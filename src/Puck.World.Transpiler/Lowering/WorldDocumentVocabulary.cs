@@ -61,10 +61,6 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     public WorldConstructTable Constructs { get; } = (constructs ?? WorldConstructs.Table);
 
     /// <inheritdoc />
-    /// <remarks>Which identifiers these are is one row of <see cref="Constructs"/> each, so the parser delegates
-    /// to exactly the dialects the vocabulary describes.</remarks>
-    public bool IsEmbeddedLanguage(string identifier) => Constructs.IsEmbeddedLanguage(identifier: identifier);
-    /// <inheritdoc />
     /// <remarks>A bare flag is a described member of <see cref="WorldMemberKind.Flag"/> written where a modifier
     /// stands, so the parser reads exactly the flags the table carries.</remarks>
     public bool IsBareModifier(string keyword, string modifier) => (

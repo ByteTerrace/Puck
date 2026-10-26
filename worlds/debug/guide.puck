@@ -7,7 +7,22 @@ import "shapes"
 
 // Every exhibit in walking order, with the centre of the region in front of it: 1.7 m out from the plinth on the
 // label's side, on the level's floor. Regions 2.6 m apart with a 1.29 m radius never overlap.
-let guideExhibits = reduce(galleryRows, [], (all, row) => concat(all, map(row.names, (name, index) => { name: name, x: (galleryX + (gallerySpacing * index)), y: galleryFloor[row.level], z: (row.z - 1.7) })))
+let guideExhibits = reduce(
+  galleryRows,
+  [],
+  (all, row) => concat(
+    all,
+    map(
+      row.names,
+      (name, index) => {
+        name: name
+        x: (galleryX + (gallerySpacing * index))
+        y: galleryFloor[row.level]
+        z: (row.z - 1.7)
+      }
+    )
+  )
+)
 // Titles and notes are authored here, in the regions' walking order; the guest contains no exhibit copy.
 let guideCopy = [
   { title: "SPHERE", note: "The sphere primitive at a uniform scale." }
@@ -151,10 +166,22 @@ let guideCopy = [
   { title: "GLASS", note: "Tinted, thin, thick and frosted glass." }
 ]
 let guideRadius = 1.29
-let guideVoice = { patchId: "gallery-guide", cadenceTicks: 16, pitchThousandths: 1100, formantThousandths: 1150, paceThousandths: 1250 }
+let guideVoice = {
+  patchId: "gallery-guide"
+  cadenceTicks: 16
+  pitchThousandths: 1100
+  formantThousandths: 1150
+  paceThousandths: 1250
+}
 
 // The existing synth patch supplies the oscillator and envelope. The HUD voice supplies the speaker's articulation.
-patches [{ name: "gallery-guide", source: "patches/guide-voice.patch.json", hash: "405ee9583477d64a47e99762ed96d22b97b0542650154d3b60cda55b00f243c0" }]
+patches [
+  {
+    name: "gallery-guide"
+    source: "patches/guide-voice.patch.json"
+    hash: "405ee9583477d64a47e99762ed96d22b97b0542650154d3b60cda55b00f243c0"
+  }
+]
 audio {
   masterGain: 0.65
   defaultSpeakerRadius: 8
@@ -203,8 +230,21 @@ hud {
         ]
       }
       elements [
-        { id: "title", kind: Text, rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }, style: Primary, "template": "{state.guide.title}" }
-        { id: "note", kind: Text, rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }, style: Dim, "template": "{state.guide.note}", voice: guideVoice }
+        {
+          id: "title"
+          kind: Text
+          rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }
+          style: Primary
+          "template": "{state.guide.title}"
+        }
+        {
+          id: "note"
+          kind: Text
+          rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }
+          style: Dim
+          "template": "{state.guide.note}"
+          voice: guideVoice
+        }
       ]
     }
     {
@@ -220,7 +260,19 @@ hud {
         ]
       }
       elements [
-        { id: "directions", kind: Text, rect { x: 0.02, y: 0.1, width: 0.96, height: 0.8 }, style: Primary, text: galleryMapDirections, voice { sampleSet: "voices/gallery.sample-set.json", cadenceTicks: 18, pitchThousandths: 800, paceThousandths: 1100 } }
+        {
+          id: "directions"
+          kind: Text
+          rect { x: 0.02, y: 0.1, width: 0.96, height: 0.8 }
+          style: Primary
+          text: galleryMapDirections
+          voice {
+            sampleSet: "voices/gallery.sample-set.json"
+            cadenceTicks: 18
+            pitchThousandths: 800
+            paceThousandths: 1100
+          }
+        }
       ]
     }
   ]
@@ -272,5 +324,14 @@ grants: concat(
     { grantee: "addon:guide", capability: Edit, subject: "state:guide", budget: 16, writeMask: "Set" }
     { grantee: "addon:guide", capability: Edit, subject: "state:guideAt", budget: 16, writeMask: "Set" }
   ],
-  map(guideExhibits, exhibit => { grantee: "addon:guide", capability: Observe, subject: $"region:guide-{exhibit.name}", budget: 1, eventBudget: 4 })
+  map(
+    guideExhibits,
+    exhibit => {
+      grantee: "addon:guide"
+      capability: Observe
+      subject: $"region:guide-{exhibit.name}"
+      budget: 1
+      eventBudget: 4
+    }
+  )
 )

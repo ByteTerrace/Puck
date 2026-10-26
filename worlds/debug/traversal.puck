@@ -126,7 +126,13 @@ grants [
   { grantee: "addon:traversal", capability: Observe, subject: "body:43", budget: 2 }
   { grantee: "addon:traversal", capability: Drive, subject: "body:43", budget: 3 }
   { grantee: "addon:traversal", capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell", budget: 10 }
-  { grantee: "addon:traversal", capability: Mutate, subject: "section:Placements", kindMask: "UpsertPlacement", budget: 2 }
+  {
+    grantee: "addon:traversal"
+    capability: Mutate
+    subject: "section:Placements"
+    kindMask: "UpsertPlacement"
+    budget: 2
+  }
   { grantee: "addon:traversal", capability: Edit, subject: "state:traversal", kindMask: "UpsertStateCell" }
   { grantee: "addon:traversal", capability: Edit, subject: "state:traversalFailures", kindMask: "UpsertStateCell" }
   { grantee: "addon:traversal", capability: Edit, subject: "state:traversalFalls", kindMask: "UpsertStateCell" }

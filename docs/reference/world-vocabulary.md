@@ -43,7 +43,6 @@ kind.
 | `set` | the document | statement | `sets[]` | One named set over the positions of a board, a zone, or a family, which `boardCombine` and `writeSet` read by name. |
 | `shape` | the document | row | `shapes[]` | One signed-distance shape of a creation document. |
 | `spawn` | the document | block | `(nothing)` | Generates a named arrival point that a door can target. |
-| `sql` | the document | embedded language | `state` | A hermetic SQL spelling of rows and rules, parsed by its own dialect and lowered to the same document members the native constructs write. |
 | `stabilize` | the document | block | `ruleGroups[]` | A fixpoint group: its members re-fire until the board settles or the pass ceiling refuses. |
 | `state` | the document | section | `state` | The simulation state: the world's rows, its lattices, its embedding spaces, and the per-participant lanes. |
 | `test` | the document | block | `(nothing)` | Behaviour stated in the world's own language — a world's own, a module's under the arguments the test gives it, or a whole composition's; the document carries no trace of it and each test lowers to a generated test world of its own. |
@@ -381,14 +380,6 @@ spawn name { at [x, y, z] [yaw: angle] }
 | `yaw:` | property | value | — | the generated spawn point's yawDegrees | — | The optional arrival heading, defaulting to zero. |
 
 Never printed back; the printer produces the statements its expansion produced in its place.
-
-### `sql`
-
-```puck
-sql { <the state SQL dialect> }
-```
-
-Never printed back; the printer produces the native constructs the block expanded into in its place.
 
 ### `stabilize`
 

@@ -55,8 +55,16 @@ let goTrayPitch = 0.14
 let goTrayColumns = 24
 let goTrayWide = 6
 let goTrayDeep = 7
-let goTrayOrigin = [(goTable[0] - ((goTrayColumns * goTrayPitch) / 2)), (goTable[1] + 1.304), (goTable[2] - ((goTrayDeep * goTrayPitch) / 2))]
-let goHome = map(range(0, goStones), i => (((i < goPerSide) ? i : (i - goPerSide)) / goTrayWide) * goTrayColumns + ((i < goPerSide) ? 0 : (goTrayColumns - goTrayWide)) + (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide))
+let goTrayOrigin = [
+  (goTable[0] - ((goTrayColumns * goTrayPitch) / 2)),
+  (goTable[1] + 1.304),
+  (goTable[2] - ((goTrayDeep * goTrayPitch) / 2))
+]
+let goHome = map(
+  range(0, goStones),
+  i => (((i < goPerSide) ? i : (i - goPerSide)) / goTrayWide) * goTrayColumns + ((i < goPerSide) ? 0 : (goTrayColumns -
+    goTrayWide)) + (((i < goPerSide) ? i : (i - goPerSide)) % goTrayWide)
+)
 let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
 
 // The bodies: debug.puck imports this file first, so its cursor and stones take the population's top slots (shapes.puck's
@@ -185,7 +193,11 @@ placements {
         source: "Idle"
       }
       parent: "goTable"
-      position [(((goHome[i] % goTrayColumns) + 0.5) * goTrayPitch - ((goTrayColumns * goTrayPitch) / 2)), 1.37, (((goHome[i] / goTrayColumns) + 0.5) * goTrayPitch - ((goTrayDeep * goTrayPitch) / 2))]
+      position [
+        (((goHome[i] % goTrayColumns) + 0.5) * goTrayPitch - ((goTrayColumns * goTrayPitch) / 2))
+        1.37,
+        (((goHome[i] / goTrayColumns) + 0.5) * goTrayPitch - ((goTrayDeep * goTrayPitch) / 2))
+      ]
     }
   }
 
@@ -315,7 +327,10 @@ prototypes {
   }
 
   // A stone: a lens of slate or shell.
-  for stone in [{ name: "goStoneBlack", color: "#1A1B1E", roughness: 0.35, specular: 0.3 }, { name: "goStoneWhite", color: "#EEECE6", roughness: 0.3, specular: 0.35 }] {
+  for stone in [
+    { name: "goStoneBlack", color: "#1A1B1E", roughness: 0.35, specular: 0.3 }
+    { name: "goStoneWhite", color: "#EEECE6", roughness: 0.3, specular: 0.35 }
+  ] {
     prototype $"{stone.name}" {
       document {
         name: stone.name
@@ -390,7 +405,10 @@ rules "" when goHold == goSettleTicks and search(ply) == 0 {
   mode: "Edge"
   rule "go-read-stones" {
     forEach: goCode
-    goCell[$each] = (board(cellOf, goBoard, placement, $each) >= 0) ? board(cellOf, goBoard, placement, $each) : (-1 - goOrdinal[$each])
+    goCell[$each] = (
+      (board(cellOf, goBoard, placement, $each) >= 0) ? board(cellOf, goBoard, placement, $each) :
+      (-1 - goOrdinal[$each])
+    )
   }
 
   // Each set's points are found by walking every row of the board both ways from its ends (a ray never reads the
@@ -405,15 +423,33 @@ rules "" when goHold == goSettleTicks and search(ply) == 0 {
     goNewCell = -1
     goFix = -1
     for r in range(0, goSize) {
-      goNewCell = maximum(goNewCell, maximum(match(goRayEmpty, goDiff, E, cell)[goSize * r], match(goRayEmpty, goDiff, W, cell)[goSize * r + goSize - 1]))
-      goFix = maximum(goFix, maximum(match(goRayEmpty, goGap, E, cell)[goSize * r], match(goRayEmpty, goGap, W, cell)[goSize * r + goSize - 1]))
+      goNewCell = maximum(
+        goNewCell,
+        maximum(
+          match(goRayEmpty, goDiff, E, cell)[goSize * r],
+          match(goRayEmpty, goDiff, W, cell)[goSize * r + goSize - 1]
+        )
+      )
+      goFix = maximum(
+        goFix,
+        maximum(
+          match(goRayEmpty, goGap, E, cell)[goSize * r],
+          match(goRayEmpty, goGap, W, cell)[goSize * r + goSize - 1]
+        )
+      )
     }
   }
 
   // One stone of the side to move, come onto an empty point and alone on it, with nothing else changed: a request
   // through the door.
   rule "go-read-request" {
-    when physics(quiescent) == 1 and goChangedCount == 1 and goCollisions == 0 and goNewCell >= 0 and goOver == 0 and goBoard[goNewCell[$value]] == 0 and goSeen[goNewCell[$value]] == goTurn
+    when physics(quiescent) == 1 and
+      goChangedCount == 1 and
+      goCollisions == 0 and
+      goNewCell >= 0 and
+      goOver == 0 and
+      goBoard[goNewCell[$value]] == 0 and
+      goSeen[goNewCell[$value]] == goTurn
     goMove[play] = goNewCell
   }
 
@@ -538,7 +574,24 @@ template goReport(colour, foe) {
     goReported = goMoves
     goGroup = board(component, goBoard, colour, colour, goPoints)[goPlaced[$value]]
     goLiberties = board(boundary, goBoard, colour, colour, goEmpty, goEmpty, goPoints)[goPlaced[$value]]
-    goAtari = (((goBoard[local(north)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(north)] ?? 0) == 1)) | (((goBoard[local(east)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(east)] ?? 0) == 1)) | (((goBoard[local(south)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(south)] ?? 0) == 1)) | (((goBoard[local(west)] ?? goEmpty) == foe) & ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(west)] ?? 0) == 1))
+    goAtari = (
+      (
+        ((goBoard[local(north)] ?? goEmpty) == foe) &
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(north)] ?? 0) == 1)
+      ) |
+      (
+        ((goBoard[local(east)] ?? goEmpty) == foe) &
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(east)] ?? 0) == 1)
+      ) |
+      (
+        ((goBoard[local(south)] ?? goEmpty) == foe) &
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(south)] ?? 0) == 1)
+      ) |
+      (
+        ((goBoard[local(west)] ?? goEmpty) == foe) &
+        ((board(boundary, goBoard, foe, foe, goEmpty, goEmpty, goPoints)[local(west)] ?? 0) == 1)
+      )
+    )
   }
 }
 
@@ -595,7 +648,9 @@ rule "go-score-tally" {
   transform writeSet(row: goOwner, set: goWhiteArea, value: goWhite)
   goTerritory[1] = count(goOwner, c -> c == 1)
   goTerritory[2] = count(goOwner, c -> c == 2)
-  goWinner = (2 * (goStoneCount[1] + goTerritory[1]) > 2 * (goStoneCount[2] + goTerritory[2]) + goKomiHalves) ? goBlack : goWhite
+  goWinner = (
+    (2 * (goStoneCount[1] + goTerritory[1]) > 2 * (goStoneCount[2] + goTerritory[2]) + goKomiHalves) ? goBlack : goWhite
+  )
   goScoring = 2
 }
 
@@ -657,7 +712,13 @@ rule "go-put-pick" {
   when goPut >= 0
   mode: Level
   local colour = (goBoard[goPut[$value]] != 0) ? goBoard[goPut[$value]] : goTurn
-  goPick = -1 - ((colour == goBlack) ? max(goCell, where: goIsBlack, atLeast: goTrayLow, atMost: -1) : max(goCell, where: goIsWhite, atLeast: goTrayLow, atMost: -1))
+  goPick = (
+    -1 -
+    (
+      (colour == goBlack) ? max(goCell, where: goIsBlack, atLeast: goTrayLow, atMost: -1) :
+      max(goCell, where: goIsWhite, atLeast: goTrayLow, atMost: -1)
+    )
+  )
 }
 
 rule "go-put-pose" {
@@ -680,18 +741,34 @@ rule "go-put-done" {
 // on the table as a player's is.
 rule "go-ai-enable" {
   mode: Level
-  goAiEnabled = (physics(quiescent) == 1) & (goAiSide == goTurn) & (goOver == 0) & (goHold == goSettleTicks) & (goJudging == 0) & (goPut < 0) & (goSync == 0)
+  goAiEnabled = (
+    (physics(quiescent) == 1) &
+    (goAiSide == goTurn) &
+    (goOver == 0) &
+    (goHold == goSettleTicks) &
+    (goJudging == 0) &
+    (goPut < 0) &
+    (goSync == 0)
+  )
 }
 
 rule "go-ai-play" {
-  when physics(quiescent) == 1 and goAiEnabled == 1 and goAiBest[revision] == goAiRevision and goAiBest[to] >= 0 and search(ply) == 0
+  when physics(quiescent) == 1 and
+    goAiEnabled == 1 and
+    goAiBest[revision] == goAiRevision and
+    goAiBest[to] >= 0 and
+    search(ply) == 0
   mode: Level
   goPut = goAiBest[to]
   goAiEnabled = 0
 }
 
 rule "go-ai-pass" {
-  when physics(quiescent) == 1 and goAiEnabled == 1 and goAiBest[revision] == goAiRevision and goAiBest[to] < 0 and search(ply) == 0
+  when physics(quiescent) == 1 and
+    goAiEnabled == 1 and
+    goAiBest[revision] == goAiRevision and
+    goAiBest[to] < 0 and
+    search(ply) == 0
   mode: Level
   goPassRequest += 1
   goAiEnabled = 0
@@ -792,15 +869,31 @@ rule "go-seat-step" {
   when goSeat[stepAhead] != 0 or goSeat[stepRight] != 0
   mode: Level
   local seatSide = board(side, goBoard, 1)
-  local cursorColumn = goSeat[cursor] % goSize + goSeat[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + goSeat[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  local cursorRow = goSeat[cursor] / goSize + goSeat[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + goSeat[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  local cursorColumn = (
+    goSeat[cursor] % goSize +
+    goSeat[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    goSeat[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  )
+  local cursorRow = (
+    goSeat[cursor] / goSize +
+    goSeat[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    goSeat[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  )
   goSeat[cursor] = clamp(cursorRow, 0, goSize - 1) * goSize + clamp(cursorColumn, 0, goSize - 1)
 }
 
 // The seat's turn, once the table has rested and matches the position.
 rule "go-seat-ready" {
   mode: Level
-  goSeat[ready] = (board(engaged, goBoard, 1) == 1) & (goAiSide != goTurn) & (goOver == 0) & (goHold == goSettleTicks) & (goJudging == 0) & (goPut < 0) & (goSync == 0)
+  goSeat[ready] = (
+    (board(engaged, goBoard, 1) == 1) &
+    (goAiSide != goTurn) &
+    (goOver == 0) &
+    (goHold == goSettleTicks) &
+    (goJudging == 0) &
+    (goPut < 0) &
+    (goSync == 0)
+  )
 }
 
 rule "go-seat-put" {
@@ -858,7 +951,14 @@ state {
     ]
     )
     // The two trays' spots, in world coordinates over the table's lids.
-    grid(cellSize: goTrayPitch, depth: goTrayDeep, width: goTrayColumns, origin: goTrayOrigin, name: "goTrays", wrap: None)
+    grid(
+      cellSize: goTrayPitch,
+      depth: goTrayDeep,
+      width: goTrayColumns,
+      origin: goTrayOrigin,
+      name: "goTrays",
+      wrap: None
+    )
   ]
 
   world {

@@ -110,7 +110,14 @@ destinations [
 // The font the shape gallery's plinth labels emboss in.
 text {
   defaultFont: "inter"
-  fonts [{ name: "inter", source: "fonts/inter-regular.ttf", hash: "sha256-64/47e488e1fc92d640", codePointRanges ["U+0020-U+007E"] }]
+  fonts [
+    {
+      name: "inter"
+      source: "fonts/inter-regular.ttf"
+      hash: "sha256-64/47e488e1fc92d640"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
 }
 
 // How many levels of windows inside windows the presentation draws; a face past it shows its session's fallback colour.

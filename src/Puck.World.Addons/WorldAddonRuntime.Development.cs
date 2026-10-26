@@ -112,14 +112,36 @@ public sealed partial class WorldAddonRuntime {
             QueueAnswer(addon, query.Ordinal, refusal);
             return;
         }
-        var arena = m_server.Arena;
-
-        if (!arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) ||
-            !CellName.TryParse(candidate: key, name: out var name, reason: out _) || !arena.Keys.TryResolve(key: out var address, name: name) ||
-            !arena.TryReadLive(row.Ordinal, address, m_server.DeliveryTime, out var value) || (value.Kind is CellKind.Text or CellKind.Vector)) {
+        if (!CellName.TryParse(candidate: key, name: out var name, reason: out _) ||
+            !TryReadDisclosed(addon: addon, subject: subject, name: name, value: out var value) || (value.Kind is CellKind.Text or CellKind.Vector)) {
             QueueAnswer(addon, query.Ordinal, AddonVerdict.NoSuchSubject);
             return;
         }
         QueuePart(addon, query.Ordinal, WorldAddonWire.FromRule(rule: verdict.Rule), 0, value.Raw, ((long)value.Kind));
+    }
+    // The one door an addon reads a state cell through. The Observe grant decides whether the addon may ask about the
+    // row; the cell's own disclosure decides what it may learn, composed for the addon's own principal from the live
+    // store on every call (a bound handle never caches it), so a cell its visibility or its containing zone withholds
+    // reads exactly as an absent one does and a mod cannot probe for hidden values.
+    private bool TryReadDisclosed(MountedAddon addon, GrantSubject subject, CellName name, out CellValue value) {
+        var arena = m_server.Arena;
+
+        value = default;
+        return (IsDisclosed(addon: addon, subject: subject, name: name) &&
+            arena.Catalog.TryResolve(StateLane.Document, subject.Id!, out var row) &&
+            arena.Keys.TryResolve(key: out var address, name: name) &&
+            arena.TryReadLive(row.Ordinal, address, m_server.DeliveryTime, out value));
+    }
+    // Whether the addon's principal may read the cell now; false for a row the document does not declare. A write door
+    // asks this before it looks for the cell, so a hidden cell is refused as an absent one is.
+    private bool IsDisclosed(MountedAddon addon, GrantSubject subject, CellName name) {
+        var definition = m_server.Definition;
+
+        foreach (var candidate in definition.State) {
+            if (string.Equals(a: candidate.Name.Value, b: subject.Id, comparisonType: StringComparison.Ordinal)) {
+                return WorldStateDisclosure.CanRead(arena: m_server.Arena, definition: definition, key: name, row: candidate, recipient: addon.Principal);
+            }
+        }
+        return false;
     }
 }

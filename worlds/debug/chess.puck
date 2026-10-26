@@ -52,8 +52,19 @@ let backRankTypes = ["rook", "knight", "bishop", "queen", "king", "bishop", "kni
 let squareTypes = ["boardSquareLight", "boardSquareDark"]
 let backRankCodes = [4, 2, 3, 5, 6, 3, 2, 4]
 let backRankByColumn = map(range(0, 8), column => backRankCodes[7 - column])
-let initialBoard = concat(backRankByColumn, map(range(0, 8), i => 1), map(range(0, 32), i => 0), map(range(0, 8), i => -1), map(backRankByColumn, code => -code))
-let initialPieceCodes = concat(backRankCodes, map(range(0, 8), i => 1), map(range(0, 8), i => -1), map(backRankCodes, code => -code))
+let initialBoard = concat(
+  backRankByColumn,
+  map(range(0, 8), i => 1),
+  map(range(0, 32), i => 0),
+  map(range(0, 8), i => -1),
+  map(backRankByColumn, code => -code)
+)
+let initialPieceCodes = concat(
+  backRankCodes,
+  map(range(0, 8), i => 1),
+  map(range(0, 8), i => -1),
+  map(backRankCodes, code => -code)
+)
 
 template piecePlacement(name, prototypeName, x, z) {
   placement name {
@@ -432,7 +443,14 @@ rules "" when settleHold == chessSettleTicks {
 
   rule "tabletop-candidate-move" {
     local mover = lastLegal[move[from]]
-    local kind = (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? MoveKind.Illegal : (absolute(mover) == PieceKind.King) & (absolute(move[to] - move[from]) == 2) ? MoveKind.Castle : (absolute(mover) == PieceKind.Pawn) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? MoveKind.EnPassant : lastLegal[move[to]] != 0 ? MoveKind.Capture : MoveKind.Quiet
+    local kind = (
+      (move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? MoveKind.Illegal :
+      (absolute(mover) == PieceKind.King) & (absolute(move[to] - move[from]) == 2) ? MoveKind.Castle :
+      (absolute(mover) == PieceKind.Pawn) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ?
+        MoveKind.EnPassant :
+      lastLegal[move[to]] != 0 ? MoveKind.Capture :
+      MoveKind.Quiet
+    )
     move[mover] = mover
     move[kind] = kind
     move[captured] = kind == MoveKind.EnPassant ? lastLegal[move[to] - 8 * (1 - 2 * turn)] : lastLegal[move[to]]
@@ -441,35 +459,79 @@ rules "" when settleHold == chessSettleTicks {
   // Search relocates the primary token; these hypothetical-only rules complete
   // the compound move before the same validator used for physical play judges it.
   rule "tabletop-search-en-passant" {
-    when (((search(ply) > 0) & (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (pieceCell[$each] == move[to] - 8 * (1 - 2 * turn))) == 1 : Int)
+    when ((
+      (search(ply) > 0) &
+      (move[kind] == MoveKind.EnPassant) &
+      (move[to] == enPassantTarget) &
+      (pieceCell[$each] == move[to] - 8 * (1 - 2 * turn))
+    ) == 1 : Int)
     forEach: pieceCode
     pieceCell[$each] = -1
   }
 
   rule "tabletop-search-castle" {
-    when (((search(ply) > 0) & (move[kind] == MoveKind.Castle) & (pieceCell[$each] == (move[from] & 56) + (move[to] > move[from] ? 7 : 0)) & (pieceCode[$each] == 4 * (1 - 2 * turn))) == 1 : Int)
+    when ((
+      (search(ply) > 0) &
+      (move[kind] == MoveKind.Castle) &
+      (pieceCell[$each] == (move[from] & 56) + (move[to] > move[from] ? 7 : 0)) &
+      (pieceCode[$each] == 4 * (1 - 2 * turn))
+    ) == 1 : Int)
     forEach: pieceCode
     pieceCell[$each] = (move[from] + move[to]) >> 1
   }
 
   rule "tabletop-search-promotion" {
-    when (((search(ply) > 0) & (absolute(move[mover]) == PieceKind.Pawn) & (pieceCell[$each] == move[to]) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))) == 1 : Int)
+    when ((
+      (search(ply) > 0) &
+      (absolute(move[mover]) == PieceKind.Pawn) &
+      (pieceCell[$each] == move[to]) &
+      (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))
+    ) == 1 : Int)
     forEach: pieceCode
     pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
   }
 
   rule "tabletop-candidate-match" {
-    local changed = ((board(mask, board, -3, -2) | board(mask, board, 1, 2) | board(mask, board, 5, 6)) ^ (board(mask, lastLegal, -3, -2) | board(mask, lastLegal, 1, 2) | board(mask, lastLegal, 5, 6))) | ((board(mask, board, -5, -3) | board(mask, board, 2, 5)) ^ (board(mask, lastLegal, -5, -3) | board(mask, lastLegal, 2, 5))) | ((board(mask, board, -4, 3)) ^ (board(mask, lastLegal, -4, 3))) | ((board(mask, board, 0, 7)) ^ (board(mask, lastLegal, 0, 7)))
+    local changed = (
+      (
+        (board(mask, board, -3, -2) | board(mask, board, 1, 2) | board(mask, board, 5, 6)) ^
+        (board(mask, lastLegal, -3, -2) | board(mask, lastLegal, 1, 2) | board(mask, lastLegal, 5, 6))
+      ) |
+      (
+        (board(mask, board, -5, -3) | board(mask, board, 2, 5)) ^
+        (board(mask, lastLegal, -5, -3) | board(mask, lastLegal, 2, 5))
+      ) |
+      ((board(mask, board, -4, 3)) ^ (board(mask, lastLegal, -4, 3))) |
+      ((board(mask, board, 0, 7)) ^ (board(mask, lastLegal, 0, 7)))
+    )
     local from = move[from]
     local to = move[to]
     local sign = 1 - 2 * turn
-    local clear = move[kind] == MoveKind.Castle ? (from & 56) + (to > from ? 7 : 0) : move[kind] == MoveKind.EnPassant ? to - 8 * local(sign) : -1
+    local clear = (
+      move[kind] == MoveKind.Castle ? (from & 56) + (to > from ? 7 : 0) :
+      move[kind] == MoveKind.EnPassant ? to - 8 * local(sign) :
+      -1
+    )
     local rook = move[kind] == MoveKind.Castle ? ((from + to) >> 1) : -1
     local clearUnique = (clear >= 0) & (clear < 64) & (clear != from) & (clear != to)
     local rookUnique = (rook >= 0) & (rook < 64) & (rook != from) & (rook != to) & (rook != clear)
-    local footprint = ((from >= 0) * (1 << maximum(from, 0))) | ((to >= 0) * (1 << maximum(to, 0))) | (clearUnique * (1 << clamp(clear, 0, 63))) | (rookUnique * (1 << clamp(rook, 0, 63)))
-    local landed = (absolute(move[mover]) == PieceKind.Pawn) & (to / 8 == (turn == TurnColor.White ? 7 : 0)) ? board[move[to]] : move[mover]
-    boardMismatch = setBitCount(changed & ~footprint) + (from >= 0) * (board[move[from]] != 0) + (to >= 0) * (board[move[to]] != landed) + clearUnique * (board[(clear)] != 0) + rookUnique * (board[(rook)] != 4 * local(sign))
+    local footprint = (
+      ((from >= 0) * (1 << maximum(from, 0))) |
+      ((to >= 0) * (1 << maximum(to, 0))) |
+      (clearUnique * (1 << clamp(clear, 0, 63))) |
+      (rookUnique * (1 << clamp(rook, 0, 63)))
+    )
+    local landed = (
+      (absolute(move[mover]) == PieceKind.Pawn) & (to / 8 == (turn == TurnColor.White ? 7 : 0)) ? board[move[to]] :
+      move[mover]
+    )
+    boardMismatch = (
+      setBitCount(changed & ~footprint) +
+      (from >= 0) * (board[move[from]] != 0) +
+      (to >= 0) * (board[move[to]] != landed) +
+      clearUnique * (board[(clear)] != 0) +
+      rookUnique * (board[(rook)] != 4 * local(sign))
+    )
     boardChanged = setBitCount(changed)
   }
 
@@ -482,13 +544,41 @@ rules "" when settleHold == chessSettleTicks {
     castleTransitAttacked[bk] = 0
     castleTransitAttacked[bq] = 0
     if turn == TurnColor.White and move[to] < move[from] {
-      castleTransitAttacked[wk] = ((board(mask, lastLegal, -1, -1) & 0xA00) != 0) | ((board(mask, lastLegal, -2, -2) & 0xA1100) != 0) | ((board(mask, lastLegal, -6, -6) & 0xE0A) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[2] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[2] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[2]
+      castleTransitAttacked[wk] = (
+        ((board(mask, lastLegal, -1, -1) & 0xA00) != 0) |
+        ((board(mask, lastLegal, -2, -2) & 0xA1100) != 0) |
+        ((board(mask, lastLegal, -6, -6) & 0xE0A) != 0) |
+        board(attacks, lastLegal, -5, -4, "N,S,E,W")[2] |
+        board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[2] |
+        board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[2]
+      )
     } else if turn == TurnColor.White {
-      castleTransitAttacked[wq] = ((board(mask, lastLegal, -1, -1) & 0x2800) != 0) | ((board(mask, lastLegal, -2, -2) & 0x284400) != 0) | ((board(mask, lastLegal, -6, -6) & 0x3828) != 0) | board(attacks, lastLegal, -5, -4, "N,S,E,W")[4] | board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[4] | board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[4]
+      castleTransitAttacked[wq] = (
+        ((board(mask, lastLegal, -1, -1) & 0x2800) != 0) |
+        ((board(mask, lastLegal, -2, -2) & 0x284400) != 0) |
+        ((board(mask, lastLegal, -6, -6) & 0x3828) != 0) |
+        board(attacks, lastLegal, -5, -4, "N,S,E,W")[4] |
+        board(attacks, lastLegal, -3, -3, "NE,SE,SW,NW")[4] |
+        board(attacks, lastLegal, -5, -5, "NE,SE,SW,NW")[4]
+      )
     } else if move[to] < move[from] {
-      castleTransitAttacked[bk] = ((board(mask, lastLegal, 1, 1) & byteSwap(0xA00)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0xA1100)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0xE0A)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[58] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[58] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[58]
+      castleTransitAttacked[bk] = (
+        ((board(mask, lastLegal, 1, 1) & byteSwap(0xA00)) != 0) |
+        ((board(mask, lastLegal, 2, 2) & byteSwap(0xA1100)) != 0) |
+        ((board(mask, lastLegal, 6, 6) & byteSwap(0xE0A)) != 0) |
+        board(attacks, lastLegal, 4, 5, "N,S,E,W")[58] |
+        board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[58] |
+        board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[58]
+      )
     } else {
-      castleTransitAttacked[bq] = ((board(mask, lastLegal, 1, 1) & byteSwap(0x2800)) != 0) | ((board(mask, lastLegal, 2, 2) & byteSwap(0x284400)) != 0) | ((board(mask, lastLegal, 6, 6) & byteSwap(0x3828)) != 0) | board(attacks, lastLegal, 4, 5, "N,S,E,W")[60] | board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[60] | board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[60]
+      castleTransitAttacked[bq] = (
+        ((board(mask, lastLegal, 1, 1) & byteSwap(0x2800)) != 0) |
+        ((board(mask, lastLegal, 2, 2) & byteSwap(0x284400)) != 0) |
+        ((board(mask, lastLegal, 6, 6) & byteSwap(0x3828)) != 0) |
+        board(attacks, lastLegal, 4, 5, "N,S,E,W")[60] |
+        board(attacks, lastLegal, 3, 3, "NE,SE,SW,NW")[60] |
+        board(attacks, lastLegal, 5, 5, "NE,SE,SW,NW")[60]
+      )
     }
   }
 
@@ -500,10 +590,27 @@ rules "" when settleHold == chessSettleTicks {
     local direction = move[to] > move[from] ? 1 : -1
     local rook = home + (direction == 1 ? 4 : -3)
     local right = (direction == 1 ? 2 : 1) << (2 * turn)
-    local attacked = turn == TurnColor.White ? (direction == 1 ? castleTransitAttacked[wq] : castleTransitAttacked[wk]) : (direction == 1 ? castleTransitAttacked[bq] : castleTransitAttacked[bk])
+    local attacked = (
+      turn == TurnColor.White ? (direction == 1 ? castleTransitAttacked[wq] : castleTransitAttacked[wk]) :
+      (direction == 1 ? castleTransitAttacked[bq] : castleTransitAttacked[bk])
+    )
     castleLegal = 0
     if move[kind] == MoveKind.Castle {
-      castleLegal = (move[kind] == MoveKind.Castle) & (move[from] == home) & (move[to] == home + 2 * direction) & ((castleRights & right) == 0) & (lastLegal[(rook)] == PieceKind.Rook * local(sign)) & ((direction == 1 ? match(chessRayEmpty, lastLegal, E, cell)[move[from]] : match(chessRayEmpty, lastLegal, W, cell)[move[from]]) == rook) & (previousInCheck[turn[$value]] == 0) & (attacked == 0)
+      castleLegal = (
+        (move[kind] == MoveKind.Castle) &
+        (move[from] == home) &
+        (move[to] == home + 2 * direction) &
+        ((castleRights & right) == 0) &
+        (lastLegal[(rook)] == PieceKind.Rook * local(sign)) &
+        (
+          (
+            direction == 1 ? match(chessRayEmpty, lastLegal, E, cell)[move[from]] :
+            match(chessRayEmpty, lastLegal, W, cell)[move[from]]
+          ) == rook
+        ) &
+        (previousInCheck[turn[$value]] == 0) &
+        (attacked == 0)
+      )
     }
   }
 
@@ -514,17 +621,53 @@ rules "" when settleHold == chessSettleTicks {
     local middle = move[from] + 8 * (1 - 2 * turn)
     shapeLegal = 0
     if piece == PieceKind.Pawn {
-      shapeLegal = (dx == 0) & (lastLegal[move[to]] == 0) & maximum(dy == 1, (dy == 2) & (move[from] / 8 == (turn == TurnColor.White ? 1 : 6)) & (lastLegal[(middle)] == 0)) | (dx == 1) & (dy == 1) & maximum(move[kind] == MoveKind.Capture, (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))
+      shapeLegal = (
+        (dx == 0) &
+          (lastLegal[move[to]] == 0) &
+          maximum(
+            dy == 1,
+            (dy == 2) & (move[from] / 8 == (turn == TurnColor.White ? 1 : 6)) & (lastLegal[(middle)] == 0)
+          ) |
+        (dx == 1) &
+          (dy == 1) &
+          maximum(
+            move[kind] == MoveKind.Capture,
+            (move[kind] == MoveKind.EnPassant) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1)
+          )
+      )
     } else if piece == PieceKind.Knight {
       shapeLegal = dx * absolute(dy) == 2
     } else if piece == PieceKind.King {
       shapeLegal = maximum((maximum(dx, absolute(dy)) == 1) & (move[kind] != MoveKind.Castle), castleLegal)
     } else {
       if piece == PieceKind.Rook or piece == PieceKind.Queen {
-        shapeLegal = maximum(maximum(maximum(match(chessRayEmpty, lastLegal, N, cell)[move[to]] == move[from], match(chessRayEmpty, lastLegal, S, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, E, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, W, cell)[move[to]] == move[from])
+        shapeLegal = maximum(
+          maximum(
+            maximum(
+              match(chessRayEmpty, lastLegal, N, cell)[move[to]] == move[from],
+              match(chessRayEmpty, lastLegal, S, cell)[move[to]] == move[from]
+            ),
+            match(chessRayEmpty, lastLegal, E, cell)[move[to]] == move[from]
+          ),
+          match(chessRayEmpty, lastLegal, W, cell)[move[to]] == move[from]
+        )
       }
       if piece == PieceKind.Bishop or piece == PieceKind.Queen {
-        shapeLegal = shapeLegal | (maximum(maximum(maximum(match(chessRayEmpty, lastLegal, NE, cell)[move[to]] == move[from], match(chessRayEmpty, lastLegal, SE, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, SW, cell)[move[to]] == move[from]), match(chessRayEmpty, lastLegal, NW, cell)[move[to]] == move[from]))
+        shapeLegal = (
+          shapeLegal |
+          (
+            maximum(
+              maximum(
+                maximum(
+                  match(chessRayEmpty, lastLegal, NE, cell)[move[to]] == move[from],
+                  match(chessRayEmpty, lastLegal, SE, cell)[move[to]] == move[from]
+                ),
+                match(chessRayEmpty, lastLegal, SW, cell)[move[to]] == move[from]
+              ),
+              match(chessRayEmpty, lastLegal, NW, cell)[move[to]] == move[from]
+            )
+          )
+        )
       }
     }
   }
@@ -535,9 +678,30 @@ rules "" when settleHold == chessSettleTicks {
     local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
     local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~kingMask
     local kingBand = kingMask | nearFiles
-    local closeHit = ((boardShift(nearFiles, chessBoard, S) & board(mask, board, -1, -1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, board, -6, -6))) != 0
-    local knightHit = ((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, board, -2, -2)) != 0
-    local slideHit = (kingMask != 0) & (board(attacks, board, -5, -4, "N,S,E,W")[(kingSquare)] | board(attacks, board, -3, -3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, board, -5, -5, "NE,SE,SW,NW")[(kingSquare)])
+    local closeHit = (
+      (boardShift(nearFiles, chessBoard, S) & board(mask, board, -1, -1)) |
+      (
+        (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
+        board(mask, board, -6, -6)
+      )
+    ) != 0
+    local knightHit = (
+      (
+        boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+        boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+        boardShift(farFiles, chessBoard, S) |
+        boardShift(farFiles, chessBoard, N)
+      ) &
+      board(mask, board, -2, -2)
+    ) != 0
+    local slideHit = (
+      (kingMask != 0) &
+      (
+        board(attacks, board, -5, -4, "N,S,E,W")[(kingSquare)] |
+        board(attacks, board, -3, -3, "NE,SE,SW,NW")[(kingSquare)] |
+        board(attacks, board, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
+      )
+    )
     inCheck[0] = closeHit | knightHit | slideHit
   }
 
@@ -547,9 +711,30 @@ rules "" when settleHold == chessSettleTicks {
     local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
     local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~kingMask
     local kingBand = kingMask | nearFiles
-    local closeHit = ((boardShift(nearFiles, chessBoard, N) & board(mask, board, 1, 1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, board, 6, 6))) != 0
-    local knightHit = ((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, board, 2, 2)) != 0
-    local slideHit = (kingMask != 0) & (board(attacks, board, 4, 5, "N,S,E,W")[(kingSquare)] | board(attacks, board, 3, 3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, board, 5, 5, "NE,SE,SW,NW")[(kingSquare)])
+    local closeHit = (
+      (boardShift(nearFiles, chessBoard, N) & board(mask, board, 1, 1)) |
+      (
+        (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
+        board(mask, board, 6, 6)
+      )
+    ) != 0
+    local knightHit = (
+      (
+        boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+        boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+        boardShift(farFiles, chessBoard, S) |
+        boardShift(farFiles, chessBoard, N)
+      ) &
+      board(mask, board, 2, 2)
+    ) != 0
+    local slideHit = (
+      (kingMask != 0) &
+      (
+        board(attacks, board, 4, 5, "N,S,E,W")[(kingSquare)] |
+        board(attacks, board, 3, 3, "NE,SE,SW,NW")[(kingSquare)] |
+        board(attacks, board, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
+      )
+    )
     inCheck[1] = closeHit | knightHit | slideHit
   }
 
@@ -565,33 +750,74 @@ rules "" when settleHold == chessSettleTicks {
   rule "tabletop-verdict" {
     local sign = 1 - 2 * turn
     local promotes = (absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0))
-    local replacement = promotes ? (board[move[to]] * local(sign) >= PieceKind.Knight) & (board[move[to]] * local(sign) <= PieceKind.Queen) : board[move[to]] == move[mover]
+    local replacement = (
+      promotes ?
+        (board[move[to]] * local(sign) >= PieceKind.Knight) & (board[move[to]] * local(sign) <= PieceKind.Queen) :
+      board[move[to]] == move[mover]
+    )
     local kings = (setBitCount(board(mask, board, 6, 6)) == 1) & (setBitCount(board(mask, board, -6, -6)) == 1)
-    verdict = (halfmoveClock < 150) & (move[kind] >= MoveKind.Quiet) & (move[kind] <= MoveKind.Castle) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & replacement & (move[mover] * local(sign) > 0) & (move[captured] * local(sign) <= 0) & (inCheck[turn[$value]] == 0) & kings
+    verdict = (
+      (halfmoveClock < 150) &
+      (move[kind] >= MoveKind.Quiet) &
+      (move[kind] <= MoveKind.Castle) &
+      (boardMismatch == 0) &
+      (boardCollisions == 0) &
+      shapeLegal &
+      replacement &
+      (move[mover] * local(sign) > 0) &
+      (move[captured] * local(sign) <= 0) &
+      (inCheck[turn[$value]] == 0) &
+      kings
+    )
     promotionPending[0] = boardChanged == 0 ? -1 : promotionPending[0]
     promotionPending[1] = boardChanged == 0 ? -1 : promotionPending[1]
   }
 
   rule "tabletop-promotion-pending" {
-    when verdict == 0 and (((absolute(move[mover]) == PieceKind.Pawn) & (move[to] / 8 == (turn == TurnColor.White ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount(board(mask, board, 6, 6)) == 1) & (setBitCount(board(mask, board, -6, -6)) == 1)) == 1 : Int)
+    when verdict == 0 and ((
+        (absolute(move[mover]) == PieceKind.Pawn) &
+        (move[to] / 8 == (turn == TurnColor.White ? 7 : 0)) &
+        (board[move[to]] == move[mover]) &
+        shapeLegal &
+        (boardMismatch == 0) &
+        (boardCollisions == 0) &
+        (inCheck[turn[$value]] == 0) &
+        (setBitCount(board(mask, board, 6, 6)) == 1) &
+        (setBitCount(board(mask, board, -6, -6)) == 1)
+      ) == 1 : Int)
     promotionPending[turn[$value]] = move[to]
   }
 
   rule "tabletop-advance-turn" {
     when verdict == 1 and move[kind] != MoveKind.Illegal
-    local lostRooks = ((board(mask, lastLegal, 4, 4) & ~board(mask, board, 4, 4)) & 0x81) | ((board(mask, lastLegal, -4, -4) & ~board(mask, board, -4, -4)) & (0x81 << 56))
-    local lostKings = ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 3)) | ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 59))
-    local lostRights = parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 3) | (1 << 59)), 5) * 3)
+    local lostRooks = (
+      ((board(mask, lastLegal, 4, 4) & ~board(mask, board, 4, 4)) & 0x81) |
+      ((board(mask, lastLegal, -4, -4) & ~board(mask, board, -4, -4)) & (0x81 << 56))
+    )
+    local lostKings = (
+      ((board(mask, lastLegal, 6, 6) & ~board(mask, board, 6, 6)) & (1 << 3)) |
+      ((board(mask, lastLegal, -6, -6) & ~board(mask, board, -6, -6)) & (1 << 59))
+    )
+    local lostRights = (
+      parallelBitExtract(lostRooks, 0x81 | (0x81 << 56)) |
+      (parallelBitDeposit(parallelBitExtract(lostKings, (1 << 3) | (1 << 59)), 5) * 3)
+    )
     transaction {
       // A pawn move, capture or lost castling right makes every earlier position unreachable.
-      historyReset = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | ((lostRights & ~castleRights) != 0)
+      historyReset = (
+        (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) | ((lostRights & ~castleRights) != 0)
+      )
       halfmoveClock = (absolute(move[mover]) == PieceKind.Pawn) | (move[captured] != 0) ? 0 : halfmoveClock + 1
       historyPending = 1
       castleRights = castleRights | lostRights
       transform boardCombine(left: board, operation: Copy, row: lastLegal)
       previousInCheck[0] = inCheck[0]
       previousInCheck[1] = inCheck[1]
-      enPassantTarget = (absolute(move[mover]) == PieceKind.Pawn) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
+      enPassantTarget = (
+        (absolute(move[mover]) == PieceKind.Pawn) & (absolute(move[to] - move[from]) == 16) ?
+          ((move[from] + move[to]) >> 1) :
+        -1
+      )
       turn = 1 - turn
       promotionPending[0] = -1
       promotionPending[1] = -1
@@ -620,19 +846,76 @@ rules "" when settleHold == chessSettleTicks {
     local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
     local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~kingMask
     local kingBand = kingMask | nearFiles
-    if (((source >= 0) & (source < 64) & (source / 8 == victim / 8) & (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) & (board[(source)] == local(sign)) & (board[(victim)] == -local(sign)) & (board[enPassantTarget[$value]] == 0) & (setBitCount(kingMask) == 1)) == 1 : Int) {
+    if ((
+      (source >= 0) &
+      (source < 64) &
+      (source / 8 == victim / 8) &
+      (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) &
+      (board[(source)] == local(sign)) &
+      (board[(victim)] == -local(sign)) &
+      (board[enPassantTarget[$value]] == 0) &
+      (setBitCount(kingMask) == 1)
+    ) == 1 : Int) {
       transform boardCombine(left: board, operation: Copy, row: enPassantProbe)
       enPassantProbe[(source)] = 0
       enPassantProbe[(victim)] = 0
       enPassantProbe[enPassantTarget[$value]] = local(sign)
       if turn == TurnColor.White {
-        enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, -6, -6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, -2, -2)) != 0)
-        enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
+        enPassantProbeCheck = (
+          (boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1)) |
+          (
+            (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
+            board(mask, enPassantProbe, -6, -6)
+          )
+        ) != 0
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          (
+            (
+              (
+                boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+                boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+                boardShift(farFiles, chessBoard, S) |
+                boardShift(farFiles, chessBoard, N)
+              ) &
+              board(mask, enPassantProbe, -2, -2)
+            ) != 0
+          )
+        )
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[(kingSquare)] |
+          board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[(kingSquare)] |
+          board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
+        )
       } else {
-        enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, 6, 6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, 2, 2)) != 0)
-        enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
+        enPassantProbeCheck = (
+          (boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1)) |
+          (
+            (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
+            board(mask, enPassantProbe, 6, 6)
+          )
+        ) != 0
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          (
+            (
+              (
+                boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+                boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+                boardShift(farFiles, chessBoard, S) |
+                boardShift(farFiles, chessBoard, N)
+              ) &
+              board(mask, enPassantProbe, 2, 2)
+            ) != 0
+          )
+        )
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[(kingSquare)] |
+          board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[(kingSquare)] |
+          board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
+        )
       }
       if enPassantProbeCheck == 0 {
         repetitionEnPassant = enPassantTarget
@@ -650,19 +933,76 @@ rules "" when settleHold == chessSettleTicks {
     local nearFiles = boardShift(kingMask, chessBoard, E) | boardShift(kingMask, chessBoard, W)
     local farFiles = (boardShift(nearFiles, chessBoard, E) | boardShift(nearFiles, chessBoard, W)) & ~kingMask
     local kingBand = kingMask | nearFiles
-    if (((source >= 0) & (source < 64) & (source / 8 == victim / 8) & (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) & (board[(source)] == local(sign)) & (board[(victim)] == -local(sign)) & (board[enPassantTarget[$value]] == 0) & (setBitCount(kingMask) == 1)) == 1 : Int) {
+    if ((
+      (source >= 0) &
+      (source < 64) &
+      (source / 8 == victim / 8) &
+      (enPassantTarget / 8 == (turn == TurnColor.White ? 5 : 2)) &
+      (board[(source)] == local(sign)) &
+      (board[(victim)] == -local(sign)) &
+      (board[enPassantTarget[$value]] == 0) &
+      (setBitCount(kingMask) == 1)
+    ) == 1 : Int) {
       transform boardCombine(left: board, operation: Copy, row: enPassantProbe)
       enPassantProbe[(source)] = 0
       enPassantProbe[(victim)] = 0
       enPassantProbe[enPassantTarget[$value]] = local(sign)
       if turn == TurnColor.White {
-        enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, -6, -6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, -2, -2)) != 0)
-        enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
+        enPassantProbeCheck = (
+          (boardShift(nearFiles, chessBoard, S) & board(mask, enPassantProbe, -1, -1)) |
+          (
+            (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
+            board(mask, enPassantProbe, -6, -6)
+          )
+        ) != 0
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          (
+            (
+              (
+                boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+                boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+                boardShift(farFiles, chessBoard, S) |
+                boardShift(farFiles, chessBoard, N)
+              ) &
+              board(mask, enPassantProbe, -2, -2)
+            ) != 0
+          )
+        )
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          board(attacks, enPassantProbe, -5, -4, "N,S,E,W")[(kingSquare)] |
+          board(attacks, enPassantProbe, -3, -3, "NE,SE,SW,NW")[(kingSquare)] |
+          board(attacks, enPassantProbe, -5, -5, "NE,SE,SW,NW")[(kingSquare)]
+        )
       } else {
-        enPassantProbeCheck = ((boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1)) | ((kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) & board(mask, enPassantProbe, 6, 6))) != 0
-        enPassantProbeCheck = enPassantProbeCheck | (((boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) | boardShift(farFiles, chessBoard, S) | boardShift(farFiles, chessBoard, N)) & board(mask, enPassantProbe, 2, 2)) != 0)
-        enPassantProbeCheck = enPassantProbeCheck | board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[(kingSquare)] | board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[(kingSquare)] | board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
+        enPassantProbeCheck = (
+          (boardShift(nearFiles, chessBoard, N) & board(mask, enPassantProbe, 1, 1)) |
+          (
+            (kingBand | boardShift(kingBand, chessBoard, S) | boardShift(kingBand, chessBoard, N)) &
+            board(mask, enPassantProbe, 6, 6)
+          )
+        ) != 0
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          (
+            (
+              (
+                boardShift(boardShift(nearFiles, chessBoard, S), chessBoard, S) |
+                boardShift(boardShift(nearFiles, chessBoard, N), chessBoard, N) |
+                boardShift(farFiles, chessBoard, S) |
+                boardShift(farFiles, chessBoard, N)
+              ) &
+              board(mask, enPassantProbe, 2, 2)
+            ) != 0
+          )
+        )
+        enPassantProbeCheck = (
+          enPassantProbeCheck |
+          board(attacks, enPassantProbe, 4, 5, "N,S,E,W")[(kingSquare)] |
+          board(attacks, enPassantProbe, 3, 3, "NE,SE,SW,NW")[(kingSquare)] |
+          board(attacks, enPassantProbe, 5, 5, "NE,SE,SW,NW")[(kingSquare)]
+        )
       }
       if enPassantProbeCheck == 0 {
         repetitionEnPassant = enPassantTarget
@@ -684,7 +1024,16 @@ rules "" when settleHold == chessSettleTicks {
   rule "tabletop-history-count" {
     when historyPending == 1 and historyAges[$each] < historyLength
     forEach: historyAges
-    if (history(boardHistoryRights, 0) == history(boardHistoryRights, historyAges[$each]) : Int) and (history(boardHistory0, 0) == history(boardHistory0, historyAges[$each]) : Int) and (history(boardHistory1, 0) == history(boardHistory1, historyAges[$each]) : Int) and (history(boardHistory2, 0) == history(boardHistory2, historyAges[$each]) : Int) and (history(boardHistory3, 0) == history(boardHistory3, historyAges[$each]) : Int) {
+    if (history(boardHistoryRights, 0) == history(boardHistoryRights, historyAges[$each]) : Int) and (history(
+        boardHistory0,
+        0
+      ) == history(boardHistory0, historyAges[$each]) : Int) and (history(boardHistory1, 0) == history(
+        boardHistory1,
+        historyAges[$each]
+      ) : Int) and (history(boardHistory2, 0) == history(boardHistory2, historyAges[$each]) : Int) and (history(
+        boardHistory3,
+        0
+      ) == history(boardHistory3, historyAges[$each]) : Int) {
       repetitionCount += 1
     }
   }
@@ -695,7 +1044,11 @@ rules "" when settleHold == chessSettleTicks {
   }
 
   rule "tabletop-apply-illegal" {
-    when verdict == 0 and move[kind] != MoveKind.Illegal and boardMismatch == 0 and promotionPending[0] == -1 and promotionPending[1] == -1
+    when verdict == 0 and
+      move[kind] != MoveKind.Illegal and
+      boardMismatch == 0 and
+      promotionPending[0] == -1 and
+      promotionPending[1] == -1
     illegalCount += 1
   }
 }
@@ -708,8 +1061,20 @@ rule "chess-ai-evaluate" {
   ai[evaluation] += 330 * (setBitCount(board(mask, board, 3, 3)) - setBitCount(board(mask, board, -3, -3)))
   ai[evaluation] += 500 * (setBitCount(board(mask, board, 4, 4)) - setBitCount(board(mask, board, -4, -4)))
   ai[evaluation] += 900 * (setBitCount(board(mask, board, 5, 5)) - setBitCount(board(mask, board, -5, -5)))
-  ai[evaluation] += 12 * (setBitCount(board(mask, board, 1, 3) & 0x00003C3C3C3C0000) - setBitCount(board(mask, board, -3, -1) & 0x00003C3C3C3C0000))
-  ai[evaluation] += 8 * (setBitCount(board(mask, board, 1, 1) & 0x00FFFFFF00000000) - setBitCount(board(mask, board, -1, -1) & 0x00000000FFFFFF00))
+  ai[evaluation] += (
+    12 *
+    (
+      setBitCount(board(mask, board, 1, 3) & 0x00003C3C3C3C0000) -
+      setBitCount(board(mask, board, -3, -1) & 0x00003C3C3C3C0000)
+    )
+  )
+  ai[evaluation] += (
+    8 *
+    (
+      setBitCount(board(mask, board, 1, 1) & 0x00FFFFFF00000000) -
+      setBitCount(board(mask, board, -1, -1) & 0x00000000FFFFFF00)
+    )
+  )
 }
 
 // The computer opponent: aiSide 1 (the default) plays Black, 0 plays White and -1 leaves both sides to people.
@@ -720,9 +1085,18 @@ rule "chess-ai-revision" {
   // Keep identity as well as geometry: exchanging two same-kind pieces still
   // invalidates a token-indexed answer. A saved piece packs square + 1 in
   // seven bits and code + 6 above it; metadata also fits in one exact Int.
-  local metadata = turn | (castleRights << 1) | ((enPassantTarget + 1) << 5) | (halfmoveClock << 12) | (repetitionCount << 20) | (previousInCheck[0] << 27) | (previousInCheck[1] << 28)
+  local metadata = (
+    turn |
+    (castleRights << 1) |
+    ((enPassantTarget + 1) << 5) |
+    (halfmoveClock << 12) |
+    (repetitionCount << 20) |
+    (previousInCheck[0] << 27) |
+    (previousInCheck[1] << 28)
+  )
   local pieceState = (pieceCell[$each] + 1) | ((pieceCode[$each] + 6) << 7)
-  when settleHold == chessSettleTicks and physics(quiescent) == 1 and (pieceState != aiBefore[$each] or metadata != ai[metadata])
+  when settleHold == chessSettleTicks and physics(quiescent) == 1 and (pieceState != aiBefore[$each] or
+      metadata != ai[metadata])
   mode: Level
   forEach: pieceCode
   aiBefore[$each] = pieceState
@@ -732,11 +1106,27 @@ rule "chess-ai-revision" {
 
 rule "chess-ai-enable" {
   mode: Level
-  aiEnabled = (aiSide == turn) & (physics(quiescent) == 1) & (settleHold == chessSettleTicks) & (gameStarted == 1) & (boardCollisions == 0) & ((verdict == 1) | (boardChanged == 0)) & (halfmoveClock < 150) & (repetitionCount < 5)
+  aiEnabled = (
+    (aiSide == turn) &
+    (physics(quiescent) == 1) &
+    (settleHold == chessSettleTicks) &
+    (gameStarted == 1) &
+    (boardCollisions == 0) &
+    ((verdict == 1) | (boardChanged == 0)) &
+    (halfmoveClock < 150) &
+    (repetitionCount < 5)
+  )
 }
 
 rule "chess-ai-request" {
-  when (((aiEnabled == 1) & (aiBest[revision] == aiRevision) & (aiBest[token] == pieceOrdinal[$each]) & (aiBest[to] >= 0) & (aiBest[to] < 64) & (physics(quiescent) == 1)) == 1 : Int)
+  when ((
+    (aiEnabled == 1) &
+    (aiBest[revision] == aiRevision) &
+    (aiBest[token] == pieceOrdinal[$each]) &
+    (aiBest[to] >= 0) &
+    (aiBest[to] < 64) &
+    (physics(quiescent) == 1)
+  ) == 1 : Int)
   mode: Level
   forEach: pieceCode
   ai[from] = pieceCell[$each]
@@ -756,24 +1146,48 @@ rule "chess-ai-relocate" {
     if (((absolute(ai[mover]) == PieceKind.Pawn) & (ai[to] / 8 == (turn == TurnColor.White ? 7 : 0))) == 1 : Int) {
       pieceCode[$each] = PieceKind.Queen * (1 - 2 * turn)
     }
-  } else if (((absolute(ai[mover]) == PieceKind.Pawn) & (ai[to] == enPassantTarget) & ((ai[from] & 7) != (ai[to] & 7)) & (pieceCell[$each] == ai[to] - 8 * (1 - 2 * turn))) == 1 : Int) {
+  } else if ((
+    (absolute(ai[mover]) == PieceKind.Pawn) &
+    (ai[to] == enPassantTarget) &
+    ((ai[from] & 7) != (ai[to] & 7)) &
+    (pieceCell[$each] == ai[to] - 8 * (1 - 2 * turn))
+  ) == 1 : Int) {
     pieceCell[$each] = -1
-  } else if (((absolute(ai[mover]) == PieceKind.King) & (absolute(ai[to] - ai[from]) == 2) & (pieceCell[$each] == (ai[from] & 56) + (ai[to] > ai[from] ? 7 : 0))) == 1 : Int) {
+  } else if ((
+    (absolute(ai[mover]) == PieceKind.King) &
+    (absolute(ai[to] - ai[from]) == 2) &
+    (pieceCell[$each] == (ai[from] & 56) + (ai[to] > ai[from] ? 7 : 0))
+  ) == 1 : Int) {
     pieceCell[$each] = (ai[from] + ai[to]) >> 1
   }
 }
 
 for i in range(0, 32) {
   rule $"chess-ai-place-{i}" {
-    gate: compareValue(kind: Int, comparison: Equal, left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] >= 0), right: 1)
+    gate: compareValue(
+      kind: Int,
+      comparison: Equal,
+      left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] >= 0),
+      right: 1
+    )
     mode: Level
     poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: pieceCell[$"piece{i}"], offset: [0, 0.08, 0])
   }
   rule $"chess-ai-capture-{i}" {
-    gate: compareValue(kind: Int, comparison: Equal, left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] < 0), right: 1)
+    gate: compareValue(
+      kind: Int,
+      comparison: Equal,
+      left: (ai[pending] == 1) & (pieceCell[$"piece{i}"] != ((aiBefore[$"piece{i}"] & 127) - 1)) & (pieceCell[$"piece{i}"] < 0),
+      right: 1
+    )
     mode: Level
     // Each captured piece gets its own place beside the board.
-    poseCell(key: $"placement:piece{i}", topology: chessBoard, expression: 0, offset: [-0.4 - 0.15 * (i % 4), 0.3, 0.18 * (i / 4)])
+    poseCell(
+      key: $"placement:piece{i}",
+      topology: chessBoard,
+      expression: 0,
+      offset: [-0.4 - 0.15 * (i % 4), 0.3, 0.18 * (i / 4)]
+    )
   }
 }
 
@@ -865,14 +1279,31 @@ rule "chess-play-step" {
   when play[stepAhead] != 0 or play[stepRight] != 0
   mode: Level
   local seatSide = board(side, board, 1)
-  local cursorColumn = play[cursor] % 8 + play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) + play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  local cursorRow = play[cursor] / 8 + play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) + play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  local cursorColumn = (
+    play[cursor] % 8 +
+    play[stepAhead] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    play[stepRight] * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  )
+  local cursorRow = (
+    play[cursor] / 8 +
+    play[stepAhead] * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    play[stepRight] * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  )
   play[cursor] = clamp(cursorRow, 0, 7) * 8 + clamp(cursorColumn, 0, 7)
 }
 
 // A press lifts the side to move's piece under the cursor, once the board has rested and while no answer is moving.
 rule "chess-play-lift" {
-  when (((play[pickEdge] == 1) & (play[held] < 0) & (play[judging] == 0) & (pieceCell[$each] == play[cursor]) & (pieceCode[$each] * (1 - 2 * turn) > 0) & (aiSide != turn) & (ai[pending] == 0) & (settleHold == chessSettleTicks)) == 1 : Int)
+  when ((
+    (play[pickEdge] == 1) &
+    (play[held] < 0) &
+    (play[judging] == 0) &
+    (pieceCell[$each] == play[cursor]) &
+    (pieceCode[$each] * (1 - 2 * turn) > 0) &
+    (aiSide != turn) &
+    (ai[pending] == 0) &
+    (settleHold == chessSettleTicks)
+  ) == 1 : Int)
   mode: Level
   forEach: pieceCode
   play[held] = pieceOrdinal[$each]
@@ -996,14 +1427,52 @@ bindingOverlays [
             id: "board"
             label: "Board"
             entries [
-              { channel: "forward", id: "boardUp", scale: 1, sources ["keyboard.w", "keyboard.arrowUp", "gamepad.dpadUp"] }
-              { channel: "forward", id: "boardDown", scale: -1, sources ["keyboard.s", "keyboard.arrowDown", "gamepad.dpadDown"] }
-              { channel: "strafe", id: "boardLeft", scale: -1, sources ["keyboard.a", "keyboard.arrowLeft", "gamepad.dpadLeft"] }
-              { channel: "strafe", id: "boardRight", scale: 1, sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"] }
+              {
+                channel: "forward"
+                id: "boardUp"
+                scale: 1
+                sources ["keyboard.w", "keyboard.arrowUp", "gamepad.dpadUp"]
+              }
+              {
+                channel: "forward"
+                id: "boardDown"
+                scale: -1
+                sources ["keyboard.s", "keyboard.arrowDown", "gamepad.dpadDown"]
+              }
+              {
+                channel: "strafe"
+                id: "boardLeft"
+                scale: -1
+                sources ["keyboard.a", "keyboard.arrowLeft", "gamepad.dpadLeft"]
+              }
+              {
+                channel: "strafe"
+                id: "boardRight"
+                scale: 1
+                sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"]
+              }
               { command: "player.move.strafe", id: "boardStick", sources ["gamepad.leftStick"] }
-              { channel: "confirm", id: "confirm", label: "Pick", scale: 1, sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"] }
-              { channel: "cancel", id: "cancel", label: "Cancel", scale: 1, sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"] }
-              { channel: "interact", id: "boardLeave", label: "Leave", scale: 1, sources ["keyboard.e", "gamepad.rightShoulder"] }
+              {
+                channel: "confirm"
+                id: "confirm"
+                label: "Pick"
+                scale: 1
+                sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"]
+              }
+              {
+                channel: "cancel"
+                id: "cancel"
+                label: "Cancel"
+                scale: 1
+                sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"]
+              }
+              {
+                channel: "interact"
+                id: "boardLeave"
+                label: "Leave"
+                scale: 1
+                sources ["keyboard.e", "gamepad.rightShoulder"]
+              }
             ]
           }
         }
@@ -1021,7 +1490,10 @@ let diagonalSteps = [[1, 1], [1, -1], [-1, 1], [-1, -1]]
 let knightSteps = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]]
 let kingSteps = concat(orthogonalSteps, diagonalSteps, [[2, 0], [-2, 0]])
 let chessMoves = concat(
-  map([1, -1], sign => { codes [sign], turn: (1 - sign) / 2, offsets [[0, sign], [0, 2 * sign], [1, sign], [-1, sign]] }),
+  map(
+    [1, -1],
+    sign => { codes [sign], turn: (1 - sign) / 2, offsets [[0, sign], [0, 2 * sign], [1, sign], [-1, sign]] }
+  ),
   map([1, -1], sign => { codes [2 * sign], turn: (1 - sign) / 2, offsets: knightSteps }),
   map([1, -1], sign => { codes [3 * sign, 5 * sign], turn: (1 - sign) / 2, offsets: diagonalSteps, range: 0 }),
   map([1, -1], sign => { codes [4 * sign, 5 * sign], turn: (1 - sign) / 2, offsets: orthogonalSteps, range: 0 }),

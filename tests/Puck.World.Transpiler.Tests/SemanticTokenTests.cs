@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Lsp;
-using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -37,10 +36,7 @@ public class SemanticTokenTests {
             path1: SamplesDirectory(),
             path2: sample
         ));
-        var tokens = PuckSemanticTokens.Classify(
-            source: source,
-            vocabulary: WorldDocumentVocabulary.Instance
-        );
+        var tokens = PuckSemanticTokens.Classify(source: source);
         var end = 0;
 
         Assert.NotEmpty(collection: tokens);
@@ -154,10 +150,7 @@ public class SemanticTokenTests {
 
         var token = TokenAt(
             offset: offset,
-            tokens: PuckSemanticTokens.Classify(
-                source: source,
-                vocabulary: WorldDocumentVocabulary.Instance
-            )
+            tokens: PuckSemanticTokens.Classify(source: source)
         );
 
         Assert.NotNull(@object: token);
@@ -227,36 +220,6 @@ public class SemanticTokenTests {
         }
     }
     [Fact]
-    public void AnEmbeddedLanguageBodyIsLeftToItsOwnGrammar() {
-        const string Source = "sql \"setup\" {\n  CREATE TABLE t (a INT);\n}\nx: 1";
-        var tokens = PuckSemanticTokens.Classify(
-            source: Source,
-            vocabulary: WorldDocumentVocabulary.Instance
-        );
-
-        Assert.Equal(
-            actual: TokenAt(offset: 0, tokens: tokens)?.Role,
-            expected: PuckSemanticRole.Keyword
-        );
-        Assert.Null(@object: TokenAt(
-            offset: Source.IndexOf(
-                comparisonType: StringComparison.Ordinal,
-                value: "CREATE"
-            ),
-            tokens: tokens
-        ));
-        Assert.Equal(
-            actual: TokenAt(
-                offset: Source.IndexOf(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "x:"
-                ),
-                tokens: tokens
-            )?.Role,
-            expected: PuckSemanticRole.Property
-        );
-    }
-    [Fact]
     public void ATokenCrossingALineBreakIsEncodedOnePiecePerLine() {
         const string Source = "a: \"\"\"one\r\ntwo\"\"\"";
         var data = PuckSemanticTokens.Encode(
@@ -295,10 +258,7 @@ public class SemanticTokenTests {
             actual: Assert.IsType<JsonArray>(@object: transcript.Result(id: 2)?["data"]).Select(selector: static node => node!.GetValue<int>()),
             expected: PuckSemanticTokens.Encode(
                 source: Source,
-                tokens: PuckSemanticTokens.Classify(
-                    source: Source,
-                    vocabulary: WorldDocumentVocabulary.Instance
-                )
+                tokens: PuckSemanticTokens.Classify(source: Source)
             )
         );
     }

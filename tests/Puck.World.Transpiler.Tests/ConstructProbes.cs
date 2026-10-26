@@ -330,14 +330,6 @@ internal static class ConstructProbes {
                         }
                 """)
         )],
-        ["sql"] = [new(
-            Pointer: "/state",
-            Source: Doc(body: """
-                sql {
-                    DECLARE gold INT DEFAULT 10 CHECK (gold >= 0);
-                }
-                """)
-        )],
         ["rule"] = [new(
             Pointer: "/rules/0",
             Source: Rule(body: """
