@@ -275,6 +275,7 @@ public sealed class ArenaVisibilityBudgetLawTests {
                 Name: ArenaFixture.Name(value: "pool"),
                 Kind: CellKind.Int,
                 Capacity: capacity,
+                Visibility: new StateVisibility(Readers: []),
                 Cells: cells
             )]);
         var catalog = StateCatalog.Compile(section: section);

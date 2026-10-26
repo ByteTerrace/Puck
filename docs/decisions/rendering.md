@@ -104,6 +104,37 @@ little to give up an exact outline for. The one pixel change a merged face can
 make is where it meets a separately baked mesh, whose depth test the face's new
 rounding can turn, as two coincident meshes' pixels turn.
 
+The two coarser levels are part of the bake too (`SdfMeshCollapse`): half-edge
+collapses of the merged mesh, so a level is a triangle list over the mesh's own
+vertices with their own normals, and the region holds only its indices and
+triangle materials, numbered after the merged triangles. A level's error is
+measured, not estimated from the quadric that orders the collapses: every vertex
+of the merged mesh stays within it of a level triangle of its own material, and
+every vertex and edge midpoint of a crease or a material's edge stays within it
+of that line as the level draws it, and every level triangle's centroid and edge
+midpoints stay within it of the surface it replaces, so no triangle cuts through
+a thin rod whose samples it passes between; a collapse is taken only where all
+three hold (a quarter of the contour cell for the first level, two cells for the
+second).
+The lines are measured as lines because a surface measure alone misses an
+outline that moves within its face's plane: a triangle filling a notch in a face's
+outline holds the notch's vertices at no distance, and the face shows surface
+where there was none. Shading needs a bound geometry alone does not give: a
+coarse triangle can stay within a pixel of a bumpy surface while its interpolated
+normal smooths the bumps away, so a collapse also keeps each vertex's normal within
+2 degrees (first level) or 6 degrees (second) of the level's normal there. A crease
+place slides only along its crease with each side keeping its own vertices, a
+corner where three faces meet and a mesh's open edge never move, and no collapse
+turns a triangle against its normals, which the back-face cull would show as a
+hole. A level saving less than a quarter of the finer level's triangles is not
+kept. The projection of the error is conservative: the error times the draw's
+largest stretch, over the nearest forward depth of the draw's box, at the
+frustum corner's sharpest projection of a displacement; a box reaching the eye's
+plane draws the merged mesh. Glass draws its merged mesh, since its thickness is
+the sums of its own triangles' distances, and a frame held for a settled capture
+chooses without the previous frame's level, so its still owes nothing to earlier
+frames.
+
 The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
 `CameraSnapshot.MaySee`, a light's sphere of range against the view's frustum.

@@ -105,7 +105,7 @@ public sealed class StatePoolDenseLawTests {
 
         Assert.True(condition: arena.TryClaimPair(poolOrdinal: 1, leftHandle: nodes[1], rightHandle: nodes[1], handle: out var last, reason: out var reason), userMessage: reason);
         Assert.True(condition: arena.TryClaimPair(poolOrdinal: 1, leftHandle: nodes[0], rightHandle: nodes[1], handle: out var earlier, reason: out reason), userMessage: reason);
-        Assert.Equal(expected: new[] { 16, 288 }, actual: arena.SnapshotPool(poolOrdinal: 1).Select(selector: handle => handle.Slot));
+        Assert.Equal(expected: new[] { 0, 1 }, actual: arena.SnapshotPool(poolOrdinal: 1).Select(selector: handle => handle.Slot));
         Assert.True(condition: arena.TryWrite(handle: last, fieldOrdinal: 0, value: CellValue.Int(value: 41), reason: out reason), userMessage: reason);
         var rows = Enumerable.Range(start: 0, count: arena.Layout.RowCount).ToArray();
         var plan = new ArenaUndoPlan(Depth: 1, Name: "turn", Rows: rows);
@@ -130,7 +130,7 @@ public sealed class StatePoolDenseLawTests {
         restored.CommitUndoTurn(group: "turn");
         Assert.True(condition: restored.TryRewindGroup(group: "turn", reason: out reason), userMessage: reason);
         Assert.Equal(expected: before, actual: restored.ComputeHash());
-        Assert.True(condition: restored.TryResolvePoolSlot(handle: out var restoredLast, poolOrdinal: 1, slot: 288));
+        Assert.True(condition: restored.TryResolvePoolSlot(handle: out var restoredLast, poolOrdinal: 1, slot: 0));
         Assert.True(condition: restored.TryRead(fieldOrdinal: 0, handle: restoredLast, value: out var value));
         Assert.Equal(expected: 41L, actual: value.AsInt);
     }

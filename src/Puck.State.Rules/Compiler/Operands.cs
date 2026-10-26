@@ -224,11 +224,9 @@ public sealed class ReductionOperand : RuleOperand {
     /// <param name="domainOrdinal">The token domain row's catalog ordinal, for an arrangement rank; <c>-1</c>
     /// otherwise.</param>
     /// <param name="valueKind">Int for <see cref="StateReduceOp.Count"/>, else the aggregated row's own kind.</param>
-    /// <param name="capacity">The aggregated row's cell capacity, for pricing the scan.</param>
     /// <param name="range">Optional inclusive bounds in the source row's raw numeric encoding.</param>
     /// <param name="rowFrom">The live row aggregated, or <see langword="null"/> for a fixed row.</param>
-    public ReductionOperand(int rowOrdinal, StateReduceOp reduce, int filterOrdinal, int domainOrdinal, CellKind valueKind, long capacity, (long Lower, long Upper)? range = null, LiveRow? rowFrom = null) : base(valueKind: valueKind) {
-        Capacity = capacity;
+    public ReductionOperand(int rowOrdinal, StateReduceOp reduce, int filterOrdinal, int domainOrdinal, CellKind valueKind, (long Lower, long Upper)? range = null, LiveRow? rowFrom = null) : base(valueKind: valueKind) {
         DomainOrdinal = domainOrdinal;
         FilterOrdinal = filterOrdinal;
         Range = range;
@@ -237,8 +235,6 @@ public sealed class ReductionOperand : RuleOperand {
         RowOrdinal = rowOrdinal;
     }
 
-    /// <summary>Gets the aggregated row's cell capacity, for pricing the scan.</summary>
-    public long Capacity { get; }
     /// <summary>Gets the token domain row's catalog ordinal, for an arrangement rank; <c>-1</c> otherwise.</summary>
     public int DomainOrdinal { get; }
     /// <summary>Gets the filter row's catalog ordinal, or <c>-1</c>.</summary>
@@ -273,8 +269,8 @@ public sealed class ReductionOperand : RuleOperand {
     }
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => (((long)((RowFrom is { } live)
-        ? live.SelectionCapacity
-        : Capacity)) * RuleWork.Known(units: ((Range is null)
+        ? live.SelectionCapacity(context: context)
+        : context.RowCapacity(rowOrdinal: RowOrdinal))) * RuleWork.Known(units: ((Range is null)
             ? 1L
             : 3L
         )));

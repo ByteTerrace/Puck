@@ -99,7 +99,11 @@ public static class ArenaFixture {
                     ),
                     new StateCell(
                         Key: Name(value: "b"),
-                        Value: CellValue.Int(value: 2L)
+                        Value: CellValue.Int(value: 2L),
+                        Clock: new StateCellClock(),
+                        Behavior: StateCellBehavior.None,
+                        Visibility: new StateVisibility(Readers: []),
+                        Observation: new StateObservation(Tick: 0L, Visible: false)
                     ),
                 ]
             ),
@@ -145,7 +149,11 @@ public static class ArenaFixture {
                     ),
                     new StateCell(
                         Key: Name(value: "b"),
-                        Value: CellValue.Int(value: 22L)
+                        Value: CellValue.Int(value: 22L),
+                        Clock: new StateCellClock(),
+                        Behavior: StateCellBehavior.None,
+                        Visibility: new StateVisibility(Readers: []),
+                        Observation: new StateObservation(Tick: 0L, Visible: false)
                     ),
                 ]
             ),

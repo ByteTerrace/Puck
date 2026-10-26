@@ -26,13 +26,13 @@ namespace Puck.SdfVm;
 /// SYNC with the kernel's candidate and command layouts.</para>
 /// </summary>
 internal sealed class SdfMeshOcclusion : IDisposable {
-    // The kernel's steps, pushed from SdfKernelInterfaces.MeshViewShift up.
+    // The kernel's steps, pushed from SdfKernelInterfaces.MeshLevelShift up.
     private const uint EarlyStep = 0u;
     private const uint DepthStep = 1u;
     private const uint GroupSize = 64u;
     private const uint LateStep = 2u;
     // The uint4 rows a candidate takes after the header: its draw, its vertex count and its box's center, then its three
-    // half axes.
+    // half axes, its flags and its level of detail, which the kernel writes into the draw's identity.
     private const int CandidateRows = 4;
     private const int CandidateWords = (CandidateRows * 4);
     private const ulong CountsBytes = (4 * sizeof(uint));
@@ -74,9 +74,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // The candidates staged for the frame.
     public uint CandidateCount => m_count;
 
-    // Writes a frame's opaque draws the box cull keeps, in their staged order, as the frame slot's candidates, with the
-    // pyramid's levels for the render extent. A draw with no box is a candidate the test never hides.
-    public void Stage(int slot, IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, uint count, in SdfMeshCull cull, uint width, uint height) {
+    // Writes a frame's opaque draws the box cull keeps (`kept`), in their staged order, as the frame slot's candidates,
+    // each with the level the pass chose for it and that level's vertices, with the pyramid's levels for the render
+    // extent. A draw with no box is a candidate the test never hides.
+    public void Stage(int slot, ReadOnlySpan<SdfMeshBox?> boxes, ReadOnlySpan<bool> kept, ReadOnlySpan<uint> levels, ReadOnlySpan<uint> vertexCounts, uint count, uint width, uint height) {
         m_slot = slot;
         m_width = Math.Max(val1: width, val2: 1u);
         m_height = Math.Max(val1: height, val2: 1u);
@@ -93,30 +94,23 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         var candidates = 0u;
 
-        for (var draw = 0u; (draw < count); draw++) {
-            var item = draws[((int)draw)];
-
-            if (item.Glass) {
+        for (var draw = 0; (draw < count); draw++) {
+            if (!kept[draw]) {
                 continue;
             }
 
-            var box = boxes[((int)draw)];
-
-            if (!cull.Keeps(box: in box)) {
-                continue;
-            }
-
+            var box = boxes[draw];
+            var bounds = box.GetValueOrDefault();
             var word = (HeaderWords + (((int)candidates) * CandidateWords));
-            var kept = box.GetValueOrDefault();
 
-            words[word] = draw;
-            words[(word + 1)] = ((uint)item.Mesh.Indices.Length);
-            Floats(destination: words.AsSpan(length: 3, start: (word + 2)), value: kept.Center);
-            Floats(destination: words.AsSpan(length: 3, start: (word + 5)), value: kept.HalfX);
-            Floats(destination: words.AsSpan(length: 3, start: (word + 8)), value: kept.HalfY);
-            Floats(destination: words.AsSpan(length: 3, start: (word + 11)), value: kept.HalfZ);
+            words[word] = (uint)draw;
+            words[(word + 1)] = vertexCounts[draw];
+            Floats(destination: words.AsSpan(length: 3, start: (word + 2)), value: bounds.Center);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 5)), value: bounds.HalfX);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 8)), value: bounds.HalfY);
+            Floats(destination: words.AsSpan(length: 3, start: (word + 11)), value: bounds.HalfZ);
             words[(word + 14)] = (box.HasValue ? 0u : UnboxedFlag);
-            words[(word + 15)] = 0u;
+            words[(word + 15)] = levels[draw];
             candidates++;
         }
 
@@ -348,7 +342,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             return;
         }
 
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: m_pushed, value: (step << SdfKernelInterfaces.MeshViewShift) | level);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: m_pushed, value: (step << SdfKernelInterfaces.MeshLevelShift) | level);
         recorder.PushConstants(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,

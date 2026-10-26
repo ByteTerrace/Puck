@@ -43,7 +43,7 @@ public sealed record StatePoolValue(CellName Field, CellValue Value, StateCellCl
 }
 /// <summary>One statically live pool slot and its field overrides.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StatePoolSeed(int Slot, IReadOnlyList<StatePoolValue>? Values = null) {
+public sealed record StatePoolSeed(int Slot, IReadOnlyList<StatePoolValue>? Values = null, int? LeftSlot = null, int? RightSlot = null) {
     /// <summary>Gets the immutable field overrides.</summary>
     public IReadOnlyList<StatePoolValue>? Values { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Values);
 
@@ -122,5 +122,7 @@ public sealed record StatePoolDescriptor(
     int RightPoolOrdinal = -1,
     int MaxLive = 0,
     bool Directed = true,
-    bool AllowSelf = false
+    bool AllowSelf = false,
+    int LeftRowOrdinal = -1,
+    int RightRowOrdinal = -1
 );

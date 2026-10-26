@@ -17,7 +17,6 @@ public sealed class ArenaHashLawTests {
         "clockV0",
         "clockSubstepTicks",
         "behavior",
-        "provenance",
         "visibility",
         "observation",
         "presence",
@@ -272,14 +271,6 @@ public sealed class ArenaHashLawTests {
                 Assert.True(condition: arena.TryWriteBehavior(
                     behavior: StateCellBehavior.None,
                     key: a,
-                    rowOrdinal: ArenaFixture.Tokens
-                ));
-
-                break;
-            case "provenance":
-                Assert.True(condition: arena.TryWriteProvenance(
-                    key: a,
-                    provenance: "issuer",
                     rowOrdinal: ArenaFixture.Tokens
                 ));
 

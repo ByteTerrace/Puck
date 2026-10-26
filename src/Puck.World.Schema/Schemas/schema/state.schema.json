@@ -84,9 +84,6 @@
                     "visible"
                   ],
                   "additionalProperties": false
-                },
-                "provenance": {
-                  "type": "string"
                 }
               },
               "required": [
@@ -156,6 +153,19 @@
           "capacity": {
             "description": "The row\u0027s own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell \u2014 declaring a capacity is declaring table intent. Omitted from the wire when null.",
             "type": "integer"
+          },
+          "cellSlots": {
+            "description": "Gets the physical slots of exported members in logical order. Null uses contiguous slots.",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "reservedCapacity": {
+            "description": "Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes with the same memory and work reservation. Authored rows normally omit it.",
+            "type": "integer",
+            "minimum": 0
           },
           "overflow": {
             "description": "What Overflow does with a write TryAdmitWrite finds outside the row\u0027s declared envelope, or that overflows raw 64-bit arithmetic.",

@@ -768,6 +768,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.Add(item: 0u);
             // The identity carry (rotation, translation, a scale of one) and the clip plane that clips nothing.
             expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
+            // A mesh without coarser levels draws its own triangles at every level, from its first.
+            expected.AddRange(collection: [0u, 0u]);
         }
         // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {

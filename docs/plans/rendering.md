@@ -7536,10 +7536,47 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
      hierarchy boxes a long thin triangle in pieces, which keeps a probe sweep at
      7.3 CPU seconds over the merged meshes where the unmerged took 6.9, with the
      same hits.
-   - *Step 2:* two coarser levels derived from that mesh by quadric edge
-     collapse, each recording its exact error, with creases and material edges
-     simplifying last. This is a simplification of the one contour, not a
-     second mesher.
+   - *Step 2, landed:* two coarser levels derived from that mesh by half-edge
+     collapse ordered by quadrics, creases and material edges weighted to
+     simplify last (`SdfMeshCollapse`, after the merge in `Land`), each
+     recording its measured error, and chosen per pass beside the box cull
+     (`SdfMeshDetail`, `SdfWorldPassRecorder.Choose`); `world.detail` forces a
+     level for comparison. This is a simplification of the one contour, not a
+     second mesher. Measured as Step 1 was, the merged level (`world.detail 0`,
+     Step 1's counts) against the per-draw choice:
+
+     | View | Mesh pass | Near cascade | Far cascade |
+     |---|---:|---:|---:|
+     | Lobby | 4.9 → 1.3 M | 17.9 → 2.1 M | 22.8 → 2.0 M |
+     | Level 1 aisle | 8.2 → 1.7 M | 14.3 → 2.0 M | 18.5 → 1.8 M |
+     | Outdoors, facing the hall | 5.1 → 1.7 M | 6.9 → 1.3 M | 28.1 → 2.3 M |
+
+     In the lobby the near cascade's GPU time fell from 3.81 to 0.91 ms, the
+     far cascade's from 4.31 to 0.41 and the mesh pass's from 1.17 to 0.40
+     (`world.gpu-timing`); 400 frames held 16.67 ms on average with 18 past
+     16.7 ms (p99 16.87) where the merged level had 50 (p99 24.6), produce at
+     9.5 ms on average where it took 10.3, on a machine other lanes were
+     building on. Of the stored set's 32.5 M triangles the first level keeps
+     3.6 M (11%) and the second 2.0 M (6%), over 1,386 of its 1,406 meshes;
+     the world residency draws 35.4 M, 4.5 M or 2.7 M triangles at levels 0, 1
+     and 2. The levels cost 9% in bytes: the mesh region holds 1.21 GB (1.11
+     at Step 1) and the stored set is 1.11 GB (1.02). The irradiance trace
+     reads the merged level, so a probe sweep finds the same 4,020,842 hits in
+     7.0 to 7.7 CPU seconds. The collapse takes about 208 CPU seconds over the
+     whole set, spread across `Land`'s tasks.
+
+     A switch stays within the owner's pixel. Settled captures of the lobby
+     differ from the merged level's in 22,795 of 1,152,000 pixels, 328 of them
+     by more than 16 codes (the level 1 aisle 196, outdoors 197), where two
+     captures in one mode differ in 17 by one code: shading where a coarser
+     face interpolates its normals over a longer edge, and the edges of glyphs
+     a few pixels tall moving by up to a pixel (the lift indicator's lit 0,
+     three by four pixels from the lobby, loses its one-pixel hole). Presented
+     bursts of the same walk, 3 m backwards at 1.5 m/s across the lobby, show
+     no switch: each frame's count of pixels changing by more than 16 codes
+     agrees with the merged level's within 2%, and the change one burst shows
+     that the other does not stays between 459 and 859 pixels in every moving
+     frame, with no frame standing out.
 
    The selection rules are the owner's
    ([decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)):
@@ -7548,9 +7585,12 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
    - a shadow cascade takes the coarsest level within one of its texels;
    - the irradiance trace reads the merged level.
 
-   Chunking a union larger than one chunk follows once Step 1's savings are
-   measured. The bake's contour, store and identity belong to the bake lane;
-   the selector is a draw-time choice beside P20-1's box.
+   A draw's level is its whole mesh's, so a mesh whose box holds the camera
+   (the hall's shell and floors) draws its merged triangles in the view however
+   far most of it lies; chunking a union larger than one chunk, or clusters
+   with their own boxes and errors, would let its far parts coarsen. The
+   bake's contour, store and identity belong to the bake lane; the selector is
+   a draw-time choice beside P20-1's box.
 4. **Residency.** Today every mesh of a world is resident, the debug world's
    at the region's 2 GiB ceiling. Two shapes keep it bounded without stalls:
    distance rings with hysteresis (resident within R + h of any view's camera,

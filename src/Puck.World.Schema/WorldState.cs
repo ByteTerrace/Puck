@@ -251,6 +251,8 @@ public sealed record WorldStateRow(
         Witness: witness
     ) {
         this.Generated = row.Generated;
+        ReservedCapacity = row.ReservedCapacity;
+        CellSlots = row.CellSlots;
     }
 
     /// <summary>Gets a value indicating whether only a rule's own effect may write this row: it is a verdict, or a

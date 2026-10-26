@@ -49,6 +49,8 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["min"] = KindConditionalEnvelopeSchema(),
             ["max"] = KindConditionalEnvelopeSchema(),
             ["capacity"] = new JsonObject { ["type"] = "integer" },
+            ["cellSlots"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0 } },
+            ["reservedCapacity"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0 },
             ["overflow"] = exportType(typeof(StateOverflow)),
             ["evicts"] = new JsonObject { ["type"] = "boolean" },
             ["advance"] = exportType(typeof(StateAdvance)),
@@ -223,7 +225,6 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["clock"] = StateCellClockJsonConverter.Schema(),
             ["visibility"] = exportType(typeof(StateVisibility)),
             ["observation"] = exportType(typeof(StateObservation)),
-            ["provenance"] = new JsonObject { ["type"] = "string" },
         },
         ["required"] = new JsonArray(
         "key",

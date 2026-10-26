@@ -11,6 +11,7 @@ public sealed partial class StateArena {
             words[(index >> 6)] &= ~mask;
         }
     }
+    private ArenaColumnBuffer<long> Ensure(ref ArenaColumnBuffer<long>? column, ArenaColumn kind) => (column ??= new ArenaColumnBuffer<long>(layout: m_layout, column: kind));
     private static long[] Ensure(ref long[]? column, int size) => (column ??= new long[size]);
     // The lane whose roster run holds the bit: the layout placed the runs, so it answers.
     private StateLaneDescriptor LaneOfRoster(int rosterIndex) {
@@ -34,24 +35,29 @@ public sealed partial class StateArena {
     }
     // Whether a lazily allocated column has been materialized; every other column always exists. A column that is
     // not materialized reads as zero or null everywhere, so a clear has nothing to do to it.
-    private bool IsMaterialized(ArenaColumn column) => (column switch {
-        ArenaColumn.ClockEpochTick => (m_clockEpochTicks is not null),
-        ArenaColumn.ClockEpochEngineTick => (m_clockEpochEngineTicks is not null),
-        ArenaColumn.ClockY0 => (m_clockY0 is not null),
-        ArenaColumn.ClockV0 => (m_clockV0 is not null),
-        ArenaColumn.ClockSubstepTicks => (m_clockSubstepTicks is not null),
-        ArenaColumn.Behavior => (m_behaviors is not null),
-        ArenaColumn.DrawCursor => (m_drawCursors is not null),
+    private bool IsMaterialized(ArenaColumn column, int row) => m_layout.HasColumn(row: row, column: column) && (column switch {
+        ArenaColumn.ClockEpochTick => (m_clockEpochTicks?.HasRow(row: row) == true),
+        ArenaColumn.ClockEpochEngineTick => (m_clockEpochEngineTicks?.HasRow(row: row) == true),
+        ArenaColumn.ClockY0 => (m_clockY0?.HasRow(row: row) == true),
+        ArenaColumn.ClockV0 => (m_clockV0?.HasRow(row: row) == true),
+        ArenaColumn.ClockSubstepTicks => (m_clockSubstepTicks?.HasRow(row: row) == true),
+        ArenaColumn.Behavior => (m_behaviors?.HasRow(row: row) == true),
+        ArenaColumn.DrawCursor => (m_drawCursors?.HasRow(row: row) == true),
         ArenaColumn.DrawnMaskWord => (m_maskWords is not null),
-        ArenaColumn.PhaseSequence => (m_phaseSequences is not null),
-        ArenaColumn.Text => (m_texts is not null),
-        ArenaColumn.Provenance => (m_provenance is not null),
-        ArenaColumn.Visibility => (m_visibilities is not null),
-        ArenaColumn.Observation => (m_observations is not null),
+        ArenaColumn.PhaseSequence => (m_phaseSequences?.HasRow(row: row) == true),
+        ArenaColumn.Text => (m_texts?.HasRow(row: row) == true),
+        ArenaColumn.Visibility => (m_visibilities?.HasRow(row: row) == true),
+        ArenaColumn.Observation => (m_observations?.HasRow(row: row) == true),
+        ArenaColumn.ClockSet => m_clockSet.HasRow(row: row),
         _ => true,
     });
     private long ReadNumberRaw(ArenaColumn column, int index) => (column switch {
         ArenaColumn.Number => m_numbers[index],
+        ArenaColumn.CellCapacity => m_layout[index].CellCapacity,
+        ArenaColumn.NextSlot => m_nextSlots[index],
+        ArenaColumn.PreviousSlot => m_previousSlots[index],
+        ArenaColumn.HeadSlot => m_headSlots[index],
+        ArenaColumn.TailSlot => m_tailSlots[index],
         ArenaColumn.Presence => (Bit(
         index: index,
         words: m_presence
@@ -60,10 +66,7 @@ public sealed partial class StateArena {
             : 0L
         ),
         ArenaColumn.MemberKey => m_memberKeys[index],
-        ArenaColumn.ClockSet => (Bit(
-        index: index,
-        words: m_clockSet
-    )
+        ArenaColumn.ClockSet => (m_clockSet[index]
             ? 1L
             : 0L
         ),
@@ -90,13 +93,17 @@ public sealed partial class StateArena {
     });
     private object? ReadReferenceRaw(ArenaColumn column, int index) => (column switch {
         ArenaColumn.Text => m_texts?[index],
-        ArenaColumn.Provenance => m_provenance?[index],
         ArenaColumn.Visibility => m_visibilities?[index],
         ArenaColumn.Observation => m_observations?[index],
         _ => throw new InvalidOperationException(message: $"Arena column '{column}' stores no reference."),
     });
     private void WriteNumberRaw(ArenaColumn column, int index, long value) {
         switch (column) {
+            case ArenaColumn.NextSlot: m_nextSlots[index] = (int)value; break;
+            case ArenaColumn.PreviousSlot: m_previousSlots[index] = (int)value; break;
+            case ArenaColumn.HeadSlot: m_headSlots[index] = (int)value; break;
+            case ArenaColumn.TailSlot: m_tailSlots[index] = (int)value; break;
+            case ArenaColumn.CellCapacity: InstallReservation(next: m_layout.WithCellCapacity(rowOrdinal: index, capacity: (int)value)); break;
             case ArenaColumn.Number:
                 m_numbers[index] = value;
 
@@ -118,11 +125,7 @@ public sealed partial class StateArena {
 
                 break;
             case ArenaColumn.ClockSet:
-                SetBit(
-                    index: index,
-                    value: (value != 0L),
-                    words: m_clockSet
-                );
+                m_clockSet[index] = (value != 0L);
 
                 break;
             case ArenaColumn.MemberKey:
@@ -132,40 +135,40 @@ public sealed partial class StateArena {
             case ArenaColumn.ClockEpochTick:
                 Ensure(
                     column: ref m_clockEpochTicks,
-                    size: m_layout.CellSlotCount
+                    kind: ArenaColumn.ClockEpochTick
                 )[index] = value;
 
                 break;
             case ArenaColumn.ClockEpochEngineTick:
                 Ensure(
                     column: ref m_clockEpochEngineTicks,
-                    size: m_layout.CellSlotCount
+                    kind: ArenaColumn.ClockEpochEngineTick
                 )[index] = value;
 
                 break;
             case ArenaColumn.ClockY0:
                 Ensure(
                     column: ref m_clockY0,
-                    size: m_layout.CellSlotCount
+                    kind: ArenaColumn.ClockY0
                 )[index] = value;
 
                 break;
             case ArenaColumn.ClockV0:
                 Ensure(
                     column: ref m_clockV0,
-                    size: m_layout.CellSlotCount
+                    kind: ArenaColumn.ClockV0
                 )[index] = value;
 
                 break;
             case ArenaColumn.ClockSubstepTicks:
                 Ensure(
                     column: ref m_clockSubstepTicks,
-                    size: m_layout.CellSlotCount
+                    kind: ArenaColumn.ClockSubstepTicks
                 )[index] = value;
 
                 break;
             case ArenaColumn.Behavior:
-                (m_behaviors ??= new byte[m_layout.CellSlotCount])[index] = ((byte)value);
+                (m_behaviors ??= new ArenaColumnBuffer<byte>(layout: m_layout, column: ArenaColumn.Behavior))[index] = ((byte)value);
 
                 break;
             case ArenaColumn.MemberCount:
@@ -179,7 +182,7 @@ public sealed partial class StateArena {
             case ArenaColumn.DrawCursor:
                 Ensure(
                     column: ref m_drawCursors,
-                    size: m_layout.RowCount
+                    kind: ArenaColumn.DrawCursor
                 )[index] = value;
 
                 break;
@@ -193,7 +196,7 @@ public sealed partial class StateArena {
             case ArenaColumn.PhaseSequence:
                 Ensure(
                     column: ref m_phaseSequences,
-                    size: m_layout.RowCount
+                    kind: ArenaColumn.PhaseSequence
                 )[index] = value;
 
                 break;
@@ -216,21 +219,17 @@ public sealed partial class StateArena {
     private void WriteReferenceRaw(ArenaColumn column, int index, object? value) {
         switch (column) {
             case ArenaColumn.Text:
-                (m_texts ??= new string?[m_layout.CellSlotCount])[index] = ((string?)value);
-
-                break;
-            case ArenaColumn.Provenance:
-                (m_provenance ??= new string?[m_layout.CellSlotCount])[index] = ((string?)value);
+                (m_texts ??= new ArenaColumnBuffer<string?>(layout: m_layout, column: ArenaColumn.Text))[index] = ((string?)value);
 
                 break;
             case ArenaColumn.Visibility:
                 m_visibilityBytes -= StateVisibilityStorage.RetainedBytes(value: m_visibilities?[index]);
-                (m_visibilities ??= new StateVisibility?[m_layout.CellSlotCount])[index] = ((StateVisibility?)value);
+                (m_visibilities ??= new ArenaColumnBuffer<StateVisibility?>(layout: m_layout, column: ArenaColumn.Visibility))[index] = ((StateVisibility?)value);
                 m_visibilityBytes += StateVisibilityStorage.RetainedBytes(value: ((StateVisibility?)value));
 
                 break;
             case ArenaColumn.Observation:
-                (m_observations ??= new StateObservation?[m_layout.CellSlotCount])[index] = ((StateObservation?)value);
+                (m_observations ??= new ArenaColumnBuffer<StateObservation?>(layout: m_layout, column: ArenaColumn.Observation))[index] = ((StateObservation?)value);
 
                 break;
             default:
@@ -240,6 +239,11 @@ public sealed partial class StateArena {
     // The one door every number column is written through: it journals what it overwrote while a scope is open,
     // settles the version immediately when none is, and moves the row's generation either way.
     private void WriteNumber(ArenaColumn column, int index, long value) {
+        var row = m_layout.RowOf(column: column, index: index);
+        if ((row >= 0) && !m_layout.HasColumn(row: row, column: column)) {
+            if (value == 0L) { return; }
+            throw new InvalidOperationException(message: $"Row '{RowName(rowOrdinal: row)}' declares no '{column}' column.");
+        }
         var previous = ReadNumberRaw(
             column: column,
             index: index
@@ -272,6 +276,11 @@ public sealed partial class StateArena {
         );
     }
     private void WriteReference(ArenaColumn column, int index, object? value) {
+        var row = m_layout.RowOf(column: column, index: index);
+        if ((row >= 0) && !m_layout.HasColumn(row: row, column: column)) {
+            if (value is null) { return; }
+            throw new InvalidOperationException(message: $"Row '{RowName(rowOrdinal: row)}' declares no '{column}' column.");
+        }
         var previous = ReadReferenceRaw(
             column: column,
             index: index
