@@ -260,6 +260,11 @@ public static partial class WorldDocumentEmitter {
             m_text.Append(value: ']');
         }
         private void WriteCall(Syntax.SourceCall call, OperandExpressionNode operand) {
+            if (call.Name is "compareState" or "compareValue") {
+                Refuse(message: $"{call.Name}(...) is retired in source gates; write an ordinary comparison such as 'left == right'.", span: operand.Span);
+                m_text.Append(value: '0');
+                return;
+            }
             if (call is { Name: "maximum", Arguments: [var left, var right] } &&
                 BooleanSyntax(left.Value) && BooleanSyntax(right.Value)) {
                 Refuse(message: "maximum() over Boolean expressions is retired; write 'left or right'.", span: operand.Span);

@@ -444,7 +444,8 @@ Kinds come from state declarations and earlier locals. Numeric literals take the
 kind; an unconstrained integer expression is Int, while an unconstrained decimal expression selects
 Fixed (`1.0` suffices). Int carriers round literals to even; comparisons against Int cells keep exact thresholds. There is no implicit conversion between Int and Fixed state reads. A gate needs no
 `: Int` or `as Int` suffix, and a Boolean expression needs no `== 1` wrapper. The emitter chooses
-`compareState` or `compareValue` from the expression.
+`compareState` or `compareValue` from the expression; source gates refuse these call spellings
+and name an ordinary comparison such as `left == right` as their replacement.
 A comparison yields `1` or `0`, never a JSON boolean—the rule language has no boolean either, so
 `cleared + (row > 0)` means the same thing on both sides of the compiler. `filter`'s lambda, a conditional's
 condition, and a `for`'s own reads are all read back through the same truth test: a number is true when non-zero, a string

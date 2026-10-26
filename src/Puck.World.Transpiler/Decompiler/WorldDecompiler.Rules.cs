@@ -456,14 +456,8 @@ public static partial class WorldDecompiler {
     }
     // ---- Gate (predicate) inverse (§1.4) ---------------------------------------------------------------------
 
-    // A rule's `gate` is an ordinary rule-body property (§2.2's generic-property fallback), so — unlike `when` on
-    // its own — it has a safe escape hatch: print it as a plain `gate: <value>` property, letting `FormatValue`'s
-    // call-form printer carry every `$type` node, whenever `when <comparison>` sugar could not parse back to the
-    // same tree. This is required, not cosmetic (A11): `ParseAtom` special-cases a LEADING '(' as a parenthesized
-    // sub-gate before a `compareValue` predicate's own `left` reaches the operand parser — a `left` that
-    // itself begins with a parenthesized clause (a `&`/`|`-chain of grouped comparisons,
-    // real in this corpus's own board-legality binds) is truncated at the first ')' no matter where in an
-    // `and`/`or` chain it sits, so it can only be represented by NOT going through the gate grammar at all.
+    // A rule's generic gate property preserves a noncanonical document shape that an inferred-kind
+    // expression would lower differently. Ordinary authored conditions print as expressions.
     private static void AppendGateProperty(StringBuilder sb, JsonObject gate, int indentLevel) {
         var inner = new string(
             c: ' ',
@@ -526,10 +520,7 @@ public static partial class WorldDecompiler {
         out _
     )
             && node["kind"] is null && !CompareValueNeedsDocumentForm(node: node)),
-        // A single-child (or empty) `all`/`any` has no bare-sugar spelling at all: `AndGate`/`OrGate` only ever
-        // build the `All`/`Any` wrapper when MORE than one operand was matched at the same keyword — one operand
-        // (or zero) collapses to that operand directly (or nothing), so the wrapper itself is unrecoverable from
-        // `and`/`or` text no matter where it sits in the tree.
+        // An empty or single-child logical wrapper has no expression spelling that preserves the wrapper.
         "all" or "any" => ((node["predicates"] is JsonArray predicates)
             && (predicates.Count >= 2)
             && predicates.All(predicate: static p => ((p is JsonObject o) && IsPredicateSafeForGateSugar(node: o)))),
@@ -1163,18 +1154,11 @@ public static partial class WorldDecompiler {
             );
         }
     }
-    // `if Gate { }` mandates a Gate-grammar condition with no property-style escape hatch the way a rule's own
-    // `gate` has: `AppendGateProperty` falls back to a raw `gate: <value>` property (parsed generically, never
-    // re-entering Gate grammar) when the sugar cannot safely reproduce a predicate, but `if` has nowhere to fall
-    // back to — the core parser reads `if(...)` at statement position unconditionally as this same if-statement
-    // grammar, never as a generic call the way every other effect verb is, so no text this method could emit both
-    // preserves an unsafe predicate's exact shape and reparses at all. Refuse to decompile rather than emit text
-    // that silently recompiles to a different predicate tree (a `compareValue` whose `left` itself starts with '(',
-    // misread by `ParseAtom`'s leading-'(' sub-gate case) or fails to reparse at all (an unparseable comparison
-    // name, a single-operand `all`/`any`).
+    // An if condition must be an expression; unlike a rule's generic gate property, it cannot preserve a
+    // document predicate whose kind or wrapper shape has no equivalent expression spelling.
     private static string FormatSafeIfCondition(JsonObject cond, string keyword) {
         if (!IsPredicateSafeForGateSugar(node: cond)) {
-            throw new InvalidOperationException(message: $"cannot decompile this '{keyword}' effect to .puck source: its condition (\"{cond["$type"]}\") has no DSL spelling that reparses back to the same predicate — author or edit this rule as JSON instead");
+            throw new InvalidOperationException(message: $"cannot decompile this '{keyword}' effect to .puck source: its condition (\"{cond["$type"]}\") has no expression spelling that preserves the predicate shape; rewrite the condition as an ordinary expression");
         }
 
         return FormatPredicate(node: cond);

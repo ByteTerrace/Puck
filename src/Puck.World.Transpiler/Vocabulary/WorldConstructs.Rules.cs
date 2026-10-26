@@ -217,13 +217,13 @@ public static partial class WorldConstructs {
                     Name: "gate",
                     Position: WorldMemberPosition.Header,
                     Required: true,
-                    Summary: "The predicate; a second `when` in one rule or option is refused."
+                    Summary: "The condition expression; a second `when` in one rule or option is refused."
                 ),
             ],
             Shape: WorldConstructShape.Statement,
             Snippet: "when ${1:condition}",
             Sugar: new(
-                Condition: "no `compareValue` in it opens its left operand with `(` and no `all`/`any` in it carries fewer than two children",
+                Condition: "its predicates have an expression spelling that preserves their document shape",
                 Open: true,
                 Fallback: "`gate: <call-form>`, an ordinary rule-body property"
             ),

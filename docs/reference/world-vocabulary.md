@@ -774,9 +774,9 @@ when <expression>
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
-| `gate` (required) | header | gate | — | `gate` | — | The predicate; a second `when` in one rule or option is refused. |
+| `gate` (required) | header | gate | — | `gate` | — | The condition expression; a second `when` in one rule or option is refused. |
 
-Printed back as `when` when the node carries `gate`, and no `compareValue` in it opens its left operand with `(` and no `all`/`any` in it carries fewer than two children; otherwise `gate: <call-form>`, an ordinary rule-body property. Every field of the node the description does not name prints as an ordinary property.
+Printed back as `when` when the node carries `gate`, and its predicates have an expression spelling that preserves their document shape; otherwise `gate: <call-form>`, an ordinary rule-body property. Every field of the node the description does not name prints as an ordinary property.
 
 ### `space`
 
