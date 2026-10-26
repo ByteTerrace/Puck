@@ -159,7 +159,10 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   A world document also gets its compiled world (`.puckb`) beside it.
   `--watch` recompiles on change; `--tree` mirrors a directory of sources.
 - `puck decompile` is **one-way**: `let`, `template` and `for` never come back.
-  Decompile once to import a JSON document, then edit the `.puck`.
+  Decompile once to import one hand-written JSON document, then edit the
+  `.puck`. A row a `ground`, `test`, `border`, `door` or aliased `use`
+  generated is refused by name: those are written in source, never printed
+  from a document (decision P1).
 - `puck format` prints `.puck` through `PuckPrinter` (two-space indent, lines
   broken past 120 columns, no options); the language server and `puck
   decompile` print through the same printer. Formatting is a fixed point and
@@ -176,8 +179,10 @@ twins as derived caches, never committed or byte-compared against a saved copy.
 Compile the authored sources when needed; semantic round trips compare fresh
 compilations. Imported modules contribute templates, not standalone documents.
 A world source also has no committed document: the build compiles it. `--world foo.puck` boots straight from source,
-`world.reload` recompiles it, and `world.save` writes edits back through the
-printer (generated rows refuse by name).
+`world.reload` recompiles it, and `world.save` writes each live edit into the
+source that authors it, an import's row in the import and a value read from a
+`let` in that `let`, keeping everything else as written; generated rows refuse
+by name, and simulation `state` stays as authored.
 
 After editing a world, run it (`dotnet run --project src/Puck.World -c Release
 -- --world worlds/debug --devices none --exit-after-seconds 2`); verify a cartridge in a world (`rom-forge`).

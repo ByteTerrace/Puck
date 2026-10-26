@@ -202,9 +202,7 @@ state {
       cells: reduce(range(0, length(guideCopy)), [], (cells, index) => concat(cells, [
         { key: $"{index}-title", value: guideCopy[index].title }
         { key: $"{index}-note", value: guideCopy[index].note }
-      ]
-      )
-      )
+      ]))
     }
     table guide {
       title = ""
@@ -235,14 +233,14 @@ hud {
           kind: Text
           rect { x: 0.03, y: 0.08, width: 0.94, height: 0.46 }
           style: Primary
-          "template": "{state.guide.title}"
+          template: "{state.guide.title}"
         }
         {
           id: "note"
           kind: Text
           rect { x: 0.03, y: 0.56, width: 0.94, height: 0.36 }
           style: Dim
-          "template": "{state.guide.note}"
+          template: "{state.guide.note}"
           voice: guideVoice
         }
       ]

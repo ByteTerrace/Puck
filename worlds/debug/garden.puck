@@ -32,7 +32,6 @@ metadata {
 // A traveller from the debug world arrives here, and the debug world's window onto the garden observes it whole.
 admission [
   {
-    algorithm: ""
     disclosure: Replica
     domain: "*"
     grants [
@@ -48,8 +47,6 @@ admission [
       }
     ]
     mode: FederatedAuthority
-    publicKey: ""
-    subject: null
   }
 ]
 
@@ -268,8 +265,7 @@ render {
         { elevation: 0, color: "#FF9A4D" }
         { elevation: 0.25, color: "#D2557A" }
         { elevation: 1, color: "#3B2A6E" }
-      ]
-      )
+      ])
       sunDisc(name: "sun", luminance: 400nit, light: 0, radius: 1.2deg, intensity: 10, color: "#FFC27A")
     ]
   }

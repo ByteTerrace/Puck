@@ -215,7 +215,7 @@ public static partial class WorldDefinitionValidator {
             // row is keyless by rule (below) and its domain is an authority namespace or the any-authority
             // wildcard, never a key fingerprint — the profile's algorithm/domain constraints cannot apply to it.
             if (row.Mode is not (WorldAdmissionTrustMode.FederatedAuthority or WorldAdmissionTrustMode.OAuth)) {
-                if (!AttestationProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
+                if ((row.Algorithm is null) || !AttestationProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
                     errors.Add(item: $"{path}.algorithm must be '{AttestationAlgorithms.EcdsaP256Sha256}' because the world admission door uses the mandatory attestation-v1-base profile.");
                 }
 
@@ -244,15 +244,14 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.domain is required for keyless admission.");
                 }
 
-                if (
-                    !string.IsNullOrEmpty(value: row.Algorithm) ||
-                    !string.IsNullOrEmpty(value: row.PublicKey)
-                ) {
-                    errors.Add(item: $"{path} is a keyless admission mode; leave algorithm and publicKey empty.");
+                if ((row.Algorithm is not null) || (row.PublicKey is not null)) {
+                    errors.Add(item: $"{path} is a keyless admission mode; it authors no algorithm and no publicKey.");
                 }
+            } else if (row.PublicKey is null) {
+                errors.Add(item: $"{path}.publicKey is required for mode '{row.Mode}'.");
             } else {
                 try {
-                    spki = Convert.FromBase64String(s: (row.PublicKey ?? string.Empty));
+                    spki = Convert.FromBase64String(s: row.PublicKey);
                 } catch (FormatException) {
                     errors.Add(item: $"{path}.publicKey is not valid base64.");
                 }

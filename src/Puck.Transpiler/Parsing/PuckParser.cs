@@ -404,7 +404,7 @@ public static partial class PuckParser {
             }
         }
 
-        if (TryMatchKeyword(context: context, keyword: "let")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "let")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var varName)) {
                 throw CreateException(context: context, message: "Expected identifier after 'let'");
@@ -421,11 +421,11 @@ public static partial class PuckParser {
             return new LetNode(Column: col, Length: len, Line: line, Name: varName, Offset: startOffset, Value: val);
         }
 
-        if (TryMatchKeyword(context: context, keyword: "for")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "for")) {
             return ParseForStatement(col: col, context: context, diagnostics: diagnostics, line: line, schema: schema, startOffset: startOffset, vocabulary: vocabulary);
         }
 
-        if (TryMatchKeyword(context: context, keyword: "use")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "use")) {
             SkipWhiteSpace(context: context);
             var callStart = cursor.Offset;
 
@@ -452,7 +452,7 @@ public static partial class PuckParser {
             };
         }
 
-        if (TryMatchKeyword(context: context, keyword: "import")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "import")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var importPath)) {
                 throw CreateException(context: context, message: "Expected string path after 'import'");
@@ -482,7 +482,7 @@ public static partial class PuckParser {
             return import;
         }
 
-        if (TryMatchKeyword(context: context, keyword: "export")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "export")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var facet)) {
                 throw CreateException(context: context, message: "Expected export facet ('read', 'action', 'binding') after 'export'");
@@ -550,9 +550,9 @@ public static partial class PuckParser {
             return new ExportNode(Column: col, Facet: facet, Length: len, Line: line, Names: names, Offset: startOffset) { FacetExplicit = facetExplicit };
         }
 
-        var isModule = TryMatchKeyword(context: context, keyword: "module");
+        var isModule = TryMatchStatementKeyword(context: context, keyword: "module");
 
-        if (isModule || TryMatchKeyword(context: context, keyword: "template")) {
+        if (isModule || TryMatchStatementKeyword(context: context, keyword: "template")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var templateName)) {
                 throw CreateException(context: context, message: "Expected identifier after 'template'");
@@ -688,7 +688,7 @@ public static partial class PuckParser {
             return ParseTestDeclaration(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
-        if (TryMatchKeyword(context: context, keyword: "rule")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "rule")) {
             return ParseRuleBlock(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
@@ -709,7 +709,7 @@ public static partial class PuckParser {
         }
 
         // Addon capability request: request Mutate "section:state"
-        if (TryMatchKeyword(context: context, keyword: "request")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "request")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var capability)) {
                 throw CreateException(context: context, message: "Expected capability name (e.g. Mutate, Observe, Emit) after 'request'");
@@ -726,7 +726,7 @@ public static partial class PuckParser {
         }
 
         // Addon machine-memory watch: watchMemory screen: 0, address: 0x02000000, length: 4
-        if (TryMatchKeyword(context: context, keyword: "watchMemory")) {
+        if (TryMatchStatementKeyword(context: context, keyword: "watchMemory")) {
             SkipWhiteSpace(context: context);
             var screen = 0;
             var address = 0L;
@@ -1519,6 +1519,31 @@ public static partial class PuckParser {
         }
 
         cursor.Advance(count: keyword.Length);
+        return true;
+    }
+    // A statement keyword followed by ':', '{' or '[' is an ordinary property or block of that name instead
+    // (`template: "{state.title}"` in an element row), as `world`, `border`, `door` and `parameter` are, so a
+    // document-level or block member never needs quoting for spelling one.
+    private static bool TryMatchStatementKeyword(ParseContext context, string keyword) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+
+        if (!TryMatchKeyword(context: context, keyword: keyword)) {
+            return false;
+        }
+
+        var buffer = cursor.Buffer;
+        var probe = cursor.Offset;
+
+        while ((probe < buffer.Length) && (buffer[probe] is ' ' or '\t')) {
+            probe++;
+        }
+        if ((probe < buffer.Length) && (buffer[probe] is ':' or '{' or '[')) {
+            cursor.ResetPosition(position: saved);
+
+            return false;
+        }
+
         return true;
     }
     private static bool TryMatchKeywordFollowedByName(ParseContext context, string keyword, NameForms admitted) {

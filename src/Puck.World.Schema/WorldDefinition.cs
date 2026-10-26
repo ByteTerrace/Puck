@@ -735,6 +735,43 @@ public sealed partial record WorldDefinition(
 
         return updated;
     }
+    /// <summary>Returns a copy whose named placement rows carry new <see cref="WorldPlacement.Holding"/> masks, every
+    /// other row and section shared: the projection a response selection makes of the rows it resolved. The compiled
+    /// placement frames and spatial index, which read no mask, carry over, and so does the face catalog when no
+    /// creation a named row shows before or after derives a facet.</summary>
+    /// <param name="holdings">The rows to change, each as an index into <see cref="Placements"/> and its new mask.</param>
+    /// <returns>The updated definition, or this one when <paramref name="holdings"/> is empty.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="holdings"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">An index names no placement row.</exception>
+    public WorldDefinition WithPlacementHoldings(IReadOnlyList<(int Row, int Holding)> holdings) {
+        ArgumentNullException.ThrowIfNull(argument: holdings);
+
+        if (holdings.Count == 0) {
+            return this;
+        }
+
+        var section = (PlacementsRaw ?? new WorldPlacementsSection());
+        var rows = Placements;
+        var next = new WorldPlacement[rows.Count];
+
+        for (var index = 0; (index < rows.Count); index++) {
+            next[index] = rows[index];
+        }
+        foreach (var (row, holding) in holdings) {
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)row), other: ((uint)rows.Count), paramName: nameof(holdings));
+            next[row] = (rows[row] with { Holding = holding });
+        }
+
+        var placements = (section with { Rows = next });
+        var updated = (this with { PlacementsRaw = placements });
+
+        WorldPlacementFrameCompilation.CarryAcrossHolding(source: section, target: placements);
+        WorldSpatialQueryCompilation.CarryAcrossHolding(source: section, target: placements);
+        WorldStateDocumentValues.CarryReferencedRows(source: this, target: updated);
+        WorldFaceCatalog.CarryAcrossHolding(holdings: holdings, source: this, target: updated);
+
+        return updated;
+    }
     /// <summary>Returns a copy with its declared state spaces replaced.</summary>
     public WorldDefinition WithWorldSpaces(IReadOnlyList<StateSpace>? spaces) {
         var updated = this with {

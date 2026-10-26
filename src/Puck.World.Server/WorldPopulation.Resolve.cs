@@ -83,9 +83,6 @@ public sealed partial class WorldPopulation {
 
         CompileFlocks();
 
-        // Derive the contact field the definition selects — the ONE derivation both a fresh activation and a live body
-        // read. The field provider's program is handed in pre-built at runtime; at boot it is compiled here.
-        m_contactCensus = WorldColliderSet.Measure(definition: definition);
         // The gravitational field the definition authors. Compiled here beside the contact field so one derivation
         // serves a fresh activation and a live body alike.
         m_gravityField = new WorldGravityField(
@@ -95,11 +92,37 @@ public sealed partial class WorldPopulation {
                 placements: definition.Placements
             )
         );
-        var derivedSolids = solids;
 
         // Field state exists independently of the selected contact/target provider. A world may use its lattice only
         // for reactions, exposure rows, snapshots, or rendering and still owes the same authoritative state.
         InstallFields(definition: definition);
+        CompileSolidConsumers(
+            definition: definition,
+            previousNavigation: previousNavigation,
+            solids: solids
+        );
+        m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
+        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.
+        m_lookRows = WorldDefinitionRows.ResolveLookRows(looks: definition.Looks);
+        // The compiled population distribution — read ONLY by SeedSimulated (never the authored floats). The validator has already
+        // resolved every named spawn point, so Compile's lookups always hit.
+        m_distribution = FixedWorldDistribution.Compile(
+            distribution: definition.Population.Distribution,
+            spawnPoints: definition.SpawnPoints
+        );
+        m_lookAssignment = definition.LookAssignment;
+        // The remote admission cap moves with the live document (a swap can raise or lower networkPlayers); the running
+        // census count is re-clamped against it by ReconcileInhabitants' trailing SetSimulatedCount.
+        m_remoteCap = definition.Population.NetworkPlayers;
+    }
+    // What the solid rows compile into: the contact field the definition selects (the ONE derivation both a fresh
+    // activation and a live body read; the field provider's program is handed in pre-built at runtime, and at boot it
+    // is compiled here), the line-of-sight field and the navigation runtime over them. A whole rebuild and a response
+    // swap that moves a solid row (TryInstallResponseSolids) both compile them through here.
+    private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation) {
+        m_contactCensus = null;
+        m_censusDefinition = definition;
+        var derivedSolids = solids;
 
         if (
             (derivedSolids is null) &&
@@ -137,19 +160,6 @@ public sealed partial class WorldPopulation {
             ),
             previous: previousNavigation
         );
-        m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
-        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.
-        m_lookRows = WorldDefinitionRows.ResolveLookRows(looks: definition.Looks);
-        // The compiled population distribution — read ONLY by SeedSimulated (never the authored floats). The validator has already
-        // resolved every named spawn point, so Compile's lookups always hit.
-        m_distribution = FixedWorldDistribution.Compile(
-            distribution: definition.Population.Distribution,
-            spawnPoints: definition.SpawnPoints
-        );
-        m_lookAssignment = definition.LookAssignment;
-        // The remote admission cap moves with the live document (a swap can raise or lower networkPlayers); the running
-        // census count is re-clamped against it by ReconcileInhabitants' trailing SetSimulatedCount.
-        m_remoteCap = definition.Population.NetworkPlayers;
     }
 
     /// <summary>Checks whether the candidate's field runtime can replace the live reaction plan while preserving
@@ -422,7 +432,8 @@ public sealed partial class WorldPopulation {
     // the pre-built SDF field otherwise. At runtime the
     // server hands the pre-built field (built once at apply time for its loud excluded-op rejection); at boot (solids ==
     // null) the field is compiled here and a bad-op world fails loudly.
-    private static IContactField? ResolveContactField(WorldDefinition definition, WorldSolidField? solids) {
+    // An analytic set reuses the colliders of each row that stands from the set it replaces.
+    private IContactField? ResolveContactField(WorldDefinition definition, WorldSolidField? solids) {
         if (WorldContactSelection.RequiresField(collision: definition.Collision)) {
             if (solids is not null) {
                 return solids;
@@ -431,7 +442,10 @@ public sealed partial class WorldPopulation {
             return (solids ?? throw new InvalidOperationException(message: "the field contact provider was not compiled."));
         }
 
-        return WorldColliderSet.Build(definition: definition);
+        return WorldColliderSet.Build(
+            definition: definition,
+            previous: (m_baseContactField as WorldColliderSet)
+        );
     }
     // The kit name an inhabited placement resolves: its explicit Inhabit.Kit, or the creation's Locomotion token as a
     // kit name (the creator's rule). Null when neither resolves to a string (the validator already rejected such a row).
@@ -625,6 +639,55 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+    // Carries one body's navigation route and producer domain from the runtime a recompile replaced into the current one,
+    // by domain name. A route stores domain-local node ordinals, so it is kept only when the replacement runtime proved
+    // the same complete static bake and rebound its dynamic query provider; every uncertain case replans from the
+    // retained designation on the next producer tick.
+    private void RebindNavigation(int bodyIndex, NavigationRuntime previousNavigation) {
+        var navigation = m_entries[bodyIndex].NavigationState;
+        var routeRetained = false;
+
+        if ((((uint)navigation.DomainIndex) < ((uint)previousNavigation.Count)) && TryFindRetainedDomain(
+            index: out var currentIndex,
+            name: previousNavigation[navigation.DomainIndex].Name
+        )) {
+            navigation.DomainIndex = currentIndex;
+            routeRetained = true;
+        }
+        if (!routeRetained) {
+            navigation.Clear();
+        }
+        var activeDomain = m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex;
+
+        if (
+            (((uint)activeDomain) < ((uint)previousNavigation.Count)) &&
+            TryFindRetainedDomain(
+            previousNavigation[activeDomain].Name,
+            out var reboundDomain
+        )
+        ) {
+            m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = reboundDomain;
+        } else if (activeDomain >= 0) {
+            m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = -1;
+        }
+    }
+    private bool TryFindRetainedDomain(string name, out int index) {
+        for (var candidate = 0; (candidate < m_navigation.Count); candidate++) {
+            if (
+                m_navigation.WasRetained(index: candidate) &&
+                string.Equals(
+                a: m_navigation[candidate].Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                index = candidate;
+                return true;
+            }
+        }
+        index = -1;
+        return false;
+    }
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
     /// motion/producer retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
     /// re-resolves every entry's kit index, re-derives the kit/producer-dependent per-entry statics without resetting the
@@ -662,39 +725,10 @@ public sealed partial class WorldPopulation {
         );
 
         for (var bodyIndex = 0; (bodyIndex < m_entries.Length); bodyIndex++) {
-            var navigation = m_entries[bodyIndex].NavigationState;
-            var routeRetained = false;
-
-            if (((uint)navigation.DomainIndex) < ((uint)previousNavigation.Count)) {
-                var oldName = previousNavigation[navigation.DomainIndex].Name;
-
-                if (TryFindRetainedDomain(
-                    index: out var currentIndex,
-                    name: oldName
-                )) {
-                    navigation.DomainIndex = currentIndex;
-                    routeRetained = true;
-                }
-            }
-            // A route stores domain-local node ordinals. Keep it only when the replacement runtime proved the same
-            // complete static bake and rebound its dynamic query provider; all uncertain cases replan from the
-            // retained designation on the next producer tick.
-            if (!routeRetained) {
-                navigation.Clear();
-            }
-            var activeDomain = m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex;
-
-            if (
-                (((uint)activeDomain) < ((uint)previousNavigation.Count)) &&
-                TryFindRetainedDomain(
-                previousNavigation[activeDomain].Name,
-                out var reboundDomain
-            )
-            ) {
-                m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = reboundDomain;
-            } else if (activeDomain >= 0) {
-                m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = -1;
-            }
+            RebindNavigation(
+                bodyIndex: bodyIndex,
+                previousNavigation: previousNavigation
+            );
             // Cadence periods and cached steering are compiled-kit products. A live kit/assignment rebuild must not
             // carry a partial interval or producer image authored under the previous row into the replacement.
             m_entries[bodyIndex].AutonomyState.Clear();
@@ -711,24 +745,6 @@ public sealed partial class WorldPopulation {
             }
 
             m_entries[bodyIndex].Designations = current;
-        }
-
-        bool TryFindRetainedDomain(string name, out int index) {
-            for (var candidate = 0; (candidate < m_navigation.Count); candidate++) {
-                if (
-                    m_navigation.WasRetained(index: candidate) &&
-                    string.Equals(
-                    a: m_navigation[candidate].Name,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    index = candidate;
-                    return true;
-                }
-            }
-            index = -1;
-            return false;
         }
 
         var assignmentRows = ResolveRows(

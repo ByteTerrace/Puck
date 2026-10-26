@@ -130,6 +130,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
     private int m_staticFieldNeighbours = -1;
+    private int m_staticFieldResponses = -1;
     // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
     private Task<SdfFieldEvaluator>? m_staticFieldBuild;
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
@@ -446,12 +447,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // evaluator it compiles to is built on the thread pool while the field it replaces stays published, and a
     // tick-locked frame waits for it (AdoptStaticField), so a still of one tick reads the field that tick delivered.
     private void RebuildStaticField() {
-        SdfProgram program;
+        SdfProgramBuilder builder;
 
         try {
             var definition = m_client.Definition;
-            var builder = new SdfProgramBuilder();
 
+            builder = new SdfProgramBuilder();
             // Only what a body can touch: a solid placement. A presentation-only placement (the wallpaper-folded
             // ground texture) has no fixed-point query twin and would refuse the whole field.
             m_queryColors.Begin();
@@ -481,7 +482,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             );
 
             m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
-            program = builder.Build();
         } catch (ArgumentException exception) {
             m_staticFieldBuild = null;
             m_client.PublishStaticField(field: null);
@@ -490,7 +490,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return;
         }
 
-        m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: program));
+        // The program and its evaluator build off the frame thread; a refusal from either reaches AdoptStaticField.
+        m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: builder.Build()));
         AdoptStaticField(wait: TickLocked);
     }
     // Publishes the presentation field's evaluator once its build has finished, or waits for it.
@@ -1644,13 +1645,15 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             m_lastProgram = program;
 
             // The field holds the delivered definition's static placements and screens and the neighbours' strips alone,
-            // so a rebuild for a body coming or going, or for a value-only state delivery, which changes no scene shape,
+            // so a rebuild for a body coming or going, or for a value-only state delivery that moves no shown creation,
             // leaves it as it was.
             if (
                 (m_client.DefinitionRevision != m_staticFieldDefinition) ||
+                (m_client.ResponseRevision != m_staticFieldResponses) ||
                 (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours)
             ) {
                 m_staticFieldDefinition = m_client.DefinitionRevision;
+                m_staticFieldResponses = m_client.ResponseRevision;
                 m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
                 RebuildStaticField();
             }
@@ -2356,6 +2359,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // ReconcileDelivery call always reconciles once, exactly like every later delivery.
         m_builtDefinitionRevision = int.MinValue;
         ObserveShadows();
+        // What a response can show compiles now, off the frame thread, rather than on the frame that first shows it.
+        _ = Task.Run(action: () => PrepareResponses(definition: definition));
+    }
+
+    private static void PrepareResponses(WorldDefinition definition) {
+        try {
+            _ = WorldPlacementStamper.PrepareResponses(definition: definition);
+        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+            Console.Error.WriteLine(value: $"[world.presentation: the creations responses show were not prepared ahead; each compiles when first shown: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+        }
     }
 
     // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the

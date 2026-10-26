@@ -2265,11 +2265,11 @@ public static partial class WorldModelShape {
             [],
             [
                 M("domain", typeof(global::System.String), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Domain", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Domain),
-                M("subject", typeof(global::System.String), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Subject", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Subject),
                 M("mode", typeof(global::Puck.World.Protocol.WorldAdmissionTrustMode), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Mode", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Mode),
+                M("grants", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Protocol.WorldAdmissionGrant>), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Grants", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Grants),
+                M("subject", typeof(global::System.String), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Subject", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Subject),
                 M("algorithm", typeof(global::System.String), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Algorithm", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Algorithm),
                 M("publicKey", typeof(global::System.String), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "PublicKey", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).PublicKey),
-                M("grants", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Protocol.WorldAdmissionGrant>), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Grants", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Grants),
                 M("disclosure", typeof(global::System.Nullable<global::Puck.World.Protocol.WorldDisclosureTier>), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Disclosure", Read | Write, static value => ((global::Puck.World.Protocol.WorldAdmissionEntry)value).Disclosure),
                 M("tier", typeof(global::Puck.World.Protocol.WorldDisclosureTier), typeof(global::Puck.World.Protocol.WorldAdmissionEntry), "Tier", None),
             ],

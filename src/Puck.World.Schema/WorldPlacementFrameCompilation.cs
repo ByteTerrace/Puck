@@ -139,6 +139,13 @@ public static class WorldPlacementFrameCompilation {
             createValueCallback: static s => new StrongBox<IReadOnlyDictionary<string, CompiledPlacementFrame>>(value: Compile(placements: s.Rows))
         ).Value!;
     }
+    // Hands a section's compiled frame table to a section whose rows differ from it only in their holding masks
+    // (WorldDefinition.WithPlacementHoldings), which no frame reads.
+    internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
+        if (Cache.TryGetValue(key: source, value: out var table)) {
+            Cache.AddOrUpdate(key: target, value: table);
+        }
+    }
     /// <summary>Rotates a document vector about +Y through the deterministic placement-frame rotation.</summary>
     /// <param name="vector">The local vector.</param>
     /// <param name="degrees">Yaw in degrees.</param>

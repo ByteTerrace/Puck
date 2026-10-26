@@ -97,7 +97,7 @@ search {
       legal: legal
       best: aiBest
       depth: 2
-      "score": (turn == 1) ? pieceCell[red] - pieceCell[blue] : pieceCell[blue] - pieceCell[red]
+      score: (turn == 1) ? pieceCell[red] - pieceCell[blue] : pieceCell[blue] - pieceCell[red]
     }
   ]
 }

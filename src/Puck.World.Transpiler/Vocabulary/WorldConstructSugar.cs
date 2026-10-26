@@ -37,6 +37,13 @@ public sealed record WorldConstructSugar(
         Open: true
     );
 
+    /// <summary>The requirement for a construct that generates rows no document node prints back: it is written in
+    /// source alone, and a save keeps it as written and refuses an edit to a row it generated, naming the row.</summary>
+    public static WorldConstructSugar Generator { get; } = new(
+        Fallback: "a refusal naming the generated row, since the construct is written in source and a save leaves it as written",
+        Open: true,
+        Printed: false
+    );
     /// <summary>The requirement for a construct of the compile-time layer, which reaches no document member of
     /// its own.</summary>
     public static WorldConstructSugar None { get; } = new(

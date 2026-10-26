@@ -70,10 +70,7 @@ public sealed partial class AdmissionArrivalLawTests {
 
         return new WorldAdmissionEntry(
             Domain: domain,
-            Subject: null,
             Mode: WorldAdmissionTrustMode.FederatedAuthority,
-            Algorithm: string.Empty,
-            PublicKey: string.Empty,
             Grants: grants
         );
     }

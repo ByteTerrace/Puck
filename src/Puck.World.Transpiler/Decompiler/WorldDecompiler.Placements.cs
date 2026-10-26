@@ -43,6 +43,16 @@ public static partial class WorldDecompiler {
             count: ((indentLevel + 1) * 4)
         );
 
+        // A section holding only its empty list is the array of its rows, the one spelling the lowering reads.
+        if ((placements.Count == 1) && (placements["rows"] is JsonArray { Count: 0 })) {
+            sb.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"{indent}placements []"
+            );
+
+            return;
+        }
+
         sb.AppendLine(
             CultureInfo.InvariantCulture,
             $"{indent}placements {{"

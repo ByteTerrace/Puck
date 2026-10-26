@@ -351,13 +351,10 @@ let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
     z0: 14.47
     z1: 37.53
   }
-]
-), map(
+]), map(
   ((k == 3) ? skylightStarts : []),
   x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 }
-)
-)
-)
+)))
 let blindPalette = [{ color: "#CFCFCC", roughness: 0.9, specular: 0.03 }]
 // The seams painted across a window's board, the most a palette slot's paints hold.
 let blindSeams = 8
@@ -1118,7 +1115,7 @@ placements {
       solid
       respond [
         {
-          "when": state(state: hallLights, key: $"level{k - 1}", comparison: Equal, value: 0)
+          when: state(state: hallLights, key: $"level{k - 1}", comparison: Equal, value: 0)
           prototypeId: $"hall-floor-{k}-dark"
         }
       ]
@@ -1130,7 +1127,7 @@ placements {
     solid
     respond [
       {
-        "when": state(state: hallLights, key: `level3`, comparison: Equal, value: 0)
+        when: state(state: hallLights, key: `level3`, comparison: Equal, value: 0)
         prototypeId: "hall-roof-dark"
       }
     ]
@@ -1141,7 +1138,7 @@ placements {
       position [0, galleryFloor[k], 0]
       respond [
         {
-          "when": state(state: hallLights, key: $"level{k}", comparison: Equal, value: 0)
+          when: state(state: hallLights, key: $"level{k}", comparison: Equal, value: 0)
           prototypeId: "hall-switch-off"
         }
       ]
@@ -1175,7 +1172,7 @@ placements {
       solid
       respond [
         {
-          "when": state(state: hallBlinds, key: $"level{blind.level}", comparison: Equal, value: 0)
+          when: state(state: hallBlinds, key: $"level{blind.level}", comparison: Equal, value: 0)
           prototypeId: "hall-blinds-up"
         }
       ]
@@ -1238,7 +1235,7 @@ placements {
     }
     solid
     respond [
-      { "when": state(state: liftDoors, key: `car`, comparison: Equal, value: 1), prototypeId: "lift-door-1" }
+      { when: state(state: liftDoors, key: `car`, comparison: Equal, value: 1), prototypeId: "lift-door-1" }
     ]
   }
   placement "lift-car-indicator" {
@@ -1250,7 +1247,7 @@ placements {
     }
     respond: map(
       range(1, 3),
-      v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
+      v => { when: state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
     )
   }
   placement "lift-car-arrow" {
@@ -1262,7 +1259,7 @@ placements {
     }
     respond: map(
       range(1, 2),
-      v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
+      v => { when: state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
     )
   }
   // The panel's buttons, left to right: floors 0 to 3, door open, door close. A floor button lights while its car call
@@ -1277,7 +1274,7 @@ placements {
       }
       respond [
         {
-          "when": state(state: liftCarCall, key: $"level{pad.slot}", comparison: Equal, value: 1)
+          when: state(state: liftCarCall, key: $"level{pad.slot}", comparison: Equal, value: 1)
           prototypeId: $"lift-btn-{pad.key}-1"
         }
       ]
@@ -1293,7 +1290,7 @@ placements {
       }
       respond [
         {
-          "when": state(state: liftLamp, key: pad.key, comparison: Equal, value: 1)
+          when: state(state: liftLamp, key: pad.key, comparison: Equal, value: 1)
           prototypeId: $"lift-btn-{pad.key}-1"
         }
       ]
@@ -1306,7 +1303,7 @@ placements {
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.2), 36.1]
       respond [
         {
-          "when": state(state: liftHall, key: $"level{level.level}", comparison: Equal, value: 1)
+          when: state(state: liftHall, key: $"level{level.level}", comparison: Equal, value: 1)
           prototypeId: "lift-call-1"
         }
       ]
@@ -1317,7 +1314,7 @@ placements {
       solid
       respond [
         {
-          "when": state(state: liftDoors, key: $"level{level.level}", comparison: Equal, value: 1)
+          when: state(state: liftDoors, key: $"level{level.level}", comparison: Equal, value: 1)
           prototypeId: "lift-door-1"
         }
       ]
@@ -1327,7 +1324,7 @@ placements {
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), 36.1]
       respond: map(
         range(1, 3),
-        v => { "when": state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
+        v => { when: state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
       )
     }
     placement $"lift-arrow-{level.level}" {
@@ -1335,7 +1332,7 @@ placements {
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), 36.1]
       respond: map(
         range(1, 2),
-        v => { "when": state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
+        v => { when: state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
       )
     }
     placement $"lift-landing-{level.level}" {
@@ -1472,7 +1469,7 @@ render {
     maximum: 16
     compensation: 2.5
     adaptation: 0.75
-    "local": 0.5
+    local: 0.5
     hold: "state.galleryFill.hold"
   }
   indirect {
@@ -1502,46 +1499,42 @@ spawnPoints: concat(
 
 // The car's kit: a sphere of radius 0.1 m that touches nothing in the cab or shaft, with no gravity, so it stands wherever
 // `lift-ride` last posed it.
-kits {
-  rows [
-    {
-      name: "lift"
-      bodyMotionProgram: "walk"
-      collider: sphere(radius: 0.1)
-      motion {
-        holds [
-          {
-            bond: Free
-            hold: None
-            name: "held"
-          }
-        ]
-        shaping [
-          {
-            along {}
-          }
-        ]
-        speed {
-          value: 0.001
+kits [
+  {
+    name: "lift"
+    bodyMotionProgram: "walk"
+    collider: sphere(radius: 0.1)
+    motion {
+      holds [
+        {
+          bond: Free
+          hold: None
+          name: "held"
         }
-        turn {
-          rate: 0.001
+      ]
+      shaping [
+        {
+          along {}
         }
+      ]
+      speed {
+        value: 0.001
+      }
+      turn {
+        rate: 0.001
       }
     }
-  ]
-}
+  }
+]
 
-looks {
-  rows [
-    {
-      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
-      name: "lift-car"
-      scale: 1
-      source: creation(prototypeId: `lift-hidden`)
-    }
-  ]
-}
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "lift-car"
+    scale: 1
+    source: creation(prototypeId: `lift-hidden`)
+  }
+]
 
 state {
   // The shaft: one 3 m column of 1/16 m layers from the ground to level 3, the car's root riding liftRoot over each.

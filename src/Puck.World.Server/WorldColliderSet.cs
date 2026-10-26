@@ -70,7 +70,7 @@ public sealed class WorldColliderSet : IContactField {
     private readonly int[] m_unboundedColliders;
     private readonly List<int> m_candidates = [];
 
-    public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private init; } = [];
+    public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private set; } = [];
 
     // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
     // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
@@ -339,8 +339,11 @@ public sealed class WorldColliderSet : IContactField {
 
     /// <summary>Builds the analytic contact field from a definition.</summary>
     /// <param name="definition">The world definition supplying the collision tuning and solid rows.</param>
+    /// <param name="previous">A set built from an earlier definition, whose colliders for each row that stands as it
+    /// was (the same row, showing the same creation at the same resolved frame) are taken rather than compiled again, or
+    /// <see langword="null"/> to compile every row.</param>
     /// <returns>The analytic field.</returns>
-    public static WorldColliderSet Build(WorldDefinition definition) {
+    public static WorldColliderSet Build(WorldDefinition definition, WorldColliderSet? previous = null) {
         var collision = definition.Collision;
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
 
@@ -351,9 +354,8 @@ public sealed class WorldColliderSet : IContactField {
         var holdableGrantedByOverride = new List<bool>();
         var worldDefaultGrip = definition.Collision.DefaultHold;
         var attachedRows = new List<(WorldPlacement Placement, WorldPrototype Creation)>();
-        var spheres = 0;
+        var placementsCompiled = new Dictionary<WorldPlacement, PlacementColliders>(comparer: ReferenceEqualityComparer.Instance);
         var boxes = 0;
-        var planes = 0;
         var placementSpheres = 0;
         var placementBoxes = 0;
         var placementCylinders = 0;
@@ -389,7 +391,7 @@ public sealed class WorldColliderSet : IContactField {
         foreach (var placement in definition.Placements) {
             // A dealt template collides with nothing itself; its solid facet is what its dealt children carry.
             if (
-                (placement.Solid is not { } solid) ||
+                (placement.Solid is null) ||
                 (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
@@ -408,94 +410,51 @@ public sealed class WorldColliderSet : IContactField {
                 continue;
             }
 
-            var margin = FixedQ4816.FromDouble(value: solid.Margin);
             var resolvedFrame = WorldDefinitionRows.ResolvedFrame(
                 definition: definition,
                 placement: placement
             );
-            // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
-            // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
-            // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
-            // This runs once per boot, but once per boot ON EVERY MACHINE: the compiled colliders are re-derived
-            // from the document by every process, never baked once and shared, which is why a non-portable
-            // transcendental here is a cross-machine divergence rather than a one-time authoring rounding.
-            var rotation = FixedQuaternion.FromAxisAngle(
-                axis: FixedVector3.UnitY,
-                angle: FixedQ4816.FromDegrees(degrees: resolvedFrame.YawDegrees)
-            );
-            // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
-            // WorldPlacementGrip's own remarks.
-            var placementHoldable = (placement.Grip?.Holdable ?? worldDefaultGrip);
-            var placementHoldableIsOverride = (placement.Grip is not null);
 
-            CreationStampLattice.ForEachFixedInstance(
-                origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
-                rotation: rotation,
-                pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(
+            if (
+                (previous is null) ||
+                !previous.m_placements.TryGetValue(key: placement, value: out var compiled) ||
+                !ReferenceEquals(objA: compiled.Creation, objB: creation) ||
+                (compiled.Frame != resolvedFrame) ||
+                (compiled.WorldSeed != worldSeed) ||
+                (compiled.DefaultGrip != worldDefaultGrip)
+            ) {
+                compiled = CompilePlacement(
+                    creation: creation,
+                    defaultGrip: worldDefaultGrip,
+                    frame: resolvedFrame,
                     placement: placement,
                     worldSeed: worldSeed
-                ),
-                mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-                visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
-                    document: creation.EngineDocument,
-                    transform: new FixedCreationStampTransform(
-                        Origin: instance.Origin,
-                        Rotation: rotation,
-                        Scale: FixedQ4816.FromDouble(value: placement.Scale),
-                        ReflectionNormal: instance.ReflectionNormal
-                    ),
-                    visitor: copy => {
-                        FixedStaticCollider placementCollider;
+                );
 
-                        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
-                            var normal = copy.PlaneNormal;
+                if (placement.Respond is { Count: > 0 } responses) {
+                    compiled = CompileShows(
+                        creations: definition.Creations,
+                        placement: placement,
+                        responses: responses,
+                        shown: compiled
+                    );
+                }
+            }
 
-                            placementCollider = FixedStaticCollider.HalfSpace(
-                                point: (copy.Center + (normal * margin)),
-                                normal: normal
-                            );
-                            planes++;
-                            placementPlanes++;
-                        } else if (
-                            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
-                            (copy.UniformScale > FixedQ4816.Zero)
-                        ) {
-                            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
-
-                            placementCollider = FixedStaticCollider.Sphere(
-                                center: copy.Center,
-                                radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                            );
-                            spheres++;
-                            placementSpheres++;
-                        } else {
-                            placementCollider = PlacementFinite(
-                                copy: copy,
-                                margin: margin
-                            );
-                            if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
-                                placementCylinders++;
-                            } else {
-                                boxes++;
-                                placementBoxes++;
-                            }
-                        }
-
-                        colliders.Add(item: placementCollider);
-                        diagnosticColliders.Add(item: new WorldDiagnosticCollider(placementCollider, placement.Id.ToString(),
-                            creation.Id.ToString(), (copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
-                            $"{copy.Shape.Type}/{copy.Shape.Blend}", solid.Margin, !creation.EngineDocument.IsGlassShape(shape: copy.Shape)) {
-                            ConservativeInset = ((placementCollider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
-                        });
-
-                        if (placementHoldable) {
-                            holdableColliders.Add(item: placementCollider);
-                            holdableGrantedByOverride.Add(item: placementHoldableIsOverride);
-                        }
-                    }
-                )
-            );
+            placementsCompiled[placement] = compiled;
+            colliders.AddRange(collection: compiled.Colliders);
+            diagnosticColliders.AddRange(collection: compiled.Diagnostics);
+            if (compiled.Holdable) {
+                holdableColliders.AddRange(collection: compiled.Colliders);
+                for (var index = 0; (index < compiled.Colliders.Length); index++) {
+                    holdableGrantedByOverride.Add(item: compiled.HoldableIsOverride);
+                }
+            }
+            boxes += compiled.Boxes;
+            placementSpheres += compiled.Spheres;
+            placementBoxes += compiled.Boxes;
+            placementCylinders += compiled.Cylinders;
+            placementPlanes += compiled.Planes;
         }
 
         return new WorldColliderSet(
@@ -512,9 +471,233 @@ public sealed class WorldColliderSet : IContactField {
             PlacementCylinderCount = placementCylinders,
             PlacementPlaneCount = placementPlanes,
             PlacementSphereCount = placementSpheres,
-            PlaneCount = planes,
-            SphereCount = spheres,
+            PlaneCount = placementPlanes,
+            SphereCount = placementSpheres,
+            m_placements = placementsCompiled,
         };
+    }
+    // One static solid row's colliders, compiled from the creation it shows at its resolved frame, with the inputs they
+    // were compiled from. A responding row also holds the colliders of every creation it can show, compiled with it at
+    // the same frame (Shows, keyed by creation and holding this entry too), so a response change compiles nothing.
+    private sealed record PlacementColliders(WorldPrototype Creation, CompiledPlacementFrame Frame, ulong WorldSeed, bool DefaultGrip,
+        FixedStaticCollider[] Colliders, WorldDiagnosticCollider[] Diagnostics, bool Holdable, bool HoldableIsOverride, int Spheres,
+        int Boxes, int Cylinders, int Planes, IReadOnlyDictionary<WorldPrototype, PlacementColliders>? Shows = null);
+
+    // Compiles a responding row's colliders for its authored creation and every response entry's, beside the one it
+    // shows, and returns the shown entry holding them all.
+    private static PlacementColliders CompileShows(IReadOnlyList<WorldPrototype> creations, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, PlacementColliders shown) {
+        var shows = new Dictionary<WorldPrototype, PlacementColliders>(comparer: ReferenceEqualityComparer.Instance);
+
+        for (var index = -1; (index < responses.Count); index++) {
+            var id = ((index < 0) ? placement.PrototypeId : responses[index]?.PrototypeId);
+
+            if (
+                (id is null) ||
+                (WorldDefinitionRows.FindCreation(creations: creations, id: id) is not { } creation) ||
+                shows.ContainsKey(key: creation)
+            ) {
+                continue;
+            }
+
+            shows[creation] = (ReferenceEquals(objA: creation, objB: shown.Creation)
+                ? shown
+                : CompilePlacement(
+                    creation: creation,
+                    defaultGrip: shown.DefaultGrip,
+                    frame: shown.Frame,
+                    placement: placement,
+                    worldSeed: shown.WorldSeed
+                )
+            );
+        }
+
+        foreach (var creation in shows.Keys.ToArray()) {
+            shows[creation] = (shows[creation] with { Shows = shows });
+        }
+
+        return (shows.TryGetValue(key: shown.Creation, value: out var entry)
+            ? entry
+            : (shown with { Shows = shows }));
+    }
+
+    // The static solid rows this set compiled, by row, so a set built from a later definition takes the rows that stand.
+    private Dictionary<WorldPlacement, PlacementColliders> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
+
+    /// <summary>Takes a response change into this set in place when it moves no collider: each changed row now shows
+    /// another creation, and when that creation compiles, at the row's frame, to exactly the colliders and grip the
+    /// row had, the set keeps every collider and only names the new creation in its diagnostics.</summary>
+    /// <param name="previous">The definition the set was last built or carried over.</param>
+    /// <param name="definition">The definition the response change installed: the same rows, with the changed ones
+    /// showing other creations.</param>
+    /// <param name="rows">The indices of the rows whose shown creation the change moved.</param>
+    /// <returns><see langword="true"/> when the set now stands for <paramref name="definition"/>; <see langword="false"/>
+    /// when a changed row's colliders differ (or it is attached), so the set must be built again, and nothing was
+    /// changed.</returns>
+    internal bool TryCarryAcrossHolding(WorldDefinition previous, WorldDefinition definition, IReadOnlyList<int> rows) {
+        List<(WorldPlacement Before, WorldPlacement After, PlacementColliders Compiled)>? carried = null;
+
+        foreach (var row in rows) {
+            var before = previous.Placements[row];
+            var after = definition.Placements[row];
+
+            // A dealt template and a row with no solid facet compile nothing here.
+            if ((after.Solid is null) || (after.Deal is not null)) {
+                continue;
+            }
+            if (
+                (after.Attach is not null) ||
+                !m_placements.TryGetValue(key: before, value: out var compiled) ||
+                (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: after.ShownPrototypeId) is not { } creation)
+            ) {
+                return false;
+            }
+
+            var next = (ReferenceEquals(objA: creation, objB: compiled.Creation)
+                ? compiled
+                : ((compiled.Shows?.GetValueOrDefault(key: creation)) ?? CompilePlacement(
+                    creation: creation,
+                    defaultGrip: compiled.DefaultGrip,
+                    frame: compiled.Frame,
+                    placement: after,
+                    worldSeed: compiled.WorldSeed
+                ))
+            );
+
+            if (
+                (next.Holdable != compiled.Holdable) ||
+                (next.HoldableIsOverride != compiled.HoldableIsOverride) ||
+                !next.Colliders.AsSpan().SequenceEqual(other: compiled.Colliders)
+            ) {
+                return false;
+            }
+
+            (carried ??= []).Add(item: (before, after, next));
+        }
+
+        if (carried is null) {
+            return true;
+        }
+
+        var diagnostics = DiagnosticColliders.ToArray();
+
+        foreach (var (before, after, next) in carried) {
+            var compiled = m_placements[before];
+
+            _ = m_placements.Remove(key: before);
+            m_placements[after] = next;
+
+            if (compiled.Diagnostics.Length == 0) {
+                continue;
+            }
+
+            var start = Array.FindIndex(array: diagnostics, match: diagnostic => ReferenceEquals(objA: diagnostic, objB: compiled.Diagnostics[0]));
+
+            if (start >= 0) {
+                next.Diagnostics.CopyTo(array: diagnostics, index: start);
+            }
+        }
+
+        DiagnosticColliders = diagnostics;
+
+        return true;
+    }
+
+    private static PlacementColliders CompilePlacement(WorldPlacement placement, WorldPrototype creation, CompiledPlacementFrame frame, ulong worldSeed, bool defaultGrip) {
+        var solid = placement.Solid!;
+        var margin = FixedQ4816.FromDouble(value: solid.Margin);
+        var colliders = new List<FixedStaticCollider>();
+        var diagnostics = new List<WorldDiagnosticCollider>();
+        var spheres = 0;
+        var boxes = 0;
+        var cylinders = 0;
+        var planes = 0;
+        // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
+        // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
+        // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
+        // The compiled colliders are re-derived from the document by every process, never baked once and shared,
+        // which is why a non-portable transcendental here would be a cross-machine divergence.
+        var rotation = FixedQuaternion.FromAxisAngle(
+            axis: FixedVector3.UnitY,
+            angle: FixedQ4816.FromDegrees(degrees: frame.YawDegrees)
+        );
+
+        CreationStampLattice.ForEachFixedInstance(
+            origin: FixedVector3.FromVector3(value: frame.Position),
+            rotation: rotation,
+            pattern: WorldPlacementStamp.PatternFor(placement: placement),
+            sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(
+                placement: placement,
+                worldSeed: worldSeed
+            ),
+            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
+            visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
+                document: creation.EngineDocument,
+                transform: new FixedCreationStampTransform(
+                    Origin: instance.Origin,
+                    Rotation: rotation,
+                    Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                    ReflectionNormal: instance.ReflectionNormal
+                ),
+                visitor: copy => {
+                    FixedStaticCollider placementCollider;
+
+                    if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+                        var normal = copy.PlaneNormal;
+
+                        placementCollider = FixedStaticCollider.HalfSpace(
+                            point: (copy.Center + (normal * margin)),
+                            normal: normal
+                        );
+                        planes++;
+                    } else if (
+                        (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
+                        (copy.UniformScale > FixedQ4816.Zero)
+                    ) {
+                        var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
+
+                        placementCollider = FixedStaticCollider.Sphere(
+                            center: copy.Center,
+                            radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
+                        );
+                        spheres++;
+                    } else {
+                        placementCollider = PlacementFinite(
+                            copy: copy,
+                            margin: margin
+                        );
+                        if (placementCollider.Kind == FixedStaticColliderKind.Cylinder) {
+                            cylinders++;
+                        } else {
+                            boxes++;
+                        }
+                    }
+
+                    colliders.Add(item: placementCollider);
+                    diagnostics.Add(item: new WorldDiagnosticCollider(placementCollider, placement.Id.ToString(),
+                        creation.Id.ToString(), (copy.Shape.Name?.ToString() ?? copy.Shape.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)),
+                        $"{copy.Shape.Type}/{copy.Shape.Blend}", solid.Margin, !creation.EngineDocument.IsGlassShape(shape: copy.Shape)) {
+                        ConservativeInset = ((placementCollider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
+                    });
+                }
+            )
+        );
+
+        // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
+        // WorldPlacementGrip's own remarks.
+        return new PlacementColliders(
+            Creation: creation,
+            Frame: frame,
+            WorldSeed: worldSeed,
+            DefaultGrip: defaultGrip,
+            Colliders: colliders.ToArray(),
+            Diagnostics: diagnostics.ToArray(),
+            Holdable: (placement.Grip?.Holdable ?? defaultGrip),
+            HoldableIsOverride: (placement.Grip is not null),
+            Spheres: spheres,
+            Boxes: boxes,
+            Cylinders: cylinders,
+            Planes: planes
+        );
     }
     /// <summary>Recomputes every ATTACHED solid row's colliders from the live population's CURRENT body poses — the
     /// dynamic counterpart to the static loop <see cref="Build"/> already compiled once for every non-attached solid

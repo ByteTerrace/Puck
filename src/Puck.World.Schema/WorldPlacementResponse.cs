@@ -25,10 +25,12 @@ namespace Puck.World;
 /// already use for a population body, <c>Puck.Physics.Fields.FieldLattice.TryBodyCellOf</c>), and a state-cell
 /// condition, which reads an ordinary <c>state.world</c> row independent of the placement's position and of any
 /// <c>fields</c> section at all.</para>
-/// <para>A changed <see cref="WorldPlacement.Holding"/> lands as an ordinary <c>WorldMutation.UpsertPlacement</c>
-/// under <c>Principal.World</c>, so it revalidates, rebuilds derived state (colliders included), reaches every
-/// client that reads the document, and journals through the one mutation pipeline like any other engine-driven
-/// placement write. A replay of the same tape reproduces it on the same tick because the trigger is simulation state.
+/// <para>The mask is runtime state the sweep derives, never an authored edit: a change replaces the live rows'
+/// masks outside the mutation pipeline (<see cref="WorldDefinition.WithPlacementHoldings"/>), unjournalled and
+/// unvalidated beyond its bits, and reaches every reader as a value delivery. The server recompiles only colliders the
+/// shown creation actually moves, and a client presents the change without rebuilding what a face-free swap cannot
+/// change (<see cref="CompareHoldings"/>). A replay of the same tape reproduces it on the same tick because the
+/// trigger is simulation state, and a checkpoint carries it in the exported rows.
 /// The mask travels as data because a field condition reads the server's lattice, which neither a client's document
 /// nor a projection carries; a reader whose disclosure withholds a cell an entry reads is handed the mask without
 /// that entry (<see cref="Disclosed"/>).</para>
@@ -117,6 +119,59 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
             ? placement
             : (placement with { Holding = holding }));
     }
+    /// <summary>Determines whether the creation a row shows derives a presentation facet: a face, a camera or a
+    /// sound, which a presentation reconciles as part of the definition rather than as drawn geometry.</summary>
+    /// <param name="definition">The definition whose creations the row resolves against.</param>
+    /// <param name="placement">The placement.</param>
+    /// <returns><see langword="true"/> when the shown creation declares a face, a camera or a sound.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="placement"/> is
+    /// <see langword="null"/>.</exception>
+    public static bool ShowsFacets(WorldDefinition definition, WorldPlacement placement) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: placement);
+
+        return (
+            (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId) is { } creation) &&
+            ((creation.Document.Behavior?.Faces is { Count: > 0 }) || (creation.Document.Cameras is { Count: > 0 }) || (creation.Document.Behavior?.Sounds is { Count: > 0 }))
+        );
+    }
+    /// <summary>Classifies what a value delivery moved in a definition's responsive rows: nothing, only which
+    /// creations rows draw and collide as, or a creation that derives a presentation facet
+    /// (<see cref="ShowsFacets"/>).</summary>
+    /// <param name="before">The definition a reader held, or <see langword="null"/> when it held none.</param>
+    /// <param name="after">The definition the delivery hands over.</param>
+    /// <returns>The kind of change; <see cref="WorldHoldingChange.None"/> when the rows are the same section, or a
+    /// different number of rows (a shape change, which a definition delivery carries).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="after"/> is <see langword="null"/>.</exception>
+    public static WorldHoldingChange CompareHoldings(WorldDefinition? before, WorldDefinition after) {
+        ArgumentNullException.ThrowIfNull(argument: after);
+
+        if (
+            (before is null) ||
+            ReferenceEquals(objA: before.PlacementsRaw, objB: after.PlacementsRaw) ||
+            (before.Placements.Count != after.Placements.Count)
+        ) {
+            return WorldHoldingChange.None;
+        }
+
+        var change = WorldHoldingChange.None;
+
+        for (var index = 0; (index < after.Placements.Count); index++) {
+            var previous = before.Placements[index];
+            var next = after.Placements[index];
+
+            if (ReferenceEquals(objA: previous, objB: next) || (previous.Holding == next.Holding)) {
+                continue;
+            }
+            if (ShowsFacets(definition: before, placement: previous) || ShowsFacets(definition: after, placement: next)) {
+                return WorldHoldingChange.Facets;
+            }
+
+            change = WorldHoldingChange.Appearance;
+        }
+
+        return change;
+    }
     /// <summary>Determines whether any entry of a row's response facet reads one of the named rows — a state
     /// condition's row or comparand row, or a field condition's scalar row.</summary>
     /// <param name="placement">The placement.</param>
@@ -142,6 +197,16 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
 
         return false;
     }
+}
+/// <summary>What a value delivery moved in a definition's responsive rows
+/// (<see cref="WorldPlacementResponse.CompareHoldings"/>).</summary>
+public enum WorldHoldingChange {
+    /// <summary>No row's holding mask moved.</summary>
+    None,
+    /// <summary>Rows show other creations, none of which derives a face, a camera or a sound.</summary>
+    Appearance,
+    /// <summary>A row shows, or stopped showing, a creation that derives a face, a camera or a sound.</summary>
+    Facets,
 }
 /// <summary>
 /// The closed union a response entry's <see cref="WorldPlacementResponse.When"/> speaks. Both arms evaluate

@@ -572,15 +572,13 @@ pointed at the result and re-recorded, and the JSON sources are deleted.
 
 **Check:** the forcing world's check above.
 
-**Open:** `puck decompile` refuses a document carrying a module instance's
-machine. `experimental/tests/Puck.World.Canaries/four-corners-sharded/island.world.json`
+**Open:** `experimental/tests/Puck.World.Canaries/four-corners-sharded/island.world.json`
 (and each of its four quilts) declares `/machines/0/name` as
-`arcade$agb-screen`, and the decompiler answers `'arcade$agb-screen' … is a name
-Puck generates … a module's use does not print back from the document it
-expanded into; decompile the module's own document instead`. A machine
-declared by an aliased `use` has no printed form, so the canary's five
-documents stay JSON; done when they decompile, compile back as parsed, and the
-JSON is deleted.
+`arcade$agb-screen`, a machine an aliased `use` declared. An aliased `use` is
+written in source alone and prints back from no document
+([P1](../decisions/state-and-language.md#the-language)), so `puck decompile`
+refuses the five documents by that name; done when they are authored as `.puck`
+over the module, compile to the documents as parsed, and the JSON is deleted.
 
 ### S7 — Records and pools
 

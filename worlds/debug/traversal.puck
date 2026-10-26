@@ -52,9 +52,7 @@ state {
         { key: $"{i}x", value: $"{traversalGoals[i].x}" }
         { key: $"{i}y", value: $"{traversalGoals[i].y}" }
         { key: $"{i}z", value: $"{traversalGoals[i].z}" }
-      ]
-      )
-      )
+      ]))
     }
     table traversalFailures {
       "0" = 0
