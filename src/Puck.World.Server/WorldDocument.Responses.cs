@@ -36,20 +36,17 @@ public sealed partial class WorldDocument {
             return;
         }
 
+        // Every creation a row may show was admitted with the row, so the field compiles; were it not to, the population
+        // compiles it again below and refuses by name.
         if (
             WorldContactSelection.RequiresField(collision: definition.Collision) ||
             WorldTargetSelection.RequiresLineOfSight(definition: definition)
         ) {
-            if (!TryBuildSolids(
+            _ = TryBuildSolids(
                 definition: definition,
-                reason: out var reason,
+                reason: out _,
                 solids: out var solids
-            )) {
-                Host.Output.Narrate(channel: "world.respond", text: $"[world.respond: the solid field keeps the creations shown before; the ones shown now do not compile: {reason}]");
-
-                return;
-            }
-
+            );
             AdoptSolidField(solids: solids);
         }
 

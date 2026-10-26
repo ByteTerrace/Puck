@@ -911,4 +911,39 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Equal(expected: WorldHoldingChange.Facets, actual: WorldPlacementResponse.CompareHoldings(after: faced, before: before));
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => before.WithPlacementHoldings(holdings: [(2, 1)]));
     }
+    // THE LAW: a session mirror, whose readers watch its definition revision alone, moves it for a value delivery that
+    // moves a holding mask and for no other; and preparing a document's responses emits each responding row once for
+    // its authored creation and once for each entry.
+    [Fact]
+    public void AMovedHoldingIsASceneChangeToASessionMirror() {
+        var door = BuildDoorDocument();
+        var crate = new WorldPlacement(
+            Id: "crate",
+            PrototypeId: "crate",
+            Position: new Vector3(x: 1f, y: 0f, z: 2f),
+            YawDegrees: 0f,
+            Scale: 1f,
+            Respond: [new WorldPlacementResponse(
+                When: new WorldPlacementResponseCondition.StateCondition(State: "heat", Comparison: Puck.State.ExpressionOp.GreaterOrEqual, Value: 1),
+                PrototypeId: "lid"
+            )]
+        );
+        var before = (door with {
+            CreationsRaw = [.. door.Creations, CreationFixtures.UnitSphere(id: "crate"), CreationFixtures.Sphere(id: "lid", scale: 2f)],
+            PlacementRowsRaw = [.. door.Placements, crate],
+        });
+        var session = new WorldSessionMirror(placeholder: before);
+        var stamp = new Puck.World.Protocol.WorldStateStamp(EngineTick: 1UL, Everything: false, MovedRows: default, Tick: 1UL);
+
+        session.DeliverDefinition(definition: before, version: default);
+
+        var revision = session.DefinitionRevision;
+
+        session.DeliverState(definition: (before with { }), stamp: in stamp, version: default);
+        Assert.Equal(expected: revision, actual: session.DefinitionRevision);
+        session.DeliverState(definition: before.WithPlacementHoldings(holdings: [(1, 1)]), stamp: in stamp, version: default);
+        Assert.Equal(expected: (revision + 1), actual: session.DefinitionRevision);
+        Assert.Equal(expected: 2, actual: WorldPlacementStamper.PrepareResponses(definition: before));
+        Assert.Equal(expected: 0, actual: WorldPlacementStamper.PrepareResponses(definition: door));
+    }
 }

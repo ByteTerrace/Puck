@@ -422,6 +422,30 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         Assert.Equal(expected: authored, actual: Assert.Single(collection: fixture.Server.Population.DiagnosticColliders).Collider);
         Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
     }
+    /// <summary>Under the field contact provider a solid row's response compiles the solid field again, with the
+    /// creation the row now shows, and the population revision stands.</summary>
+    [Fact]
+    public void ASolidRowRebuildsTheSolidFieldItCollidesThrough() {
+        var document = CrossingDocument();
+
+        using var fixture = Fixtures.FreshServer(definition: (document with {
+            CollisionRaw = document.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.Sphere(id: TargetCreation, scale: 3f)],
+            PlacementRowsRaw = [(document.Placements[0] with { Solid = new WorldSolid(Margin: 0f) })],
+        }));
+
+        fixture.Step();
+
+        var revision = fixture.Server.Population.Revision;
+        var solids = fixture.Server.SolidRevision;
+
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Equal(expected: TargetCreation, actual: PrototypeOf(fixture: fixture));
+        Assert.True(condition: (fixture.Server.SolidRevision > solids));
+        Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
+    }
     /// <summary>An upsert that writes a holding mask refuses a bit past the row's entries by name,
     /// leaving the row as it was.</summary>
     [Fact]
