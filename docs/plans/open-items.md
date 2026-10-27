@@ -8,6 +8,18 @@ starting work, and tick or remove an item in the same change that closes it.
 
 - [ ] The owner's sequence: the current lanes finish and land, the integrated work is vetted by review, quiet-machine readings (frame times and memory) find no regression, and then the owner decides to push `main`, which deploys.
 
+## Awaiting the owner's review
+
+Ideas discussed with the owner and not yet queued. None starts until the owner
+reviews it and says so (the owner's ruling).
+
+- [ ] **Ground cover and vegetation.** Forests are authorable today (a tree creation with a `Noise` or `Scatter` placement distribution, drawn per copy from shared geometry under the one-pixel rule), but dense ground cover is a gap: presentation-only GPU instancing of grass and low plants placed by density masks from terrain material, slope and height and fading into the ground material; wind motion (vertex displacement driven by a region's wind, since baked meshes are rigid); billboard or impostor tiers for distant forest; bending and trampling through the weather decision's track layer; terrain material blending by slope and height across a valley. Proposed as a consensus cross-referenced with the valley and weather plans.
+- [ ] **Tonemapping.** One curve exists (`render.tonemap` `Filmic`: Uchimura's Gran Turismo fit, per RGB channel, SDR peak 1.0, in `place.comp.hlsl`), and the debug world authors none, so its sky, sun and emissives clip at white. Proposed: Khronos PBR Neutral for the gallery as an inspection tool, a luminance-based filmic option that keeps hue, the choice per world and camera like bloom, a colour-grade look as a world's or camera's material, and a display-aware curve for HDR10 and scRGB once an HDR display is available to verify it (the lead machine's Dell S2722DGM is 8-bit SDR, 240 nits). The default curve and the gallery's look are the owner's call.
+- [ ] **The simulation tick off the frame thread.** The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99. Presentation already interpolates (`RenderTicks`, `InterpolationAlpha`) and the server and client already split through snapshots, so a simulation thread publishing snapshots to a frame thread that reads the latest is close. To design: a lock-free, allocation-free handoff; input capture on the frame thread consumed per tick (with or after input C3 to C6); offscreen and `world.lockstep` keeping exact one-tick-per-frame; collections on either thread not stalling the other; console and MCP verbs marshalled to the tick. Proposed as a design consensus after the input lane lands.
+- [ ] **Pacing at 120 Hz with Windows' Dynamic Refresh Rate.** The owner moved the lead machine's display to 120 Hz with DRR on (desktop 60 or 120 Hz, VRR 48 to 120 Hz). Confirm the 60 FPS bar and VRR pacing hold in front of and behind another window, and that `world.target display` reaches 120 Hz.
+- [ ] **Test fixtures stop machines they do not need.** The debug-world replay spends most of its time in the cartridge emulators every test world runs and in continuation hashing; fixtures that only exercise other features can keep their machines mounted but stopped, as the chess demo's fixtures do.
+- [ ] **The bloom look.** The debug world authors scatter 0.04 and radius 0.08 for the owner to judge in the World.
+
 ## World authoring diagnostics
 
 - [x] Make `puck creation stats --world worlds/debug/debug.puck --prototype companion` compose the live world's grant masks (`CliWorldVocabulary` installs `WorldSchemaVocabularyHooks` alongside the local document source, and `CreationCommand` calls `CliWorldVocabulary.EnsureInstalled()`).
