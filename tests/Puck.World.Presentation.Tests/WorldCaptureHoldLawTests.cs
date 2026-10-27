@@ -510,8 +510,8 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: run.View.IsReady);
         Assert.Equal(
             expected: [
-                "first:10:Unserved:the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
-                "second:30:Unserved:the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "first:10:Unserved:the engine's pipeline set is building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply) (the host held its clock at tick 10 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
+                "second:30:Unserved:the engine's pipeline set is building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply) (the host held its clock at tick 30 while the engine's pipeline set built, until its 180-second pipeline-build hold budget was spent)",
             ],
             actual: run.Scheduler.Entries.Select(selector: static entry => $"{entry.Station}:{entry.Tick}:{entry.Refusal}:{entry.Detail}")
         );
@@ -557,7 +557,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         var entry = Assert.Single(collection: run.Scheduler.Entries);
 
         Assert.Equal(
-            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 11 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission)"),
+            expected: (WorldCaptureRefusal.Unserved, "the run ended before any frame served it (last completed tick 10); the engine's pipeline set is building (0 of 14 pipelines created; waiting on sdf-mesh-bake-mask, sdf-mesh-bake, sdf-mesh-pyramid, sdf-world-surface, sdf-world-views, sdf-sky-runs, sdf-composite, sdf-glass, sdf-sky-environment, sdf-sky-environment-reduce, sdf-screen-emission, sdf-bloom-down, sdf-bloom-up, sdf-bloom-apply)"),
             actual: (entry.Refusal!.Value, entry.Detail!)
         );
         run.AssertNothingReachedDisposal();

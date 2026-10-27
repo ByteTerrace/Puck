@@ -594,7 +594,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
     // WorldSeatCameraPose this camera fills is the listener policy's per-seat candidate.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, out CameraBloom bloom, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
         // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
@@ -656,9 +656,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // pipeline as chase/orbit, against this SAME anchor: the anchor above already resolved to the seat's
         // PERCEIVED body, which possession has already retargeted onto the camera body by the time this runs, so no
         // second anchor resolve is needed here.
-        var rig = ((m_seatBindings.IsCameraModeActive(slot: slot) && (views.CameraRig is { } cameraRig))
+        var cameraMode = m_seatBindings.IsCameraModeActive(slot: slot);
+        var program = WorldSeatViewState.ProgramOf(cameraMode: cameraMode, views: views);
+
+        bloom = m_settings.ResolveBloom(definition.Render, ((held is { } heldCamera) ? heldCamera.Bloom : program.Bloom), m_settings.BloomScale(seat: slot));
+        var rig = ((cameraMode && (views.CameraRig is not null))
             ? ResolveCameraModeRig(
-                cameraRig: cameraRig,
+                cameraRig: program,
                 definition: definition,
                 mirror: state,
                 slot: slot
@@ -948,7 +952,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             Eye: eye,
             FieldOfViewRadians: fieldOfView,
             Target: target
-        );
+        ) { Bloom = camera.Rig.Bloom };
     }
     private static WorldScreenFraming[] NewScreenFraming() {
         var framing = new WorldScreenFraming[PlayerRoster.MaxSlots];
@@ -1419,9 +1423,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return;
         }
 
-        graphs.OpticalPlacement = ((m_settings.ResolveBloom(m_client.Definition.Render).Scatter > 0f) ||
-            m_client.Definition.Cameras.Any(predicate: camera => (camera.Rig.Bloom is { Scatter: > 0f })) ||
-            (m_client.Definition.Views.SeatRig.Bloom is { Scatter: > 0f }));
         graphs.BeginFrame(
             rate: m_presentationRate,
             sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
@@ -1871,6 +1872,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 (settled.Index == engaged.Index)
             );
             var camera = ResolveCamera(
+                bloom: out var bloom,
                 deltaSeconds: deltaSeconds,
                 engaged: engaged,
                 eye: out var eye,
@@ -1927,7 +1929,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Elsewhere = (presentedElsewhere is not null),
                 Grid = SeatGrid(slot: slot),
-                Bloom = m_settings.ResolveBloom(m_client.Definition.Render, m_client.Definition.Views.SeatRig.Bloom, m_settings.BloomScale(seat: slot)),
+                Bloom = bloom,
                 BloomQuality = m_settings.BloomQuality,
                 Quality = quality,
                 // A matted view renders at native scale whatever the dynamic resolution's floor, so the picture is never

@@ -21,9 +21,13 @@ that value; unlike the default linear filter, this selection changes with exposu
 
 Each optical endpoint filters its complete exposed HDR composite, including glass,
 sky and air. High builds six RGBA16F levels from half output resolution; Low builds
-five from quarter; Off allocates no pyramid. Thirteen linear samples downfilter,
-and normalized 3×3 tents upfilter, all with FP32 arithmetic. Radius blends the
-coarse contribution continuously across levels and scales tent spacing. The output grid fixes support
+five from quarter; Off allocates no pyramid. A thirteen-position filter downfilters,
+and normalized 3×3 tents upfilter, all with FP32 arithmetic. Cell-edge reflection
+and integration over each destination cell preserve constants and total HDR energy
+through odd-sized levels and final placement. Adjacent contributions share a linear
+sample; odd resampling ratios can require extra samples. Fractional tent widths
+blend whole symmetric integer-width kernels. Radius blends the coarse contribution
+continuously across levels and scales tent spacing. The output grid fixes support
 while dynamic resolution changes the scene grid. There is no bloom history.
 
 The view exports `bloom` alongside its direct image. Root `place.bloom` sharpens
@@ -34,6 +38,17 @@ continuations, sky layers and raw machine/video images are transport and bypass 
 All diagnostics bypass it except `world.debug-view bloom`, which displays the
 scatter alone. Screen fidelity fades scatter to zero and removes its pyramid at
 full fidelity. CRT material has no separate brightness knee.
+
+A seat takes its lens from the same active program and presented endpoint as its
+camera: camera mode selects `views.cameraRig`, and a routed seat inherits the
+destination world's render settings. Placement eligibility uses these composed
+views. Resolved lens settings are values and allocate no objects each frame.
+
+For on/off evidence, pin exposure (`render.exposure.hold` above zero disables local
+adaptation too), pause the world with `world.rate pause`, and capture both states at
+that tick. Record `world.exposure` for each capture. An HDR energy invariant does not
+imply equal PNG means after a nonlinear tonemap, and an adapting exposure is a
+different input even when the camera has not moved.
 
 The quality preset's `bloom` is Off, Low or High. Each seat independently scales
 scatter from zero (accessibility off) to one. `world.bloom` reports effective

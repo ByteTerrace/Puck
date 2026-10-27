@@ -11,8 +11,8 @@
 static const float SdfScreenFaceCrt = 2.0;
 // The CRT material's knobs, which only a screen that opts into the material reaches. The glass's warp, the bezel's
 // width among it, is the screen's published mapping (ScreenMappingData); these are its look: near-square corners, a
-// crisp dark bezel edge, faint aperture-grille stripes, subtle native-line scanlines, and a soft bright-pixel bloom
-// knee. The bezel's mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
+// crisp dark bezel edge, faint aperture-grille stripes and subtle native-line scanlines.
+// The bezel's mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
 //
 // The two knobs at 0 (vignette, glint) are live and free: DXC emits `fmul fast`, so each zero folds and its whole
 // chain, the glint's cross, normalize and pow included, is eliminated on both backends. Raising one brings the effect it
@@ -30,8 +30,6 @@ float sdfCrtPatternGain(float footprintTexels) {
 static const float CrtVignette = 0.0;        // radial corner darkening (0 = flat, even brightness)
 static const float CrtGlint = 0.0;           // fresnel rim brighten at glancing angles (0 = no glass glint)
 static const float CrtGlintPower = 3.0;
-// Rec.601 luma weights, for the bloom knee's brightness test.
-static const float3 CrtLumaWeights = float3(0.299, 0.587, 0.114);
 // The aperture grille's three phosphor stripes, 120 degrees apart (2pi/3, 4pi/3), so each channel peaks in its own
 // column third. Spelled as literals rather than SDF_TAU/3: the divide would round differently by an ULP.
 static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.1887902047863905);

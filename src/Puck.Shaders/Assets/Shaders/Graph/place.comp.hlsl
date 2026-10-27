@@ -15,6 +15,7 @@
 // destination, each image input with a sampler it never reads. rect is the destination rect as fractions of the
 // destination's extent and crop the shown part as fractions of the source's: left, top, width, height.
 #include "place.interface.hlsli"
+#include "../Shared/bloom-filter.hlsli"
 
 // The filmic curve, Uchimura's Gran Turismo fit, and only the curve: the stylized shading is already display-referred,
 // so no gamma encode follows it, and the display encode writes its result as it is. A toe near linear (its power 1.1)
@@ -137,14 +138,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             uint2 bloomDims;
             bloom.GetDimensions(bloomDims.x, bloomDims.y);
             float2 uv = (float2(cropMin) + ((float2(pixel) + 0.5) / float2(rectDims)) * float2(cropDims)) / float2(sourceDims);
-            float2 texel = 1.0 / float2(bloomDims);
-            float3 veil = 0.0;
-            [unroll] for (int y = -1; y <= 1; y++) {
-                [unroll] for (int x = -1; x <= 1; x++) {
-                    veil += float((2 - abs(x)) * (2 - abs(y))) / 16.0 * bloom.SampleLevel(bloomSampler,
-                        clamp(uv + float2(x,y) * texel, texel * 0.5, 1.0 - texel * 0.5), 0).rgb;
-                }
+            BloomAxis bx, by;
+            if (all(cropMin == 0u) && all(cropDims == sourceDims)) {
+                bx = bloomLinearAxis(pixel.x, bloomDims.x, rectDims.x);
+                by = bloomLinearAxis(pixel.y, bloomDims.y, rectDims.y);
+            } else {
+                float2 length = float2(cropDims) / float2(rectDims) * float2(bloomDims) / float2(sourceDims);
+                float2 left = uv * float2(bloomDims) - 0.5 * length;
+                bx = bloomLinearAxisRange(left.x, length.x, bloomDims.x);
+                by = bloomLinearAxisRange(left.y, length.y, bloomDims.y);
             }
+            float3 veil = bloomTent(bloom, bloomSampler, bx, by, bloomDims, 1.0);
             // An absent optional publication binds the shared one-pixel stand-in. It scatters nothing while
             // the endpoint's new graph is building, and no old transport image can become a lens image.
             float scatter = all(bloomDims > 1u) ? passGroup.bloomScatter : 0.0;

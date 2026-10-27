@@ -50,6 +50,7 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
 
         host.Attach(
             compose: (panes, views, post, tonemap, sharpens) => WorldRootGraph.Compose(
+                blooms: host.OpticalPlacement,
                 overlay: overlay,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,

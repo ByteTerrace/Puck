@@ -11,11 +11,20 @@ namespace Puck.World.Client;
 /// local rendering, away rendering, and read-back all observe it.
 /// </summary>
 public sealed class WorldSeatViewState {
+    /// <summary>The authored program used by this endpoint's active camera mode, including its lens settings.</summary>
+    /// <param name="views">The presented endpoint's views.</param>
+    /// <param name="cameraMode">Whether the seat is controlling its camera application.</param>
+    /// <returns>The camera rig when available in camera mode, otherwise the seat rig.</returns>
+    public static WorldCameraProgram ProgramOf(WorldViewDefaults views, bool cameraMode) =>
+        (cameraMode ? (views.CameraRig ?? views.SeatRig) : views.SeatRig);
+
     private readonly Lock m_gate = new();
     private readonly SdfCameraBoomFollower m_boom = new();
     private readonly WorldCameraClearance m_clearance = new();
     private readonly WorldCameraViewTransition m_viewTransition = new();
+
     private static readonly WorldCameraAutoFirstPerson DefaultAutomatic = new();
+
     private Quaternion m_upAlignment = Quaternion.Identity;
     private Vector3 m_alignedUp = Vector3.UnitY;
     private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
@@ -62,13 +71,14 @@ public sealed class WorldSeatViewState {
     public bool FirstPersonLook { get { lock (m_gate) { return m_viewTransition.LookFirstPerson; } } }
     /// <summary>Whether this seat requests first person.</summary>
     public bool FirstPerson { get { lock (m_gate) { return m_viewTransition.FirstPerson; } } }
+
     /// <summary>Sets an explicit view; null restores authored state and automatic preference.</summary>
-    public void SetView(bool? first) { lock (m_gate) { m_viewTransition.SetView(first); } }
+    public void SetView(bool? first) { lock (m_gate) { m_viewTransition.SetView(first: first); } }
     /// <summary>Sets an explicit automatic preference; null restores the portable/author default.</summary>
-    public void SetAutomaticFirstPerson(bool? enabled) { lock (m_gate) { m_viewTransition.SetAutomatic(enabled); } }
+    public void SetAutomaticFirstPerson(bool? enabled) { lock (m_gate) { m_viewTransition.SetAutomatic(enabled: enabled); } }
     /// <summary>Resolves the automatic preference.</summary>
     public bool AutomaticFirstPerson(WorldSeatViewControl control, WorldSeatCameraFeel feel) {
-        lock (m_gate) { return m_viewTransition.Automatic(control, feel); }
+        lock (m_gate) { return m_viewTransition.Automatic(control: control, feel: feel); }
     }
 
     /// <summary>Gets the last clearance frame's opacity for the body's stamp in this seat's own view.</summary>
@@ -278,8 +288,9 @@ public sealed class WorldSeatViewState {
                 return 0f;
             }
 
-            var forward = (viewForward ?? Vector3.Normalize(target - eye));
-            var authoredLength = Vector3.Distance(eye, target);
+            var forward = (viewForward ?? Vector3.Normalize(value: (target - eye)));
+            var authoredLength = Vector3.Distance(value1: eye, value2: target);
+
             eye = m_clearance.Resolve(
                 deltaSeconds: deltaSeconds,
                 desiredEye: eye,
@@ -295,11 +306,12 @@ public sealed class WorldSeatViewState {
                 maxElevation: (control?.ClearanceMaxElevation ?? WorldCameraClearance.LiftCeiling)
             );
             if ((firstPerson is { } destination) && (control is not null)) {
-                var head = subject.Point(destination.EyePoint);
-                var room = WorldCameraClearance.AvailableRoom(field, head, -forward, authoredLength, scale) / scale;
+                var head = subject.Point(local: destination.EyePoint);
+                var room = (WorldCameraClearance.AvailableRoom(backward: -forward, field: field, head: head, length: authoredLength, scale: scale) / scale);
+
                 m_viewTransition.Advance(destination, (control.AutoFirstPerson ?? DefaultAutomatic),
-                    m_viewTransition.Automatic(control, (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);
-                m_clearance.ApplyView(m_viewTransition, head, forward, destination.HideRadius * scale);
+                    m_viewTransition.Automatic(control: control, feel: (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);
+                m_clearance.ApplyView(m_viewTransition, head, forward, (destination.HideRadius * scale));
                 eye = m_clearance.Eye;
             } else {
                 m_viewTransition.Reset();

@@ -33,6 +33,20 @@ rendering while its replacement builds must not lose its per-frame leased bindin
 Never bloom portal/window/mirror transport or raw screen textures. Never sharpen
 the scatter. Every diagnostic except the bloom-only view bypasses optical scatter.
 
+`Shared/bloom-filter.hlsli` uses cell-edge reflection and conservative cell
+integration. Unit-sum taps alone only preserve constants: edge clamping duplicated
+a corner impulse's energy, and point resampling odd levels changed their mean.
+Keep the constant, impulse and odd-grid witnesses in `BloomEnergyLawTests`; include
+the final placement tent and FP16 storage. Fractional radii blend symmetric kernels
+at adjacent integer widths, rather than combining their interpolation with the
+resampling. `CameraBloom` is a value; `WorldBloomLawTests` covers on/off allocation.
+Seat lens selection happens beside pose selection from the active endpoint's program.
+`PlaceViews` derives optical placement from the resulting snapshots, including routed
+seats and camera-mode overrides. Never infer it from unused boot-world programs.
+
+Pin exposure and local adaptation for on/off captures, and record each EV with
+`world.exposure`. Use `world.rate pause` to hold one simulation tick for the pair.
+
 For a motion burst, arm it inside a sustained pan and inspect its reported ticks:
 an eight-tick pan can finish before the first of eight asynchronous captures lands.
 

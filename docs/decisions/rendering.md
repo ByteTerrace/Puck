@@ -95,13 +95,18 @@ recorded the result.
   engaged screen's scatter fades by its fidelity, so a fully framed screen
   shows its exact pixels.
 - **How it filters.** A linear, normalized pyramid with no threshold and no
-  luminance reweighting by default: a 13-fetch downfilter, a 3×3 tent upfilter,
+    luminance reweighting by default: a 13-position downfilter, a 3×3 tent upfilter,
   FP32 arithmetic and RGBA16F storage, six half-resolution levels at the high
   tier. Being linear, it commutes with exposure adaptation and needs no history
   of its own. Its radius is a fraction of the output's shorter side, so dynamic
   resolution never resizes its look. The combine is `(1 - s) L + s B(L)`; an
   explicitly authored soft cutoff is the one nonlinear option, and its exposure
   dependence is documented where it is authored.
+    Cell-edge reflection and integrated destination-cell resampling preserve both
+    constants and total HDR energy, including odd-sized levels and final placement.
+    Adjacent contributions share linear samples; odd ratios can require extra
+    samples per filter position. Fractional tent widths interpolate whole symmetric
+    integer-width kernels, preserving energy while radius varies continuously.
 - **Who owns it.** The engine default is off. A world authors `render.bloom`;
   a camera may override it; the quality tier gates its cost; each player has a
   scale from 0 to 1, where 0 is the accessibility off switch. Every diagnostic

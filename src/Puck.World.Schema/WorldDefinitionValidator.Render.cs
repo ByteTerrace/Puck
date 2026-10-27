@@ -58,10 +58,10 @@ public static partial class WorldDefinitionValidator {
         }
     }
     private static void ValidateBloom(Puck.Hosting.CameraBloom? bloom, string path, List<string> errors) {
-        if (bloom is null) { return; }
-        RequireRange(bloom.Scatter, 0f, 1f, (path + ".scatter"), errors);
-        RequireRange(bloom.Radius, .001f, 1f, (path + ".radius"), errors);
-        RequireRange(bloom.Cutoff, 0f, 65504f, (path + ".cutoff"), errors);
+        if (bloom is not { } value) { return; }
+        RequireRange(value.Scatter, 0f, 1f, (path + ".scatter"), errors);
+        RequireRange(value.Radius, .001f, 1f, (path + ".radius"), errors);
+        RequireRange(value.Cutoff, 0f, 65504f, (path + ".cutoff"), errors);
     }
     private static void ValidateSkyFieldScale(float value, string path, List<string> errors) {
         if (value is not (.5f or 1f)) { errors.Add(item: $"{path} must be 1 or 0.5."); }

@@ -771,6 +771,21 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover, IReadOnlyList<NormalizedRect>? envelopes = null, Vector4? letterboxColor = null, Func<int, NormalizedRect?>? mattes = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
+        // These are the cameras actually composed for this frame, with the active program and routed endpoint's
+        // resolved lens. An unused boot-world camera must neither enable nor suppress their placement.
+        var blooms = false;
+
+        for (var index = 0; (index < views.Count); index++) {
+            var snapshot = views[index];
+
+            blooms |= ((snapshot.Bloom is { Scatter: > 0f }) && (snapshot.BloomQuality != Puck.Hosting.BloomQuality.Off) &&
+                !snapshot.Unexposed && !snapshot.Quality.GeometryOnly && (snapshot.ScreenFidelity < 1f));
+        }
+        if (OpticalPlacement != blooms) {
+            OpticalPlacement = blooms;
+            if (m_lastViews is { } authored) { Reconcile(sharpens: m_lastSharpens, tonemap: m_lastTonemap, views: authored); }
+        }
+
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
         m_loneThroughItsPass = false;

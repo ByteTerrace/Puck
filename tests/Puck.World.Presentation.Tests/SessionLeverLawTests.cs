@@ -22,11 +22,12 @@ public sealed class SessionLeverLawTests {
     public void ToonReloadFollowsTheDocumentUntilTheSessionOverridesIt_AndTuningStillReloads() {
         var render = Fixtures.BuildDocument().Render with { Toon = null };
         var settings = new WorldRenderSettings(defaults: render);
+
         Assert.False(condition: settings.Toon);
         Assert.Null(@object: settings.ToonOverride);
 
         render = render with { Toon = new WorldRenderToon(Enabled: true, OutlineWidth: 2f) };
-        Assert.True(condition: settings.ResolveToon(render).Enabled);
+        Assert.True(condition: settings.ResolveToon(render: render).Enabled);
         Assert.True(condition: settings.Toon);
 
         var sink = WorldSessionLevers.Compose(
@@ -35,9 +36,11 @@ public sealed class SessionLeverLawTests {
             pacing: new PresentPacingControl(initialTargetHertz: null),
             settings: settings
         );
-        sink.Apply(lever: Lever(name: WorldSessionLevers.Toon, a: 0));
+
+        sink.Apply(lever: Lever(a: 0, name: WorldSessionLevers.Toon));
         render = render with { Toon = render.Toon with { OutlineWidth = 3f } };
-        var resolved = settings.ResolveToon(render);
+        var resolved = settings.ResolveToon(render: render);
+
         Assert.False(condition: resolved.Enabled);
         Assert.False(condition: settings.ToonOverride);
         Assert.Equal(expected: 3f, actual: resolved.OutlineWidth);
@@ -336,6 +339,9 @@ public sealed class SessionLeverLawTests {
         string[] expected = [
             WorldSessionLevers.AmbientOcclusion,
             WorldSessionLevers.BindingBar,
+            WorldSessionLevers.Bloom,
+            WorldSessionLevers.BloomQuality,
+            WorldSessionLevers.BloomScale,
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.Cull,
             WorldSessionLevers.Detail,

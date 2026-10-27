@@ -8,4 +8,8 @@ public enum BloomQuality { Off, Low, High }
 /// <param name="Scatter">The fraction of direct light scattered, in [0, 1].</param>
 /// <param name="Radius">The normalized radius, in [0.001, 1].</param>
 /// <param name="Cutoff">An optional soft luminance cutoff; zero keeps the filter linear.</param>
-public sealed record CameraBloom(float Scatter = 0f, float Radius = 0.08f, float Cutoff = 0f);
+[method: System.Text.Json.Serialization.JsonConstructor]
+public readonly record struct CameraBloom(float Scatter = 0f, float Radius = 0.08f, float Cutoff = 0f) {
+    /// <summary>The unauthored lens: scatter disabled, with the default radius ready for a session override.</summary>
+    public CameraBloom() : this(0f, 0.08f, 0f) { }
+}
