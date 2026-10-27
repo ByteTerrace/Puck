@@ -69,14 +69,49 @@ public sealed class WorldArenaHost : ArenaEffectHost {
             refusal: out refusal
         );
 
-        if (refusal.Code is null) {
-            _ = WorldVerdictStamp.Stamp(
+        if ((refusal.Code is null) && !WorldVerdictStamp.Stamp(
                 arena: Arena,
                 rowOrdinal: verdictOrdinal,
-                tick: Tick
-            );
+                tick: Tick,
+                reason: out var reason
+            )) {
+            // The caller rewinds the firing on refusal, including the status already written above.
+            refusal = EffectRefusal.Of(code: RuleEffectRefusal.MutationRejected, reason: reason);
+            return false;
         }
 
         return applied;
+    }
+    /// <inheritdoc/>
+    public override bool TryTransform(ArenaTransform transform, in ArenaTransformBinding binding, out bool moved, out EffectRefusal refusal) {
+        if (m_verdicts is not { } verdicts) {
+            return base.TryTransform(binding: in binding, moved: out moved, refusal: out refusal, transform: transform);
+        }
+
+        Span<int> writes = stackalloc int[Arena.Catalog.Rows.Count];
+        var count = ArenaTransforms.CollectWrites(transform: transform, catalog: Arena.Catalog, binding: in binding, writes: writes);
+
+        foreach (var row in writes[..count]) {
+            if (verdicts.TryResolve(rowOrdinal: row, status: out var status, verdictOrdinal: out var verdict) &&
+                WorldVerdictStamp.IsSettled(arena: Arena, rowOrdinal: verdict, status: status, tick: Tick)) {
+                // A transform is indivisible: freezing either end also freezes the other end and any draw.
+                moved = false;
+                refusal = EffectRefusal.None;
+                return true;
+            }
+        }
+
+        if (!base.TryTransform(binding: in binding, moved: out moved, refusal: out refusal, transform: transform)) {
+            return false;
+        }
+        foreach (var row in writes[..count]) {
+            if (verdicts.TryResolve(rowOrdinal: row, status: out _, verdictOrdinal: out var verdict) &&
+                !WorldVerdictStamp.Stamp(arena: Arena, rowOrdinal: verdict, tick: Tick, reason: out var reason)) {
+                refusal = EffectRefusal.Of(code: RuleEffectRefusal.MutationRejected, reason: reason);
+                moved = false;
+                return false;
+            }
+        }
+        return true;
     }
 }

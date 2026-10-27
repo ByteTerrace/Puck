@@ -411,14 +411,14 @@ public sealed partial class WorldPersistence {
             );
         }
     }
-
     // A key-bound latch entry's LatchKey.Left is an ordinal this arena interned, so it travels as the key's name
     // and is interned again on the way back in. An unnamed entry's Left is a participant index, which the arena
     // knows nothing about and which travels as itself.
-    private WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named) {
+    internal WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named, IReadOnlySet<string>? rules = null) {
         var flattened = new List<(string Rule, LatchKey Binding, bool Held)>(capacity: latch.Count);
 
         latch.Flatten(into: flattened);
+        if (rules is not null) { flattened.RemoveAll(match: entry => !rules.Contains(item: entry.Rule)); }
 
         var keys = Host.Arena.Keys;
         var entries = new WorldRuleLatchEntry[flattened.Count];
@@ -450,10 +450,13 @@ public sealed partial class WorldPersistence {
 
         return entries;
     }
-    private void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries) {
+    internal void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries, IReadOnlySet<string>? rules = null) {
         var keys = Host.Arena.Keys;
 
-        latch.Clear();
+        if (rules is null) { latch.Clear(); } else {
+            foreach (var rule in rules) { latch.Bindings(name: rule).Clear(); }
+            latch.InvalidateScheduler();
+        }
         foreach (var entry in entries) {
             var left = entry.Left;
 
@@ -481,6 +484,7 @@ public sealed partial class WorldPersistence {
             );
         }
     }
+
     /// <summary>Whether this server's live state is outside what a checkpoint can capture: a pumped addon guest, or a
     /// stepped machine on a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <param name="restartingAddons">Whether a prepared restart replaces the guests at this recording boundary.</param>
@@ -689,6 +693,7 @@ public sealed partial class WorldPersistence {
             var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
                 Input: Host.Input.Capture(),
+                ScopedReplays: Host.ScopedReplays.Select(selector: scope => scope.Checkpoint()).ToArray(),
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 Arena: Host.Arena.CaptureSnapshot(),
                 DefinitionJson: definitionJson,
@@ -729,7 +734,7 @@ public sealed partial class WorldPersistence {
                 EventFeed: Host.Events.Capture(),
                 OwnedWorlds: ownedWorlds!,
                 HostRow: hostRow,
-                Fields: Host.Population.Fields?.Capture(),
+                Fields: Host.Population.CaptureFieldRegions(),
                 Search: Host.Search.Capture(),
                 BoardEnforcement: BoardEnforcement.Capture(),
                 Machines: machines
@@ -797,11 +802,7 @@ public sealed partial class WorldPersistence {
     private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true) {
         var server = checkpoint.Server;
 
-        if ((Host.Population.Fields is null) != (checkpoint.Fields is null)) {
-            throw new InvalidOperationException(message: "the checkpoint's fields-section presence does not match its world definition.");
-        }
-
-        Host.Population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+        Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
 
         var restoredOrigin = ResolveBaseOrigin(
             directory: admission.Definition.DocumentDirectory,
@@ -913,9 +914,9 @@ public sealed partial class WorldPersistence {
             );
         }
 
-        if (Host.Population.Fields is { } lattice) {
-            lattice.Restore(checkpoint: checkpoint.Fields!);
-        }
+        // Restored catalogs mint new handles; retain cells but bind every reaction to that catalog.
+        Host.Population.InstallFields(definition: restoredDefinition);
+        Host.Population.RestoreFieldRegions(checkpoints: checkpoint.Fields);
         Host.AdoptPreparedArena(arena: restoredArena, definition: restoredDefinition);
         Host.Population.Restore(
             continuingFederatedBodies: server.FederatedInputs.Select(static input => input.Index).ToHashSet(),
@@ -929,6 +930,12 @@ public sealed partial class WorldPersistence {
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.Input = restoredInput;
         Host.Input.BindRestoredBodies();
+        foreach (var scope in (server.ScopedReplays ?? [])) {
+            var runtime = (Host.ScopedReplays.SingleOrDefault(predicate: runtime => (runtime.Name == scope.Name))
+                ?? throw new InvalidOperationException(message: "Checkpoint names an undeclared replay scope."));
+
+            runtime.RestoreCheckpoint(checkpoint: scope);
+        }
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership

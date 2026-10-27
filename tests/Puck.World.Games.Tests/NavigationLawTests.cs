@@ -682,7 +682,7 @@ public sealed partial class NavigationLawTests {
             )
         );
 
-        var fields = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.Fields);
+        var fields = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.FieldRegions[0].Lattice);
 
         fields.Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [new long[fields.CellCount]]));
         fixture.Step();
@@ -712,7 +712,7 @@ public sealed partial class NavigationLawTests {
             ),
             withMedium: true
         ));
-        var fields = fixture.Server.Population.Fields!;
+        var fields = fixture.Server.Population.FieldRegions[0].Lattice;
         var raw = Enumerable.Repeat(
             FixedQ4816.One.Value,
             fields.CellCount
@@ -784,7 +784,7 @@ public sealed partial class NavigationLawTests {
             ),
             withMedium: true
         ));
-        var fields = fixture.Server.Population.Fields!;
+        var fields = fixture.Server.Population.FieldRegions[0].Lattice;
         var raw = Enumerable.Repeat(
             FixedQ4816.One.Value,
             fields.CellCount
@@ -838,7 +838,7 @@ public sealed partial class NavigationLawTests {
             ),
             withMedium: true
         ));
-        var fields = fixture.Server.Population.Fields!;
+        var fields = fixture.Server.Population.FieldRegions[0].Lattice;
         var raw = new long[fields.CellCount];
 
         Assert.True(condition: fields.TryCellOf(
@@ -908,7 +908,7 @@ public sealed partial class NavigationLawTests {
             ),
             withMedium: true
         ));
-        var fields = fixture.Server.Population.Fields!;
+        var fields = fixture.Server.Population.FieldRegions[0].Lattice;
         var from = FixedVector3.Zero;
         var to = new FixedVector3(
             X: FixedQ4816.FromInteger(value: 4),
@@ -1095,7 +1095,7 @@ public sealed partial class NavigationLawTests {
                     constrained &&
                     (kind == WorldNavigationKind.Medium)
                 ) {
-                    Assert.True(condition: fixture.Server.Population.Fields!.IsInsideMedium(
+                    Assert.True(condition: fixture.Server.Population.FieldRegions[0].Lattice.IsInsideMedium(
                         0,
                         body.FixedPosition,
                         FixedQ4816.FromDouble(value: .25)

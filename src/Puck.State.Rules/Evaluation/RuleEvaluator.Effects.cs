@@ -272,13 +272,13 @@ public sealed partial class RuleEvaluator {
 
         switch (effect) {
             case ClaimEffect claim:
-                return FireClaim(effect: claim, firing: in firing, moved: out moved);
+                return FireClaim(effect: claim, firing: in firing, moved: out moved, strict: strict);
             case ClaimPairEffect pair:
-                return FireClaimPair(effect: pair, firing: in firing, moved: out moved);
+                return FireClaimPair(effect: pair, firing: in firing, moved: out moved, strict: strict);
             case ReleaseEffect release:
                 return FireRelease(effect: release, firing: in firing, moved: out moved);
             case ForEachPoolEffect each:
-                return FireForEachPool(effect: each, firing: in firing, moved: out moved);
+                return FireForEachPool(effect: each, firing: in firing, moved: out moved, strict: strict);
             case InstanceFieldWriteEffect fieldWrite:
                 return FireInstanceFieldWrite(effect: fieldWrite, firing: in firing, moved: out moved);
             case StaticInstanceFieldWriteEffect staticWrite:
@@ -337,6 +337,7 @@ public sealed partial class RuleEvaluator {
                     effect: effect,
                     firing: in firing,
                     moved: out moved,
+                    strict: strict,
                     write: write
                 );
             default:
@@ -347,7 +348,7 @@ public sealed partial class RuleEvaluator {
                 );
         }
     }
-    private bool FireClaim(ClaimEffect effect, in EffectFiring firing, out bool moved) {
+    private bool FireClaim(ClaimEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
@@ -365,7 +366,7 @@ public sealed partial class RuleEvaluator {
         try {
             var bodyMoved = false;
 
-            if (!FireSequence(effects: effect.Effects, firing: in firing, strict: false, applied: ref bodyMoved)) {
+            if (!FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved)) {
                 return false;
             }
 
@@ -375,7 +376,7 @@ public sealed partial class RuleEvaluator {
             bindings[effect.BindingSlot] = previous;
         }
     }
-    private bool FireClaimPair(ClaimPairEffect effect, in EffectFiring firing, out bool moved) {
+    private bool FireClaimPair(ClaimPairEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
@@ -407,7 +408,7 @@ public sealed partial class RuleEvaluator {
         try {
             var bodyMoved = false;
 
-            if (!FireSequence(effects: effect.Effects, firing: in firing, strict: false, applied: ref bodyMoved)) {
+            if (!FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref bodyMoved)) {
                 return false;
             }
             moved = true;
@@ -431,7 +432,7 @@ public sealed partial class RuleEvaluator {
         moved = true;
         return true;
     }
-    private bool FireForEachPool(ForEachPoolEffect effect, in EffectFiring firing, out bool moved) {
+    private bool FireForEachPool(ForEachPoolEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
         var bindings = m_host.InstanceBindings;
 
@@ -449,7 +450,7 @@ public sealed partial class RuleEvaluator {
                 }
 
                 bindings[effect.BindingSlot] = handle;
-                if (!FireSequence(effects: effect.Effects, firing: in firing, strict: false, applied: ref moved)) {
+                if (!FireSequence(effects: effect.Effects, firing: in firing, strict: strict, applied: ref moved)) {
                     return false;
                 }
             }
@@ -598,7 +599,7 @@ public sealed partial class RuleEvaluator {
         return false;
     }
     // The condition reads what the firing has already written into its open scope, exactly as any other read would.
-    // A faulted condition runs neither branch and is already reported; it is not itself a refusal of the firing.
+    // A faulted condition runs neither branch and is already reported; propagate its refusal to the scope.
     private bool FireIf(IfEffect effect, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
@@ -613,7 +614,7 @@ public sealed partial class RuleEvaluator {
                 m_traceEffectValue = "condition failed";
             }
 
-            return true;
+            return false;
         }
 
         var branch = (open
@@ -726,7 +727,12 @@ public sealed partial class RuleEvaluator {
         );
 
         if (!key.IsValid) {
-            return true;
+            if (!strict) {
+                return true;
+            }
+            ReportRefusal(detail: "the remove address names no held cell", effect: effect.Describe,
+                refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
+            return false;
         }
         if (
             !strict &&
@@ -846,7 +852,7 @@ public sealed partial class RuleEvaluator {
         ? ordinal
         : -1
     );
-    private bool FireWrite(IRuleEffect effect, IStateWriteEffect write, in EffectFiring firing, out bool moved) {
+    private bool FireWrite(IRuleEffect effect, IStateWriteEffect write, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
         var ordinal = write.RowOrdinal;
@@ -893,7 +899,12 @@ public sealed partial class RuleEvaluator {
         }
 
         if (!key.IsValid) {
-            return true;
+            if (!strict) {
+                return true;
+            }
+            ReportRefusal(detail: "the write address names no cell", effect: effect.Describe,
+                refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
+            return false;
         }
 
         var kind = KindOf(rowOrdinal: ordinal);
@@ -931,6 +942,7 @@ public sealed partial class RuleEvaluator {
                 }
             default: {
                     var previousWriteKey = m_host.Scratch.WriteKey;
+
                     m_host.Scratch.WriteKey = key;
                     try {
                         if (!TryReadValue(

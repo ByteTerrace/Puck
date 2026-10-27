@@ -128,6 +128,21 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         definition: Definition,
         name: name
     );
+    /// <inheritdoc/>
+    public override bool DeclaresCell(StateRow row, string key) {
+        ArgumentNullException.ThrowIfNull(row);
+        if (row.HostOwned && (row.EffectiveDomain is StateDomain.CellsOf domain) &&
+            (WorldTopologyCompilation.FindPhysical(state: Definition.StateRaw, name: domain.Topology) is { } region)) {
+            return (long.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) &&
+                (ordinal < ((((long)region.Width) * region.Depth) * region.Layers)));
+        }
+        return base.DeclaresCell(key: key, row: row);
+    }
+    /// <inheritdoc/>
+    public override Puck.State.Rules.IRuleOperand CreateCellRead(StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
+        ((row.HostOwned && (row.EffectiveDomain is StateDomain.CellsOf))
+            ? new WorldHostOwnedCellOperand(rowOrdinal: rowOrdinal, key: key, keyFrom: keyFrom, valueKind: row.Kind)
+            : base.CreateCellRead(key: key, keyFrom: keyFrom, row: row, rowOrdinal: rowOrdinal));
     /// <summary>Returns the placement ordinal per cell of the enclosing rule's <c>forEach</c> row, in cell order,
     /// computed once per compile.</summary>
     /// <param name="channel">The authored channel, for refusal text.</param>

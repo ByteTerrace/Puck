@@ -13,6 +13,10 @@ public sealed partial class WorldPersistence {
                 Host.Tick.AppendRoutedInputHash(ref hash);
                 Host.Tick.AppendFederatedInputHash(ref hash);
                 break;
+            case WorldStateHashComponent.ScopedReplays:
+                hash.Add(value: ((uint)Host.ScopedReplays.Count));
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AppendStateHash(hash: ref hash); }
+                break;
             case WorldStateHashComponent.Arena:
                 hash.Add(value: Host.Arena.ComputeHash());
 
@@ -60,10 +64,20 @@ public sealed partial class WorldPersistence {
 
                 break;
             case WorldStateHashComponent.HostOwnedRows:
-                hash.Add(value: ((byte)((Host.Population.Fields is null)
-                    ? 0
-                    : 1)));
-                Host.Population.Fields?.AppendStateHash(hash: ref hash);
+                hash.Add(value: Host.Population.FieldRegions.Count);
+                for (var regionIndex = 0; (regionIndex < Host.Population.FieldRegions.Count); regionIndex++) {
+                    var region = Host.Population.FieldRegions[regionIndex];
+
+                    hash.Add(value: region.Name.Length);
+                    hash.Add(value: region.Name);
+                    hash.Add(value: region.Lattice.FieldCount);
+                    for (var fieldIndex = 0; (fieldIndex < region.Lattice.Input.Fields.Count); fieldIndex++) {
+                        var field = region.Lattice.Input.Fields[fieldIndex];
+
+                        hash.Add(value: field.Name.Length); hash.Add(value: field.Name);
+                    }
+                    region.Lattice.AppendStateHash(hash: ref hash);
+                }
 
                 break;
             case WorldStateHashComponent.InteractionLatch:

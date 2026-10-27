@@ -88,6 +88,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     private readonly WorldPerceptionAnchor? m_perception;
     private readonly AudioSnapshot[] m_slabs;
     private readonly WorldSpeechClock? m_speech;
+    private readonly WorldStateMirror m_gainMirror;
+
+    private readonly WorldValueDomainGuard m_gainDomains = new() { Report = static report => Console.Error.WriteLine(value: report) };
 
     // The cumulative babble-syllable fire count this session — the voice.state echo's one monotone fact (never
     // reset), so a caller can prove multiple distinct syllables fired without racing the live transient pool's own
@@ -162,6 +165,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         m_perception = perception;
         m_speech = speech;
         m_evaluator = evaluator;
+        m_gainMirror = (client?.StateMirror ?? new WorldStateMirror(view: new WorldDocumentStateView(definition: () => m_definition!)));
         m_slabs = new AudioSnapshot[SnapshotRotation];
 
         for (var index = 0; (index < SnapshotRotation); index++) {
@@ -617,10 +621,11 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
     // ---- derivation ------------------------------------------------------------------------------------------------
 
     private void DeriveSpeakers(WorldDefinition definition, WorldAudioDefaults audio) {
-        foreach (var speaker in definition.Speakers) {
+        for (var index = 0; (index < definition.Speakers.Count); index++) {
+            var speaker = definition.Speakers[index];
             var key = $"speaker:{speaker.Name}";
             var source = SourceKey(source: speaker.Feed.Source);
-            var gain = GainQ16(gain: speaker.Feed.Gain);
+            var gain = GainQ16(gain: (speaker.Feed.Gain.Literal ?? 1f));
             var channel = (speaker.Feed.Channel switch {
                 WorldSpeakerFeed.ChannelLeft => AudioChannel.Left,
                 WorldSpeakerFeed.ChannelRight => AudioChannel.Right,
@@ -629,7 +634,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
             switch (speaker) {
                 case WorldSpeaker.Bed bed:
-                    Admit(
+                    AdmitSpeaker(
+                        speaker: speaker,
+                        index: index,
                         plan: new EmitterPlan {
                             Key = key,
                             Kind = AudioEmitterKind.Bed,
@@ -649,7 +656,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
                     break;
                 case WorldSpeaker.Fixed fixedSpeaker:
-                    Admit(
+                    AdmitSpeaker(
+                        speaker: speaker,
+                        index: index,
                         plan: PointPlan(
                             key: key,
                             anchor: EmitterAnchor.FixedPoint(position: fixedSpeaker.Position),
@@ -667,7 +676,9 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
                     break;
                 case WorldSpeaker.Anchored anchored:
-                    Admit(
+                    AdmitSpeaker(
+                        speaker: speaker,
+                        index: index,
                         plan: PointPlan(
                             key: key,
                             anchor: AnchorOf(
@@ -689,6 +700,11 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
                     break;
             }
         }
+    }
+    private void AdmitSpeaker(EmitterPlan plan, WorldSpeaker speaker, int index, string signatureToken) {
+        plan.Gain = speaker.Feed.Gain;
+        plan.GainSite = new WorldValueSite(Index: index, Inner: "feed", Section: "speakers");
+        Admit(plan: plan, signatureToken: signatureToken);
     }
     // The publish clock's real-time advance in audio frames — shared by PublishTransients (ages the live cue pool)
     // and AdvanceBabbleSchedule (ages the pending syllable schedule).
@@ -1384,8 +1400,7 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         }
     }
     /// <summary>The deterministic <c>audio.emitters</c> listing: one segment per derived emitter — id, key, kind,
-    /// source token, channel, gain, and radii — the document-derived stable facts (never live poses), so a piped
-    /// proof asserts the derivation byte-for-byte.</summary>
+    /// source token, channel, last published gain, and radii (never live poses).</summary>
     public string DescribeEmitters() {
         lock (m_gate) {
             if (m_plan.Count == 0) {
@@ -1609,6 +1624,17 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
             for (var index = 0; (index < m_plan.Count); index++) {
                 var plan = m_plan[index];
 
+                if (plan.Gain is { } gain) {
+                    plan.GainQ16 = GainQ16(gain: m_gainDomains.Resolve(
+                        mirror: m_gainMirror,
+                        field: WorldValueFields.SpeakerGain,
+                        scalar: in gain,
+                        value: m_gainMirror.Scalar(scalar: in gain, fallback: 1f),
+                        fallback: 1f,
+                        site: in plan.GainSite
+                    ));
+                }
+
                 if (!TryResolvePosition(
                     plan: plan,
                     position: out var position,
@@ -1682,6 +1708,10 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
 
         lock (m_gate) {
             m_definition = definition;
+
+            if (m_client is null) {
+                m_gainMirror.Install(engineTick: 0UL, tick: 0UL);
+            }
 
             var audio = definition.Audio;
 
@@ -2086,6 +2116,8 @@ public sealed partial class WorldAudioDirector : IWorldAudioLever, IWorldAudioFr
         public AudioAttenuationCurve Curve;
         public int FadeFrames;
         public int GainQ16;
+        public BindableScalar? Gain;
+        public WorldValueSite GainSite;
         public AudioChannel Channel;
         public AudioSourceKey Source;
         public Vector3 LastPosition;

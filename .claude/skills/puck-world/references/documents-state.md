@@ -360,9 +360,10 @@ the cell namespace.
 
 `WorldFields.cs` (the compiled composite) + `WorldState.cs` (the document
 spelling). `state.lattices` declares one or more topologies (name, origin,
-`cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
-most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
-FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
+`cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`);
+many may be `Field`-kind, each an independent named physical region with its own
+reactions and lattice-derived geometry. `WorldTopologyCompilation.FindPhysical(state, name)`
+finds one by identity; the other kinds are discrete
 `Grid`/`Ring`/`Hex`/`Graph`/`Tiling`/`Box` topologies: a placement's `board` facet
 (`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid`, a `Hex`, a
 `Graph`, or a `Tiling` (`family`: triangular, kagome, truncatedSquare, rhombitrihexagonal, truncatedHexagonal,
@@ -391,8 +392,8 @@ state rows: `{"name": …, "kind": "Fixed", "domain": {"$type": "cellsOf",
 uses; which storage a `cellsOf` row gets is an implementation choice keyed on
 `kind`, never a second authored trait), and `lattice` (`WorldStateFieldTrait`)
 carries only what is left once the topology moves to `domain`.
-`WorldFieldsSection.Compile` assembles the runtime composite
-the engine consumes (`WorldDefinition.Fields` is that compiled view — never
+`WorldFieldsSection.Compile` assembles one runtime composite per named physical region
+the engine consumes (`WorldDefinition.FieldRegions` is that ordered compiled view — never
 an authored section; there is no top-level `fields` member). A cell
 write against a lattice row (`world.state.cell.set`) refuses through
 whole-document revalidation — the lattice's cells are simulation state, not
@@ -420,9 +421,9 @@ authored topology and reaction list: stable field/node handles, its canonical
 state catalog, fixed-point scalar inputs, typed state dependencies, immutable
 canonical read/write sets, the dependency DAG they imply, and separate
 cell-node/full-cell/body work counts. It is deliberately not a second serialized
-graph language; editors and schedulers consume it beside `WorldDefinition.Fields`,
+graph language; editors and schedulers consume it beside `WorldDefinition.FieldRegions`,
 which remains the complete topology/paint/display composite and the document
-remains the one authoring home. `WorldDefinition.FieldProgram` is the cached,
+remains the one authoring home. `WorldDefinition.FieldPrograms` is the cached,
 non-serialized door. It retains compatible handles across unrelated definition
 edits and value-only state updates, and replaces them when field or reaction
 program inputs change.
@@ -800,3 +801,37 @@ it must never be silently omitted from a compact retained record.
 
 After changing this surface, regenerate schema, vocabulary, and name-registry
 outputs with their CLI verbs.
+
+Physical region identity and field-row identity travel with every physical-cell delta,
+primer and checkpoint. Each region advances at its own cadence even headlessly;
+sealed flow omits `spillRow`. `travelResistance` on the physical topology is a
+nonnegative literal or scalar Fixed-row reference. The first region containing the
+body's fixed position supplies resistance; speed scales by `1/(1+r)`.
+Controls are ordinary state/rules and authored console commands, not feature verbs.
+See the schema README's fields section and `scenarios/physical-regions.puck`.
+Checkpoint restore also reinstalls each region's reaction program against the
+restored `StateCatalog` before continuing. State handles belong to their catalog;
+restoring cell arrays alone leaves scalar/tag operands stale and fails on the
+first continuation tick. The regional checkpoint/control law exercises this path.
+Presentation region declarations pass the same live row-reader checks as cell
+delivery; never copy the authority's complete composite into a projection.
+The owner's ruling: seed data is often a public game feature, so disclosure is
+the author's visibility policy. Preserve an admitted row's initial value and
+paints unchanged, including public seeds for every observer. Omit forbidden rows
+and their seeds, and omit a reaction if any field or state dependency is hidden
+(use the existing compiled node read/write sets). Apply the same source check to
+a travel input. Never replace allowed initial values with zero or strip allowed
+paints and reactions as a blanket policy. The two-direction region law exercises
+public, admitted and refused recipients through serialization and hydration.
+Physical named addresses survive fields being omitted before them in a projection.
+Body-coupled reaction hosts admit only bodies coupled to their stepping region.
+After a body leaves all regions contributing an exposure row, clear that row on
+the next tick; skipping outside bodies alone leaves stale tags. Keep regional
+sampling, lookup and stepping indexed and reuse installed transform scratch:
+interface enumerators, captured predicates and per-step scalar arrays allocate
+on these paths. `WorldFieldRegionLawTests` covers the review probes and warm phases.
+
+Rule reads of physical cell rows use the host-owned operand seam, not the arena's
+empty columns. Literal indices are validated against that row's named region;
+computed indices are bounded again at read time. An authored field row needs no
+sparse `cells` seed merely to read a valid physical cell.

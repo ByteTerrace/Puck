@@ -1,0 +1,279 @@
+// The Alchemy table's scenarios (alchemy.puck), each booted in the whole debug world:
+// `puck test worlds/debug/alchemy-tests.puck --reproduce --jobs 1`.
+// Cells are named by ordinal on the 8x5 `alchemyGrid` (8 * row + column): cell 0 is the reset tile, cells 1 to 31 hold
+// the 31 element tokens (`alchemyToken1`..`alchemyToken31`, bodies 223..193), and row 4 holds the cauldron between the
+// left hand well (cell 34, world x = 64.79, z = 30.88) and right hand well (cell 37, world x = 65.21, z = 30.88).
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "alchemy-tests"
+
+test "the tokens settle on their shelf cells with the four starters face up" {
+  when {
+    ticks 150
+  }
+  expect {
+    alchemyHold == 9
+    physics(quiescent) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken4) == 4
+    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
+    board(cellOf, alchemyBoard, placement, alchemyToken31) == 31
+    upright(placement, alchemyToken1) > 0
+    upright(placement, alchemyToken2) > 0
+    upright(placement, alchemyToken3) > 0
+    upright(placement, alchemyToken4) > 0
+    upright(placement, alchemyToken5) < 0
+    upright(placement, alchemyToken31) < 0
+    alchemyCollisions == 0
+    alchemyMisplaced == 0
+    alchemyIllegal == 0
+    hints == 6
+  }
+}
+
+test "fire and water make steam and turn its token face up on the table" {
+  given {
+    left = Fire
+    right = Water
+  }
+  when {
+    ticks 150
+  }
+  expect {
+    made == Steam
+    newest == Steam
+    fresh == 1
+    discovered == 5
+    alchemyBoard[5] == 1
+    alchemyHold == 9
+    physics(quiescent) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
+    upright(placement, alchemyToken5) > 0
+  }
+}
+
+test "overturned tokens on their own shelves return to the book's face" {
+  when {
+    ticks 150
+    seat1: body.pose 64.65 9.97 30.32 0 0 180 223
+    seat1: body.pose 65.21 9.97 30.32 0 0 0 219
+    ticks 150
+  }
+  expect {
+    alchemyHold == 9
+    physics(quiescent) == 1
+    alchemyIllegal == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
+    upright(placement, alchemyToken1) > 0
+    upright(placement, alchemyToken5) < 0
+    discovered == 4
+    mixes == 0
+  }
+}
+
+test "the order of the hands does not matter" {
+  given {
+    left = Water
+    right = Fire
+  }
+  expect {
+    made == Steam
+  }
+}
+
+test "an element can be mixed with itself" {
+  given {
+    left = Water
+    right = Water
+  }
+  expect {
+    made == Sea
+    newest == Sea
+    fresh == 1
+    discovered == 5
+  }
+}
+
+test "a pair that is no recipe fizzles" {
+  given {
+    left = Air
+    right = Water
+  }
+  expect {
+    made == Nothing
+    fizzles == 1
+    mixes == 1
+    discovered == 4
+    alchemyVerdict == 0
+  }
+}
+
+test "an undiscovered element is refused" {
+  given {
+    left = Steam
+    right = Air
+  }
+  expect {
+    refused == 1
+    mixes == 0
+    discovered == 4
+    made == Nothing
+    alchemyVerdict == 0
+  }
+}
+
+test "the starting hints count the recipes open from the four starters" {
+  expect {
+    hints == 6
+  }
+}
+
+test "a second route to a known element discovers nothing" {
+  when {
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Earth
+    ticks 1
+    seat1: world.state.cell.set left $value Lava
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Lava
+    seat1: world.state.cell.set right $value Air
+    ticks 1
+  }
+  expect {
+    made == Stone
+    fresh == 0
+    newest == Stone
+    discovered == 6
+  }
+}
+
+test "a seated player picks two elements with the cursor and drops tokens into the hand wells" {
+  when {
+    seat1: body.pose 65 9.25 29 0 0 0 0
+    ticks 150
+    seat1: body.press interact
+    ticks 5
+    seat1: body.press confirm
+    ticks 4
+    seat1: body.press strafe -1
+    ticks 4
+    seat1: body.press confirm
+    ticks 20
+    seat1: body.pose 64.79 9.97 30.88 0 0 0 221
+    seat1: body.pose 65.21 9.97 30.88 0 0 0 220
+    ticks 150
+  }
+  expect {
+    board(engaged, alchemyBoard, 1) == 1
+    alchemySeat.cursor == 2
+    made == Steam
+    newest == Steam
+    discovered == 6
+    mixes == 2
+    alchemyBoard[8] == 1
+    alchemyBoard[5] == 1
+    alchemyFace.alchemyToken8 == 1
+    alchemyFace.alchemyToken5 == 1
+    alchemyCell.alchemyToken3 == 3
+    alchemyCell.alchemyToken4 == 4
+    alchemyIllegal == 0
+  }
+}
+
+// One route through the whole book, one mix per tick.
+test "the whole book can be completed" {
+  when {
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Fire
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Earth
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Fire
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Steam
+    ticks 1
+    seat1: world.state.cell.set left $value Cloud
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Water
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Lava
+    seat1: world.state.cell.set right $value Water
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Stone
+    ticks 1
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Sand
+    ticks 1
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Stone
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Rain
+    ticks 1
+    seat1: world.state.cell.set left $value Mud
+    seat1: world.state.cell.set right $value Plant
+    ticks 1
+    seat1: world.state.cell.set left $value Energy
+    seat1: world.state.cell.set right $value Sea
+    ticks 1
+    seat1: world.state.cell.set left $value Cloud
+    seat1: world.state.cell.set right $value Energy
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Plant
+    ticks 1
+    seat1: world.state.cell.set left $value Metal
+    seat1: world.state.cell.set right $value Tree
+    ticks 1
+    seat1: world.state.cell.set left $value Fire
+    seat1: world.state.cell.set right $value Plant
+    ticks 1
+    seat1: world.state.cell.set left $value Life
+    seat1: world.state.cell.set right $value Swamp
+    ticks 1
+    seat1: world.state.cell.set left $value Earth
+    seat1: world.state.cell.set right $value Life
+    ticks 1
+    seat1: world.state.cell.set left $value Life
+    seat1: world.state.cell.set right $value Sea
+    ticks 1
+    seat1: world.state.cell.set left $value Air
+    seat1: world.state.cell.set right $value Animal
+    ticks 1
+    seat1: world.state.cell.set left $value Mud
+    seat1: world.state.cell.set right $value Sand
+    ticks 1
+    seat1: world.state.cell.set left $value Clay
+    seat1: world.state.cell.set right $value Life
+    ticks 1
+    seat1: world.state.cell.set left $value Human
+    seat1: world.state.cell.set right $value Metal
+    ticks 1
+    seat1: world.state.cell.set left $value Tool
+    seat1: world.state.cell.set right $value Wood
+    ticks 1
+  }
+  expect {
+    complete == 1
+    discovered == 31
+    hints == 0
+    mixes == 27
+    fizzles == 0
+    refused == 0
+  }
+}

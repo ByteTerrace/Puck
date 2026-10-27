@@ -80,7 +80,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private WorldDocumentVersion m_documentVersion;
 
     // The field rows a snapshot's field-cell writes moved, handed to the state mirror.
-    private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
+    private readonly int[] m_movedFields = new int[StateCapacity.MaxRows];
     private readonly int[] m_movedBodyState = new int[WorldDocumentStateView.MaxMovedBodyState];
 
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation

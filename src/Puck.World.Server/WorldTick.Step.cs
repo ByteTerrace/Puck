@@ -317,6 +317,7 @@ public sealed partial class WorldTick {
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
         Host.BeginCellWriteTick();
+        foreach (var scope in Host.ScopedReplaySpan) { scope.BeforeTick(); }
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
@@ -407,6 +408,7 @@ public sealed partial class WorldTick {
         // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
         // surface, never last tick's.
         Host.Population.SampleMediumSurfaces();
+        SampleTravelResistance(tick: tick);
         Host.Population.AdvanceSimulated(
             tick: tick,
             stepTicks: context.StepTicks,
@@ -744,6 +746,7 @@ public sealed partial class WorldTick {
         }
         var applied = new WorldAcceptedInput(submission.Tick, submission.EntityIndex, movement, submission.Principal,
             held, submission.MeasuredHoldTicks);
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(intent: in submission); }
         ApplyAcceptedBodyInput(body, in applied);
         return new(verdict);
     }
@@ -973,7 +976,10 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return; }
             Host.EnterArenaTick();
-            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
+            try {
+                StepCore(context: in context);
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
@@ -991,7 +997,10 @@ public sealed partial class WorldTick {
             );
 
             Host.EnterArenaTick();
-            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
+            try {
+                StepCore(context: in context);
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind

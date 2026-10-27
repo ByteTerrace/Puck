@@ -71,7 +71,7 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_followedLifetime;
 
     // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
-    private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
+    private readonly int[] m_movedFields = new int[StateCapacity.MaxRows];
     // The body-state rows one snapshot's entries moved (TakeMovedBodyState's output), used only under m_followGate.
     private readonly int[] m_movedBodyState = new int[WorldDocumentStateView.MaxMovedBodyState];
 

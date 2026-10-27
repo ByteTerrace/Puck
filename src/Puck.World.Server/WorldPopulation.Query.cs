@@ -158,8 +158,12 @@ public sealed partial class WorldPopulation {
     /// neither a settle nor a bounce here — carrying the world's one rigid body off a resting surface must not read
     /// as newly quiescent, and neither must it read as newly unsettled. Vacuously <see langword="true"/> when the
     /// world activates no rigid body.</summary>
-    public bool RigidBodiesQuiescent() {
-        for (var index = 0; (index < m_entries.Length); index++) {
+    public bool RigidBodiesQuiescent() => RigidBodiesQuiescent(bodies: null);
+    /// <summary>Reads the resting census of only the selected body ordinals, or all slots when null.</summary>
+    public bool RigidBodiesQuiescent(IReadOnlyList<int>? bodies) {
+        for (var slot = 0; (slot < (bodies?.Count ?? m_entries.Length)); slot++) {
+            var index = ((bodies is null) ? slot : bodies[slot]);
+
             if (
                 (m_entries[index] is { Active: true, Body: { IsRigid: true, Resting: false, CarriedBy: null } })
             ) {

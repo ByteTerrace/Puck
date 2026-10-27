@@ -133,9 +133,12 @@ public static class WorldStaging {
         );
         var origins = new WorldDocumentOrigins();
 
+        // Staging consumes its root once. Retain shared imports and bases, without allocating one full root
+        // image and per-value origin snapshot for every generated test world in a directory sweep.
         if (!PuckDocumentComposer.TryComposeWorldDocument(
             catalog: catalog,
             origins: origins,
+            retainRoot: false,
             chainBytes: out _,
             composed: out var composed,
             reason: out reason,

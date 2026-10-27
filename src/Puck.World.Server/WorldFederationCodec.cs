@@ -154,7 +154,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x324445464B435550UL; // "PUCKFED2"
+    public const ulong WireKey = 0x334445464B435550UL; // "PUCKFED3"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -432,7 +432,7 @@ public static partial class WorldFederationCodec {
         // The document being encoded is whatever the caller holds — a traveller's destination world as often as
         // this authority's own — so its store is loaded here through the one import door rather than borrowed from
         // a server that may not own it.
-        if (arena is null) { WorldStateReader.TryBoundArena(definition, out arena); }
+        if (arena is null) { WorldStateReader.TryBoundArena(arena: out arena, definition: definition); }
         if ((arena is null) && !StateArena.TryCreate(
             arena: out arena,
             catalog: definition.StateCatalog,
@@ -837,17 +837,19 @@ public static partial class WorldFederationCodec {
             writer.WriteByte(value: delta.Field);
             writer.WriteInt64(value: delta.Raw);
             writer.WriteInt32(value: delta.Row);
+            writer.WriteString(value: delta.Region);
+            writer.WriteString(value: delta.FieldName);
             if ((delta.Row >= 0) && (delta.Cell >= 0)) {
                 writer.WriteString(value: delta.Image.Key.Value);
                 var value = delta.Image.Value;
+
                 writer.WriteByte(value: ((byte)value.Kind));
-                if (value.Kind == CellKind.Text) { writer.WriteString(value: value.AsText); }
-                else if (value.Kind == CellKind.Vector) {
+                if (value.Kind == CellKind.Text) { writer.WriteString(value: value.AsText); } else if (value.Kind == CellKind.Vector) {
                     writer.WriteInt32(value: value.AsVector.Length);
                     foreach (var component in value.AsVector.Span) { writer.WriteByte(value: unchecked((byte)component)); }
                 } else { writer.WriteInt64(value: value.Raw); }
-                writer.WriteByte(value: (byte)delta.Image.Behavior);
-                writer.WriteBoolean(value: delta.Image.Clock is not null);
+                writer.WriteByte(value: ((byte)delta.Image.Behavior));
+                writer.WriteBoolean(value: (delta.Image.Clock is not null));
                 if (delta.Image.Clock is { } clock) {
                     writer.WriteInt64(value: clock.EpochTick); writer.WriteInt64(value: clock.EpochEngineTick);
                     writer.WriteInt64(value: clock.Y0); writer.WriteInt64(value: clock.V0); writer.WriteInt64(value: clock.SubstepTicks);
@@ -1542,7 +1544,7 @@ public static partial class WorldFederationCodec {
         var fieldsFull = reader.ReadBoolean();
         var deltaCount = reader.ReadCount(
             field: "snapshot field cell count",
-            maximum: (WorldFieldCapacity.MaxFields * WorldFieldCapacity.MaxCells),
+            maximum: (WorldFieldCapacity.MaxSnapshotBytes / 25),
             minimum: 0
         );
 
@@ -1566,7 +1568,10 @@ public static partial class WorldFederationCodec {
             var field = reader.ReadByte();
             var raw = reader.ReadInt64();
             var row = reader.ReadInt32();
+            var region = reader.ReadString(field: "snapshot physical region");
+            var fieldName = reader.ReadString(field: "snapshot field identity");
             var image = default(ArenaCellImage);
+
             if ((row < -1) || (row >= StateCapacity.MaxRows) || (cell < -1) ||
                 ((row >= 0) && (cell >= StateCapacity.MaxCellsPerRow)) || ((cell == -1) && ((raw < 0) || (raw > StateCapacity.MaxCellsPerRow)))) {
                 reader.Fail(detail: "snapshot cell address is outside its capacity", refusal: WireRefusal.PayloadMalformed);
@@ -1574,28 +1579,30 @@ public static partial class WorldFederationCodec {
             }
             if ((row >= 0) && (cell >= 0)) {
                 var name = reader.ReadRequiredString(field: "snapshot cell key");
+
                 if (!CellName.TryParse(candidate: name, name: out var key, reason: out _)) {
                     reader.Fail(detail: "snapshot cell key is invalid", refusal: WireRefusal.PayloadMalformed); break;
                 }
-                var kind = (CellKind)reader.ReadByte();
+                var kind = ((CellKind)reader.ReadByte());
                 var value = default(CellValue);
-                if (kind == CellKind.Text) { value = CellValue.Text(value: reader.ReadString(field: "snapshot state text", maxBytes: StateCapacity.MaxTextValueLength * 4)); }
-                else if (kind == CellKind.Vector) {
+
+                if (kind == CellKind.Text) { value = CellValue.Text(value: reader.ReadString(field: "snapshot state text", maxBytes: (StateCapacity.MaxTextValueLength * 4))); } else if (kind == CellKind.Vector) {
                     var length = reader.ReadCount(field: "snapshot vector dimensions", maximum: StateCapacity.MaxVectorDimensions, minimum: StateCapacity.MinVectorDimensions);
                     var components = new sbyte[length];
-                    for (var component = 0; component < length; component++) { components[component] = unchecked((sbyte)reader.ReadByte()); }
+
+                    for (var component = 0; (component < length); component++) { components[component] = unchecked((sbyte)reader.ReadByte()); }
                     value = CellValue.Vector(components: components);
-                } else if (kind is CellKind.Bool or CellKind.Int or CellKind.Fixed) { value = CellValue.FromNumber(kind: kind, raw: reader.ReadInt64()); }
-                else { reader.Fail(detail: "snapshot cell kind is invalid", refusal: WireRefusal.EnumValueUnknown); break; }
-                var behavior = (StateCellBehavior)reader.ReadByte();
-                var clock = reader.ReadBoolean() ? new StateCellClock(EpochTick: reader.ReadInt64(), EpochEngineTick: reader.ReadInt64(),
-                    Y0: reader.ReadInt64(), V0: reader.ReadInt64(), SubstepTicks: reader.ReadInt64()) : null;
+                } else if (kind is CellKind.Bool or CellKind.Int or CellKind.Fixed) { value = CellValue.FromNumber(kind: kind, raw: reader.ReadInt64()); } else { reader.Fail(detail: "snapshot cell kind is invalid", refusal: WireRefusal.EnumValueUnknown); break; }
+                var behavior = ((StateCellBehavior)reader.ReadByte());
+                var clock = (reader.ReadBoolean() ? new StateCellClock(EpochTick: reader.ReadInt64(), EpochEngineTick: reader.ReadInt64(),
+                    Y0: reader.ReadInt64(), V0: reader.ReadInt64(), SubstepTicks: reader.ReadInt64()) : null);
+
                 if ((value.Kind == CellKind.Text) && (value.AsText.Length > StateCapacity.MaxTextValueLength)) {
                     reader.Fail(detail: "snapshot state text exceeds the cell limit", refusal: WireRefusal.PayloadTooLarge); break;
                 }
-                image = new ArenaCellImage(Key: key, Value: value, Behavior: behavior, Clock: clock);
+                image = new ArenaCellImage(Behavior: behavior, Clock: clock, Key: key, Value: value);
             }
-            deltas[index] = new FieldCellDelta(Cell: cell, Field: field, Raw: raw, Row: row, Image: image);
+            deltas[index] = new FieldCellDelta(Cell: cell, Field: field, FieldName: fieldName, Image: image, Raw: raw, Region: region, Row: row);
         }
 
         var engineTick = reader.ReadUInt64();

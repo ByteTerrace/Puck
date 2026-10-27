@@ -1,0 +1,119 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "An authored input program and its explicitly owned replay boundary. Its recording is derived in memory on the first drive; subsequent drives restore only this boundary and compare with that live recording.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The scope\u0027s identity.",
+        "type": "string"
+      },
+      "rows": {
+        "description": "Complete document rows owned by the scope, including its input mailboxes.",
+        "type": "array",
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "bodies": {
+        "description": "Stable body ordinals owned by the scope.",
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "seats": {
+        "description": "The principals whose addressed inputs this scope records.",
+        "type": "array",
+        "items": {
+          "title": "Principal",
+          "type": "string"
+        }
+      },
+      "control": {
+        "description": "An Int row with request, status, cursor and completed cells, outside the scope.",
+        "type": "string"
+      },
+      "durationTicks": {
+        "description": "The recorded span, including time for the final input to settle.",
+        "type": "integer"
+      },
+      "inputs": {
+        "description": "Inputs, in tick order, applied through the ordinary grant-checked mutation door.",
+        "type": "array",
+        "items": {
+          "description": "One tick-relative, atomic input batch. Values are raw state-cell values, just as at the live door.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "tick": {
+              "type": "integer"
+            },
+            "principal": {
+              "title": "Principal",
+              "type": "string"
+            },
+            "cells": {
+              "type": "array",
+              "items": {
+                "description": "One addressed numeric input cell.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "row": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "row",
+                  "key",
+                  "value"
+                ],
+                "additionalProperties": false,
+                "title": "WorldScopedReplayCell"
+              }
+            }
+          },
+          "required": [
+            "tick",
+            "principal",
+            "cells"
+          ],
+          "additionalProperties": false,
+          "title": "WorldScopedReplayInput"
+        }
+      }
+    },
+    "required": [
+      "name",
+      "rows",
+      "bodies",
+      "seats",
+      "control",
+      "durationTicks",
+      "inputs"
+    ],
+    "additionalProperties": false,
+    "title": "WorldScopedReplay"
+  },
+  "default": null
+}

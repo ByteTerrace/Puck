@@ -35,6 +35,7 @@ public static partial class WorldFactsVocabulary {
             "$inputHeldPress:<owner>:<channel>",
             WorldRuleFacts.Population,
             WorldRuleFacts.PhysicsQuiescent,
+            $"{WorldRuleFacts.PhysicsQuiescent}:<scope>",
             $"{WorldRuleFacts.RegionPrefix}<placementId>",
             $"{WorldRuleFacts.InfluencePrefix}<channel>:<placementId>",
             $"{WorldRuleFacts.MachinePrefix}<screen>:<address>",
@@ -375,18 +376,22 @@ public static partial class WorldFactsVocabulary {
                     ruleName: ruleName
                 );
                 fact = WorldPopulationOperand.Instance;
-            } else if (string.Equals(
-                a: name,
-                b: WorldRuleFacts.PhysicsQuiescent,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            } else if ((name == WorldRuleFacts.PhysicsQuiescent) || name.StartsWith(comparisonType: StringComparison.Ordinal, value: (WorldRuleFacts.PhysicsQuiescent + ":"))) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
                     key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
-                fact = WorldPhysicsQuiescentOperand.Instance;
+                if (name == WorldRuleFacts.PhysicsQuiescent) { fact = WorldPhysicsQuiescentOperand.Instance; } else {
+                    var scopeName = name[(WorldRuleFacts.PhysicsQuiescent.Length + 1)..];
+                    var scope = world.Definition.ReplaysRaw?.FirstOrDefault(predicate: scope => (scope.Name == scopeName));
+
+                    if (scope is null) {
+                        throw new RuleException(detail: $"'{name}' names no replay scope '{scopeName}'", refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName);
+                    }
+                    fact = new WorldPhysicsQuiescentOperand(bodies: scope.Bodies);
+                }
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.InfluencePrefix
@@ -1329,6 +1334,7 @@ public static partial class WorldFactsVocabulary {
 
             return (fact is not null);
         }
+
         private static bool DeclaresScreen(WorldDefinition definition, int index) {
             foreach (var screen in definition.Screens) {
                 if (screen.Index == index) {

@@ -404,6 +404,11 @@ tick — the cross-cutting "rule writes land on the arena" contract in
 `SKILL.md` — so the table names the kind a write eventually composes as,
 never a second apply path.
 
+Inside `transaction`, an unresolved destination key refuses a write, schedule
+or remove, including a valid cell name not interned in the arena. Pool claim,
+pair claim and iteration bodies preserve that strictness just as `if` branches
+do, so a skipped absent remove cannot leave earlier writes or claims committed.
+
 **A world rule body is mostly straight-line, `if` aside.** The core `.puck`
 language parses `if`/`else if`/`else`, `repeat`/`break`, call-form gates, and
 compound assignment (`+= -= *= /= %= &= |= ^= <<= >>=`) for every vocabulary,
@@ -427,7 +432,9 @@ branch and is reported through `world.rule.failures` the same way a failing
 top-level effect is — a false condition with no fault is not a failure. Each
 branch effect is its own boundary, on the same terms as a top-level effect
 (or, inside a transaction, any other step) — a branch is not itself a
-transaction. An `if` may sit inside a `transaction`; a `transaction` may sit
+transaction. A faulted condition refuses its enclosing scope, rewinding earlier
+writes and invoking `onFailure` when the scope has one. An `if` may sit inside
+a `transaction`; a `transaction` may sit
 inside an `if` only when that `if` is not itself inside one, since
 transactions never nest either way. `save` is refused by name inside any `if`
 branch, at any nesting depth. Kit actions and body-scope effects refuse `if`

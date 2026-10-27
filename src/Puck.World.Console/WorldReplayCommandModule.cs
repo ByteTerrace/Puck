@@ -14,9 +14,9 @@ namespace Puck.World;
 /// self-contained <see cref="WorldReplaySnapshot"/> under the LIVE session's tail population hash and re-drives it once to
 /// report the verdict, and <c>replay.verify</c> re-drives a saved recording through a fresh world and reports whether the
 /// replayed tail hash MATCHES the recorded LIVE tail — a genuine live-vs-replay fidelity proof, not a re-drive compared
-/// against another re-drive of the same stream. Every verb is Immediate (a client-local control, no direct simulation effect):
-/// verification runs offline over an isolated shadow world, so it never re-injects into the live session and its verdict
-/// is readable the instant the verb returns. A SEPARATE module to keep each class under its analyzer ceilings.
+/// against another re-drive of the same stream. Every verb is Immediate. Whole-session verification runs offline over
+/// an isolated shadow world, so its verdict is readable the instant the verb returns. <c>replay.scope</c> submits
+/// ordinary mutations for a scoped replay in the live session without replacing that session.
 /// </summary>
 public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, WorldReplayInspector inspector, WorldInstanceHost instances) : ICommandModule {
     private readonly WorldReplayInspector m_inspector = inspector;
@@ -209,6 +209,13 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "replay.scope",
+            audience: CommandAudience.Operator,
+            description: "replay.scope [<name> [capture|drive|cancel|reset]] reads an authored scope or requests its next-tick operation. capture retains its fresh rows and bodies once; drive derives an in-memory tape through the real mutation door on its first run, then restores only the scope and checks each recorded tick on later runs. cancel restores a fresh scope. The world and other scopes keep running. Status: 0 idle, 1 recording, 2 replaying, 3 recorded, 4 MATCH, -1 MISMATCH. No recorded hashes or binary tapes are authored or committed.",
+            handler: (context, args) => Scope(args: args, principal: context.Principal)
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.record",

@@ -156,10 +156,13 @@ public abstract record WorldScreenSource {
     /// text run. Requires the world to declare a text font catalog (<see cref="WorldDefinition.Text"/>); the decal
     /// bypasses the screen image pipeline, so no image source competes with it on the slot.</summary>
     /// <param name="Lines">The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar
-    /// per cell — no kerning or shaping on this tier).</param>
+    /// per cell — no kerning or shaping on this tier). State placeholders follow
+    /// <c>{state.&lt;row&gt;[.&lt;key&gt;][.$target]}</c>; <c>{{</c> and <c>}}</c> escape literal braces.
+    /// Rows must be declared Int, Fixed, Bool or Text; an absent cell displays empty. Expanded lines clip to the grid.</param>
     /// <param name="Font">The text catalog font name; <see langword="null"/> selects the catalog's default font.</param>
     /// <param name="Columns">The cell grid's column count, or <see langword="null"/> to fit the widest line. The grid
-    /// (columns x rows) is capped by the engine's per-screen decal cell budget
+    /// (columns x rows) is capped by the engine's per-screen decal cell budget; inferred columns stop at that budget,
+    /// including when a live placeholder grows
     /// (<c>Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells</c>).</param>
     /// <param name="Rows">The cell grid's row count, or <see langword="null"/> to fit the line count.</param>
     /// <param name="Foreground">The letter color as <c>#RRGGBB</c>, or <see langword="null"/> for white.</param>

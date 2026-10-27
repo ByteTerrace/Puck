@@ -15,14 +15,20 @@ namespace Puck.World;
 /// <param name="Fields">The declared fields, in order; a reaction, paint, or render row names them.</param>
 /// <param name="Reactions">The per-step reactions, applied in document order each lattice step.</param>
 /// <param name="Paint">The initial fills, applied in order over the fields' <see cref="WorldFieldRow.Initial"/>.</param>
+/// <param name="Name">The stable physical region identity, taken from its topology name.</param>
+/// <param name="TravelResistance">The nonnegative scalar resistance sampled by bodies inside this region.</param>
 public sealed record WorldFieldsSection(
     WorldFieldLatticeDefinition Lattice,
     IReadOnlyList<WorldFieldRow> Fields,
+    string Name,
     IReadOnlyList<WorldReaction>? Reactions = null,
-    IReadOnlyList<WorldLatticeFill>? Paint = null
+    IReadOnlyList<WorldLatticeFill>? Paint = null,
+    WorldLatticeScalar? TravelResistance = null
 ) {
     /// <summary>Determines whether two compiled composites carry the same runtime field inputs, including paint.</summary>
     internal bool HasSameCompilation(WorldFieldsSection other) => (
+        (Name == other.Name) &&
+        (TravelResistance == other.TravelResistance) &&
         (Lattice == other.Lattice) &&
         Fields.SequenceEqual(second: other.Fields) &&
         ReactionsEqual(
@@ -46,15 +52,15 @@ public sealed record WorldFieldsSection(
         right: other.Reactions
     )
     );
+
     /// <summary>Determines without allocation whether an authored state section still compiles to a cached
     /// composite.</summary>
-    internal static bool MatchesState(WorldFieldsSection? composite, WorldStateSection? state) {
-        if (WorldTopologyCompilation.FindPhysical(state: state) is not { } topology) {
-            return (composite is null);
-        }
+    private bool MatchesTopology(WorldFieldTopology topology, WorldStateSection? state) {
+        var composite = this;
 
         if (
-            (composite is null) ||
+            (composite.Name != topology.Name) ||
+            (composite.TravelResistance != topology.TravelResistance) ||
             (composite.Lattice.Origin != topology.Origin) ||
             (composite.Lattice.CellSize != topology.CellSize) ||
             (composite.Lattice.Width != topology.Width) ||
@@ -80,6 +86,9 @@ public sealed record WorldFieldsSection(
             }
 
             if (row.Field is not { } trait) {
+                continue;
+            }
+            if ((row.EffectiveDomain is not StateDomain.CellsOf domain) || (domain.Topology != topology.Name)) {
                 continue;
             }
 
@@ -138,6 +147,24 @@ public sealed record WorldFieldsSection(
             (fieldIndex == composite.Fields.Count) &&
             (paintIndex == paint.Count)
         );
+    }
+
+    /// <summary>Checks every physical region against its authored topology and field rows without allocation.</summary>
+    internal static bool MatchesState(IReadOnlyList<WorldFieldsSection> composite, WorldStateSection? state) {
+        var index = 0;
+        var topologies = state?.Lattices;
+
+        for (var topologyIndex = 0; (topologyIndex < (topologies?.Count ?? 0)); topologyIndex++) {
+            var topology = topologies![topologyIndex];
+
+            if (topology is not WorldFieldTopology physical) {
+                continue;
+            }
+            if ((index >= composite.Count) || !composite[index++].MatchesTopology(state: state, topology: physical)) {
+                return false;
+            }
+        }
+        return (index == composite.Count);
     }
 
     private static bool FillEqual(WorldLatticeFill authored, WorldLatticeFill compiled) => (authored, compiled) switch {
@@ -235,22 +262,25 @@ public sealed record WorldFieldsSection(
         return true;
     }
 
-    /// <summary>Compiles the state section's lattice topology and lattice-shaped rows into the runtime composite, or
-    /// <see langword="null"/> when the section declares no topology. Row order is state-section declaration order --
+    /// <summary>Compiles each named physical topology and its lattice-shaped rows into a runtime region.
+    /// Region and row order follow their state-section declarations --
     /// the order every wire index, checkpoint entry, and render channel keys off. Reaction collections are
     /// snapshotted so mutating a caller-owned list cannot rewrite an already compiled composite.</summary>
     /// <param name="state">The state section.</param>
-    /// <returns>The composite, or <see langword="null"/>.</returns>
-    public static WorldFieldsSection? Compile(WorldStateSection? state) {
-        if (WorldTopologyCompilation.FindPhysical(state: state) is not { } topology) {
-            return null;
-        }
+    /// <returns>The physical regions, or an empty list when none are declared.</returns>
+    public static IReadOnlyList<WorldFieldsSection> Compile(WorldStateSection? state) =>
+        (state?.Lattices ?? []).OfType<WorldFieldTopology>().Select(selector: topology => CompileRegion(state: state, topology: topology)).ToArray();
+
+    private static WorldFieldsSection CompileRegion(WorldStateSection? state, WorldFieldTopology topology) {
 
         var rows = new List<WorldFieldRow>();
         var paint = new List<WorldLatticeFill>();
 
         foreach (var row in (state?.World ?? [])) {
             if (row.Field is not { } trait) {
+                continue;
+            }
+            if ((row.EffectiveDomain is not StateDomain.CellsOf domain) || (domain.Topology != topology.Name)) {
                 continue;
             }
 
@@ -270,6 +300,8 @@ public sealed record WorldFieldsSection(
         }
 
         return new WorldFieldsSection(
+            Name: topology.Name,
+            TravelResistance: topology.TravelResistance,
             Fields: rows,
             Lattice: new WorldFieldLatticeDefinition(
                 CellSize: topology.CellSize,
@@ -292,55 +324,53 @@ public sealed record WorldFieldsSection(
             }).ToArray()
         );
     }
-    /// <summary>Decompiles a composite back into the state-section spelling — the inverse of <see cref="Compile"/>,
+
+    /// <summary>Decompiles physical regions back into the state-section spelling — the inverse of <see cref="Compile"/>,
     /// for the projection reconstruction that must hand a client-side definition the SAME lattice through the state
-    /// section the compile reads. <see langword="null"/> in, empty section out.</summary>
-    /// <param name="composite">The composite, or <see langword="null"/>.</param>
-    /// <returns>A state section carrying the topology and one lattice-shaped row per composite row.</returns>
-    public static WorldStateSection ToStateSection(WorldFieldsSection? composite) {
-        if (composite is null) {
-            return new WorldStateSection(World: []);
-        }
-
+    /// section the compile reads.</summary>
+    /// <param name="composite">The ordered physical regions.</param>
+    /// <returns>A state section carrying each topology and its lattice-shaped rows.</returns>
+    public static WorldStateSection ToStateSection(IReadOnlyList<WorldFieldsSection> composite) {
         var rows = new List<WorldStateRow>();
+        var topologies = new List<LatticeTopology>();
 
-        foreach (var row in composite.Fields) {
-            rows.Add(item: new WorldStateRow(
-                Kind: CellKind.Fixed,
-                Domain: new StateDomain.CellsOf(Topology: DefaultTopologyName),
-                Field: new WorldStateFieldTrait(
-                    Color: row.Color,
-                    HeightScale: row.HeightScale,
-                    Initial: row.Initial,
-                    Max: row.Max,
-                    Medium: (row.Medium
-                ? new WorldLatticeMedium()
-                : null),
-                    Min: row.Min,
-                    Paint: null
-                ),
-                Name: CellName.Parse(candidate: row.Name)
+        foreach (var region in composite) {
+
+            foreach (var row in region.Fields) {
+                var paint = (region.Paint ?? []).Where(predicate: fill => (fill.Field == row.Name)).ToArray();
+
+                rows.Add(item: new WorldStateRow(
+                    Kind: CellKind.Fixed,
+                    Domain: new StateDomain.CellsOf(Topology: region.Name),
+                    Field: new WorldStateFieldTrait(
+                        Color: row.Color,
+                        HeightScale: row.HeightScale,
+                        Initial: row.Initial,
+                        Max: row.Max,
+                        Medium: (row.Medium
+                    ? new WorldLatticeMedium()
+                    : null),
+                        Min: row.Min,
+                        Paint: ((paint.Length == 0) ? null : paint)
+                    ),
+                    Name: CellName.Parse(candidate: row.Name)
+                ));
+            }
+
+            topologies.Add(item: new WorldFieldTopology(
+                CellSize: region.Lattice.CellSize,
+                Depth: region.Lattice.Depth,
+                Layers: region.Lattice.Layers,
+                Name: region.Name,
+                Origin: region.Lattice.Origin,
+                Reactions: region.Reactions,
+                StepEveryTicks: region.Lattice.StepEveryTicks,
+                Width: region.Lattice.Width,
+                TravelResistance: region.TravelResistance
             ));
         }
-
-        return new WorldStateSection(
-            Lattices: [new WorldFieldTopology(
-                    CellSize: composite.Lattice.CellSize,
-                    Depth: composite.Lattice.Depth,
-                    Layers: composite.Lattice.Layers,
-                    Name: DefaultTopologyName,
-                    Origin: composite.Lattice.Origin,
-                    Reactions: composite.Reactions,
-                    StepEveryTicks: composite.Lattice.StepEveryTicks,
-                    Width: composite.Lattice.Width
-                )],
-            World: rows
-        );
+        return new WorldStateSection(Lattices: topologies, World: rows);
     }
-
-    /// <summary>The topology name a decompiled projection lattice carries — one lattice exists today, so the
-    /// round-trip needs no authored name.</summary>
-    public const string DefaultTopologyName = "world";
 }
 /// <summary>The physical <c>state.lattices</c> topology: a scalar field over the lattice's footprint, evolved by
 /// reactions each <paramref name="StepEveryTicks"/> — the document's own case of <see cref="LatticeTopology"/>,
@@ -353,11 +383,13 @@ public sealed record WorldFieldsSection(
 /// <param name="Layers">Cells along +Y -- 1 is a ground lattice.</param>
 /// <param name="StepEveryTicks">Simulation ticks between reaction steps.</param>
 /// <param name="Reactions">The per-step reactions, applied in document order.</param>
+/// <param name="TravelResistance">A nonnegative scalar body motion reads within the bounded region. Zero leaves motion unchanged.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldTopology(
     string Name, DocumentVector3 Origin, float CellSize,
     int Width, int Depth, int Layers = 1, int StepEveryTicks = 8,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReaction>? Reactions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeScalar? TravelResistance = null
 ) : LatticeTopology(
     Name,
     Origin,
@@ -660,6 +692,9 @@ public enum WorldFieldWriteOp : byte {
 }
 /// <summary>Capacity constants for a lattice.</summary>
 public static class WorldFieldCapacity {
+    /// <summary>The aggregate physical-cell payload budget for a full primer. The remaining 8 MiB of the
+    /// federation frame is available to population, document state and envelope metadata.</summary>
+    public const int MaxSnapshotBytes = ((24 * 1024) * 1024);
     /// <summary>The most cells a lattice may declare (width × depth × layers). Eight full fields plus the rest of a
     /// primer snapshot must fit the federation wire's 32 MiB frame ceiling.</summary>
     public const int MaxCells = (1 << 18);

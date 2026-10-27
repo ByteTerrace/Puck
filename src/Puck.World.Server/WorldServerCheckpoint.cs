@@ -61,5 +61,6 @@ public sealed record WorldServerCheckpoint(
     IReadOnlyList<WorldDecisionCheckpoint> Decisions,
     IReadOnlyList<WorldMachineBindingEntry> MachineBindings,
     ArenaUndoSnapshot? Undo = null,
-    WorldInputRuntimeCheckpoint? Input = null
+    WorldInputRuntimeCheckpoint? Input = null,
+    IReadOnlyList<WorldScopedReplayCheckpoint>? ScopedReplays = null
 );

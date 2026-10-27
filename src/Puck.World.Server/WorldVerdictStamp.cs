@@ -135,14 +135,15 @@ public sealed class WorldVerdictStamp {
     /// <param name="arena">The store the row lives in.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="tick">The tick of the firing.</param>
+    /// <param name="reason">Why the stamp was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the stamp landed.</returns>
-    public static bool Stamp(StateArena arena, int rowOrdinal, ulong tick) {
+    public static bool Stamp(StateArena arena, int rowOrdinal, ulong tick, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         return arena.TryWriteOrMint(
             evicted: out _,
             key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey),
-            reason: out _,
+            reason: out reason,
             rowOrdinal: rowOrdinal,
             value: CellValue.Int(value: ((long)tick))
         );

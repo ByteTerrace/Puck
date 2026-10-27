@@ -4,6 +4,22 @@ using Xunit;
 namespace Puck.Cli.Core.Tests;
 
 public sealed class CliProcessHandshakeTests {
+    [Fact]
+    public void StreamedOutputStillReleasesContinuationWithoutRetainingTheTranscript() {
+        var (executable, arguments) = Reader();
+        var observed = new List<CliProcessOutputLine>();
+        var result = CliProcess.RunCaptured(executable, arguments, "ready\n", Timeout.InfiniteTimeSpan,
+            continueWhen: line => ((line.Stream == CliProcessOutputStream.Stderr) && (line.Line == "ready")),
+            continuationInput: "finished\n", cancellationToken: TestContext.Current.CancellationToken,
+            onOutput: observed.Add, retainOutput: false);
+
+        Assert.Equal(expected: 0, actual: result.ExitCode);
+        Assert.Contains(collection: observed, filter: line => ((line.Stream == CliProcessOutputStream.Stdout) && (line.Line == "finished")));
+        Assert.Empty(collection: result.OutputLines);
+        Assert.Empty(value: result.Stdout);
+        Assert.Empty(value: result.Stderr);
+    }
+
     private static (string Executable, string[] Arguments) Reader() => (OperatingSystem.IsWindows()
         ? ("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
             "[Console]::Error.WriteLine([Console]::ReadLine()); [Console]::WriteLine([Console]::ReadLine())"])

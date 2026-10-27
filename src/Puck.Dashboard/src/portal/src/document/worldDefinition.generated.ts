@@ -76,6 +76,7 @@ export type WorldDefinition = {
   editor?: WorldEditorDefaults | null;
   timeline?: WorldTimelineSection | null;
   commands?: (WorldConsoleCommand | null)[] | null;
+  replays?: (WorldScopedReplay | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -5492,6 +5493,10 @@ export type WorldFieldTopology = {
    * The per-step reactions, applied in document order.
    */
   reactions?: (WorldReaction | null)[] | null;
+  /**
+   * A nonnegative scalar body motion reads within the bounded region. Zero leaves motion unchanged.
+   */
+  travelResistance?: WorldLatticeScalar | null;
   /**
    * The topology's name — what a row's cellsOf domain references.
    */
@@ -11431,6 +11436,49 @@ export type WorldScheduleSection = {
   instances?: (WorldScheduleInstance | null)[] | null;
 };
 
+export type WorldScopedReplay = {
+  /**
+   * The scope's identity.
+   */
+  name: string;
+  /**
+   * Complete document rows owned by the scope, including its input mailboxes.
+   */
+  rows: (string | null)[];
+  /**
+   * Stable body ordinals owned by the scope.
+   */
+  bodies: number[];
+  /**
+   * The principals whose addressed inputs this scope records.
+   */
+  seats: Principal[];
+  /**
+   * An Int row with request, status, cursor and completed cells, outside the scope.
+   */
+  control: string;
+  /**
+   * The recorded span, including time for the final input to settle.
+   */
+  durationTicks: number;
+  /**
+   * Inputs, in tick order, applied through the ordinary grant-checked mutation door.
+   */
+  inputs: (WorldScopedReplayInput | null)[];
+};
+
+export type WorldScopedReplayCell = {
+  row: string;
+  key: string;
+  value: number;
+};
+
+export type WorldScopedReplayInput = {
+  tick: number;
+  principal: Principal;
+  cells: (WorldScopedReplayCell | null)[];
+};
+
 export type WorldScreen = {
   /**
    * The engine screen-surface index (0..MaxScreenSurfaces−1) this slab declares — the key the source/light providers bind under.
@@ -11708,7 +11756,7 @@ export type WorldScreenSourceSession = {
 export type WorldScreenSourceText = {
   $type?: "text";
   /**
-   * The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell — no kerning or shaping on this tier).
+   * The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell — no kerning or shaping on this tier). State placeholders follow {state.<row>[.<key>][.$target]}; {{ and }} escape literal braces. Rows must be declared Int, Fixed, Bool or Text; an absent cell displays empty. Expanded lines clip to the grid.
    */
   lines: StringList;
   /**
@@ -11716,7 +11764,7 @@ export type WorldScreenSourceText = {
    */
   font?: string | null;
   /**
-   * The cell grid's column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine's per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).
+   * The cell grid's column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine's per-screen decal cell budget; inferred columns stop at that budget, including when a live placeholder grows (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).
    */
   columns?: number | null;
   /**
@@ -12318,9 +12366,9 @@ export type WorldSpeakerFeed = {
    */
   channel: string;
   /**
-   * The feed gain (1 = unity), bounded by MaxLevel — the one audio gain ceiling the validator enforces everywhere.
+   * The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter.
    */
-  gain: number;
+  gain: BindableScalar;
 };
 
 export type WorldSpeakerFixed = {

@@ -36,7 +36,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
     /// changes, and never reuse an earlier value.</summary>
-    public const ushort SupportedVersion = 17;
+    public const ushort SupportedVersion = 21;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>

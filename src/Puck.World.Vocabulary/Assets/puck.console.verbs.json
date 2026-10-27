@@ -234,6 +234,7 @@
     { "name": "replay.inspect", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "replay.list", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "replay.record", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "replay.scope", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "replay.status", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "replay.stop", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "replay.verify", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

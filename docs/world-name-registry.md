@@ -1325,10 +1325,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `placements.rows[].deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
 | `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][fixed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][fixed].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][anchored].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `speakers[][anchored].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][anchored].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][bed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][bed].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `gravity.attractors[].placementId` | Placement | Names | Read | `WorldGravityAttractor.PlacementId` |
 | `gravity.points[].placementId` | Placement | Names | Read | `WorldGravityPoint.PlacementId` |
 | `gravity.areas[].placementId` | Placement | Names | Read | `WorldGravityArea.PlacementId` |
@@ -1442,6 +1446,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][field].reactions[][flow].rate{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].reactions[][flow].over` | Field | Names | Read | `WorldReaction.Flow.Over` |
 | `state.lattices[][field].reactions[][flow].spillRow` | State | Names | Action | `WorldReaction.Flow.SpillRow` |
+| `state.lattices[][field].travelResistance{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.families[].members` | State | Names | Read | `StateFamily.Members` |
 | `state.records[].name` | Record | Declares |  | `StateRecord.Name` |
@@ -2832,6 +2837,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
 | `timeline.clocks[].name` | Clock | Declares |  | `WorldClock.Name` |
 | `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
+| `replays[].rows` | State | Names | Read | `WorldScopedReplay.Rows` |
+| `replays[].control` | State | Names | Action | `WorldScopedReplay.Control` |
+| `replays[].inputs[].cells[].row` | State | Names | Action | `WorldScopedReplayCell.Row` |
+| `replays[].inputs[].cells[].key` | State | Key | Read | `WorldScopedReplayCell.Key` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -3313,3 +3322,4 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
 | `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
 | `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |
+| `replays[].name` | `WorldScopedReplay.Name` | a replay scope identity, local to the replays section |

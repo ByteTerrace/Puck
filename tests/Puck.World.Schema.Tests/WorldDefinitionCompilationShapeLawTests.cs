@@ -84,8 +84,8 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
     public void ValueOnlyChange_PreservesCompiledViewsAndAllocatesUnder2KiB() {
         var original = new WorldDefinition(StateRaw: BuildState());
         var catalog = original.StateCatalog;
-        var fields = Assert.IsType<WorldFieldsSection>(@object: original.Fields);
-        var program = Assert.IsType<WorldFieldProgram>(@object: original.FieldProgram);
+        var fields = Assert.Single(collection: original.FieldRegions);
+        var program = Assert.Single(collection: original.FieldPrograms);
 
         var rows = original.StateRaw!.World!.Select(selector: row => (
             string.Equals(
@@ -116,11 +116,11 @@ public sealed class WorldDefinitionCompilationShapeLawTests(ITestOutputHelper ou
         );
         Assert.Same(
             expected: fields,
-            actual: updated.Fields
+            actual: Assert.Single(collection: updated.FieldRegions)
         );
         Assert.Same(
             expected: program,
-            actual: updated.FieldProgram
+            actual: Assert.Single(collection: updated.FieldPrograms)
         );
         Assert.True(
             condition: (allocated < 2048),

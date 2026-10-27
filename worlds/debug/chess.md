@@ -104,6 +104,54 @@ the console.
 | Frame the table from White's side | `view.override camera look 56.5 11.05 20.8 56.5 9.85 22.6`, then `view.override camera auto` |
 | Frame the board game room from its doorway | `view.override camera look 52 11.6 26 60 9.6 26.5`, then `view.override camera auto` |
 
+## The idle replay demonstration
+
+After 60 seconds with no move and no player within 3 m of the table, the board
+resets and shows **Deep Blue (White)–Garry Kasparov, New York, 11 May 1997,
+game 6, 1–0**. It plays one ply every three seconds, holds the final position
+for twelve seconds, then repeats. Approaching or engaging cancels the demo and
+restores a fresh playable table. The faerie is free to watch; its proximity does
+not count as a player approaching. The computer opponent pauses during the demo.
+
+The score was checked against the [ChessBox public game score](https://www.chessbox.in/chessgame/deep-blue-kasparov-garry-5/):
+
+```text
+1.e4 c6 2.d4 d5 3.Nc3 dxe4 4.Nxe4 Nd7 5.Ng5 Ngf6
+6.Bd3 e6 7.N1f3 h6 8.Nxe6 Qe7 9.O-O fxe6 10.Bg6+ Kd8
+11.Bf4 b5 12.a4 Bb7 13.Re1 Nd5 14.Bg3 Kc8 15.axb5 cxb5
+16.Qd3 Bc6 17.Bf5 exf5 18.Rxe7 Bxe7 19.c4 1-0
+```
+
+Kasparov resigned after 19.c4; the demo does not label the position checkmate.
+There are 37 plies: nineteen White moves and eighteen Black moves.
+
+The `replays` row in `chess.puck` authors only addressed inputs, their pacing,
+and the table's scope. The first idle cycle derives an in-memory tape by
+submitting those inputs through the grant-checked move mailbox. The table's
+ordinary relocation rules and settled-board judge process every move, including
+captures and castling. Its screen says **SCOPE TAPE RECORDED** on that cycle.
+Every later cycle restores only the captured table rows and bodies and replays
+the accepted inputs. It compares every resulting scope hash with the first
+live recording and shows **SCOPE HASH MATCH** or **SCOPE HASH MISMATCH**, beside
+the historical result. No board positions, expected hashes or binary tapes are
+committed. The rest of the world's clock, bodies, routes and state keep running.
+For screen captures, the title is screen 12; the result and verdict lines are
+screens 8–11. Screen 7 belongs to the Alchemy recipe book.
+The scope includes the table rules' edge latches and group progress as well as
+its rows and pieces, including rules whose only effect moves an owned piece.
+Settling reads only the chess pieces' resting facts, so an
+airborne Go stone or Reversi disc cannot change the verdict. Saved starting
+images must contain exactly the declared rows and bodies; forged outside bodies
+and truncated expected hash sequences are refused before playback.
+
+`replay.scope chess-demo` reads progress, the starting hash, the recorded tail
+and the current scope hash. `world.state chessDemo` and `world.state chessTape`
+read the idle deadline, loop and match counts, cancellation count and status.
+The authored timing constants stand near the top of `chess.puck`.
+`world.state.cell.set chessDemo enabled 0` cancels and disables the loop.
+`chess.move 11 27` requests e2-e4 through the same apply and judging path;
+`chessInput` reads the mailbox and its accepted-request count.
+
 ## The opponent
 
 `world.state.cell.set aiSide $value 1` gives Black to the computer (the

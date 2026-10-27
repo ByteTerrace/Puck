@@ -2535,7 +2535,7 @@
         },
         "lines": {
           "$ref": "#/$defs/StringList",
-          "description": "The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell \u2014 no kerning or shaping on this tier)."
+          "description": "The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell \u2014 no kerning or shaping on this tier). State placeholders follow {state.\u003Crow\u003E[.\u003Ckey\u003E][.$target]}; {{ and }} escape literal braces. Rows must be declared Int, Fixed, Bool or Text; an absent cell displays empty. Expanded lines clip to the grid."
         },
         "font": {
           "description": "The text catalog font name; null selects the catalog\u0027s default font.",
@@ -2546,7 +2546,7 @@
           "default": null
         },
         "columns": {
-          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).",
+          "description": "The cell grid\u0027s column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine\u0027s per-screen decal cell budget; inferred columns stop at that budget, including when a live placeholder grows (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).",
           "type": [
             "integer",
             "null"
@@ -9172,8 +9172,8 @@
           "type": "string"
         },
         "gain": {
-          "description": "The feed gain (1 = unity), bounded by MaxLevel \u2014 the one audio gain ceiling the validator enforces everywhere.",
-          "type": "number"
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter."
         }
       },
       "required": [

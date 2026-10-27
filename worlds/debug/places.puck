@@ -18,7 +18,7 @@ spawnPoints [
   { id: "devices", position [4, 0.05, 30.5], yawDegrees: 90 }
   // At White's edge of the chess table in the gallery's board game room (chess.puck), 1.6 m from the board's centre and
   // facing it, inside the board's engage radius: the context button sits her down. The room's other tables have places
-  // of their own beside them (go.puck, reversi.puck), and the room's doorway is `boardroom` (hall.puck).
+  // of their own beside them (go.puck, reversi.puck, alchemy.puck), and the room's doorway is `boardroom` (hall.puck).
   { id: "chess", position [56.5, 9.05, 21], yawDegrees: 180 }
   // Behind the chair at the desktop computer in the gallery lobby (desktop.puck), facing its monitor, inside the
   // screen's engage radius.
@@ -30,7 +30,7 @@ spawnPoints [
 commands [
   {
     name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, or any spawn point) and returns the view to the play layout's chase camera."
     parameters [
       { name: "place", kind: Spawn, default: "stage" }
       { name: "body", kind: Body, default: "0" }

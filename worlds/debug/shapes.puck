@@ -20,12 +20,13 @@
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
 let galleryPopulation = 43
-// The board game room's bodies (boardroom.puck): Go's cursor and 82 stones (go.puck), then Reversi's cursor and 64
-// discs (reversi.puck). debug.puck imports both ahead of every other population, so they take the population's top
-// slots and every body below them keeps its index.
+// The board game room's bodies (boardroom.puck): Alchemy's cursor and 31 element tokens (alchemy.puck), Go's cursor and
+// 82 stones (go.puck), then Reversi's cursor and 64 discs (reversi.puck). debug.puck imports them ahead of every other
+// population, so they take the population's top slots and every body below them keeps its index.
+let alchemyBodies = 32
 let goBodies = 83
 let reversiBodies = 65
-let boardRoomBodies = (goBodies + reversiBodies)
+let boardRoomBodies = (alchemyBodies + goBodies + reversiBodies)
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 let galleryMapDirections = "stairs and lift north-west: press CALL, or gallery.lift <level>"
 

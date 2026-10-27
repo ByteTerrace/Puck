@@ -288,11 +288,27 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   frame reads them. A `$body` key names the lease's body, and the
   lease releases its slots when the body leaves, its binding moves, or the
   mirror installs a document, so the mirror retires what nothing reads.
-- `WorldBakedColors.cs` is the colors a build bakes (a creation palette's, a
-  height field's, a text screen's ink), read through the mirror's color slots;
-  the scene and field emitters and the decal cache follow a bound one's move
-  with a rebuild. `WorldFieldEmitter` bakes each height field's brick from the
+- `WorldBakedColors.cs` is the colors and text screen strings a build bakes (a
+  creation palette's, a height field's, a text screen's ink and `{state.*}`
+  placeholders), read through the mirror's color and number slots; the scene
+  and field emitters and the decal cache follow a bound one's move with a
+  rebuild. `WorldFieldEmitter` bakes each height field's brick from the
   field row's slot, the same slot a pass's array bound to `state.<field>` reads.
+  Text screens accept `{state.<row>[.<key>][.$target]}` for declared Int, Fixed,
+  Bool and Text rows; `$body` has no screen context and is refused. `{{` and
+  `}}` display literal braces, so `{{state.count}}` displays `{state.count}`.
+  An absent or withheld live cell displays empty; an undeclared row or malformed
+  placeholder is a load error naming the line and token. Values are formatted
+  invariantly, with booleans as `true`/`false`. Each line occupies one row;
+  expanded values clip at the column boundary by Unicode scalar. Explicit
+  columns stay fixed; inferred columns fit the expanded width up to
+  `MaxScreenDecalCells / rows`, including after later growth. Literal runs
+  after unescaping must fit the grid at load. Placeholder dependencies cross
+  presentation projections through the same recipient disclosure checks as
+  other bound values; restricted sources refuse disclosure.
+  Every named physical region uses its own origin, dimensions, cell size and
+  fields. Brick slots span all regions, while bound field rows retain their
+  globally unique state-row names and their region's own row length.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the
   seat's routed mirror, and rebuilt only when one of the slots it read changes

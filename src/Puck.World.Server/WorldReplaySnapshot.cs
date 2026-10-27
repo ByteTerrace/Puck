@@ -308,7 +308,7 @@ public sealed partial class WorldReplaySnapshot {
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 6u;
+    private const uint Version = 7u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -1981,12 +1981,14 @@ public sealed partial class WorldReplaySnapshot {
     /// <param name="population">The entity table to hash.</param>
     /// <returns>The state hash.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="population"/> is <see langword="null"/>.</exception>
-    public static ulong HashState(WorldPopulation population) {
+    /// <param name="bodies">A selected body set, or null for every active body.</param>
+    public static ulong HashState(WorldPopulation population, IReadOnlySet<int>? bodies = null) {
         ArgumentNullException.ThrowIfNull(argument: population);
 
         var hash = Fnv1aHash.Create();
 
         for (var index = 0; (index < population.Capacity); index++) {
+            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
             if (
                 !population.IsActive(index: index) ||
                 (population.EntryBody(index: index) is not { } body)

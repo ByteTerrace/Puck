@@ -26,8 +26,9 @@ Run it:
 puck test worlds/parlor/chinese-checkers.puck
 ```
 
-Independent test worlds run concurrently and their reports remain in authored
-order. Use `--jobs 1` when debugging a single shared resource, or `--jobs <n>`
+Independent test worlds run with at most two concurrent workers by default, and
+their reports remain in authored order. Use `--jobs 1` alongside heavy work or
+when debugging a single shared resource, or `--jobs <n>`
 to choose the worker limit explicitly. The headless host advances on the
 world's fixed tick grid without waiting for wall clock.
 
@@ -359,7 +360,11 @@ and printed the same way as one it declares.
 A world can author its own `schedule` and named verdict rows through the
 explicit `state { world { row { … } } }` vocabulary. A row's `verdict` names
 its status cell and gate text; its rule effects decide the status. A status
-that no rule firing writes stays never evaluated, including when
+cell must be distinct from the engine's `$firedTick` cell. Scalar effects and
+transforms both stamp a verdict or witness write in the same transaction;
+a refused stamp rewinds the firing. A failed verdict from an earlier tick
+freezes subsequent writes to itself and its witnesses, including whole transforms.
+A status that no rule firing writes stays never evaluated, including when
 `simulation { rateHz: 0 }` stops the schedule before its export tick.
 `puck test` runs a single-document source carrying both an authored schedule
 and verdict rows, even when it carries no `test` block. A stopped schedule is

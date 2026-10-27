@@ -35,6 +35,7 @@ public sealed class WorldStateHashCompositionLawTests {
         ("cached navigation", WorldStateHashComponent.Navigation),
         ("flock perception, slot generations and prior travel", WorldStateHashComponent.Flock),
         ("every search job's progress", WorldStateHashComponent.Search),
+        ("scoped tape starts, inputs, live hashes and playback cursors", WorldStateHashComponent.ScopedReplays),
     ];
 
     // What the capture fold adds for a cell whose clock has never settled: the unset flag, then the five columns,
@@ -226,6 +227,7 @@ public sealed class WorldStateHashCompositionLawTests {
     [Fact]
     public void WorldScope_DistinguishesLiveLatticeCells() {
         var fields = new WorldFieldsSection(
+            Name: "world",
             Lattice: new WorldFieldLatticeDefinition(
                 Origin: new DocumentVector3(
                     x: 0f,
@@ -250,7 +252,7 @@ public sealed class WorldStateHashCompositionLawTests {
         using var left = Fixtures.FreshServer(definition: definition);
         using var right = Fixtures.FreshServer(definition: definition);
 
-        Assert.IsType<FieldLattice>(@object: right.Server.Population.Fields).Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [[FixedQ4816.One.Value]]));
+        Assert.IsType<FieldLattice>(@object: right.Server.Population.FieldRegions[0].Lattice).Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [[FixedQ4816.One.Value]]));
 
         Assert.NotEqual(
             expected: WorldStateHashComposition.HashWorld(

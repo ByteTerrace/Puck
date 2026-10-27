@@ -200,7 +200,7 @@ public sealed class WorldPresentationManifest {
         }
 
         builder.Visit(value: definition);
-        builder.AddFields(fields: definition.Fields);
+        foreach (var region in definition.FieldRegions) { builder.AddFields(fields: region); }
 
         var clocks = (definition.Timeline.Clocks ?? []).Where(predicate: static clock => (clock is not null)).ToArray();
 
@@ -698,6 +698,27 @@ public sealed class WorldPresentationManifest {
                 case WorldScreenSource.Text text:
                     AddColor(token: text.Foreground);
                     AddColor(token: text.Background);
+
+                    foreach (var line in (text.Lines ?? [])) {
+                        if (
+                            (line is { Length: > 0 }) &&
+                            WorldScreenText.TryParse(
+                            error: out _,
+                            line: line,
+                            segments: out var segments
+                        )
+                        ) {
+                            foreach (var segment in segments) {
+                                if (!segment.IsPlaceholder) {
+                                    continue;
+                                }
+                                Add(
+                                    binding: StateBinding.Parse(token: segment.Text),
+                                    conversion: WorldStateConversion.Number
+                                );
+                            }
+                        }
+                    }
 
                     return false;
                 case OverlayPredicate.State state:

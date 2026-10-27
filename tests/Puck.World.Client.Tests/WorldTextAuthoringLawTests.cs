@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 using Puck.SignedDistance;
 using Puck.Text;
 using Xunit;
@@ -63,7 +64,7 @@ public sealed class WorldTextAuthoringLawTests {
         // The box has independent timeline motion; text uses the existing root, without an extra transform.
         Assert.Equal(expected: 0, actual: text.Slot);
         Assert.Equal(expected: 1, actual: box.Slot);
-        Assert.True((box.BakesSeparately && text.BakesSeparately));
+        Assert.True(condition: (box.BakesSeparately && text.BakesSeparately));
         var transforms = new DynamicTransform[pool.DynamicSlotCount];
 
         CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);
@@ -610,5 +611,180 @@ public sealed class WorldTextAuthoringLawTests {
             ),
             userMessage: reason
         );
+    }
+    [Fact]
+    public void TextScreenSourceInterpolatesStatePlaceholdersAndRebakesOnMove() {
+        var source = new WorldScreenSource.Text(
+            Lines: ["{state.discovered}"],
+            Columns: 4,
+            Rows: 1
+        );
+        var definition = (Fixtures.BuildDocument() with {
+            Text = Catalog(),
+            ScreensRaw = [TextScreen(source: source)],
+        }).WithWorldState(rows: [new WorldStateRow(
+            Name: CellName.Parse(candidate: "discovered"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Int(value: 4L)
+            )]
+        )]);
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        var fonts = FontAtlasCatalogPacker.Pack(
+            defaultFont: "body",
+            fonts: new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "0123456789") }
+        );
+        var decals = new WorldScreenDecals(
+            catalog: () => fonts,
+            colors: new WorldBakedColors(mirror: mirror),
+            textAt: static index => ((index == 0)
+                ? new WorldScreenSource.Text(
+                    Lines: ["{state.discovered}"],
+                    Columns: 4,
+                    Rows: 1
+                )
+                : null)
+        );
+        var before = decals.Providers[0]()!;
+
+        // "4" occupies cell 0 (non-equal UV words) and leaves cell 1 blank (equal UV words).
+        Assert.NotEqual(
+            actual: before.Cells.Span[0],
+            expected: before.Cells.Span[1]
+        );
+        Assert.Equal(
+            actual: before.Cells.Span[4],
+            expected: before.Cells.Span[5]
+        );
+
+        definition = definition.WithWorldState(rows: [new WorldStateRow(
+            Name: CellName.Parse(candidate: "discovered"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Int(value: 31L)
+            )]
+        )]);
+        mirror.Refresh(stamp: new Puck.World.Protocol.WorldStateStamp(
+            ArenaValues: false,
+            EngineTick: 1UL,
+            Everything: true,
+            MovedRows: default,
+            Tick: 1UL
+        ));
+
+        var after = decals.Providers[0]()!;
+
+        // "31" occupies both cell 0 and cell 1.
+        Assert.NotEqual(
+            actual: after.Cells.Span[4],
+            expected: after.Cells.Span[5]
+        );
+    }
+    [InlineData(null, 800)]
+    [InlineData(4, 4)]
+    [Theory]
+    public void DynamicTextStaysWithinItsGridAfterValueGrowth(int? columns, int grownColumns) {
+        var source = new WorldScreenSource.Text(Lines: ["{state.message}", "{state.message}"], Columns: columns);
+
+        WorldDefinition WithMessage(WorldDefinition document, string message) => document.WithWorldState(rows: [
+            new WorldStateRow(Name: CellName.Parse(candidate: "message"), Kind: CellKind.Text,
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Text(value: message))])]);
+        var definition = WithMessage(document: Fixtures.BuildDocument() with {
+            Text = Catalog(),
+            ScreensRaw = [TextScreen(source: source)],
+        }, message: "X");
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+
+        mirror.Install(engineTick: 0, tick: 0);
+        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "X") });
+        var decals = new WorldScreenDecals(catalog: () => fonts, colors: new WorldBakedColors(mirror: mirror),
+            textAt: index => ((index == 0) ? source : null));
+
+        Assert.Equal((columns ?? 1), decals.Providers[0]()!.Columns);
+
+        definition = WithMessage(document: definition, message: new string(c: 'X', count: 1024));
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out reason), userMessage: reason);
+        mirror.Refresh(stamp: new Puck.World.Protocol.WorldStateStamp(ArenaValues: false, EngineTick: 1,
+            Everything: true, MovedRows: default, Tick: 1));
+        var grown = decals.Providers[0]()!;
+
+        Assert.Equal(grownColumns, grown.Columns);
+        Assert.Equal(2, grown.Rows);
+        Assert.Equal(((grownColumns * 2) * 4), grown.Cells.Length);
+        Assert.InRange((grown.Columns * grown.Rows), 1, SdfScreenDecalLayout.MaxScreenDecalCells);
+        // Both expanded lines fill the entire bounded grid, including their last cell.
+        Assert.NotEqual(grown.Cells.Span[^4], grown.Cells.Span[^3]);
+    }
+    [InlineData("A {state.absent} B", "absent")]
+    [InlineData("A {unknown} B", "unknown")]
+    [InlineData("{world.tick}", "world.tick")]
+    [InlineData("A {state.discovered", "unterminated")]
+    [InlineData("A } B", "unescaped")]
+    [InlineData("{}", "empty placeholder")]
+    [InlineData("{state.discovered.$body}", "$body")]
+    [Theory]
+    public void TextScreenNamesMalformedOrUndeclaredPlaceholdersAtLoad(string line, string mistake) {
+        var definition = (Fixtures.BuildDocument() with {
+            Text = Catalog(),
+            ScreensRaw = [TextScreen(source: new WorldScreenSource.Text(Lines: [line]))],
+        }).WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "discovered"), Kind: CellKind.Int,
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 4))])]);
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "text.lines[0]");
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: mistake);
+    }
+    [Fact]
+    public void TextScreenCountsUnescapedScalarsAndLeavesAbsentCellsEmpty() {
+        var source = new WorldScreenSource.Text(Lines: ["{{\U0001F600}}", "{state.discovered.missing}"], Columns: 3);
+        var definition = (Fixtures.BuildDocument() with { Text = Catalog(), ScreensRaw = [TextScreen(source: source)] })
+            .WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "discovered"), Kind: CellKind.Int)]);
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
+        var colors = WorldBakedColors.Of(definition: definition);
+
+        Assert.Equal("{\U0001F600}", colors.ResolveText(line: source.Lines[0]));
+        Assert.Equal("", colors.ResolveText(line: source.Lines[1]));
+        var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "{}") });
+
+        Assert.Equal(3, WorldScreenTextDecal.Bake(catalog: fonts, colors: colors, text: source).Columns);
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void PresentationDeliversPlaceholderOnlyRowsThroughDisclosure(bool restricted) {
+        var source = new WorldScreenSource.Text(Lines: ["{state.discovered}"]);
+        var definition = (Fixtures.BuildDocument() with { Text = Catalog(), ScreensRaw = [TextScreen(source: source)] })
+            .WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "discovered"), Kind: CellKind.Int,
+                Visibility: (restricted ? new StateVisibility(Readers: ["seat1"]) : null),
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 4))])]);
+        var arena = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
+        // A delivered observation must read the arena, not the document's seed.
+        Assert.True(condition: arena.Catalog.TryResolve(handle: out var row, lane: StateLane.Document, name: "discovered"));
+        Assert.True(condition: arena.Keys.TryResolve(key: out var key, name: WorldStateRow.SlotKey));
+        Assert.True(condition: arena.TryWrite(row.Ordinal, key, CellValue.Int(value: 7), out _));
+        WorldProjectionDocument Project() => WorldProjection.Compose(definition, WorldDisclosureTier.Presentation,
+            "test", 0, arena, ArenaTime.Origin)!;
+        if (restricted) {
+            Assert.Throws<WorldDisclosureException>(testCode: () => Project());
+            return;
+        }
+        var projection = Project();
+
+        Assert.Equal("discovered", Assert.Single(collection: projection.Observations!).Name);
+        Assert.True(condition: WorldProjection.TryToDefinition(projection, out var hydrated, out var reason), userMessage: reason);
+        Assert.Equal("7", WorldBakedColors.Of(definition: hydrated!).ResolveText(line: source.Lines[0]));
     }
 }

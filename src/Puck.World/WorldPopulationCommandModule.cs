@@ -49,8 +49,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 power: out var power
             ) &&
             gamepads.TryGetAccessories(
-                deviceId: device,
-                accessories: out var accessories
+                accessories: out var accessories,
+                deviceId: device
             )
         )
             ? GamepadStatusText.Describe(
@@ -165,11 +165,11 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             provider: CultureInfo.InvariantCulture,
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
-        var lattice = ((population.Fields is { } fields)
-            ? fields.DescribeCost(
+        var lattice = ((population.FieldRegions.Count > 0)
+            ? string.Join(separator: " | ", values: population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
                 activeBodyCount: population.ActiveCount(),
                 bodyCapacity: population.Capacity
-            )
+            ))))
             : "lattice none"
         );
         var gravityCompiled = population.CompiledGravity;
@@ -363,7 +363,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         ));
         var looks = server.Definition.Looks;
         var workload = WorldRigCatalog.ActiveWorkload(
-            isActive: index => (population.IsActive(index) && (WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index)).Source is WorldLookSource.Catalog)),
+            isActive: index => (population.IsActive(index: index) && (WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index: index)).Source is WorldLookSource.Catalog)),
             capacity: population.Capacity,
             rigFor: index => WorldRigCatalog.RigFor(
                 WorldDefinitionRows.ResolveLook(

@@ -960,28 +960,48 @@ public sealed partial class WorldDocument {
             );
         }
 
-        var fieldsFull = false;
-        var latticeDeltas = (Host.Population.Fields?.TakeDeltas(
-            full: !consumeContinuity,
-            isFull: out fieldsFull
-        ) ?? []);
+        var fieldsFull = !consumeContinuity;
+        var latticeDeltas = m_latticeSnapshotDeltas;
+
+        latticeDeltas.Clear();
+        var regions = Host.Population.FieldRegions;
+
+        for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+            var region = regions[regionIndex];
+            var deltas = region.Lattice.TakeDeltas(full: !consumeContinuity, isFull: out var regionFull);
+
+            fieldsFull |= regionFull;
+            foreach (var delta in deltas) {
+                latticeDeltas.Add(item: new FieldCellDelta(Cell: delta.Cell, Field: delta.Field, Raw: delta.Raw,
+                    Region: region.Name, FieldName: region.Lattice.Input.Fields[delta.Field].Name));
+            }
+        }
+        // FieldsFull replaces the entire physical image, so a region requesting a primer also republishes
+        // the other regions even when their cells did not move this tick.
+        if (fieldsFull && consumeContinuity && (Host.Population.FieldRegions.Count > 1)) {
+            latticeDeltas.Clear();
+            for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+                var region = regions[regionIndex];
+
+                foreach (var delta in region.Lattice.TakeDeltas(full: true, isFull: out _)) {
+                    latticeDeltas.Add(item: new FieldCellDelta(Cell: delta.Cell, Field: delta.Field, Raw: delta.Raw,
+                        Region: region.Name, FieldName: region.Lattice.Input.Fields[delta.Field].Name));
+                }
+            }
+        }
         // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
         // the one caller that needs both.
         var stateCells = Host.PublishedCellCount(full: !consumeContinuity);
-        var cellCount = (latticeDeltas.Length + stateCells);
+        var cellCount = (latticeDeltas.Count + stateCells);
 
         if (m_snapshotCells.Length < cellCount) { Array.Resize(array: ref m_snapshotCells, newSize: ((int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: ((uint)cellCount)))); }
         var fieldCells = m_snapshotCells.AsMemory(length: cellCount, start: 0);
 
-        for (var index = 0; (index < latticeDeltas.Length); index++) {
-            fieldCells.Span[index] = new FieldCellDelta(
-                Cell: latticeDeltas[index].Cell,
-                Field: latticeDeltas[index].Field,
-                Raw: latticeDeltas[index].Raw
-            );
+        for (var index = 0; (index < latticeDeltas.Count); index++) {
+            fieldCells.Span[index] = latticeDeltas[index];
         }
 
-        Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Length..], full: !consumeContinuity);
+        Host.CopyPublishedCells(fieldCells.Span[latticeDeltas.Count..], full: !consumeContinuity);
 
         return new WorldSnapshot(
             Tick: tick,
@@ -1000,6 +1020,7 @@ public sealed partial class WorldDocument {
     }
 
     private FieldCellDelta[] m_snapshotCells = [];
+    private readonly List<FieldCellDelta> m_latticeSnapshotDeltas = [];
 
     // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
     // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write
@@ -1265,6 +1286,7 @@ public sealed partial class WorldDocument {
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
+
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
     // over them, with nothing compiled.
     private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
@@ -1660,6 +1682,7 @@ public sealed partial class WorldDocument {
             return;
         }
 
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(command: command); }
         switch (command) {
             case WorldCommand.AdmitInput admission:
                 if (!Host.Input.TryAdmitProfile(command.Principal, command.EntityIndex, admission.Sources, out var profileReason, admission.FreshAttachment)) {

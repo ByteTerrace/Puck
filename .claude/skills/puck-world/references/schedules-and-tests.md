@@ -20,6 +20,16 @@ Rows whose kinds are only known after basis/import composition still evaluate
 but currently have no witness values; this reporting gap is recorded in
 [open items](../../../../docs/plans/open-items.md#addon-system).
 
+Verdict rows reserve room for `$firedTick` at load but mint it only when a rule
+fires. Do not group expectations to evade a verdict-count cutoff: a stamp must
+not grow and copy the composed arena during the tick. Its write belongs to the
+firing transaction; a refused stamp rejects that transaction rather than
+leaving a passing status without evidence that its rule evaluated.
+The status names a separate cell, never `$firedTick`. Transforms use the same
+verdict door as scalar effects: every resolved write row (including live zone
+ends and draw bookkeeping) is checked for settlement and stamped. A settled
+end freezes the whole transform; a refused stamp rewinds the whole firing.
+
 ## Tick-exact debug capture
 
 **Start with `puck motion`.** It is this procedure as one command: it boots a
@@ -265,9 +275,17 @@ authoritative replay hashes for the boot world and every running instance;
 reproduction names the first differing sampled tick and instance before still
 requiring byte-identical exports and manifests. Preparation shares composed
 imports, including authored-value origins, through the existing content-checked
-composition cache; each reader gets a fresh tree. Worker processes reuse startup
-and derived caches while booting and disposing a fresh host for each document.
-Reproduce replicas always occupy different processes, even with `--jobs 1`.
+composition cache; each reader gets a fresh tree. Staging consumes roots without
+retaining their composed images or scalar-origin snapshots, while shared imports
+retain their origins. Generated test compiles share persisted entries but release
+their in-memory documents after staging each source. Each worker reuses its process
+and builds a fresh native host through the normal composition root for each document.
+Provider reuse by rewriting singleton lifetimes changes dependency validation,
+caller ownership and child-scope identity, so every graph uses the native container.
+Reproduce replicas always occupy different processes, even with `--jobs 1`, and
+the second visits worlds in reverse order to expose predecessor state leaks.
+The default runs at most two worker processes concurrently; `--jobs 1` serializes
+the replicas. Transcripts stream to disk and verdicts are read one world at a time.
 A `schedule` declaring `instances`
 arms those sibling worlds beside the booted one (the `world.instance.start`
 path), steps them in the same host step, exports each at the tick the booted

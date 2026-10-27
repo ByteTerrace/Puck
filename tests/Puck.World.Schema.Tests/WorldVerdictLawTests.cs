@@ -109,6 +109,15 @@ public sealed class WorldVerdictLawTests {
         );
     }
     [Fact]
+    public void AStatusCannotAliasTheEnginesFiringStamp() {
+        var row = Verdict(status: WorldVerdict.FiredTickKey.Value) with {
+            Cells = [new StateCell(Key: WorldVerdict.FiredTickKey, Value: CellValue.Int(value: 0L))],
+        };
+
+        Assert.Contains(expectedSubstring: "requires its own status cell beside the stamp",
+            actualString: Validate(definition: BuildDefinition(row)), comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
     public void AStatusNamingNoCellOfTheRowIsRefusedByName() {
         Assert.Contains(
             actualString: Validate(definition: BuildDefinition(Verdict(status: "absent"))),
@@ -399,25 +408,25 @@ public sealed class WorldVerdictLawTests {
         Assert.Equal(
             actual: WorldVerdict.DescribeSeen(
                 key: "hp",
-                value: CellValue.Int(3L)
+                value: CellValue.Int(value: 3L)
             ),
             expected: "hp=3"
         );
         Assert.Equal(
             actual: WorldVerdict.DescribeSeen(
                 key: "speed",
-                value: CellValue.Fixed(147456L)
+                value: CellValue.Fixed(rawBits: 147456L)
             ),
             expected: "speed=2.25"
         );
         Assert.Equal(
             actual: WorldVerdict.DescribeSeen(
                 key: "open",
-                value: CellValue.Bool(false)
+                value: CellValue.Bool(value: false)
             ),
             expected: "open=false"
         );
-        Assert.Equal("title=\"SHEAR\"", WorldVerdict.DescribeSeen("title", CellValue.Text("SHEAR")));
+        Assert.Equal("title=\"SHEAR\"", WorldVerdict.DescribeSeen(key: "title", value: CellValue.Text(value: "SHEAR")));
     }
     [Fact]
     public void MoreVerdictRowsThanTheCeilingAreRefusedByName() {
