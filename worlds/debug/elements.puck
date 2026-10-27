@@ -1,0 +1,89 @@
+// Shared elemental colours and glyphs for the debug world's exhibits.
+// Alchemy (alchemy.puck) and the combat yard keep separate element identities and state tables; they share only these
+// surface colours and two-character glyph codes.
+
+let elementNothingColor = "#32363C"
+let elementAirColor = "#B8E6FF"
+let elementEarthColor = "#8B5A2B"
+let elementFireColor = "#FF5224"
+let elementWaterColor = "#2478FF"
+let elementFrostColor = "#A8F0F8"
+let elementShockColor = "#FFE033"
+let elementPoisonColor = "#4E6B3A"
+let elementArcaneColor = "#FF66B2"
+let elementStoneColor = "#888E94"
+let elementMetalColor = "#B8C2CC"
+let elementWoodColor = "#A06A3B"
+let elementLifeColor = "#34B84A"
+let elementSteamColor = "#DCE8F2"
+let elementMudColor = "#6B4C35"
+let elementLavaColor = "#FF3800"
+let elementDustColor = "#D2B48C"
+let elementCloudColor = "#F0F4F8"
+let elementRainColor = "#5CA4FF"
+let elementSeaColor = "#0E4D92"
+let elementSandColor = "#EED690"
+let elementLightningColor = "#FFF066"
+let elementTreeColor = "#268536"
+let elementAshColor = "#585450"
+let elementBacteriaColor = "#68C880"
+let elementAnimalColor = "#B87A44"
+let elementFishColor = "#3694D8"
+let elementBirdColor = "#82C8F0"
+let elementClayColor = "#C26B4A"
+let elementHumanColor = "#E0AC8B"
+let elementToolColor = "#947450"
+let elementHouseColor = "#E29A5C"
+
+let elementFamilyGlyphs = {
+  air: "Ai"
+  arcane: "Ar"
+  earth: "Ea"
+  fire: "Fi"
+  frost: "Fr"
+  life: "Li"
+  metal: "Me"
+  physical: "Ph"
+  poison: "Po"
+  shock: "Sh"
+  stone: "Sn"
+  water: "Wa"
+  wood: "Wo"
+}
+
+// One style row per Alchemy element ordinal (0 Nothing, 1 Air .. 31 House): surface colour, roughness, specular and
+// two-letter glyph code.
+let alchemyElementStyles = [
+  { color: elementNothingColor, glyph: "--", name: "Nothing", roughness: 0.75, specular: 0.08 }
+  { color: elementAirColor, glyph: elementFamilyGlyphs.air, name: "Air", roughness: 0.35, specular: 0.25 }
+  { color: elementEarthColor, glyph: elementFamilyGlyphs.earth, name: "Earth", roughness: 0.75, specular: 0.08 }
+  { color: elementFireColor, glyph: elementFamilyGlyphs.fire, name: "Fire", roughness: 0.35, specular: 0.3 }
+  { color: elementWaterColor, glyph: elementFamilyGlyphs.water, name: "Water", roughness: 0.25, specular: 0.35 }
+  { color: elementSteamColor, glyph: "St", name: "Steam", roughness: 0.45, specular: 0.2 }
+  { color: elementMudColor, glyph: "Mu", name: "Mud", roughness: 0.7, specular: 0.12 }
+  { color: elementLavaColor, glyph: "La", name: "Lava", roughness: 0.4, specular: 0.28 }
+  { color: elementDustColor, glyph: "Du", name: "Dust", roughness: 0.8, specular: 0.06 }
+  { color: elementShockColor, glyph: "En", name: "Energy", roughness: 0.3, specular: 0.35 }
+  { color: elementCloudColor, glyph: "Cl", name: "Cloud", roughness: 0.55, specular: 0.15 }
+  { color: elementRainColor, glyph: "Ra", name: "Rain", roughness: 0.3, specular: 0.3 }
+  { color: elementSeaColor, glyph: "Se", name: "Sea", roughness: 0.28, specular: 0.35 }
+  { color: elementStoneColor, glyph: elementFamilyGlyphs.stone, name: "Stone", roughness: 0.75, specular: 0.1 }
+  { color: elementSandColor, glyph: "Sa", name: "Sand", roughness: 0.78, specular: 0.08 }
+  { color: elementFrostColor, glyph: "Gl", name: "Glass", roughness: 0.2, specular: 0.4 }
+  { color: elementMetalColor, glyph: elementFamilyGlyphs.metal, name: "Metal", roughness: 0.25, specular: 0.4 }
+  { color: elementLifeColor, glyph: "Pl", name: "Plant", roughness: 0.55, specular: 0.18 }
+  { color: elementPoisonColor, glyph: "Sw", name: "Swamp", roughness: 0.65, specular: 0.15 }
+  { color: elementArcaneColor, glyph: elementFamilyGlyphs.life, name: "Life", roughness: 0.35, specular: 0.3 }
+  { color: elementLightningColor, glyph: elementFamilyGlyphs.shock, name: "Lightning", roughness: 0.25, specular: 0.4 }
+  { color: elementTreeColor, glyph: "Tr", name: "Tree", roughness: 0.6, specular: 0.15 }
+  { color: elementWoodColor, glyph: elementFamilyGlyphs.wood, name: "Wood", roughness: 0.65, specular: 0.14 }
+  { color: elementAshColor, glyph: "As", name: "Ash", roughness: 0.8, specular: 0.06 }
+  { color: elementBacteriaColor, glyph: "Ba", name: "Bacteria", roughness: 0.5, specular: 0.2 }
+  { color: elementAnimalColor, glyph: "An", name: "Animal", roughness: 0.65, specular: 0.14 }
+  { color: elementFishColor, glyph: "Fs", name: "Fish", roughness: 0.3, specular: 0.35 }
+  { color: elementBirdColor, glyph: "Bi", name: "Bird", roughness: 0.45, specular: 0.22 }
+  { color: elementClayColor, glyph: "Cy", name: "Clay", roughness: 0.68, specular: 0.12 }
+  { color: elementHumanColor, glyph: "Hu", name: "Human", roughness: 0.55, specular: 0.18 }
+  { color: elementToolColor, glyph: elementFamilyGlyphs.physical, name: "Tool", roughness: 0.5, specular: 0.25 }
+  { color: elementHouseColor, glyph: "Ho", name: "House", roughness: 0.6, specular: 0.16 }
+]

@@ -18,8 +18,8 @@ desktop computer showing the whole desktop ([`desktop.md`](desktop.md)) and the
 big painting to Wonderland, where the gaming devices stand
 ([`devices.md`](devices.md)). The east end of level 0 is the painting wing,
 five portal paintings behind a doorway ([`paintings.md`](paintings.md)), and the
-east end of level 2 is the board game room, the chess, Go and Reversi tables
-behind a doorway ([below](#the-board-game-room)).
+east end of level 2 is the board game room, the chess, Go, Reversi and Alchemy
+tables behind a doorway ([below](#the-board-game-room)).
 
 Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
 in small type under the label saying what the exhibit demos and what to look
@@ -44,7 +44,7 @@ rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
 | x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
 | x 20 to 70 | The halls: each level's rows run along +X from x = 23; section signs hang above the first exhibit, facing the landing down the hall |
 | x 51 to 69.7, z 12.3 to 39.7, level 0 | The painting wing: a partition at x = 51 with a doorway at z 24 to 28, and five portal paintings ([`paintings.md`](paintings.md)). Level 1's floor is holed and railed over the ceiling painting of the endless fall, at (66, 22.6) |
-| x 51 to 69.7, z 12.3 to 39.7, level 2 | The board game room: a partition at x = 51 with a doorway at z 24 to 28, and the chess, Go and Reversi tables ([below](#the-board-game-room)) |
+| x 51 to 69.7, z 12.3 to 39.7, level 2 | The board game room: a partition at x = 51 with a doorway at z 24 to 28, and the chess, Go, Reversi and Alchemy tables ([below](#the-board-game-room)) |
 | South, north and east walls | A 2.4 m window band on every level, a blind in every window; the roof's skylights light level 3 |
 
 The lobby on level 0, from the entrance north. The walk from the door to the
@@ -162,15 +162,16 @@ the doorway, facing in.
 | (56.5, 22.6), 2 m square | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side; `debug.go chess` |
 | (65, 22.6), 3.5 by 1.7 m | The Reversi table ([`reversi.md`](reversi.md)): Black sits on its -Z side, White on its +Z side, each tray at its player's right; `debug.go reversi` |
 | (56.5, 30.6), 3.5 by 1.7 m | The Go table ([`go.md`](go.md)): Black on its -Z side, White on its +Z side; `debug.go go` |
-| (65, 30.6) | Free, for the next game |
+| (65, 30.6), 3.5 by 1.7 m | The Alchemy table ([`alchemy.md`](alchemy.md)): a cauldron with two hand wells, 31 element tokens and a lectern recipe-book screen; `debug.go alchemy` |
 
 Every table is a tabletop: walk within 2.5 m of its board and press the context
 button (E, or RB on a pad) to sit down, the camera easing to the board from the
 side she stands on; the same button stands her up. Seated, the keys, the pad or
-the pointer move a cursor over the board and the pick button plays. Each game has
-a computer opponent on one side by default and either side can be given to it,
-or neither. The pieces are rigid bodies: whatever moves them, the rules read the
-settled table and judge it.
+the pointer move a cursor over the board and the pick button plays. Chess, Go
+and Reversi each have a computer opponent on one side by default and either side
+can be given to it, or neither; Alchemy is single-player discovery. The pieces
+are rigid bodies: whatever moves them, the rules read the settled table and
+judge it.
 
 ### Getting around
 
@@ -181,7 +182,7 @@ settled table and judge it.
 | Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
 | Ride the lift | Stand in the car facing its back wall, where the brushed panel has a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |
-| Go to the board game room | `debug.go boardroom` (its doorway, facing in), or `debug.go chess`, `go` or `reversi` (a table's edge, close enough to sit) |
+| Go to the board game room | `debug.go boardroom` (its doorway, facing in), or `debug.go chess`, `go`, `reversi` or `alchemy` (a table's edge, close enough to sit) |
 | Raise or lower a level's blinds | `gallery.blinds <level> up\|down`; down, the default, keeps daylight off the exhibits |
 | Inspect without the showcase lighting | `gallery.inspect on\|off`: On lights every surface from five unshadowed neutral directional fills (60 lux each), raises the sky ambient gain to 2.5 against the authored 0.40625, pins the camera at EV100 7 with no local adaptation (about where the lit hall meters) and takes the screens out of the traced light, so a capture reads albedo and form alike at every exhibit, shadowed sides included. The sky ambient barely reaches the baked interior, so the fills do the work there. Off writes the authored values back exactly. It touches only those render values (`galleryFill` cells bound by the fill lights' illuminance, `render.environment.ambient`, `render.exposure.hold` and `render.indirect.sources.screens`), so the fixtures, strips, blinds and traced bounce stay as `gallery.lights` and `gallery.blinds` leave them; turn it Off for a lighting or photometric check |
 | Switch a level's lights | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |

@@ -12,7 +12,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `addState` | 44 | 1 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall`, `debug/relative-input-tests`, `debug/reversi` |
+| `addState` | 76 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall` and 2 more |
 | `applyRigidImpulse` | 0 | 0 |  |
 | `claim` | 0 | 0 |  |
 | `claimPair` | 0 | 0 |  |
@@ -20,11 +20,11 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `emitCue` | 0 | 0 |  |
 | `forEachPool` | 0 | 0 |  |
 | `generate` | 1 | 0 | `debug/avatars/moth` |
-| `if` | 67 | 1 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
+| `if` | 80 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
 | `paintField` | 0 | 0 |  |
 | `planarImpulse` | 0 | 0 |  |
 | `pose` | 140 | 0 | `debug/debug`, `debug/hall` |
-| `poseCell` | 174 | 0 | `debug/chess`, `debug/go`, `debug/hall`, `debug/reversi` |
+| `poseCell` | 178 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/hall`, `debug/reversi` |
 | `pushState` | 9 | 0 | `debug/chess`, `debug/go` |
 | `release` | 0 | 0 |  |
 | `removeHudPanel` | 0 | 0 |  |
@@ -36,11 +36,11 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `scheduleState` | 11 | 1 | `debug/avatars/moth`, `debug/companion-senses`, `debug/hall` |
 | `setBodyState` | 8 | 0 | `debug/avatars/moth`, `debug/noclip`, `debug/suit`, `debug/suit-tests` |
 | `setIdentityFact` | 0 | 0 |  |
-| `setState` | 1345 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices`, `debug/go` and 4 more |
+| `setState` | 1386 | 10 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices` and 5 more |
 | `setVerticalVelocity` | 0 | 0 |  |
 | `startTimer` | 0 | 0 |  |
 | `transaction` | 1 | 1 | `debug/chess` |
-| `transformState` | 55 | 5 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `transformState` | 56 | 5 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `upsertHudPanel` | 0 | 0 |  |
 | `upsertPlacement` | 0 | 0 |  |
 
@@ -48,10 +48,10 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `all` | 282 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices`, `debug/go` and 6 more |
-| `any` | 17 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices`, `debug/go`, `debug/reversi` |
-| `compareState` | 1318 | 8 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/debug`, `debug/devices` and 8 more |
-| `compareValue` | 205 | 1 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall`, `debug/noclip`, `debug/reversi` |
+| `all` | 293 | 1 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices` and 7 more |
+| `any` | 20 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices` and 2 more |
+| `compareState` | 1351 | 8 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/debug` and 9 more |
+| `compareValue` | 200 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall` and 2 more |
 | `held` | 0 | 0 |  |
 | `not` | 2 | 1 | `debug/chess`, `debug/go` |
 | `now` | 0 | 0 |  |
@@ -63,7 +63,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
 | `arrange` | 0 | 0 |  |
-| `boardCombine` | 31 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `boardCombine` | 32 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `clearEnclosed` | 4 | 0 | `debug/go` |
 | `mean` | 0 | 0 |  |
 | `mix` | 0 | 1 |  |
@@ -81,7 +81,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `cellsOf` | 17 | 1 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `cellsOf` | 22 | 1 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `keys` | 1 | 0 | `debug/traversal` |
 | `keysOf` | 0 | 1 |  |
 | `ring` | 6 | 0 | `debug/chess`, `debug/go` |
@@ -96,7 +96,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `draw` | 1 | 0 | `debug/avatars/moth` |
 | `dynamics` | 3 | 0 | `debug/avatars/moth` |
 | `evicts` | 0 | 4 |  |
-| `inverse` | 3 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `inverse` | 4 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `knowledge` | 0 | 0 |  |
 | `overflow` | 0 | 1 |  |
 | `phase` | 0 | 0 |  |
@@ -131,24 +131,24 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `board` | 226 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `board` | 239 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `bodies` | 4 | 0 | `debug/companion-senses`, `debug/debug`, `debug/noclip` |
-| `bodyPosition` | 595 | 0 | `debug/chess`, `debug/companion-senses`, `debug/debug`, `debug/hall`, `debug/wonderland-tests` |
+| `bodyPosition` | 571 | 0 | `debug/companion-senses`, `debug/debug`, `debug/hall`, `debug/wonderland-tests` |
 | `bodyState` | 28 | 0 | `debug/avatars/moth`, `debug/devices`, `debug/noclip`, `debug/suit`, `debug/suit-tests`, `debug/wonderland-tests` |
-| `cell` | 95 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
-| `channel` | 39 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/go`, `debug/hall`, `debug/noclip` and 4 more |
-| `each` | 90 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices`, `debug/go` and 3 more |
+| `cell` | 97 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
+| `channel` | 45 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/go`, `debug/hall` and 5 more |
+| `each` | 105 | 1 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/debug`, `debug/devices` and 4 more |
 | `engaged` | 2 | 0 | `debug/devices` |
-| `expr` | 77 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `expr` | 80 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `fact` | 6 | 0 | `debug/avatars/moth`, `debug/suit`, `debug/suit-tests` |
 | `history` | 12 | 0 | `debug/chess`, `debug/go` |
-| `local` | 1796 | 0 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
+| `local` | 1784 | 0 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
 | `match` | 80 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
-| `physics` | 17 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
-| `reduce` | 8 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `physics` | 19 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
+| `reduce` | 9 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `search` | 31 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
-| `tick` | 40 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/hall`, `debug/wonderland-tests` |
-| `upright` | 3 | 0 | `debug/chess`, `debug/reversi` |
+| `tick` | 34 | 0 | `debug/avatars/moth`, `debug/companion-senses`, `debug/hall`, `debug/wonderland-tests` |
+| `upright` | 4 | 0 | `debug/alchemy`, `debug/chess`, `debug/reversi` |
 
 ## Document sections
 
@@ -161,73 +161,73 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `AddCellStatementNode` | 39 | 1 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall`, `debug/relative-input-tests`, `debug/reversi` |
-| `AndPredicateNode` | 138 | 1 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses` and 10 more |
-| `ArgumentNode` | 7090 | 49 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 31 more |
-| `ArrayExpressionNode` | 10883 | 16 | `debug/addon-hud`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot` and 38 more |
-| `BinaryExpressionNode` | 1877 | 1 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 13 more |
-| `BlockNode` | 6020 | 33 | `debug/addon-hud`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 35 more |
-| `CallExpressionNode` | 3008 | 9 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 31 more |
+| `AddCellStatementNode` | 40 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall` and 2 more |
+| `AndPredicateNode` | 148 | 1 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/avatars/moth`, `debug/chess` and 11 more |
+| `ArgumentNode` | 7534 | 49 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 31 more |
+| `ArrayExpressionNode` | 11672 | 16 | `debug/addon-hud`, `debug/addons-tests`, `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head` and 39 more |
+| `BinaryExpressionNode` | 1981 | 1 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 14 more |
+| `BlockNode` | 6578 | 33 | `debug/addon-hud`, `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot` and 35 more |
+| `CallExpressionNode` | 3233 | 9 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 31 more |
 | `CellSetDeclarationNode` | 7 | 0 | `debug/go` |
 | `ColorExpressionNode` | 0 | 2 |  |
-| `ComparisonPredicateNode` | 1105 | 9 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/chess`, `debug/chess-tests` and 18 more |
+| `ComparisonPredicateNode` | 1182 | 9 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/alchemy-tests`, `debug/avatars/moth` and 20 more |
 | `CompoundAssignStatementNode` | 7 | 0 | `debug/chess`, `debug/companion-senses` |
-| `ConditionalExpressionNode` | 56 | 0 | `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/companion-senses`, `debug/debug`, `debug/go` and 5 more |
+| `ConditionalExpressionNode` | 59 | 0 | `debug/alchemy`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/companion-senses`, `debug/debug` and 6 more |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 53 | 5 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 48 more |
-| `EnumDeclarationNode` | 5 | 0 | `debug/chess`, `debug/hall` |
-| `EnumMemberNode` | 18 | 0 | `debug/chess`, `debug/hall` |
-| `ExpressionStatementNode` | 1646 | 2 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 16 more |
-| `FlagStatementNode` | 32 | 1 | `debug/avatars/moth`, `debug/camera-course`, `debug/chess`, `debug/debug`, `debug/desktop` and 8 more |
-| `ForStatementNode` | 183 | 0 | `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess`, `debug/companion-senses` and 12 more |
-| `IdentifierExpressionNode` | 8223 | 31 | `debug/addon-hud`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot` and 39 more |
-| `IfStatementNode` | 49 | 1 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
-| `ImportNode` | 46 | 1 | `debug/avatars/moth`, `debug/chess`, `debug/companion`, `debug/debug`, `debug/fuzzer` and 7 more |
-| `IndexExpressionNode` | 378 | 0 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 10 more |
-| `InterpolatedStringNode` | 471 | 0 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 24 more |
-| `LambdaExpressionNode` | 428 | 0 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 16 more |
-| `LetNode` | 988 | 8 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 24 more |
-| `LiteralExpressionNode` | 47612 | 161 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 47 more |
-| `LocalStatementNode` | 131 | 1 | `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
-| `MemberAccessExpressionNode` | 13 | 0 | `debug/guide`, `debug/hall` |
+| `DocumentNode` | 56 | 5 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/alchemy-tests` and 51 more |
+| `EnumDeclarationNode` | 6 | 0 | `debug/alchemy`, `debug/chess`, `debug/hall` |
+| `EnumMemberNode` | 50 | 0 | `debug/alchemy`, `debug/chess`, `debug/hall` |
+| `ExpressionStatementNode` | 1801 | 2 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 17 more |
+| `FlagStatementNode` | 33 | 1 | `debug/alchemy`, `debug/avatars/moth`, `debug/camera-course`, `debug/chess`, `debug/debug` and 9 more |
+| `ForStatementNode` | 194 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 13 more |
+| `IdentifierExpressionNode` | 8871 | 31 | `debug/addon-hud`, `debug/addons-tests`, `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head` and 40 more |
+| `IfStatementNode` | 62 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
+| `ImportNode` | 48 | 1 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion`, `debug/debug` and 8 more |
+| `IndexExpressionNode` | 402 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 11 more |
+| `InterpolatedStringNode` | 495 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 25 more |
+| `LambdaExpressionNode` | 453 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 16 more |
+| `LetNode` | 1142 | 8 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 26 more |
+| `LiteralExpressionNode` | 51009 | 161 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/alchemy-tests` and 50 more |
+| `LocalStatementNode` | 137 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/reversi` |
+| `MemberAccessExpressionNode` | 15 | 0 | `debug/alchemy`, `debug/guide`, `debug/hall` |
 | `NotPredicateNode` | 1 | 1 | `debug/chess` |
-| `ObjectExpressionNode` | 4277 | 15 | `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 35 more |
-| `OperandExpressionNode` | 3302 | 43 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/chess`, `debug/chess-tests` and 21 more |
+| `ObjectExpressionNode` | 4556 | 15 | `debug/addons-tests`, `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course` and 36 more |
+| `OperandExpressionNode` | 3531 | 43 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/alchemy-tests`, `debug/avatars/moth` and 23 more |
 | `OptionBlockNode` | 0 | 1 |  |
-| `OrPredicateNode` | 16 | 0 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices`, `debug/go`, `debug/reversi` |
+| `OrPredicateNode` | 19 | 0 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices` and 2 more |
 | `PatternDeclarationNode` | 2 | 0 | `debug/chess`, `debug/go` |
 | `PatternSymbolDeclarationNode` | 2 | 0 | `debug/chess`, `debug/go` |
-| `PropertyNode` | 29353 | 114 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/avatars/moth`, `debug/avatars/moth-head` and 47 more |
+| `PropertyNode` | 31488 | 114 | `debug/addon-hud`, `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/alchemy-tests` and 50 more |
 | `PushStatementNode` | 8 | 0 | `debug/chess`, `debug/go` |
-| `RangeExpressionNode` | 109 | 3 | `debug/chess`, `debug/go`, `debug/hall`, `debug/reversi` |
-| `RhsOperandNode` | 641 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/companion-senses`, `debug/devices` and 8 more |
-| `RhsTextNode` | 12 | 1 | `debug/chess` |
-| `RowRefNode` | 653 | 12 | `debug/avatars/moth`, `debug/chess`, `debug/chess-tests`, `debug/companion-senses`, `debug/devices` and 8 more |
-| `RuleBlockNode` | 201 | 7 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/debug`, `debug/devices` and 9 more |
-| `RuleScopeNode` | 3 | 0 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `RangeExpressionNode` | 124 | 3 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/hall`, `debug/reversi` |
+| `RhsOperandNode` | 682 | 10 | `debug/alchemy`, `debug/alchemy-tests`, `debug/avatars/moth`, `debug/chess`, `debug/chess-tests` and 10 more |
+| `RhsTextNode` | 0 | 1 |  |
+| `RowRefNode` | 682 | 12 | `debug/alchemy`, `debug/alchemy-tests`, `debug/avatars/moth`, `debug/chess`, `debug/chess-tests` and 10 more |
+| `RuleBlockNode` | 209 | 7 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/debug` and 10 more |
+| `RuleScopeNode` | 4 | 0 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `ScheduleStatementNode` | 8 | 1 | `debug/avatars/moth`, `debug/companion-senses`, `debug/hall` |
 | `ScoreStatementNode` | 0 | 1 |  |
-| `SetCellStatementNode` | 451 | 10 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices`, `debug/go` and 4 more |
+| `SetCellStatementNode` | 499 | 10 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/devices` and 5 more |
 | `StabilizeGroupNode` | 1 | 0 | `debug/go` |
-| `StateCellEntryNode` | 686 | 18 | `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess`, `debug/companion-senses` and 14 more |
+| `StateCellEntryNode` | 696 | 18 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 15 more |
 | `StateGridDeclarationNode` | 0 | 1 |  |
-| `StateModifierNode` | 125 | 23 | `debug/camera-course`, `debug/chess`, `debug/companion-senses`, `debug/debug`, `debug/go` and 5 more |
+| `StateModifierNode` | 141 | 23 | `debug/alchemy`, `debug/camera-course`, `debug/chess`, `debug/companion-senses`, `debug/debug` and 6 more |
 | `StatePileDeclarationNode` | 0 | 1 |  |
 | `StatePileTokenNode` | 0 | 3 |  |
-| `StateSlotDeclarationNode` | 112 | 6 | `debug/addon-hud`, `debug/camera-course`, `debug/chess`, `debug/chess-tests`, `debug/companion-senses` and 8 more |
-| `StateTableDeclarationNode` | 86 | 11 | `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess`, `debug/companion-senses` and 14 more |
-| `TemplateNode` | 214 | 2 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 17 more |
-| `TemplateParameterNode` | 449 | 3 | `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 16 more |
-| `TestDeclarationNode` | 123 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
-| `TestExpectBlockNode` | 123 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
+| `StateSlotDeclarationNode` | 133 | 6 | `debug/addon-hud`, `debug/alchemy`, `debug/camera-course`, `debug/chess`, `debug/companion-senses` and 8 more |
+| `StateTableDeclarationNode` | 85 | 11 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/camera-course`, `debug/chess` and 15 more |
+| `TemplateNode` | 230 | 2 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 18 more |
+| `TemplateParameterNode` | 467 | 3 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 17 more |
+| `TestDeclarationNode` | 130 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
+| `TestExpectBlockNode` | 130 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
 | `TestExpectWorldNode` | 4 | 0 | `debug/suit-tests`, `debug/wonderland-tests` |
-| `TestExpectationNode` | 572 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
-| `TestGivenBlockNode` | 42 | 0 | `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
-| `TestGivenNode` | 148 | 0 | `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
-| `TestSeatStepNode` | 377 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
-| `TestTicksStepNode` | 363 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
-| `TestWhenBlockNode` | 123 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
+| `TestExpectationNode` | 617 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
+| `TestGivenBlockNode` | 43 | 0 | `debug/alchemy-tests`, `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
+| `TestGivenNode` | 128 | 0 | `debug/alchemy-tests`, `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
+| `TestSeatStepNode` | 437 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
+| `TestTicksStepNode` | 392 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
+| `TestWhenBlockNode` | 125 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
 | `TransactionStatementNode` | 1 | 1 | `debug/chess` |
-| `TransformStatementNode` | 24 | 5 | `debug/chess`, `debug/go`, `debug/reversi` |
+| `TransformStatementNode` | 25 | 5 | `debug/alchemy`, `debug/chess`, `debug/go`, `debug/reversi` |
 | `UnaryExpressionNode` | 19 | 0 | `debug/avatars/moth`, `debug/avatars/moth-pilot`, `debug/chess` |
-| `WhenStatementNode` | 172 | 7 | `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/debug`, `debug/devices` and 9 more |
+| `WhenStatementNode` | 180 | 7 | `debug/alchemy`, `debug/avatars/moth`, `debug/chess`, `debug/companion-senses`, `debug/debug` and 10 more |

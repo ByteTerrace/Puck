@@ -259,6 +259,14 @@ public sealed record WorldStateRow(
     /// witness of one.</summary>
     [JsonIgnore]
     public bool IsRuleWritten => ((Verdict is not null) || (Witness is not null));
+    /// <inheritdoc/>
+    /// <remarks>The engine knows a verdict needs its firing stamp before the first rule runs. Reserve its slot
+    /// at load without minting the cell: an unevaluated verdict still has no stamp, and firing any number of
+    /// verdicts never spends the tick's growth budget copying the composed world's arena.</remarks>
+    [JsonIgnore]
+    public override int InitialCellCapacity => (((Verdict is not null) && (StateRows.FindCell(cells: Cells, key: WorldVerdict.FiredTickKey) is null))
+        ? Math.Min(val1: CellCeiling, val2: Math.Max(val1: base.InitialCellCapacity, val2: ((Cells?.Count ?? 0) + 1)))
+        : base.InitialCellCapacity);
 
     /// <inheritdoc/>
     /// <remarks>A verdict row mints <see cref="WorldVerdict.FiredTickKey"/> beside the slot key: the effect door

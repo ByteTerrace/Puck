@@ -42,11 +42,15 @@ public static class WorldScreenTextDecal {
         ArgumentNullException.ThrowIfNull(catalog);
 
         var atlas = catalog.Resolve(name: text.Font);
-        var lines = text.Lines;
+        var authoredLines = text.Lines;
+        var lines = new string[authoredLines.Count];
         var widestLine = 0;
 
-        foreach (var line in lines) {
+        for (var index = 0; (index < authoredLines.Count); index++) {
+            var line = colors.ResolveText(line: authoredLines[index]);
             var count = 0;
+
+            lines[index] = line;
 
             foreach (var _ in line.EnumerateRunes()) {
                 count++;
@@ -58,14 +62,7 @@ public static class WorldScreenTextDecal {
             );
         }
 
-        var columns = Math.Max(
-            val1: (text.Columns ?? widestLine),
-            val2: 1
-        );
-        var rows = Math.Max(
-            val1: (text.Rows ?? lines.Count),
-            val2: 1
-        );
+        var (columns, rows) = WorldScreenText.Grid(text: text, width: widestLine);
 
         // The validator refuses this at load. Keep the bake independently total for future callers: truncating rows
         // would silently alter authored content, and decrementing a one-row oversized grid would manufacture the
@@ -94,7 +91,7 @@ public static class WorldScreenTextDecal {
             cells[((cell * 4) + 3)] = background;
         }
 
-        for (var row = 0; ((row < rows) && (row < lines.Count)); row++) {
+        for (var row = 0; ((row < rows) && (row < lines.Length)); row++) {
             var column = 0;
 
             foreach (var rune in lines[row].EnumerateRunes()) {

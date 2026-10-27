@@ -18,9 +18,11 @@ pushes word tiles to rewrite the rules: one rules module, three levels that are
 only their maps, and an overworld whose gate opens from what the visitor has
 cleared.
 
-[Puck Alchemy](alchemy/README.md) is a single-player discovery game: combine
-two known elements to discover a third, with the recipe book stored as a grid
-indexed by the pair.
+Puck Alchemy is the debug world's Alchemy table
+([`worlds/debug/alchemy.puck`](../../worlds/debug/alchemy.puck),
+[`worlds/debug/alchemy.md`](../../worlds/debug/alchemy.md)): combine two known
+elements in the cauldron to discover a third, with the recipe book stored as a
+grid indexed by the pair.
 
 [Puck Familiars](familiars/README.md) is a creature-taming game fought in real
 time: one rules module that carries no setting, a default ruleset of twelve

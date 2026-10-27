@@ -63,10 +63,10 @@ let reversiHomeRow = map(
 )
 let reversiHome = map(range(0, reversiDiscs), i => (reversiHomeRow[i] * reversiTrayColumns) + reversiHomeColumn[i])
 
-// The bodies: debug.puck imports this file second, so its cursor and discs take the population's slots under Go's
-// (shapes.puck's goBodies and reversiBodies): the cursor is the highest and disc i the one `1 + i` below it. Seat 1
-// drives each disc, so a seat's `body.pose` may set one on a cell (reversi.md).
-let reversiTop = (((galleryPopulation + 2 + boardRoomBodies) - 1) - goBodies)
+// The bodies: debug.puck imports this file after Alchemy and Go, so its cursor and discs take the population's slots
+// under Go's (shapes.puck's alchemyBodies, goBodies and reversiBodies): the cursor is the highest and disc i the one
+// `1 + i` below it. Seat 1 drives each disc, so a seat's `body.pose` may set one on a cell (reversi.md).
+let reversiTop = ((((galleryPopulation + 2 + boardRoomBodies) - 1) - alchemyBodies) - goBodies)
 grants: map(range(0, reversiDiscs), i => { capability: Drive, grantee: "seat1", subject: $"body:{reversiTop - 1 - i}" })
 
 looks: map(["reversiDisc", "reversiCursor"], name => {

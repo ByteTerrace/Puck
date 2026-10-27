@@ -691,7 +691,7 @@ prototypes {
       )
     }
   }
-  sectionSign(name: "boardroom-sign", title: "BOARD GAMES", what: "chess, Go, Reversi: sit at a table with E")
+  sectionSign(name: "boardroom-sign", title: "BOARD GAMES", what: "chess, Go, Reversi, Alchemy: sit at a table with E")
 
   // Each lowered blind board, a creation of its own, so each bakes as one flat group.
   for blind in hallBlindBoards {
