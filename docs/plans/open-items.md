@@ -28,8 +28,8 @@ starting work, and tick or remove an item in the same change that closes it.
 The [input channel decision](../decisions/input-channels.md) owns the model,
 migration inventory, genre checks, and each step's completion criteria. The
 runtime has 32 numeric slots and 64 packed buttons with shared debug inputs,
-including Q32.32 relative displacement. Authoritative modes and timed history
-remain open.
+including Q32.32 relative displacement. Authoritative modes, timed history
+(with typed text) and rule patterns remain open.
 
 - [x] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
   buttons, separate target-register reach, all consumers and codecs migrated,
@@ -49,13 +49,25 @@ remain open.
   flight and clearing on flight exit, and neutral board/screen entry and exit.
 - [ ] C5 timed ingress and history: sub-tick events, lateness admission,
   calibration, bounded rings and overflow outcomes, held-origin continuation
-  across epochs, replay and hash coverage.
+  across epochs, replay and hash coverage, and `Text` events (one Unicode scalar
+  each, typed, pasted or IME-committed) in a text-focus mode.
 - [ ] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
   patterns, consumption, tick buffers, event-time beat judgement, and held-note
   and charge continuity across a declared mode transition without a new press.
 - [ ] C7 read-back and cleanup: current-mode action names in `body.rig`,
   `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
   ordinal surfaces removed, and executable checks of the genre table.
+- [ ] C3 to C6 land together as one engine lane after 19×19 Go (the owner's
+  ruling): they unblock rhythm, the combat yard's buffered actions and dodge,
+  chat typed in the world and the typing game at once.
+- [ ] A typing tutor in the gallery (the owner's request), on C5 and C6: a
+  station whose engagement enters a text-focus mode, lessons from the home row
+  to words and sentences on a prompt screen, live per-character feedback, words
+  per minute, per-key accuracy, streaks and a run timer, judged from input
+  history so a replay reproduces every keystroke.
+- [ ] Chat typed in the world: a HUD prompt that enters a text-focus mode and
+  submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
+  (`ChatCommandModule`), so no one has to use the developer console to talk.
 
 ## Standalone
 
