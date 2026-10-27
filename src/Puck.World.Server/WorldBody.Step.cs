@@ -39,6 +39,7 @@ public sealed partial class WorldBody {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     internal bool Advance(ulong tick, ulong stepTicks, RigidContactPolicy rigidPolicy, StepScratch scratch, int? engageProbeOrdinal = null, int entityIndex = -1, BodyEffectTargets effectTargets = default, List<BodyEffectOutput>? effectOutputs = null, List<WorldDesignation>? designationOutputs = null, List<WorldGeneratorInvocation>? generatorInvocations = null, ulong sleepAfterTicks = 0UL, ulong contactFieldVersion = 0UL) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+        if (PopulationSleeping) { return false; }
 
         // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).

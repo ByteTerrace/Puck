@@ -15,6 +15,116 @@ namespace Puck.World.Server.Tests;
 /// <summary>Laws for the rigid-dynamics facet (<see cref="WorldRigid"/>): pair-contact momentum conservation and
 /// checkpoint/restore bit-exactness across a rigid body's own state.</summary>
 public sealed class WorldRigidDynamicsLawTests {
+    [Fact]
+    public void FrozenNeighboursDoNotConsumeTheCandidateBudgetBeforeAnAwakeBody() {
+        var source = LensOnFloorDocument();
+        var definition = source with {
+            CollisionRaw = source.Collision with {
+                BodyContactsRaw = source.Collision.BodyContacts with {
+                    CandidateBudget = 1,
+                    MaxPairsPerBody = 1,
+                    RigidPairIterationCeiling = 1,
+                },
+            },
+        };
+        using var fixture = TwoJoinedSeats(definition: definition);
+        var principal = Principal.Seat(slot: 2);
+
+        Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(IdentityName: null, Principal: principal, Slot: 2, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var first = fixture.Server.Body(index: 0)!;
+        var second = fixture.Server.Body(index: 1)!;
+        var arriving = fixture.Server.Body(index: 2)!;
+
+        first.Pose(pitchRadians: 0, rollRadians: 0, x: 0, y: 0.13f, yawRadians: 0, z: 0);
+        second.Pose(pitchRadians: 0, rollRadians: 0, x: 0.06f, y: 0.13f, yawRadians: 0, z: 0.06f);
+        arriving.Pose(pitchRadians: 0, rollRadians: 0, x: 2, y: 0.13f, yawRadians: 0, z: 0);
+        for (var tick = 0; ((tick < 600) && (fixture.Server.Population.SleepingRigidBodies != 3)); tick++) { fixture.Step(); }
+        Assert.Equal(expected: 3, actual: fixture.Server.Population.SleepingRigidBodies);
+        // The two frozen lenses' enclosing bounds overlap, but their actual volumes do not. In X sweep order
+        // they both precede the arriving lens. Their unchanged pair must not consume first's one candidate.
+        arriving.Pose(x: 0.065f, y: first.Position.Y, z: 0.03f, yawRadians: 0, pitchRadians: 0, rollRadians: 0);
+        fixture.Step();
+        Assert.False(condition: first.Resting);
+    }
+    [Fact]
+    public void ACheckpointRetainsAPendingFieldWakeForASleepingRigidIsland() {
+        using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
+        var body = fixture.JoinSeat();
+
+        for (var tick = 0; ((tick < 600) && !body.Resting); tick++) { fixture.Step(); }
+        Assert.True(condition: body.Resting);
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var captured, reason: out var reason), userMessage: reason);
+        var entry = Assert.Single(collection: captured!.Population.Entries);
+
+        Assert.True(condition: entry.Residue.ContactFieldObservationCurrent);
+        captured = captured with {
+            Population = captured.Population with {
+                Entries = [entry with { Residue = entry.Residue with { ContactFieldObservationCurrent = false } }],
+            },
+        };
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: captured),
+            checkpoint: out var decoded, reason: out reason), userMessage: reason);
+        fixture.Server.RestoreCheckpoint(checkpoint: decoded!);
+        Assert.Equal(expected: 1, actual: fixture.Server.Population.SleepingRigidBodies);
+        fixture.Step();
+        Assert.False(condition: fixture.Server.Body(index: 0)!.Resting);
+        Assert.Equal(expected: 0, actual: fixture.Server.Population.SleepingRigidBodies);
+    }
+    [Fact]
+    public void SleepingRigidPopulationLeavesTickWorkAndWakesOnAnArrivingBody() {
+        var source = FallingRigidBallDocument();
+        var document = source with {
+            PopulationRaw = source.Population with { CapacityRaw = 6, NetworkPlayers = 2 },
+            PlacementRowsRaw = [.. source.Placements.Select(selector: row => row with { Region = new WorldPlacementRegion(Radius: 10) })],
+        };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var population = fixture.Server.Population;
+
+        Assert.Equal(expected: 2, actual: population.SetSimulatedCount(count: 2));
+        var a = population.LocalSeatCount;
+        var b = (a + 1);
+
+        fixture.Server.Body(index: a)!.Pose(pitchRadians: 0, rollRadians: 0, x: -1, y: 0.5f, yawRadians: 0, z: 0);
+        fixture.Server.Body(index: b)!.Pose(pitchRadians: 0, rollRadians: 0, x: 1, y: 0.5f, yawRadians: 0, z: 0);
+        for (var tick = 0; ((tick < 600) && (population.SleepingRigidBodies != 2)); tick++) { fixture.Step(); }
+        Assert.Equal(expected: 2, actual: population.SleepingRigidBodies);
+        fixture.Step(); // Consume the last movement's event and snapshot work.
+        for (var tick = 0; (tick < 10); tick++) {
+            fixture.Step();
+            Assert.Equal(expected: 0, actual: population.SimulatedBodyVisits);
+            Assert.Equal(expected: 0, actual: population.DynamicContactPairVisits);
+            Assert.Equal(expected: 0, actual: fixture.Server.Events.CollisionOverlapTests);
+            Assert.Equal(expected: 0, actual: fixture.Server.Events.RegionBodyTests);
+        }
+        var sleeping = fixture.Server.Body(index: a)!;
+        var arriving = fixture.Server.Body(index: b)!;
+        var feed = new WorldEventFeed(capacity: population.Capacity);
+
+        feed.Collect(definition: document, population: population);
+        var regionId = document.Placements[0].Id;
+
+        Assert.True(condition: feed.IsOccupant(body: a, placementId: regionId));
+        var withoutRegion = document with {
+            PlacementRowsRaw = [.. document.Placements.Select(selector: row => row with { Region = null })],
+        };
+
+        feed.Collect(definition: withoutRegion, population: population);
+        sleeping.Glide(position: sleeping.FixedPosition with { X = FixedQ4816.FromInteger(value: 11) });
+        for (var tick = 0; ((tick < 300) && (population.SleepingRigidBodies != 2)); tick++) { fixture.Step(); }
+        Assert.Equal(expected: 2, actual: population.SleepingRigidBodies);
+        // Re-adding an unchanged region after movement while it was absent must reconsider frozen occupants.
+        feed.Collect(definition: document, population: population);
+        Assert.False(condition: feed.IsOccupant(body: a, placementId: regionId));
+        var before = sleeping.FixedPosition;
+
+        arriving.Glide(position: (before + (FixedVector3.UnitX * FixedQ4816.FromDouble(value: 0.5))));
+        fixture.Step();
+        Assert.False(condition: sleeping.Resting);
+        Assert.NotEqual(expected: before, actual: sleeping.FixedPosition);
+        Assert.True(condition: (population.DynamicContactResolvedPairs > 0));
+    }
+
     private static WorldDefinition LensOnFloorDocument() {
         var source = FallingRigidBallDocument();
         var creation = CreationCanonicalizer.Canonicalize(document: new CreationDocument(
@@ -65,9 +175,24 @@ public sealed class WorldRigidDynamicsLawTests {
         }
         var supportedHeight = upper.FixedPosition.Y;
 
+        Assert.Equal(expected: 2, actual: fixture.Server.Population.SleepingRigidBodies);
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var capturedStack, reason: out var captureReason), userMessage: captureReason);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: WorldAuthorityCheckpointCodec.Encode(checkpoint: capturedStack!),
+            checkpoint: out var decodedStack, reason: out var decodeReason), userMessage: decodeReason);
+        fixture.Server.RestoreCheckpoint(checkpoint: decodedStack!);
+        lower = fixture.Server.Body(index: 0)!;
+        upper = fixture.Server.Body(index: 1)!;
+        Assert.Equal(expected: 2, actual: fixture.Server.Population.SleepingRigidBodies);
+        fixture.Step();
+        Assert.True(condition: (lower.Resting && upper.Resting));
+        Assert.Equal(expected: supportedHeight, actual: upper.FixedPosition.Y);
+
         lower.Glide(position: (lower.FixedPosition + FixedVector3.UnitX));
+        Assert.False(condition: upper.Resting, userMessage: "moving the support must wake its entire sleeping contact island");
         for (var tick = 0; (tick < 120); tick++) { fixture.Step(); }
-        Assert.True(condition: (upper.FixedPosition.Y < (supportedHeight - FixedQ4816.FromDouble(value: 0.005))));
+        Assert.True(condition: (upper.FixedPosition.Y < (supportedHeight - FixedQ4816.FromDouble(value: 0.005))), userMessage: $"supported={supportedHeight}; upper={upper.FixedPosition}; sleeping={fixture.Server.Population.SleepingRigidBodies}");
     }
     [InlineData("glide")]
     [InlineData("reconcile")]

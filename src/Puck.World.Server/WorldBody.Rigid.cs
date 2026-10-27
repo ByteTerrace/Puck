@@ -306,6 +306,7 @@ public sealed partial class WorldBody {
         }
 
         m_rigidVelocity = candidate;
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
         return true;
@@ -524,6 +525,7 @@ public sealed partial class WorldBody {
 
         m_rigidVelocity = handle.LinearVelocity;
         m_angularVelocity = handle.AngularVelocity;
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
     }
@@ -543,6 +545,7 @@ public sealed partial class WorldBody {
         }
 
         m_position += correction;
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
     }
@@ -555,6 +558,7 @@ public sealed partial class WorldBody {
     private FixedVector3 m_rigidSupportNormal;
 
     private void InvalidateRigidRest() {
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
         m_rigidGroundContacting = false;
@@ -587,8 +591,8 @@ public sealed partial class WorldBody {
     }
 
     // Pair impulses and depenetration run after AdvanceRigid. Count the hold window once, from the final solved
-    // velocity, including support supplied by another body. Only static-supported sleepers freeze integration:
-    // a dynamic-supported sleeper checks gravity/contact again next tick, so removing its support releases it.
+    // velocity, including support supplied by another body. A resting body still awaiting the rest of its island
+    // rechecks dynamic support; a fully resting island is parked by the population outside this solve.
     internal void FinishRigidContacts(RigidContactPolicy policy) {
         if ((m_rigid is null) || m_sweepRefusedThisTick) { return; }
         if (m_rigidPairSupported) { m_rigidGroundContacting = false; }
@@ -643,8 +647,9 @@ public sealed partial class WorldBody {
         // A static-supported body the rest latch has closed stays FROZEN — position, orientation, and contact latches held
         // bit-identical — until something wakes it: TryApplyRigidImpulse, CommitRigidHandle (a dynamic-pair
         // impulse), ApplyRigidPositionalCorrection (a dynamic-pair depenetration), Pose (a hard teleport), or
-        // SetContactField, Glide, Reconcile, or a changed scale/collider/rigid facet. A dynamic-supported sleeper
-        // instead rechecks support each tick, so removing the lower body cannot leave it suspended. `$physics:quiescent`/`world.rigid`/
+        // SetContactField, Glide, Reconcile, or a changed scale/collider/rigid facet. Dynamic-supported bodies that
+        // reach here still await the rest of their contact island. Once it all rests, the population parks the
+        // complete island and changing any support wakes it. `$physics:quiescent`/`world.rigid`/
         // `body.where`'s own "resting" fact all read this latch directly, so this IS what those facts mean: a body
         // actually at rest has nothing left to solve, and re-deriving gravity/contact against it every tick (the
         // bounded-iteration ground manifold below converges close to, never exactly, zero net impulse) is exactly

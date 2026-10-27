@@ -1177,7 +1177,7 @@ published by `WorldBody.FactHolds`) after its linear and angular speed stay
 below threshold for a short hold window while grounded—the LINEAR threshold
 scales with the body's own live `Scale` (a spatial rate, like a hold's own
 travel speed), the ANGULAR one does not (no length dimension). Once the latch
-closes over static support, `WorldBody.AdvanceRigid` stops integrating that body entirely—position,
+closes over a complete contact island, the population parks every member—position,
 orientation, and both contact latches hold bit-identical every tick—until
 something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`,
 `ApplyRigidPositionalCorrection`, `Pose`, `Glide`, `Reconcile`, a changed scale or collider/rigid facet, or `SetContactField`
@@ -1198,15 +1198,20 @@ rests uncarried, vacuously 1 for a world authoring none. The scoped expression
 row's authored keys (`WorldPopulation.RigidPlacementsQuiescent`); its compiled
 placement ordinals make a read one lookup per member. A carried member keeps
 the read false. A body's final resting hold includes dynamic-pair support and the post-pair velocity.
-Bodies supported by other bodies recheck gravity and contact each tick, so moving a support releases its stack.
-Resting pairs skip the dynamic narrowphase only when both integrations actually froze their poses this tick.
+Bodies supported by other bodies sleep together once the whole contact component rests. Moving, carrying,
+rescaling, recompiling or striking a member wakes its entire island in stable slot order, so removing a support
+releases its stack. Sleeping bodies leave the integration work set and retain a spatial index of frozen bounds;
+only an awake body's nearby sleepers enter a dynamic sweep. Extra passes can discover further sleepers as an
+impulse propagates. Region occupancy and overlap events retain unchanged sleeping results and reconsider them
+when a body wakes, a region moves or the collision policy changes. Body register synchronization skips unchanged
+register generations and occupancy/configuration revisions.
 `world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are
 `world.budget`'s own `rigid` segment. Checkpoint (`WorldBodyIntegrationResidue`)
 and the diagnostic population hash (`WorldReplaySnapshot.HashState`) both cover
-linear/angular velocity, the resting latch and hold-tick counter, BOTH
+linear/angular velocity, the resting latch and hold-tick counter, canonical sleeping-island membership, BOTH
 restitution edge latches, and both channels' miss streaks. A kit swap that
 adds or drops the `rigid` facet resets every rigid-solver field
 (`WorldBody.RecompileKit`) rather than leaking the other kind of body's stale

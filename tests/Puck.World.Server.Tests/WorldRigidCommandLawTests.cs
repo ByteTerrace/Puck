@@ -468,7 +468,7 @@ public sealed class WorldRigidCommandLawTests {
         );
     }
     [Fact]
-    public void ASettledPlacementRosterIgnoresMotionOutsideItAndRestingPairsSkipTheNarrowphase() {
+    public void ASettledPlacementRosterIgnoresMotionOutsideItAndSleepingPairsLeaveTheBroadphase() {
         var source = FallingRigidBallDocument();
         var inhabit = new WorldPlacementInhabit(
             Kit: source.Kits[0].Name,
@@ -498,7 +498,8 @@ public sealed class WorldRigidCommandLawTests {
         _ = fixture.StepUntil(ceiling: 3000, settled: population.RigidBodiesQuiescent);
         Assert.True(condition: population.RigidBodiesQuiescent());
         fixture.Step();
-        Assert.True(condition: (population.DynamicContactCandidates > 0));
+        Assert.Equal(expected: 0, actual: population.DynamicContactCandidates);
+        Assert.Equal(expected: 2, actual: population.SleepingRigidBodies);
         Assert.Equal(expected: 0, actual: population.DynamicContactNarrowPairs);
 
         var other = fixture.Server.Body(index: population.BodyForPlacementOrdinal(ordinal: 2))!;

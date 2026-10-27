@@ -25,6 +25,8 @@ neutral. Filling the board or using a tray's last stone does not end play.
 The physical table is read across nine quiet ticks (0.3 s), at most 41 stones
 per tick. Motion restarts the scan; a verdict requires the whole quiet window.
 Other tables do not delay it, and a carried stone always prevents settlement.
+Settled stones sleep outside the tick's body and event work sets. A stack sleeps
+as one contact island; touching or moving a member wakes it and its supports.
 `goCell` records stone locations and `goSeen` their colours at points.
 `goDiff` and `goGap` mark changed and missing points; ordinal max reductions
 select a point without ray scans. A single new stone of the side to move is

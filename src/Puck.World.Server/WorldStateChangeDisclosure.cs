@@ -43,6 +43,7 @@ public sealed class WorldStateChangeDisclosure {
         }
         for (var ordinal = 0; (!policiesMoved && (ordinal < arena.Rows.Count)); ordinal++) {
             policiesMoved |= ReadersMoved(arena: arena, policy: arena.Rows[ordinal].Visibility);
+            if (!arena.HasCellVisibility(rowOrdinal: ordinal)) { continue; }
             var cursor = 0;
 
             while (!policiesMoved && arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: ordinal)) {

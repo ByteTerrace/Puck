@@ -60,9 +60,9 @@ internal static class WorldBenchmarks {
 
         rows.Add(item: ("world: arena storage", $"{server.Arena.Bytes:N0} bytes"));
         if (!server.TryCaptureCheckpoint(Puck.World.Server.WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var checkpointReason)) {
-            throw new InvalidOperationException(checkpointReason);
+            throw new InvalidOperationException(message: checkpointReason);
         }
-        rows.Add(item: ("world: authority checkpoint", $"{Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(checkpoint!).Length:N0} bytes (before guests and machines step)"));
+        rows.Add(item: ("world: authority checkpoint", $"{Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!).Length:N0} bytes (before guests and machines step)"));
         var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition!.SimulationRateHz));
 
         for (var tick = 0; (tick < WarmupTicks); tick++) {
@@ -72,12 +72,17 @@ internal static class WorldBenchmarks {
         var allocationSamples = new long[SampleTicks];
         var elapsedTicksSamples = new long[SampleTicks];
         var countsBefore = ReadContactWork();
+        long simulatedBodyVisits = 0, dynamicPairVisits = 0, eventOverlapTests = 0, regionBodyTests = 0;
 
         for (var tick = 0; (tick < SampleTicks); tick++) {
             var timestampBefore = Stopwatch.GetTimestamp();
 
             allocationSamples[tick] = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
             elapsedTicksSamples[tick] = (Stopwatch.GetTimestamp() - timestampBefore);
+            simulatedBodyVisits += server.Population.SimulatedBodyVisits;
+            dynamicPairVisits += server.Population.DynamicContactPairVisits;
+            eventOverlapTests += server.Events.CollisionOverlapTests;
+            regionBodyTests += server.Events.RegionBodyTests;
         }
 
         var countsAfter = ReadContactWork();
@@ -90,6 +95,10 @@ internal static class WorldBenchmarks {
 
         rows.Add(item: ("world: idle tick (median)", $"{medianElapsedMs:F3} ms"));
         rows.Add(item: ("world: quiet-tick allocation (median)", $"{medianAllocation:N0} bytes"));
+        rows.Add(item: ("world: sleeping rigid bodies", $"{server.Population.SleepingRigidBodies}"));
+        rows.Add(item: ("world: simulated body visits / tick", $"{(simulatedBodyVisits / ((double)SampleTicks)):F1}"));
+        rows.Add(item: ("world: dynamic broadphase pair visits / tick", $"{(dynamicPairVisits / ((double)SampleTicks)):F1}"));
+        rows.Add(item: ("world: event overlap / region body tests / tick", $"{(eventOverlapTests / ((double)SampleTicks)):F1} / {(regionBodyTests / ((double)SampleTicks)):F1}"));
 
         // The contact work behind the tick, as deterministic counts: what a timing row is read beside.
         for (var kind = 0; (kind < ContactWorkKinds.Length); kind++) {
@@ -298,7 +307,7 @@ internal static class WorldBenchmarks {
             animator: new Puck.World.Client.WorldCreationInstances(),
             audio: inert,
             client: client,
-            continuum: new Puck.World.Client.WorldContinuum(client, routes, inert),
+            continuum: new Puck.World.Client.WorldContinuum(adjacencies: inert, client: client, routes: routes),
             text: new Puck.World.Client.WorldTextCatalog(source: new WorldDefinitionSource(Definition: server.Definition, SourcePath: path))
         );
         var context = new Puck.SdfVm.SdfEmitContext(Probe: false, Time: 0f, RenderOrigin: System.Numerics.Vector3.Zero, ParkPosition: System.Numerics.Vector3.Zero, SlotBase: 0, InterpolationAlpha: 1f);
@@ -323,10 +332,10 @@ internal static class WorldBenchmarks {
 
         emitter.Tick(deltaSeconds: 0f);
         for (var warm = 0; (warm < 4); warm++) {
-            Emit(times: steady, bytes: steadyBytes, sample: 0);
+            Emit(bytes: steadyBytes, sample: 0, times: steady);
         }
         for (var sample = 0; (sample < Samples); sample++) {
-            Emit(times: steady, bytes: steadyBytes, sample: sample);
+            Emit(bytes: steadyBytes, sample: sample, times: steady);
         }
         for (var change = 0; (change < (Samples + 4)); change++) {
             foreach (var cell in cells) {

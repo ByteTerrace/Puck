@@ -806,14 +806,16 @@ public sealed partial class WorldPopulation {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+        SimulatedBodyVisits = 0;
 
         AutonomyStatistics = default;
 
-        if (m_baseContactField is WorldColliderSet colliders) {
-            colliders.RefreshAttached(population: this);
+        if (m_baseContactField is WorldColliderSet attached) { attached.RefreshAttached(population: this); }
+        var stepBodies = PrepareBodyStep();
 
+        if (m_baseContactField is WorldColliderSet colliders) {
             // Every body standing on a moving attached solid rides it before any body advances, seats included.
-            for (var index = 0; (index < Capacity); index++) {
+            foreach (var index in stepBodies) {
                 if (
                     m_entries[index].Active &&
                     (m_entries[index].Body is { } rider)
@@ -831,7 +833,7 @@ public sealed partial class WorldPopulation {
         // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
         var contactFieldVersion = ContactFieldVersion;
 
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
+        foreach (var index in stepBodies) {
             var entry = m_entries[index];
 
             // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
@@ -843,6 +845,7 @@ public sealed partial class WorldPopulation {
             ) {
                 continue;
             }
+            SimulatedBodyVisits++;
 
             // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no
             // cadence bookkeeping, no Advance. See WorldBody.Sleep.cs.

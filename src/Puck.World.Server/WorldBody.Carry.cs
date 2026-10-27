@@ -101,6 +101,7 @@ public sealed partial class WorldBody {
         }
 
         m_carryingIndex = targetIndex;
+        target.NotifyPopulationWake();
         target.m_carriedByIndex = selfIndex;
         target.m_rigidVelocity = FixedVector3.Zero;
         target.m_angularVelocity = FixedVector3.Zero;

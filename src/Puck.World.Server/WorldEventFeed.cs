@@ -63,9 +63,9 @@ public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubje
 /// <see cref="WorldCollisionEvents"/> limits; established pairs are retained first. A saturated crowd therefore has
 /// bounded work and memory and may omit lower-priority new proximity pairs. It is deliberately not a claim about
 /// physical contact response.</para>
-/// <para><b>Region containment</b> re-reads the document's placements every tick (a linear scan, cheap at
-/// authoring scale) rather than caching a derived structure keyed to the Placements section's install cadence —
-/// simpler and correct; revisit only if profiling ever shows the scan matters.</para>
+/// <para>Frozen bodies retain their region and overlap results. Collection visits awake/changed bodies and their
+/// nearby frozen neighbours, in stable sweep/slot order. A changed region frame rechecks every occupant; a changed
+/// collision policy reconsiders the complete image. Begin-budget work left over is resumed on later collections.</para>
 /// <para><b>Route edges are pushed, not diffed.</b> <see cref="WorldGrants"/> reports changes from the Control-route
 /// storage every producer shares, including engagement, repair, and direct grant/revoke outcomes. The server resolves
 /// a Seat/Peer principal to its body index and queues the corresponding edge; principals that drive no body produce no
@@ -102,6 +102,17 @@ public sealed class WorldEventFeed {
 
     private readonly WorldSweepBody[] m_collisionBodies;
     private readonly byte[] m_collisionDegrees;
+    private readonly bool[] m_bodyChanged;
+    private readonly bool[] m_collisionIncluded;
+    private readonly int[] m_nearbySleeping;
+
+    // Only membership matters here: the complete candidate image is sorted by X/slot before any pair is visited.
+    private readonly HashSet<int> m_collisionPending = [];
+    private readonly Dictionary<string, (FixedVector3 Center, FixedQ4816 Radius, bool HasCenter)> m_regionFrames = new(comparer: StringComparer.Ordinal);
+
+    private WorldCollisionEvents? m_collisionPolicy;
+    private WorldDefinition? m_regionDefinition;
+
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
     private readonly int m_maximumTrackedPairs;
@@ -118,6 +129,9 @@ public sealed class WorldEventFeed {
         m_maximumTrackedPairs = MaximumTrackedPairsForCapacity(capacity: capacity);
         m_collisionBodies = new WorldSweepBody[capacity];
         m_collisionDegrees = new byte[capacity];
+        m_bodyChanged = new bool[capacity];
+        m_collisionIncluded = new bool[capacity];
+        m_nearbySleeping = new int[capacity];
         m_collisionPairKeys = new ulong[m_maximumTrackedPairs];
         m_collisionTransitions = new CollisionTransition[checked((m_maximumTrackedPairs * 2))];
         _ = m_overlapping.EnsureCapacity(capacity: m_maximumTrackedPairs);
@@ -129,6 +143,10 @@ public sealed class WorldEventFeed {
     public int CollisionLimitedBodies { get; private set; }
     /// <summary>Gets the established overlap pairs retained after the latest pass.</summary>
     public int CollisionTrackedPairs => m_overlapping.Count;
+    /// <summary>Exact collision overlap tests performed by this tick's collection.</summary>
+    public int CollisionOverlapTests { get; private set; }
+    /// <summary>Body/region containment tests performed by this tick's collection.</summary>
+    public int RegionBodyTests { get; private set; }
     /// <summary>Gets this tick's collected edges, in pinned order (seats, then regions, then collisions, then links,
     /// then routes). Valid only between one <see cref="Collect"/> call and the next.</summary>
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
@@ -231,10 +249,15 @@ public sealed class WorldEventFeed {
             Now: now
         );
     }
-    private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy) {
+    private void CollectCollisions(WorldPopulation population, WorldCollisionEvents policy, ReadOnlySpan<int> changedBodies) {
         Array.Clear(array: m_collisionDegrees);
+        Array.Clear(array: m_collisionIncluded);
         CollisionCandidates = 0;
         CollisionLimitedBodies = 0;
+        CollisionOverlapTests = 0;
+        var policyChanged = (m_collisionPolicy != policy);
+
+        m_collisionPolicy = policy;
 
         var pairCount = 0;
 
@@ -266,10 +289,10 @@ public sealed class WorldEventFeed {
                 population.IsActive(index: b) &&
                 (population.EntryBody(index: a) is { Collider: not null } bodyA) &&
                 (population.EntryBody(index: b) is { Collider: not null } bodyB) &&
-                Overlaps(
+                ((!policyChanged && !m_bodyChanged[a] && !m_bodyChanged[b]) || TestOverlap(
                 a: bodyA,
                 b: bodyB
-            )
+            ))
             );
 
             if (retained) {
@@ -289,27 +312,42 @@ public sealed class WorldEventFeed {
         var bodyCount = 0;
 
         if (policy.MaxPairsPerBody > 0) {
-            for (var index = 0; (index < population.Capacity); index++) {
-                if (
-                    !population.IsActive(index: index) ||
-                    (population.EntryBody(index: index) is not { Collider: { } collider } body)
-                ) {
-                    continue;
+            foreach (var index in changedBodies) { IncludeNeighbours(index: index); }
+            foreach (var index in m_collisionPending) { IncludeNeighbours(index: index); }
+            m_collisionPending.Clear();
+
+            void IncludeNeighbours(int index) {
+                Include(index: index);
+                if ((population.EntryBody(index: index) is { } body) && population.IsActive(index: index)) {
+                    var nearby = population.NearbySleepingBodies(body: body, destination: m_nearbySleeping);
+
+                    for (var neighbour = 0; (neighbour < nearby); neighbour++) { Include(index: m_nearbySleeping[neighbour]); }
                 }
-
-                var radius = body.BroadphaseRadius;
-
-                m_collisionBodies[bodyCount++] = new WorldSweepBody(
-                    Index: index,
-                    MinimumX: (body.FixedPosition.X - radius),
-                    MaximumX: (body.FixedPosition.X + radius),
-                    Radius: radius
-                );
             }
-            Array.Sort(
-                array: m_collisionBodies,
-                index: 0,
-                length: bodyCount
+            // A policy edit can admit a previously budget-limited unchanged pair. Reconsider the complete image
+            // once for that edit, never on an ordinary tick.
+            if (policyChanged) {
+                for (var index = 0; (index < population.Capacity); index++) { Include(index: index); }
+            }
+            Array.Sort(array: m_collisionBodies, index: 0, length: bodyCount);
+        }
+
+        void Include(int index) {
+            if (
+                m_collisionIncluded[index] ||
+                !population.IsActive(index: index) ||
+                (population.EntryBody(index: index) is not { Collider: { } collider } body)
+            ) {
+                return;
+            }
+            m_collisionIncluded[index] = true;
+            var radius = body.BroadphaseRadius;
+
+            m_collisionBodies[bodyCount++] = new WorldSweepBody(
+                Index: index,
+                MinimumX: (body.FixedPosition.X - radius),
+                MaximumX: (body.FixedPosition.X + radius),
+                Radius: radius
             );
         }
 
@@ -333,14 +371,15 @@ public sealed class WorldEventFeed {
             for (var rightOrdinal = (leftOrdinal + 1);
                 ((rightOrdinal < bodyCount) && (m_collisionBodies[rightOrdinal].MinimumX <= left.MaximumX));
                 rightOrdinal++) {
+                var right = m_collisionBodies[rightOrdinal];
+
+                if (!policyChanged && !m_bodyChanged[left.Index] && !m_bodyChanged[right.Index]) { continue; }
                 if (inspected >= policy.CandidateBudget) {
                     CollisionLimitedBodies++;
                     break;
                 }
                 inspected++;
                 CollisionCandidates++;
-
-                var right = m_collisionBodies[rightOrdinal];
 
                 if (
                     (m_collisionDegrees[left.Index] >= policy.MaxPairsPerBody) ||
@@ -370,7 +409,7 @@ public sealed class WorldEventFeed {
                 if (
                     (FixedQ4816.Abs(value: delta.Y) > radius) ||
                     (FixedQ4816.Abs(value: delta.Z) > radius) ||
-                    !Overlaps(
+                    !TestOverlap(
                     a: leftBody,
                     b: rightBody
                 )
@@ -394,6 +433,14 @@ public sealed class WorldEventFeed {
             }
         }
 
+        if ((policy.BeginBudget > 0) && (begins >= policy.BeginBudget)) {
+            for (var ordinal = 0; (ordinal < bodyCount); ordinal++) {
+                var index = m_collisionBodies[ordinal].Index;
+
+                if (m_collisionDegrees[index] < policy.MaxPairsPerBody) { m_collisionPending.Add(item: index); }
+            }
+        }
+
         Array.Sort(
             array: m_collisionTransitions,
             index: 0,
@@ -413,6 +460,11 @@ public sealed class WorldEventFeed {
                 A: a,
                 B: b
             ));
+        }
+
+        bool TestOverlap(WorldBody a, WorldBody b) {
+            CollisionOverlapTests++;
+            return Overlaps(a: a, b: b);
         }
     }
     // The link pass. Sign/unit: StaleTicks counts SIMULATION ticks since the last delivered refresh, 0 on the tick a
@@ -485,7 +537,11 @@ public sealed class WorldEventFeed {
             ));
         }
     }
-    private void CollectRegions(WorldDefinition definition, WorldPopulation population) {
+    private void CollectRegions(WorldDefinition definition, WorldPopulation population, ReadOnlySpan<int> changedBodies) {
+        if (!ReferenceEquals(objA: m_regionDefinition, objB: definition)) {
+            m_regionFrames.Clear();
+            m_regionDefinition = definition;
+        }
         var ordinal = 0;
 
         var placements = definition.Placements;
@@ -534,8 +590,16 @@ public sealed class WorldEventFeed {
             }
 
             var radius = FixedQ4816.FromDouble(value: region.Radius);
+            var frame = (center, radius, hasCenter);
+            var frameChanged = (!m_regionFrames.TryGetValue(key: placement.Id, value: out var previous) || (previous != frame));
 
-            for (var body = 0; (body < population.Capacity); body++) {
+            m_regionFrames[placement.Id] = frame;
+            var bodyCount = (frameChanged ? population.Capacity : changedBodies.Length);
+
+            for (var bodyOrdinal = 0; (bodyOrdinal < bodyCount); bodyOrdinal++) {
+                var body = (frameChanged ? bodyOrdinal : changedBodies[bodyOrdinal]);
+
+                RegionBodyTests++;
                 var inside = (
                     hasCenter &&
                     population.IsActive(index: body) &&
@@ -779,20 +843,29 @@ public sealed class WorldEventFeed {
     /// <param name="population">The live population (positions, activity, seat occupancy).</param>
     public void Collect(WorldDefinition definition, WorldPopulation population) {
         m_edges.Clear();
+        RegionBodyTests = 0;
+        Array.Clear(array: m_bodyChanged);
+        var changedBodies = population.EventBodies();
+
+        foreach (var index in changedBodies) { m_bodyChanged[index] = true; }
+        foreach (var index in m_collisionPending) { m_bodyChanged[index] = true; }
 
         CollectSeats(population: population);
         CollectRegions(
+            changedBodies: changedBodies,
             definition: definition,
             population: population
         );
         CollectCollisions(
             population: population,
-            policy: definition.Collision.Events
+            policy: definition.Collision.Events,
+            changedBodies: changedBodies
         );
         CollectLinks(definition: definition);
 
         m_edges.AddRange(collection: m_pendingRoutes);
         m_pendingRoutes.Clear();
+        population.CompleteBodyEvents();
     }
     /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
     /// <param name="placementId">The placement carrying the region facet.</param>
@@ -924,6 +997,9 @@ public sealed class WorldEventFeed {
     /// <summary>Restores this feed's live state from a previously captured checkpoint.</summary>
     public void Restore(WorldEventFeedCheckpoint checkpoint) {
         ValidateCheckpoint(checkpoint: checkpoint);
+        m_regionFrames.Clear();
+        m_collisionPolicy = null;
+        m_collisionPending.Clear();
 
         m_edges.Clear();
         m_edges.AddRange(collection: checkpoint.Edges);

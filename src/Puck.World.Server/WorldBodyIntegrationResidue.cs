@@ -65,6 +65,8 @@ namespace Puck.World.Server;
 /// <param name="RigidResting">A rigid kit's resting latch; always <see langword="false"/> for a locomotion kit.</param>
 /// <param name="RigidRestingHoldTicks">A rigid kit's elapsed engine ticks under the resting thresholds so far,
 /// carried across a checkpoint so a restore does not re-arm the hold window from zero mid-settle.</param>
+/// <param name="RigidSleepRootPlusOne">Zero while awake; otherwise one plus the smallest slot in the frozen
+/// contact island. The wake relationship survives a checkpoint even when depenetration left a tiny contact gap.</param>
 /// <param name="RigidGroundContacting">A rigid kit's ground-channel restitution edge latch — whether the
 /// previous substep already had a walkable contact, so a restore does not read a genuine mid-rest tick as a
 /// fresh impact.</param>
@@ -116,6 +118,7 @@ public readonly record struct WorldBodyIntegrationResidue(
     FixedVector3 RigidAngularVelocity,
     bool RigidResting,
     ulong RigidRestingHoldTicks,
+    int RigidSleepRootPlusOne,
     bool RigidGroundContacting,
     bool RigidObstructionContacting,
     int RigidGroundMissStreak,

@@ -809,7 +809,7 @@ Every package below carries its own check on the programme page; tick it there a
     6. Area scoring keeps the existing flood at one pass a tick with `maxPasses(goPoints + 2)`, and publishes its progress.
     7. The settled-table reading replaces the 76 ray scans with ordinal `goDiff`/`goGap` rows and max reductions, scoped to this table's stones; a carried stone is never quiescent.
     8. The opponent is a one-ply negamax job with a tactical and positional evaluation (captures, own atari and eyes, endangered groups, third and fourth lines), bounded by work and node counts (start at 8 nodes a step), aiming at a 1 to 3 s reply and at most 5 s beside the other tables; search admission prices each job by the rows it depends on, and every job is repriced after the change.
-    9. Resting body pairs skip the narrowphase; a bulk reset re-seats stones through a deterministic queue (8 bodies a tick to start).
+    9. Resting body pairs skip the narrowphase; a bulk reset re-seats stones through a deterministic queue (8 bodies a tick to start). Rigid contact islands now sleep outside integration, active broadphase and event work; changing a member wakes its component. The lane's matched immediate-present 600-frame readings returned spawn/board-room simulate p99 to 3.95/4.02 ms with no frame over 16.7 ms; quiet-machine confirmation remains with the lead.
     10. The camera keeps the tabletop framing; `go-tests.puck` covers settling, captures, suicide refusal, ko, passes ending the game and area scoring at 19×19.
     11. The bar is a steady 60 FPS at the highest settings through idle play, drops, captures, every opponent thinking, scoring, reset and tray disturbance.
 

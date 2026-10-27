@@ -707,6 +707,7 @@ public sealed partial class WorldBody {
             objB: field
         )
         ) {
+            NotifyPopulationWake();
             m_resting = false;
             m_restingHoldTicks = 0UL;
         }
@@ -740,6 +741,7 @@ public sealed partial class WorldBody {
     /// from — the population hands it the live field on activation and every rebuild.</summary>
     /// <param name="field">The world gravity field, or <see langword="null"/> for a world authoring none.</param>
     public void SetGravityField(WorldGravityField? field) {
+        if (!ReferenceEquals(objA: m_gravityField, objB: field)) { InvalidateRigidRest(); }
         m_gravityField = field;
     }
     /// <summary>Sets the capture latch — a PROJECTION of the owning principal's control-application set, written by

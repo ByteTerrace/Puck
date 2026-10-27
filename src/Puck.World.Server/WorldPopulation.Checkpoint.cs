@@ -420,6 +420,7 @@ public sealed partial class WorldPopulation {
         m_seatKit = checkpoint.SeatKit;
         m_revision = checkpoint.Revision;
         RebuildCarryRelationships();
+        RestoreSleepingIslands();
     }
 
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
@@ -512,6 +513,15 @@ public sealed partial class WorldPopulation {
         foreach (var captured in checkpoint.Entries) {
             var carrying = captured.Residue.Carrying;
             var carriedBy = captured.Residue.CarriedBy;
+            var sleeping = captured.Residue.RigidSleepRootPlusOne;
+
+            if ((sleeping < 0) || (sleeping > Capacity) ||
+                ((sleeping > 0) && ((sleeping > (captured.Index + 1)) ||
+                    (restored[(sleeping - 1)] is not { } root) || (root.Residue.RigidSleepRootPlusOne != sleeping) ||
+                    !captured.Residue.RigidResting || (carriedBy >= 0) ||
+                    (m_kits[((captured.Index < LocalSeatCount) ? checkpoint.SeatKit : captured.KitIndex)].Rigid is null)))) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has an invalid sleeping rigid island.");
+            }
 
             if (
                 (carrying >= 0) &&

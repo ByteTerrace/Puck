@@ -892,6 +892,7 @@ public sealed partial class WorldPopulation {
     /// <see langword="null"/>.</exception>
     public void BindActionStateLane(StateArena arena, WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        m_bodyCellDefinition = null;
 
         m_actionStateLane.Bind(
             arena: arena,

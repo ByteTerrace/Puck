@@ -13,6 +13,9 @@ public sealed partial class WorldPopulation {
     // Whether the last selection pass had a selector to resolve, so the pass after a document drops both selectors
     // still clears what they selected, and a document without one costs nothing per tick.
     private bool m_selecting;
+    private WorldDefinition? m_bodyCellDefinition;
+    private int m_bodyCellRevision = -1;
+    private (ulong Scale, ulong Kit, ulong Look) m_bodyCellGenerations;
 
     /// <summary>Resyncs what every body takes from its own registers: its live <see cref="WorldBody.Scale"/> from the
     /// register <c>bodies.scale</c> names (<see cref="SyncBodyScale"/>), and its kit and look from the assignments'
@@ -20,9 +23,23 @@ public sealed partial class WorldPopulation {
     /// <c>WorldGrants.SyncState</c> is, once a tick after the world rules, and when a crossing lands a body.</summary>
     /// <param name="definition">The live document.</param>
     public void SyncBodyCells(WorldDefinition definition) {
+        var generations = (RegisterGeneration(definition: definition, name: definition.Population.Scale),
+            RegisterGeneration(definition: definition, name: definition.Assignment.Select?.BodyState),
+            RegisterGeneration(definition: definition, name: definition.LookAssignment.Select?.BodyState));
+
+        if (ReferenceEquals(objA: m_bodyCellDefinition, objB: definition) && (m_bodyCellRevision == m_revision) &&
+            (m_bodyCellGenerations == generations)) { return; }
         SyncBodyScale(definition: definition);
         SyncBodySelections(definition: definition);
+        m_bodyCellDefinition = definition;
+        m_bodyCellRevision = m_revision;
+        m_bodyCellGenerations = generations;
     }
+
+    private ulong RegisterGeneration(WorldDefinition definition, string? name) => (((name is not null) &&
+        WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out _, name: name, slot: out var slot))
+        ? m_actionStateLane.Generation(slot: slot) : 0);
+
     /// <summary>Resyncs every body's kit and look from the kit and look assignments' selectors
     /// (<see cref="WorldRowAssignment.Select"/>), which read each body's own <c>state.body</c> register. Called once a
     /// tick after the world rules, the last writer of a register in a tick; from every choke point
