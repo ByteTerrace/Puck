@@ -7,12 +7,124 @@
 
 schema: "puck.world.definition.v1"
 basis: "debug"
-documentId: "chess-tests"
+// Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
+documentId: "debug"
+
+state {
+  world {
+    slot replayWitness = 0
+  }
+}
+
+// Keep unrelated devices mounted but stopped in these table fixtures. World rules, bodies, the faerie and the
+// other boards continue normally; emulating six cartridges is independent of the table's replay proof.
+machines: map([
+  "humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck",
+  "range-deck-9", "range-deck-24", "range-deck-50"
+], name => { name: name, running: false })
+
+// 37 plies (19 White moves). The first idle run records real accepted moves; the second proves the tape's
+// per-tick scope hashes, while a world-owned cell outside the scope keeps its live value. No hash is authored.
+test "the idle demo records all 19 moves then replays with matching scope hashes and loops" {
+  given {
+    aiSide = -1
+    chessDemo.idleTicks = 30
+    chessDemo.holdTicks = 30
+  }
+  when {
+    ticks 150
+    seat1: world.state.cell.set replayWitness $value 731
+    seat1: body.pose 3 0.05 3 0 0 0 0
+    ticks 3500
+    seat1: world.state chessDemo
+    ticks 3400
+  }
+  expect {
+    chessDemo.loops >= 2
+    chessDemo.matches >= 1
+    chessTape.completed >= 2
+    illegalCount == 0
+    chessDemo.cancelled == 0
+    chessDemo.playing == 1
+    replayWitness == 731
+    // Normal contact correction can move her slightly; a whole-world reset would return her to the spawn.
+    bodyPosition(body, 0, x) > 2.9
+    bodyPosition(body, 0, x) < 3.1
+    $tick > 7000
+  }
+}
+
+test "the replay holds the historical final position and its scope verdict" {
+  given {
+    aiSide = -1
+    chessDemo.idleTicks = 30
+    chessDemo.holdTicks = 1200
+  }
+  when {
+    ticks 4000
+    seat1: world.state chessDemo
+    ticks 4000
+    seat1: world.state chessDemo
+    ticks 150
+  }
+  expect {
+    chessInput.accepted == 37
+    turn == Black
+    verdict == 1
+    illegalCount == 0
+    chessTape.status == 4
+    chessDemo.matches == 1
+    pieceCell.piece10 == 29
+    pieceCell.piece28 == 61
+  }
+}
+
+test "engaging the demo cancels it and restores a fresh playable table" {
+  given {
+    aiSide = -1
+    chessDemo.idleTicks = 30
+  }
+  when {
+    ticks 800
+    seat1: body.pose 56.5 9.25 21.1 0 0 0 0
+    ticks 100
+    seat1: body.press interact
+    ticks 30
+  }
+  expect {
+    chessDemo.cancelled == 1
+    chessDemo.playing == 0
+    chessTape.status == 0
+    chessInput.accepted == 0
+    turn == White
+    pieceCell.piece12 == 11
+    board(engaged, board, 1) == 1
+  }
+}
+
+test "a scope changed during replay reports a mismatch instead of blessing a new hash" {
+  given {
+    aiSide = -1
+    chessDemo.idleTicks = 30
+    chessDemo.holdTicks = 300
+  }
+  when {
+    ticks 3800
+    seat1: world.state.cell.set illegalCount $value 7
+    ticks 3500
+  }
+  expect {
+    chessTape.status == -1
+    chessDemo.matches == 0
+    chessDemo.loops == 2
+  }
+}
 
 // Seat 1 stands at White's edge, sits down with the context button and plays e2-e4 with the keys (lift, two steps up
 // the board, put down), then e7-e5 by dragging with the pointer (press over e7, move over e5, release).
 test "a seated player plays e4 with the keys and e5 with a pointer drag" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -52,6 +164,7 @@ test "a seated player plays e4 with the keys and e5 with a pointer drag" {
 // nothing and no legal move would follow.
 test "a seated player cancels a lift, an illegal put-down is put back and the context button stands her up" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -104,6 +217,7 @@ test "a seated player cancels a lift, an illegal put-down is put back and the co
 
 test "pieces settle and derive initial board cells" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -119,6 +233,7 @@ test "pieces settle and derive initial board cells" {
 
 test "e2e4 records legal" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -135,6 +250,7 @@ test "e2e4 records legal" {
 
 test "illegal knight move records illegal then legal succeeds" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -154,6 +270,7 @@ test "illegal knight move records illegal then legal succeeds" {
 
 test "king step records legal and multi step refused" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -176,6 +293,7 @@ test "king step records legal and multi step refused" {
 
 test "knight capture records move kind two" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -197,6 +315,7 @@ test "knight capture records move kind two" {
 
 test "pawn diagonal capture records legal" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -219,6 +338,7 @@ test "pawn diagonal capture records legal" {
 
 test "queen diagonal slide records legal" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -238,6 +358,7 @@ test "queen diagonal slide records legal" {
 
 test "white kingside castle records legal" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -269,6 +390,7 @@ test "white kingside castle records legal" {
 // (cell 7) to d1 (cell 4), past d1's transit check.
 test "white queenside castle records legal" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -311,6 +433,7 @@ test "white queenside castle records legal" {
 // 56) to f8 (cell 58).
 test "black kingside castle records legal" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -349,6 +472,7 @@ test "black kingside castle records legal" {
 
 test "castle cannot cross knight attack" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -370,6 +494,7 @@ test "castle cannot cross knight attack" {
 
 test "castle safe when knight does not attack transit" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -391,6 +516,7 @@ test "castle safe when knight does not attack transit" {
 
 test "move leaving king in check is refused" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -409,6 +535,7 @@ test "move leaving king in check is refused" {
 
 test "en passant capture records move kind en passant" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -437,6 +564,7 @@ test "en passant capture records move kind en passant" {
 
 test "initial position counts in threefold repetition" {
   given {
+    chessDemo.enabled = 0
     aiSide = -1
   }
   when {
@@ -469,6 +597,7 @@ test "initial position counts in threefold repetition" {
 
 test "AI White makes one legal opening move and waits for Black" {
   given {
+    chessDemo.enabled = 0
     aiSide = White
   }
   when {
@@ -502,6 +631,7 @@ test "AI Black replies after a human opening" {
 
 test "a stale AI answer cannot move a piece" {
   given {
+    chessDemo.enabled = 0
     aiSide = White
     aiBest.token = 12
     aiBest.to = 63

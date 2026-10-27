@@ -8,6 +8,10 @@ public sealed partial class WorldPersistence {
     // arm throws rather than folding nothing.
     internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick) {
         switch (component) {
+            case WorldStateHashComponent.ScopedReplays:
+                hash.Add(value: ((uint)Host.ScopedReplays.Count));
+                foreach (var scope in Host.ScopedReplays) { scope.AppendStateHash(hash: ref hash); }
+                break;
             case WorldStateHashComponent.Arena:
                 hash.Add(value: Host.Arena.ComputeHash());
 

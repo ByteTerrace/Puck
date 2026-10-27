@@ -38,6 +38,7 @@ kind.
 | `pool` | the document | declaration | `state.pools[]` | Declares a bounded typed instance pool with optional static seeds. |
 | `prototypes` | the document | section | `prototypes` | The creation documents this world places. |
 | `record` | the document | block | `(nothing)` | A typed field set instantiated by pools. |
+| `replays` | the document | section | `replays` | Scoped input programs whose first live drive records a starting state and per-tick scope hashes; later drives restore and verify only that scope. |
 | `rule` | the document | block | `rules[]` | One reactive rule: a gate, its working values, and the effects it fires. |
 | `rules` | the document | block | `rules[]` | A shared header for several rules: its gate, locals and properties apply to every member. |
 | `set` | the document | statement | `sets[]` | One named set over the positions of a board, a zone, or a family, which `boardCombine` and `writeSet` read by name. |
@@ -307,6 +308,14 @@ record Name { field: Kind … }
 | `fields` (required) | body | statements | — | one field descriptor in `state.records[]` | — | The fields that every instance of a pool using this record carries. |
 
 Never printed back; the printer produces the statements its expansion produced in its place.
+
+### `replays`
+
+```puck
+replays [ { name: … rows [ … ] bodies [ … ] seats [ … ] control: … durationTicks: … inputs [ … ] } ]
+```
+
+Printed back as `replays`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `rule`
 

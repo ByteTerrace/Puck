@@ -25,10 +25,55 @@ surface.
 - Verify semantics
 - Inspect — reading a tape back
 - The live drive and forking
+- Scoped live replays
 - The in-session history
 - Rules for changes
 
-## Format and development version
+## Scoped live replays
+
+`replay.drive` replaces a whole session. A document's `replays` rows instead
+declare owned document `rows`, stable `bodies`, input `seats` (principals), a
+separate Int `control` row, `durationTicks`, and an ordered `inputs` program.
+Each input names a relative tick, its actor, and an atomic list of numeric
+row/key/value writes. The normal grant-checked mutation door applies it; world
+rules still decide what it means. No feature vocabulary enters the engine.
+
+The control row declares `request`, `status`, `cursor`, and `completed`.
+Requests are consumed at the next input boundary: 4 captures a fresh start once,
+1 drives (deriving a tape on the first completed run), and 2 or 3 cancels and
+restores that start. Status is 0 idle, 1 recording, 2 replaying, 3 recorded,
+4 MATCH, or -1 MISMATCH/refused. A cancellation discards an incomplete recording.
+The owner authors idle detection, hold time, repetition and cancellation in
+ordinary rules outside the replay scope.
+
+`replay.scope [name [capture|drive|cancel|reset]]` is operator-only. Its requests
+also enter the normal mutation pipeline, so whole-session tapes capture them.
+`WorldReplayTape.RequestScope` submits these through the existing loopback
+transport; `EnqueueMutation` alone bypasses the full tape's submission tap.
+The authored program deliberately uses that internal queue, so a whole-session
+drive derives those inputs once instead of injecting a second taped copy.
+Read-back includes the start, recorded tail and live scope hashes. The first
+divergent tick is narrated with expected and actual hashes and remains a failed
+verdict even if later inputs converge again. A mismatch never updates the
+recording's expectations.
+
+`WorldScopedReplayRuntime` records accepted scoped cell mutations and batches,
+plus admitted intents and ordinary pose, press, segment, stop and impulse
+commands addressed to owned bodies. Route/carry/transfer operations require a
+wider authority boundary. Replay uses the same doors and live grants. It leaves
+unrelated rows, bodies, routes, keys and the world's clock running.
+`ArenaScopeSnapshot` retains storage columns, including presence, order and
+ring/draw cursors, in the same arena. It rebinds captured column addresses to
+the selected rows when unrelated row growth moves storage; selected row capacities
+must still agree. Field, vector, timed and pool rows are
+refused. The derived start and tape ride `WorldServerCheckpoint`; their rolling
+input/hash digests and cursors ride the authoritative hash. There is no binary
+scope tape or hash ledger to commit. A rebuild drops the derived tape.
+
+The live example is [the chess table](../../../../worlds/debug/chess.md), with
+positive, cancellation, and deliberately diverged scenarios in `chess-tests.puck`.
+
+## Whole-session format and development version
 
 - Extension `.puckreplay`, stored under the tape's injected `WorldStateRoot`, in `Replays`
   (so `--state-dir` isolates replays too).

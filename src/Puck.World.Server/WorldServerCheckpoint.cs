@@ -58,5 +58,6 @@ public sealed record WorldServerCheckpoint(
     ulong? MusicDirectorLastEmbellishmentTick,
     IReadOnlyList<WorldDecisionCheckpoint> Decisions,
     IReadOnlyList<WorldMachineBindingEntry> MachineBindings,
-    ArenaUndoSnapshot? Undo = null
+    ArenaUndoSnapshot? Undo = null,
+    IReadOnlyList<WorldScopedReplayCheckpoint>? ScopedReplays = null
 );

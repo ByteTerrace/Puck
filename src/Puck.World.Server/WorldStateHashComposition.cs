@@ -14,7 +14,7 @@ public enum WorldStateHashScope : byte {
     /// <summary>The store's own contents, the rows its host owns, and the topologies they are declared over.</summary>
     World,
     /// <summary><see cref="World"/> plus poses, rule latches, group progress, body/identity action state, every body's
-    /// simulation continuation, navigation, flock perception, and search progress.</summary>
+    /// simulation continuation, navigation, flock perception, search progress, and scoped replay continuations.</summary>
     Authoritative,
 }
 /// <summary>One named component of the world hash composition. A scope is an ordered list of these and nothing
@@ -61,6 +61,8 @@ public enum WorldStateHashComponent : byte {
     Flock,
     /// <summary>Every search job's progress.</summary>
     Search,
+    /// <summary>The scoped tapes' captured starts, accepted inputs, recorded hashes and playback cursors.</summary>
+    ScopedReplays,
 }
 /// <summary>Composes the world's state hash from named components in one declared order.</summary>
 /// <remarks>
@@ -91,6 +93,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.Navigation,
         WorldStateHashComponent.Flock,
         WorldStateHashComponent.Search,
+        WorldStateHashComponent.ScopedReplays,
     ];
     private static readonly WorldStateHashComponent[] PoseOrder = [
         WorldStateHashComponent.PopulationPose,
@@ -139,6 +142,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.RuleGroups => "Puck.State.Rules.RuleGroupState",
         WorldStateHashComponent.RuleLatch => "Puck.State.Rules.RuleLatch",
         WorldStateHashComponent.Search => "Puck.State.ArenaSearch",
+        WorldStateHashComponent.ScopedReplays => "Puck.World.Server.WorldScopedReplayRuntime",
         WorldStateHashComponent.Seed => "Puck.World.Server.WorldStateHashComposition",
         WorldStateHashComponent.Tick => "Puck.World.Server.WorldServer",
         WorldStateHashComponent.Topologies => "Puck.World.Server.WorldStateHashComposition",
@@ -184,6 +188,7 @@ public static partial class WorldStateHashComposition {
         server: server,
         tick: tick
     );
+
     // One single-component order per authoritative component, so a per-component read allocates no order per call.
     private static readonly WorldStateHashComponent[][] AuthoritativeSingles = [.. AuthoritativeOrder.Select(selector: static component => new[] { component })];
 
@@ -309,11 +314,12 @@ public static partial class WorldStateHashComposition {
 
         hash.Add(value: WorldReplaySnapshot.HashState(population: server.Population));
 
-        for (var rowOrdinal = 0; rowOrdinal < arena.Rows.Count; rowOrdinal++) {
+        for (var rowOrdinal = 0; (rowOrdinal < arena.Rows.Count); rowOrdinal++) {
             var row = arena.Rows[rowOrdinal];
             var cursor = 0;
-            while (arena.TryNextCell(rowOrdinal, ref cursor, out var key)) {
-                if (!arena.TryReadLive(rowOrdinal: rowOrdinal, key: key, time: in time, value: out var value)) { continue; }
+
+            while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+                if (!arena.TryReadLive(key: key, rowOrdinal: rowOrdinal, time: in time, value: out var value)) { continue; }
                 hash.Add(value: (value.Kind switch {
                     CellKind.Bool => (value.AsBool
                         ? 1L

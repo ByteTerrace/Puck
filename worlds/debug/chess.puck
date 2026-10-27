@@ -14,7 +14,9 @@ bodies {
 
 // The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
-grants: map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" })
+grants: concat(map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
+  [{ capability: Edit, grantee: "seat1", subject: "state:chessInput" }]
+)
 
 // The table's placement, its creation's floor 0.5 m under its origin on level 2's floor (y 9.05), and the ticks the
 // physics must stay at rest before an arrangement is judged (0.3 s at the debug world's 30 Hz). The rigid solver's own
@@ -22,6 +24,9 @@ grants: map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject
 // a piece that is touched, knocked or dropped beside another settling.
 let chessTable = [56.5, 8.55, 22.6]
 let chessSettleTicks = 9
+let chessDemoIdleSeconds = 60
+let chessDemoHoldSeconds = 12
+let chessDemoPlyTicks = 90
 
 let pieceTypes = ["pawn", "knight", "bishop", "rook", "queen", "king"]
 let pieceLooks = concat(
@@ -1042,6 +1047,7 @@ rule "chess-ai-enable" {
   mode: Level
   aiEnabled = (
     (aiSide == turn) and
+    chessDemo.playing == 0 and
     (physics(quiescent) == 1) and
     (settleHold == chessSettleTicks) and
     (gameStarted == 1) and
@@ -1065,6 +1071,24 @@ rule "chess-ai-request" {
   ai.to = aiBest.to
   ai.mover = pieceCode[$each]
   ai.pending = 1
+}
+
+// A numeric move mailbox is the console's and replay's real move door. It joins the seated player's apply path:
+// captures, castling and promotion are placed by chess-ai-relocate, then the ordinary settled-board judge decides.
+rule "chess-input-move" {
+  when (chessInput.request == 1 and
+    chessInput.from == pieceCell[$each] and
+    (pieceCode[$each] * (1 - 2 * turn)) > 0 and
+    ai.pending == 0 and
+    settleHold == chessSettleTicks)
+  mode: Level
+  forEach: pieceCode
+  ai.from = chessInput.from
+  ai.to = chessInput.to
+  ai.mover = pieceCode[$each]
+  ai.pending = 1
+  chessInput.request = 0
+  chessInput.accepted += 1
 }
 
 rule "chess-ai-relocate" {
@@ -1515,6 +1539,39 @@ state {
   ]
 
   world {
+    table chessInput {
+      from = -1
+      to = -1
+      request = 0
+      accepted = 0
+    }
+    table chessDemo {
+      enabled = 1
+      ready = 0
+      playing = 0
+      near = 0
+      lastTurn = 0
+      idleDue = 0
+      holdDue = 0
+      loops = 0
+      matches = 0
+      cancelled = 0
+      // The live debug world's authored 30 Hz, in seconds at the authoring boundary.
+      idleTicks = chessDemoIdleSeconds * 30
+      holdTicks = chessDemoHoldSeconds * 30
+    }
+    table chessTape {
+      request = 0
+      status = 0
+      cursor = 0
+      completed = 0
+    }
+    table chessDemoInk {
+      recorded = "#000000"
+      match = "#000000"
+      mismatch = "#000000"
+      result = "#000000"
+    }
     row {
       capacity: 64
       domain: cellsOf(topology: chessBoard)
@@ -1737,3 +1794,257 @@ state {
     slot boardCollisions = 0 bounds(0..64)
   }
 }
+
+// ---- The idle historical demonstration ---------------------------------------------------------------
+// Deep Blue (White) - Garry Kasparov, New York, 11 May 1997, game 6, 1-0.
+// chess.md cites the public score. The source authors inputs, never boards or expected hashes.
+// The first idle run derives the tape through the live move door; later loops compare against that recording.
+replays [
+  {
+    name: "chess-demo"
+    control: chessTape
+    rows [
+      board, lastLegal, plan, ai, aiEnabled, aiRevision, aiBest, aiBefore,
+      pieceOrdinal, pieceCode, pieceCell, play, playBefore, playBeforeCode,
+      turn, verdict, illegalCount, settleHold, gameStarted, move,
+      promotionPending, enPassantTarget, inCheck, previousInCheck,
+      boardHistory0, boardHistory1, boardHistory2, boardHistory3, boardHistoryRights,
+      historyAges, enPassantProbe, enPassantProbeCheck, repetitionEnPassant,
+      historyPending, historyReset, historyLength, halfmoveClock, repetitionCount,
+      shapeLegal, castleLegal, castleRights, castleTransitAttacked,
+      boardMismatch, boardChanged, boardCollisions, chessInput
+    ]
+    bodies: range(8, 33)
+    seats ["seat1"]
+    durationTicks: 37 * chessDemoPlyTicks
+    inputs: map([
+      [11, 27],
+      [53, 45],
+      [12, 28],
+      [52, 36],
+      [6, 21],
+      [36, 27],
+      [21, 27],
+      [62, 52],
+      [27, 33],
+      [57, 42],
+      [2, 20],
+      [51, 43],
+      [1, 18],
+      [48, 40],
+      [33, 43],
+      [60, 51],
+      [3, 1],
+      [50, 43],
+      [20, 41],
+      [59, 60],
+      [5, 26],
+      [54, 38],
+      [15, 31],
+      [61, 54],
+      [2, 3],
+      [42, 36],
+      [26, 17],
+      [60, 61],
+      [31, 38],
+      [45, 38],
+      [4, 20],
+      [54, 45],
+      [41, 34],
+      [43, 34],
+      [3, 51],
+      [58, 51],
+      [13, 29]
+    ], (move, i) => {
+      tick: i * chessDemoPlyTicks
+      principal: "seat1"
+      cells [
+        { row: chessInput, key: from, value: move[0] }
+        { row: chessInput, key: to, value: move[1] }
+        { row: chessInput, key: request, value: 1 }
+      ]
+    })
+  }
+]
+
+rule "chess-demo-fresh-start" {
+  when chessDemo.ready == 0 and gameStarted == 1 and settleHold == chessSettleTicks
+  mode: Level
+  chessTape.request = 4
+  chessDemo.ready = 1
+  chessDemo.idleDue = $tick + chessDemo.idleTicks
+}
+
+rule "chess-demo-near-reset" {
+  mode: Level
+  chessDemo.near = 0
+}
+for seat in range(0, 8) {
+  rule $"chess-demo-near-{seat}" {
+    local dx = bodyPosition(body, seat, x) - 56.5
+    local dy = bodyPosition(body, seat, y) - 9.05
+    local dz = bodyPosition(body, seat, z) - 22.6
+    when (dx * dx + dy * dy + dz * dz) < 9
+    mode: Level
+    chessDemo.near = 1
+  }
+}
+
+rule "chess-demo-engaged" {
+  when board(engaged, board, 1) == 1
+  mode: Level
+  chessDemo.near = 1
+}
+
+rule "chess-demo-idle-reset" {
+  when chessDemo.near == 1 or turn != chessDemo.lastTurn
+  mode: Level
+  chessDemo.idleDue = $tick + chessDemo.idleTicks
+}
+rule "chess-demo-remember-turn" {
+  mode: Level
+  chessDemo.lastTurn = turn
+}
+
+rule "chess-demo-cancel" {
+  when chessDemo.playing == 1 and (chessDemo.near == 1 or chessDemo.enabled == 0)
+  mode: Level
+  chessTape.request = 2
+  chessDemo.playing = 0
+  chessDemo.holdDue = 0
+  chessDemo.cancelled += 1
+  chessDemoInk.recorded = "#000000"
+  chessDemoInk.match = "#000000"
+  chessDemoInk.mismatch = "#000000"
+  chessDemoInk.result = "#000000"
+}
+
+rule "chess-demo-idle-start" {
+  when (chessDemo.ready == 1 and
+    chessDemo.enabled == 1 and
+    chessDemo.playing == 0 and
+    chessDemo.near == 0 and
+    $tick >= chessDemo.idleDue)
+  mode: Level
+  chessTape.request = 1
+  chessDemo.playing = 1
+  chessDemo.holdDue = 0
+}
+
+rule "chess-demo-result" {
+  when chessDemo.playing == 1 and chessTape.status >= 3 and chessDemo.holdDue == 0
+  mode: Level
+  chessDemo.loops += 1
+  chessDemo.holdDue = $tick + chessDemo.holdTicks
+  chessDemoInk.result = "#F2E9D8"
+  if chessTape.status == 4 {
+    chessDemo.matches += 1
+    chessDemoInk.match = "#58D68D"
+  } else {
+    chessDemoInk.recorded = "#F0C674"
+  }
+}
+rule "chess-demo-diverged" {
+  when chessDemo.playing == 1 and chessTape.status == -1 and chessDemo.holdDue == 0
+  mode: Level
+  chessDemo.loops += 1
+  chessDemo.holdDue = $tick + chessDemo.holdTicks
+  chessDemoInk.mismatch = "#FF6655"
+}
+
+rule "chess-demo-loop" {
+  when chessDemo.playing == 1 and chessDemo.holdDue > 0 and $tick >= chessDemo.holdDue
+  mode: Level
+  chessTape.request = 1
+  chessDemo.holdDue = 0
+  chessDemoInk.recorded = "#000000"
+  chessDemoInk.match = "#000000"
+  chessDemoInk.mismatch = "#000000"
+  chessDemoInk.result = "#000000"
+}
+
+// The table's slim display sits beyond Black's back rank, facing White. Each line is a text screen;
+// state-backed ink lights the verdict that actually occurred. No engine screen knows this game's vocabulary.
+screens [
+  {
+    index: 7
+    origin [56.5, 10.55, 23.65]
+    right [-1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.8
+    halfHeight: 0.09
+    halfDepth: 0.01
+    round: 0
+    luminance: 100nit
+    route { engageable: false }
+    source { $type: "text", lines ["DEEP BLUE - KASPAROV", "NEW YORK 1997 - GAME 6"] }
+  }
+  {
+    index: 8
+    origin [56.5, 10.36, 23.65]
+    right [-1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.8
+    halfHeight: 0.055
+    halfDepth: 0.01
+    round: 0
+    luminance: 100nit
+    route { engageable: false }
+    source { $type: "text", lines ["19.c4  1-0  BLACK RESIGNED"], foreground: "state.chessDemoInk.result" }
+  }
+  {
+    index: 9
+    origin [56.5, 10.22, 23.65]
+    right [-1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.8
+    halfHeight: 0.055
+    halfDepth: 0.01
+    round: 0
+    luminance: 100nit
+    route { engageable: false }
+    source { $type: "text", lines ["SCOPE TAPE RECORDED"], foreground: "state.chessDemoInk.recorded" }
+  }
+  {
+    index: 10
+    origin [56.5, 10.08, 23.65]
+    right [-1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.8
+    halfHeight: 0.055
+    halfDepth: 0.01
+    round: 0
+    luminance: 100nit
+    route { engageable: false }
+    source { $type: "text", lines ["SCOPE HASH MATCH"], foreground: "state.chessDemoInk.match" }
+  }
+  {
+    index: 11
+    origin [56.5, 9.94, 23.65]
+    right [-1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.8
+    halfHeight: 0.055
+    halfDepth: 0.01
+    round: 0
+    luminance: 100nit
+    route { engageable: false }
+    source { $type: "text", lines ["SCOPE HASH MISMATCH"], foreground: "state.chessDemoInk.mismatch" }
+  }
+]
+
+commands [
+  {
+    name: "chess.move"
+    help: "Requests a move through the table's real apply and settled-board judge. Cells count 8 * rank + 7 - file from a1."
+    parameters [
+      { name: "from", kind: Integer }
+      { name: "to", kind: Integer }
+    ]
+    lines [
+      "world.state.cell.set chessInput from {from}"
+      "world.state.cell.set chessInput to {to}"
+      "world.state.cell.set chessInput request 1"
+    ]
+  }
+]

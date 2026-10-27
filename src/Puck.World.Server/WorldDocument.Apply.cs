@@ -1246,6 +1246,7 @@ public sealed partial class WorldDocument {
             ? WorldDefinitionValidator.TryValidateLocally(compilation: out compilation, definition: candidate, reason: out reason)
             : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
     }
+
     // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
     // over them, with nothing compiled.
     private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
@@ -1612,6 +1613,7 @@ public sealed partial class WorldDocument {
             return;
         }
 
+        foreach (var scope in Host.ScopedReplays) { scope.Observe(command: command); }
         switch (command) {
             case WorldCommand.SnapPose snap:
                 switch (snap.Mode) {

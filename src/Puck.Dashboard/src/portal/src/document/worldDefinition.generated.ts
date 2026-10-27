@@ -73,6 +73,7 @@ export type WorldDefinition = {
   editor?: WorldEditorDefaults | null;
   timeline?: WorldTimelineSection | null;
   commands?: (WorldConsoleCommand | null)[] | null;
+  replays?: (WorldScopedReplay | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -11219,6 +11220,49 @@ export type WorldScheduleSection = {
    * The sibling worlds this run starts beside the booted one, in declaration order. Empty for a run over one world. Capacity MaxInstances.
    */
   instances?: (WorldScheduleInstance | null)[] | null;
+};
+
+export type WorldScopedReplay = {
+  /**
+   * The scope's identity.
+   */
+  name: string;
+  /**
+   * Complete document rows owned by the scope, including its input mailboxes.
+   */
+  rows: (string | null)[];
+  /**
+   * Stable body ordinals owned by the scope.
+   */
+  bodies: number[];
+  /**
+   * The principals whose addressed inputs this scope records.
+   */
+  seats: Principal[];
+  /**
+   * An Int row with request, status, cursor and completed cells, outside the scope.
+   */
+  control: string;
+  /**
+   * The recorded span, including time for the final input to settle.
+   */
+  durationTicks: number;
+  /**
+   * Inputs, in tick order, applied through the ordinary grant-checked mutation door.
+   */
+  inputs: (WorldScopedReplayInput | null)[];
+};
+
+export type WorldScopedReplayCell = {
+  row: string;
+  key: string;
+  value: number;
+};
+
+export type WorldScopedReplayInput = {
+  tick: number;
+  principal: Principal;
+  cells: (WorldScopedReplayCell | null)[];
 };
 
 export type WorldScreen = {

@@ -19,6 +19,13 @@ Start with [Quick start](#quick-start) to route one key press. Then read
 authority, ordering, and refusal behavior. The [core types](#core-types) table
 provides a map of the API.
 
+For live replay control, `replay.scope [<name> [capture|drive|cancel|reset]]`
+reads or requests an authored scope without replacing the running world.
+It is an operator command; requests enter the ordinary mutation pipeline.
+Whole-session `replay.drive` replaces the session's boot image instead.
+The [state and replay reference](state/worlds.md#hashes-checkpoints-and-replay)
+describes the scope's control cells and hash verdicts.
+
 ## How input becomes a command
 
 There are two public routes to a handler: the fixed-step router and submitted

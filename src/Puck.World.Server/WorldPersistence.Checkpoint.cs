@@ -688,6 +688,7 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
+                ScopedReplays: Host.ScopedReplays.Select(selector: scope => scope.Checkpoint()).ToArray(),
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 Arena: Host.Arena.CaptureSnapshot(),
                 DefinitionJson: definitionJson,
@@ -913,6 +914,12 @@ public sealed partial class WorldPersistence {
         // which the arena restored, so it needs the same catch-up every other admission door gives a freshly minted
         // body.
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
+        foreach (var scope in (server.ScopedReplays ?? [])) {
+            var runtime = (Host.ScopedReplays.SingleOrDefault(predicate: runtime => (runtime.Name == scope.Name))
+                ?? throw new InvalidOperationException(message: "Checkpoint names an undeclared replay scope."));
+
+            runtime.RestoreCheckpoint(checkpoint: scope);
+        }
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership

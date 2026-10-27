@@ -91,7 +91,8 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("sets"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CellSetRow>? SetsRaw = null,
     [property: JsonPropertyName("editor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEditorDefaults? EditorRaw = null,
     [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null,
-    [property: JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null
+    [property: JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null,
+    [property: JsonPropertyName("replays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScopedReplay>? ReplaysRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.definition.v1";
