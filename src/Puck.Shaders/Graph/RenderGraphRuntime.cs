@@ -9,9 +9,10 @@ namespace Puck.Shaders;
 /// to.</summary>
 /// <param name="Version">The consumer graph's external version (<see cref="ShaderPipelineInitialization.External"/>).</param>
 /// <param name="Producer">The instance whose output it binds; the consumer's instance declares a read of it.</param>
-/// <param name="Output">An exported buffer version of the producer, or <see langword="null"/> for its default output.
-/// Selection names the buffer from the scheduled producer frame, including a standing or previous frame.</param>
-public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null);
+/// <param name="Output">An exported image or buffer version of the producer, or null for its default output.
+/// Selection names the resource from the scheduled producer frame, including a standing or previous frame.</param>
+/// <param name="Optional">Whether an absent named image binds the shared stand-in while that optional graph feature is off.</param>
+public readonly record struct RenderGraphRuntimeInput(string Version, string Producer, string? Output = null, bool Optional = false);
 /// <summary>The graph one instance runs, and where its reads land in it.</summary>
 /// <param name="Pipeline">The planned graph with its compiled shader passes. Its default output
 /// (<see cref="ShaderPipelinePlan.DefaultOutput"/>) is what consumers read unless they select an exported buffer.</param>
@@ -215,6 +216,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return null;
         }
     }
+
     /// <summary>Gets the root instance's name: the instance the display shows and captures read by default.</summary>
     public string Root => m_set.Instances[m_root].Name;
     /// <summary>Gets why a capture of the root would not be served by the frame the runtime produces now (see
@@ -350,18 +352,21 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (input.Output is { } selected) {
                 var producerPlan = graphs[producer]?.Pipeline.Plan;
 
-                if ((storage.Declaration.Kind != ShaderPipelineResourceKind.Buffer) ||
-                    ((producerPlan is null) && (set.Instances[producer].Kind != RenderGraphInstanceKind.Graph)) ||
-                    ((producerPlan is not null) && (!producerPlan.Outputs.Contains(value: selected) ||
-                        (producerPlan.FindResource(name: selected)?.Declaration.Kind != ShaderPipelineResourceKind.Buffer)))) {
+                if (((producerPlan is null) && (set.Instances[producer].Kind != RenderGraphInstanceKind.Graph)) ||
+                    (input.Optional && (storage.Declaration.Kind != ShaderPipelineResourceKind.Image)) ||
+                    ((producerPlan is not null) &&
+                    ((!producerPlan.Outputs.Contains(value: selected) && !input.Optional) ||
+                    (producerPlan.Outputs.Contains(value: selected) &&
+                    (producerPlan.FindResource(name: selected)?.Declaration.Kind != storage.Declaration.Kind))))) {
                     refusal = Refuse(RenderGraphRuntimeRefusalCode.InputOutput,
-                        $"Instance '{instance.Name}' binds '{input.Version}' to '{input.Producer}' output '{selected}', which is not an exported buffer version.",
+                        $"Instance '{instance.Name}' binds '{input.Version}' to '{input.Producer}' output '{selected}', which is not an exported {storage.Declaration.Kind} version.",
                         instance.Name, input.Version!, input.Producer!, selected);
                     return false;
                 }
-                publication = PublishedBy(graph: graphs[producer], producer: null, packages: packages, outputName: selected);
+                publication = ((input.Optional && (producerPlan?.FindResource(name: selected) is null)) ? null :
+                    PublishedBy(graph: graphs[producer], producer: null, packages: packages, outputName: selected));
             }
-            var outputKind = ((input.Output is null) ? set.Instances[producer].Output : ShaderPipelineResourceKind.Buffer);
+            var outputKind = ((input.Output is null) ? set.Instances[producer].Output : storage.Declaration.Kind);
 
             if (storage.Declaration.Kind != outputKind) {
                 refusal = Refuse(
@@ -415,6 +420,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 Producer: producer,
                 ProducerName: set.Instances[producer].Name,
                 Output: input.Output,
+                Optional: input.Optional,
                 Version: input.Version!
             );
         }
@@ -969,6 +975,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 readFrame: (schedule.Frame - (binding.PreviousFrame ? 1L : 0L))
             );
 
+            if (binding.Output is { } selectedImage) {
+                output = RecordedAt(frame: frame, producer: binding.Producer).ImageOf(name: selectedImage);
+            }
+
             if (
                 output.Image.IsSameDeviceImage &&
                 Withholds(
@@ -1004,6 +1014,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     image: StandInFor(format: binding.Format),
                     name: binding.Version
                 );
+                if (binding.Optional && (binding.Output is { } optional) &&
+                    (m_graphs[binding.Producer]?.Pipeline.Plan.Outputs.Contains(value: optional) != true)) { continue; }
                 NoteStandIn(
                     frame: frame,
                     index: index,
@@ -1679,11 +1691,26 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     private readonly record struct Published(GpuPixelFormat Format, ulong SizeBytes, bool Borrowed = false, uint? StrideBytes = null);
     // One input resolved at install: the version it binds, the producer whose output it reads, and whether it reads that
     // output's previous frame.
-    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true);
+    private readonly record struct Binding(string Version, int Producer, string ProducerName, ShaderPipelineResourceKind Kind, GpuPixelFormat Format, bool PreviousFrame, string? Output, bool RetainsPublication = true, bool Optional = false);
     // One completed output of an instance: the frame it belongs to, its published image and the layout it is in, its
     // buffer when it is one, whether it was rendered from a tainted input, and what the image stands for when it is not
     // the instance's own (RenderGraphRuntime.Standing.cs).
     private readonly record struct Output(long Frame, Surface Image, GpuImageLayout Layout, IGpuBuffer? Buffer, bool Tainted, Standing StandsFor, ulong? StateTick = null, GpuImagePublication Publication = default, ShaderPipelineRenderNode.BufferOutput[]? Buffers = null, GpuImagePublication BufferPublication = default) {
+        public Output ImageOf(string name) {
+            foreach (var output in (Buffers ?? [])) {
+                if ((output.Name == name) && (output.Image.ImageHandle != 0)) {
+                    var image = output.Image;
+
+                    return this with {
+                        Image = Surface.SameDeviceImage(image.ImageHandle, image.ImageViewHandle, image.Width, image.Height, image.Format),
+                        Layout = image.Layout,
+                        Publication = output.Publication,
+                        StandsFor = Standing.Own,
+                    };
+                }
+            }
+            return this with { Image = default };
+        }
         public IGpuBuffer? BufferOf(string? name, out GpuImagePublication publication) {
             publication = BufferPublication;
             if (name is null) { return Buffer; }

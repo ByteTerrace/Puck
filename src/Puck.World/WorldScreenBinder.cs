@@ -53,6 +53,8 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     public WorldSkyAudition? SkyLayers { get; init; }
     /// <summary>The host's live cel-shading override for nested worlds.</summary>
     public Func<bool?>? ToonOverride { get; init; }
+    /// <summary>The observer's live optical settings, applied only to actual filmed cameras.</summary>
+    public WorldRenderSettings? BloomSettings { get; init; }
 
     // The quiet zone a live screen.source <index> qr uses when the verb names none.
     private const int QrDefaultQuietZoneModules = 4;

@@ -19,7 +19,7 @@ public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
         "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-brick-bake", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
         "sdf-composite", "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission", "sdf-mesh-bake", "sdf-mesh-pyramid",
-        "sdf-glass",
+        "sdf-glass", "sdf-bloom-down", "sdf-bloom-up", "sdf-bloom-apply",
     ];
 
     private static WorkCounterSet Work() =>
@@ -168,7 +168,7 @@ public sealed class SdfKernelSetLawTests {
             oldValue: "#endif // SDF_RENDER_HLSLI"
         );
 
-        Assert.NotEqual(expected: render, actual: withRenderConstant);
+        Assert.NotEqual(actual: withRenderConstant, expected: render);
         Assert.Contains(actualString: render, expectedSubstring: $"#include \"{SdfIsaHlsl.FileName}\"");
         Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: field));
         Assert.NotEqual(

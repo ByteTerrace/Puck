@@ -8,6 +8,7 @@
 // every world built on it inherits the table, and a world with another basis imports it by name.
 render {
   low {
+    bloom: Off
     indirect: Off
     sky: low
     skyFieldScale: 1
@@ -23,6 +24,7 @@ render {
     renderScale: 0.70980394
   }
   medium {
+    bloom: Low
     indirect: Medium
     sky: medium
     skyFieldScale: 1
@@ -38,6 +40,7 @@ render {
     renderScale: 0.8666667
   }
   high {
+    bloom: High
     indirect: High
     sky: high
     skyFieldScale: 1

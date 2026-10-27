@@ -76,7 +76,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 : null);
         }
     }
-
     /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
     /// its tables' build or its views kernel, refused by name, which only a change to what they are built from
@@ -135,6 +134,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         Hold(residency: view.Residency);
 
         try {
+            if (context.Part?.StartsWith(comparisonType: StringComparison.Ordinal, value: "bloom-") == true) {
+                return new SdfBloomRecorder(context: context, groups: groups, owner: this, view: view);
+            }
             if (context.Part == SdfWorldPackage.Resolve) {
                 return new SdfResolveRecorder(context: context, groups: groups, owner: this, view: view);
             }

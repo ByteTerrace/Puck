@@ -13,7 +13,7 @@
 
 // Whether a mode composes the final image: the final image itself and the tier views, which tint it.
 bool sdfDebugPreservesScene(uint mode) {
-    return ((mode == 0u) || (mode == SDF_DEBUG_VIEW_COLLIDERS) || (mode == SDF_DEBUG_VIEW_CONTACTS));
+    return ((mode == 0u) || (mode == SDF_DEBUG_VIEW_COLLIDERS) || (mode == SDF_DEBUG_VIEW_CONTACTS) || (mode == SDF_DEBUG_VIEW_BLOOM));
 }
 bool sdfDebugComposesFinal(uint mode) {
     return (sdfDebugPreservesScene(mode) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH));

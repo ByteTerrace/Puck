@@ -19,7 +19,7 @@ public sealed class WorldRootGraphLawTests {
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
     // The letterbox and tonemap switches a place pass binds, or zero for any other pass.
     private static (uint Letterbox, uint Tonemap) Fields(ShaderPipelinePlannedPass pass) {
-        if (pass.Package?.Package != RenderGraphPackageCatalog.Place) {
+        if (pass.Package?.Package is not (RenderGraphPackageCatalog.Place or RenderGraphPackageCatalog.PlaceBloom)) {
             return (0u, 0u);
         }
 
@@ -37,7 +37,7 @@ public sealed class WorldRootGraphLawTests {
         );
     }
     private static string[] PlaceFields(RenderGraphPlan plan) => [.. plan.Steps
-        .Where(predicate: static step => (step.Package?.Id == RenderGraphPackageCatalog.Place))
+        .Where(predicate: static step => (step.Package?.Id is RenderGraphPackageCatalog.Place or RenderGraphPackageCatalog.PlaceBloom))
         .Select(selector: static step => {
             var (letterbox, tonemap) = Fields(pass: step.Planned);
 
@@ -78,7 +78,7 @@ public sealed class WorldRootGraphLawTests {
 
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place", "main$view$2:place", "ink:place", $"grain:{FilmGrain}"]
+            expected: ["main$view$1:place.bloom", "main$view$2:place.bloom", "ink:place", $"grain:{FilmGrain}"]
         );
         Assert.Equal(
             actual: Assert.IsType<RenderGraphPlan>(@object: filmic.OverlayPlan).Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
@@ -365,7 +365,7 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place", "main$view$2:place", "main$view$3:place", "pane:place"]
+            expected: ["main$view$1:place.bloom", "main$view$2:place.bloom", "main$view$3:place.bloom", "pane:place"]
         );
         Assert.Equal(
             actual: graph.ViewPasses,
@@ -374,7 +374,8 @@ public sealed class WorldRootGraphLawTests {
         // The first view's version is a second version of the first producer, so its base and its source differ.
         Assert.Equal(
             actual: graph.Graphs()[3]!.Inputs.Select(selector: static input => $"{input.Version}<-{input.Producer}"),
-            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3", "pane<-pane"]
+            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3",
+                "main$view$1$bloom<-world", "main$view$2$bloom<-world$2", "main$view$3$bloom<-world$3", "pane<-pane"]
         );
         // Each view's footprint follows its rect frame by frame, so the root states none of its own.
         Assert.Empty(collection: graph.Footprints);

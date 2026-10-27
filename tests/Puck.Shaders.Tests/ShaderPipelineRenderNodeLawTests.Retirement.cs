@@ -227,7 +227,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // The two surfaces published last are images at the frame extent: the fullscreen pass's RGBA8 output image, or the
         // half-float history itself.
         var heldBytes = ((2UL * (Extent * Extent)) * (floatOutput
-            ? 8UL
+            ? 12UL
             : 4UL));
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(

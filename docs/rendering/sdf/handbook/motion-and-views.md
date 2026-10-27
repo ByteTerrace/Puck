@@ -358,7 +358,7 @@ things this frame renders and where each one's pixels land.
 **A screen source** is a program-declared `ScreenSlab` shape's **material**:
 its lit face samples a bound image, drawn from the screen's published mapping
 through the screen's material—untreated by default, filling the face, or through
-a CRT's glass (bezel, scanlines, vignette, glint, bloom) for a screen that opts
+a CRT's glass (bezel, scanlines, vignette, glint) for a screen that opts
 into it—and separately, that same bound image's average color is summed into the
 room as colored light. This
 is about **shading**—what a particular surface in the world *looks like*

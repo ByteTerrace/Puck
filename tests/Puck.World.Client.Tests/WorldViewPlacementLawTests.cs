@@ -91,6 +91,32 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         m_instances.Dispose();
         m_directory.Dispose();
     }
+    [InlineData(0f, .2f, true, true)]
+    [InlineData(.2f, 0f, true, false)]
+    [InlineData(.2f, 0f, false, true)]
+    [Theory]
+    public void TheComposedEndpointsActiveLensSelectsPlacementWithoutTonemapOrSharpen(float seatScatter, float cameraScatter, bool cameraMode, bool placed) {
+        var endpoint = Fixtures.BuildDocument() with {
+            RenderRaw = new WorldRenderDefaults(Bloom: new CameraBloom(.8f)),
+            ViewsRaw = Views with {
+                SeatRigRaw = Views.SeatRig with { Bloom = new CameraBloom(seatScatter) },
+                CameraRig = Views.SeatRig with { Bloom = new CameraBloom(cameraScatter) },
+            },
+        };
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults(Bloom: new CameraBloom(.9f)));
+        var lens = settings.ResolveBloom(endpoint.Render, WorldSeatViewState.ProgramOf(endpoint.Views, cameraMode).Bloom);
+
+        m_host.BeginFrame(views: endpoint.Views, tonemap: WorldTonemap.None, sharpens: false);
+        var declared = m_instances.Instances;
+
+        m_host.PlaceViews(views: [View(new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)) with {
+            Bloom = lens, BloomQuality = BloomQuality.High,
+        }], sharpness: 0f, rendered: static _ => true, panesCover: false);
+        Assert.Equal(placed, m_host.OpticalPlacement);
+        Assert.Same(declared, m_instances.Instances);
+        m_host.BeginFrame(views: endpoint.Views, tonemap: WorldTonemap.None, sharpens: false);
+        Assert.Equal(placed, m_host.Synthesized!.Blooms);
+    }
     [Fact]
     public void EveryPlacedViewsFootprintIsAddedWhetherOrNotItIsShown() {
         var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
@@ -221,7 +247,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
     [Fact]
     public void AMattedViewShowsOnlyItsMatteOfItsOutputOverTheFill() {
         var matte = new NormalizedRect(Height: 0.8f, Width: 0.75f, X: 0.125f, Y: 0.1f);
-        var fill = new Vector4(x: 0.1f, y: 0.2f, z: 0.3f, w: 1f);
+        var fill = new Vector4(w: 1f, x: 0.1f, y: 0.2f, z: 0.3f);
 
         m_host.PlaceViews(
             letterboxColor: fill,
@@ -234,7 +260,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         Assert.Equal(
             actual: PlacementOf(view: 0),
-            expected: new RenderGraphPlacement(Crop: new Vector4(x: 0.125f, y: 0.1f, z: 0.75f, w: 0.8f), Fidelity: 1f, Height: matte.Height, Left: matte.X, LetterboxColor: fill, Sharpness: 0f, Shown: true, Top: matte.Y, Uncovered: true, Width: matte.Width)
+            expected: new RenderGraphPlacement(Crop: new Vector4(w: 0.8f, x: 0.125f, y: 0.1f, z: 0.75f), Fidelity: 1f, Height: matte.Height, Left: matte.X, LetterboxColor: fill, Sharpness: 0f, Shown: true, Top: matte.Y, Uncovered: true, Width: matte.Width)
         );
         Assert.Equal(
             actual: WorldFootprints()[WorldRootGraph.ProducerOf(view: 0)],

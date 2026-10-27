@@ -7,6 +7,7 @@ namespace Puck.World;
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
         ValidateToon(definition.Render.Toon, errors);
+        ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
         ValidateIndirect(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
         RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
@@ -47,14 +48,20 @@ public static partial class WorldDefinitionValidator {
         RequireRange(toon.SpecularSize, .001f, .25f, "render.toon.specularSize", errors);
         RequireRange(toon.Exposure, -4f, 4f, "render.toon.exposure", errors);
         RequireRange(toon.Shoulder, 0f, 2f, "render.toon.shoulder", errors);
-        Color(toon.ShadowTint, "shadowTint");
-        Color(toon.OutlineTint, "outlineTint");
+        Color(color: toon.ShadowTint, name: "shadowTint");
+        Color(color: toon.OutlineTint, name: "outlineTint");
         void Color(DocumentVector3? color, string name) {
             if (color is not { } value) { return; }
             RequireRange(value.X, 0f, 1f, $"render.toon.{name}[0]", errors);
             RequireRange(value.Y, 0f, 1f, $"render.toon.{name}[1]", errors);
             RequireRange(value.Z, 0f, 1f, $"render.toon.{name}[2]", errors);
         }
+    }
+    private static void ValidateBloom(Puck.Hosting.CameraBloom? bloom, string path, List<string> errors) {
+        if (bloom is not { } value) { return; }
+        RequireRange(value.Scatter, 0f, 1f, (path + ".scatter"), errors);
+        RequireRange(value.Radius, .001f, 1f, (path + ".radius"), errors);
+        RequireRange(value.Cutoff, 0f, 65504f, (path + ".cutoff"), errors);
     }
     private static void ValidateSkyFieldScale(float value, string path, List<string> errors) {
         if (value is not (.5f or 1f)) { errors.Add(item: $"{path} must be 1 or 0.5."); }

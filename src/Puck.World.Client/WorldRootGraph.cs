@@ -42,7 +42,7 @@ public sealed class WorldRootGraph {
     // draws over (a comparison turned on or off) rebinds its input and builds nothing.
     private readonly CompiledShaderPipeline? m_overlayPipeline;
 
-    private WorldRootGraph(RenderGraphPlan? plan, RenderGraphPlan? overlay, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap, bool sharpens) {
+    private WorldRootGraph(RenderGraphPlan? plan, RenderGraphPlan? overlay, IReadOnlyList<WorldViewPostPass> post, IReadOnlyList<string> panes, int views, WorldTonemap tonemap, bool sharpens, bool blooms) {
         Plan = plan;
         OverlayPlan = overlay;
         m_overlayPipeline = ((overlay is null)
@@ -55,8 +55,9 @@ public sealed class WorldRootGraph {
         Post = post;
         Tonemap = tonemap;
         Sharpens = sharpens;
+        Blooms = blooms;
         Views = views;
-        ViewPasses = (PlacesViews(sharpens: sharpens, tonemap: tonemap, views: views)
+        ViewPasses = ((blooms || PlacesViews(sharpens: sharpens, tonemap: tonemap, views: views))
             ? [.. Enumerable.Range(count: views, start: 1).Select(selector: ViewPass)]
             : []);
 
@@ -140,6 +141,8 @@ public sealed class WorldRootGraph {
     /// <summary>Gets whether a temporally resolved view sharpens: its place pass applies the contrast-adaptive sharpen at
     /// the rect's own extent, so the root places even a lone view.</summary>
     public bool Sharpens { get; }
+    /// <summary>Whether optical endpoints require placement even without a display curve or sharpening.</summary>
+    public bool Blooms { get; }
     /// <summary>Gets the name of the instance holding the scene, the world image before the overlay: the root graph
     /// whenever there is one, which there always is with more than one view, else the world producer.</summary>
     public string Scene => ((Plan is null)
@@ -162,13 +165,14 @@ public sealed class WorldRootGraph {
     /// with a sharpen, the root places each.</param>
     /// <param name="tonemap">The document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
     /// <param name="sharpens">Whether a temporally resolved view sharpens (<see cref="Sharpens"/>).</param>
+    /// <param name="blooms">Whether an optical endpoint asks for scatter.</param>
     /// <returns>The graph.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="packages"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="views"/> is below one.</exception>
     /// <exception cref="WorldRootGraphRefusedException">The graph compiler refused the synthesized graph, such as an
     /// row's config that does not bind against its package's schema; the message names the row and the compiler's
     /// code.</exception>
-    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1, WorldTonemap? tonemap = null, bool sharpens = false) {
+    public static WorldRootGraph Compose(IReadOnlyList<WorldViewPostPass>? post, bool overlay, RenderGraphPackageCatalog packages, IReadOnlyList<string>? panes = null, int views = 1, WorldTonemap? tonemap = null, bool sharpens = false, bool blooms = false) {
         ArgumentNullException.ThrowIfNull(argument: packages);
         ArgumentOutOfRangeException.ThrowIfLessThan(
             other: 1,
@@ -178,7 +182,7 @@ public sealed class WorldRootGraph {
         var entries = (post ?? []);
         var placed = (panes ?? []);
         var curve = (tonemap ?? WorldTonemap.None);
-        var viewCount = (PlacesViews(sharpens: sharpens, tonemap: curve, views: views)
+        var viewCount = ((blooms || PlacesViews(sharpens: sharpens, tonemap: curve, views: views))
             ? views
             : 0);
         var passCount = ((viewCount + placed.Count) + entries.Count);
@@ -188,6 +192,7 @@ public sealed class WorldRootGraph {
 
         if (passCount == 0) {
             return new WorldRootGraph(
+                blooms: blooms,
                 overlay: overlayPlan,
                 panes: placed,
                 plan: null,
@@ -228,6 +233,7 @@ public sealed class WorldRootGraph {
                         initialization: ShaderPipelineInitialization.External,
                     name: view
                 ));
+                resources.Add(item: Image(initialization: ShaderPipelineInitialization.External, name: (view + "$bloom")));
                 passes.Add(item: new RenderGraphPackagePass(
                     Config: ViewConfig(
                         first: (index == 0),
@@ -236,10 +242,11 @@ public sealed class WorldRootGraph {
                     Inputs: [
                         new ResourceReference(Name: input),
                         new ResourceReference(Name: view),
+                        new ResourceReference(Name: (view + "$bloom")),
                     ],
                     Name: view,
                     Outputs: [new ResourceReference(Name: output)],
-                    Package: RenderGraphPackageCatalog.Place
+                    Package: RenderGraphPackageCatalog.PlaceBloom
                 ));
             } else if ((index - viewCount) < placed.Count) {
                 var pane = placed[(index - viewCount)];
@@ -297,6 +304,7 @@ public sealed class WorldRootGraph {
         }
 
         return new WorldRootGraph(
+            blooms: blooms,
             overlay: overlayPlan,
             panes: placed,
             plan: plan,
@@ -424,6 +432,8 @@ public sealed class WorldRootGraph {
                         Producer: ProducerOf(view: index),
                         Version: view
                     )),
+                    .. ViewPasses.Select(selector: static (view, index) => new RenderGraphRuntimeInput(
+                        Producer: ProducerOf(view: index), Version: (view + "$bloom"), Output: SdfWorldPackage.Bloom, Optional: true)),
                     .. Panes.Select(selector: static pane => new RenderGraphRuntimeInput(
                         Producer: pane,
                         Version: pane

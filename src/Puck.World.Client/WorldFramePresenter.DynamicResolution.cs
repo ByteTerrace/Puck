@@ -53,6 +53,7 @@ public sealed partial class WorldFramePresenter {
             ResolvedRenderScale = scale,
             UpscaleSharpness = m_settings.UpscaleSharpness,
             Quality = view.Quality with { SkyFieldScale = m_settings.SkyFieldScale },
+            BloomQuality = m_settings.BloomQualityOf(view: name),
         };
     }
 }

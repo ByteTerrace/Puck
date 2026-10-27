@@ -156,6 +156,7 @@ public static class WorldRenderRoot {
             factory: new PlacePackage(placements: host),
             package: RenderGraphPackageCatalog.Place
         );
+        packages.Register(factory: new PlacePackage(placements: host), package: RenderGraphPackageCatalog.PlaceBloom);
 
         // Every post-process package the catalog offers, not only the ones the booted views.post rows run: a live views.post
         // edit may name any of them, and a factory reads its stages only when a pass builds.
@@ -250,6 +251,7 @@ public static class WorldRenderRoot {
         host.ShowsDebugView = () => !DebugViewModes.PreservesScene(mode: residency.DebugMode);
         host.Attach(
             compose: (panes, views, post, tonemap, sharpens) => WorldRootGraph.Compose(
+                blooms: host.OpticalPlacement,
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
@@ -305,14 +307,14 @@ public static class WorldRenderRoot {
                 // The companions are made again only for another overlay node or scene, never for each frame.
                 if (
                     overlaid &&
-                    host.Synthesized is { } synthesizedRoot &&
-                    runtime.NodeOf(WorldRootGraph.OverlayInstance) is { } captureNode &&
+                    (host.Synthesized is { } synthesizedRoot) &&
+                    (runtime.NodeOf(instance: WorldRootGraph.OverlayInstance) is { } captureNode) &&
                     (!ReferenceEquals(objA: captureNode, objB: companionNode) || !Equals(objA: synthesizedRoot.Scene, objB: companionScene))
                 ) {
                     var shown = synthesizedRoot.Scene;
 
-                    captureNode.CaptureCompanionFactory = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureCompanion(runtime, shown);
-                    captureNode.CaptureCompanionReady = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureReady(runtime, shown);
+                    captureNode.CaptureCompanionFactory = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureCompanion(runtime: runtime, scene: shown);
+                    captureNode.CaptureCompanionReady = () => sp.GetRequiredService<WorldDiagnosticOverlay>().CaptureReady(runtime: runtime, scene: shown);
                     companionNode = captureNode;
                     companionScene = shown;
                 }
@@ -320,11 +322,13 @@ public static class WorldRenderRoot {
             },
             Roots = host.Roots,
         };
+
         node = root;
         var probe = sp.GetRequiredService<WorldRenderProbe>();
 
         probe.Device = device;
         probe.Residency = residency;
+        probe.Views = host.Pickers;
         probe.MeshIrradiance.Retarget(target: residency.MeshIrradiance.Counters);
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();

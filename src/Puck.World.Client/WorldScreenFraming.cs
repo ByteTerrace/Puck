@@ -11,7 +11,10 @@ namespace Puck.World.Client;
 /// <param name="Eye">The eye, in world units.</param>
 /// <param name="Target">The point it looks at, in world units.</param>
 /// <param name="FieldOfViewRadians">The vertical field of view, in radians.</param>
-public readonly record struct WorldHeldView(Vector3 Eye, Vector3 Target, float FieldOfViewRadians);
+public readonly record struct WorldHeldView(Vector3 Eye, Vector3 Target, float FieldOfViewRadians) {
+    /// <summary>The held camera program's authored lens override; absent inherits the presented world's lens.</summary>
+    public Puck.Hosting.CameraBloom? Bloom { get; init; }
+}
 /// <summary>
 /// The engaged view: a seat captured on a screen it engaged pans and zooms its own camera onto the screen's picture (the
 /// face, or a CRT's glass inside its bezel band), square-on, until the picture fills the matte (<see cref="Matte"/>), the rect a desktop

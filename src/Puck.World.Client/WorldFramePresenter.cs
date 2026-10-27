@@ -154,7 +154,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Appends volumes to the frame's, up to the engine's ceiling, indexed so the interface's enumerator is never boxed.
     private void AppendVolumes(IReadOnlyList<SdfVolume> volumes) {
         if ((m_volumes.Count + volumes.Count) > SdfProgramBuilder.MaxVolumes) {
-            throw new InvalidOperationException($"The world frame needs {(m_volumes.Count + volumes.Count)} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
+            throw new InvalidOperationException(message: $"The world frame needs {(m_volumes.Count + volumes.Count)} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
         }
         for (var index = 0; (index < volumes.Count); index++) {
             m_volumes.Add(item: volumes[index]);
@@ -479,7 +479,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
             var facets = WorldPrototypeFacets.Derive(
                 definition: definition,
-                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
+                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
                 derivedFaceScreens: definition.Authoring.DerivedFaceScreens
             );
 
@@ -536,7 +536,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
         var facets = WorldPrototypeFacets.Derive(
             definition: m_client.Definition,
-            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(m_client.Definition),
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: m_client.Definition),
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -594,7 +594,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the seat's bound body or, while possessing, the routed body — so the chase camera tracks the pose the avatar
     // is drawn at and the orbit pivot rides it live. The audio listener follows by construction: the
     // WorldSeatCameraPose this camera fills is the listener policy's per-seat candidate.
-    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
+    private CameraSnapshot ResolveCamera(int slot, NormalizedRect region, uint width, uint height, float deltaSeconds, float interpolationAlpha, out Vector3 eye, out Vector3 target, out CameraBloom bloom, WorldScreen? engaged = null, WorldHeldView? held = null, float share = 1f, Vector2 offset = default) {
         var route = m_continuum.Route(slot: slot);
         var views = route.Endpoint.Definition.Views;
         // A seat presented elsewhere frames in the coordinates of the world it is presented in, where the boot world's
@@ -656,9 +656,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // pipeline as chase/orbit, against this SAME anchor: the anchor above already resolved to the seat's
         // PERCEIVED body, which possession has already retargeted onto the camera body by the time this runs, so no
         // second anchor resolve is needed here.
-        var rig = ((m_seatBindings.IsCameraModeActive(slot: slot) && (views.CameraRig is { } cameraRig))
+        var cameraMode = m_seatBindings.IsCameraModeActive(slot: slot);
+        var program = WorldSeatViewState.ProgramOf(cameraMode: cameraMode, views: views);
+
+        bloom = m_settings.ResolveBloom(definition.Render, ((held is { } heldCamera) ? heldCamera.Bloom : program.Bloom), m_settings.BloomScale(seat: slot));
+        var rig = ((cameraMode && (views.CameraRig is not null))
             ? ResolveCameraModeRig(
-                cameraRig: cameraRig,
+                cameraRig: program,
                 definition: definition,
                 mirror: state,
                 slot: slot
@@ -750,7 +754,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The chase boom eases only while the seat frames through its own chase rig — a camera control application
         // resolves through views.cameraRig, whose framing is the possessed body's own pose and must not lag it. The
         // response is the one the program's dynamics op just reported; None passes eye/target through bit for bit.
-        var viewForward = Vector3.Normalize((target - eye));
+        var viewForward = Vector3.Normalize(value: (target - eye));
 
         view.Follow(
             dynamics: chase.Dynamics,
@@ -948,7 +952,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             Eye: eye,
             FieldOfViewRadians: fieldOfView,
             Target: target
-        );
+        ) { Bloom = camera.Rig.Bloom };
     }
     private static WorldScreenFraming[] NewScreenFraming() {
         var framing = new WorldScreenFraming[PlayerRoster.MaxSlots];
@@ -1161,8 +1165,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
     // group, or null = world), motion, aim, lens, and group spread. Returns
     // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
-    private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
+    private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera, out CameraBloom bloom) {
         camera = default;
+        bloom = default;
 
         WorldCamera? found = null;
         var cameras = m_client.Definition.Cameras;
@@ -1184,6 +1189,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         if (found is not { } cameraRow) {
             return false;
         }
+
+        bloom = m_settings.ResolveBloom(m_client.Definition.Render, cameraRow.Rig.Bloom);
 
         var (basePosition, baseOrientation, spread) = ResolveCameraAnchorPose(
             deltaSeconds: deltaSeconds,
@@ -1769,6 +1776,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         // A new pose is a new record, so every operator move cuts the temporal history like a teleport.
                         CutRevision = ViewCut(index: m_views.Count, source: pose, revision: 0),
+                        Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
+                        BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,
                         ResolvedRenderScale = transitionScale,
@@ -1787,6 +1796,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (composed.Camera is { } cameraName) {
                 // Named cameras share the live resolution setting with seat cameras, including a layout transition's dip.
                 if (ResolveNamedCamera(
+                    bloom: out var namedBloom,
                     camera: out var namedCamera,
                     deltaSeconds: deltaSeconds,
                     height: height,
@@ -1799,6 +1809,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Region: region
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
+                        Bloom = namedBloom,
+                        BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,
                         ResolvedRenderScale = transitionScale,
@@ -1864,6 +1876,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 (settled.Index == engaged.Index)
             );
             var camera = ResolveCamera(
+                bloom: out var bloom,
                 deltaSeconds: deltaSeconds,
                 engaged: engaged,
                 eye: out var eye,
@@ -1920,6 +1933,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Elsewhere = (presentedElsewhere is not null),
                 Grid = SeatGrid(slot: slot),
+                Bloom = bloom,
+                BloomQuality = m_settings.BloomQuality,
                 Quality = quality,
                 // A matted view renders at native scale whatever the dynamic resolution's floor, so the picture is never
                 // resampled.
@@ -2038,6 +2053,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 )
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
+                Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
+                BloomQuality = m_settings.BloomQuality,
                 Quality = quality,
                 RenderScale = m_settings.RenderCeiling,
                 ResolvedRenderScale = 1f,

@@ -34,4 +34,10 @@ public enum SdfKernel {
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>
     Resolve,
+    /// <summary>Normalized thirteen-fetch optical downfilter.</summary>
+    BloomDown,
+    /// <summary>Normalized tent optical upfilter.</summary>
+    BloomUp,
+    /// <summary>Optical combine for filmed cameras without root placement.</summary>
+    BloomApply,
 }

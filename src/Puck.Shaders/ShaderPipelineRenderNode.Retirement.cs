@@ -79,9 +79,15 @@ public sealed partial class ShaderPipelineRenderNode {
             (imageHandle != 0) &&
             (
                 (imageHandle == m_lastSurface.ImageHandle) ||
-                (imageHandle == m_previousSurface.ImageHandle)
+                (imageHandle == m_previousSurface.ImageHandle) ||
+                IsNamedImagePublished(imageHandle: imageHandle)
             )
         );
+    private bool IsNamedImagePublished(nint imageHandle) {
+        foreach (var output in m_publishedBuffers) { if (output.Image.ImageHandle == imageHandle) { return true; } }
+        foreach (var output in m_previousBuffers) { if (output.Image.ImageHandle == imageHandle) { return true; } }
+        return false;
+    }
     // The bytes the replaced objects still own once any held image has been taken out of them, counted from the objects
     // themselves: the same kinds ShaderPipelineRenderNode.Budget.cs counts from the plan.
     private static ulong LiveBytes(RuntimePass[] passes, RuntimeResource[] resources, PreviewPass? preview) {
@@ -343,6 +349,8 @@ public sealed partial class ShaderPipelineRenderNode {
             resources: resources
         );
 
+        foreach (var output in m_publishedBuffers) { Hold(imageHandle: output.Image.ImageHandle, preview: preview, resources: resources); }
+        foreach (var output in m_previousBuffers) { Hold(imageHandle: output.Image.ImageHandle, preview: preview, resources: resources); }
         HoldBuffers(resources: resources);
         // A borrowed allocation stays owned by its package. Keep the old recorder/build that retains that owner
         // while a published frame still names it without an installed retaining owner. Actual displacement then

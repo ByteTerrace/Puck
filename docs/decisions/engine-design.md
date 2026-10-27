@@ -288,7 +288,7 @@ plainly; as built:
   scrim: a player's high-contrast preference (`world.theme contrast high`)
   raises every scrim to a near-opaque backplate.
 - **Screens.** A screen shows its picture as its source made it, filling its
-  authored face; a CRT's bezel, scanlines, grille and bloom are the `Crt` screen
+  authored face; a CRT's bezel, scanlines and grille are the `Crt` screen
   material a row opts into, and a pointer hit maps through that bezel only on
   such a screen. The owner approved the change of look this made to every
   screen that is not a tube.

@@ -83,7 +83,6 @@ public abstract record WorldCameraProgramOp {
     /// <param name="TransitionSeconds">The duration of a complete eased move.</param>
     /// <param name="HideRadius">The head shell radius within which the own stamp is hidden.</param>
     public sealed record FirstPerson(DocumentVector3 EyePoint, BindableScalar Active, float TransitionSeconds = 0.5f, float HideRadius = 0.45f) : WorldCameraProgramOp;
-
     /// <summary>Establishes the CURRENT subject — the pose <see cref="Offset"/>/<see cref="Orbit"/> place the eye
     /// relative to, and <see cref="LookAt"/> aims along the facing of when it names no subject of its own. Also
     /// re-seeds the eye at the resolved subject's own position (the "first person" default before any
@@ -187,7 +186,9 @@ public sealed record WorldCameraSelectCase(long Value, string Program);
 /// <param name="Name">The stable name a <see cref="WorldCameraProgramOp.Blend"/> op selects this program by.</param>
 /// <param name="Version">The instruction-set version.</param>
 /// <param name="Operations">The selected ops, in authored evaluation order.</param>
-public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyList<WorldCameraProgramOp> Operations) {
+/// <param name="Bloom">The camera's optical scatter override; absent inherits the world.</param>
+public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyList<WorldCameraProgramOp> Operations,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null) {
     /// <summary>The supported camera-program instruction-set version.</summary>
     public const string CurrentVersion = "puck.camera.program.v1";
     /// <summary>The largest admitted operation count.</summary>

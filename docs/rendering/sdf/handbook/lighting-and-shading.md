@@ -422,8 +422,7 @@ by default, shown untreated, filling the screen's authored face. A screen whose 
 material (`WorldScreen.Material`, `Crt`; a placement face's `material` the same) draws its picture
 inset in a bezel three hundredths of the face wide (`WorldScreenMappings.CrtGlass`, a warp whose
 inverse maps a hit) through a CRT glass-face model—a soft bezel edge, soft cosine scanlines between the
-source's rows, an aperture-grille stripe tint one triad a source column, optional bloom on the bright
-regions, and (both off by default) a vignette and a fresnel rim glint. The scanlines and the grille fade
+source's rows, an aperture-grille stripe tint one triad a source column, and (both off by default) a vignette and a fresnel rim glint. The scanlines and the grille fade
 out as a source row or column shrinks toward two pixels, so they never alias against the pixel grid; the
 tuned look is a flat square tube, a hint of CRT, not a heavy filter. The face kind reaches the kernels in
 the mapping record's state row (`SdfScreenFace`: an opening, a display or a CRT). A view's screen fidelity

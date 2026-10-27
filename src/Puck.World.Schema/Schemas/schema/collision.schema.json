@@ -72,7 +72,7 @@
       ],
       "properties": {
         "candidateBudget": {
-          "description": "The most box-overlapping candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
+          "description": "The most sweep candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
           "type": "integer",
           "default": 32
         },
