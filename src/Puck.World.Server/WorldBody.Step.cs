@@ -1121,7 +1121,7 @@ public sealed partial class WorldBody {
         var resolved = (Profile?.FixedMoveSpeed ?? m_tuning.Speed.Value);
         var clamped = (m_tuning.Speed.Envelope?.Clamp(value: resolved) ?? resolved);
 
-        return (clamped * m_scale);
+        return ((clamped * m_scale) * m_travelMultiplier);
     }
     // A body's own authored-field answer this tick, or false when the world authors no field or this body matched no
     // local area in an area-only field. True does NOT imply a nonzero vector: Replace can author a zero-G pocket,

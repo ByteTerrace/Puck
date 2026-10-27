@@ -20,7 +20,7 @@ public sealed class WorldSessionFollowLawTests {
     private const long One = 65536L;
     private const int Width = 4;
 
-    private static WorldFieldsSection Fields() => new(
+    private static WorldFieldsSection Fields() => new(Name: "world",
         Lattice: new WorldFieldLatticeDefinition(
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,
@@ -93,7 +93,7 @@ public sealed class WorldSessionFollowLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
-            FieldCells: new[] { new FieldCellDelta(Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Cell: 2, Field: 1, Raw: (One / 2L)) }
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 2, Field: 1, Raw: (One / 2L)) }
         ));
         state = session.FollowState();
 

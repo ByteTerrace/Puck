@@ -505,8 +505,9 @@ C# code can evaluate a set against an arena itself with
 
 - A discrete topology holds at most `TopologyCompilation.MaxCells` (4,096)
   cells, with 1 to 4,096 cells along each axis. A world document declares at
-  most 64 topologies (`TopologyCompilation.MaxTopologies`), and Puck.World
-  allows at most one physical field among them.
+  most 64 topologies (`TopologyCompilation.MaxTopologies`), including multiple
+  named physical regions. Each physical region owns its lattice and reactions;
+  aggregate primer and sampled-surface byte budgets bound their combined allocation.
 - A hex radius is at most 36, derived from the cell ceiling.
 - Masks, `boardShift`, `boardRay`, `boardImage`, and `writeSet` from a mask
   work only on topologies of at most 64 cells. Use `boardCombine` or a declared

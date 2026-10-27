@@ -26694,8 +26694,56 @@
                     "type": "string"
                   },
                   "gain": {
-                    "description": "The feed gain (1 = unity), bounded by MaxLevel \u2014 the one audio gain ceiling the validator enforces everywhere.",
-                    "type": "number"
+                    "description": "The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter.",
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -26919,8 +26967,56 @@
                     "type": "string"
                   },
                   "gain": {
-                    "description": "The feed gain (1 = unity), bounded by MaxLevel \u2014 the one audio gain ceiling the validator enforces everywhere.",
-                    "type": "number"
+                    "description": "The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter.",
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -27025,8 +27121,56 @@
                     "type": "string"
                   },
                   "gain": {
-                    "description": "The feed gain (1 = unity), bounded by MaxLevel \u2014 the one audio gain ceiling the validator enforces everywhere.",
-                    "type": "number"
+                    "description": "The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter.",
+                    "title": "BindableScalar",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -30588,804 +30732,821 @@
       "additionalProperties": false,
       "title": "WorldHudSection"
     },
-    "fields": {
-      "description": "The field lattice declaration \u2014 a presentation peer renders field geometry from the snapshot\u0027s cell deltas and needs the lattice footprint, height scales, and colours to do it.",
+    "fieldRegions": {
+      "description": "The named physical region declarations \u2014 a presentation peer renders field geometry from the snapshot\u0027s cell deltas and needs the lattice footprint, height scales, and colours to do it.",
       "type": [
-        "object",
+        "array",
         "null"
       ],
-      "properties": {
-        "lattice": {
-          "description": "The lattice\u0027s extent, resolution, and step cadence.",
-          "type": "object",
-          "properties": {
-            "origin": {
-              "description": "The minimum corner, world units.",
-              "title": "DocumentVector3",
-              "anyOf": [
-                {
-                  "type": "array",
-                  "items": {
-                    "type": "number"
-                  },
-                  "minItems": 3,
-                  "maxItems": 3
-                },
-                {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                }
-              ]
-            },
-            "cellSize": {
-              "description": "The cubic cell edge, world units.",
-              "type": "number"
-            },
-            "width": {
-              "description": "Cells along \u002BX.",
-              "type": "integer"
-            },
-            "depth": {
-              "description": "Cells along \u002BZ.",
-              "type": "integer"
-            },
-            "layers": {
-              "description": "Cells along \u002BY.",
-              "type": "integer",
-              "default": 1
-            },
-            "stepEveryTicks": {
-              "description": "Simulation ticks between reaction steps.",
-              "type": "integer",
-              "default": 8
-            }
-          },
-          "required": [
-            "origin",
-            "cellSize",
-            "width",
-            "depth"
-          ],
-          "additionalProperties": false,
-          "title": "WorldFieldLatticeDefinition"
-        },
-        "fields": {
-          "description": "The declared fields, in order; a reaction, paint, or render row names them.",
-          "type": "array",
-          "items": {
-            "description": "One field: a scalar per cell clamped to [Min, Max].",
-            "type": [
-              "object",
-              "null"
-            ],
+      "items": {
+        "description": "The runtime lattice composite compiled from the state section (see Compile) \u2014 a lattice of named fixed-point scalar fields over a region of the world (heat, moisture, fuel, \u2026), the per-cell reactions that evolve them, and the paint that seeds them. A field with a HeightScale is geometry: its value raises a solid surface above the lattice origin that bodies stand on and the renderer shows, so a glacier or a forest is field content rather than authored solids. Boot-authored; the live cell values are simulation state beside the population (checkpointed, snapshot-delivered), never document rows.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "lattice": {
+            "description": "The lattice\u0027s extent, resolution, and step cadence.",
+            "type": "object",
             "properties": {
-              "name": {
-                "description": "The field\u0027s name \u2014 unique within the section, dot-free.",
-                "type": "string"
+              "origin": {
+                "description": "The minimum corner, world units.",
+                "title": "DocumentVector3",
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                  }
+                ]
               },
-              "initial": {
-                "description": "The value every cell starts at before paint.",
-                "type": "number",
-                "default": 0
+              "cellSize": {
+                "description": "The cubic cell edge, world units.",
+                "type": "number"
               },
-              "min": {
-                "description": "The least value a cell holds.",
-                "type": "number",
-                "default": 0
+              "width": {
+                "description": "Cells along \u002BX.",
+                "type": "integer"
               },
-              "max": {
-                "description": "The greatest value a cell holds.",
-                "type": "number",
+              "depth": {
+                "description": "Cells along \u002BZ.",
+                "type": "integer"
+              },
+              "layers": {
+                "description": "Cells along \u002BY.",
+                "type": "integer",
                 "default": 1
               },
-              "heightScale": {
-                "description": "World units of solid surface per unit of value above the lattice origin \u2014 0 for a field that is not geometry.",
-                "type": "number",
-                "default": 0
-              },
-              "color": {
-                "description": "The color the field\u0027s surface shades with \u2014 a #RRGGBB literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] Text-cell binding; required when HeightScale is nonzero.",
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "default": null
-              },
-              "medium": {
-                "description": "Whether this field is a fluid medium (see Medium).",
-                "type": "boolean",
-                "default": false
+              "stepEveryTicks": {
+                "description": "Simulation ticks between reaction steps.",
+                "type": "integer",
+                "default": 8
               }
             },
             "required": [
-              "name"
+              "origin",
+              "cellSize",
+              "width",
+              "depth"
             ],
             "additionalProperties": false,
-            "title": "WorldFieldRow"
-          }
-        },
-        "reactions": {
-          "description": "The per-step reactions, applied in document order each lattice step.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "description": "One reaction \u2014 a local rule every cell (or every tagged body) applies each lattice step. Reactions run in document order; Diffuse reads the previous step\u0027s values for the whole field, every other kind reads and writes cells in place, row-major.",
-            "type": [
-              "object",
-              "null"
-            ],
-            "required": [
-              "$type"
-            ],
-            "anyOf": [
-              {
-                "description": "Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground lattice, six in a volume).",
-                "properties": {
-                  "$type": {
-                    "const": "diffuse"
-                  },
-                  "field": {
-                    "description": "The field diffused.",
-                    "type": "string"
-                  },
-                  "rate": {
-                    "description": "The fraction per step, in [0, 1].",
-                    "title": "WorldLatticeScalar"
-                  }
-                },
-                "required": [
-                  "field",
-                  "rate"
-                ],
-                "additionalProperties": false,
-                "title": "WorldReactionDiffuse"
-              },
-              {
-                "description": "Scales each cell toward zero: v -= v\u00B7rate.",
-                "properties": {
-                  "$type": {
-                    "const": "decay"
-                  },
-                  "field": {
-                    "description": "The field decayed.",
-                    "type": "string"
-                  },
-                  "rate": {
-                    "description": "The fraction per step, in [0, 1].",
-                    "title": "WorldLatticeScalar"
-                  }
-                },
-                "required": [
-                  "field",
-                  "rate"
-                ],
-                "additionalProperties": false,
-                "title": "WorldReactionDecay"
-              },
-              {
-                "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
-                "properties": {
-                  "$type": {
-                    "const": "transform"
-                  },
-                  "when": {
-                    "description": "The conditions, all of which must hold.",
-                    "type": "array",
-                    "items": {
-                      "description": "One per-cell condition of a Transform.",
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "properties": {
-                        "field": {
-                          "description": "The field read at the cell.",
-                          "type": "string"
-                        },
-                        "comparison": {
-                          "description": "The comparison.",
-                          "title": "ExpressionComparison",
-                          "type": "string",
-                          "enum": [
-                            "Equal",
-                            "NotEqual",
-                            "Less",
-                            "LessOrEqual",
-                            "Greater",
-                            "GreaterOrEqual"
-                          ]
-                        },
-                        "value": {
-                          "description": "The scalar compared against (literal or state-row reference).",
-                          "title": "WorldLatticeScalar"
-                        }
-                      },
-                      "required": [
-                        "field",
-                        "comparison",
-                        "value"
-                      ],
-                      "additionalProperties": false,
-                      "title": "WorldFieldCondition"
-                    }
-                  },
-                  "then": {
-                    "description": "The writes, applied in order.",
-                    "type": "array",
-                    "items": {
-                      "description": "One per-cell write of a Transform.",
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "properties": {
-                        "field": {
-                          "description": "The field written at the cell.",
-                          "type": "string"
-                        },
-                        "op": {
-                          "description": "Set or add.",
-                          "enum": [
-                            "Set",
-                            "Add"
-                          ],
-                          "title": "WorldFieldWriteOp"
-                        },
-                        "value": {
-                          "description": "The constant written or added; the result clamps to the field\u0027s range.",
-                          "title": "WorldLatticeScalar"
-                        }
-                      },
-                      "required": [
-                        "field",
-                        "op",
-                        "value"
-                      ],
-                      "additionalProperties": false,
-                      "title": "WorldFieldWrite"
-                    }
-                  }
-                },
-                "required": [
-                  "when",
-                  "then"
-                ],
-                "additionalProperties": false,
-                "title": "WorldReactionTransform"
-              },
-              {
-                "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
-                "properties": {
-                  "$type": {
-                    "const": "emit"
-                  },
-                  "tag": {
-                    "description": "The keyed int state row whose nonzero cells name the emitting bodies.",
-                    "type": "string"
-                  },
-                  "field": {
-                    "description": "The field deposited into.",
-                    "type": "string"
-                  },
-                  "amount": {
-                    "description": "The amount per step; the cell clamps to the field\u0027s range.",
-                    "title": "WorldLatticeScalar"
-                  }
-                },
-                "required": [
-                  "tag",
-                  "field",
-                  "amount"
-                ],
-                "additionalProperties": false,
-                "title": "WorldReactionEmit"
-              },
-              {
-                "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
-                "properties": {
-                  "$type": {
-                    "const": "expose"
-                  },
-                  "field": {
-                    "description": "The field sampled at the body.",
-                    "type": "string"
-                  },
-                  "comparison": {
-                    "description": "The comparison.",
-                    "title": "ExpressionComparison",
-                    "type": "string",
-                    "enum": [
-                      "Equal",
-                      "NotEqual",
-                      "Less",
-                      "LessOrEqual",
-                      "Greater",
-                      "GreaterOrEqual"
-                    ]
-                  },
-                  "value": {
-                    "description": "The constant compared against.",
-                    "title": "WorldLatticeScalar"
-                  },
-                  "row": {
-                    "description": "The keyed int state row written, keyed by body index.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "field",
-                  "comparison",
-                  "value",
-                  "row"
-                ],
-                "additionalProperties": false,
-                "title": "WorldReactionExpose"
-              },
-              {
-                "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
-                "properties": {
-                  "$type": {
-                    "const": "flow"
-                  },
-                  "field": {
-                    "description": "The field transported.",
-                    "type": "string"
-                  },
-                  "rate": {
-                    "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1].",
-                    "title": "WorldLatticeScalar"
-                  },
-                  "over": {
-                    "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "default": null
-                  },
-                  "spillRow": {
-                    "description": "The scalar fixed-kind state row an edge cell\u0027s outward share accumulates into each step (a clamped add), or null to treat every lattice edge as a wall.",
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "default": null
-                  }
-                },
-                "required": [
-                  "field",
-                  "rate"
-                ],
-                "additionalProperties": false,
-                "title": "WorldReactionFlow"
-              }
-            ],
-            "title": "WorldReaction"
+            "title": "WorldFieldLatticeDefinition"
           },
-          "default": null
-        },
-        "paint": {
-          "description": "The initial fills, applied in order over the fields\u0027 Initial.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "description": "One initial fill of a lattice row, applied in order over the row\u0027s initial. Every kind decides per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend -- lattice values are simulation state. The Field member is compile-stamped from the carrying row (see Compile) and omitted in the document.",
+          "fields": {
+            "description": "The declared fields, in order; a reaction, paint, or render row names them.",
+            "type": "array",
+            "items": {
+              "description": "One field: a scalar per cell clamped to [Min, Max].",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The field\u0027s name \u2014 unique within the section, dot-free.",
+                  "type": "string"
+                },
+                "initial": {
+                  "description": "The value every cell starts at before paint.",
+                  "type": "number",
+                  "default": 0
+                },
+                "min": {
+                  "description": "The least value a cell holds.",
+                  "type": "number",
+                  "default": 0
+                },
+                "max": {
+                  "description": "The greatest value a cell holds.",
+                  "type": "number",
+                  "default": 1
+                },
+                "heightScale": {
+                  "description": "World units of solid surface per unit of value above the lattice origin \u2014 0 for a field that is not geometry.",
+                  "type": "number",
+                  "default": 0
+                },
+                "color": {
+                  "description": "The color the field\u0027s surface shades with \u2014 a #RRGGBB literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] Text-cell binding; required when HeightScale is nonzero.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "medium": {
+                  "description": "Whether this field is a fluid medium (see Medium).",
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false,
+              "title": "WorldFieldRow"
+            }
+          },
+          "name": {
+            "description": "The stable physical region identity, taken from its topology name.",
+            "type": "string"
+          },
+          "reactions": {
+            "description": "The per-step reactions, applied in document order each lattice step.",
             "type": [
-              "object",
+              "array",
               "null"
             ],
-            "required": [
-              "$type"
-            ],
-            "anyOf": [
-              {
-                "description": "Every cell whose XZ centre lies in the rectangle takes Value.",
-                "properties": {
-                  "$type": {
-                    "const": "rect"
+            "items": {
+              "description": "One reaction \u2014 a local rule every cell (or every tagged body) applies each lattice step. Reactions run in document order; Diffuse reads the previous step\u0027s values for the whole field, every other kind reads and writes cells in place, row-major.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "description": "Moves each cell a fraction of the way toward the mean of its face neighbours (four on a ground lattice, six in a volume).",
+                  "properties": {
+                    "$type": {
+                      "const": "diffuse"
+                    },
+                    "field": {
+                      "description": "The field diffused.",
+                      "type": "string"
+                    },
+                    "rate": {
+                      "description": "The fraction per step, in [0, 1].",
+                      "title": "WorldLatticeScalar"
+                    }
                   },
-                  "value": {
-                    "description": "The value written.",
-                    "type": "number"
-                  },
-                  "minX": {
-                    "description": "The rectangle\u0027s least X, world units.",
-                    "type": "number"
-                  },
-                  "minZ": {
-                    "description": "The rectangle\u0027s least Z, world units.",
-                    "type": "number"
-                  },
-                  "maxX": {
-                    "description": "The rectangle\u0027s greatest X, world units.",
-                    "type": "number"
-                  },
-                  "maxZ": {
-                    "description": "The rectangle\u0027s greatest Z, world units.",
-                    "type": "number"
-                  },
-                  "field": {
-                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
-                    "type": "string"
-                  }
+                  "required": [
+                    "field",
+                    "rate"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldReactionDiffuse"
                 },
-                "required": [
-                  "value",
-                  "minX",
-                  "minZ",
-                  "maxX",
-                  "maxZ"
-                ],
-                "additionalProperties": false,
-                "title": "WorldLatticeFillRect"
-              },
-              {
-                "description": "Patchy fill: fixed-point hash-lattice fBm over the CELL INDEX decides each cell. Where the octave sum n (in [0, 1]) reaches Threshold, the cell takes Value \u00B7 (n \u2212 Threshold) / (1 \u2212 Threshold) -- a smooth patch interior rising to the full value. The hash folds the fill\u0027s Seed with the world seed (the generation section\u0027s reroll lever), and every blend runs in Q48.16, so two boots of one document at one seed are bit-identical.",
-                "properties": {
-                  "$type": {
-                    "const": "noise"
+                {
+                  "description": "Scales each cell toward zero: v -= v\u00B7rate.",
+                  "properties": {
+                    "$type": {
+                      "const": "decay"
+                    },
+                    "field": {
+                      "description": "The field decayed.",
+                      "type": "string"
+                    },
+                    "rate": {
+                      "description": "The fraction per step, in [0, 1].",
+                      "title": "WorldLatticeScalar"
+                    }
                   },
-                  "value": {
-                    "description": "The peak value written inside a patch.",
-                    "type": "number"
-                  },
-                  "frequency": {
-                    "description": "Lattice cells per noise cell reciprocal -- noise-cell edge in CELLS (e.g. 8 = one noise cell spans 8 lattice cells). At least 1.",
-                    "type": "integer"
-                  },
-                  "threshold": {
-                    "description": "The patch admission level in [0, 1); higher = sparser patches.",
-                    "type": "number",
-                    "default": 0.5
-                  },
-                  "octaves": {
-                    "description": "Octave count, 1..4.",
-                    "type": "integer",
-                    "default": 3
-                  },
-                  "seed": {
-                    "description": "The hash seed, folded with the world seed.",
-                    "type": "integer",
-                    "default": 0
-                  },
-                  "field": {
-                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
-                    "type": "string"
-                  }
+                  "required": [
+                    "field",
+                    "rate"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldReactionDecay"
                 },
-                "required": [
-                  "value",
-                  "frequency"
-                ],
-                "additionalProperties": false,
-                "title": "WorldLatticeFillNoise"
-              },
-              {
-                "description": "Scattered discs: one jittered point per Spacing-cell block (integer-hash offset), and every cell within Radius cells of a point takes Value -- the CPU boot-fill sibling of the renderer\u0027s CellJitter scatter.",
-                "properties": {
-                  "$type": {
-                    "const": "scatter"
-                  },
-                  "value": {
-                    "description": "The value written inside each disc.",
-                    "type": "number"
-                  },
-                  "spacing": {
-                    "description": "The scatter block edge in CELLS (at least 2).",
-                    "type": "integer"
-                  },
-                  "radius": {
-                    "description": "The disc radius in CELLS (at least 1; must leave the disc inside its block\u0027s jitter envelope, refused otherwise).",
-                    "type": "integer",
-                    "default": 1
-                  },
-                  "seed": {
-                    "description": "The hash seed, folded with the world seed.",
-                    "type": "integer",
-                    "default": 0
-                  },
-                  "field": {
-                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "value",
-                  "spacing"
-                ],
-                "additionalProperties": false,
-                "title": "WorldLatticeFillScatter"
-              },
-              {
-                "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
-                "properties": {
-                  "$type": {
-                    "const": "draw"
-                  },
-                  "source": {
-                    "description": "A declared generators row, or null when Generator is inlined.",
-                    "default": null,
-                    "title": "CellName",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "generator": {
-                    "description": "An inline numeric source, or null when Source is named.",
-                    "type": [
-                      "object",
-                      "null"
-                    ],
-                    "properties": {
-                      "source": {
-                        "description": "Which draw shape this source fires.",
-                        "enum": [
-                          "Markov",
-                          "UniformRange",
-                          "WeightedNumeric",
-                          "StreamDraw",
-                          "SymmetryOrbit"
-                        ],
-                        "default": "Markov",
-                        "title": "GeneratorSource"
-                      },
-                      "start": {
-                        "description": "Markov only: the context every emission begins from. Must name a declared context.",
-                        "default": null,
-                        "title": "CellName",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "bound": {
-                        "description": "Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
-                        "type": "integer",
-                        "default": 1
-                      },
-                      "contexts": {
-                        "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "items": {
-                          "description": "One named context of a StateGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "key": {
-                              "description": "The stable context key, unique within the generator.",
-                              "title": "CellName",
-                              "type": "string"
-                            },
-                            "alternatives": {
-                              "description": "The weighted alternatives out of this context, or empty for a terminal context.",
-                              "type": [
-                                "array",
-                                "null"
-                              ],
-                              "items": {
-                                "description": "One weighted alternative of a GeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
-                                "type": [
-                                  "object",
-                                  "null"
-                                ],
-                                "properties": {
-                                  "token": {
-                                    "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
-                                    "type": "string"
-                                  },
-                                  "weight": {
-                                    "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
-                                    "type": "integer"
-                                  },
-                                  "next": {
-                                    "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
-                                    "title": "CellName",
-                                    "type": "string"
-                                  },
-                                  "multiplicity": {
-                                    "description": "How many units of this alternative one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass. A context\u0027s units total at most MaxEntriesPerSet.",
-                                    "type": [
-                                      "integer",
-                                      "null"
-                                    ],
-                                    "default": null
-                                  }
-                                },
-                                "required": [
-                                  "token",
-                                  "weight",
-                                  "next"
-                                ],
-                                "additionalProperties": false,
-                                "title": "GeneratorAlternative"
-                              },
-                              "default": null
-                            }
-                          },
-                          "required": [
-                            "key"
-                          ],
-                          "additionalProperties": false,
-                          "title": "GeneratorContext"
-                        },
-                        "default": null
-                      },
-                      "mode": {
-                        "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see GeneratorMode).",
-                        "enum": [
-                          "WithReplacement",
-                          "WithoutReplacement",
-                          "RestartOnExhaustion"
-                        ],
-                        "default": "WithReplacement",
-                        "title": "GeneratorMode"
-                      },
-                      "rangeMin": {
-                        "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "rangeMax": {
-                        "description": "UniformRange only: the inclusive upper bound, same encoding as RangeMin.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "weighted": {
-                        "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under an exhausting Mode each outcome contributes Multiplicity units to the pass.",
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "items": {
-                          "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of GeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
-                          "type": [
-                            "object",
-                            "null"
-                          ],
-                          "properties": {
-                            "value": {
-                              "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
-                              "type": "integer"
-                            },
-                            "weight": {
-                              "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
-                              "type": "integer"
-                            },
-                            "multiplicity": {
-                              "description": "How many units of this outcome one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s units total at most MaxEntriesPerSet.",
-                              "type": [
-                                "integer",
-                                "null"
-                              ],
-                              "default": null
-                            }
-                          },
-                          "required": [
-                            "value",
-                            "weight"
-                          ],
-                          "additionalProperties": false,
-                          "title": "GeneratorWeightedNumeric"
-                        },
-                        "default": null
-                      },
-                      "ring": {
-                        "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the units \u2014 exactly one of Ring and Node.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "node": {
-                        "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the units.",
-                        "type": [
-                          "integer",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "word": {
-                        "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a StateCycle authors.",
-                        "type": [
-                          "array",
-                          "null"
-                        ],
-                        "items": {
-                          "type": "integer"
-                        },
-                        "default": null
-                      },
-                      "extended": {
-                        "description": "The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.",
+                {
+                  "description": "Where every condition holds at a cell, applies every write at that cell \u2014 ignition, melting, evaporation, freezing are rows of this shape.",
+                  "properties": {
+                    "$type": {
+                      "const": "transform"
+                    },
+                    "when": {
+                      "description": "The conditions, all of which must hold.",
+                      "type": "array",
+                      "items": {
+                        "description": "One per-cell condition of a Transform.",
                         "type": [
                           "object",
                           "null"
                         ],
                         "properties": {
-                          "k": {
-                            "description": "The extension table size: a power of two from MinExtendedTableSize to MaxExtendedTableSize.",
-                            "type": "integer"
+                          "field": {
+                            "description": "The field read at the cell.",
+                            "type": "string"
                           },
-                          "table": {
-                            "description": "The whole extension table, exactly K words \u2014 or null when Script authors it instead.",
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "items": {
-                              "type": "integer"
-                            },
-                            "default": null
+                          "comparison": {
+                            "description": "The comparison.",
+                            "title": "ExpressionComparison",
+                            "type": "string",
+                            "enum": [
+                              "Equal",
+                              "NotEqual",
+                              "Less",
+                              "LessOrEqual",
+                              "Greater",
+                              "GreaterOrEqual"
+                            ]
                           },
-                          "script": {
-                            "description": "Up to K values in the source\u0027s own output space, authoring the site\u0027s first draws directly \u2014 or null when Table is authored instead.",
-                            "type": [
-                              "array",
-                              "null"
-                            ],
-                            "items": {
-                              "type": "integer"
-                            },
-                            "default": null
+                          "value": {
+                            "description": "The scalar compared against (literal or state-row reference).",
+                            "title": "WorldLatticeScalar"
                           }
                         },
                         "required": [
-                          "k"
+                          "field",
+                          "comparison",
+                          "value"
                         ],
                         "additionalProperties": false,
-                        "default": null,
-                        "title": "GeneratorExtended"
+                        "title": "WorldFieldCondition"
                       }
                     },
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "StateGenerator"
+                    "then": {
+                      "description": "The writes, applied in order.",
+                      "type": "array",
+                      "items": {
+                        "description": "One per-cell write of a Transform.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "field": {
+                            "description": "The field written at the cell.",
+                            "type": "string"
+                          },
+                          "op": {
+                            "description": "Set or add.",
+                            "enum": [
+                              "Set",
+                              "Add"
+                            ],
+                            "title": "WorldFieldWriteOp"
+                          },
+                          "value": {
+                            "description": "The constant written or added; the result clamps to the field\u0027s range.",
+                            "title": "WorldLatticeScalar"
+                          }
+                        },
+                        "required": [
+                          "field",
+                          "op",
+                          "value"
+                        ],
+                        "additionalProperties": false,
+                        "title": "WorldFieldWrite"
+                      }
+                    }
                   },
-                  "field": {
-                    "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
-                    "type": "string"
-                  }
+                  "required": [
+                    "when",
+                    "then"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldReactionTransform"
                 },
-                "additionalProperties": false,
-                "title": "WorldLatticeFillDraw"
-              }
-            ],
-            "title": "WorldLatticeFill"
+                {
+                  "description": "Every active body whose cell in the keyed state row Tag reads nonzero adds Amount to Field at the cell it occupies \u2014 a burning body is a heat source.",
+                  "properties": {
+                    "$type": {
+                      "const": "emit"
+                    },
+                    "tag": {
+                      "description": "The keyed int state row whose nonzero cells name the emitting bodies.",
+                      "type": "string"
+                    },
+                    "field": {
+                      "description": "The field deposited into.",
+                      "type": "string"
+                    },
+                    "amount": {
+                      "description": "The amount per step; the cell clamps to the field\u0027s range.",
+                      "title": "WorldLatticeScalar"
+                    }
+                  },
+                  "required": [
+                    "tag",
+                    "field",
+                    "amount"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldReactionEmit"
+                },
+                {
+                  "description": "Writes 1 or 0 into Row\u0027s cell for every active body, by whether Field at the body\u0027s cell satisfies the comparison \u2014 a body standing in a burning cell becomes tagged, and body-level chemistry takes it from there.",
+                  "properties": {
+                    "$type": {
+                      "const": "expose"
+                    },
+                    "field": {
+                      "description": "The field sampled at the body.",
+                      "type": "string"
+                    },
+                    "comparison": {
+                      "description": "The comparison.",
+                      "title": "ExpressionComparison",
+                      "type": "string",
+                      "enum": [
+                        "Equal",
+                        "NotEqual",
+                        "Less",
+                        "LessOrEqual",
+                        "Greater",
+                        "GreaterOrEqual"
+                      ]
+                    },
+                    "value": {
+                      "description": "The constant compared against.",
+                      "title": "WorldLatticeScalar"
+                    },
+                    "row": {
+                      "description": "The keyed int state row written, keyed by body index.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "comparison",
+                    "value",
+                    "row"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldReactionExpose"
+                },
+                {
+                  "description": "Moves Field downhill, cell to cell, over the combined surface height of Over plus Field\u0027s own value -- mass-conserving except where a cell\u0027s clamp to its declared [min, max] binds. Every cell donates an equal share of its previous-step value to each of the lattice\u0027s active-axis directions (four on a ground lattice, six in a volume -- the SAME count for every cell, whether a direction reaches a neighbour or the lattice edge), and sends that share only along a direction that is strictly downhill; a level or uphill direction moves nothing.",
+                  "properties": {
+                    "$type": {
+                      "const": "flow"
+                    },
+                    "field": {
+                      "description": "The field transported.",
+                      "type": "string"
+                    },
+                    "rate": {
+                      "description": "The fraction of a cell\u0027s per-direction share that actually moves each step, in [0, 1].",
+                      "title": "WorldLatticeScalar"
+                    },
+                    "over": {
+                      "description": "The other lattice rows forming the terrain basis a downhill direction is measured against; empty or omitted means the field flows over its own height alone.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "default": null
+                    },
+                    "spillRow": {
+                      "description": "The scalar fixed-kind state row an edge cell\u0027s outward share accumulates into each step (a clamped add), or null to treat every lattice edge as a wall.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "rate"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldReactionFlow"
+                }
+              ],
+              "title": "WorldReaction"
+            },
+            "default": null
           },
-          "default": null
-        }
+          "paint": {
+            "description": "The initial fills, applied in order over the fields\u0027 Initial.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One initial fill of a lattice row, applied in order over the row\u0027s initial. Every kind decides per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend -- lattice values are simulation state. The Field member is compile-stamped from the carrying row (see Compile) and omitted in the document.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "description": "Every cell whose XZ centre lies in the rectangle takes Value.",
+                  "properties": {
+                    "$type": {
+                      "const": "rect"
+                    },
+                    "value": {
+                      "description": "The value written.",
+                      "type": "number"
+                    },
+                    "minX": {
+                      "description": "The rectangle\u0027s least X, world units.",
+                      "type": "number"
+                    },
+                    "minZ": {
+                      "description": "The rectangle\u0027s least Z, world units.",
+                      "type": "number"
+                    },
+                    "maxX": {
+                      "description": "The rectangle\u0027s greatest X, world units.",
+                      "type": "number"
+                    },
+                    "maxZ": {
+                      "description": "The rectangle\u0027s greatest Z, world units.",
+                      "type": "number"
+                    },
+                    "field": {
+                      "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "minX",
+                    "minZ",
+                    "maxX",
+                    "maxZ"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldLatticeFillRect"
+                },
+                {
+                  "description": "Patchy fill: fixed-point hash-lattice fBm over the CELL INDEX decides each cell. Where the octave sum n (in [0, 1]) reaches Threshold, the cell takes Value \u00B7 (n \u2212 Threshold) / (1 \u2212 Threshold) -- a smooth patch interior rising to the full value. The hash folds the fill\u0027s Seed with the world seed (the generation section\u0027s reroll lever), and every blend runs in Q48.16, so two boots of one document at one seed are bit-identical.",
+                  "properties": {
+                    "$type": {
+                      "const": "noise"
+                    },
+                    "value": {
+                      "description": "The peak value written inside a patch.",
+                      "type": "number"
+                    },
+                    "frequency": {
+                      "description": "Lattice cells per noise cell reciprocal -- noise-cell edge in CELLS (e.g. 8 = one noise cell spans 8 lattice cells). At least 1.",
+                      "type": "integer"
+                    },
+                    "threshold": {
+                      "description": "The patch admission level in [0, 1); higher = sparser patches.",
+                      "type": "number",
+                      "default": 0.5
+                    },
+                    "octaves": {
+                      "description": "Octave count, 1..4.",
+                      "type": "integer",
+                      "default": 3
+                    },
+                    "seed": {
+                      "description": "The hash seed, folded with the world seed.",
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "field": {
+                      "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "frequency"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldLatticeFillNoise"
+                },
+                {
+                  "description": "Scattered discs: one jittered point per Spacing-cell block (integer-hash offset), and every cell within Radius cells of a point takes Value -- the CPU boot-fill sibling of the renderer\u0027s CellJitter scatter.",
+                  "properties": {
+                    "$type": {
+                      "const": "scatter"
+                    },
+                    "value": {
+                      "description": "The value written inside each disc.",
+                      "type": "number"
+                    },
+                    "spacing": {
+                      "description": "The scatter block edge in CELLS (at least 2).",
+                      "type": "integer"
+                    },
+                    "radius": {
+                      "description": "The disc radius in CELLS (at least 1; must leave the disc inside its block\u0027s jitter envelope, refused otherwise).",
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "seed": {
+                      "description": "The hash seed, folded with the world seed.",
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "field": {
+                      "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "spacing"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldLatticeFillScatter"
+                },
+                {
+                  "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
+                  "properties": {
+                    "$type": {
+                      "const": "draw"
+                    },
+                    "source": {
+                      "description": "A declared generators row, or null when Generator is inlined.",
+                      "default": null,
+                      "title": "CellName",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "generator": {
+                      "description": "An inline numeric source, or null when Source is named.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "source": {
+                          "description": "Which draw shape this source fires.",
+                          "enum": [
+                            "Markov",
+                            "UniformRange",
+                            "WeightedNumeric",
+                            "StreamDraw",
+                            "SymmetryOrbit"
+                          ],
+                          "default": "Markov",
+                          "title": "GeneratorSource"
+                        },
+                        "start": {
+                          "description": "Markov only: the context every emission begins from. Must name a declared context.",
+                          "default": null,
+                          "title": "CellName",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "bound": {
+                          "description": "Markov only: the maximum tokens one emission may draw before refusing by name, 1..MaxEmissionBound. Left at DefaultBound by a numeric source.",
+                          "type": "integer",
+                          "default": 1
+                        },
+                        "contexts": {
+                          "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "description": "One named context of a StateGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "key": {
+                                "description": "The stable context key, unique within the generator.",
+                                "title": "CellName",
+                                "type": "string"
+                              },
+                              "alternatives": {
+                                "description": "The weighted alternatives out of this context, or empty for a terminal context.",
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "items": {
+                                  "description": "One weighted alternative of a GeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ],
+                                  "properties": {
+                                    "token": {
+                                      "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
+                                      "type": "string"
+                                    },
+                                    "weight": {
+                                      "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
+                                      "type": "integer"
+                                    },
+                                    "next": {
+                                      "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+                                      "title": "CellName",
+                                      "type": "string"
+                                    },
+                                    "multiplicity": {
+                                      "description": "How many units of this alternative one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass. A context\u0027s units total at most MaxEntriesPerSet.",
+                                      "type": [
+                                        "integer",
+                                        "null"
+                                      ],
+                                      "default": null
+                                    }
+                                  },
+                                  "required": [
+                                    "token",
+                                    "weight",
+                                    "next"
+                                  ],
+                                  "additionalProperties": false,
+                                  "title": "GeneratorAlternative"
+                                },
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "key"
+                            ],
+                            "additionalProperties": false,
+                            "title": "GeneratorContext"
+                          },
+                          "default": null
+                        },
+                        "mode": {
+                          "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see GeneratorMode).",
+                          "enum": [
+                            "WithReplacement",
+                            "WithoutReplacement",
+                            "RestartOnExhaustion"
+                          ],
+                          "default": "WithReplacement",
+                          "title": "GeneratorMode"
+                        },
+                        "rangeMin": {
+                          "description": "UniformRange only: the closed range\u0027s inclusive lower bound \u2014 both bounds present or neither. Raw-encoded per the destination site\u0027s CellKind (raw FixedQ4816 bits for a fixed site) \u2014 unlike a site row\u0027s own min/max, which a fixed row authors as decimal text, since a source is not bound to one site and cannot know the kind it will write.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "rangeMax": {
+                          "description": "UniformRange only: the inclusive upper bound, same encoding as RangeMin.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "weighted": {
+                          "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under an exhausting Mode each outcome contributes Multiplicity units to the pass.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of GeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "value": {
+                                "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
+                                "type": "integer"
+                              },
+                              "weight": {
+                                "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
+                                "type": "integer"
+                              },
+                              "multiplicity": {
+                                "description": "How many units of this outcome one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s units total at most MaxEntriesPerSet.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "weight"
+                            ],
+                            "additionalProperties": false,
+                            "title": "GeneratorWeightedNumeric"
+                          },
+                          "default": null
+                        },
+                        "ring": {
+                          "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the units \u2014 exactly one of Ring and Node.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "node": {
+                          "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the units.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "word": {
+                          "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a StateCycle authors.",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "integer"
+                          },
+                          "default": null
+                        },
+                        "extended": {
+                          "description": "The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "k": {
+                              "description": "The extension table size: a power of two from MinExtendedTableSize to MaxExtendedTableSize.",
+                              "type": "integer"
+                            },
+                            "table": {
+                              "description": "The whole extension table, exactly K words \u2014 or null when Script authors it instead.",
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "integer"
+                              },
+                              "default": null
+                            },
+                            "script": {
+                              "description": "Up to K values in the source\u0027s own output space, authoring the site\u0027s first draws directly \u2014 or null when Table is authored instead.",
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "integer"
+                              },
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "k"
+                          ],
+                          "additionalProperties": false,
+                          "default": null,
+                          "title": "GeneratorExtended"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "StateGenerator"
+                    },
+                    "field": {
+                      "description": "Gets the filled row\u0027s name -- compile-stamped, never authored inside a trait.",
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "title": "WorldLatticeFillDraw"
+                }
+              ],
+              "title": "WorldLatticeFill"
+            },
+            "default": null
+          },
+          "travelResistance": {
+            "description": "The nonnegative scalar resistance sampled by bodies inside this region.",
+            "default": null,
+            "title": "WorldLatticeScalar"
+          }
+        },
+        "required": [
+          "lattice",
+          "fields",
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "WorldFieldsSection"
       },
-      "required": [
-        "lattice",
-        "fields"
-      ],
-      "additionalProperties": false,
-      "default": null,
-      "title": "WorldFieldsSection"
+      "default": null
     },
     "simulation": {
       "description": "The authored simulation rate, when the world authors one.",

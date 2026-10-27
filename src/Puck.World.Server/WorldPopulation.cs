@@ -156,7 +156,7 @@ public sealed partial class WorldPopulation {
     public ulong ContactFieldVersion => unchecked(
         ((m_contactFieldInstallVersion +
         ((m_baseContactField as WorldColliderSet)?.AttachedRevision ?? 0UL)) +
-        ((ulong)(m_fields?.Revision ?? 0)))
+        FieldRegionsRevision())
     );
     /// <summary>Gets the authored idle floor (<c>bodies.sleepAfterSeconds</c>), in engine ticks, before a non-seat body's
     /// motion program and contact solve stop running — 0 means never sleep.</summary>
@@ -262,11 +262,13 @@ public sealed partial class WorldPopulation {
     private FixedSpawnPoint[] m_seatSpawns;
     private int m_simulatedCount;
     private WorldSolidField? m_targetField;
-    private FieldLattice? m_fields;
+
+    private IReadOnlyList<WorldFieldRegion> m_fieldRegions = [];
+
     private bool m_fieldsCompiled;
 
     /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
-    public FieldLattice? Fields => m_fields;
+    public IReadOnlyList<WorldFieldRegion> FieldRegions => m_fieldRegions;
     /// <summary>Gets the compiled gravity declaration for read-back.</summary>
     public FixedWorldGravity CompiledGravity => (m_gravityField?.Compiled ?? FixedWorldGravity.Inert);
     /// <summary>Gets the last gravity solve's deterministic structural work counters.</summary>

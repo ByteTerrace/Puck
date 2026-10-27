@@ -26,9 +26,9 @@ public sealed class WorldStateChangeDisclosure {
         if (m_changed.Length != arena.Rows.Count) { m_changed = new bool[arena.Rows.Count]; } else { Array.Clear(array: m_changed); }
         foreach (var delta in changes.Span) {
             if (delta.Row < 0) {
-                var fields = server.Population.Fields?.Input.Fields;
+                var fields = server.Population.TryFieldRegion(name: delta.Region)?.Lattice.Input.Fields;
 
-                if ((fields is null) || (((uint)delta.Field) >= ((uint)fields.Count)) || (delta.Cell < 0)) { continue; }
+                if ((fields is null) || (((uint)delta.Field) >= ((uint)fields.Count)) || (delta.Cell < 0) || (fields[delta.Field].Name != delta.FieldName)) { continue; }
                 if (arena.Catalog.TryResolve(StateLane.Document, fields[delta.Field].Name, out var row) &&
                     !WorldStateDisclosure.CanRead(server.Configuration, arena, arena.Rows[row.Ordinal],
                         CellName.Parse(candidate: IndexKeyCache.Get(index: delta.Cell)), recipient)) { continue; }

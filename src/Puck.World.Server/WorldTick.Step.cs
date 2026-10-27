@@ -394,6 +394,7 @@ public sealed partial class WorldTick {
         // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
         // surface, never last tick's.
         Host.Population.SampleMediumSurfaces();
+        SampleTravelResistance(tick: tick);
         Host.Population.AdvanceSimulated(
             tick: tick,
             stepTicks: context.StepTicks,

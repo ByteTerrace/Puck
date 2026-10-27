@@ -35,6 +35,7 @@ public sealed class BodySweepRefusalLawTests {
         return Fixtures.WithLattice(
             definition: world,
             composite: new WorldFieldsSection(
+            Name: "world",
                 Lattice: new WorldFieldLatticeDefinition(Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 4, Depth: 4, Layers: 1, StepEveryTicks: 1),
                 Fields: [new WorldFieldRow(Name: "ground", Min: 0f, Max: 10f, HeightScale: 1f, Color: "#808080")],
                 Reactions: null

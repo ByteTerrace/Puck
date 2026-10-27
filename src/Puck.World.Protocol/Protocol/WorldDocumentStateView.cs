@@ -10,7 +10,7 @@ namespace Puck.World.Client;
 /// document lane of <see cref="WorldDefinition.State"/> directly, and one cell of it through the engine's own
 /// <see cref="StateReader"/> computations, so a bound read and a rule read never disagree about a value.
 /// <para>
-/// A field row (a lattice row whose trait declares it one of <see cref="WorldDefinition.Fields"/>) is read otherwise:
+/// A field row (a lattice row whose domain names one of <see cref="WorldDefinition.FieldRegions"/>) is read otherwise:
 /// its live cells are simulation state the snapshot carries (<see cref="WorldSnapshot.FieldCells"/>), never document
 /// cells, so the view keeps the cells its owner hands it through <see cref="ApplyFieldCells"/> and reads the row's cell
 /// <c>i</c> as lattice cell <c>i</c> (z, then layer, then x), a Fixed value. Those cells are a field's one truth on
@@ -21,8 +21,6 @@ namespace Puck.World.Client;
 /// <param name="definition">Returns the definition currently delivered; read on every call.</param>
 public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : IWorldStateView {
     private StateArena m_arena = null!;
-
-
     private readonly int[] m_valueRowsMoved = new int[StateCapacity.MaxRows];
 
     private int m_valueRowsMovedCount;
@@ -38,9 +36,8 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     // resolved against the definition last shaped for.
     private long[][] m_cells = [];
     private int[] m_fieldOfOrdinal = [];
-
-    private WorldFieldLatticeDefinition? m_lattice;
-
+    private readonly Dictionary<(string Region, string Field), int> m_fieldAddresses = [];
+    private WorldFieldLatticeDefinition[] m_latticeOfField = [];
     private int[] m_ordinalOfField = [];
     // The delivered action-state register file of every entity index (raw Q48.16 presented values, the slots of one
     // body contiguous), the catalog ordinal each slot's lane row holds, and which slots a delivery moved since the
@@ -184,18 +181,19 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         var time = new ArenaTime(Tick: tick, EngineTick: engineTick, TicksPerSecond: document.SimulationRateHz, Dynamics: document.Dynamics);
         var value = default(CellValue);
         var motion = WorldStateMotion.Still;
-        if (CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out _) &&
-            m_arena.Keys.TryResolve(name: name, key: out var cell)) {
-            if (target) { m_arena.TryReadLive(rowOrdinal: ordinal, key: cell, time: in time, value: out value); }
-            else { m_arena.TryReadEased(rowOrdinal: ordinal, key: cell, time: in time, value: out value); }
-            var behavior = m_arena.LiveBehavior(rowOrdinal: ordinal, key: cell);
+
+        if (CellName.TryParse(candidate: (key ?? StateRow.SlotKey.Value), name: out var name, reason: out _) &&
+            m_arena.Keys.TryResolve(key: out var cell, name: name)) {
+            if (target) { m_arena.TryReadLive(key: cell, rowOrdinal: ordinal, time: in time, value: out value); } else { m_arena.TryReadEased(key: cell, rowOrdinal: ordinal, time: in time, value: out value); }
+            var behavior = m_arena.LiveBehavior(key: cell, rowOrdinal: ordinal);
+
             motion = behavior switch {
                 { Advance.PerSecondNumerator: not 0L } => WorldStateMotion.Advancing,
                 { Cycle: not null } => WorldStateMotion.Stepping,
                 _ => WorldStateMotion.Still,
             };
-            if (!target && m_arena.TryReadDynamics(rowOrdinal: ordinal, key: cell, time: in time, sample: out var eased) &&
-                m_arena.TryRead(rowOrdinal: ordinal, key: cell, value: out var stored) &&
+            if (!target && m_arena.TryReadDynamics(key: cell, rowOrdinal: ordinal, sample: out var eased, time: in time) &&
+                m_arena.TryRead(key: cell, rowOrdinal: ordinal, value: out var stored) &&
                 ((eased.Velocity != FixedQ4816.Zero) || (eased.Value != StateReader.DynamicsRowRawToFixed(row: row, raw: stored.Raw)))) {
                 motion = WorldStateMotion.Easing;
             }
@@ -268,7 +266,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     /// cells at zero until the next full snapshot writes them.</summary>
     /// <param name="deltas">The snapshot's cell writes.</param>
     /// <param name="moved">Receives the catalog ordinal of each field row a write changed; at least
-    /// <see cref="WorldFieldCapacity.MaxFields"/> long.</param>
+    /// <see cref="StateCapacity.MaxRows"/> long.</param>
     /// <returns>How many ordinals <paramref name="moved"/> received.</returns>
     public int ApplyFieldCells(ReadOnlySpan<FieldCellDelta> deltas, Span<int> moved) {
         if (deltas.IsEmpty) {
@@ -277,7 +275,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         _ = Shape();
 
-        Span<bool> changed = stackalloc bool[WorldFieldCapacity.MaxFields];
+        Span<bool> changed = stackalloc bool[StateCapacity.MaxRows];
         Span<bool> valueChanged = stackalloc bool[StateCapacity.MaxRows];
 
         m_valueRowsMovedCount = 0;
@@ -285,17 +283,18 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         foreach (var delta in deltas) {
             if (delta.Row >= 0) {
-                if ((uint)delta.Row >= (uint)m_arena.Rows.Count) { continue; }
-                if (delta.Cell < 0) { m_arena.BeginProjectionRow(rowOrdinal: delta.Row, count: checked((int)delta.Raw)); }
-                else { m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image); }
+                if (((uint)delta.Row) >= ((uint)m_arena.Rows.Count)) { continue; }
+                if (delta.Cell < 0) { m_arena.BeginProjectionRow(rowOrdinal: delta.Row, count: checked((int)delta.Raw)); } else { m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image); }
                 if (!valueChanged[delta.Row]) { m_valueRowsMoved[m_valueRowsMovedCount++] = delta.Row; valueChanged[delta.Row] = true; }
                 continue;
             }
-            if (delta.Field >= m_cells.Length) {
+            // Recipient disclosure can remove preceding fields; the authority's local ordinal then differs from
+            // this document's. The named address remains stable across that projection.
+            if (!m_fieldAddresses.TryGetValue(key: (delta.Region, delta.FieldName), value: out var field)) {
                 continue;
             }
 
-            var cells = m_cells[delta.Field];
+            var cells = m_cells[field];
 
             if (
                 (((uint)delta.Cell) >= ((uint)cells.Length)) ||
@@ -305,7 +304,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             }
 
             cells[delta.Cell] = delta.Raw;
-            changed[delta.Field] = true;
+            changed[field] = true;
         }
 
         var count = 0;
@@ -424,55 +423,44 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
         ShapeBodyState(document: document);
 
-        var fields = document.Fields;
-        var fieldCount = (fields?.Fields.Count ?? 0);
-
-        if (
-            (fields?.Lattice != m_lattice) ||
-            (m_cells.Length != fieldCount)
-        ) {
-            var cellCount = ((fields?.Lattice is { } lattice)
-                ? ((lattice.Width * lattice.Layers) * lattice.Depth)
-                : 0
-            );
-
-            m_lattice = fields?.Lattice;
-            m_cells = new long[fieldCount][];
-
-            for (var field = 0; (field < fieldCount); field++) {
-                m_cells[field] = new long[cellCount];
-            }
-        }
-
+        var regions = document.FieldRegions;
+        var fieldCount = regions.Sum(selector: static region => region.Fields.Count);
+        var cells = new long[fieldCount][];
+        var latticeOfField = new WorldFieldLatticeDefinition[fieldCount];
+        var addresses = new Dictionary<(string Region, string Field), int>();
         var rows = document.State;
 
-        if (m_fieldOfOrdinal.Length < rows.Count) {
-            m_fieldOfOrdinal = new int[rows.Count];
-        }
-        if (m_ordinalOfField.Length < fieldCount) {
-            m_ordinalOfField = new int[fieldCount];
-        }
+        m_fieldOfOrdinal = new int[rows.Count];
+        m_ordinalOfField = new int[fieldCount];
+        Array.Fill(array: m_fieldOfOrdinal, value: -1);
+        Array.Fill(array: m_ordinalOfField, value: -1);
 
-        Array.Fill(
-            array: m_fieldOfOrdinal,
-            value: -1
-        );
+        var field = 0;
 
-        for (var field = 0; (field < fieldCount); field++) {
-            m_ordinalOfField[field] = -1;
+        foreach (var region in regions) {
+            var cellCount = checked(((region.Lattice.Width * region.Lattice.Layers) * region.Lattice.Depth));
 
-            if (
-                document.StateCatalog.TryResolve(
-                handle: out var handle,
-                lane: StateLane.Document,
-                name: fields!.Fields[field].Name
-            ) &&
-                (handle.Ordinal < rows.Count)
-            ) {
-                m_ordinalOfField[field] = handle.Ordinal;
-                m_fieldOfOrdinal[handle.Ordinal] = field;
+            for (var local = 0; (local < region.Fields.Count); local++, field++) {
+                var name = region.Fields[local].Name;
+
+                latticeOfField[field] = region.Lattice;
+                // An unrelated region changing shape never discards this region's delivered cells.
+                cells[field] = ((m_fieldAddresses.TryGetValue(key: (region.Name, name), value: out var previous) &&
+                    (m_latticeOfField[previous] == region.Lattice))
+                    ? m_cells[previous]
+                    : new long[cellCount]);
+                addresses.Add(key: (region.Name, name), value: field);
+                if (document.StateCatalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name) &&
+                    (handle.Ordinal < rows.Count)) {
+                    m_ordinalOfField[field] = handle.Ordinal;
+                    m_fieldOfOrdinal[handle.Ordinal] = field;
+                }
             }
         }
+        m_cells = cells;
+        m_latticeOfField = latticeOfField;
+        m_fieldAddresses.Clear();
+        foreach (var address in addresses) { m_fieldAddresses.Add(key: address.Key, value: address.Value); }
 
         return document;
     }

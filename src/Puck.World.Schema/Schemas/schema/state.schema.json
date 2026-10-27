@@ -1794,6 +1794,11 @@
                 },
                 "default": null
               },
+              "travelResistance": {
+                "description": "A nonnegative scalar body motion reads within the bounded region. Zero leaves motion unchanged.",
+                "default": null,
+                "title": "WorldLatticeScalar"
+              },
               "name": {
                 "description": "The topology\u0027s name \u2014 what a row\u0027s cellsOf domain references.",
                 "type": "string"

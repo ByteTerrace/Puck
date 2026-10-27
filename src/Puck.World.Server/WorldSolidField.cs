@@ -63,7 +63,7 @@ public sealed class WorldSolidField : IContactField {
     // The largest extent any kit collider volume reaches from its own sample point, at the world's largest body
     // scale, in world units; the contact skin is added per tuning.
     private readonly FixedQ4816 m_kitReach;
-    private readonly FieldLattice? m_lattice;
+    private readonly IReadOnlyList<WorldFieldRegion> m_regions;
     private readonly SdfProgram m_program;
     private readonly IWorldQuery m_query;
     private readonly FixedFieldContactSolver m_solver;
@@ -76,11 +76,11 @@ public sealed class WorldSolidField : IContactField {
     // gradient a side to face. Small enough that no authored surface curves meaningfully across it.
     private static readonly FixedQ4816 GradientBackoff = FixedQ4816.FromDouble(value: 0.02);
 
-    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, FieldLattice? lattice, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
+    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, IReadOnlyList<WorldFieldRegion> regions, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
         m_program = program;
         m_evaluator = evaluator;
         m_kitReach = kitReach;
-        m_lattice = lattice;
+        m_regions = regions;
         m_holdableMaterials = holdableMaterials;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_defaultGrip = defaultGrip;
@@ -111,10 +111,15 @@ public sealed class WorldSolidField : IContactField {
         // that proves how far a body moves; ray casts and line of sight still march the authored program alone. The
         // sweep proves clearance of the exact program, never the grid's corner bound, so it stops a body at geometry
         // rather than at the grid's slack.
-        var latticeSolid = ((lattice is null)
-            ? null
-            : new FieldLatticeSolid(lattice: lattice)
-        );
+        IFieldEvaluator? latticeSolid = null;
+        IFieldBounds? latticeBounds = null;
+
+        foreach (var region in regions) {
+            var solid = new FieldLatticeSolid(lattice: region.Lattice);
+
+            latticeSolid = ((latticeSolid is null) ? solid : new UnionField(a: latticeSolid, b: solid));
+            latticeBounds = ((latticeBounds is null) ? solid : new FieldBoundsUnion(a: latticeBounds, b: solid));
+        }
         var sweepBounds = (evaluator.HasShape ? new SdfBoundsCache(field: evaluator) : null);
 
         m_contactField = ((latticeSolid is null)
@@ -132,7 +137,7 @@ public sealed class WorldSolidField : IContactField {
             groundedThreshold: tuning.GroundedThreshold,
             maxIterations: tuning.MaxIterations,
             query: m_query,
-            sweep: (sweepBounds, latticeSolid) switch {
+            sweep: (sweepBounds, latticeBounds) switch {
                 ( { } bounds, null) => new CertifiedFieldSweep(field: bounds),
                 ( { } bounds, { } solid) => new CertifiedFieldSweep(field: new FieldBoundsUnion(
                     a: bounds,
@@ -340,9 +345,9 @@ public sealed class WorldSolidField : IContactField {
     /// <param name="built">The built field on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The forwarded <see cref="SdfFieldEvaluator"/> reject reason when a solid names an op the
     /// warp-free evaluator cannot interpret; empty on success.</param>
-    /// <param name="lattice">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
+    /// <param name="regions">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
-    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, FieldLattice? lattice = null) {
+    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, IReadOnlyList<WorldFieldRegion>? regions = null) {
         built = null;
         reason = string.Empty;
 
@@ -517,7 +522,7 @@ public sealed class WorldSolidField : IContactField {
                 program: program
             ),
             kitReach: KitReach(definition: definition),
-            lattice: lattice,
+            regions: (regions ?? []),
             placementShapeCount: placementShapeCount,
             program: program,
             census: WorldColliderSet.Measure(definition: definition),
@@ -577,6 +582,11 @@ public sealed class WorldSolidField : IContactField {
             position: in position,
             up: out up
         );
+    /// <summary>Reuses immutable authored solids with the population's live physical regions.</summary>
+    public WorldSolidField WithRegions(IReadOnlyList<WorldFieldRegion> regions, FixedWorldCollision tuning) => new(
+        program: m_program, evaluator: m_evaluator, grid: m_banded?.Grid, kitReach: m_kitReach, regions: regions,
+        placementShapeCount: PlacementShapeCount, census: Census, tuning: tuning, holdableMaterials: m_holdableMaterials,
+        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip);
     /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
     /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array) and
     /// the distance grid when the cell size is unchanged. A <c>SetCollision</c> edit touches only the collision tuning
@@ -597,7 +607,7 @@ public sealed class WorldSolidField : IContactField {
                     program: m_program
                 )),
             kitReach: m_kitReach,
-            lattice: m_lattice,
+            regions: m_regions,
             placementShapeCount: PlacementShapeCount,
             program: m_program,
             census: Census,

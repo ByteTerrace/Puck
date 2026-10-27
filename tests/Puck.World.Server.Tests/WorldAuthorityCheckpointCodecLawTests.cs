@@ -732,10 +732,10 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
     [Fact]
     public void Field_section_round_trips_structurally() {
         var checkpoint = CapturedCheckpoint() with {
-            Fields = new FieldLattice.Checkpoint(Raw: [
+            Fields = [new WorldFieldRegionCheckpoint(Region: "grid", FieldNames: ["first", "second"], Cells: new FieldLattice.Checkpoint(Raw: [
                 [FixedQ4816.Zero.Value, FixedQ4816.FromInteger(value: 1).Value],
                 [FixedQ4816.FromInteger(value: -2).Value, FixedQ4816.FromInteger(value: 3).Value],
-            ]),
+            ]))],
         };
         var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
 

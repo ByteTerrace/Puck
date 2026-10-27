@@ -463,20 +463,17 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         value = 0L;
 
         if (
-            (Host.Population.Fields is not { } lattice) ||
             !TryHostOwnedField(
             field: out var field,
             rowOrdinal: rowOrdinal
         ) ||
-            !lattice.TryFieldIndex(
-            field: out var index,
-            name: field
-        )
+            !Host.Population.TryFieldForRow(field: out var index, name: field, region: out var region) ||
+            (((uint)cell) >= ((uint)region!.Lattice.CellCount))
         ) {
             return false;
         }
 
-        value = lattice.Value(
+        value = region!.Lattice.Value(
             cell: cell,
             field: index
         ).Value;

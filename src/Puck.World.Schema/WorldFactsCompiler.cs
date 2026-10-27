@@ -100,6 +100,7 @@ public static partial class WorldFactsCompiler {
 
                 if (decision is not null) {
                     var controls = new List<CellAccess>();
+
                     RuleDataflow.CollectGate(gate: compiled.Gate, into: controls);
                     foreach (var local in (compiled.Locals ?? [])) {
                         RuleDataflow.CollectExpression(
@@ -107,7 +108,7 @@ public static partial class WorldFactsCompiler {
                             tokens: local.Expression
                         );
                     }
-                    RuleDataflow.CollectGate(gate: decision.Interrupt ?? [], into: controls);
+                    RuleDataflow.CollectGate(gate: (decision.Interrupt ?? []), into: controls);
                     if (compiled.ForEachOrdinal >= 0) { controls.Add(item: new CellAccess(RowOrdinal: compiled.ForEachOrdinal, Key: default)); }
                     if (compiled.PoolForEach is { } pool) { controls.Add(item: new CellAccess(RowOrdinal: pool.DomainRowOrdinal, Key: default)); }
                     foreach (var option in decision.Options) {
@@ -293,7 +294,7 @@ public static partial class WorldFactsCompiler {
             );
         }
 
-        var fields = (context.Definition.Fields
+        var fields = (context.Definition.FieldRegions.FirstOrDefault(predicate: region => region.Fields.Any(predicate: field => (field.Name == effect.Field)))
             ?? throw new RuleException(
             detail: "'paintField' requires a declared lattice",
             refusal: RuleRefusal.EffectKindInadmissible,

@@ -213,11 +213,11 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.channel '{feed.Channel}' must be '{WorldSpeakerFeed.ChannelMix}', '{WorldSpeakerFeed.ChannelLeft}', or '{WorldSpeakerFeed.ChannelRight}'.");
         }
 
-        RequireRange(
-            value: feed.Gain,
-            min: 0f,
-            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
-            name: $"{path}.gain",
+        JudgeScalar(
+            definition: definition,
+            field: WorldValueFields.SpeakerGain,
+            scalar: feed.Gain,
+            path: $"{path}.gain",
             errors: errors
         );
 

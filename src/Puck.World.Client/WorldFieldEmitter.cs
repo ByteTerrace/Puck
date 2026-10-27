@@ -28,9 +28,9 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     private bool[] m_ready = [];
     private ISdfBrickBakeService? m_uploadService;
     private int[] m_uploadedChanged = [];
-    private int m_uploadedFieldCount;
+    private (WorldFieldsSection Region, WorldFieldRow Row)[] m_heightFields = [];
     private float[] m_uploadedHeightScales = [];
-    private WorldFieldLatticeDefinition? m_uploadedLattice;
+    private IReadOnlyList<WorldFieldsSection>? m_uploadedRegions;
     private float[] m_voxels = [];
 
     /// <summary>Initializes a new instance of the <see cref="WorldFieldEmitter"/> class over a client.</summary>
@@ -149,44 +149,44 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         val1: SdfBrickPoolLayout.BrickDim,
         val2: cells
     );
-    private static (int Field, WorldFieldRow Row, int Slot) HeightField(WorldFieldsSection document, int ordinal) {
-        var slot = 0;
+    // Height-field slots are global across the world's regions; every slot keeps the lattice that owns its row.
+    private void Shape(IReadOnlyList<WorldFieldsSection> regions) {
+        if (ReferenceEquals(objA: regions, objB: m_uploadedRegions)) { return; }
+        var heightFields = regions.SelectMany(selector: static region => region.Fields
+            .Where(predicate: static row => (row.HeightScale > 0f))
+            .Select(selector: row => (Region: region, Row: row)))
+            .ToArray();
 
-        for (var field = 0; (field < document.Fields.Count); field++) {
-            var row = document.Fields[field];
-
-            if (row.HeightScale <= 0f) {
-                continue;
-            }
-
-            if (slot == ordinal) {
-                return (field, row, slot);
-            }
-
-            slot++;
+        if (heightFields.Length > SdfBrickPoolLayout.MaxBricks) {
+            throw new InvalidOperationException(message: "The declared physical regions exceed the resident sampled-field brick buffer.");
         }
+        var sameShape = (heightFields.Length == m_heightFields.Length);
 
-        throw new ArgumentOutOfRangeException(paramName: nameof(ordinal));
+        for (var field = 0; (sameShape && (field < heightFields.Length)); field++) {
+            var previous = m_heightFields[field];
+            var next = heightFields[field];
+
+            sameShape = ((previous.Region.Name == next.Region.Name) &&
+                (previous.Region.Lattice == next.Region.Lattice) && (previous.Row.Name == next.Row.Name));
+        }
+        m_uploadedRegions = regions;
+        m_heightFields = heightFields;
+        if (sameShape) { return; }
+        var dropsReadyField = AnyReady();
+
+        m_uploadedChanged = new int[heightFields.Length];
+        Array.Fill(array: m_uploadedChanged, value: int.MinValue);
+        m_uploadedHeightScales = new float[heightFields.Length];
+        m_ready = new bool[heightFields.Length];
+        m_pendingField = -1;
+        m_cursor = 0;
+        if (dropsReadyField) { m_programRevision++; }
     }
     // Whether the live program names any field's brick (Emit names a field only once its first upload is ready), so
     // that a reset of the brick state, which forgets every ready field, changes the program. A reset before any field is
     // ready leaves the program as it was, and moving its revision then would rebuild an unchanged program and render
     // every standing view again.
     private bool AnyReady() => (Array.IndexOf(array: m_ready, value: true) >= 0);
-    private static int HeightFieldCount(WorldFieldsSection document) {
-        var count = 0;
-
-        for (var field = 0; (field < document.Fields.Count); field++) {
-            if (document.Fields[field].HeightScale > 0f) {
-                count++;
-            }
-        }
-
-        return Math.Min(
-            val1: count,
-            val2: SdfBrickPoolLayout.MaxBricks
-        );
-    }
 
     /// <summary>Re-bakes and uploads a height field's brick when its row's mirror slot has moved since the brick was
     /// baked, or its height scale has, one field per call.</summary>
@@ -202,8 +202,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             var dropsReadyField = AnyReady();
 
             m_uploadService = bakes;
-            m_uploadedLattice = null;
-            m_uploadedFieldCount = 0;
+            m_uploadedRegions = null;
+            m_heightFields = [];
             m_ready = [];
             m_uploadedChanged = [];
             m_uploadedHeightScales = [];
@@ -214,38 +214,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             }
         }
 
-        if (
-            !bakes.BrickBakeAvailable ||
-            (m_client.Definition.Fields is not { } document)
-        ) {
-            return;
-        }
-
-        var lattice = document.Lattice;
-        var fieldCount = document.Fields.Count;
-
-        if (
-            (lattice != m_uploadedLattice) ||
-            (fieldCount != m_uploadedFieldCount)
-        ) {
-            var dropsReadyField = AnyReady();
-
-            m_uploadedLattice = lattice;
-            m_uploadedFieldCount = fieldCount;
-            m_uploadedChanged = new int[fieldCount];
-            Array.Fill(
-                array: m_uploadedChanged,
-                value: int.MinValue
-            );
-            m_uploadedHeightScales = new float[fieldCount];
-            m_ready = new bool[fieldCount];
-            m_pendingField = -1;
-            m_cursor = 0;
-
-            if (dropsReadyField) {
-                m_programRevision++;
-            }
-        }
+        if (!bakes.BrickBakeAvailable) { return; }
+        Shape(regions: m_client.Definition.FieldRegions);
 
         if (m_pendingField >= 0) {
             var status = bakes.GetBrickState(slot: m_pendingSlot);
@@ -269,26 +239,24 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
         }
 
         var mirror = m_client.StateMirror;
-        var cell = lattice.CellSize;
-        var cellCount = ((lattice.Width * lattice.Layers) * lattice.Depth);
-        var dimX = Clamp(cells: (lattice.Width + 2));
-        var dimZ = Clamp(cells: (lattice.Depth + 2));
-        var dimY = BrickLayers(document: document);
-        var total = ((dimX * dimY) * dimZ);
-
-        if (m_voxels.Length < total) {
-            m_voxels = new float[total];
-        }
-
-        var heightFieldCount = HeightFieldCount(document: document);
+        var heightFieldCount = m_heightFields.Length;
 
         for (var offset = 0; (offset < heightFieldCount); offset++) {
             var candidate = ((m_cursor + offset) % heightFieldCount);
 
-            var (field, row, slot) = HeightField(
-                document: document,
-                ordinal: candidate
-            );
+            var (document, row) = m_heightFields[candidate];
+            var field = candidate;
+            var slot = candidate;
+            var lattice = document.Lattice;
+            var cell = lattice.CellSize;
+            var cellCount = checked(((lattice.Width * lattice.Layers) * lattice.Depth));
+            var dimX = Clamp(cells: (lattice.Width + 2));
+            var dimZ = Clamp(cells: (lattice.Depth + 2));
+            var dimY = BrickLayers(document: document);
+            var total = checked(((dimX * dimY) * dimZ));
+
+            if (m_voxels.Length < total) { m_voxels = new float[total]; }
+
             var rowSlot = mirror.SlotOf(
                 binding: new StateBinding(
                     Key: null,
@@ -363,32 +331,22 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     public void Emit(SdfProgramBuilder builder, in SdfEmitContext context) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 
-        if (m_client.Definition.Fields is not { } document) {
-            return;
-        }
-        if (!context.Probe) {
-            m_colors.Begin();
-        }
+        Shape(regions: m_client.Definition.FieldRegions);
+        if (!context.Probe) { m_colors.Begin(); }
 
-        var lattice = document.Lattice;
-        // The brick box is padded one cell on every side so no column reaches a face: outside the box the kernel
-        // returns dist(p, box) + boundaryFloor, and a union brick whose solid touched a face would render the face.
-        var boxMin = new Vector3(
-            x: (lattice.Origin.X - lattice.CellSize),
-            y: (lattice.Origin.Y - lattice.CellSize),
-            z: (lattice.Origin.Z - lattice.CellSize)
-        );
-        var dimX = Clamp(cells: (lattice.Width + 2));
-        var dimZ = Clamp(cells: (lattice.Depth + 2));
-        var dimY = BrickLayers(document: document);
-
-        var heightFieldCount = HeightFieldCount(document: document);
-
-        for (var ordinal = 0; (ordinal < heightFieldCount); ordinal++) {
-            var (field, row, slot) = HeightField(
-                document: document,
-                ordinal: ordinal
+        for (var field = 0; (field < m_heightFields.Length); field++) {
+            var (document, row) = m_heightFields[field];
+            var slot = field;
+            var lattice = document.Lattice;
+            // The brick box is padded one cell on every side so no column reaches a face.
+            var boxMin = new Vector3(
+                x: (lattice.Origin.X - lattice.CellSize),
+                y: (lattice.Origin.Y - lattice.CellSize),
+                z: (lattice.Origin.Z - lattice.CellSize)
             );
+            var dimX = Clamp(cells: (lattice.Width + 2));
+            var dimZ = Clamp(cells: (lattice.Depth + 2));
+            var dimY = BrickLayers(document: document);
 
             // The pool's zero-filled/uninitialized bytes describe a surface, not empty space. Keep a live program from
             // naming a slot until its first upload has completed; the probe still declares every possible brick so the
