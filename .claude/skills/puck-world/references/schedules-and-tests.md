@@ -25,6 +25,10 @@ fires. Do not group expectations to evade a verdict-count cutoff: a stamp must
 not grow and copy the composed arena during the tick. Its write belongs to the
 firing transaction; a refused stamp rejects that transaction rather than
 leaving a passing status without evidence that its rule evaluated.
+The status names a separate cell, never `$firedTick`. Transforms use the same
+verdict door as scalar effects: every resolved write row (including live zone
+ends and draw bookkeeping) is checked for settlement and stamped. A settled
+end freezes the whole transform; a refused stamp rewinds the whole firing.
 
 ## Tick-exact debug capture
 

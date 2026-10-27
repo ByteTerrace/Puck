@@ -197,6 +197,9 @@ public static partial class WorldDefinitionValidator {
     // admitted only beside a firing stamp, which is what makes the live document a rule wrote round-trip through the
     // boot loader while an authored pass still refuses.
     private static void ValidateVerdictCells(WorldStateRow row, CellName status, string path, List<string> errors) {
+        if (status == WorldVerdict.FiredTickKey) {
+            errors.Add(item: $"{path}.status '{status}' is the engine's firing stamp — a verdict requires its own status cell beside the stamp.");
+        }
         var cells = (row.Cells ?? []);
         var stamp = StateRows.FindCell(
             cells: cells,

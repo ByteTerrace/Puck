@@ -148,7 +148,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
         );
     }
     [Fact]
-    public void AFaultingConditionRunsNeitherBranchAndIsReportedRatherThanTreatedAsFalse() {
+    public void AFaultingConditionRewindsTheFiringAndRunsNeitherBranch() {
         var flag = new WorldStateRow(
             Name: CellName.Parse(candidate: "flag"),
             Kind: CellKind.Int,
@@ -183,7 +183,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                     Value: 1m
                 ),
                 Mode: ActionTriggerMode.Level,
-                Effects: [new ActionEffect.If(
+                Effects: [new ActionEffect.SetState(State: "a", Value: 9m), new ActionEffect.If(
                         // 1 / flag with flag == 0 faults the condition (division by zero) at runtime rather than
                         // reading as false, so this must run NEITHER branch.
                         Condition: new ActionPredicate.CompareValue(
@@ -204,7 +204,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                                 State: "a",
                                 Value: 200m
                             )]
-                    )]
+                    ), new ActionEffect.SetState(State: "a", Value: 7m)]
             )],
         });
 
@@ -217,7 +217,7 @@ public sealed class WorldRuleIfTraceAndSaveSettleLawTests {
                 row: "a"
             )
         );
-        Assert.NotEmpty(collection: fixture.Server.RuleRuntimeDiagnostics());
+        Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
     }
     [Fact]
     public void ASavedRowsSettledClockReloadsToTheSameLiveValueAndContinuesIdenticallyToAnUninterruptedSession() {

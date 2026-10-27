@@ -7,7 +7,8 @@ namespace Puck.World.Server;
 
 /// <summary>The effect arms only the world can fire.</summary>
 /// <remarks>
-/// <para>Every world arm but the identity-fact write leaves the arena, so it is queued and called with
+/// <para>The body-state and identity-fact writes join the arena scope. Every other world arm leaves the arena,
+/// so it is queued and called with
 /// <see cref="EffectFiring.Preflight"/> set before the firing's scope commits, where it validates and does nothing
 /// outward. The arms of one firing are preflighted as a sequence: what one would do is what the next is judged
 /// against.</para>
