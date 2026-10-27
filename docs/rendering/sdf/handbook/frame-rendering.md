@@ -29,6 +29,9 @@ sample; odd resampling ratios can require extra samples. Fractional tent widths
 blend whole symmetric integer-width kernels. Radius blends the coarse contribution
 continuously across levels and scales tent spacing. The output grid fixes support
 while dynamic resolution changes the scene grid. There is no bloom history.
+During a shrinking layout transition the source envelope can remain larger than
+the placed rect. Placement integrates the complete reducing footprint, including
+every overlapping reconstruction basis; its cached tap pairs never limit support.
 
 The view exports `bloom` alongside its direct image. Root `place.bloom` sharpens
 the direct image, then combines `(1 - scatter) * direct + scatter * bloom` before

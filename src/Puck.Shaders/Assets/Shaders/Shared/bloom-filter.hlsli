@@ -5,9 +5,15 @@
 #define PUCK_BLOOM_FILTER_HLSLI
 
 struct BloomAxis {
+    // Cache the common enlargement/downfilter pairs. Placement may reduce an arbitrarily larger
+    // source envelope, so count is not bounded by this cache; later pairs use the complete interval.
     float3 position;
     float3 weight;
     uint count;
+    int first;
+    float left;
+    float length;
+    uint source;
 };
 
 float2 bloomReflect(float2 uv) {
@@ -45,21 +51,37 @@ float bloomHatIntegral(float x) {
     return x < 0.0 ? 0.5 * a * a : 1.0 - 0.5 * b * b;
 }
 
+float2 bloomLinearPair(int first, float left, float length, uint source, uint pair) {
+    float right = left + length;
+    float cell = float(pair * 2u);
+    float a = max(0.0, bloomHatIntegral(right - cell) - bloomHatIntegral(left - cell));
+    float b = max(0.0, bloomHatIntegral(right - cell - 1.0) - bloomHatIntegral(left - cell - 1.0));
+    float weight = a + b;
+    return weight > 0.0 ? float2((float(first) + cell + 0.5 + b / weight) / float(source), weight / length) : 0.0;
+}
+
 BloomAxis bloomLinearAxisLocal(int first, float left, float length, uint source) {
     BloomAxis axis = (BloomAxis)0;
-    float right = left + length;
-    [unroll] for (uint pair = 0; pair < 2u; pair++) {
-        float cell = float(pair * 2u);
-        float a = max(0.0, bloomHatIntegral(right - cell) - bloomHatIntegral(left - cell));
-        float b = max(0.0, bloomHatIntegral(right - cell - 1.0) - bloomHatIntegral(left - cell - 1.0));
-        float weight = a + b;
-        if (weight > 0.0) {
-            axis.position[pair] = (float(first) + cell + 0.5 + b / weight) / float(source);
-            axis.weight[pair] = weight / length;
-            axis.count = pair + 1u;
+    axis.first = first;
+    axis.left = left;
+    axis.length = length;
+    axis.source = source;
+    // The last overlapping hat has its centre strictly before right + 1. Include every such basis,
+    // including the half-cell edge support, rather than renormalizing an incomplete footprint.
+    axis.count = uint(ceil((left + length + 1.0) * 0.5));
+    [unroll] for (uint pair = 0; pair < 3u; pair++) {
+        if (pair < axis.count) {
+            float2 tap = bloomLinearPair(first, left, length, source, pair);
+            axis.position[pair] = tap.x;
+            axis.weight[pair] = tap.y;
         }
     }
     return axis;
+}
+
+float2 bloomAxisPair(BloomAxis axis, uint pair) {
+    if (pair < 3u) { return float2(axis.position[pair], axis.weight[pair]); }
+    return bloomLinearPair(axis.first, axis.left, axis.length, axis.source, pair);
 }
 
 BloomAxis bloomLinearAxis(uint pixel, uint source, uint destination) {
@@ -77,10 +99,22 @@ BloomAxis bloomLinearAxisRange(float left, float length, uint source) {
 
 float3 bloomAreaSample(Texture2D<float4> image, SamplerState filter, BloomAxis x, BloomAxis y, float2 offset) {
     float3 color = 0.0;
+    // Keep the common pyramid/enlargement loop free of general-footprint evaluation per sample.
+    if (x.count <= 3u && y.count <= 3u) {
+        [loop] for (uint j = 0u; j < y.count; j++) {
+            [loop] for (uint i = 0u; i < x.count; i++) {
+                color += x.weight[i] * y.weight[j] * image.SampleLevel(filter,
+                    bloomReflect(float2(x.position[i], y.position[j]) + offset), 0).rgb;
+            }
+        }
+        return color;
+    }
     [loop] for (uint j = 0u; j < y.count; j++) {
+        float2 ty = bloomAxisPair(y, j);
         [loop] for (uint i = 0u; i < x.count; i++) {
-            color += x.weight[i] * y.weight[j] * image.SampleLevel(filter,
-                bloomReflect(float2(x.position[i], y.position[j]) + offset), 0).rgb;
+            float2 tx = bloomAxisPair(x, i);
+            color += tx.y * ty.y * image.SampleLevel(filter,
+                bloomReflect(float2(tx.x, ty.x) + offset), 0).rgb;
         }
     }
     return color;

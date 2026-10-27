@@ -3,6 +3,26 @@ namespace Puck.Shaders.Tests;
 // CPU radiometric oracle for Shared/bloom-filter.hlsli and the pyramid: test integrated HDR energy,
 // not a tonemapped PNG's mean. Constants alone cannot distinguish a conservative filter from edge clamping.
 public sealed class BloomEnergyLawTests {
+    [InlineData(320, 225)]
+    [InlineData(160, 112)]
+    [InlineData(64, 45)]
+    [InlineData(1, 1)]
+    [InlineData(1, 112)]
+    [Theory]
+    public void ReducingPlacementIntegratesTheWholeEnvelope(int width, int height) {
+        var constant = new Image(640, 450, Enumerable.Repeat(count: (640 * 450), element: .5d).ToArray());
+        var flat = Resample(Convolve(constant, down: false), width, height, linear: true, half: false, store: false);
+
+        Assert.All(flat.Pixels, value => Assert.Equal(.5d, value, tolerance: 1e-6d));
+        foreach (var (x, y) in new[] { (0, 0), (1, 1), (320, 225), (639, 449) }) {
+            var input = new Image(Height: 450, Pixels: new double[(640 * 450)], Width: 640);
+
+            input.Pixels[((y * 640) + x)] = 1d;
+            var placed = Resample(Convolve(input, down: false), width, height, linear: true, half: false, store: false);
+            // A destination pixel covers more of the same normalized image domain during minification.
+            Assert.Equal(1d, (((placed.Pixels.Sum() * 640d) * 450d) / (width * height)), tolerance: 1e-4d);
+        }
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -29,7 +49,11 @@ public sealed class BloomEnergyLawTests {
     }
     [Fact]
     public void OddGridResamplingPreservesConstantsAndEveryInputsIntegratedContribution() {
-        foreach (var (source, target, linear) in new[] { (225, 112, false), (900, 225, false), (112, 225, true), (225, 450, true), (1, 3, true) }) {
+        foreach (var (source, target, linear) in new[] {
+            (225, 112, false), (900, 225, false), (112, 225, true), (225, 450, true), (1, 3, true),
+            (640, 320, true), (450, 225, true), (640, 160, true), (450, 112, true), (640, 64, true), (450, 45, true),
+            (640, 1, true), (450, 1, true),
+        }) {
             var weights = Weights(linear: linear, source: source, target: target);
             var columns = new double[source];
 
@@ -106,7 +130,9 @@ public sealed class BloomEnergyLawTests {
             var right = (left + length);
             var taps = new List<Tap>();
 
-            for (var pair = 0; (pair < (linear ? 2 : 3)); pair++) {
+            var pairs = (linear ? (int)MathF.Ceiling(x: ((right + 1f) * .5f)) : 3);
+
+            for (var pair = 0; (pair < pairs); pair++) {
                 var cell = (pair * 2);
                 var a = (linear ? (float)(HatIntegral(x: (right - cell)) - HatIntegral(x: (left - cell))) :
                     MathF.Max(x: 0f, y: (MathF.Min(x: right, y: (cell + 1f)) - MathF.Max(x: left, y: cell))));

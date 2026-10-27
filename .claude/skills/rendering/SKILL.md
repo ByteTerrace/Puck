@@ -39,7 +39,11 @@ a corner impulse's energy, and point resampling odd levels changed their mean.
 Keep the constant, impulse and odd-grid witnesses in `BloomEnergyLawTests`; include
 the final placement tent and FP16 storage. Fractional radii blend symmetric kernels
 at adjacent integer widths, rather than combining their interpolation with the
-resampling. `CameraBloom` is a value; `WorldBloomLawTests` covers on/off allocation.
+resampling. Placement can minify the retained source envelope during a shrinking
+layout transition. Integrate its entire footprint, including edge hats; the axis's
+three cached pairs are not a tap limit. Keep the 2×, 4×, 10× and one-pixel placement
+constant/impulse witnesses. Renormalizing truncated taps still discards energy.
+`CameraBloom` is a value; `WorldBloomLawTests` covers on/off allocation.
 Seat lens selection happens beside pose selection from the active endpoint's program.
 `PlaceViews` derives optical placement from the resulting snapshots, including routed
 seats and camera-mode overrides. Never infer it from unused boot-world programs.
