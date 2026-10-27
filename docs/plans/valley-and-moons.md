@@ -32,8 +32,9 @@ ends with the check named in it.
    gallery routes; record whole-frame time, body, mesh, source and staging
    counts, cold and warm bake work, and a real C# and HLSL edit-to-running
    time.
-1. **The valley.** Keep the gallery precinct at y 0 on the valley floor: about
-   2 km across, 250 to 450 m of relief, a clear floor about 400 m across that
+1. **The valley.** Keep the gallery precinct at y 0 on the floor of a basin or
+   caldera with relatively close slopes (provisionally 250 to 450 m of relief,
+   sized to keep the walls near), a clear floor about 400 m across that
    keeps every exhibit, aperture, the studio, the camera course, the devices
    and the rate range, and reserves the combat yard (north) and the climate wing
    (east). Merge the old slab edge into the terrain, add an overlook, and
@@ -44,7 +45,7 @@ ends with the check named in it.
    8192 m cap, haze is decoupled from draw distance, macro terrain shadows are
    added, and displayed surface error stays inside the one-pixel rule with its
    hysteresis below one pixel.
-2. **One real moon.** A moon source world with a surface arrival and a return
+2. **One real moon, then the second.** A moon source world with a surface arrival and a return
    portal, through the existing references, destinations and sessions. The
    valley sky shows that same world as a `View` layer with an authored coverage
    mode and intentional moon lighting. One moon is finished and measured before
@@ -74,14 +75,18 @@ ends with the check named in it.
    the highest settings, both backends, edit-to-running under 30 s. More moons
    and content follow it.
 
-## Questions for the owner
+## The owner's rulings
 
-1. The valley's character: alpine basin, narrow canyon, eroded desert, volcanic
-   caldera or another; close looming walls or distant peaks beyond open slopes.
-2. Its relationship to the Nexus: a valley on a planetoid beneath the floating
-   Nexus, or the gallery valley on the Nexus landmass itself.
-3. The moons: how many, their apparent size, look (colour, rings, settlements),
-   and daytime crescents or night dominance.
-4. Flight: the Moth's wings, a craft or both; assisted horizon flight or freer
-   attitude; a short ascent or a long cruise; open landing anywhere or authored
-   destinations.
+- **The valley** is a basin or caldera with relatively close slopes, not far
+  away: the walls rise near the clear floor rather than beyond open plains.
+  Phase 1 sizes the relief and floor to that.
+- **The Nexus island is not part of this design yet.** The valley stands on its
+  own.
+- **Two moons** that look relatively close in the sky; no rings yet. Phase 2
+  finishes one and measures it before the second.
+- **Flight is the Moth's wings** for now; no craft.
+
+Still open, for when the work reaches them: the moons' colour and surface, and
+whether they dominate the day or the night; whether flight is assisted
+toward the horizon or freer in attitude; how long the ascent is; and whether
+landing is open or at authored destinations.
