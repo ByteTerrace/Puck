@@ -1967,7 +1967,7 @@ rule "chess-demo-loop" {
 // state-backed ink lights the verdict that actually occurred. No engine screen knows this game's vocabulary.
 screens [
   {
-    index: 7
+    index: 12
     origin [56.5, 10.55, 23.65]
     right [-1, 0, 0]
     up [0, 1, 0]
