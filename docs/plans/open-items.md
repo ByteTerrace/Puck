@@ -20,6 +20,19 @@ reviews it and says so (the owner's ruling).
 - [ ] **Test fixtures stop machines they do not need.** The debug-world replay spends most of its time in the cartridge emulators every test world runs and in continuation hashing; fixtures that only exercise other features can keep their machines mounted but stopped, as the chess demo's fixtures do.
 - [ ] **The bloom look.** The debug world authors scatter 0.04 and radius 0.08 for the owner to judge in the World.
 
+## Owned memory for the custom host
+
+The [memory plan](memory-pooling.md#delivery-packages) separates a focused memory
+slice from later runtime integration. This is planning work; implementation has
+not started.
+
+- [ ] M1: Prove real custom-runtime allocation, reclamation, and native thread lifecycle.
+- [ ] M2: Extract the small Memory boundary and migrate a retained State storage consumer.
+- [ ] M3: Add justified shared reuse, job admission, pressure handling, and shutdown.
+- [ ] R1: Port the actual State/Maths runtime dependencies and owned storage.
+- [ ] R2: Migrate jobs, shared resources, and other buffer consumers.
+- [ ] R3: Resolve the remaining lifetimes and dependencies for the custom-host World workload.
+
 ## World authoring diagnostics
 
 - [x] Make `puck creation stats --world worlds/debug/debug.puck --prototype companion` compose the live world's grant masks (`CliWorldVocabulary` installs `WorldSchemaVocabularyHooks` alongside the local document source, and `CreationCommand` calls `CliWorldVocabulary.EnsureInstalled()`).
