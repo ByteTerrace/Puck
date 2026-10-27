@@ -197,6 +197,21 @@ eligibility and never deletes backup recovery points.
 
 ## The runtime
 
+**Bare-metal Puck runs on Puck's own host (the owner's ruling).** The
+freestanding runtime and platform host supply the engine's required contracts;
+hosting stock .NET is not a goal or a fallback. The archived
+[BareMetal experiment](../../experimental/Puck.BareMetal/README.md) is prior art
+for this work. Missing runtime, memory-management, device, or presentation
+contracts are gaps to implement in Puck's host or resolve in the engine, rather
+than reasons to introduce a stock .NET host. This direction does not establish
+that the current experiment can run the current engine.
+
+**The bare-metal host has no garbage collector, by design (the owner's
+ruling).** Porting Puck does not add one. Engine allocations need explicit
+owners and lifetimes, with storage reclaimed or reused when those lifetimes
+end. GC-dependent cache lifetime and implicit reclamation are engine porting
+work; adding allocation alone to the host does not resolve them.
+
 **No new packages; every fold has an existing home.** No rewrite of
 `WorldBody`; no change to the name grammar (a namespace is a property of an
 import, never a character inside a name); no preservation of retired journal
