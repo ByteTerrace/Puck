@@ -1,13 +1,29 @@
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
+    /// <summary>Collects the distinct rows a transform can write after substituting its live bindings, including
+    /// draw bookkeeping. Uses the same access walk as disclosure and compilation.</summary>
+    /// <param name="transform">The resolved transform.</param>
+    /// <param name="catalog">The catalog its ordinals address.</param>
+    /// <param name="binding">The live row and key substitutions.</param>
+    /// <param name="writes">Storage for at least the catalog's row count.</param>
+    /// <returns>The number of written row ordinals stored.</returns>
+    public static int CollectWrites(ArenaTransform transform, StateCatalog catalog, in ArenaTransformBinding binding, Span<int> writes) {
+        Span<int> reads = stackalloc int[catalog.Rows.Count];
+        var accesses = new DisclosureAccesses(catalog: catalog, reads: reads, writes: writes);
+
+        accesses.Collect(binding: in binding, transform: transform);
+        return accesses.Writes.Length;
+    }
+
     // Collect intrinsic dependencies as well as the compiler's selector/set dependencies. Written rows can also
     // be read: sorting reveals their values, moving reveals membership, and remembering tests prior contents.
     internal static void CollectAccesses(ArenaTransform transform, StateCatalog catalog, in ArenaTransformBinding binding, List<int> reads, List<int> writes) {
         Span<int> readRows = stackalloc int[catalog.Rows.Count];
         Span<int> writeRows = stackalloc int[catalog.Rows.Count];
         var accesses = new DisclosureAccesses(catalog: catalog, reads: readRows, writes: writeRows);
-        accesses.Collect(transform: transform, binding: in binding);
+
+        accesses.Collect(binding: in binding, transform: transform);
         foreach (var row in accesses.Reads) { reads.Add(item: row); }
         foreach (var row in accesses.Writes) { writes.Add(item: row); }
     }
@@ -17,20 +33,22 @@ public static partial class ArenaTransforms {
     private ref struct DisclosureAccesses(StateCatalog catalog, Span<int> reads, Span<int> writes) {
         private readonly Span<int> m_reads = reads;
         private readonly Span<int> m_writes = writes;
+
         private int m_readCount;
         private int m_writeCount;
+
         public readonly ReadOnlySpan<int> Reads => m_reads[..m_readCount];
         public readonly ReadOnlySpan<int> Writes => m_writes[..m_writeCount];
 
         private void Read(int row) {
-            if ((uint)row < (uint)catalog.Rows.Count && !Reads.Contains(value: row)) { m_reads[m_readCount++] = row; }
+            if ((((uint)row) < ((uint)catalog.Rows.Count)) && !Reads.Contains(value: row)) { m_reads[m_readCount++] = row; }
         }
         private void Write(int row, bool read = false) {
-            if ((uint)row < (uint)catalog.Rows.Count && !Writes.Contains(value: row)) { m_writes[m_writeCount++] = row; }
+            if ((((uint)row) < ((uint)catalog.Rows.Count)) && !Writes.Contains(value: row)) { m_writes[m_writeCount++] = row; }
             if (read) { Read(row: row); }
         }
         private void Vector(VectorSource source) { if (source.IsCell) { Read(row: source.Address.RowOrdinal); } }
-        private void Named(CellName name) { if (catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle)) { Read(row: handle.Ordinal); } }
+        private void Named(CellName name) { if (catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)) { Read(row: handle.Ordinal); } }
         private void Set(CellSetExpression? set) {
             switch (set) {
                 case CellSetExpression.Board board: Named(name: board.Row); break;
@@ -41,13 +59,14 @@ public static partial class ArenaTransforms {
                         if (catalog.Rows[ordinal].EffectiveDomain is StateDomain.KeysOf domain) { Named(name: domain.Row); }
                     }
                     break;
-                case CellSetExpression.Any any: for (var index = 0; index < any.Items.Count; index++) { Set(set: any.Items[index]); } break;
-                case CellSetExpression.Both both: for (var index = 0; index < both.Items.Count; index++) { Set(set: both.Items[index]); } break;
+                case CellSetExpression.Any any: for (var index = 0; (index < any.Items.Count); index++) { Set(set: any.Items[index]); } break;
+                case CellSetExpression.Both both: for (var index = 0; (index < both.Items.Count); index++) { Set(set: both.Items[index]); } break;
                 case CellSetExpression.Complement complement: Set(set: complement.Item); break;
             }
         }
+
         public void Collect(ArenaTransform transform, in ArenaTransformBinding binding) {
-            for (var index = 0; index < transform.DisclosureReads.Count; index++) { Read(row: transform.DisclosureReads[index]); }
+            for (var index = 0; (index < transform.DisclosureReads.Count); index++) { Read(row: transform.DisclosureReads[index]); }
             switch (transform) {
                 case ArenaTransform.Arrange value:
                     Write(row: value.RowOrdinal, read: true); Read(row: value.FromRowOrdinal); Read(row: value.DomainRowOrdinal); break;
@@ -62,10 +81,12 @@ public static partial class ArenaTransforms {
                     Write(row: value.IntoRowOrdinal); Vector(source: value.From); break;
                 case ArenaTransform.Mix value:
                     Write(row: value.IntoRowOrdinal);
-                    for (var index = 0; index < value.Terms.Count; index++) { Vector(source: value.Terms[index].Source); }
+                    for (var index = 0; (index < value.Terms.Count); index++) { Vector(source: value.Terms[index].Source); }
                     break;
                 case ArenaTransform.Nearest value:
                     Write(row: value.IntoRowOrdinal); Read(row: value.FromRowOrdinal); Read(row: value.WhereRowOrdinal); Vector(source: value.Query); break;
+                case ArenaTransform.Observe value:
+                    Write(row: value.RowOrdinal); Read(row: value.SourceRowOrdinal); Read(row: value.MaskRowOrdinal); Read(row: value.PositionsRowOrdinal); break;
                 case ArenaTransform.PushRay value:
                     var pool = catalog.Pools[value.PoolOrdinal];
                     Read(row: pool.DomainRowOrdinal);
@@ -82,7 +103,7 @@ public static partial class ArenaTransforms {
                     Write(row: value.RowOrdinal, read: true); break;
                 case ArenaTransform.SortZone value:
                     Write(row: value.RowOrdinal, read: true);
-                    for (var index = 0; index < value.By.Count; index++) { Read(row: value.By[index].RowOrdinal); }
+                    for (var index = 0; (index < value.By.Count); index++) { Read(row: value.By[index].RowOrdinal); }
                     break;
                 case ArenaTransform.Transfer value:
                     Write(row: binding.FromOr(own: value.FromRowOrdinal), read: true);
@@ -90,7 +111,7 @@ public static partial class ArenaTransforms {
                     Write(row: value.DrawRowOrdinal, read: true); break;
                 case ArenaTransform.WriteSet value:
                     Write(row: value.RowOrdinal); Read(row: value.SetRowOrdinal); Set(set: value.Set?.Set); break;
-                }
+            }
         }
     }
 
@@ -103,7 +124,8 @@ public static partial class ArenaTransforms {
         Span<int> readRows = stackalloc int[arena.Rows.Count];
         Span<int> writeRows = stackalloc int[arena.Rows.Count];
         var accesses = new DisclosureAccesses(catalog: arena.Catalog, reads: readRows, writes: writeRows);
-        accesses.Collect(transform: transform, binding: in binding);
+
+        accesses.Collect(binding: in binding, transform: transform);
         foreach (var target in accesses.Writes) {
             foreach (var source in accesses.Reads) {
                 if (!arena.ReadAudienceEncloses(rowOrdinal: source, audience: arena.Rows[target].Visibility)) {

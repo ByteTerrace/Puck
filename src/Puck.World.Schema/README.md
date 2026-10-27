@@ -2501,13 +2501,17 @@ effects, and field paints. Branches use ordinary `ActionEffect`
 records, including text writes and expression-sourced history pushes. The
 compiler rejects nested transactions.
 `removeStateCell` lets the same transaction retire keyed membership cleanly.
+An unresolved destination key refuses a write, schedule or remove inside a
+transaction, even when the pointer spells a valid cell name no arena row holds.
+Pool claim, pair claim and iteration bodies retain this strict behavior.
 
 An `if` effect branches its own `then`/`else` effect lists on a predicate — the
 same grammar a gate compiles. Both branches read the frame at the `if`'s own
 position, so an earlier same-firing write is visible to the condition exactly
 as a later effect's own operand would see it. A condition that cannot
 evaluate runs neither branch and is reported the same way a failing top-level
-effect is; a false condition with no branch left to run is not a failure.
+effect is; its refusal rewinds the enclosing scope. A false condition with no
+branch left to run is not a failure.
 Each branch effect is its own boundary, on the same terms as a top-level
 effect or, inside a `transaction`, any other step — a branch is not itself a
 transaction. An `if` may sit inside a `transaction`; a `transaction` may sit
