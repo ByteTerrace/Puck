@@ -34,9 +34,9 @@ public sealed class WorldFieldRegionsLawTests {
         Assert.True(condition: WorldProjection.TryToDefinition(decoded!, out var hydrated, out reason), userMessage: reason);
         Assert.Equal(new[] { "west", "east" }, hydrated!.FieldRegions.Select(selector: region => region.Name));
         Assert.Equal(definition.FieldRegions[1].Lattice, hydrated.FieldRegions[1].Lattice);
-        Assert.Empty(collection: (hydrated.FieldRegions[0].Paint ?? []));
-        Assert.Empty(collection: (hydrated.FieldRegions[0].Reactions ?? []));
-        Assert.Equal(0f, hydrated.FieldRegions[0].Fields[0].Initial);
+        Assert.Equal(definition.FieldRegions[0].Paint, hydrated.FieldRegions[0].Paint);
+        Assert.Equal(definition.FieldRegions[0].Reactions, hydrated.FieldRegions[0].Reactions);
+        Assert.Equal(1f, hydrated.FieldRegions[0].Fields[0].Initial);
         Assert.True(condition: WorldBoundRow.TryResolve(definition: hydrated, length: out var length, row: out _, rowName: "eastValue"));
         Assert.Equal(actual: length, expected: 3);
     }

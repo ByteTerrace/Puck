@@ -814,8 +814,15 @@ restored `StateCatalog` before continuing. State handles belong to their catalog
 restoring cell arrays alone leaves scalar/tag operands stale and fails on the
 first continuation tick. The regional checkpoint/control law exercises this path.
 Presentation region declarations pass the same live row-reader checks as cell
-delivery; never copy the authority's complete composite into a projection. Carry
-shape and appearance only, with no seeds, paint, reactions or travel inputs.
+delivery; never copy the authority's complete composite into a projection.
+The owner's ruling: seed data is often a public game feature, so disclosure is
+the author's visibility policy. Preserve an admitted row's initial value and
+paints unchanged, including public seeds for every observer. Omit forbidden rows
+and their seeds, and omit a reaction if any field or state dependency is hidden
+(use the existing compiled node read/write sets). Apply the same source check to
+a travel input. Never replace allowed initial values with zero or strip allowed
+paints and reactions as a blanket policy. The two-direction region law exercises
+public, admitted and refused recipients through serialization and hydration.
 Physical named addresses survive fields being omitted before them in a projection.
 Body-coupled reaction hosts admit only bodies coupled to their stepping region.
 After a body leaves all regions contributing an exposure row, clear that row on

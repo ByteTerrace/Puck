@@ -9,11 +9,18 @@ namespace Puck.World.Server.Tests;
 /// <summary>Independent physical regions retain their identity across live controls and durable restore.</summary>
 public sealed class WorldFieldRegionLawTests {
     [Fact]
-    public void PresentationRegionsFollowLiveReadersAndCarryNoAuthoritySeedsOrPrograms() {
+    public void PresentationRegionsFollowLiveReadersAndExcludeHiddenReactionDependencies() {
         var first = Region("first", "hiddenValue", -2f) with {
             Fields = [new WorldFieldRow(Name: "hiddenValue", Initial: 7, Min: 0, Max: 100), new WorldFieldRow(Name: "visibleValue", Initial: 3, Min: 0, Max: 100)],
-            Reactions = [new WorldReaction.Decay(Field: "hiddenValue", Rate: 1f)],
-            Paint = [new WorldLatticeFill.Rect(MaxX: 1, MaxZ: 1, MinX: 0, MinZ: 0, Value: 9) { Field = "hiddenValue" }],
+            Reactions = [new WorldReaction.Decay(Field: "hiddenValue", Rate: 1f), new WorldReaction.Decay(Field: "visibleValue", Rate: 1f),
+                new WorldReaction.Transform(When: [new WorldFieldCondition(Comparison: ExpressionOp.Greater, Field: "hiddenValue", Value: 0f)],
+                    Then: [new WorldFieldWrite(Field: "visibleValue", Op: WorldFieldWriteOp.Set, Value: 2f)]),
+                new WorldReaction.Decay(Field: "visibleValue", Rate: new WorldLatticeScalar(Row: "privateControl")),
+                new WorldReaction.Transform(When: [], Then: [new WorldFieldWrite(Field: "hiddenValue", Op: WorldFieldWriteOp.Set, Value: 2f)]),
+                new WorldReaction.Expose(Comparison: ExpressionOp.Greater, Field: "visibleValue", Row: "privateOutput", Value: 0f)],
+            Paint = [new WorldLatticeFill.Rect(MaxX: 1, MaxZ: 1, MinX: 0, MinZ: 0, Value: 9) { Field = "hiddenValue" },
+                new WorldLatticeFill.Rect(MaxX: 1, MaxZ: 1, MinX: 0, MinZ: 0, Value: 5) { Field = "visibleValue" }],
+            TravelResistance = new WorldLatticeScalar(Row: "privateControl"),
         };
         var section = WorldFieldsSection.ToStateSection(composite: [first, Region("second", "secondValue", 20f) with { Reactions = null }]);
 
@@ -23,7 +30,9 @@ public sealed class WorldFieldRegionLawTests {
             "secondValue" => row with { Visibility = new StateVisibility(Readers: []) },
             _ => row,
         }), new WorldStateRow(Name: CellName.Parse(candidate: "readers"), Kind: CellKind.Text, Domain: StateDomain.Keys.Instance,
-            Cells: [new StateCell(CellName.Parse(candidate: "allowed"), CellValue.Text(value: "seat1"))])],
+            Cells: [new StateCell(CellName.Parse(candidate: "allowed"), CellValue.Text(value: "seat1"))]),
+            Scalar(name: "privateControl", value: 1) with { Visibility = new StateVisibility(Readers: []) },
+            new WorldStateRow(Name: CellName.Parse(candidate: "privateOutput"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance, Visibility: new StateVisibility(Readers: []))],
         };
         using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument() with { StateRaw = section });
 
@@ -38,12 +47,15 @@ public sealed class WorldFieldRegionLawTests {
 
         Assert.DoesNotContain(actualString: json, expectedSubstring: "hiddenValue");
         Assert.DoesNotContain(actualString: json, expectedSubstring: "secondValue");
+        Assert.DoesNotContain(actualString: json, expectedSubstring: "privateControl");
+        Assert.DoesNotContain(actualString: json, expectedSubstring: "privateOutput");
         var disclosed = Assert.Single(collection: projection.FieldRegions!);
 
         Assert.Equal("visibleValue", Assert.Single(collection: disclosed.Fields).Name);
-        Assert.Equal(0f, disclosed.Fields[0].Initial);
-        Assert.Null(@object: disclosed.Paint);
-        Assert.Null(@object: disclosed.Reactions);
+        Assert.Equal(3f, disclosed.Fields[0].Initial);
+        Assert.Equal(5f, Assert.IsType<WorldLatticeFill.Rect>(@object: Assert.Single(collection: disclosed.Paint!)).Value);
+        Assert.Equal("visibleValue", Assert.IsType<WorldReaction.Decay>(@object: Assert.Single(collection: disclosed.Reactions!)).Field);
+        Assert.Null(value: disclosed.TravelResistance);
         Assert.True(condition: WorldProjection.TryToDefinition(projection, out var hydrated, out var reason), userMessage: reason);
         var view = new Puck.World.Client.WorldDocumentStateView(definition: () => hydrated!);
         var moved = new int[StateCapacity.MaxRows];
@@ -52,10 +64,56 @@ public sealed class WorldFieldRegionLawTests {
         Assert.True(condition: view.TryResolveRow(ordinal: out var ordinal, rowName: "visibleValue"));
         Assert.True(condition: view.TryRead(engineTick: 0, key: "0", ordinal: ordinal, sample: out var sample, target: false, tick: 0));
         Assert.Equal(123L, sample.Value.Raw);
-        Assert.Equal(2, Assert.Single(collection: Project(recipient: Principal.Seat(slot: 0)).FieldRegions!).Fields.Count);
+        var admitted = Assert.Single(collection: Project(recipient: Principal.Seat(slot: 0)).FieldRegions!);
+
+        Assert.Equal(2, admitted.Fields.Count);
+        Assert.Equal(7f, admitted.Fields[0].Initial);
+        Assert.Equal(2, admitted.Paint!.Count);
+        Assert.Equal(4, admitted.Reactions!.Count);
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "readers", "allowed", 0, WorldDocumentWriteKind.Set, Text: "seat2"));
         fixture.Step();
         Assert.Single(collection: Assert.Single(collection: Project(recipient: Principal.Seat(slot: 0)).FieldRegions!).Fields);
+    }
+    [Fact]
+    public void AuthoredVisibilityHidesRestrictedSeedsAndPreservesPublicSeedsForEveryObserver() {
+        WorldFieldsSection Seeded(string name, float origin, float paint) => Region(name, (name + "Value"), origin) with {
+            Fields = [new WorldFieldRow(Name: (name + "Value"), Initial: 7, Min: 0, Max: 100)],
+            Paint = [new WorldLatticeFill.Rect(MaxX: 1, MaxZ: 1, MinX: 0, MinZ: 0, Value: paint) { Field = (name + "Value") }],
+            Reactions = [new WorldReaction.Expose(Comparison: ExpressionOp.Greater, Field: (name + "Value"), Row: "exposed", Value: 0f)],
+            TravelResistance = 2f,
+        };
+        var section = WorldFieldsSection.ToStateSection(composite: [Seeded(name: "restricted", origin: -2f, paint: 31f), Seeded(name: "public", origin: 20f, paint: 43f)]);
+
+        section = section with {
+            World = [.. section.World!.Select(selector: row => ((row.Name.Value == "restrictedValue")
+            ? row with { Visibility = new StateVisibility(Readers: ["seat1"]) } : row)),
+            new WorldStateRow(Name: CellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance)],
+        };
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument() with { StateRaw = section });
+
+        foreach (var recipient in new Principal?[] { null, Principal.Seat(slot: 0), Principal.Seat(slot: 1), Principal.Peer(generation: 1, index: 0) }) {
+            var time = ArenaTime.Origin;
+            var projection = WorldProjection.Compose(fixture.Server.Definition, WorldDisclosureTier.Presentation, "test", 0,
+                fixture.Server.Arena, in time, recipient)!;
+            var wire = WorldProjection.Serialize(projection: projection);
+            var admitted = (recipient == Principal.Seat(slot: 0));
+
+            Assert.Equal(admitted, System.Text.Encoding.UTF8.GetString(bytes: wire).Contains(comparisonType: StringComparison.Ordinal, value: "restrictedValue"));
+            Assert.Equal((admitted ? 2 : 1), projection.FieldRegions!.Count);
+            Assert.True(condition: WorldProjection.TryDeserialize(projection: out var decoded, reason: out var reason, utf8Json: wire), userMessage: reason);
+            Assert.True(condition: WorldProjection.TryToDefinition(decoded!, out var hydrated, out reason), userMessage: reason);
+            foreach (var region in hydrated!.FieldRegions) {
+                var original = fixture.Server.Definition.FieldRegions.Single(predicate: candidate => (candidate.Name == region.Name));
+
+                Assert.Equal(original.Fields, region.Fields);
+                Assert.Equal(7f, Assert.Single(collection: region.Fields).Initial);
+                Assert.Equal(original.Paint, region.Paint);
+                Assert.Single(collection: region.Paint!);
+                Assert.Equal(original.Reactions, region.Reactions);
+                Assert.Single(collection: region.Reactions!);
+                Assert.Equal(original.TravelResistance, region.TravelResistance);
+            }
+        }
     }
     [InlineData(false, 1)]
     [InlineData(true, 1)]

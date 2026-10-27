@@ -164,8 +164,10 @@ resolves the named address, since disclosure can omit preceding fields. Each reg
 keeps its own cell count and lattice shape, so reshaping one preserves the
 delivered cells of every other region. Presentation projections carry only the
 `FieldRegions` rows admitted by their live reader policies, with their lattice
-shape and appearance. Seeds, paint, reactions and travel inputs stay at the
-authority; checked snapshots supply the disclosed cells. Hydration reconstructs
+shape, appearance, authored initial values and paints unchanged. Reactions and
+travel inputs cross when their dependencies are readable too. A public row's
+seed data reaches every observer; restricted data reaches only admitted readers.
+Checked snapshots supply the current cells. Hydration reconstructs
 the separate state topologies from those disclosed declarations.
 `ApplyFieldCells` names the
 rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them. A

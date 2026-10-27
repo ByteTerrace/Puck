@@ -59,26 +59,51 @@ public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDi
 /// document snapshot taken per observer: which zone holds a token decides who may read it, so a disclosure composed
 /// against a stale copy would answer for a table that has already moved.</remarks>
 public static class WorldStateDisclosure {
-    /// <summary>Discloses physical row declarations through their live reader policies. Presentation needs shape
-    /// and appearance, never the authority's seeds, paint, reactions or motion inputs; cells arrive separately
-    /// through the same recipient's checked snapshot deltas.</summary>
+    /// <summary>Discloses physical rows and their authored seeds through live reader policies. Public seeds remain
+    /// unchanged; paint and reactions cross only with readable owning rows and dependencies. Current cell values
+    /// arrive separately through the same recipient's checked snapshot deltas.</summary>
     public static IReadOnlyList<WorldFieldsSection> FieldProjection(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
         var observer = new Observer(arena: arena, recipient: recipient, unrestricted: unrestricted);
         var result = new List<WorldFieldsSection>();
 
-        foreach (var region in definition.FieldRegions) {
+        for (var regionIndex = 0; (regionIndex < definition.FieldRegions.Count); regionIndex++) {
+            var region = definition.FieldRegions[regionIndex];
             var fields = new List<WorldFieldRow>();
+            var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var field in region.Fields) {
-                if (!arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: field.Name) ||
-                    !observer.Allows(policy: arena.Rows[handle.Ordinal].Visibility)) { continue; }
-                fields.Add(item: field with { Initial = Math.Clamp(value: 0f, min: field.Min, max: field.Max) });
+                if (!observer.ReadsRow(name: field.Name)) { continue; }
+                fields.Add(item: field);
+                names.Add(item: field.Name);
             }
             if (fields.Count == 0) { continue; }
-            result.Add(item: region with { Fields = fields, Paint = null, Reactions = null, TravelResistance = null });
+            var reactions = new List<WorldReaction>();
+
+            if (region.Reactions is { Count: > 0 }) {
+                var program = definition.FieldPrograms[regionIndex];
+
+                for (var index = 0; (index < region.Reactions.Count); index++) {
+                    if (FieldNodeDisclosed(program.Nodes[index], program, names, ref observer)) { reactions.Add(item: region.Reactions[index]); }
+                }
+            }
+            result.Add(item: region with {
+                Fields = fields,
+                Paint = region.Paint?.Where(predicate: fill => names.Contains(item: fill.Field)).ToArray(),
+                Reactions = reactions,
+                TravelResistance = (((region.TravelResistance?.Row is { } row) && !observer.ReadsRow(name: row)) ? null : region.TravelResistance),
+            });
         }
         return result;
     }
+
+    private static bool FieldNodeDisclosed(WorldFieldNode node, WorldFieldProgram program, HashSet<string> fields, ref Observer observer) {
+        foreach (var field in node.FieldReads) { if (!fields.Contains(item: program.Fields[field.Ordinal].Name)) { return false; } }
+        foreach (var field in node.FieldWrites) { if (!fields.Contains(item: program.Fields[field.Ordinal].Name)) { return false; } }
+        foreach (var row in node.StateReads) { if (!observer.ReadsRow(name: program.StateCatalog[row].Name)) { return false; } }
+        foreach (var row in node.StateWrites) { if (!observer.ReadsRow(name: program.StateCatalog[row].Name)) { return false; } }
+        return true;
+    }
+
     /// <summary>Determines whether the recipient may read one cell, including its containing zone's policy.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>
     /// <param name="arena">The live store.</param>
@@ -692,6 +717,8 @@ public static class WorldStateDisclosure {
         // A restriction the store holds for the recipient's own token, or one a live text row lists it in.
         public bool Allows(StateVisibility? policy) => (m_unrestricted || (policy is null) || policy.IsPublic ||
             WorldStateDisclosure.Allows(arena: m_arena, policy: policy, recipient: m_name ??= m_recipient?.Describe()));
+        public bool ReadsRow(string name) => (m_arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name) &&
+            Allows(policy: m_arena.Rows[handle.Ordinal].Visibility) && !AnyCellWithheld(row: m_arena.Rows[handle.Ordinal], rowOrdinal: handle.Ordinal));
         public bool AnyCellRestricted(int rowOrdinal) {
             var cursor = 0;
 
