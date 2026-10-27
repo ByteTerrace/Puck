@@ -336,6 +336,50 @@ held.
 - **Costs are measured, never ledgered.** Admission charges what the
   implementation bounds; frame-time claims come from quiet-machine readings.
 
+## Weather is a region's composition of generic pieces
+
+Codex and Antigravity proposed weather independently and converged over three
+rounds. Rain, snow, sand, ash and embers are world recipes; no weather or
+element word enters an engine contract.
+
+- **Weather is regional.** It extends the combat decision's named physical
+  regions with presentation projections: a bounded domain, state bindings,
+  fields, sources and blockers, emitters, media, coatings and audio. A storm
+  over one region leaves its neighbour clear; sealed regions exchange nothing,
+  and open regions exchange in a stable order, once per exchange.
+- **Authority never reads an image.** Accumulation, tracks, melting and
+  conversions are fixed-point fields and reactions, persisted through
+  snapshots, checkpoints and replay, advancing at their authored cadence
+  whether or not anyone looks. GPU collisions, particle density, wall time and
+  camera count never feed simulation.
+- **Matter moves through extended reactions, not engine operations.** Same-cell
+  field operands, bounded transfers and directional flux let a world author
+  melting, freezing, wind transport, wet cohesion and sand turning to glass;
+  the engine has no melt or vitrify operation. Exposure for simulation comes
+  from authored masks or bounded fixed queries, never GPU depth.
+- **Cover accumulates on supported surfaces** with a stable support identity,
+  so stacked floors, roofs, plinths and ledges each hold their own. Shelter
+  stops new influx; retained cover persists until it melts, dries, drains or is
+  cleared. Grounded bodies stamp tracks in stable order, and depth slows travel
+  through an authored resistance, with no snow or sand branch in the body
+  integrator.
+- **Particles are shared presentation state.** Region-owned GPU pools step once
+  per presentation step for every view, are sized by machine byte and work
+  budgets rather than fixed caps, and reset by explicit emitter generation,
+  never by a view's history. They draw as instanced analytic streaks and
+  sprites after the opaque resolve, outside the opaque history, and compose by
+  depth with glass (behind the pane refracted, in front after its reflection)
+  and with regional media through shared depth segments. Exposure applies once
+  at the viewing camera and bloom once at each direct endpoint.
+- **Shelter from above is a directional blocker map** built from baked meshes
+  and the shadow machinery along the region's transport direction, glass
+  included, invalidated by changed geometry and moving bounds. Detail and
+  cadence follow displayed size; nothing disappears by recursion depth.
+- **Coatings** project retained regional state onto materials before lighting:
+  wetness, deposits, roughness and normals, with puddles from fields and
+  authored basin masks. Baked meshes carry no curvature, so noise and derived
+  normals only decorate.
+
 ## A collider follows the drawn solid
 
 A placement collides as the solid it draws, not as a bound around it. A

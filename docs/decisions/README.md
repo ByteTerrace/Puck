@@ -8,6 +8,7 @@ contracts belong in the subsystem guides; proposed changes belong in
   document names, simulation and presentation boundaries, composition, the one
   acting identity and what a grant names, portals as planes a body passes
   through, [combat as world content on generic queries, fields and input](engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input),
+  [weather as a region's composition of generic pieces](engine-design.md#weather-is-a-regions-composition-of-generic-pieces),
   and verification policy.
 - [State and the authoring language](state-and-language.md): the rebuilt
   state substrate, its ceilings as prices, the language as a projection with
