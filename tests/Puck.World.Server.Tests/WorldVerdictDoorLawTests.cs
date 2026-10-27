@@ -133,6 +133,58 @@ public sealed class WorldVerdictDoorLawTests {
     ));
 
     [Fact]
+    public void EveryVerdictFiringIsStampedWithoutGrowingTheArenaDuringTheTick() {
+        const int Count = 64;
+        var rows = Enumerable.Range(count: Count, start: 0).Select(selector: index => new WorldStateRow(
+            Name: CellName.Parse(candidate: $"answer{index}"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "ok"), Value: CellValue.Int(value: 0L))],
+            Verdict: new WorldVerdictTrait(Gate: "the rule fired", Status: CellName.Parse(candidate: "ok"))
+        )).ToArray();
+        var definition = Fixtures.BuildDocument().WithWorldState(rows: [
+            // Unrelated storage makes each runtime reservation copy the composed world's whole arena.
+            new WorldStateRow(Name: CellName.Parse(candidate: "padding"), Kind: CellKind.Int, Capacity: 4096),
+            .. rows,
+        ]) with {
+            Rules = rows.Select(selector: row => new WorldRule(
+                Name: row.Name,
+                Gate: new ActionPredicate.CompareState(Comparison: ExpressionOp.Equal, State: row.Name.Value, Key: "ok", Value: 0L),
+                Effects: [new ActionEffect.SetState(State: row.Name.Value, Key: "ok", Value: WorldVerdict.Pass)]
+            )).ToArray(),
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        fixture.Step();
+        var exported = fixture.Server.ExportDefinition();
+
+        foreach (var row in rows) {
+            var cells = WorldDefinitionRows.FindStateRow(rows: exported.State, name: row.Name.Value)!.Cells;
+
+            Assert.Equal(expected: WorldVerdict.Pass, actual: StateRows.FindCell(cells: cells, key: CellName.Parse(candidate: "ok"))!.Value.Raw);
+            Assert.True(condition: (StateRows.FindCell(cells: cells, key: WorldVerdict.FiredTickKey)?.Value.Raw > 0L), userMessage: $"{row.Name} passed without its firing stamp");
+        }
+        Assert.Equal(expected: 0L, actual: fixture.Server.Arena.ReservationWorkCharged);
+    }
+    [Fact]
+    public void AStampRefusalRewindsTheVerdictStatusAndItsWitnesses() {
+        var definition = Document(failWhen: 9L, passWhen: 0L);
+
+        definition = definition.WithWorldState(rows: definition.AuthoredState.Select(selector: row => ((row.Name.Value == Verdict)
+            ? row with { Capacity = 3 }
+            : row)).ToArray());
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        Assert.True(condition: fixture.Server.Definition.StateCatalog.TryResolve(lane: StateLane.Document, name: CellName.Parse(candidate: Verdict), handle: out var handle));
+        // Occupy the remaining slot through raw storage after admission to exercise the effect door's refusal.
+        Assert.True(condition: fixture.Server.Arena.TryMint(rowOrdinal: handle.Ordinal, name: CellName.Parse(candidate: "occupied"), value: CellValue.Int(value: 0L), key: out _, reason: out _));
+
+        fixture.Step();
+
+        Assert.Equal(expected: WorldVerdict.NotEvaluated, actual: Cell(fixture: fixture, key: "ok"));
+        Assert.Null(value: Cell(fixture: fixture, key: WorldVerdict.FiredTickKey.Value));
+        Assert.Equal(expected: 0L, actual: Seen(fixture: fixture));
+    }
+    [Fact]
     public void AVerdictNoRuleWroteCarriesNoFiringStampAndAFiringStampsItsOwnTick() {
         using var fixture = Fixtures.FreshServer(definition: Document(
             failWhen: 9L,

@@ -162,7 +162,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
 | `AddCellStatementNode` | 40 | 1 | `debug/alchemy`, `debug/chess`, `debug/companion-senses`, `debug/go`, `debug/hall` and 2 more |
-| `AndPredicateNode` | 151 | 1 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/alchemy-tests`, `debug/avatars/moth` and 12 more |
+| `AndPredicateNode` | 148 | 1 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy`, `debug/avatars/moth`, `debug/chess` and 11 more |
 | `ArgumentNode` | 7534 | 49 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 31 more |
 | `ArrayExpressionNode` | 11672 | 16 | `debug/addon-hud`, `debug/addons-tests`, `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head` and 39 more |
 | `BinaryExpressionNode` | 1981 | 1 | `debug/alchemy`, `debug/avatars/moth`, `debug/avatars/moth-head`, `debug/avatars/moth-pilot`, `debug/camera-course` and 14 more |
@@ -221,7 +221,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `TestDeclarationNode` | 130 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
 | `TestExpectBlockNode` | 130 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
 | `TestExpectWorldNode` | 4 | 0 | `debug/suit-tests`, `debug/wonderland-tests` |
-| `TestExpectationNode` | 610 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
+| `TestExpectationNode` | 617 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |
 | `TestGivenBlockNode` | 43 | 0 | `debug/alchemy-tests`, `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
 | `TestGivenNode` | 128 | 0 | `debug/alchemy-tests`, `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
 | `TestSeatStepNode` | 437 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/alchemy-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests` and 8 more |

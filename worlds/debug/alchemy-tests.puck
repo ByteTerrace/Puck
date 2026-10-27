@@ -15,9 +15,16 @@ test "the tokens settle on their shelf cells with the four starters face up" {
   expect {
     alchemyHold == 9
     physics(quiescent) == 1
-    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1 and board(cellOf, alchemyBoard, placement, alchemyToken4) == 4 and board(cellOf, alchemyBoard, placement, alchemyToken5) == 5 and board(cellOf, alchemyBoard, placement, alchemyToken31) == 31
-    upright(placement, alchemyToken1) > 0 and upright(placement, alchemyToken2) > 0 and upright(placement, alchemyToken3) > 0 and upright(placement, alchemyToken4) > 0
-    upright(placement, alchemyToken5) < 0 and upright(placement, alchemyToken31) < 0
+    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken4) == 4
+    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
+    board(cellOf, alchemyBoard, placement, alchemyToken31) == 31
+    upright(placement, alchemyToken1) > 0
+    upright(placement, alchemyToken2) > 0
+    upright(placement, alchemyToken3) > 0
+    upright(placement, alchemyToken4) > 0
+    upright(placement, alchemyToken5) < 0
+    upright(placement, alchemyToken31) < 0
     alchemyCollisions == 0
     alchemyMisplaced == 0
     alchemyIllegal == 0
