@@ -781,10 +781,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             blooms |= ((snapshot.Bloom is { Scatter: > 0f }) && (snapshot.BloomQuality != Puck.Hosting.BloomQuality.Off) &&
                 !snapshot.Unexposed && !snapshot.Quality.GeometryOnly && (snapshot.ScreenFidelity < 1f));
         }
-        if (OpticalPlacement != blooms) {
-            OpticalPlacement = blooms;
-            if (m_lastViews is { } authored) { Reconcile(sharpens: m_lastSharpens, tonemap: m_lastTonemap, views: authored); }
-        }
+        // BeginFrame reconciles this demand before the next frame forms any source/environment footprints.
+        // Reconfiguring here would mix the new declarations with this frame's already-published footprints.
+        OpticalPlacement = blooms;
 
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 

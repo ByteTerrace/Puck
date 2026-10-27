@@ -2367,13 +2367,16 @@
       ],
       "properties": {
         "scatter": {
-          "type": "number"
+          "type": "number",
+          "default": 0
         },
         "radius": {
-          "type": "number"
+          "type": "number",
+          "default": 0.08
         },
         "cutoff": {
-          "type": "number"
+          "type": "number",
+          "default": 0
         }
       },
       "additionalProperties": false,

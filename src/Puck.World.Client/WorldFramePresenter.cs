@@ -1165,8 +1165,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
     // group, or null = world), motion, aim, lens, and group spread. Returns
     // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
-    private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
+    private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera, out CameraBloom bloom) {
         camera = default;
+        bloom = default;
 
         WorldCamera? found = null;
         var cameras = m_client.Definition.Cameras;
@@ -1188,6 +1189,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         if (found is not { } cameraRow) {
             return false;
         }
+
+        bloom = m_settings.ResolveBloom(m_client.Definition.Render, cameraRow.Rig.Bloom);
 
         var (basePosition, baseOrientation, spread) = ResolveCameraAnchorPose(
             deltaSeconds: deltaSeconds,
@@ -1793,6 +1796,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (composed.Camera is { } cameraName) {
                 // Named cameras share the live resolution setting with seat cameras, including a layout transition's dip.
                 if (ResolveNamedCamera(
+                    bloom: out var namedBloom,
                     camera: out var namedCamera,
                     deltaSeconds: deltaSeconds,
                     height: height,
@@ -1805,7 +1809,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Region: region
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
-                        Bloom = m_settings.ResolveBloom(m_client.Definition.Render, m_client.Definition.Cameras.First(predicate: camera => (camera.Name == cameraName)).Rig.Bloom),
+                        Bloom = namedBloom,
                         BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,

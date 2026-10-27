@@ -43,6 +43,9 @@ resampling. `CameraBloom` is a value; `WorldBloomLawTests` covers on/off allocat
 Seat lens selection happens beside pose selection from the active endpoint's program.
 `PlaceViews` derives optical placement from the resulting snapshots, including routed
 seats and camera-mode overrides. Never infer it from unused boot-world programs.
+Publish that demand for the next `BeginFrame` reconciliation. Reconfiguring from
+placement mixes newly selected capture-fill/environment reads with footprints
+already formed for the current frame and can make a capture refuse or crash.
 
 Pin exposure and local adaptation for on/off captures, and record each EV with
 `world.exposure`. Use `world.rate pause` to hold one simulation tick for the pair.

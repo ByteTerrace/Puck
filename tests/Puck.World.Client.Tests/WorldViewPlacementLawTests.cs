@@ -107,10 +107,14 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         var lens = settings.ResolveBloom(endpoint.Render, WorldSeatViewState.ProgramOf(endpoint.Views, cameraMode).Bloom);
 
         m_host.BeginFrame(views: endpoint.Views, tonemap: WorldTonemap.None, sharpens: false);
+        var declared = m_instances.Instances;
+
         m_host.PlaceViews(views: [View(new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)) with {
             Bloom = lens, BloomQuality = BloomQuality.High,
         }], sharpness: 0f, rendered: static _ => true, panesCover: false);
         Assert.Equal(placed, m_host.OpticalPlacement);
+        Assert.Same(declared, m_instances.Instances);
+        m_host.BeginFrame(views: endpoint.Views, tonemap: WorldTonemap.None, sharpens: false);
         Assert.Equal(placed, m_host.Synthesized!.Blooms);
     }
     [Fact]
