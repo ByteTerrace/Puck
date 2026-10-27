@@ -731,7 +731,7 @@ public sealed partial class WorldPersistence {
                 EventFeed: Host.Events.Capture(),
                 OwnedWorlds: ownedWorlds!,
                 HostRow: hostRow,
-                Fields: Host.Population.Fields?.Capture(),
+                Fields: Host.Population.CaptureFieldRegions(),
                 Search: Host.Search.Capture(),
                 BoardEnforcement: BoardEnforcement.Capture(),
                 Machines: machines
@@ -799,11 +799,7 @@ public sealed partial class WorldPersistence {
     private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true) {
         var server = checkpoint.Server;
 
-        if ((Host.Population.Fields is null) != (checkpoint.Fields is null)) {
-            throw new InvalidOperationException(message: "the checkpoint's fields-section presence does not match its world definition.");
-        }
-
-        Host.Population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+        Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
 
         var restoredOrigin = ResolveBaseOrigin(
             directory: admission.Definition.DocumentDirectory,
@@ -905,9 +901,9 @@ public sealed partial class WorldPersistence {
             );
         }
 
-        if (Host.Population.Fields is { } lattice) {
-            lattice.Restore(checkpoint: checkpoint.Fields!);
-        }
+        // Restored catalogs mint new handles; retain cells but bind every reaction to that catalog.
+        Host.Population.InstallFields(definition: restoredDefinition);
+        Host.Population.RestoreFieldRegions(checkpoints: checkpoint.Fields);
         Host.AdoptPreparedArena(arena: restoredArena, definition: restoredDefinition);
         Host.Population.Restore(
             checkpoint: checkpoint.Population,

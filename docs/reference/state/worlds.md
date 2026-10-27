@@ -128,7 +128,7 @@ processor resolves `(lane, name)` once to a handle.
   0-based entity index) is checked every tick before that body's drive or
   action intents are admitted. A nonzero cell refuses them until it reads zero
   again.
-- `field` marks a row over the physical field topology, served by the physics
+- `field` marks a row over its named physical field topology, served by the physics
   host (see [Rows the server owns](#rows-the-server-owns)).
 - `verdict` and `witness` mark the rows a `.puck` `test` block lowers to. Only a
   rule's own effect may write them.
@@ -282,15 +282,17 @@ owns the projection's exact member list.
 ## Rows the server owns
 
 A row carrying the physical `field` trait is **host-owned**: the arena holds its
-descriptor and no cells, the physics field lattice serves its values through
+descriptor and no cells, its named region's physics field lattice serves its values through
 `IWorldFacts.TryReadHostOwnedCell` and `TryReadHostOwnedSlot`, and no rule
-writes it. Puck.World derives the mark when it builds the state section; it has
+writes it directly (a `paintField` effect goes through the host). Literal and
+computed cell keys both read the live lattice, bounded by that region's cell
+count. Puck.World derives the mark when it builds the state section; it has
 no wire form.
 
 Because the arena stores nothing for these rows, the arena's hash skips them.
 The server folds them into the world hash as a separate component,
 `HostOwnedRows`, through the field lattice's own `AppendStateHash`, and the
-state export writes them under `fields`.
+state export writes them under `fields`, with region and field identities.
 
 ## Records, pools, and carriers
 

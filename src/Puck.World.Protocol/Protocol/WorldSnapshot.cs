@@ -141,11 +141,13 @@ public readonly record struct WorldSnapshot(
 );
 /// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
 /// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
-/// <param name="Field">The field's index in the declared <c>fields.fields</c> list.</param>
+/// <param name="Field">The field's index within its named region.</param>
 /// <param name="Raw">The cell's value, raw Q48.16 bits.</param>
 /// <param name="Row">A document row ordinal for a typed state cell, or -1 for a field-lattice cell.</param>
 /// <param name="Image">The stored cell. A cell index of -1 starts a replacement row with Raw cells.</param>
-public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int Row = -1, ArenaCellImage Image = default);
+/// <param name="Region">The physical region's topology identity; empty for a document-cell write.</param>
+/// <param name="FieldName">The field's globally unique row identity; empty for a document-cell write.</param>
+public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int Row = -1, ArenaCellImage Image = default, string Region = "", string FieldName = "");
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a
 /// connection carries up to four per tick, one per local seat). The server resolves the intent against the body's live
 /// tape and server-side producer in <c>NextIntent</c> precedence; <paramref name="HeldChannels"/> is the always-overlay

@@ -71,6 +71,16 @@ patch crosses into the mixer's `VoicePatch` struct through the host's patch
 factory, which stays in `Puck.World` alongside the rest of the presentation glue (the tune host, the
 render device) documented in [`Puck.World`'s Audio/ folder](../../src/Puck.World/Audio/README.md).
 
+## Speaker gain
+
+A speaker feed's `gain` accepts a number (1 is unity), a numeric state binding
+such as `"state.level"`, or keys on a clock, using the same scalar grammar as
+lighting and camera operands. Gain resolves for every audio publication through
+the state mirror, including eased cells and `.$target` reads. Authored values
+start within `0..CreationSoundDocument.MaxLevel`; later bound values are clamped
+by the shared value-domain guard. Changing gain preserves emitter identity and
+the mixer's coefficient ramps, and does not restart a synth voice.
+
 ## Text speech
 
 A HUD `Text` element may author a `voice`, reusing `WorldVoiceProfile` and a

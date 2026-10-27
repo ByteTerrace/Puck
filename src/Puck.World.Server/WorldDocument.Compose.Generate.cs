@@ -46,7 +46,7 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
-            var shape = current.Fields!.Lattice;
+            var shape = current.FieldRegions.First(predicate: region => region.Fields.Any(predicate: field => (field.Name == siteRow.Name.Value))).Lattice;
             var cellCount = ((shape.Width * shape.Layers) * shape.Depth);
             var fillSite = WorldDrawSites.StateRow(rowName: siteRow.Name);
 

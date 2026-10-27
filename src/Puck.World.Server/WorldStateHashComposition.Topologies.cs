@@ -29,6 +29,17 @@ public static partial class WorldStateHashComposition {
             hash.Add(value: width);
             hash.Add(value: depth);
             hash.Add(value: layers);
+            if (row is WorldFieldTopology physical) {
+                hash.Add(value: FixedQ4816.FromDouble(value: physical.Origin.X).Value);
+                hash.Add(value: FixedQ4816.FromDouble(value: physical.Origin.Y).Value);
+                hash.Add(value: FixedQ4816.FromDouble(value: physical.Origin.Z).Value);
+                hash.Add(value: FixedQ4816.FromDouble(value: physical.CellSize).Value);
+                hash.Add(value: physical.StepEveryTicks);
+                hash.Add(value: ((byte)((physical.TravelResistance is null) ? 0 : ((physical.TravelResistance.Value.Row is null) ? 1 : 2))));
+                if (physical.TravelResistance is { } resistance) {
+                    if (resistance.Row is { } name) { AppendString(hash: ref hash, value: name); } else { hash.Add(value: FixedQ4816.FromDouble(value: (resistance.Literal ?? 0f)).Value); }
+                }
+            }
         }
     }
 

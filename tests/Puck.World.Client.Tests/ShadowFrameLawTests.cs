@@ -297,7 +297,7 @@ public sealed class ShadowFrameLawTests {
         var weight = new BindableScalar(binding: "state.heat.0");
         var definition = Fixtures.WithLattice(
             definition: Definition(1, Light("field", 0f) with { Illuminance = weight }, Light("steady", 1f)),
-            composite: new WorldFieldsSection(
+            composite: new WorldFieldsSection(Name: "world",
                 Lattice: new WorldFieldLatticeDefinition(
                     Origin: new DocumentVector3(value: Vector3.Zero),
                     CellSize: 1f,
@@ -329,7 +329,7 @@ public sealed class ShadowFrameLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
-            FieldCells: new[] { new FieldCellDelta(Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: 2d).Value) }
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: 2d).Value) }
         ));
 
         Assert.Equal(expected: 2f, actual: client.StateMirror.Scalar(delivered: true, fallback: -1f, scalar: weight));
@@ -343,7 +343,7 @@ public sealed class ShadowFrameLawTests {
             definition: Definition(1,
                 Light("field", 0f) with { Illuminance = new BindableScalar(binding: "state.heat.0") },
                 Light("steady", 1f)),
-            composite: new WorldFieldsSection(
+            composite: new WorldFieldsSection(Name: "world",
                 Lattice: new WorldFieldLatticeDefinition(
                     Origin: new DocumentVector3(value: Vector3.Zero), CellSize: 1f, Width: 1, Depth: 1),
                 Fields: [new WorldFieldRow(Name: "heat", Max: 4f)]
@@ -359,7 +359,7 @@ public sealed class ShadowFrameLawTests {
         void Snapshot(ulong tick, double weight) => client.DeliverSnapshot(snapshot: new WorldSnapshot(
             Tick: tick, EngineTick: tick, Revision: 0, StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
-            FieldCells: new[] { new FieldCellDelta(Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: weight).Value) }
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: weight).Value) }
         ));
 
         Snapshot(tick: 0UL, weight: 2d);

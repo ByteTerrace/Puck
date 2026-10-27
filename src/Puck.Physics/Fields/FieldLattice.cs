@@ -80,6 +80,8 @@ public sealed class FieldLattice {
     private FieldLatticeInput m_input;
     private ReactionSets[] m_reactionSets;
     private int m_revision;
+    private FixedQ4816[] m_transformWhen = [];
+    private FixedQ4816[] m_transformThen = [];
 
     /// <summary>One captured lattice: raw Q48.16 cell values per field, field-major.</summary>
     /// <param name="Raw">The raw values, one array per declared field.</param>
@@ -644,6 +646,10 @@ public sealed class FieldLattice {
         m_cellPassCount = 0;
 
         for (var index = 0; (index < m_input.Reactions.Count); index++) {
+            if (m_input.Reactions[index] is FieldReactionInput.Transform transform) {
+                if (m_transformWhen.Length < transform.When.Count) { m_transformWhen = new FixedQ4816[transform.When.Count]; }
+                if (m_transformThen.Length < transform.Then.Count) { m_transformThen = new FixedQ4816[transform.Then.Count]; }
+            }
             m_cellPassCount += m_input.Reactions[index] switch {
                 FieldReactionInput.Diffuse => 2,
                 FieldReactionInput.Flow => 2,
@@ -992,8 +998,9 @@ public sealed class FieldLattice {
     private void StepTransform(FieldReactionInput.Transform reaction, IFieldLatticeHost host, ulong tick) {
         // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
         // constant, never a per-cell read.
-        var whenValues = new FixedQ4816[reaction.When.Count];
-        var thenValues = new FixedQ4816[reaction.Then.Count];
+        // Transform nodes execute serially; install-sized scratch serves every node without per-step arrays.
+        var whenValues = m_transformWhen;
+        var thenValues = m_transformThen;
 
         for (var index = 0; (index < reaction.When.Count); index++) {
             whenValues[index] = Resolve(
@@ -1641,7 +1648,9 @@ public sealed class FieldLattice {
 
         ArgumentNullException.ThrowIfNull(argument: host);
 
-        foreach (var reaction in m_input.Reactions) {
+        for (var reactionIndex = 0; (reactionIndex < m_input.Reactions.Count); reactionIndex++) {
+            var reaction = m_input.Reactions[reactionIndex];
+
             switch (reaction) {
                 case FieldReactionInput.Diffuse diffuse:
                     StepDiffuse(

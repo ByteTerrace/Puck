@@ -67,6 +67,13 @@ director re-resolves the binder's live machines by reference each produced
 frame, so a cartridge booting late into an already-referenced slot self-heals
 with no verb.
 
+Speaker feed `gain` uses the shared `BindableScalar` grammar: a number,
+`state.<row>[.<key>][.$target]`, or keys on a clock. Each published audio
+snapshot resolves it through the presentation's state mirror and maps it
+into `0..CreationSoundDocument.MaxLevel` with the common value-domain guard.
+Changing gain keeps the emitter and voice identities, so the mixer's existing
+coefficient ramps carry the change without retriggering a sustained patch.
+
 ## The music-transition cue lane
 
 A committed `MusicDirector` segment transition fires the `music.transition`

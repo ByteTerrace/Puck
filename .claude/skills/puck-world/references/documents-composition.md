@@ -151,7 +151,7 @@ Engine facts those worlds exercised, which hold for any world:
   `puck.cartridge.v1` document compiled at bind by the brick's forge
   (`MachineCartridgeLawTests`).
 - **Derived limits.** Sixteen drive-reach ordinals across channels and target
-  registers; one physical field topology per document; and the rule budget
+  registers; aggregate physical-region primer and sampled-surface byte budgets; and the rule budget
   `RuleCapacity.MaxWorkUnitsPerTick` (four million work units), where a
   body-pair interaction costs capacity squared.
 - **Placement policy.** `placements.policy` is optional, and whole when

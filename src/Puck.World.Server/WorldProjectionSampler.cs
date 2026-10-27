@@ -16,7 +16,7 @@ public sealed class WorldProjectionSampler {
     private bool m_pendingFieldsFull;
     private ulong m_updateTicks;
 
-    private readonly Dictionary<long, FieldCellDelta> m_pendingFields = [];
+    private readonly Dictionary<(string Region, string Name, int Row, int Cell, byte Field), FieldCellDelta> m_pendingFields = [];
     private readonly EntityContinuity[] m_pendingContinuity = new EntityContinuity[WorldBodiesLimits.CapacityCeiling];
     private readonly int[] m_pendingContinuityGeneration = new int[WorldBodiesLimits.CapacityCeiling];
     private readonly bool[] m_hasPendingContinuity = new bool[WorldBodiesLimits.CapacityCeiling];
@@ -40,9 +40,9 @@ public sealed class WorldProjectionSampler {
         }
         foreach (var delta in snapshot.FieldCells.Span) {
             if ((delta.Row >= 0) && (delta.Cell == -1)) {
-                foreach (var pending in m_pendingFields.Where(pair => pair.Value.Row == delta.Row).Select(pair => pair.Key).ToArray()) { m_pendingFields.Remove(pending); }
+                foreach (var pending in m_pendingFields.Where(predicate: pair => (pair.Value.Row == delta.Row)).Select(selector: pair => pair.Key).ToArray()) { m_pendingFields.Remove(key: pending); }
             }
-            var key = (((long)(delta.Row + 1)) << 40) | (((long)(uint)(delta.Cell + 1)) << 8) | delta.Field;
+            var key = (delta.Region, delta.FieldName, delta.Row, delta.Cell, delta.Field);
 
             m_pendingFields[key] = delta;
         }
@@ -103,6 +103,9 @@ public sealed class WorldProjectionSampler {
             Array.Sort(
                 array: combined,
                 comparison: static (left, right) => {
+                    var region = StringComparer.Ordinal.Compare(x: left.Region, y: right.Region);
+
+                    if (region != 0) { return region; }
                     var row = left.Row.CompareTo(value: right.Row);
 
                     if (row != 0) { return row; }

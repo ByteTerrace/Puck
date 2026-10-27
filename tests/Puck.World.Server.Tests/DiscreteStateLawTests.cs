@@ -132,7 +132,7 @@ public sealed class DiscreteStateLawTests {
             0L,
             AllocationWindow.Least(window: () => {
                 for (var repeat = 0; (repeat < 100); repeat++) {
-                    _ = WorldTopologyCompilation.FindPhysical(state: state);
+                    _ = WorldTopologyCompilation.FindPhysical(name: "world", state: state);
                     BoardQueries.Read(
                         row: row,
                         topology: topology,
@@ -319,7 +319,7 @@ public sealed class DiscreteStateLawTests {
             Domain: new StateDomain.CellsOf("map")
         ));
 
-        Assert.Null(@object: definition.Fields);
+        Assert.Empty(collection: definition.FieldRegions);
         var topology = TopologyCompilation.Find(
             definition.StateRaw,
             "map"

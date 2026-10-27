@@ -1325,10 +1325,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `placements.rows[].deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
 | `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][fixed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][fixed].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][anchored].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `speakers[][anchored].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][anchored].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][bed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
+| `speakers[][bed].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `gravity.attractors[].placementId` | Placement | Names | Read | `WorldGravityAttractor.PlacementId` |
 | `gravity.points[].placementId` | Placement | Names | Read | `WorldGravityPoint.PlacementId` |
 | `gravity.areas[].placementId` | Placement | Names | Read | `WorldGravityArea.PlacementId` |
@@ -1442,6 +1446,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][field].reactions[][flow].rate{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].reactions[][flow].over` | Field | Names | Read | `WorldReaction.Flow.Over` |
 | `state.lattices[][field].reactions[][flow].spillRow` | State | Names | Action | `WorldReaction.Flow.SpillRow` |
+| `state.lattices[][field].travelResistance{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
 | `state.lattices[][field].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.families[].members` | State | Names | Read | `StateFamily.Members` |
 | `state.records[].name` | Record | Declares |  | `StateRecord.Name` |

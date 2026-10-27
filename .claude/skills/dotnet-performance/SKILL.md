@@ -30,6 +30,12 @@ project file before changing code.
 
 ## Apply repository constraints
 
+- **Bare-metal Puck intentionally has no GC.** Its own runtime and platform
+  host are the target. A port gives engine allocations explicit owners and
+  lifetimes and supplies reclamation or reuse; do not propose adding GC or
+  hosting stock .NET to preserve implicit managed lifetimes. The GC and JIT
+  advice below applies to the existing stock-runtime builds
+  ([owner ruling](../../../docs/decisions/runtime-and-delivery.md#the-runtime)).
 - **`net11.0` is the repository default.** `Puck.Analyzers` deliberately
   targets `netstandard2.0`; inspect the affected project rather than assuming
   every project inherits the default.

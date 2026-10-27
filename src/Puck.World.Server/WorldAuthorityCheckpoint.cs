@@ -2,7 +2,6 @@ using Puck.Commands;
 using System.Numerics;
 
 using Puck.Maths;
-using Puck.Physics.Fields;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -197,7 +196,7 @@ public sealed record WorldAuthorityCheckpoint(
     WorldEventFeedCheckpoint EventFeed,
     WorldOwnedWorldsCheckpoint OwnedWorlds,
     WorldAuthorityHostRowCheckpoint HostRow,
-    FieldLattice.Checkpoint? Fields = null,
+    IReadOnlyList<WorldFieldRegionCheckpoint>? Fields = null,
     ArenaSearchCheckpoint? Search = null,
     WorldBoardEnforcementCheckpoint? BoardEnforcement = null,
     WorldMachineHostCheckpoint? Machines = null

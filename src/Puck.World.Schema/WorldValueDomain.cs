@@ -27,6 +27,12 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 /// its document is validated.
 /// </summary>
 public static class WorldValueFields {
+    /// <summary>A speaker feed's gain, sharing the audio gain ceiling.</summary>
+    public static WorldValueField SpeakerGain { get; } = new(typeof(WorldSpeakerFeed), nameof(WorldSpeakerFeed.Gain), new WorldValueDomain(
+        Maximum: CreationSoundDocument.MaxLevel,
+        Minimum: 0f
+    ));
+
     /// <summary>The brightest illuminance a directional light admits, in lux: twice the brightest sunlight at the Earth's
     /// surface, so a weight authored as if it were lux, or lux authored as a weight, is caught by name.</summary>
     public const float MaxIlluminance = 250000f;
@@ -275,6 +281,7 @@ public static class WorldValueFields {
 
     /// <summary>Gets every field, in declaration order.</summary>
     public static IReadOnlyList<WorldValueField> All { get; } = [
+        SpeakerGain,
         IndirectLights, IndirectEmission, IndirectScreens, IndirectSky, IndirectFeedback, IndirectIntensity, IndirectContact,
         LightBounce,
         DirectionalIlluminance,

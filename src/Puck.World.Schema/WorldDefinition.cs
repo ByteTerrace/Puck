@@ -215,14 +215,14 @@ public sealed partial record WorldDefinition(
     [JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
     /// <summary>Gets the typed deterministic program compiled from the lattice-shaped state rows and their ordered
-    /// reactions, or <see langword="null"/> when the state section declares no lattice topology.</summary>
+    /// reactions, in physical region declaration order. Empty when no physical regions are declared.</summary>
     [JsonIgnore]
-    public WorldFieldProgram? FieldProgram => GetFieldProgram();
+    public IReadOnlyList<WorldFieldProgram> FieldPrograms => GetFieldPrograms();
     /// <summary>Gets the runtime lattice composite compiled from the state section's topology and lattice-shaped
-    /// rows, or <see langword="null"/> when the state section declares no lattice. The state section is the single
+    /// rows, in physical region declaration order. The state section is the single
     /// authored source; this accessor is the engine's compiled view of it.</summary>
     [JsonIgnore]
-    public WorldFieldsSection? Fields => GetCompiledFields();
+    public IReadOnlyList<WorldFieldsSection> FieldRegions => GetCompiledFields();
     /// <summary>Gets the document-authored grant rows — ABSENT resolves to none (the permissive boot seed still
     /// applies; this section only ADDS to it).</summary>
     [JsonIgnore]
@@ -480,7 +480,7 @@ public sealed partial record WorldDefinition(
     // Fields/FieldProgram compile from every reaction a lattice-shaped row's topology carries, and a topology's own
     // Reactions list is not a WorldStateSection list — this cache still re-proves its product against the live
     // section on every read to catch an in-place edit reaching in through that inner list.
-    private WorldFieldsSection? GetCompiledFields() {
+    private IReadOnlyList<WorldFieldsSection> GetCompiledFields() {
         var cache = GetCompilationCache(state: StateRaw);
 
         if (Volatile.Read(location: ref cache.FieldsCompiled)) {
@@ -512,41 +512,38 @@ public sealed partial record WorldDefinition(
             return cache.Fields;
         }
     }
-    private WorldFieldProgram? GetFieldProgram() {
+    private IReadOnlyList<WorldFieldProgram> GetFieldPrograms() {
         var cache = GetCompilationCache(state: StateRaw);
 
         lock (cache.SyncRoot) {
             var fields = GetCompiledFields();
             var catalog = GetStateCatalog();
+            var programs = cache.FieldPrograms;
+            var same = (programs.Count == fields.Count);
 
-            if (
-                !cache.FieldProgramCompiled ||
-                ((fields is null) != (cache.FieldProgram is null)) ||
-                (
-                    (fields is not null) &&
-                    (
-                        (cache.FieldProgram is null) ||
-                        (cache.FieldProgramFields is null) ||
-                        !ReferenceEquals(
-                objA: cache.FieldProgram.StateCatalog,
-                objB: catalog
-            ) ||
-                        !cache.FieldProgramFields.HasSameProgram(other: fields)
-                    )
-                )
-            ) {
-                cache.FieldProgram = ((fields is null)
-                    ? null
-                    : WorldFieldProgram.Compile(
-                        document: fields,
-                        state: catalog
-                    )
-                );
-                cache.FieldProgramFields = fields;
-                cache.FieldProgramCompiled = true;
+            for (var index = 0; (same && (index < fields.Count)); index++) {
+                same = (ReferenceEquals(objA: programs[index].StateCatalog, objB: catalog) &&
+                    (cache.FieldProgramFields[index].Name == fields[index].Name) &&
+                    cache.FieldProgramFields[index].HasSameProgram(other: fields[index]));
             }
+            if (same) {
+                return programs;
+            }
+            var next = new WorldFieldProgram[fields.Count];
 
-            return cache.FieldProgram;
+            for (var index = 0; (index < next.Length); index++) {
+                var region = fields[index];
+
+                next[index] = (((index < programs.Count) && (index < cache.FieldProgramFields.Count) &&
+                    ReferenceEquals(objA: programs[index].StateCatalog, objB: catalog) &&
+                    (cache.FieldProgramFields[index].Name == region.Name) &&
+                    cache.FieldProgramFields[index].HasSameProgram(other: region))
+                        ? programs[index]
+                        : WorldFieldProgram.Compile(document: region, state: catalog));
+            }
+            cache.FieldPrograms = next;
+            cache.FieldProgramFields = fields;
+            return cache.FieldPrograms;
         }
     }
     // The catalog's shape depends only on WorldStateSection's own lists (World/Body/Identity/Lattices' names and
@@ -603,39 +600,8 @@ public sealed partial record WorldDefinition(
                     );
                 }
 
-                if (sourceCache.FieldProgramCompiled) {
-                    var fields = (targetCache.FieldsCompiled
-                        ? targetCache.Fields
-                        : WorldFieldsSection.Compile(state: target.StateRaw)
-                    );
-                    var catalog = (targetCache.StateCatalog ?? StateCatalog.Compile(section: target.StateRaw));
-
-                    targetCache.Fields = fields;
-                    Volatile.Write(
-                        location: ref targetCache.FieldsCompiled,
-                        value: true
-                    );
-                    targetCache.StateCatalog = catalog;
-                    targetCache.FieldProgram = (
-                        ((sourceCache.FieldProgram is not null) &&
-                        (sourceCache.FieldProgramFields is not null) &&
-                        (fields is not null) &&
-                        ReferenceEquals(
-                        objA: sourceCache.FieldProgram.StateCatalog,
-                        objB: catalog
-                    ) &&
-                        sourceCache.FieldProgramFields.HasSameProgram(other: fields))
-                        ? sourceCache.FieldProgram
-                        : ((fields is null)
-                            ? null
-                            : WorldFieldProgram.Compile(
-                                document: fields,
-                                state: catalog
-                            )
-                    ));
-                    targetCache.FieldProgramFields = fields;
-                    targetCache.FieldProgramCompiled = true;
-                }
+                targetCache.FieldPrograms = sourceCache.FieldPrograms;
+                targetCache.FieldProgramFields = sourceCache.FieldProgramFields;
             }
         }
     }
@@ -788,12 +754,11 @@ public sealed partial record WorldDefinition(
     private static readonly ConditionalWeakTable<WorldStateSection, RuntimeCompilationCache> RuntimeCompilationCaches = new();
 
     private sealed class RuntimeCompilationCache {
-        public WorldFieldProgram? FieldProgram { get; set; }
-        public bool FieldProgramCompiled { get; set; }
-        public WorldFieldsSection? FieldProgramFields { get; set; }
+        public IReadOnlyList<WorldFieldProgram> FieldPrograms { get; set; } = [];
+        public IReadOnlyList<WorldFieldsSection> FieldProgramFields { get; set; } = [];
         public object SyncRoot { get; } = new();
+        public IReadOnlyList<WorldFieldsSection> Fields = [];
 
-        public WorldFieldsSection? Fields;
         public bool FieldsCompiled;
         public StateCatalog? StateCatalog;
         public IReadOnlyList<WorldStateRow>? StateRows;
