@@ -37,7 +37,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     private long[][] m_cells = [];
     private int[] m_fieldOfOrdinal = [];
     private readonly Dictionary<(string Region, string Field), int> m_fieldAddresses = [];
-    private int[] m_localField = [];
     private WorldFieldLatticeDefinition[] m_latticeOfField = [];
     private int[] m_ordinalOfField = [];
     // The delivered action-state register file of every entity index (raw Q48.16 presented values, the slots of one
@@ -289,8 +288,9 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
                 if (!valueChanged[delta.Row]) { m_valueRowsMoved[m_valueRowsMovedCount++] = delta.Row; valueChanged[delta.Row] = true; }
                 continue;
             }
-            if (!m_fieldAddresses.TryGetValue(key: (delta.Region, delta.FieldName), value: out var field) ||
-                (m_localField[field] != delta.Field)) {
+            // Recipient disclosure can remove preceding fields; the authority's local ordinal then differs from
+            // this document's. The named address remains stable across that projection.
+            if (!m_fieldAddresses.TryGetValue(key: (delta.Region, delta.FieldName), value: out var field)) {
                 continue;
             }
 
@@ -426,7 +426,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         var regions = document.FieldRegions;
         var fieldCount = regions.Sum(selector: static region => region.Fields.Count);
         var cells = new long[fieldCount][];
-        var localField = new int[fieldCount];
         var latticeOfField = new WorldFieldLatticeDefinition[fieldCount];
         var addresses = new Dictionary<(string Region, string Field), int>();
         var rows = document.State;
@@ -444,7 +443,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             for (var local = 0; (local < region.Fields.Count); local++, field++) {
                 var name = region.Fields[local].Name;
 
-                localField[field] = local;
                 latticeOfField[field] = region.Lattice;
                 // An unrelated region changing shape never discards this region's delivered cells.
                 cells[field] = ((m_fieldAddresses.TryGetValue(key: (region.Name, name), value: out var previous) &&
@@ -460,7 +458,6 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             }
         }
         m_cells = cells;
-        m_localField = localField;
         m_latticeOfField = latticeOfField;
         m_fieldAddresses.Clear();
         foreach (var address in addresses) { m_fieldAddresses.Add(key: address.Key, value: address.Value); }

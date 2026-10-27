@@ -59,6 +59,26 @@ public sealed record WorldStateDisclosed(WorldDefinition Definition, IReadOnlyDi
 /// document snapshot taken per observer: which zone holds a token decides who may read it, so a disclosure composed
 /// against a stale copy would answer for a table that has already moved.</remarks>
 public static class WorldStateDisclosure {
+    /// <summary>Discloses physical row declarations through their live reader policies. Presentation needs shape
+    /// and appearance, never the authority's seeds, paint, reactions or motion inputs; cells arrive separately
+    /// through the same recipient's checked snapshot deltas.</summary>
+    public static IReadOnlyList<WorldFieldsSection> FieldProjection(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
+        var observer = new Observer(arena: arena, recipient: recipient, unrestricted: unrestricted);
+        var result = new List<WorldFieldsSection>();
+
+        foreach (var region in definition.FieldRegions) {
+            var fields = new List<WorldFieldRow>();
+
+            foreach (var field in region.Fields) {
+                if (!arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: field.Name) ||
+                    !observer.Allows(policy: arena.Rows[handle.Ordinal].Visibility)) { continue; }
+                fields.Add(item: field with { Initial = Math.Clamp(value: 0f, min: field.Min, max: field.Max) });
+            }
+            if (fields.Count == 0) { continue; }
+            result.Add(item: region with { Fields = fields, Paint = null, Reactions = null, TravelResistance = null });
+        }
+        return result;
+    }
     /// <summary>Determines whether the recipient may read one cell, including its containing zone's policy.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>
     /// <param name="arena">The live store.</param>
@@ -147,6 +167,8 @@ public static class WorldStateDisclosure {
         var result = new List<WorldObservedRow>();
 
         foreach (var row in arena.Rows) {
+            // Physical cells cross through their disclosed region and snapshot stream, never twice as arena rows.
+            if (row.HostOwned) { continue; }
             if (!observer.TryRow(
                 ordinal: out var rowOrdinal,
                 row: row

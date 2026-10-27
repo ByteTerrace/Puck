@@ -1277,7 +1277,11 @@ with a discrete board's own `cellsOf` case) is the whole spelling.
 (`WorldDefinition.FieldRegions`, cached, never an authored member); `ToStateSection`
 is its inverse, for the projection reconstruction that must hand a client-side
 definition the same lattice through the identical state section the compile
-reads. A cell write against a lattice row (`world.state.cell.set`) refuses
+reads. Presentation composition first filters rows through the live recipient
+reader policies and retains only lattice shape and display traits: seeds, paint,
+reactions and travel inputs never cross. Physical values arrive through checked
+snapshot deltas, addressed by region and field names even when disclosure changes
+their local ordinals. A cell write against a lattice row (`world.state.cell.set`) refuses
 through whole-document revalidation—a lattice row's cells are simulation
 state, never authored cells.
 

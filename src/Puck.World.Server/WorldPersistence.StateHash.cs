@@ -56,11 +56,17 @@ public sealed partial class WorldPersistence {
                 break;
             case WorldStateHashComponent.HostOwnedRows:
                 hash.Add(value: Host.Population.FieldRegions.Count);
-                foreach (var region in Host.Population.FieldRegions) {
+                for (var regionIndex = 0; (regionIndex < Host.Population.FieldRegions.Count); regionIndex++) {
+                    var region = Host.Population.FieldRegions[regionIndex];
+
                     hash.Add(value: region.Name.Length);
                     hash.Add(value: region.Name);
                     hash.Add(value: region.Lattice.FieldCount);
-                    foreach (var field in region.Lattice.Input.Fields) { hash.Add(value: field.Name.Length); hash.Add(value: field.Name); }
+                    for (var fieldIndex = 0; (fieldIndex < region.Lattice.Input.Fields.Count); fieldIndex++) {
+                        var field = region.Lattice.Input.Fields[fieldIndex];
+
+                        hash.Add(value: field.Name.Length); hash.Add(value: field.Name);
+                    }
                     region.Lattice.AppendStateHash(hash: ref hash);
                 }
 

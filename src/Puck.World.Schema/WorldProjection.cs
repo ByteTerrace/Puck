@@ -333,7 +333,7 @@ public static class WorldProjection {
             LookAssignment: definition.LookAssignment,
             Dynamics: definition.Dynamics,
             Hud: definition.Hud,
-            FieldRegions: definition.FieldRegions,
+            FieldRegions: WorldStateDisclosure.FieldProjection(arena: arena, definition: definition, recipient: recipient, unrestricted: unrestricted),
             Simulation: definition.Simulation,
             Interactions: definition.Interactions,
             References: definition.References,

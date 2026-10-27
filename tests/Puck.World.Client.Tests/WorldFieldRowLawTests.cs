@@ -132,7 +132,7 @@ public sealed class WorldFieldRowLawTests {
         Assert.Equal(
             expected: 0,
             actual: view.ApplyFieldCells(
-                deltas: [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "bump", Cell: (Width * Depth), Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 7, Raw: One)],
+                deltas: [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "bump", Cell: (Width * Depth), Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "unknown", Cell: 0, Field: 7, Raw: One)],
                 moved: moved
             )
         );

@@ -662,7 +662,9 @@ public sealed partial class WorldPopulation {
 
             Puck.Physics.Fields.FixedFieldSurface? surface = null;
 
-            foreach (var region in m_fieldRegions) {
+            for (var regionIndex = 0; (regionIndex < m_fieldRegions.Count); regionIndex++) {
+                var region = m_fieldRegions[regionIndex];
+
                 if (region.Lattice.MediumSurface(position: body.FixedPosition) is { } candidate) { surface = candidate; break; }
             }
             body.SetMediumSurface(surface: surface);

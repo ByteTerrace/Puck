@@ -813,6 +813,16 @@ Checkpoint restore also reinstalls each region's reaction program against the
 restored `StateCatalog` before continuing. State handles belong to their catalog;
 restoring cell arrays alone leaves scalar/tag operands stale and fails on the
 first continuation tick. The regional checkpoint/control law exercises this path.
+Presentation region declarations pass the same live row-reader checks as cell
+delivery; never copy the authority's complete composite into a projection. Carry
+shape and appearance only, with no seeds, paint, reactions or travel inputs.
+Physical named addresses survive fields being omitted before them in a projection.
+Body-coupled reaction hosts admit only bodies coupled to their stepping region.
+After a body leaves all regions contributing an exposure row, clear that row on
+the next tick; skipping outside bodies alone leaves stale tags. Keep regional
+sampling, lookup and stepping indexed and reuse installed transform scratch:
+interface enumerators, captured predicates and per-step scalar arrays allocate
+on these paths. `WorldFieldRegionLawTests` covers the review probes and warm phases.
 
 Rule reads of physical cell rows use the host-owned operand seam, not the arena's
 empty columns. Literal indices are validated against that row's named region;

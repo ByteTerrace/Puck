@@ -159,10 +159,14 @@ that mirror, a flat slot table refreshed from each delivery's stamp, and
 `WorldDocumentStateView.cs` the view over a delivered definition and the field
 cells its snapshots carry, which a field row reads. A lattice `FieldCellDelta`
 names its region topology, its globally unique field row and its region-local
-field ordinal; the receiver validates all three before applying it. Each region
+field ordinal. The authority validates that ordinal; a presentation receiver
+resolves the named address, since disclosure can omit preceding fields. Each region
 keeps its own cell count and lattice shape, so reshaping one preserves the
-delivered cells of every other region. Presentation projections carry the same
-`FieldRegions` declarations and reconstruct their separate state topologies.
+delivered cells of every other region. Presentation projections carry only the
+`FieldRegions` rows admitted by their live reader policies, with their lattice
+shape and appearance. Seeds, paint, reactions and travel inputs stay at the
+authority; checked snapshots supply the disclosed cells. Hydration reconstructs
+the separate state topologies from those disclosed declarations.
 `ApplyFieldCells` names the
 rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them. A
 `WorldSessionMirror` keeps the rows its state deliveries moved until

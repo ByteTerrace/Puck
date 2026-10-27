@@ -13,10 +13,19 @@ public sealed partial class WorldPopulation {
     }
 
     /// <summary>Finds a region by topology identity.</summary>
-    public WorldFieldRegion? TryFieldRegion(string name) => m_fieldRegions.FirstOrDefault(predicate: region => string.Equals(a: region.Name, b: name, comparisonType: StringComparison.Ordinal));
+    public WorldFieldRegion? TryFieldRegion(string name) {
+        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+            var region = m_fieldRegions[index];
+
+            if (string.Equals(a: region.Name, b: name, comparisonType: StringComparison.Ordinal)) { return region; }
+        }
+        return null;
+    }
     /// <summary>Resolves a field row to its region and local ordinal.</summary>
     public bool TryFieldForRow(string name, out WorldFieldRegion? region, out int field) {
-        foreach (var candidate in m_fieldRegions) {
+        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+            var candidate = m_fieldRegions[index];
+
             if (candidate.Lattice.TryFieldIndex(field: out field, name: name)) { region = candidate; return true; }
         }
         region = null; field = -1; return false;

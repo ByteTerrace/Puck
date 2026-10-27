@@ -2,11 +2,107 @@ using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Assets.Documents;
 using Puck.Maths;
+using Puck.Abstractions.Counting;
 using Xunit;
 namespace Puck.World.Server.Tests;
 
 /// <summary>Independent physical regions retain their identity across live controls and durable restore.</summary>
 public sealed class WorldFieldRegionLawTests {
+    [Fact]
+    public void PresentationRegionsFollowLiveReadersAndCarryNoAuthoritySeedsOrPrograms() {
+        var first = Region("first", "hiddenValue", -2f) with {
+            Fields = [new WorldFieldRow(Name: "hiddenValue", Initial: 7, Min: 0, Max: 100), new WorldFieldRow(Name: "visibleValue", Initial: 3, Min: 0, Max: 100)],
+            Reactions = [new WorldReaction.Decay(Field: "hiddenValue", Rate: 1f)],
+            Paint = [new WorldLatticeFill.Rect(MaxX: 1, MaxZ: 1, MinX: 0, MinZ: 0, Value: 9) { Field = "hiddenValue" }],
+        };
+        var section = WorldFieldsSection.ToStateSection(composite: [first, Region("second", "secondValue", 20f) with { Reactions = null }]);
+
+        section = section with {
+            World = [.. section.World!.Select(selector: row => row.Name.Value switch {
+            "hiddenValue" => row with { Visibility = new StateVisibility(ReadersFrom: "readers") },
+            "secondValue" => row with { Visibility = new StateVisibility(Readers: []) },
+            _ => row,
+        }), new WorldStateRow(Name: CellName.Parse(candidate: "readers"), Kind: CellKind.Text, Domain: StateDomain.Keys.Instance,
+            Cells: [new StateCell(CellName.Parse(candidate: "allowed"), CellValue.Text(value: "seat1"))])],
+        };
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument() with { StateRaw = section });
+
+        WorldProjectionDocument Project(Principal? recipient) {
+            var time = ArenaTime.Origin;
+
+            return WorldProjection.Compose(fixture.Server.Definition, WorldDisclosureTier.Presentation, "test", 0,
+                fixture.Server.Arena, in time, recipient)!;
+        }
+        var projection = Project(recipient: null);
+        var json = System.Text.Encoding.UTF8.GetString(bytes: WorldProjection.Serialize(projection: projection));
+
+        Assert.DoesNotContain(actualString: json, expectedSubstring: "hiddenValue");
+        Assert.DoesNotContain(actualString: json, expectedSubstring: "secondValue");
+        var disclosed = Assert.Single(collection: projection.FieldRegions!);
+
+        Assert.Equal("visibleValue", Assert.Single(collection: disclosed.Fields).Name);
+        Assert.Equal(0f, disclosed.Fields[0].Initial);
+        Assert.Null(@object: disclosed.Paint);
+        Assert.Null(@object: disclosed.Reactions);
+        Assert.True(condition: WorldProjection.TryToDefinition(projection, out var hydrated, out var reason), userMessage: reason);
+        var view = new Puck.World.Client.WorldDocumentStateView(definition: () => hydrated!);
+        var moved = new int[StateCapacity.MaxRows];
+        // The visible row's authority ordinal is 1; its disclosed region contains only that row at ordinal 0.
+        Assert.Equal(1, view.ApplyFieldCells(deltas: [new FieldCellDelta(Cell: 0, Field: 1, Raw: 123, Region: "first", FieldName: "visibleValue")], moved: moved));
+        Assert.True(condition: view.TryResolveRow(ordinal: out var ordinal, rowName: "visibleValue"));
+        Assert.True(condition: view.TryRead(engineTick: 0, key: "0", ordinal: ordinal, sample: out var sample, target: false, tick: 0));
+        Assert.Equal(123L, sample.Value.Raw);
+        Assert.Equal(2, Assert.Single(collection: Project(recipient: Principal.Seat(slot: 0)).FieldRegions!).Fields.Count);
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "readers", "allowed", 0, WorldDocumentWriteKind.Set, Text: "seat2"));
+        fixture.Step();
+        Assert.Single(collection: Assert.Single(collection: Project(recipient: Principal.Seat(slot: 0)).FieldRegions!).Fields);
+    }
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    [Theory]
+    public void DistantExposureCannotClearTheContainingRegionAndDepartureClearsTheTag(bool reverse, int cadence) {
+        WorldFieldsSection Exposing(string name, float origin, int every) => Region(name, (name + "Value"), origin, every) with {
+            Fields = [new WorldFieldRow(Name: (name + "Value"), Initial: 7, Min: 0, Max: 100)],
+            Reactions = [new WorldReaction.Expose(Comparison: ExpressionOp.Greater, Field: (name + "Value"), Row: "exposed", Value: 0f)],
+        };
+        var regions = new[] { Exposing(every: 1, name: "first", origin: -2f), Exposing(every: cadence, name: "second", origin: 20f) };
+        var section = WorldFieldsSection.ToStateSection(composite: (reverse ? regions.Reverse().ToArray() : regions));
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument() with {
+            StateRaw = section with {
+                World = [.. section.World!, new WorldStateRow(Name: CellName.Parse(candidate: "exposed"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance)],
+            },
+        });
+        var body = fixture.JoinSeat();
+
+        long Tag() => WorldDefinitionRows.FindStateRow(fixture.Server.ExportDefinition().State, "exposed")!.Cells!.Single(predicate: cell => (cell.Key.Value == "0")).Value.Raw;
+        fixture.Step(); Assert.Equal(1L, Tag());
+        fixture.Step(); Assert.Equal(1L, Tag());
+        body.Pose(pitchRadians: 0f, rollRadians: 0f, x: 10f, y: 0f, yawRadians: 0f, z: 0f);
+        fixture.Step(); Assert.Equal(0L, Tag());
+        body.Pose(pitchRadians: 0f, rollRadians: 0f, x: 21f, y: 0f, yawRadians: 0f, z: 0f);
+        fixture.Step(); Assert.Equal(1L, Tag());
+    }
+    [Fact]
+    public void WarmRegionalSamplingLookupAndSteppingAllocateNothing() {
+        using var fixture = Fixtures.FreshServer(Definition());
+
+        fixture.JoinSeat();
+        void Sample() {
+            var population = fixture.Server.Population;
+
+            population.SampleMediumSurfaces();
+            _ = population.TryFieldRegion(name: "first");
+            _ = population.TryFieldRegion(name: "absent");
+            _ = population.TryFieldForRow(field: out _, name: "secondValue", region: out _);
+            _ = population.TryFieldForRow(field: out _, name: "absent", region: out _);
+            fixture.Server.Tick.SampleTravelResistance(tick: 2);
+            fixture.Server.Tick.StepFields(tick: 2);
+        }
+        for (var warm = 0; (warm < 256); warm++) { Sample(); }
+        Assert.Equal(0L, AllocationWindow.Least(() => { for (var sample = 0; (sample < 100); sample++) { Sample(); } }));
+    }
+
     private static WorldFieldsSection Region(string name, string field, float x, int cadence = 1, WorldLatticeScalar? resistance = null) => new(
         Name: name, Lattice: new WorldFieldLatticeDefinition(new DocumentVector3(x: x, y: -2f, z: -2f), 1f, 4, 4, 4, cadence),
         Fields: [new WorldFieldRow(Name: field, Min: 0f, Max: 100f)],

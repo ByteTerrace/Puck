@@ -953,7 +953,10 @@ public sealed partial class WorldDocument {
         var latticeDeltas = m_latticeSnapshotDeltas;
 
         latticeDeltas.Clear();
-        foreach (var region in Host.Population.FieldRegions) {
+        var regions = Host.Population.FieldRegions;
+
+        for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+            var region = regions[regionIndex];
             var deltas = region.Lattice.TakeDeltas(full: !consumeContinuity, isFull: out var regionFull);
 
             fieldsFull |= regionFull;
@@ -966,7 +969,9 @@ public sealed partial class WorldDocument {
         // the other regions even when their cells did not move this tick.
         if (fieldsFull && consumeContinuity && (Host.Population.FieldRegions.Count > 1)) {
             latticeDeltas.Clear();
-            foreach (var region in Host.Population.FieldRegions) {
+            for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+                var region = regions[regionIndex];
+
                 foreach (var delta in region.Lattice.TakeDeltas(full: true, isFull: out _)) {
                     latticeDeltas.Add(item: new FieldCellDelta(Cell: delta.Cell, Field: delta.Field, Raw: delta.Raw,
                         Region: region.Name, FieldName: region.Lattice.Input.Fields[delta.Field].Name));
