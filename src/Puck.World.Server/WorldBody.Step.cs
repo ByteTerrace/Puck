@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 using Puck.Physics;
@@ -91,7 +92,7 @@ public sealed partial class WorldBody {
         // stages an intent for every body every tick, including a kit with no producer at all (it stages the inert
         // default) — so "had incoming intent" for the sleep floor below reads the resolved vector after this call,
         // not the raw pre-resolve flags, which would read true for a body nothing is actually driving.
-        var intent = NextIntent(stepTicks: stepTicks);
+        var intent = NextIntent(stepTicks: stepTicks, tick: tick, body: entityIndex);
         var hadIncomingIntentForSleep = (intent != default);
 
         // Captured EVERY Advance, regardless of the latch — a mirrored application set needs this body's resolved
@@ -844,8 +845,9 @@ public sealed partial class WorldBody {
             ratePerSecond: scratch.Velocity
         ));
     }
-    private PlayerIntent NextIntent(ulong stepTicks) {
+    private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body) {
         var movement = default(PlayerIntent);
+        var tapeActor = default(Principal);
         var resolved = false;
 
         while (
@@ -867,6 +869,7 @@ public sealed partial class WorldBody {
                 value: segment.RemainingTicks
             );
             movement = segment.Intent;
+            tapeActor = segment.Actor;
             segment.Intent = WithoutRelative(intent: segment.Intent);
             resolved = true;
 
@@ -875,6 +878,8 @@ public sealed partial class WorldBody {
             }
         }
 
+        var acceptedScript = AdmitScriptInput(movement, tapeActor, tick, body);
+        if (resolved) { movement = acceptedScript; }
         if (!resolved) {
             movement = ((!m_source.IsIdle && m_hasSubmittedIntent)
                 ? m_submittedIntent
@@ -910,7 +915,7 @@ public sealed partial class WorldBody {
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (m_channelShapes[ordinal] == ChannelShape.Relative) { continue; }
             if (m_laneTimers[ordinal] > 0) {
-                channels[ordinal] = ((m_channelShapes[ordinal] == ChannelShape.Binary)
+                channels[ordinal] = m_stateLane?.Input is not null ? m_scriptAccepted[ordinal] : ((m_channelShapes[ordinal] == ChannelShape.Binary)
                     ? ((m_channelTimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
                     : m_channelTimerValues[ordinal]);
             } else if (

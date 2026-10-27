@@ -185,10 +185,10 @@ tape records no reservation. A refused and retried reservation, an abort
 before the detach, an in-doubt restore and a reused body slot each replay tick
 for tick (`CrossingTapeOrderLawTests`).
 An exact committed retry includes action-continuity collection order and every
-channel/register value, not just profile and motion. Escrow retains detached
+register value, not just profile and motion. Escrow retains detached
 continuity values at commit and checkpoint restore; mutating a caller's original
 lists cannot rewrite the accepted receipt. Independently allocated equal values
-remain idempotent; altered edge bits, held values, names, register kinds, values,
+remain idempotent; altered names, register kinds, values,
 or timers refuse as a different commit.
 Failed source restoration on non-commit retains rollback-only recovery and never retries Commit.
 Non-atomic parties split before any parent reservation. Full details and limits:
@@ -359,17 +359,14 @@ unit inside the last confirmed owner and removes only outward normal velocity.
 ## Input and action continuity
 
 Movement and actions route to the seat's current authority. A transfer carries
-action state by declared name rather than document-local ordinal:
-
-- the previous threshold bit, so arrival cannot manufacture a rising edge;
-- the last admitted held composition value, bridged until the destination
-  receives its first real input publication (neutral included);
-- named counter/timer action registers admitted only when the destination
-  declares the same name and kind; their authored programs give those values
-  cooldown, charge, or other gameplay meaning.
-
-The bridge is why holding jump across a handoff remains one physical hold
-rather than release-then-press. `body.press`, `body.channels`,
+committed counter/timer action registers by declared name rather than
+document-local ordinal. The destination admits only the same name and kind,
+under its own envelope. Input itself resets unconditionally: no held value,
+edge latch, queued press or partial pattern crosses the boundary. Destination
+input starts a new epoch and requires fresh admission and neutral rearming;
+cancellation never scores as a release. The shared transfer leaf carries only
+the registers, while a same-authority abort restores the full captured state.
+`body.press`, `body.channels`,
 `body.state`, `body.targets`, `world.contacts`, and `body.where` follow
 the same seat route after a crossing, and so do the seat-routed document
 writes `player.row.set`/`player.state.cell.set` — the `world.row.set`/

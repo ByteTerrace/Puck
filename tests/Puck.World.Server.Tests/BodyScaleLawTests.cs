@@ -336,7 +336,6 @@ public sealed class BodyScaleLawTests {
                     PlanarVelocity: default,
                     VerticalVelocity: default,
                     ActionContinuity: new WorldTransferActionContinuity(
-                        Channels: [],
                         Registers: [new WorldTransferActionRegister(
                             Kind: ActionStateKind.Counter,
                             Name: Fixtures.BodyScaleRegister,

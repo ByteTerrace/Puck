@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Commands;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
@@ -63,7 +64,7 @@ public sealed partial class WorldBody {
     // from a seconds-rounded value would drift the restored segment's remaining duration from the exact tick count
     // that was live at capture. Always called on a freshly constructed restore body (RestoreDetachedSeat never calls
     // ApplyTransferState on a live one), so there is never an existing segment to preserve or lose.
-    private void RestoreTape(IReadOnlyList<PlayerIntent> intents, IReadOnlyList<ulong> remainingTicks) {
+    private void RestoreTape(IReadOnlyList<PlayerIntent> intents, IReadOnlyList<ulong> remainingTicks, IReadOnlyList<Principal> actors) {
         var count = Math.Min(
             val1: intents.Count,
             val2: remainingTicks.Count
@@ -77,7 +78,7 @@ public sealed partial class WorldBody {
         m_tapeCount = count;
 
         for (var index = 0; (index < count); index++) {
-            m_tape[index] = new TapeSegment { Intent = intents[index], RemainingTicks = remainingTicks[index] };
+            m_tape[index] = new TapeSegment { Intent = intents[index], RemainingTicks = remainingTicks[index], Actor = actors[index] };
         }
     }
     private void SetBodyMotionProgram(CompiledBodyMotionProgram program) {
@@ -226,7 +227,9 @@ public sealed partial class WorldBody {
     /// A non-positive duration is ignored.</summary>
     /// <param name="intent">The intent the segment holds while live.</param>
     /// <param name="seconds">How long (advance seconds) the segment drives before it expires.</param>
-    public void EnqueueRun(PlayerIntent intent, float seconds) {
+    public void EnqueueRun(PlayerIntent intent, float seconds) => EnqueueRun(intent, seconds, Principal.World);
+    /// <summary>Queues a scripted segment under the actor who authorized it.</summary>
+    public void EnqueueRun(PlayerIntent intent, float seconds, Principal actor) {
         var duration = FixedQ4816.FromDouble(value: seconds);
 
         if (duration <= FixedQ4816.Zero) {
@@ -244,6 +247,7 @@ public sealed partial class WorldBody {
         m_tape[tail] = new TapeSegment {
             Intent = Clamped(intent: in intent),
             RemainingTicks = FixedTickConversion.DurationEngineTicks(seconds: duration),
+            Actor = actor,
         };
         m_tapeCount++;
     }
@@ -334,13 +338,15 @@ public sealed partial class WorldBody {
         CommitTeleport();
         m_continuity = EntityContinuity.Teleport;
     }
-    /// <summary>Presses a channel for the default two-host-step tap, reaching any ordinal (movement roles included).
+    /// <summary>Presses a channel for the default one-host-step tap, reaching any ordinal (movement roles included).
     /// The concrete engine-tick duration is derived by the next <see cref="Advance"/> from its <c>stepTicks</c> (see
     /// <see cref="MaterializeDefaultLanePresses"/>), which merges it under the same rule <see cref="PressChannel(int, FixedQ4816, float, FixedQ4816)"/>
     /// uses: a same-value re-press only extends an in-flight hold, a different value replaces it outright.</summary>
     /// <param name="ordinal">The channel ordinal to hold.</param>
     /// <param name="value">The raw fixed-point value to hold the channel at.</param>
-    public void PressChannel(int ordinal, FixedQ4816 value) {
+    public void PressChannel(int ordinal, FixedQ4816 value) => PressChannel(ordinal, value, Principal.World);
+    /// <summary>Stages a one-step press under the actor who authorized it.</summary>
+    public void PressChannel(int ordinal, FixedQ4816 value, Principal actor) {
         if (
             (ordinal < 0) ||
             (ordinal >= ActionLaneCount) ||
@@ -351,6 +357,7 @@ public sealed partial class WorldBody {
 
         m_pendingDefaultChannelPress[ordinal] = true;
         m_pendingDefaultChannelValue[ordinal] = value;
+        m_pendingScriptActors[ordinal] = actor;
     }
     /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>body.press</c>), reaching
     /// any ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time
@@ -358,8 +365,8 @@ public sealed partial class WorldBody {
     /// per sub-step, then releases
     /// itself. A short hold is a short hop (the release cuts the rising jump) on a composition channel bound to a
     /// vertical effect; on a movement-role channel it is a timed analog override. A re-press carrying the same value
-    /// as the ordinal's in-flight hold never shortens it (the longer of the two durations wins — repeatedly resubmitting
-    /// one held key must not truncate itself); a re-press carrying a different value is a distinct action and replaces
+    /// as the same actor's in-flight hold never shortens it (the longer of the two durations wins — repeatedly resubmitting
+    /// one held key must not truncate itself); a different actor or value is a distinct action and replaces
     /// the hold outright — its own duration, not merged with whatever remained — so a short full-brake press on a
     /// channel mid a long throttle hold takes effect immediately instead of being swallowed by the throttle's
     /// remaining ticks (see <see cref="MergeLaneTimer"/>, shared with <see cref="MaterializeDefaultLanePresses"/> so
@@ -379,7 +386,10 @@ public sealed partial class WorldBody {
     /// <returns>The effective hold (in sim seconds) and which cap, if any, decided it — <c>body.press</c>'s
     /// synchronous read-back, so its echo can name a silent truncation instead of assuming the request was
     /// honored.</returns>
-    public PressOutcome PressChannel(int ordinal, FixedQ4816 value, float holdSeconds, FixedQ4816 authoredMaximum) {
+    public PressOutcome PressChannel(int ordinal, FixedQ4816 value, float holdSeconds, FixedQ4816 authoredMaximum) =>
+        PressChannel(ordinal, value, holdSeconds, authoredMaximum, Principal.World);
+    /// <summary>Stages a timed press under the actor who authorized it and the grant ceiling already resolved for that actor.</summary>
+    public PressOutcome PressChannel(int ordinal, FixedQ4816 value, float holdSeconds, FixedQ4816 authoredMaximum, Principal actor) {
         if (
             (ordinal < 0) ||
             (ordinal >= ActionLaneCount)
@@ -434,6 +444,7 @@ public sealed partial class WorldBody {
         var holdTicks = FixedTickConversion.DurationEngineTicks(seconds: hold);
 
         MergeLaneTimer(
+            actor: actor,
             holdTicks: holdTicks,
             ordinal: ordinal,
             value: value
@@ -1056,5 +1067,6 @@ public sealed partial class WorldBody {
     private struct TapeSegment {
         public PlayerIntent Intent;
         public ulong RemainingTicks;
+        public Principal Actor;
     }
 }

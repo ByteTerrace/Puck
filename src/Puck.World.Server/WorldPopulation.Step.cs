@@ -987,7 +987,7 @@ public sealed partial class WorldPopulation {
     /// <param name="yawRadians">The mapped arrival yaw, fixed-point radians.</param>
     /// <param name="planarVelocity">The mapped (rotated) planar velocity.</param>
     /// <param name="verticalVelocity">The mapped (rotation-invariant) vertical velocity.</param>
-    /// <param name="actionContinuity">Named held-edge and action-register state carried without assuming matching ordinals.</param>
+    /// <param name="actionContinuity">Named action registers carried without assuming matching ordinals. Input resets.</param>
     /// <param name="continuum">The optional already-evaluated adjacency segment to resolve before this body may
     /// participate in another ordinary simulation step. Portal and spawn arrivals omit it.</param>
     /// <param name="destinationCompletedEngineTick">The destination authority's completed engine-time boundary at
@@ -1007,6 +1007,8 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
+        m_actionStateLane.Input?.ResetBody(slot);
+        body.ResetArrivalInput();
         body.Pose(
             position: position,
             yawRadians: yawRadians,
@@ -1027,7 +1029,6 @@ public sealed partial class WorldPopulation {
             );
 
             body.ApplyTransferActionContinuity(
-                channels: m_channels,
                 continuity: actionContinuity,
                 settledToInitial: settled
             );
@@ -1118,24 +1119,9 @@ public sealed partial class WorldPopulation {
             toOrientation: b.FixedOrientation
         );
     }
-    /// <summary>Names the edge/action subset of a captured body state so another world can restore it without
+    /// <summary>Names the action registers of a captured body state so another world can restore them without
     /// assuming the two documents assigned the same ordinals.</summary>
     public WorldTransferActionContinuity NameTransferActionContinuity(int slot, WorldBodyTransferState state) {
-        var channels = new List<WorldTransferChannelEdge>();
-
-        for (var ordinal = 0; (ordinal < Math.Min(
-            val1: state.PreviousChannelBit.Length,
-            val2: ChannelLimits.MaxChannels
-        )); ordinal++) {
-            if (m_channels.Name(ordinal: ordinal) is { } name) {
-                channels.Add(item: new WorldTransferChannelEdge(
-                    Name: name,
-                    PreviousBit: state.PreviousChannelBit[ordinal],
-                    HeldValue: state.HeldChannelImage[ordinal]
-                ));
-            }
-        }
-
         var definitions = m_kits[ResolveKitIndex(index: slot)].ActionState;
         var count = Math.Min(
             val1: definitions.Length,
@@ -1162,7 +1148,6 @@ public sealed partial class WorldPopulation {
         }
 
         return new WorldTransferActionContinuity(
-            Channels: channels,
             Registers: registers
         );
     }

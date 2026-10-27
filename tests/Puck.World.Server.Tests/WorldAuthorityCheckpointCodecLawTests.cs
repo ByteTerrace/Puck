@@ -63,11 +63,6 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
     private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBodyTransferState dynamicState, WorldTransferCommitMember? commitMember = null) {
         commitMember ??= new WorldTransferCommitMember(
             ActionContinuity: new WorldTransferActionContinuity(
-                Channels: [new WorldTransferChannelEdge(
-                        Name: "move",
-                        PreviousBit: true,
-                        HeldValue: FixedQ4816.FromInteger(value: 1)
-                    )],
                 Registers: []
             ),
             BodyMotionProgramName: "walk",

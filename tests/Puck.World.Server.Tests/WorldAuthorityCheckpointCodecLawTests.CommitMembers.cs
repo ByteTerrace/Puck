@@ -7,7 +7,7 @@ namespace Puck.World.Server.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: a traveller's committed motion has one encoding. A checkpoint holding an in-doubt transfer
 /// and a federation commit carry the same member to the same decoded state, field for field, whether its action
-/// continuity carries edges and registers or none (an absent continuity is the empty one, the only way to carry none).
+/// continuity carries registers or none (an absent continuity is the empty one, the only way to carry none).
 /// Both refuse a continuum segment that is not well formed.
 /// </summary>
 public sealed partial class WorldAuthorityCheckpointCodecLawTests {
@@ -35,20 +35,15 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
     );
 
     private static WorldTransferActionContinuity Carried { get; } = new(
-        Channels: [
-            new WorldTransferChannelEdge(HeldValue: FixedQ4816.One, Name: "move", PreviousBit: true),
-            new WorldTransferChannelEdge(HeldValue: FixedQ4816.FromDouble(value: -0.5), Name: "strafe", PreviousBit: false),
-        ],
         Registers: [new WorldTransferActionRegister(Kind: ActionStateKind.Timer, Name: "dash", TimerTicks: 42UL, Value: FixedQ4816.FromInteger(value: 3))]
     );
 
-    // The whole member as text, its continuity's edges and registers spelled out, so two members describe alike
+    // The whole member as text, its continuity's registers spelled out, so two members describe alike
     // exactly when every field is equal.
     private static string Describe(WorldTransferCommitMember member) => string.Join(
         separator: " | ",
         values: [
             (member with { ActionContinuity = WorldTransferActionContinuity.Empty }).ToString(),
-            string.Join(separator: ", ", values: member.ActionContinuity.Channels),
             string.Join(separator: ", ", values: member.ActionContinuity.Registers),
         ]
     );

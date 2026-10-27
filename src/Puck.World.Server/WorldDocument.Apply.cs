@@ -1752,6 +1752,7 @@ public sealed partial class WorldDocument {
                 break;
             case WorldCommand.EnqueueSegment segment:
                 body.EnqueueRun(
+                    actor: segment.Principal,
                     intent: segment.Intent,
                     seconds: segment.Seconds
                 );
@@ -1764,6 +1765,7 @@ public sealed partial class WorldDocument {
                         subject: GrantSubject.Body(index: press.EntityIndex)
                     ));
                     var outcome = body.PressChannel(
+                        actor: press.Principal,
                         ordinal: press.ChannelOrdinal,
                         value: press.Value,
                         holdSeconds: holdSeconds,
@@ -1780,6 +1782,7 @@ public sealed partial class WorldDocument {
                     );
                 } else {
                     body.PressChannel(
+                        actor: press.Principal,
                         ordinal: press.ChannelOrdinal,
                         value: press.Value
                     );

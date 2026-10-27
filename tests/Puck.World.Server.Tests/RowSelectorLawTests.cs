@@ -367,7 +367,6 @@ public sealed class RowSelectorLawTests {
                     PlanarVelocity: default,
                     VerticalVelocity: default,
                     ActionContinuity: new WorldTransferActionContinuity(
-                        Channels: [],
                         Registers: [new WorldTransferActionRegister(
                             Kind: ActionStateKind.Counter,
                             Name: Suit,

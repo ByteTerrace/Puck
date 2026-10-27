@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Commands;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -204,6 +205,7 @@ namespace Puck.World.Server;
 /// <param name="TapeRemainingTicks">Each segment's own remaining ticks, parallel to <paramref name="TapeIntents"/>.</param>
 /// <param name="PendingContinuum">The already-evaluated adjacency segment awaiting ownership resolution, or
 /// <see langword="null"/> when this body may advance normally.</param>
+/// <param name="ScriptActors">The authorizing actors of timed, pending and taped scripted input.</param>
 public readonly record struct WorldBodyTransferState(
     FixedVector3 PlanarVelocity,
     FixedQ4816 VerticalVelocity,
@@ -253,4 +255,8 @@ public readonly record struct WorldBodyTransferState(
     ulong DurableInputTick,
     IReadOnlyList<PlayerIntent> TapeIntents,
     IReadOnlyList<ulong> TapeRemainingTicks,
-    WorldContinuumTrajectory? PendingContinuum);
+    WorldContinuumTrajectory? PendingContinuum,
+    WorldBodyScriptActors ScriptActors);
+
+/// <summary>Actor provenance parallel to the body's existing duration stores; no input duration is duplicated.</summary>
+public readonly record struct WorldBodyScriptActors(Principal[] Timers, Principal[] Pending, IReadOnlyList<Principal> Tape);

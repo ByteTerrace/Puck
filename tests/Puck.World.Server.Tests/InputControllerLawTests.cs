@@ -8,6 +8,62 @@ namespace Puck.World.Server.Tests;
 
 public sealed class InputControllerLawTests {
     [Fact]
+    public void ScriptedDurationsRetainTheirActorAndAdmittedHistoryAcrossCheckpointRestore() {
+        var basis = Fixtures.BuildDocument();
+        var definition = basis with { ChannelsRaw = [.. basis.Channels, new("tap", ChannelShape.Binary, Composition: true)] };
+        using var fixture = Fixtures.FreshServer(definition);
+        fixture.JoinSeat();
+        fixture.Step();
+        var actor = Principal.Addon("script-test");
+        fixture.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(0), false, Budget: 8,
+            Reach: new(["tap"])), Principal.Console);
+        var body = fixture.Server.Body(0)!;
+        Assert.True(body.Channels.TryGetOrdinal("tap", out var address));
+        Assert.True(fixture.Server.Population.InputCatalog.TryGetLogicalId("tap", out var logical));
+        body.PressChannel(address, FixedQ4816.One, 0.1f, FixedQ4816.One, actor);
+        fixture.Step();
+        var participant = Assert.Single(fixture.Server.Input.Capture().Owners);
+        Assert.Equal(actor, participant.Controller!.Value.Actor);
+        Assert.True(fixture.Server.Input.TryGet(participant.Principal, out var owner));
+        Assert.True(owner!.TryHeld(logical, out var hold));
+        Assert.True(owner.TryEvent(logical, WorldInputEventKind.Press, 0, out _));
+        Assert.Equal(FixedQ4816.One, body.ChannelReadComposed[address]);
+        // Queue another segment before the checkpoint; its author must not become World or Console on restore.
+        body.EnqueueRun(default(PlayerIntent).WithChannel(address, FixedQ4816.One), 0.2f, actor);
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(WorldAuthorityCheckpointCodec.Encode(checkpoint!), out var decoded, out reason), reason);
+        using var restored = Fixtures.FreshServer(definition);
+        restored.Server.RestoreCheckpoint(decoded!);
+        for (var index = 0; index < 12; index++) {
+            fixture.Step(); restored.Step();
+            var tick = fixture.Server.Input.Interval.Tick;
+            Assert.Equal(WorldStateHashComposition.HashAuthoritative(fixture.Server, tick),
+                WorldStateHashComposition.HashAuthoritative(restored.Server, tick));
+        }
+        Assert.False(owner.TryHeld(logical, out _));
+        Assert.True(owner.TryEvent(logical, WorldInputEventKind.Release, 0, out var released));
+        Assert.Equal(hold.Press, released.HoldPress);
+        body.PressChannel(address, FixedQ4816.One, 1f, FixedQ4816.One, actor);
+        fixture.Step();
+        Assert.True(owner.TryHeld(logical, out _));
+        var replacement = Principal.Addon("replacement-script");
+        fixture.Server.Grant(new(replacement, WorldCapability.Drive, GrantSubject.Body(0), false, Budget: 8,
+            Reach: new(["tap"])), Principal.Console);
+        body.PressChannel(address, FixedQ4816.One, 0.1f, FixedQ4816.One, replacement);
+        fixture.Step();
+        Assert.False(owner.TryHeld(logical, out _));
+        Assert.True(owner.TryEvent(logical, WorldInputEventKind.Release, 0, out _));
+        var replacementOwner = Assert.Single(fixture.Server.Input.Capture().Owners, row => row.Controller?.Actor == replacement);
+        Assert.True(fixture.Server.Input.TryGet(replacementOwner.Principal, out var replacing));
+        Assert.True(replacing!.TryHeld(logical, out _));
+        fixture.Server.Revoke(new(replacement, WorldCapability.Drive, GrantSubject.Body(0), false), Principal.Console);
+        fixture.Step();
+        Assert.Equal(FixedQ4816.Zero, body.ChannelReadComposed[address]);
+        Assert.False(replacing.TryHeld(logical, out _));
+        Assert.True(replacing.TryEvent(logical, WorldInputEventKind.Cancel, 0, out _));
+    }
+
+    [Fact]
     public void AControllerFollowsItsTargetsAdmittedModeAndCannotReviveCancelledInput() {
         var basis = Fixtures.BuildDocument();
         var definition = basis with {

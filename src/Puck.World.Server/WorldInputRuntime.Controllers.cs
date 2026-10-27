@@ -7,9 +7,27 @@ namespace Puck.World.Server;
 public readonly record struct WorldInputControllerOrigin(Principal Actor, string Source, ulong ActivationSequence = 0, ulong ObservationTick = 0);
 
 public sealed partial class WorldInputRuntime {
+    private const string BodyScriptSource = "$body-script";
     private bool IsAuthoredProducer(Principal actor, int body, string source) => actor.Kind == PrincipalKind.World &&
-        m_host.Body(body)?.Source.ProducerName == source &&
-        m_host.Population.SupportsSource(body, m_host.Body(body)!.Source, out _);
+        m_host.Body(body) is { } target && (source == BodyScriptSource ||
+        target.Source.ProducerName == source && m_host.Population.SupportsSource(body, target.Source, out _));
+
+    internal PlayerIntent AdmitScriptSnapshot(Principal actor, int body, PlayerIntent image, ulong tick) {
+        if (TryPublishSnapshot(actor, body, BodyScriptSource, image, tick, out var principal, out var batch, out var reason) &&
+            TryAdmit(principal, batch, out reason, body)) { return ProjectSnapshot(body, batch); }
+        RejectControllerBatch(principal);
+        m_host.Output.Narrate("input.refused", reason);
+        return default;
+    }
+
+    internal void CompleteBodyScripts(int body, ulong tick) {
+        if (!m_bodyOwners.TryGetValue(body, out var owners)) { return; }
+        foreach (var owner in owners) {
+            if (owner.Controller is not { Source: BodyScriptSource } origin || origin.ObservationTick == tick ||
+                !m_host.GrantTable.IsLiveSession(owner.Principal)) { continue; }
+            _ = AdmitScriptSnapshot(origin.Actor, body, default, tick);
+        }
+    }
 
     /// <summary>Admits a world's own compiled producer before its body consumes the resulting image. The
     /// structural actor is local-only; external submissions cannot claim the World principal.</summary>
@@ -21,6 +39,11 @@ public sealed partial class WorldInputRuntime {
             m_host.Output.Narrate("input.refused", reason);
             return default;
         }
+        return ProjectSnapshot(body, batch);
+    }
+
+    private PlayerIntent ProjectSnapshot(int body, in WorldInputBatch batch) {
+        var target = m_host.Body(body)!;
         var channels = Catalog.Mappings[batch.Mapping].Channels;
         var accepted = batch.Image with { Channels = default };
         foreach (var logical in Catalog.Mappings[batch.Mapping].Live) {
@@ -76,7 +99,8 @@ public sealed partial class WorldInputRuntime {
             var session = m_host.GrantTable.AdmitInputControllerSession();
             try { owner = PrepareOwner(session, body, sources, 1, controller: new(actor, source)); }
             catch (ArgumentException error) { m_host.GrantTable.MarkObserverEnded(session); reason = error.Message; return false; }
-            InstallOwner(owner);
+            // Adding a local observation stream does not detach the body's existing scripted durations.
+            InstallOwner(owner, Catalog.Mappings[target.InputMappingId], reset: false, recompiled: true);
             m_controllers.Add(key, owner);
         }
         if (!TrySynchronize(owner, 0, out reason)) { return false; }

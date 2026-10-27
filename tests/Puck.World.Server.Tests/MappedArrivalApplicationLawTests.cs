@@ -64,11 +64,6 @@ public sealed class MappedArrivalApplicationLawTests {
             verticalVelocity: mappedVerticalVelocity,
             destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             actionContinuity: new WorldTransferActionContinuity(
-                Channels: [new WorldTransferChannelEdge(
-                        Name: "forward",
-                        PreviousBit: true,
-                        HeldValue: FixedQ4816.One
-                    )],
                 Registers: []
             )
         );
@@ -102,17 +97,17 @@ public sealed class MappedArrivalApplicationLawTests {
             expected: mappedVerticalVelocity,
             actual: state.VerticalVelocity
         );
-        Assert.True(
+        Assert.False(
             condition: state.PreviousChannelBit[0],
-            userMessage: "the mapped writer change manufactured a fresh held-channel edge"
+            userMessage: "arrival must start without an input edge latch"
         );
         Assert.Equal(
-            expected: FixedQ4816.One,
+            expected: FixedQ4816.Zero,
             actual: state.HeldChannelImage[0]
         );
     }
     [Fact]
-    public void ApplyMappedArrival_HeldCompositionBridgesUntilFirstDestinationInput() {
+    public void ApplyMappedArrival_CancelsHeldAndQueuedInputWithoutScoringARelease() {
         var definition = Fixtures.BuildDocument();
 
         definition = definition with {
@@ -138,6 +133,19 @@ public sealed class MappedArrivalApplicationLawTests {
             name: "jump",
             ordinal: out var ordinal
         ));
+        fixture.Step();
+        var runtime = fixture.Server.Input;
+        var held = default(PlayerIntent).WithChannel(ordinal, FixedQ4816.One);
+        Assert.True(runtime.TryPublishSnapshot(actor, actor.Index, "arrival", held, runtime.Interval.Tick,
+            out var session, out var press, out var reason), reason);
+        Assert.True(fixture.Server.ApplyIntentSubmission(body,
+            new(runtime.Interval.Tick, actor.Index, held, actor, Input: press, InputOwner: session)).IsAccepted);
+        Assert.True(runtime.TryGet(session, out var owner));
+        Assert.True(fixture.Server.Population.InputCatalog.TryGetLogicalId("jump", out var logical));
+        var epoch = owner!.Epoch;
+        Assert.True(owner.TryHeld(logical, out _));
+        body.PressChannel(ordinal, FixedQ4816.One, 2f, FixedQ4816.FromInteger(2));
+        body.EnqueueRun(held, 2f);
 
         Assert.True(condition: fixture.Server.Population.ApplyMappedArrival(
             slot: actor.Index,
@@ -148,18 +156,17 @@ public sealed class MappedArrivalApplicationLawTests {
             verticalVelocity: FixedQ4816.Zero,
             destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             actionContinuity: new WorldTransferActionContinuity(
-                Channels: [new WorldTransferChannelEdge(
-                        Name: "jump",
-                        PreviousBit: true,
-                        HeldValue: FixedQ4816.One
-                    )],
                 Registers: []
             )
         ));
 
+        Assert.Equal(epoch + 1, owner.Epoch);
+        Assert.False(owner.TryHeld(logical, out _));
+        Assert.True(owner.TryEvent(logical, WorldInputEventKind.Cancel, 0, out _));
+        Assert.False(owner.TryEvent(logical, WorldInputEventKind.Release, 0, out _));
         fixture.Step();
         Assert.Equal(
-            expected: FixedQ4816.One,
+            expected: FixedQ4816.Zero,
             actual: body.ChannelReadHeld[ordinal]
         );
 

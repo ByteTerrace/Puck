@@ -755,6 +755,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     // ---- population section ----
 
     private static void WriteTransferState(WireWriter writer, WorldBodyTransferState state) {
+        writer.WriteArray(state.ScriptActors.Timers, WriteScriptActor);
+        writer.WriteArray(state.ScriptActors.Pending, WriteScriptActor);
+        writer.WriteArray(state.ScriptActors.Tape, WriteScriptActor);
         writer.WriteFixedVector(value: state.PlanarVelocity);
         writer.WriteFixed(value: state.VerticalVelocity);
         writer.WriteFixedQuaternion(value: state.Orientation);
@@ -872,6 +875,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldBodyTransferState ReadTransferState(ref WireReader reader) {
+        var scriptTimers = reader.ReadArray("script timer actors", ReadScriptActor, ChannelLimits.MaxChannels);
+        var scriptPending = reader.ReadArray("script pending actors", ReadScriptActor, ChannelLimits.MaxChannels);
+        var scriptTape = reader.ReadArray("script tape actors", ReadScriptActor, MaxCollectionCount);
         var planarVelocity = reader.ReadFixedVector();
         var verticalVelocity = reader.ReadFixed();
         var orientation = reader.ReadFixedQuaternion();
@@ -999,8 +1005,27 @@ public static partial class WorldAuthorityCheckpointCodec {
         var pendingContinuum = reader.ReadOptional(
             readValue: static (ref WireReader r) => WorldWireLeaves.ReadContinuum(reader: ref r)
         );
+        if (scriptTimers.Length != channelTimerTicks.Length || scriptPending.Length != pendingDefaultChannelPress.Length ||
+            scriptTape.Length != tapeIntents.Length || scriptTape.Length != tapeRemainingTicks.Length) {
+            reader.Fail(WireRefusal.PayloadMalformed, "script actor counts must match their duration stores");
+        } else {
+            for (var index = 0; index < scriptTimers.Length; index++) {
+                if (channelTimerTicks[index] > 0 && scriptTimers[index] == default) {
+                    reader.Fail(WireRefusal.PayloadMalformed, "live scripted timer has no actor");
+                }
+            }
+            for (var index = 0; index < scriptPending.Length; index++) {
+                if (pendingDefaultChannelPress[index] && scriptPending[index] == default) {
+                    reader.Fail(WireRefusal.PayloadMalformed, "pending scripted press has no actor");
+                }
+            }
+            foreach (var actor in scriptTape) {
+                if (actor == default) { reader.Fail(WireRefusal.PayloadMalformed, "scripted tape segment has no actor"); }
+            }
+        }
 
         return new WorldBodyTransferState(
+            ScriptActors: new(scriptTimers, scriptPending, scriptTape),
             ActionState: actionState,
             ActionStateDirty: actionStateDirty,
             ActionStateDirtyKind: actionStateDirtyKind,

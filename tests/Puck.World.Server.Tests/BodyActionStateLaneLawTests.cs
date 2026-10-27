@@ -223,7 +223,6 @@ public sealed class BodyActionStateLaneLawTests {
             verticalVelocity: FixedQ4816.Zero,
             destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
             actionContinuity: new WorldTransferActionContinuity(
-                Channels: [],
                 Registers: [new WorldTransferActionRegister(
                         Kind: ActionStateKind.Counter,
                         Name: AmmoSlot,
@@ -581,7 +580,6 @@ public sealed class BodyActionStateLaneLawTests {
         verticalVelocity: FixedQ4816.Zero,
         destinationCompletedEngineTick: fixture.Server.CompletedEngineTicks,
         actionContinuity: new WorldTransferActionContinuity(
-            Channels: [],
             Registers: [new WorldTransferActionRegister(
                     Kind: ActionStateKind.Counter,
                     Name: name,

@@ -173,19 +173,6 @@ public static class WorldWireLeaves {
         return continuum;
     }
 
-    private static void WriteChannelEdge(WireWriter writer, WorldTransferChannelEdge edge) {
-        writer.WriteString(value: edge.Name);
-        writer.WriteBoolean(value: edge.PreviousBit);
-        writer.WriteFixed(value: edge.HeldValue);
-    }
-    private static WorldTransferChannelEdge ReadChannelEdge(ref WireReader reader) => new(
-        Name: reader.ReadString(
-            field: "channel edge name",
-            maxBytes: WireLimits.MaxStringBytes
-        ),
-        PreviousBit: reader.ReadBoolean(),
-        HeldValue: reader.ReadFixed()
-    );
     private static void WriteActionRegister(WireWriter writer, WorldTransferActionRegister register) {
         writer.WriteString(value: register.Name);
         writer.WriteByte(value: ((byte)register.Kind));
@@ -222,20 +209,11 @@ public static class WorldWireLeaves {
 
     public static void WriteActionContinuity(WireWriter writer, WorldTransferActionContinuity continuity) {
         writer.WriteArray(
-            items: continuity.Channels,
-            writeItem: WriteChannelEdge
-        );
-        writer.WriteArray(
             items: continuity.Registers,
             writeItem: WriteActionRegister
         );
     }
     public static WorldTransferActionContinuity ReadActionContinuity(ref WireReader reader) {
-        var channels = reader.ReadArray(
-            field: "action continuity channels",
-            readItem: static (ref WireReader r) => ReadChannelEdge(reader: ref r),
-            maximum: ChannelLimits.MaxChannels
-        );
         var registers = reader.ReadArray(
             field: "action continuity registers",
             readItem: static (ref WireReader r) => ReadActionRegister(reader: ref r),
@@ -243,7 +221,6 @@ public static class WorldWireLeaves {
         );
 
         return new WorldTransferActionContinuity(
-            Channels: channels,
             Registers: registers
         );
     }

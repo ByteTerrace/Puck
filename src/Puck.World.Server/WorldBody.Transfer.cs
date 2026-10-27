@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Physics;
 using Puck.Physics.Motion;
@@ -53,12 +54,13 @@ public sealed partial class WorldBody {
 
         ReadActionState(image: actionState);
 
-        var (tapeIntents, tapeRemainingTicks) = Tape(
+        var (tapeIntents, tapeRemainingTicks, tapeActors) = Tape(
             alias: alias,
             buffers: buffers
         );
 
         return new(
+            ScriptActors: new(Own(alias, buffers, m_scriptActors), Own(alias, buffers, m_pendingScriptActors), tapeActors),
             PlanarVelocity: m_planarVelocity,
             VerticalVelocity: m_verticalVelocity,
             Orientation: m_orientation,
@@ -136,35 +138,40 @@ public sealed partial class WorldBody {
     }
     // The tape, oldest segment first: the body's reused view lists for a view, whose count follows the tape without
     // reallocating, or arrays taken as Take takes one for a capture.
-    private (IReadOnlyList<PlayerIntent> Intents, IReadOnlyList<ulong> RemainingTicks) Tape(bool alias, CaptureBuffers? buffers) {
+    private (IReadOnlyList<PlayerIntent> Intents, IReadOnlyList<ulong> RemainingTicks, IReadOnlyList<Principal> Actors) Tape(bool alias, CaptureBuffers? buffers) {
         if (alias) {
             var viewIntents = (m_viewTapeIntents ??= []);
             var viewRemainingTicks = (m_viewTapeRemainingTicks ??= []);
+            var viewActors = (m_viewTapeActors ??= []);
 
             viewIntents.Clear();
             viewRemainingTicks.Clear();
+            viewActors.Clear();
 
             for (var offset = 0; (offset < m_tapeCount); offset++) {
                 var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
 
                 viewIntents.Add(item: segment.Intent);
                 viewRemainingTicks.Add(item: segment.RemainingTicks);
+                viewActors.Add(segment.Actor);
             }
 
-            return (viewIntents, viewRemainingTicks);
+            return (viewIntents, viewRemainingTicks, viewActors);
         }
 
         var intents = Take<PlayerIntent>(buffers: buffers, length: m_tapeCount);
         var remainingTicks = Take<ulong>(buffers: buffers, length: m_tapeCount);
+        var actors = Take<Principal>(buffers: buffers, length: m_tapeCount);
 
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
 
             intents[offset] = segment.Intent;
             remainingTicks[offset] = segment.RemainingTicks;
+            actors[offset] = segment.Actor;
         }
 
-        return (intents, remainingTicks);
+        return (intents, remainingTicks, actors);
     }
 
     /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
@@ -229,38 +236,15 @@ public sealed partial class WorldBody {
         m_continuumConsumedThroughEngineTick = consumedThrough;
         m_ordinaryAdvanceAdmitted = false;
     }
-    /// <summary>Restores the named action-edge/register subset that must remain continuous when exactly one writer
+    /// <summary>Restores the named action registers that remain continuous when exactly one writer
     /// hands this body to another authority. Destination names and kinds are authoritative; unknown rows are ignored
     /// and a carried value the destination's own envelope refuses settles through it — a range clamps, a closed set
     /// settles to the authored initial.</summary>
-    /// <param name="continuity">The carried edge and register subset.</param>
-    /// <param name="channels">The destination's compiled channel table.</param>
+    /// <param name="continuity">The carried register subset.</param>
     /// <param name="settledToInitial">Collects the name of every register a closed-set refusal settled to its
     /// authored initial, so the caller can narrate it; <see langword="null"/> collects nothing.</param>
-    public void ApplyTransferActionContinuity(WorldTransferActionContinuity continuity, WorldChannelTable channels, ICollection<string>? settledToInitial = null) {
+    public void ApplyTransferActionContinuity(WorldTransferActionContinuity continuity, ICollection<string>? settledToInitial = null) {
         ArgumentNullException.ThrowIfNull(continuity);
-        ArgumentNullException.ThrowIfNull(channels);
-
-        var held = default(PlayerIntent);
-
-        foreach (var channel in continuity.Channels) {
-            if (
-                channels.TryGetOrdinal(
-                name: channel.Name,
-                ordinal: out var ordinal
-            ) &&
-                (((uint)ordinal) < ((uint)m_previousChannelBit.Length))
-            ) {
-                m_previousChannelBit[ordinal] = channel.PreviousBit;
-                held = held.WithChannel(
-                    ordinal: ordinal,
-                    value: channel.HeldValue
-                );
-            }
-        }
-
-        m_transferHeldChannels = held;
-        m_hasTransferHeldChannels = (held != default);
 
         // An arrival loads the carried register file into this body's slot lanes. A carried value the destination's
         // own envelope does not admit settles by the envelope's shape: a range has a nearest admitted value and
@@ -390,6 +374,8 @@ public sealed partial class WorldBody {
     /// velocity/orientation fields beside it.</summary>
     /// <param name="state">The state a matching <see cref="CaptureTransferState"/> call produced.</param>
     public void ApplyTransferState(WorldBodyTransferState state) {
+        CopyClamped(state.ScriptActors.Timers, m_scriptActors);
+        CopyClamped(state.ScriptActors.Pending, m_pendingScriptActors);
         // A restored body never sleeps through the restore that just replaced its velocity/orientation/program —
         // see WorldBody.Sleep.cs's own remarks. SetBodyMotionProgram below wakes too, but only when the captured
         // program name differs from the fresh body's default, so this cannot rely on that alone.
@@ -570,6 +556,7 @@ public sealed partial class WorldBody {
         m_durableInputTick = state.DurableInputTick;
 
         RestoreTape(
+            actors: state.ScriptActors.Tape,
             intents: state.TapeIntents,
             remainingTicks: state.TapeRemainingTicks
         );

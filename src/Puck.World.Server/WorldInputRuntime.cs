@@ -406,6 +406,11 @@ public sealed partial class WorldInputRuntime {
         if (!m_owners.TryGetValue(principal, out var owner)) { return; }
         Reset(owner, owner.Input.Mapping, activation);
     }
+    /// <summary>Cancels every admitted input owner at an authority crossing.</summary>
+    internal void ResetBody(int body) {
+        if (!m_bodyOwners.TryGetValue(body, out var owners)) { return; }
+        foreach (var owner in owners) { Reset(owner, owner.Input.Mapping, 0); }
+    }
     /// <summary>Installs one barrier for an atomic application-set replacement, including its new selection.</summary>
     internal void ResetRoute(Principal principal) {
         if (!m_owners.TryGetValue(principal, out var owner)) { return; }

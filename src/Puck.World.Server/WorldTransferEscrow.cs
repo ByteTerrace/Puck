@@ -65,23 +65,16 @@ public enum WorldTransferStatus : byte {
 }
 /// <summary>Bounded operational counts for transfer-state churn laws and diagnostics.</summary>
 public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases);
-/// <summary>One named channel edge carried across an authority change. Names, rather than ordinals, keep a
-/// destination's independently-authored channel order from changing the meaning of a held control. HeldValue is
-/// the last admitted device-held composition value: the destination bridges it until the first real input image
-/// arrives, so transport handoff cannot insert a synthetic release/press pair into one physical hold.</summary>
-public readonly record struct WorldTransferChannelEdge(string Name, bool PreviousBit, FixedQ4816 HeldValue);
 /// <summary>One named action register carried across an authority change. A destination accepts it only when its
 /// own seat kit declares the same name and kind; its own envelope remains authoritative.</summary>
 public readonly record struct WorldTransferActionRegister(string Name, ActionStateKind Kind, FixedQ4816 Value, ulong TimerTicks);
-/// <summary>The minimal action continuity that prevents an authority seam from manufacturing a new input edge or
-/// a fresh cooldown/charge.</summary>
+/// <summary>Committed action registers carried across authorities. Input holds, edges and partial patterns reset
+/// at the crossing and never travel with these simulation effects.</summary>
 public sealed record WorldTransferActionContinuity(
-    IReadOnlyList<WorldTransferChannelEdge> Channels,
     IReadOnlyList<WorldTransferActionRegister> Registers
 ) {
-    /// <summary>Gets the continuity that carries no edge and no register.</summary>
+    /// <summary>Gets the continuity that carries no register.</summary>
     public static WorldTransferActionContinuity Empty { get; } = new(
-        Channels: [],
         Registers: []
     );
 }
@@ -145,7 +138,7 @@ public sealed record WorldTransferCommitMember(
     WorldContinuumTrajectory? Continuum = null,
     FixedQ4816 TravelTurn = default
 ) {
-    /// <summary>Gets the action edges and registers the traveller carries. Carrying none is the empty continuity: an
+    /// <summary>Gets the action registers the traveller carries. Carrying none is the empty continuity: an
     /// absent one reads as <see cref="WorldTransferActionContinuity.Empty"/>, so a commit means the same whichever
     /// carrier built it.</summary>
     public WorldTransferActionContinuity ActionContinuity { get; init; } = (ActionContinuity ?? WorldTransferActionContinuity.Empty);
@@ -437,13 +430,12 @@ public sealed partial class WorldTransferEscrow {
         (ReferenceEquals(
             objA: left,
             objB: right
-        ) || ((left.Channels is not null) && (right.Channels is not null) && (left.Registers is not null) && (right.Registers is not null) &&
-        left.Channels.SequenceEqual(second: right.Channels) && left.Registers.SequenceEqual(second: right.Registers)));
+        ) || ((left.Registers is not null) && (right.Registers is not null) &&
+        left.Registers.SequenceEqual(second: right.Registers)));
     // IReadOnlyList does not imply immutable storage. Retain a value image of continuity, including at checkpoint
     // capture/restore, so caller edits cannot rewrite which commit this idempotency receipt accepted.
     private static WorldTransferCommitMember CopyCommitMember(WorldTransferCommitMember member) => member with {
         ActionContinuity = new WorldTransferActionContinuity(
-            Channels: [.. member.ActionContinuity.Channels],
             Registers: [.. member.ActionContinuity.Registers]
         ),
     };
@@ -745,7 +737,7 @@ public sealed partial class WorldTransferEscrow {
             return WorldTransferStatus.Missing;
         }
 
-        if (members.Any(predicate: static member => ((member.ActionContinuity is not { Channels: not null, Registers: not null })))) {
+        if (members.Any(predicate: static member => ((member.ActionContinuity is not { Registers: not null })))) {
             reason = $"transfer {transferId} carries invalid action continuity collections";
             return WorldTransferStatus.Missing;
         }

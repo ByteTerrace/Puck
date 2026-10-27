@@ -357,11 +357,6 @@ public sealed partial class FederationTransferLawTests {
             ),
             VerticalVelocity: FixedQ4816.FromInteger(value: 3),
             ActionContinuity: new WorldTransferActionContinuity(
-                Channels: [new WorldTransferChannelEdge(
-                        Name: "jump",
-                        PreviousBit: true,
-                        HeldValue: FixedQ4816.One
-                    )],
                 Registers: [new WorldTransferActionRegister(
                         Name: "jumpUses",
                         Kind: ActionStateKind.Counter,
@@ -425,11 +420,6 @@ public sealed partial class FederationTransferLawTests {
             left: expected.Profile,
             right: member.Profile
         ));
-        Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
-        Assert.Equal(
-            expected: FixedQ4816.One,
-            actual: Assert.Single(collection: member.ActionContinuity.Channels).HeldValue
-        );
         Assert.Equal(
             expected: FixedQ4816.One,
             actual: Assert.Single(collection: member.ActionContinuity.Registers).Value
@@ -551,18 +541,6 @@ public sealed partial class FederationTransferLawTests {
             sourceAuthority: "machine-a/boot",
             transferId: 290
         );
-        var channels = new[] {
-            new WorldTransferChannelEdge(
-            "jump",
-            true,
-            FixedQ4816.One
-        ),
-            new WorldTransferChannelEdge(
-            "crouch",
-            false,
-            FixedQ4816.Zero
-        ),
-        };
         var registers = new[] {
             new WorldTransferActionRegister(
             "uses",
@@ -578,7 +556,6 @@ public sealed partial class FederationTransferLawTests {
         ),
         };
         var continuity = new WorldTransferActionContinuity(
-            Channels: channels,
             Registers: registers
         );
         var member = new WorldTransferCommitMember(
@@ -604,7 +581,6 @@ public sealed partial class FederationTransferLawTests {
         );
         var equal = member with {
             ActionContinuity = new(
-            Channels: [.. channels],
             Registers: [.. registers]
         ),
         };
@@ -619,11 +595,8 @@ public sealed partial class FederationTransferLawTests {
             userMessage: replay
         );
         var alternatives = new WorldTransferActionContinuity[] {
-            WorldTransferActionContinuity.Empty, continuity with { Channels = [] }, continuity with { Registers = [] },
-            continuity with { Channels = channels.Reverse().ToArray() }, continuity with { Registers = registers.Reverse().ToArray() },
-            continuity with { Channels = [channels[0] with { Name = "other" }, channels[1]] },
-            continuity with { Channels = [channels[0] with { PreviousBit = false }, channels[1]] },
-            continuity with { Channels = [channels[0] with { HeldValue = FixedQ4816.Zero }, channels[1]] },
+            WorldTransferActionContinuity.Empty,
+            continuity with { Registers = registers.Reverse().ToArray() },
             continuity with { Registers = [registers[0] with { Name = "other" }, registers[1]] },
             continuity with { Registers = [registers[0] with { Kind = ActionStateKind.Timer }, registers[1]] },
             continuity with { Registers = [registers[0] with { Value = FixedQ4816.Zero }, registers[1]] },
@@ -643,7 +616,7 @@ public sealed partial class FederationTransferLawTests {
             );
         }
         // Mutating the same collections originally submitted must not mutate the retained receipt.
-        channels[0] = channels[0] with { PreviousBit = false }; registers[1] = registers[1] with { TimerTicks = 1 };
+        registers[1] = registers[1] with { TimerTicks = 1 };
         Assert.True(condition: (fixture.Server.CommitTransfer(
             request.SourceAuthority,
             request.TransferId,
@@ -670,11 +643,6 @@ public sealed partial class FederationTransferLawTests {
             transferId: 291
         );
         var continuity = new WorldTransferActionContinuity(
-            Channels: [new WorldTransferChannelEdge(
-                    "jump",
-                    true,
-                    FixedQ4816.One
-                )],
             Registers: [new WorldTransferActionRegister(
                     "cooldown",
                     ActionStateKind.Timer,
@@ -706,19 +674,13 @@ public sealed partial class FederationTransferLawTests {
         var checkpoint = escrow.Capture();
         var carried = Assert.Single(collection: checkpoint.Committed).Members[0].ActionContinuity!;
         // A checkpoint supplied to Restore may use mutable lists, regardless of Capture's concrete collection type.
-        var channels = carried.Channels.ToArray(); var registers = carried.Registers.ToArray();
+        var registers = carried.Registers.ToArray();
 
         carried = new WorldTransferActionContinuity(
-            Channels: channels,
             Registers: registers
         );
         checkpoint.Committed[0].Members[0] = member with { ActionContinuity = carried };
         var restored = new WorldTransferEscrow(server: fixture.Server); restored.Restore(checkpoint: checkpoint);
-        channels[0] = new(
-            "jump",
-            false,
-            FixedQ4816.Zero
-        );
         registers[0] = new(
             "cooldown",
             ActionStateKind.Timer,

@@ -634,6 +634,7 @@ public sealed partial class WorldBody {
             }
 
             MergeLaneTimer(
+                actor: m_pendingScriptActors[ordinal],
                 ordinal: ordinal,
                 value: m_pendingDefaultChannelValue[ordinal],
                 holdTicks: stepTicks
@@ -643,11 +644,11 @@ public sealed partial class WorldBody {
     }
     // Merges (ordinal, value, holdTicks) into the lane-timer slot: a same-value re-press only extends an in-flight
     // hold (the longer of the two durations wins — repeatedly resubmitting one held key must not truncate itself);
-    // a DIFFERENT value is a distinct action and replaces the hold outright — its own duration, not merged with
+    // a different actor or value is a distinct action and replaces the hold outright — its own duration, not merged with
     // whatever ticks remained. Shared by PressChannel's timed overload and MaterializeDefaultLanePresses so the
     // wire-timed and host-step-tap press paths can never drift onto two different merge rules.
-    private void MergeLaneTimer(int ordinal, FixedQ4816 value, ulong holdTicks) {
-        var isSameValueRepress = ((m_laneTimers[ordinal] > 0) && (m_channelTimerValues[ordinal] == value));
+    private void MergeLaneTimer(int ordinal, FixedQ4816 value, ulong holdTicks, Puck.Commands.Principal actor) {
+        var isSameValueRepress = ((m_laneTimers[ordinal] > 0) && (m_channelTimerValues[ordinal] == value) && (m_scriptActors[ordinal] == actor));
 
         if (isSameValueRepress) {
             m_laneTimers[ordinal] = Math.Max(
@@ -657,6 +658,7 @@ public sealed partial class WorldBody {
         } else {
             m_channelTimerValues[ordinal] = value;
             m_laneTimers[ordinal] = holdTicks;
+            m_scriptActors[ordinal] = actor;
         }
     }
     // A shaping-row gate: a postfix Boolean program of body-fact predicates plus 'held' (a live channel-threshold

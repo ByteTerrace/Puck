@@ -141,6 +141,16 @@ profiles. `PublishBorrowed` uses reusable event/contribution arrays for immediat
 admission; never queue or retain that batch. Transport and replay producers use
 the owning `Publish` result instead.
 
+Scripted `body.press` and movement tapes keep their durations in the existing
+body timer/tape stores and retain the command's actual actor alongside them.
+Each step admits that actor's current script image before the body consumes it;
+the accepted image controls motion and actions, and expiry publishes a normal
+release. Revocation and authority crossings cancel. Actor arrays and queued
+segment actors use the authority checkpoint leaf, including local `World`
+provenance for compiled internal callers; none can claim `World` on the wire.
+A default tap lasts one host step. Adding a local observation session does not
+reset the body's already queued script durations.
+
 Size history for the authored rate and sample density, including both ends of
 the retention window and any burst. At 240 Hz, two seconds of continuously
 changing steering axes can exceed the default 256 records. An overflow cancels

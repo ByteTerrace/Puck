@@ -4,6 +4,21 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
+    /// <summary>Starts a cross-authority arrival with no held, queued or partially recognized input.</summary>
+    internal void ResetArrivalInput() {
+        ClearTransientInput();
+        ClearTape();
+        Array.Clear(m_laneTimers);
+        Array.Clear(m_channelTimerValues);
+        Array.Clear(m_pendingDefaultChannelPress);
+        Array.Clear(m_pendingDefaultChannelValue);
+        Array.Clear(m_previousChannelBit);
+        Array.Clear(m_laneActions);
+        m_channelReadHeld = default;
+        m_channelReadComposed = default;
+        m_channelReadScalar = default;
+        m_engagedIntent = default;
+    }
     private readonly LaneActionRuntime[] m_inputActionScratch = new LaneActionRuntime[ActionLaneCount];
     /// <summary>The input tuple currently installed on this body's folded intent.</summary>
     public ushort InputMappingId { get; private set; }
@@ -20,6 +35,7 @@ public sealed partial class WorldBody {
         timers.Clear(); timerValues.Clear(); previousBits.Clear();
         continuing.Clear();
         Array.Clear(m_inputActionScratch);
+        Array.Clear(m_inputScriptActorScratch);
         foreach (var logical in next.Live) {
             var destination = next.Address(logical);
             if (destination < 0 || reset || !recompiled && !catalog.Keeps(previous, next, logical) ||
@@ -32,11 +48,13 @@ public sealed partial class WorldBody {
             continuing[destination] = true;
             timers[destination] = m_laneTimers[source];
             timerValues[destination] = m_channelTimerValues[source];
+            m_inputScriptActorScratch[destination] = m_scriptActors[source];
             previousBits[destination] = m_previousChannelBit[source] || accepted[destination] != FixedQ4816.Zero;
             m_inputActionScratch[destination] = m_laneActions[source];
         }
         timers.CopyTo(m_laneTimers);
         timerValues.CopyTo(m_channelTimerValues);
+        m_inputScriptActorScratch.CopyTo(m_scriptActors, 0);
         previousBits.CopyTo(m_previousChannelBit);
         m_inputActionScratch.CopyTo(m_laneActions, 0);
         Array.Clear(m_pendingDefaultChannelPress);
