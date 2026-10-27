@@ -31,7 +31,8 @@ public sealed partial class WorldBody {
         InvalidateRigidRest();
         // PrepareBodyStep fixes this tick's integration roster. A later wake joins the contact solve immediately,
         // but integrates only next tick. Start its contact phase empty, exactly as a reconstructed body does;
-        // neither support nor a hold tick may come from the advance that preceded sleep.
+        // neither support nor a hold tick may come from the advance that preceded sleep. Zero step ticks also
+        // tell RefreshRigidStaticSupport to query a fresh static witness during this tick's contacts.
         m_rigidHoldBeforeStep = 0;
         m_rigidStepTicks = 0;
         m_rigidPairSupported = false;

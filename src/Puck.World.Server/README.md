@@ -936,8 +936,11 @@ The pre-integration roster fixes which bodies integrate that tick. A rigid
 body woken after that snapshot joins the contact solve immediately with empty
 per-step support scratch and zero elapsed hold time; it first integrates on
 the next tick. An arriving pair wakes its sleepers before noting fresh pair
-support. This boundary applies equally to live and restored bodies, so no
-grounded fact or rest hold can depend on transient pre-sleep contact scratch.
+support. A late wake queries the static field at its current pose before the
+support-aware pair split and contact finalization, so its floor can still block
+a downward correction. This boundary applies equally to live and restored
+bodies, so no grounded fact or rest hold can depend on transient pre-sleep
+contact scratch.
 The checkpoint codec carries this continuation state, identity-owned
 record snapshots, and generation-qualified rule latches. It refuses older envelopes.
 

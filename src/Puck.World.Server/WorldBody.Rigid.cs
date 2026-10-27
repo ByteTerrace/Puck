@@ -579,13 +579,16 @@ public sealed partial class WorldBody {
     }
 
     private void RefreshRigidStaticSupport(RigidContactPolicy policy) {
-        if (m_rigidStaticSupported && (m_rigidSupportNormal == FixedVector3.Zero) && (m_contactField is { } field)) {
-            // A frozen body did not sample a normal this tick. Recover it without writing the probe's position.
+        if (((m_rigidStepTicks == 0) || (m_rigidStaticSupported && (m_rigidSupportNormal == FixedVector3.Zero))) && (m_contactField is { } field)) {
+            // A late wake skipped integration and cleared its old support scratch. Recover current static
+            // support before a pair can push it into the floor, independently of pre-sleep/live/restore history.
+            // Recheck at the current pose on later pair passes and finalization; the probe never moves the body.
             var probePosition = (m_position - (FixedVector3.UnitY * policy.SubstepMinimumTravel));
             var probeVelocity = FixedVector3.Zero;
             var support = field.ResolveSweep(previousPosition: m_position, position: ref probePosition,
                 velocity: ref probeVelocity, orientation: m_orientation, volumes: ScaledColliderVolumes(), up: FixedVector3.UnitY);
 
+            m_rigidStaticSupported = support.Grounded;
             if (support.Grounded) { m_rigidSupportNormal = ((support.GroundNormal != FixedVector3.Zero) ? support.GroundNormal : FixedVector3.UnitY); }
         }
     }

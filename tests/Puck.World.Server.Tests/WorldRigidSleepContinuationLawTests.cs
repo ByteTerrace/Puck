@@ -10,6 +10,41 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed class WorldRigidSleepContinuationLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ArrivingBodyCannotPushALateWokenSleeperThroughItsFloor(bool analytic) {
+        var source = Document();
+        var definition = (analytic ? source with { CollisionRaw = source.Collision with { Requirements = [] } } : source);
+        var population = new WorldPopulation(definition: definition);
+
+        population.SetSimulatedCount(2);
+        Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
+        Pose(index: 1, population: population, x: 3, y: .5f, z: 0);
+        Settle(count: 2, population: population);
+        var floorPosition = population.EntryBody(index: 0)!.FixedPosition;
+        var captured = RoundTrip(definition, population);
+
+        var live = Arrive();
+
+        population.Restore(checkpoint: captured.Population, defaults: definition.PlayerDefaults, tick: 1200);
+        Assert.Equal(live, Arrive());
+
+        byte[] Arrive() {
+            var target = population.EntryBody(index: 0)!;
+
+            Assert.True(condition: target.Grounded);
+            Assert.False(condition: target.IsPenetratingStaticGeometry());
+            Pose(index: 1, population: population, x: 0, y: (target.Position.Y + .7f), z: 0);
+            Step(population: population, tick: 1200);
+            Assert.True(condition: (population.DynamicContactResolvedPairs > 0));
+            Assert.Equal(1, population.SimulatedBodyVisits);
+            Assert.False(condition: target.IsPenetratingStaticGeometry());
+            Assert.Equal(floorPosition, target.FixedPosition);
+            Assert.True(condition: target.Grounded);
+            return WorldAuthorityCheckpointCodec.Encode(checkpoint: captured with { Population = population.Capture() });
+        }
+    }
     [Fact]
     public void OrdinarySupportMotionContinuesIdenticallyAfterRestore() {
         var source = SupportedDocument();
