@@ -35,26 +35,21 @@ public sealed partial class WorldPopulation {
 
     // Bridges the server's own field-lattice representation to the kernel's narrow medium-field seam, so the
     // navigation runtime depends on neither the document schema nor the lattice's representation.
-    private sealed class NavigationMediumFieldAdapter(FieldLattice lattice) : INavigationMediumField {
-        public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) =>
-            lattice.IsInsideMedium(
-                clearance: clearance,
-                field: field,
-                position: in position
-            );
+    private sealed class NavigationMediumFieldAdapter : INavigationMediumField {
+        private readonly (FieldLattice Lattice, int Field, string Name)[] m_fields;
+
+        public NavigationMediumFieldAdapter(IReadOnlyList<WorldFieldRegion> regions) {
+            m_fields = regions.SelectMany(selector: region => region.Lattice.Input.Fields.Select(selector: (field, index) => (region.Lattice, index, field.Name))).ToArray();
+        }
+
+        public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) => m_fields[field].Lattice.IsInsideMedium(m_fields[field].Field, in position, clearance);
         public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) =>
-            lattice.IsSegmentInsideMedium(
-                clearance: clearance,
-                field: field,
-                from: in from,
-                maximumSubdivisions: maximumSubdivisions,
-                to: in to
-            );
-        public bool TryFieldIndex(string name, out int field) => lattice.TryFieldIndex(
-            field: out field,
-            name: name
-        );
-        public ulong ValueRevision(int field) => lattice.ValueRevision(field: field);
+            m_fields[field].Lattice.IsSegmentInsideMedium(m_fields[field].Field, in from, in to, clearance, maximumSubdivisions);
+        public bool TryFieldIndex(string name, out int field) {
+            for (var index = 0; (index < m_fields.Length); index++) { if (m_fields[index].Name == name) { field = index; return true; } }
+            field = -1; return false;
+        }
+        public ulong ValueRevision(int field) => m_fields[field].Lattice.ValueRevision(field: m_fields[field].Field);
     }
 
     // Compiles the authored navigation rows into the kernel's own plain input shape once at resolve time; the

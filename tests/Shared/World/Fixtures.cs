@@ -568,8 +568,10 @@ internal static partial class Fixtures {
             time: in time
         );
     }
+
     /// <summary>The name of the <c>state.body</c> register <see cref="WithBodyScale"/> declares.</summary>
     public const string BodyScaleRegister = "scale";
+
     /// <summary>Returns <paramref name="source"/> declaring the Counter register <see cref="BodyScaleRegister"/> in
     /// <c>state.body</c>, with a range envelope, and <c>bodies.scale</c> naming it, so every body's live scale reads the
     /// register.</summary>
@@ -770,7 +772,7 @@ internal static partial class Fixtures {
     /// composite row — what <c>with { Fields = ... }</c> said before the fold made Fields a compiled view of the
     /// state section.</summary>
     public static WorldDefinition WithLattice(WorldDefinition definition, WorldFieldsSection composite) =>
-        (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: composite) });
+        (definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: [composite]) });
 
     /// <summary>The full parameter set <c>ValidateProducerParameters</c> requires for a kit naming the "roam"
     /// producer — shared by every fixture kit that declares one (<see cref="BuildKits"/>'s own "traveler" row, and

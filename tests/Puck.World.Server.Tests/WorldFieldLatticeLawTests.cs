@@ -23,7 +23,7 @@ public sealed class WorldFieldLatticeLawTests {
                 Cells: [new StateCell(CellName.Parse(candidate: "allowed"), CellValue.Text(value: "seat1"))])
         ]);
         using var fixture = Fixtures.FreshServer(definition);
-        ReadOnlyMemory<FieldCellDelta> changes = new FieldCellDelta[] { new(Cell: 0, Field: 0, Raw: 123) };
+        ReadOnlyMemory<FieldCellDelta> changes = new FieldCellDelta[] { new(Cell: 0, Field: 0, Raw: 123, Region: "grid", FieldName: "drawn") };
         var first = Principal.Seat(slot: 0);
         var second = Principal.Seat(slot: 1);
         var disclosure = new WorldStateChangeDisclosure();
@@ -81,6 +81,7 @@ public sealed class WorldFieldLatticeLawTests {
         float heightScale = 0f,
         IReadOnlyList<WorldReaction>? reactions = null
     ) => new(
+        Name: "world",
         Lattice: new WorldFieldLatticeDefinition(
             Origin: new DocumentVector3(
                 x: 0f,
@@ -111,7 +112,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: boot);
 
-        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.Fields);
+        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.FieldRegions[0].Lattice);
         var bootCells = lattice.Capture().Raw[0].ToArray();
 
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.Generate(
@@ -156,7 +157,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         using var expectedFixture = Fixtures.FreshServer(definition: loaded);
 
-        var expectedCells = Assert.IsType<FieldLattice>(@object: expectedFixture.Server.Population.Fields).Capture().Raw[0].ToArray();
+        var expectedCells = Assert.IsType<FieldLattice>(@object: expectedFixture.Server.Population.FieldRegions[0].Lattice).Capture().Raw[0].ToArray();
 
         lattice.Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [[0L, 0L]]));
         fixture.Server.EnqueueRebuild(
@@ -202,7 +203,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         var population = new WorldPopulation(definition: definition);
 
-        Assert.NotNull(@object: population.Fields);
+        Assert.NotNull(@object: population.FieldRegions[0].Lattice);
     }
     [Fact]
     public void PopulationRebuildInstallsReactionOnlyEditsWithoutResettingLiveCells() {
@@ -231,7 +232,7 @@ public sealed class WorldFieldLatticeLawTests {
             definition: original
         );
         var population = new WorldPopulation(definition: original);
-        var lattice = Assert.IsType<FieldLattice>(@object: population.Fields);
+        var lattice = Assert.IsType<FieldLattice>(@object: population.FieldRegions[0].Lattice);
 
         Fixtures.StepLattice(lattice: lattice);
         population.Rebuild(
@@ -241,7 +242,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.Same(
             expected: lattice,
-            actual: population.Fields
+            actual: population.FieldRegions[0].Lattice
         );
         Assert.Equal(
             expected: FixedQ4816.One,
@@ -272,7 +273,7 @@ public sealed class WorldFieldLatticeLawTests {
             composite: Fields(width: 2)
         );
         var population = new WorldPopulation(definition: original);
-        var lattice = Assert.IsType<FieldLattice>(@object: population.Fields);
+        var lattice = Assert.IsType<FieldLattice>(@object: population.FieldRegions[0].Lattice);
         var input = lattice.Input;
         var revision = population.Revision;
         var seats = population.LocalSeatCount;
@@ -284,7 +285,7 @@ public sealed class WorldFieldLatticeLawTests {
 
         Assert.Same(
             expected: lattice,
-            actual: population.Fields
+            actual: population.FieldRegions[0].Lattice
         );
         Assert.Same(
             expected: input,
@@ -327,7 +328,7 @@ public sealed class WorldFieldLatticeLawTests {
         ));
         fixture.Step();
 
-        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.Fields);
+        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.FieldRegions[0].Lattice);
         var definitionBefore = fixture.DefinitionBytes();
         var inputBefore = lattice.Input;
         var cellsBefore = lattice.Capture().Raw.Select(selector: static field => field.ToArray()).ToArray();
@@ -370,7 +371,7 @@ public sealed class WorldFieldLatticeLawTests {
         );
         Assert.Same(
             expected: lattice,
-            actual: fixture.Server.Population.Fields
+            actual: fixture.Server.Population.FieldRegions[0].Lattice
         );
         Assert.Same(
             expected: inputBefore,

@@ -39,7 +39,7 @@ discrete cases—a `"box"` case exists too, for a 3-layer discrete board; the do
 `"field"` case is `WorldFieldTopology`, registered through `WorldJsonVocabulary`) and bind an
 integer/boolean row through `domain: { "$type": "cellsOf", "topology": "map", "empty": 0 }`. Only
 a `"field"` lattice creates physical field storage. A world may declare at most 64 topologies, including
-at most one physical field topology. Each discrete topology admits 4096 cells; a row of any domain may author a
+any number of named physical field regions within the aggregate byte budgets. Each discrete topology admits 4096 cells; a row of any domain may author a
 capacity up to 4096 cells, and a slot or keys row that authors none gets 128. What all of a document's state may
 occupy together is one figure in bytes, `ArenaCapacity.MaxBytes` (64 MiB): the arena's layout measures every column
 at its full width, and a document that lays out past the ceiling is refused at the row that crossed. `world.state`
@@ -1273,13 +1273,51 @@ physical case is the document's `WorldFieldTopology`—name, origin, `cellSize`,
 (`WorldStateFieldTrait`—`initial`/`min`/`max`, optional
 `heightScale`/`color`, `paint`; the topology itself lives on `domain`, shared
 with a discrete board's own `cellsOf` case) is the whole spelling.
-`WorldFieldsSection.Compile(state)` assembles the runtime composite
-(`WorldDefinition.Fields`, cached, never an authored member); `ToStateSection`
+`WorldFieldsSection.Compile(state)` assembles one runtime composite per physical topology
+(`WorldDefinition.FieldRegions`, cached, never an authored member); `ToStateSection`
 is its inverse, for the projection reconstruction that must hand a client-side
 definition the same lattice through the identical state section the compile
-reads. A cell write against a lattice row (`world.state.cell.set`) refuses
+reads. Presentation composition first filters rows through the live recipient
+reader policies. An admitted row retains its authored initial value and paint;
+reactions cross only when every referenced field and state row is readable by
+that recipient, and a travel input crosses only when its source is readable.
+The owner rules that seed data is often a public game feature: the author's
+visibility policy decides disclosure, without blanket seed stripping.
+Current physical values arrive through checked
+snapshot deltas, addressed by region and field names even when disclosure changes
+their local ordinals. A cell write against a lattice row (`world.state.cell.set`) refuses
 through whole-document revalidation—a lattice row's cells are simulation
 state, never authored cells.
+
+Each physical topology is an independent region: its name is its stable identity;
+its origin, cell size, extents and cadence govern only rows whose `domain.topology`
+names it. Reactions resolve field names inside that region. No `spillRow` means
+sealed edges; sources, drains and any exchange are explicit world content.
+Snapshots, primers and checkpoints carry region and field names; hashes include
+those identities and the physical topology inputs.
+
+A region can author `travelResistance` as a nonnegative literal or `{ "row": "name" }`
+referencing a scalar Fixed row. Before body integration, the first region in
+document order containing the body's fixed position supplies `r`; travel speed
+is multiplied by `1 / (1 + max(0, r))`. Bounds are half open on all three axes;
+outside every region the factor is one. The input is derived again each tick.
+Use an authored state row to drive it and presentation bindings together.
+
+The full physical-cell primer is limited by `WorldFieldCapacity.MaxSnapshotBytes`
+(24 MiB, reserving 8 MiB of a federation frame for the rest of the snapshot).
+Height fields share the current sampled-surface buffer's 64 MiB resident budget;
+validation refuses excess bytes rather than dropping a surface. There is no
+one-region limit. Per-region representation and reaction bounds still apply.
+
+Start, stop, intensity and reset compose ordinary scalar state, reactions,
+`paintField` rules and document-authored `commands`. Stop can set source intensity
+to zero while retained fields continue reacting; reset is a separate explicit
+rule. [The two-region scenario](../../scenarios/physical-regions.puck) demonstrates
+the controls and runs with `puck test scenarios/physical-regions.puck --reproduce --jobs 1`.
+Field rows bind whole arrays through `state.<row>` with their own region's cell
+count; scalar controls use the ordinary `state.<row>` binding grammar. Rules read
+physical cells through the host-owned operand seam, including literal indices in
+`0..cellCount-1`; they never read the arena's empty host-owned columns.
 
 **Paint** (`WorldLatticeFill`, `$type`-discriminated) seeds a row before its
 first step: `rect` (a world-space box takes one value), `noise` (fixed-point
@@ -1336,8 +1374,8 @@ scalar/tag/output state dependencies once into
 boundary, preserves reaction order as stable node order, and exposes immutable
 canonical read/write sets plus the dependency DAG they imply and exact
 cell-node/full-cell/body-pass cost classes. It is consumed alongside
-`WorldDefinition.Fields`, which remains the complete topology, paint,
-initialization, and display composite. `WorldDefinition.FieldProgram` is the
+`WorldDefinition.FieldRegions`, which remains the complete topology, paint,
+initialization, and display composite. `WorldDefinition.FieldPrograms` is the
 cached non-serialized door: unrelated definition edits and value-only state
 updates preserve compatible program handles, while a field declaration or
 reaction-program change creates a replacement. This is the shared reaction

@@ -200,7 +200,7 @@ public sealed class WorldPresentationManifest {
         }
 
         builder.Visit(value: definition);
-        builder.AddFields(fields: definition.Fields);
+        foreach (var region in definition.FieldRegions) { builder.AddFields(fields: region); }
 
         var clocks = (definition.Timeline.Clocks ?? []).Where(predicate: static clock => (clock is not null)).ToArray();
 

@@ -14,6 +14,7 @@ public sealed class WorldFieldFlowLawTests {
         float rate = 1f,
         string? spillRow = null
     ) => new(
+        Name: "world",
         Lattice: new WorldFieldLatticeDefinition(
             Origin: new DocumentVector3(
                 x: 0f,

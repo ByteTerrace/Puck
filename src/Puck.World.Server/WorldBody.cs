@@ -69,7 +69,7 @@ public sealed partial class WorldBody {
     // The world contact field this body solves its swept grounded position against (null before a population assigns
     // the document-derived field) and the body's own capsule volume (null = a volumeless kit, never solved).
     /// <summary>The authored maximum downward snap, scaled with the body.</summary>
-    private FixedQ4816 GroundSnap => m_tuning.GroundSnap * m_scale;
+    private FixedQ4816 GroundSnap => (m_tuning.GroundSnap * m_scale);
     // The half-angle rate SteerUp's rotor and its within-budget test both want, so accumulating it directly spares a
     // per-tick halving — see WorldBody.Step's SteerUp. Kit-authored (WorldMotion.UpTurn); see FixedUpTurnRates.
     private FixedQ4816 FieldUpTurnHalfRate => m_tuning.UpTurn.Field;
@@ -216,6 +216,12 @@ public sealed partial class WorldBody {
     // hold's law projects displacement along the BODY's own resolved gravity-up, not this normal, so a tilted gravity
     // area's medium still measures depth correctly.
     private FixedFieldSurface? m_mediumSurface;
+
+    private FixedQ4816 m_travelMultiplier = FixedQ4816.One;
+
+    /// <summary>Installs the current region resistance, derived afresh before each motion step.</summary>
+    public void SetTravelResistance(FixedQ4816 resistance) => m_travelMultiplier = (FixedQ4816.One / (FixedQ4816.One + FixedQ4816.Max(x: FixedQ4816.Zero, y: resistance)));
+
     // The grounded program's authoritative heading scalar (radians): integrated from the Turn rate, with m_orientation
     // derived from it each step (a pure yaw rotation). Under free it is inert (orientation is authoritative and Yaw is
     // read back out of it).

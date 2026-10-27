@@ -46,6 +46,12 @@ public sealed class WorldValueDomainLawTests {
     private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainGuard, float>? Present = null, float[]? Controls = null);
 
     private static readonly IReadOnlyDictionary<WorldValueField, Case> Cases = new Dictionary<WorldValueField, Case> {
+        [WorldValueFields.SpeakerGain] = new Case(
+            Author: static s => Fixtures.BuildDocument() with {
+                SpeakersRaw = [new WorldSpeaker.Fixed("signal", new DocumentVector3(x: 0, y: 0, z: 0), new WorldSpeakerFeed(new WorldSpeakerSource.None(), "mix", s))],
+            },
+            Path: "speakers[0].feed.gain"
+        ),
         [WorldValueFields.IndirectLights] = Indirect(s => new WorldRenderIndirect(Sources: new WorldRenderIndirectSources(Lights: s)), e => e.Indirect.Gains.Lights, "sources.lights"),
         [WorldValueFields.IndirectEmission] = Indirect(s => new WorldRenderIndirect(Sources: new WorldRenderIndirectSources(Emission: s)), e => e.Indirect.Gains.Emission, "sources.emission"),
         [WorldValueFields.IndirectScreens] = Indirect(s => new WorldRenderIndirect(Sources: new WorldRenderIndirectSources(Screens: s)), e => e.Indirect.Gains.Screens, "sources.screens"),

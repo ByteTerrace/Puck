@@ -2666,3 +2666,19 @@ for topology addressing, phases, private draws, knowledge refresh, and limits.
 ## Documentation
 
 📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)
+
+Named physical regions are exposed as `WorldPopulation.FieldRegions`; each owns
+one `FieldLattice`, with named physical-cell deltas and checkpoint field identities.
+Every consumer (solids, navigation, medium sampling, rules and responses) resolves
+the row's owning region. A full physical primer includes all regions together.
+Body-coupled reactions see only bodies within their region's coupling bounds.
+Exposure rows shared by separated regions therefore keep the containing region's
+sample on its own cadence. A body leaving every region that exposes a row clears
+that row on the next tick, even if those regions' cadences are idle; no contribution
+cache is persisted. Region traversal and name lookup use indexed loops, and
+transform nodes reuse installed scalar workspaces. The warm regional sampling,
+lookup and transform-step law measures zero allocated bytes.
+Checkpoint restore reinstalls compatible field programs against the restored
+`StateCatalog` before restoring cells: handles from the old catalog cannot execute
+a continuation. The region's live `travelResistance` scalar is sampled before
+body integration; see the schema README's fields section for bounds and overlap.

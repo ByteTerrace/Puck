@@ -44,9 +44,9 @@ public abstract record WorldSpeakerSource {
 /// <param name="Source">The shared source identity this feed taps.</param>
 /// <param name="Channel">The stereo channel selector — <see cref="ChannelMix"/>, <see cref="ChannelLeft"/>, or
 /// <see cref="ChannelRight"/>.</param>
-/// <param name="Gain">The feed gain (1 = unity), bounded by <see cref="CreationSoundDocument.MaxLevel"/> — the one
-/// audio gain ceiling the validator enforces everywhere.</param>
-public sealed record WorldSpeakerFeed(WorldSpeakerSource Source, string Channel, float Gain) {
+/// <param name="Gain">The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by
+/// <see cref="CreationSoundDocument.MaxLevel"/>. Publication resolves the live value without restarting the emitter.</param>
+public sealed record WorldSpeakerFeed(WorldSpeakerSource Source, string Channel, BindableScalar Gain) {
     /// <summary>The left-channel selector.</summary>
     public const string ChannelLeft = "left";
     /// <summary>The mix selector — the average of both source channels.</summary>

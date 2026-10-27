@@ -117,7 +117,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((index == 0)
                 ? " "
-                : " | ")}{speaker.Name} {kind} {source} {speaker.Feed.Channel} gain={speaker.Feed.Gain:0.###}"
+                : " | ")}{speaker.Name} {kind} {source} {speaker.Feed.Channel} gain={speaker.Feed.Gain}"
             );
         }
 

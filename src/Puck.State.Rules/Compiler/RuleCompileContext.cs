@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Puck.State.Rules;
 
 /// <summary>One static table a section pins, as the compiler sees it: the authored name and either the loaded
@@ -226,25 +228,45 @@ public class RuleCompileContext : IRuleCostContext {
         lattices: Lattices,
         name: name
     );
+    /// <summary>Returns whether a literal key names an authored or topology-defined cell.</summary>
+    /// <param name="row">The declared row.</param>
+    /// <param name="key">The literal cell key.</param>
+    /// <returns>Whether the row declares that cell.</returns>
+    public virtual bool DeclaresCell(StateRow row, string key) {
+        ArgumentNullException.ThrowIfNull(row);
+        return (row.HasCell(key: key) || ((row.EffectiveDomain is StateDomain.CellsOf domain) &&
+            (FindTopology(name: domain.Topology) is { } topology) &&
+            long.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) && (ordinal < topology.CellCount)));
+    }
+    /// <summary>Creates a read of a declared row; a document context may select the facet that owns its cells.</summary>
+    /// <param name="row">The declared row.</param>
+    /// <param name="rowOrdinal">Its catalog ordinal.</param>
+    /// <param name="key">The literal key, or invalid when the key is indirect.</param>
+    /// <param name="keyFrom">The key indirection, or null for a literal key.</param>
+    /// <returns>The typed read operand.</returns>
+    public virtual IRuleOperand CreateCellRead(StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
+        new StateCellOperand(rowOrdinal: rowOrdinal, key: key, keyFrom: keyFrom, valueKind: row.Kind);
     /// <summary>Returns a row's admitted cell room for pricing: its explicit capacity, topology, initial reservation, or the
     /// section-wide ceiling for an undeclared row.</summary>
     /// <param name="name">The row name.</param>
     /// <returns>The capacity.</returns>
     public long RowCapacity(string name) {
         var row = FindRow(name: name);
-        return ((row is not null) && Catalog.TryResolve(lane: StateLane.Document, name: row.Name, handle: out var handle))
-            ? RowCapacity(rowOrdinal: handle.Ordinal) : StateCapacity.MaxCellsPerRow;
+
+        return (((row is not null) && Catalog.TryResolve(lane: StateLane.Document, name: row.Name, handle: out var handle))
+            ? RowCapacity(rowOrdinal: handle.Ordinal) : StateCapacity.MaxCellsPerRow);
     }
     /// <inheritdoc/>
     public long RowCapacity(int rowOrdinal) {
-        if (AdmittedLayout is { } layout && (uint)rowOrdinal < (uint)layout.RowCount && layout[rowOrdinal].IsStored) {
+        if ((AdmittedLayout is { } layout) && (((uint)rowOrdinal) < ((uint)layout.RowCount)) && layout[rowOrdinal].IsStored) {
             return layout[rowOrdinal].CellCapacity;
         }
         var row = FindRowAt(rowOrdinal: rowOrdinal);
+
         if (row is null) { return StateCapacity.MaxCellsPerRow; }
         return row.Shape switch {
             RowShape.Slot => 1,
-            RowShape.Lattice => FindTopology(name: ((StateDomain.CellsOf)row.EffectiveDomain).Topology)?.CellCount ?? row.CellCeiling,
+            RowShape.Lattice => (FindTopology(name: ((StateDomain.CellsOf)row.EffectiveDomain).Topology)?.CellCount ?? row.CellCeiling),
             RowShape.Ring => row.CellCeiling,
             _ => row.InitialCellCapacity,
         };
@@ -252,7 +274,6 @@ public class RuleCompileContext : IRuleCostContext {
 
     /// <summary>Gets or sets the runtime reservation used for row and retained-undo pricing.</summary>
     public ArenaLayout? AdmittedLayout { get; set; }
-
     /// <inheritdoc/>
     /// <remarks>The state-neutral context declares no bodies; a document project whose host holds bodies answers its
     /// own capacity.</remarks>

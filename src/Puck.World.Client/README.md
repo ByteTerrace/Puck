@@ -306,6 +306,9 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   after unescaping must fit the grid at load. Placeholder dependencies cross
   presentation projections through the same recipient disclosure checks as
   other bound values; restricted sources refuse disclosure.
+  Every named physical region uses its own origin, dimensions, cell size and
+  fields. Brick slots span all regions, while bound field rows retain their
+  globally unique state-row names and their region's own row length.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the
   seat's routed mirror, and rebuilt only when one of the slots it read changes

@@ -6,29 +6,81 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick : IFieldLatticeHost {
+    private FieldLattice? m_steppingRegion;
+
     /// <summary>Describes the field lattice for a console read-back.</summary>
     /// <returns>One line, or a none line when the world declares no <c>fields</c> section.</returns>
-    internal string DescribeFields() => ((Host.Population.Fields is { } lattice)
-        ? $"[world.fields: {lattice.Describe()}]"
-        : "[world.fields: none]"
-    );
+    internal string DescribeFields() => ((Host.Population.FieldRegions.Count == 0) ? "[world.fields: none]"
+        : $"[world.fields: {string.Join(separator: "; ", values: Host.Population.FieldRegions.Select(selector: region => $"{region.Name}: {region.Lattice.Describe()}"))}]");
 
-    // Runs after the rules so a tag a rule wrote this tick is what an emit reads, and before the snapshot so the
-    // step's cell writes ride this tick's delivery. `this` is the host — the lattice reaches bodies and state-row
-    // cells through the interface below, never a per-tick delegate.
-    private void StepFields(ulong tick) {
-        if (Host.Population.Fields is not { } lattice) {
-            return;
+    /// <summary>Clears departed exposure outputs and advances each physical region on its own cadence.</summary>
+    public void StepFields(ulong tick) {
+        var regions = Host.Population.FieldRegions;
+
+        // A shared exposure row belongs to the regions containing the body. Clear it only after the body leaves
+        // every contributing region, including on a tick when their reaction cadences are idle. No retained
+        // contribution cache is needed, so checkpoints keep the same authoritative inputs.
+        for (var index = 0; (index < regions.Count); index++) {
+            var reactions = regions[index].Lattice.Input.Reactions;
+
+            for (var reaction = 0; (reaction < reactions.Count); reaction++) {
+                if (reactions[reaction] is not FieldReactionInput.Expose expose) { continue; }
+                for (var body = 0; (body < Host.Population.Capacity); body++) {
+                    if ((Host.Body(index: body) is not { } active) || HasExposureRegion(regions, expose.Row, active.FixedPosition)) { continue; }
+                    WriteTagCell(catalog: Host.Document.Definition.StateCatalog, row: expose.Row, body: body, value: 0L, tick: tick);
+                }
+            }
         }
-
-        lattice.Step(
-            bodyCount: Host.Population.Capacity,
-            host: this,
-            tick: tick
-        );
+        try {
+            for (var index = 0; (index < regions.Count); index++) {
+                m_steppingRegion = regions[index].Lattice;
+                m_steppingRegion.Step(bodyCount: Host.Population.Capacity, host: this, tick: tick);
+            }
+        } finally { m_steppingRegion = null; }
     }
 
-    FixedVector3? IFieldLatticeHost.BodyPosition(int body) => Host.Body(index: body)?.FixedPosition;
+    private static bool HasExposureRegion(IReadOnlyList<WorldFieldRegion> regions, StateHandle row, in FixedVector3 position) {
+        for (var index = 0; (index < regions.Count); index++) {
+            var lattice = regions[index].Lattice;
+
+            if (!lattice.TryBodyCellOf(cell: out _, position: in position)) { continue; }
+            var reactions = lattice.Input.Reactions;
+
+            for (var reaction = 0; (reaction < reactions.Count); reaction++) {
+                if ((reactions[reaction] is FieldReactionInput.Expose expose) && (expose.Row == row)) { return true; }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Samples the containing region's motion input before body integration.</summary>
+    public void SampleTravelResistance(ulong tick) {
+        if (Host.Population.FieldRegions.Count == 0) { return; }
+        for (var index = 0; (index < Host.Population.Capacity); index++) {
+            if (Host.Body(index: index) is not { } body) { continue; }
+            var resistance = FixedQ4816.Zero;
+
+            var regions = Host.Population.FieldRegions;
+
+            for (var regionIndex = 0; (regionIndex < regions.Count); regionIndex++) {
+                var region = regions[regionIndex];
+
+                if (!region.Lattice.TryCellOf(body.FixedPosition, out _)) { continue; }
+                if (region.TravelResistance is { } scalar) {
+                    resistance = ((scalar.Row is { } row) ? ReadScalarSlot(row: row, tick: tick) : FixedQ4816.FromDouble(value: (scalar.Literal ?? 0f)));
+                }
+                break;
+            }
+            body.SetTravelResistance(resistance: resistance);
+        }
+    }
+
+    FixedVector3? IFieldLatticeHost.BodyPosition(int body) {
+        if (Host.Body(index: body) is not { } active) { return null; }
+        var position = active.FixedPosition;
+
+        return (((m_steppingRegion is null) || m_steppingRegion.TryBodyCellOf(cell: out _, position: in position)) ? position : null);
+    }
     long IFieldLatticeHost.ReadTag(StateHandle row, int body, ulong tick) => ReadTagCell(
         body: body,
         catalog: Host.Document.Definition.StateCatalog,
@@ -139,7 +191,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
         catalog: catalog,
         definition: Host.Document.Definition,
         handle: row,
-        key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+        key: IndexKeyCache.Get(index: body),
         tick: tick,
         engineTick: CompletedEngineTicks,
         row: out _,
@@ -163,7 +215,7 @@ public sealed partial class WorldTick : IFieldLatticeHost {
             mutation: new WorldMutation.UpsertStateCell(
                 Principal: Principal.World,
                 Row: catalog[row].Name,
-                Key: body.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                Key: IndexKeyCache.Get(index: body),
                 Value: value,
                 Kind: WorldDocumentWriteKind.Set
             ),

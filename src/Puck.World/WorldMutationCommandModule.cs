@@ -542,7 +542,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 );
                 var halfRadiusGain = (((double)AudioMixer.HalfRadiusAttenuationQ16(curve: audioCurve)) / 65536.0);
 
-                var mediumFieldNames = (definition.Fields?.Fields ?? [])
+                var mediumFieldNames = definition.FieldRegions.SelectMany(selector: static region => region.Fields)
                     .Where(predicate: static field => field.Medium)
                     .Select(selector: static field => field.Name)
                     .ToArray();
