@@ -18,7 +18,7 @@ using Puck.World.Machines;
 // The setter suppresses the byte-order mark. A test batch's boots share it.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 if ((args.Length == 4) && (args[0] == "--devices") && (args[1] == "none") && (args[2] == "--test-batch")) {
-    using var batchHost = new WorldTestHost();
+    var batchHost = new WorldTestHost();
 
     return await WorldTestBatch.RunAsync(path: args[3], host: batchHost, boot: (arguments, script) => RunWorldAsync(args: arguments, batchHost: batchHost, script: script));
 }

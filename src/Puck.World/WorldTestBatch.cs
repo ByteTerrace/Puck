@@ -4,8 +4,8 @@ using System.Text.Json;
 
 namespace Puck.World;
 
-/// <summary>Amortizes process and container startup for scheduled tests. Every entry goes through the normal boot
-/// and disposes its isolated run scope before the next entry starts.</summary>
+/// <summary>Amortizes process startup for scheduled tests. Every entry goes through the normal boot
+/// and disposes its independent native host before the next entry starts.</summary>
 internal static class WorldTestBatch {
     private sealed record Leg(string World, string Directory, string Script, int ExitAfterSeconds);
 

@@ -7,7 +7,7 @@ public static partial class TestCommand {
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
     // Replicas ALWAYS live in separate processes, even with --jobs 1. Each process boots a sequence of unrelated
-    // test documents through the real composition root, reusing construction plans but no mutable run state.
+    // test documents through the real composition root, with an independent native host for each document.
     private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int chunks, int run) {
         var legs = new List<object>();
 

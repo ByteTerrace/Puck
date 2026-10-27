@@ -1886,7 +1886,8 @@ submitted is the process's own state, never the document's — so a restored,
 re-read or rewound world submits every row again from tick 1 and measures a
 different trajectory from the one the export was asked for.
 
-Test preparation uses the existing source-compile cache and shares composed
+Test preparation shares persisted source compiles, retaining generated test bytes
+only while staging one source, and shares composed
 imports with their authored-value origins. Each reader receives a fresh JSON
 tree; editing an input invalidates the held composition. A staged root is consumed
 once and written to disk, without retaining its composed image or scalar-origin
@@ -1896,17 +1897,16 @@ The work summary reports source compiles, compositions and shared images, worker
 processes, container host boots, world runs, and exported authority ticks (excluding
 the extra shutdown ticks). Executable build reuse is reported separately.
 
-Each worker reuses its dependency container's construction plans through the native
-host builder's provider factory; the normal host owns startup, shutdown and disposal. Every document
-still goes through the normal World composition root and receives a fresh,
-fully disposed run scope: even services normally registered as singletons are
-local to that run. Factories and instances come from the current document's
-registrations. Clocks, sessions, addons, schedules and state directories are
-separate. A changed registration shape or keyed service falls back to an ordinary
-fresh host. Reproduce replicas always use different processes, even with `--jobs 1`,
+Each worker reuses its process; every document goes through the normal World
+composition root and receives an independent, fully disposed native host container.
+Native dependency validation, singleton identity in child scopes and caller ownership
+of supplied singleton instances are preserved. Container reuse by rewriting lifetimes
+cannot preserve arbitrary factories and extensions, so every graph uses a fresh host.
+Clocks, sessions, addons, schedules and state directories are separate.
+Reproduce replicas always use different processes, even with `--jobs 1`,
 and the second replica visits worlds in reverse order to expose predecessor state
-leaks. `--jobs` bounds concurrent workers, including replicas. For 96 worlds with
-the same registration shape, `--reproduce --jobs 2` uses four workers, four container
+leaks. `--jobs` bounds concurrent workers, including replicas. For 96 worlds,
+`--reproduce --jobs 2` uses four workers, 192 native container
 boots and 192 isolated world runs. Ordinary runs use one replica. The default of
 at most two concurrent workers leaves memory headroom on a 32 GB development machine;
 use `--jobs 1` alongside other heavy work.

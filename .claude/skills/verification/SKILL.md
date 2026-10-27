@@ -57,15 +57,15 @@ its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` reuses one container per worker while creating and disposing a fresh
-run scope through the ordinary composition root for every world. All normally
-singleton mutable services are scoped too; each scope uses its own registrations,
-clock, sessions, addons, schedule and persistence. `WorldTestHost` plugs its
-provider factory into `HostApplicationBuilder`; the native host retains startup,
-shutdown, background-fault handling and disposal. The second replica reverses
+`puck test` reuses worker processes while creating and disposing an independent
+native host through the ordinary composition root for every world. Never rewrite
+singleton lifetimes to reuse a provider: that changes captive-dependency validation,
+caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
+and extensions require the native container. `WorldTestHostLawTests` preserves the
+three review witnesses. The second replica reverses
 the world order, so matching contamination from identical predecessors cannot
-hide a leak. `TestCommandLawTests.ReusedHostsIsolateDocumentsWithTheSameIdentityInOppositeOrders`
-also compares a reused scope's export and manifest with a fresh-process boot.
+hide a leak. `TestCommandLawTests.ReusedWorkersIsolateDocumentsWithTheSameIdentityInOppositeOrders`
+also compares a reused worker's export and manifest with a fresh-process boot.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
 
@@ -75,6 +75,8 @@ process peaks that occurred at different times. Record the full run's world coun
 authority ticks, host boots and wall time, and compare all exports/manifests when
 changing only the runner. Preparation can dominate coordinator memory: staged
 roots used once must not retain a composed image and a scalar-origin snapshot.
+Generated test compiles share persisted entries but use a source-local memory cache,
+so the process-wide cache cannot retain every staged test's bytes.
 Shared imports keep their origins for correct path relocation. Logs stream to
 disk, and verdict reading holds only the current world's pair. A negative control
 can route a wall-clock probe axis into an authoritative row: `--reproduce` must

@@ -267,10 +267,11 @@ requiring byte-identical exports and manifests. Preparation shares composed
 imports, including authored-value origins, through the existing content-checked
 composition cache; each reader gets a fresh tree. Staging consumes roots without
 retaining their composed images or scalar-origin snapshots, while shared imports
-retain their origins. Each worker reuses one container's construction plans and
-creates a fresh run scope through the normal composition root for each document;
-all mutable services, including normal singletons, are disposed with that scope.
-Different registration shapes or keyed services fall back to fresh hosts.
+retain their origins. Generated test compiles share persisted entries but release
+their in-memory documents after staging each source. Each worker reuses its process
+and builds a fresh native host through the normal composition root for each document.
+Provider reuse by rewriting singleton lifetimes changes dependency validation,
+caller ownership and child-scope identity, so every graph uses the native container.
 Reproduce replicas always occupy different processes, even with `--jobs 1`, and
 the second visits worlds in reverse order to expose predecessor state leaks.
 The default runs at most two worker processes concurrently; `--jobs 1` serializes

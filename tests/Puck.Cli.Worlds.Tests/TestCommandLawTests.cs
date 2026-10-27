@@ -9,7 +9,7 @@ namespace Puck.Cli.Worlds.Tests;
 /// build <c>Puck.World</c> again: the test project already depends on that build.</remarks>
 public sealed class TestCommandLawTests {
     [Fact]
-    public void ReusedHostsIsolateDocumentsWithTheSameIdentityInOppositeOrders() {
+    public void ReusedWorkersIsolateDocumentsWithTheSameIdentityInOppositeOrders() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
 
         directory.WriteText(name: "isolation.puck", text: """
@@ -24,10 +24,10 @@ public sealed class TestCommandLawTests {
 
         var (exit, output) = RunTest(directory.PathOf(name: "isolation.puck"), "--reproduce", "--keep", kept);
         Assert.Equal(actual: exit, expected: 0);
-        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "host-boots=2 world-runs=6");
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "host-boots=6 world-runs=6");
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
             actual: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000002/run1/out/state-export.json")));
-        // Also compare a reused scope to a truly fresh process, using the same staged world and ordinary boot.
+        // Also compare a reused worker to a truly fresh process, using the same staged world and ordinary boot.
         var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
         using var error = new StringWriter();
 
