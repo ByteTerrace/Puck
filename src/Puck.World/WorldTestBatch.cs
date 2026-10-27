@@ -4,12 +4,12 @@ using System.Text.Json;
 
 namespace Puck.World;
 
-/// <summary>Amortizes process startup for scheduled tests. Every entry goes through the normal boot and disposes
-/// its entire host before the next entry starts; only the executable and existing derived-content caches survive.</summary>
+/// <summary>Amortizes process startup for scheduled tests. Every entry goes through the normal boot
+/// and disposes its independent native host before the next entry starts.</summary>
 internal static class WorldTestBatch {
     private sealed record Leg(string World, string Directory, string Script, int ExitAfterSeconds);
 
-    public static async Task<int> RunAsync(string path, Func<string[], string?, Task<int>> boot) {
+    public static async Task<int> RunAsync(string path, WorldTestHost host, Func<string[], string?, Task<int>> boot) {
         var legs = (JsonSerializer.Deserialize<Leg[]>(json: File.ReadAllText(path: path))
             ?? throw new InvalidDataException(message: "A test batch must contain its legs."));
         var output = Console.Out;
@@ -27,6 +27,7 @@ internal static class WorldTestBatch {
             Console.SetOut(newOut: TextWriter.Synchronized(writer: new Tee(progress: output, transcript: transcript)));
             Console.SetError(newError: TextWriter.Synchronized(writer: errors));
             var exit = 1;
+            var boots = host.Boots;
 
             try {
                 exit = await boot([
@@ -41,6 +42,7 @@ internal static class WorldTestBatch {
                 Console.SetOut(newOut: output);
                 Console.SetError(newError: error);
                 File.WriteAllText(path: Path.Combine(path1: leg.Directory, path2: "exit-code"), contents: exit.ToString(provider: CultureInfo.InvariantCulture));
+                File.WriteAllText(path: Path.Combine(path1: leg.Directory, path2: "host-boots"), contents: (host.Boots - boots).ToString(provider: CultureInfo.InvariantCulture));
             }
             failed |= (exit != 0);
         }

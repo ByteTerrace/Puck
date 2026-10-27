@@ -51,11 +51,37 @@ that session.
 Gates, parity, canaries, counters, baselines, `puck laws prove` and review
 passes are tools to use when they pay for themselves, never preconditions. A
 change to simulation state stays deterministic; `puck test --reproduce` shows
-two independent process runs agree, including their per-tick authoritative
+two replicas in separate processes agree, including their per-tick authoritative
 replay hashes and byte-identical exports and manifests. A differing trace names
 its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
+
+`puck test` reuses worker processes while creating and disposing an independent
+native host through the ordinary composition root for every world. Never rewrite
+singleton lifetimes to reuse a provider: that changes captive-dependency validation,
+caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
+and extensions require the native container. `WorldTestHostLawTests` preserves the
+three review witnesses. The second replica reverses
+the world order, so matching contamination from identical predecessors cannot
+hide a leak. `TestCommandLawTests.ReusedWorkersIsolateDocumentsWithTheSameIdentityInOppositeOrders`
+also compares a reused worker's export and manifest with a fresh-process boot.
+The default bounds concurrent workers at two (one on fewer than four logical
+CPUs); a lane beside heavy work still passes `--jobs 1`.
+
+When profiling a sweep, sample the coordinator and the simultaneous sum of its
+descendants' working sets; report private bytes separately. Do not add individual
+process peaks that occurred at different times. Record the full run's world count,
+authority ticks, host boots and wall time, and compare all exports/manifests when
+changing only the runner. Preparation can dominate coordinator memory: staged
+roots used once must not retain a composed image and a scalar-origin snapshot.
+Generated test compiles share persisted entries but use a source-local memory cache,
+so the process-wide cache cannot retain every staged test's bytes.
+Shared imports keep their origins for correct path relocation. Logs stream to
+disk, and verdict reading holds only the current world's pair. A negative control
+can route a wall-clock probe axis into an authoritative row: `--reproduce` must
+refuse it and name the first differing tick/instance. Keep that nondeterminism
+in a scratch world, never in engine simulation logic.
 
 ### Coverage
 

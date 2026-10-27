@@ -1021,6 +1021,10 @@ public sealed partial class WorldPopulation {
                         var pairIsRigid = (left.IsRigid || right.IsRigid);
 
                         if (pairIsRigid) {
+                            // Wake before writing this pair's support scratch. Wake discards the pre-sleep
+                            // contact image, including when the body skipped this tick's integration snapshot.
+                            if (left.PopulationSleeping) { WakeBodyIsland(index: leftIndex); }
+                            if (right.PopulationSleeping) { WakeBodyIsland(index: rightIndex); }
                             ResolveRigidPairContact(
                                 correction: correction,
                                 left: left,

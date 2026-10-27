@@ -926,6 +926,18 @@ Checkpoint restoration preserves the sleep tick, any partially accumulated
 idle floor, and a pending contact-field wake. It records whether the body's
 field observation was current, rather than depending on a process-local
 counter surviving reconstruction. Ordinary transfers still wake the body.
+Rigid islands retain canonical membership, non-rigid support dependencies,
+solved gravity observations and pending collision discovery work. Restore
+retains those dependencies and observations only for surviving bodies; losing
+a support or any rigid island member wakes the remaining component. A remote
+human retired under zero reconnect grace cannot leave orphaned sleep metadata.
+
+The pre-integration roster fixes which bodies integrate that tick. A rigid
+body woken after that snapshot joins the contact solve immediately with empty
+per-step support scratch and zero elapsed hold time; it first integrates on
+the next tick. An arriving pair wakes its sleepers before noting fresh pair
+support. This boundary applies equally to live and restored bodies, so no
+grounded fact or rest hold can depend on transient pre-sleep contact scratch.
 The checkpoint codec carries this continuation state, identity-owned
 record snapshots, and generation-qualified rule latches. It refuses older envelopes.
 

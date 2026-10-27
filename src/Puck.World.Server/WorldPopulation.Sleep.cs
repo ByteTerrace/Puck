@@ -156,6 +156,19 @@ public sealed partial class WorldPopulation {
         m_sleepGravity.Clear();
         m_sleepFieldVersion = ContactFieldVersion;
         var pendingFieldWake = false;
+        // Restore can retire remote humans whose connection cannot survive. A surviving part of their rigid
+        // island has lost support, including when the retired member was the canonical root.
+        var retiredRoots = new HashSet<int>();
+
+        foreach (var captured in checkpoint.Entries) {
+            if ((captured.Residue.RigidSleepRootPlusOne != 0) && (m_entries[captured.Index] is not { Active: true, Body: not null })) {
+                retiredRoots.Add(item: captured.Residue.RigidSleepRootPlusOne);
+            }
+        }
+        // Discovery eligibility affects bounded collision admission. Keep captured work and add the bodies that
+        // roster reconciliation wakes below, rather than marking every reconstructed sleeper dirty.
+        m_eventBodies.Clear();
+        foreach (var index in checkpoint.EventBodies) { m_eventBodies.Add(item: index); }
 
         foreach (var index in m_awakeBodies.ToArray()) {
             var body = m_entries[index].Body!;
@@ -163,6 +176,7 @@ public sealed partial class WorldPopulation {
             var root = (residue.RigidSleepRootPlusOne - 1);
 
             if (root < 0) { continue; }
+            if (retiredRoots.Contains(item: (root + 1))) { body.WakeRigidIsland(); continue; }
             if (root != index) { LinkRigidBodies(left: root, right: index); }
             body.ParkRigidIsland(rootPlusOne: (root + 1), contactFieldVersion: residue.LastContactFieldVersion);
             pendingFieldWake |= (residue.LastContactFieldVersion != ContactFieldVersion);
@@ -170,12 +184,13 @@ public sealed partial class WorldPopulation {
             m_sleepingBodies.Add(item: index);
         }
         if (pendingFieldWake) { m_sleepFieldVersion = unchecked((ContactFieldVersion - 1UL)); }
-        foreach (var edge in checkpoint.SleepingSupports) { LinkRigidBodies(left: edge.Support, right: edge.Body); }
-        foreach (var row in checkpoint.SleepingGravity) { m_sleepGravity.Add(key: row.Body, value: row.Acceleration); }
-        // Discovery eligibility affects bounded collision admission. Restore the captured work, rather than
-        // treating reconstructed frozen bodies as new changes and charging them against an arriving body's budget.
-        m_eventBodies.Clear();
-        foreach (var index in checkpoint.EventBodies) { m_eventBodies.Add(item: index); }
+        foreach (var row in checkpoint.SleepingGravity) {
+            if (m_sleepingBodies.Contains(item: row.Body)) { m_sleepGravity.Add(key: row.Body, value: row.Acceleration); }
+        }
+        foreach (var edge in checkpoint.SleepingSupports) {
+            if (!m_sleepingBodies.Contains(item: edge.Body)) { continue; }
+            if (m_entries[edge.Support] is { Active: true, Body: not null }) { LinkRigidBodies(left: edge.Support, right: edge.Body); } else { WakeBodyIsland(index: edge.Body); }
+        }
         m_sleepIndexDirty = true;
     }
     private (int Support, int Body)[] CaptureSleepingSupports() => [.. m_nonRigidSupports

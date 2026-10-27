@@ -30,9 +30,9 @@ public static partial class TestCommand {
         reason = null;
         skipped = null;
 
-        // The source compiles through the compile cache the composer and the game share, so an unchanged source
-        // run again is not compiled again; a source that does not compile is compiled for its diagnostics.
-        _ = WorldCompileCache.Shared.TryCompile(
+        // Share the persistent compile cache, but retain generated test bytes only while staging this source.
+        // The process-wide cache would keep every generated document alive for the entire sweep.
+        _ = new WorldCompileCache(directory: WorldCompileCache.Shared.Directory).TryCompile(
             compiled: out var compiled,
             failure: out var failure,
             includeTests: true,
@@ -291,7 +291,7 @@ public static partial class TestCommand {
         }
 
         // A documentId that cannot name a file stays under the generated name, and the boot refuses it by name.
-        var ownId = ((ReadObject(path: staged)?["documentId"]?.GetValue<string>() is { } documentId) && WorldDocumentName.TryValidate(name: documentId, reason: out _)
+        var ownId = (((ReadObject(path: staged)?["documentId"]?.GetValue<string>() is { } documentId) && WorldDocumentName.TryValidate(name: documentId, reason: out _))
             ? documentId
             : name
         );
@@ -307,7 +307,7 @@ public static partial class TestCommand {
         );
 
         var reached = new HashSet<string>(collection: [ownId, .. siblings.Select(selector: static sibling => sibling.Name)], comparer: DocumentName.Comparer);
-        var pending = new Queue<(string Name, JsonObject World, string SourceDirectory)>(collection: siblings.Select(selector: sibling => (sibling.Name, (JsonObject)JsonNode.Parse(utf8Json: sibling.Json)!, sourceDirectory)));
+        var pending = new Queue<(string Name, JsonObject World, string SourceDirectory)>(collection: siblings.Select(selector: sibling => (sibling.Name, ((JsonObject)JsonNode.Parse(utf8Json: sibling.Json)!), sourceDirectory)));
 
         var judged = new HashSet<string>(comparer: DocumentName.Comparer);
 
@@ -402,14 +402,14 @@ public static partial class TestCommand {
                     .ToArray();
 
                 if (matched.Length > 0) {
-                    var inheritedState = (((found["basis"] is not null) || (found["imports"] is not null)) &&
+                    var inheritedState = ((((found["basis"] is not null) || (found["imports"] is not null)) &&
                         PuckDocumentComposer.TryComposeWorldDocument(
                             chainBytes: out _,
                             composed: out var composedFound,
                             reason: out _,
                             rootBytes: Encoding.UTF8.GetBytes(s: found.ToJsonString()),
                             rootResolvedPath: (File.Exists(path: source) ? source : json)
-                        )
+                        ))
                             ? (composedFound?["state"] as JsonObject)
                             : null
                     );

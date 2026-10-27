@@ -4,11 +4,94 @@ using Puck.Maths;
 using Puck.Physics.Motion;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Server.Tests;
 
 public sealed class WorldRigidSleepContinuationLawTests {
+    [Fact]
+    public void OrdinarySupportMotionContinuesIdenticallyAfterRestore() {
+        var source = SupportedDocument();
+        var definition = source with {
+            ChannelsRaw = [new WorldChannel("strafe", ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
+                new WorldChannel("forward", ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance),
+                new WorldChannel("turn", ChannelShape.Bipolar, Role: ChannelRole.Turn)],
+            BodyMotionProgramsRaw = [.. source.BodyMotionPrograms.Where(predicate: static row => (row.Name != "idle")),
+                new BodyMotionProgram("idle", BodyMotionProgram.CurrentVersion, BodyProgramKind.Motion,
+                    [BodyMotionOp.ResolveYawAttitudeAndPlanarFrame, BodyMotionOp.ComputePlanarTargetVelocity,
+                        BodyMotionOp.ShapeVelocity, BodyMotionOp.IntegratePlanarAndVerticalVelocity, BodyMotionOp.CommitPose])],
+        };
+        var population = SupportedPopulation(definition);
+        var feed = new WorldEventFeed(capacity: population.Capacity);
+
+        population.EntryBody(index: 0)!.SetIntentSource(source: IntentSource.Live);
+        feed.Collect(definition: definition, population: population);
+        feed.Collect(definition: definition, population: population);
+        var captured = RoundTrip(definition: definition, feed: feed, population: population);
+        var values = new ChannelValues();
+
+        values[0] = FixedQ4816.One;
+        var intent = new PlayerIntent(values);
+        var live = new byte[30][];
+
+        for (var step = 0; (step < live.Length); step++) { live[step] = Continue(step: step); }
+        population.Restore(checkpoint: captured.Population, defaults: definition.PlayerDefaults, tick: 1200);
+        feed.Restore(checkpoint: captured.EventFeed);
+        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpoint: captured), Image());
+        for (var step = 0; (step < live.Length); step++) { Assert.Equal(live[step], Continue(step: step)); }
+
+        byte[] Continue(int step) {
+            population.EntryBody(index: 0)!.SubmitIntent(intent: intent);
+            Step(population: population, tick: (1200 + step));
+            feed.Collect(definition: definition, population: population);
+            if (step == 0) {
+                Assert.Equal(0, population.SleepingRigidBodies);
+                Assert.Equal(1, population.SimulatedBodyVisits);
+                Assert.False(condition: population.Capture().Entries[1].Residue.Grounded);
+                Assert.True(condition: (population.EntryBody(index: 0)!.FixedPosition.X > FixedQ4816.Zero));
+            }
+            if (step == 1) { Assert.Equal(2, population.SimulatedBodyVisits); }
+            return Image();
+        }
+        byte[] Image() => WorldAuthorityCheckpointCodec.Encode(checkpoint: captured with { Population = population.Capture(), EventFeed = feed.Capture() });
+    }
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [Theory]
+    public void RestoreRetiresRemoteSleepMetadataAndWakesDependentLoads(bool remoteSupport, bool rigidSupport) {
+        var source = (remoteSupport ? SupportedDocument() : Document());
+
+        if (rigidSupport) { source = source with { KitRowsRaw = [source.Kits[0] with { Rigid = source.Kits[1].Rigid }, source.Kits[1]] }; }
+        var definition = source with { PopulationRaw = source.Population with { ReconnectGraceSeconds = 0 } };
+        var population = new WorldPopulation(definition: definition);
+
+        Assert.True(condition: population.TryAdmitRemotePeerAt(slot: 0, source: IntentSource.Live, grantTemplates: [],
+            identityDomain: "domain", identitySubject: "remote", admitted: out _, refusal: out var refusal), userMessage: refusal);
+        if (remoteSupport) {
+            population.SetSimulatedCount(1);
+            Pose(index: 0, population: population, x: 0, y: 2, z: 0);
+            Pose(index: 1, population: population, x: 0, y: 3, z: 0);
+        } else { Pose(index: 0, population: population, x: 0, y: .5f, z: 0); }
+        Settle(count: (rigidSupport ? 2 : 1), population: population);
+        var captured = RoundTrip(definition, population).Population;
+
+        Assert.Equal(expected: (rigidSupport ? 2 : 1), actual: captured.SleepingGravity.Count);
+        if (remoteSupport && !rigidSupport) { Assert.Equal(expected: (0, 1), actual: Assert.Single(collection: captured.SleepingSupports)); }
+        population.Restore(checkpoint: captured, defaults: definition.PlayerDefaults, tick: 1200);
+        Assert.Null(@object: population.EntryBody(index: 0));
+        Assert.Equal(0, population.SleepingRigidBodies);
+        var restored = RoundTrip(definition, population).Population;
+
+        Assert.Empty(collection: restored.SleepingSupports);
+        Assert.Empty(collection: restored.SleepingGravity);
+        population.Restore(checkpoint: restored, defaults: definition.PlayerDefaults, tick: 1200);
+        if (remoteSupport) {
+            for (var tick = 1200; (tick < 1320); tick++) { Step(population: population, tick: tick); }
+            Assert.True(condition: (population.EntryBody(index: 1)!.FixedPosition.Y < FixedQ4816.One));
+        } else { Assert.Empty(collection: restored.Entries); }
+    }
     [Fact]
     public void CollisionAdmissionContinuesIdenticallyAfterRestore() {
         var source = Document();

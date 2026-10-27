@@ -29,10 +29,14 @@ public sealed partial class WorldBody {
     internal void WakeRigidIsland() {
         m_rigidSleepRootPlusOne = 0;
         InvalidateRigidRest();
-        // This body may wake during the pair solve, having skipped integration. It cannot earn a hold tick from
-        // the scratch of its last advance; next tick derives a fresh static/pair support solve.
+        // PrepareBodyStep fixes this tick's integration roster. A later wake joins the contact solve immediately,
+        // but integrates only next tick. Start its contact phase empty, exactly as a reconstructed body does;
+        // neither support nor a hold tick may come from the advance that preceded sleep.
         m_rigidHoldBeforeStep = 0;
         m_rigidStepTicks = 0;
+        m_rigidPairSupported = false;
+        m_rigidStaticSupported = false;
+        m_rigidSupportNormal = default;
     }
 
     private void NotifyPopulationWake() => m_populationWake?.Invoke(obj: m_populationIndex);
