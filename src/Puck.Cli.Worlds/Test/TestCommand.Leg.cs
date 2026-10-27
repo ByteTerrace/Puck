@@ -408,7 +408,7 @@ public static partial class TestCommand {
                 } else {
                     saw.Add(item: WorldVerdict.DescribeSeen(
                         key: key,
-                        value: CellValue.Int(value)
+                        value: CellValue.Int(value: value)
                     ));
                 }
             }
@@ -436,8 +436,8 @@ public static partial class TestCommand {
                         value: ReadResolvedValue(
                             export: export,
                             key: key,
-                            row: witnessName,
-                            kind: kind
+                            kind: kind,
+                            row: witnessName
                         )
                     ));
                 }
@@ -455,16 +455,17 @@ public static partial class TestCommand {
         return verdicts;
     }
     private static long ReadResolved(JsonObject export, string row, string key) =>
-        FindResolvedCell(export, row, key)?["value"]?.GetValue<long>() ?? WorldVerdict.NotEvaluated;
-
+        (FindResolvedCell(export: export, key: key, row: row)?["value"]?.GetValue<long>() ?? WorldVerdict.NotEvaluated);
     private static CellValue ReadResolvedValue(JsonObject export, string row, string key, CellKind kind) {
-        var cell = FindResolvedCell(export, row, key);
-        if (kind == CellKind.Text) { return CellValue.Text(cell?["text"]?.GetValue<string>()); }
-        var raw = cell?["value"]?.GetValue<long>() ?? 0L;
+        var cell = FindResolvedCell(export: export, key: key, row: row);
+
+        if (kind == CellKind.Text) { return CellValue.Text(value: cell?["text"]?.GetValue<string>()); }
+        var raw = (cell?["value"]?.GetValue<long>() ?? 0L);
+
         return kind switch {
-            CellKind.Bool => CellValue.Bool(raw != 0),
-            CellKind.Fixed => CellValue.Fixed(raw),
-            _ => CellValue.Int(raw),
+            CellKind.Bool => CellValue.Bool(value: (raw != 0)),
+            CellKind.Fixed => CellValue.Fixed(rawBits: raw),
+            _ => CellValue.Int(value: raw),
         };
     }
     private static JsonObject? FindResolvedCell(JsonObject export, string row, string key) {
@@ -516,14 +517,8 @@ public static partial class TestCommand {
             Description = "Run every test world a second time and require byte-identical state exports and test-run manifests. Use for determinism qualification; ordinary authored tests run once.",
         };
         var jobsOption = new Option<int>(name: "--jobs") {
-            DefaultValueFactory = static _ => Math.Min(
-                val1: 8,
-                val2: Math.Max(
-                    val1: 1,
-                    val2: (Environment.ProcessorCount / 2)
-                )
-            ),
-            Description = "Maximum test worlds to run concurrently. Output remains in authored order.",
+            DefaultValueFactory = static _ => Math.Clamp(value: (Environment.ProcessorCount / 2), min: 1, max: 2),
+            Description = "Maximum concurrent worker processes (default: at most 2). Reproduce replicas use separate processes, serialized when --jobs 1. Output remains in authored order.",
         };
         var command = new Command(
             description: """

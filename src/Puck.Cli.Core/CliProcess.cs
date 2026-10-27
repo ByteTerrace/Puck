@@ -110,12 +110,13 @@ public static class CliProcess {
         object eventGate,
         Func<long> nextSequence,
         long startedAt,
-        Action<CliProcessOutputLine>? onOutput
+        Action<CliProcessOutputLine>? onOutput,
+        bool retainOutput
     ) {
         var text = new StringBuilder();
 
         while (await reader.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
-            text.AppendLine(value: line);
+            if (retainOutput) { text.AppendLine(value: line); }
 
             lock (eventGate) {
                 var observed = new CliProcessOutputLine(
@@ -125,7 +126,7 @@ public static class CliProcess {
                     Stream: stream
                 );
 
-                events.Add(item: observed);
+                if (retainOutput) { events.Add(item: observed); }
                 onOutput?.Invoke(observed);
             }
         }
@@ -134,7 +135,7 @@ public static class CliProcess {
     }
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput, Task? continuationGate, TimeProvider clock, CancellationToken cancellationToken, string? workingDirectory,
-        IReadOnlyDictionary<string, string?>? environment, Action<CliProcessOutputLine>? onOutput) {
+        IReadOnlyDictionary<string, string?>? environment, Action<CliProcessOutputLine>? onOutput, bool retainOutput) {
         cancellationToken.ThrowIfCancellationRequested();
 
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -199,7 +200,8 @@ public static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe)
+            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe),
+            retainOutput: retainOutput
         );
         var stderr = PumpAsync(
             reader: errors,
@@ -208,7 +210,8 @@ public static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe)
+            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe),
+            retainOutput: retainOutput
         );
         var inputPump = WriteInputAsync(
             writer: process.StandardInput,
@@ -330,10 +333,12 @@ public static class CliProcess {
     // child's whole tree like a timeout, waits for it to exit, and then throws OperationCanceledException; a token
     // already cancelled starts nothing. The child starts in workingDirectory, or the caller's own when it is null, and
     // inherits this process's environment with each environment entry applied: a value sets the variable, null removes it.
+    // With retainOutput false, observations still drive callbacks and continuation, but no transcript or event history
+    // is retained; the caller can stream each line to disk without a second copy growing with the child's output.
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", TimeProvider? clock = null, Task? continuationGate = null,
         CancellationToken cancellationToken = default, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null,
-        Action<CliProcessOutputLine>? onOutput = null) =>
+        Action<CliProcessOutputLine>? onOutput = null, bool retainOutput = true) =>
         RunCapturedAsync(
             arguments: arguments,
             cancellationToken: cancellationToken,
@@ -345,6 +350,7 @@ public static class CliProcess {
             fileName: fileName,
             input: input,
             onOutput: onOutput,
+            retainOutput: retainOutput,
             timeout: timeout,
             workingDirectory: workingDirectory
         ).GetAwaiter().GetResult();

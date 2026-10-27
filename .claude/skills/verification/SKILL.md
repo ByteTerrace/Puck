@@ -51,11 +51,35 @@ that session.
 Gates, parity, canaries, counters, baselines, `puck laws prove` and review
 passes are tools to use when they pay for themselves, never preconditions. A
 change to simulation state stays deterministic; `puck test --reproduce` shows
-two independent process runs agree, including their per-tick authoritative
+two replicas in separate processes agree, including their per-tick authoritative
 replay hashes and byte-identical exports and manifests. A differing trace names
 its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
+
+`puck test` reuses one container per worker while creating and disposing a fresh
+run scope through the ordinary composition root for every world. All normally
+singleton mutable services are scoped too; each scope uses its own registrations,
+clock, sessions, addons, schedule and persistence. `WorldTestHost` plugs its
+provider factory into `HostApplicationBuilder`; the native host retains startup,
+shutdown, background-fault handling and disposal. The second replica reverses
+the world order, so matching contamination from identical predecessors cannot
+hide a leak. `TestCommandLawTests.ReusedHostsIsolateDocumentsWithTheSameIdentityInOppositeOrders`
+also compares a reused scope's export and manifest with a fresh-process boot.
+The default bounds concurrent workers at two (one on fewer than four logical
+CPUs); a lane beside heavy work still passes `--jobs 1`.
+
+When profiling a sweep, sample the coordinator and the simultaneous sum of its
+descendants' working sets; report private bytes separately. Do not add individual
+process peaks that occurred at different times. Record the full run's world count,
+authority ticks, host boots and wall time, and compare all exports/manifests when
+changing only the runner. Preparation can dominate coordinator memory: staged
+roots used once must not retain a composed image and a scalar-origin snapshot.
+Shared imports keep their origins for correct path relocation. Logs stream to
+disk, and verdict reading holds only the current world's pair. A negative control
+can route a wall-clock probe axis into an authoritative row: `--reproduce` must
+refuse it and name the first differing tick/instance. Keep that nondeterminism
+in a scratch world, never in engine simulation logic.
 
 ### Coverage
 

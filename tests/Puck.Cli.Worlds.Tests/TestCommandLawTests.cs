@@ -8,6 +8,35 @@ namespace Puck.Cli.Worlds.Tests;
 /// <remarks>The run passes <c>--world-artifact</c> at the repository's own Release output rather than letting the verb
 /// build <c>Puck.World</c> again: the test project already depends on that build.</remarks>
 public sealed class TestCommandLawTests {
+    [Fact]
+    public void ReusedHostsIsolateDocumentsWithTheSameIdentityInOppositeOrders() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
+
+        directory.WriteText(name: "isolation.puck", text: """
+            schema: "puck.world.definition.v1"
+            documentId: "same"
+            state { world { table value { "0" = 7 } } }
+            test "pristine" { expect { value[0] == 7 } }
+            test "changed" { given { value[0] = 99 } expect { value[0] == 99 } }
+            test "pristine again" { expect { value[0] == 7 } }
+            """);
+        var kept = directory.PathOf(name: "kept");
+
+        var (exit, output) = RunTest(directory.PathOf(name: "isolation.puck"), "--reproduce", "--keep", kept);
+        Assert.Equal(actual: exit, expected: 0);
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "host-boots=2 world-runs=6");
+        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
+            actual: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000002/run1/out/state-export.json")));
+        // Also compare a reused scope to a truly fresh process, using the same staged world and ordinary boot.
+        var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
+        using var error = new StringWriter();
+
+        Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: directory.PathOf(name: "fresh"),
+            exportTick: 1, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
+        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")), actual: fresh!.ExportBytes);
+        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/test-run.json")), actual: fresh.ManifestBytes);
+    }
+
     private static string Artifact() => Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "src",
@@ -20,6 +49,7 @@ public sealed class TestCommandLawTests {
             .. arguments,
             "--world-artifact",
             Artifact(),
+            "--jobs", "1",
         ]));
 
     [Fact]
@@ -364,6 +394,7 @@ public sealed class TestCommandLawTests {
 
         foreach (var (source, world) in ((ReadOnlySpan<(string, string)>)[("home", "home~it-stands-beside-what-it-reaches"), ("plain", "plain~it-keeps-its-name")])) {
             var kept = directory.PathOf(name: $"run-{source}");
+
             var (exitCode, output) = RunTest(directory.PathOf(name: $"worlds/{source}.puck"), "--keep", kept);
 
             Assert.True(

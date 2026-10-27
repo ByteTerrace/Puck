@@ -265,9 +265,16 @@ authoritative replay hashes for the boot world and every running instance;
 reproduction names the first differing sampled tick and instance before still
 requiring byte-identical exports and manifests. Preparation shares composed
 imports, including authored-value origins, through the existing content-checked
-composition cache; each reader gets a fresh tree. Worker processes reuse startup
-and derived caches while booting and disposing a fresh host for each document.
-Reproduce replicas always occupy different processes, even with `--jobs 1`.
+composition cache; each reader gets a fresh tree. Staging consumes roots without
+retaining their composed images or scalar-origin snapshots, while shared imports
+retain their origins. Each worker reuses one container's construction plans and
+creates a fresh run scope through the normal composition root for each document;
+all mutable services, including normal singletons, are disposed with that scope.
+Different registration shapes or keyed services fall back to fresh hosts.
+Reproduce replicas always occupy different processes, even with `--jobs 1`, and
+the second visits worlds in reverse order to expose predecessor state leaks.
+The default runs at most two worker processes concurrently; `--jobs 1` serializes
+the replicas. Transcripts stream to disk and verdicts are read one world at a time.
 A `schedule` declaring `instances`
 arms those sibling worlds beside the booted one (the `world.instance.start`
 path), steps them in the same host step, exports each at the tick the booted

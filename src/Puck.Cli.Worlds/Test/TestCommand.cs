@@ -106,7 +106,6 @@ public static partial class TestCommand {
 
         using var held = lease;
 
-        var results = new TestWorldRun[worlds.Count];
         var parallelism = Math.Clamp(
             value: jobs,
             min: 1,
@@ -120,22 +119,26 @@ public static partial class TestCommand {
             parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
             body: worker => batchPassed[worker] = RunBatch(artifact: artifact!, chunk: (worker / replicas), chunks: parallelism,
                 run: ((worker % replicas) + 1), runDirectory: runDirectory, worlds: worlds));
+        var boots = 0;
+        var ticks = 0UL;
+        var refused = batchPassed.Any(predicate: static passed => !passed);
+        var failed = false;
+
         for (var index = 0; (index < worlds.Count); index++) {
-            results[index] = RunWorldCaptured(reproduce: reproduce, world: worlds[index],
+            var verdict = RunWorld(reproduce: reproduce, test: worlds[index], output: Console.Out, error: Console.Error,
+                boots: out var worldBoots, ticks: out var worldTicks,
                 worldDirectory: WorldDirectory(index: index, runDirectory: runDirectory));
+
+            boots += worldBoots;
+            ticks += worldTicks;
+            refused |= (verdict == 2);
+            failed |= (verdict != 0);
         }
 
-        foreach (var result in results) {
-            Console.Out.Write(value: result.Output);
-            Console.Error.Write(value: result.Error);
-        }
-
-        Console.WriteLine(value: $"test: work processes={(parallelism * replicas)} host-boots={results.Sum(selector: static result => result.Boots)} exported-authority-ticks={results.Aggregate(seed: 0UL, func: static (total, result) => (total + result.Ticks))}");
-        if (batchPassed.Any(predicate: static passed => !passed) || results.Any(predicate: result => (result.Verdict == 2))) {
+        Console.WriteLine(value: $"test: work processes={(parallelism * replicas)} host-boots={boots} world-runs={(worlds.Count * replicas)} exported-authority-ticks={ticks}");
+        if (refused) {
             return 2;
         }
-
-        var failed = results.Any(predicate: result => (result.Verdict != 0));
 
         if (failed) {
             Console.Error.WriteLine(value: "FAIL: one or more worlds did not pass — a failing verdict, or a step whose recorded outcome was not the one it declared.");
@@ -149,27 +152,6 @@ public static partial class TestCommand {
         ));
 
         return 0;
-    }
-    private static TestWorldRun RunWorldCaptured(TestWorld world, string worldDirectory, bool reproduce) {
-        using var output = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
-        using var error = new StringWriter(formatProvider: CultureInfo.InvariantCulture);
-        var verdict = RunWorld(
-            boots: out var boots,
-            error: error,
-            output: output,
-            reproduce: reproduce,
-            test: world,
-            ticks: out var ticks,
-            worldDirectory: worldDirectory
-        );
-
-        return new TestWorldRun(
-            Boots: boots,
-            Ticks: ticks,
-            Error: error.ToString(),
-            Output: output.ToString(),
-            Verdict: verdict
-        );
     }
     // One world: one ordinary run, or two plus a byte comparison for explicit reproducibility qualification.
     private static int RunWorld(TestWorld test, string worldDirectory, TextWriter output, TextWriter error, bool reproduce, out int boots, out ulong ticks) {
@@ -198,8 +180,10 @@ public static partial class TestCommand {
         var runCount = (reproduce ? 2 : 1);
 
         for (var run = 1; (run <= runCount); run++) {
-            if (File.Exists(path: Path.Combine(path1: worldDirectory, path2: $"run{run}", path3: "started"))) {
-                boots++;
+            var bootCount = Path.Combine(path1: worldDirectory, path2: $"run{run}", path3: "host-boots");
+
+            if (File.Exists(path: bootCount)) {
+                boots += int.Parse(s: File.ReadAllText(path: bootCount), provider: CultureInfo.InvariantCulture);
             }
             if (!TryReadBatchLeg(
                 legDirectory: Path.Combine(
@@ -383,9 +367,6 @@ public static partial class TestCommand {
             )
         )
     );
-
-    private sealed record TestWorldRun(int Verdict, string Output, string Error, int Boots, ulong Ticks);
-
     // The export tick and the simulation rate come from the document's own text rather than a composed load: the
     // schedule and the rate are the two things this verb needs before it can boot anything, and composing a document
     // that names a basis is the host's job, not the runner's.

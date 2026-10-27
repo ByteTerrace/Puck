@@ -7,11 +7,15 @@ public static partial class TestCommand {
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
     // Replicas ALWAYS live in separate processes, even with --jobs 1. Each process boots a sequence of unrelated
-    // test documents through the real composition root, reusing JIT/immutable caches but no host or mutable state.
+    // test documents through the real composition root, reusing construction plans but no mutable run state.
     private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int chunks, int run) {
         var legs = new List<object>();
 
-        for (var index = chunk; (index < worlds.Count); index += chunks) {
+        var indices = Enumerable.Range(start: 0, count: worlds.Count).Where(predicate: index => ((index % chunks) == chunk));
+        // The second replica has different predecessor worlds. A shared mutable service cannot hide merely
+        // because both replicas happened to inherit identical contamination from the same earlier document.
+        if (run == 2) { indices = indices.Reverse(); }
+        foreach (var index in indices) {
             var world = worlds[index];
 
             if (!TryReadSchedule(world: world.Path, schedule: out var schedule, reason: out _)) {
@@ -34,12 +38,16 @@ public static partial class TestCommand {
 
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
+        using var output = new StreamWriter(path: (batch + ".stdout.log"));
+        using var error = new StreamWriter(path: (batch + ".stderr.log"));
 
         try {
             var process = CliProcess.RunCaptured(fileName: "dotnet",
                 arguments: [artifact, .. WorldDevices.NoneArguments, "--test-batch", batch],
                 input: string.Empty, cancellationToken: watchdog.Token, timeout: Timeout.InfiniteTimeSpan,
+                retainOutput: false,
                 onOutput: line => {
+                    ((line.Stream == CliProcessOutputStream.Stdout) ? output : error).WriteLine(value: line.Line);
                     if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[test.batch: begin ")) {
                         watchdog.CancelAfter(delay: StartupBudget);
                     } else if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: WaitAnswer)) {
@@ -47,16 +55,16 @@ public static partial class TestCommand {
                     }
                 });
 
-            File.WriteAllText(path: (batch + ".stdout.log"), contents: process.Stdout);
-            File.WriteAllText(path: (batch + ".stderr.log"), contents: process.Stderr);
+            output.Flush();
+            error.Flush();
             if (process.ExitCode != 0) {
-                Console.Error.WriteLine(value: $"ERROR: test batch {batch} exited {process.ExitCode}: {Tail(text: process.Stderr)}");
+                Console.Error.WriteLine(value: $"ERROR: test batch {batch} exited {process.ExitCode}; transcripts under {batch}.*.log");
             }
             return (process.ExitCode == 0);
         } catch (OperationCanceledException) when (watchdog.IsCancellationRequested) {
-            File.WriteAllText(contents: "The test batch stopped advancing; unfinished legs are refused.", path: (batch + ".stderr.log"));
+            error.WriteLine(value: "The test batch stopped advancing; unfinished legs are refused.");
         } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            File.WriteAllText(path: (batch + ".stderr.log"), contents: exception.Message);
+            error.WriteLine(value: exception.Message);
         }
         return false;
     }

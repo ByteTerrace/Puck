@@ -26,8 +26,9 @@ Run it:
 puck test worlds/parlor/chinese-checkers.puck
 ```
 
-Independent test worlds run concurrently and their reports remain in authored
-order. Use `--jobs 1` when debugging a single shared resource, or `--jobs <n>`
+Independent test worlds run with at most two concurrent workers by default, and
+their reports remain in authored order. Use `--jobs 1` alongside heavy work or
+when debugging a single shared resource, or `--jobs <n>`
 to choose the worker limit explicitly. The headless host advances on the
 world's fixed tick grid without waiting for wall clock.
 

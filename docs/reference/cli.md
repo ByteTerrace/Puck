@@ -1847,7 +1847,8 @@ puck test <path> --keep <dir>          run in <dir> and keep it: every generated
                                        in its own directory under <dir>/generated, beside
                                        the documents it reaches, plus transcripts, exports
                                        and manifests
-puck test <path> --jobs <n>            run at most n isolated test worlds concurrently
+puck test <path> --jobs <n>            run at most n worker processes concurrently (default: 2,
+                                     or 1 on a machine with fewer than four logical CPUs)
 puck test <path> --reproduce           rerun every world and require byte-identical state
                                        exports and test-run manifests
 puck test -h / --help                  this text
@@ -1887,17 +1888,28 @@ different trajectory from the one the export was asked for.
 
 Test preparation uses the existing source-compile cache and shares composed
 imports with their authored-value origins. Each reader receives a fresh JSON
-tree; editing an input invalidates the held composition. Both ordinary and
-reproduce runs use this preparation. The work summary reports source compiles,
-compositions and shared images, worker processes, host boots, and the sum of exported authority
-ticks (excluding the host's extra shutdown ticks). Executable build reuse is
-reported separately. Each worker boots and fully disposes a fresh host per
-document through the normal World composition root, with separate mutable
-state, schedules and persistence. Only process startup and the existing derived
-content caches are reused. Reproduce replicas always use different worker
-processes, even with `--jobs 1`; `--jobs` bounds concurrent workers. For 96 worlds,
-`--reproduce --jobs 2` uses four workers and 192 fresh host boots. Ordinary runs
-use the same preparation and worker path, with one replica.
+tree; editing an input invalidates the held composition. A staged root is consumed
+once and written to disk, without retaining its composed image or scalar-origin
+snapshot. Worker transcripts stream to disk, and verdict reporting reads one
+world's pair of exports at a time. Both ordinary and reproduce runs use this path.
+The work summary reports source compiles, compositions and shared images, worker
+processes, container host boots, world runs, and exported authority ticks (excluding
+the extra shutdown ticks). Executable build reuse is reported separately.
+
+Each worker reuses its dependency container's construction plans through the native
+host builder's provider factory; the normal host owns startup, shutdown and disposal. Every document
+still goes through the normal World composition root and receives a fresh,
+fully disposed run scope: even services normally registered as singletons are
+local to that run. Factories and instances come from the current document's
+registrations. Clocks, sessions, addons, schedules and state directories are
+separate. A changed registration shape or keyed service falls back to an ordinary
+fresh host. Reproduce replicas always use different processes, even with `--jobs 1`,
+and the second replica visits worlds in reverse order to expose predecessor state
+leaks. `--jobs` bounds concurrent workers, including replicas. For 96 worlds with
+the same registration shape, `--reproduce --jobs 2` uses four workers, four container
+boots and 192 isolated world runs. Ordinary runs use one replica. The default of
+at most two concurrent workers leaves memory headroom on a 32 GB development machine;
+use `--jobs 1` alongside other heavy work.
 
 Ordinary authoring runs every isolated test world once. `--reproduce` adds the
 determinism qualification pass: each world runs twice into sibling leg
