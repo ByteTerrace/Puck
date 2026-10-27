@@ -545,13 +545,15 @@ prototypes {
           scale [0.35, 0.02, 0.35]
         }
       }
-      // Flush patches share one flat supporting face. Paints draw the grid without contact ridges.
+      // Rectangular prisms have sharp edges, so their flush union has no Box fillet grooves.
+      // Paints draw the grid without contact ridges on this one flat supporting face.
       for r in range(0, 4) {
         for c in range(0, 4) {
-          shape Box $"face-{r}-{c}" {
+          shape Prism $"face-{r}-{c}" {
             material: 3 + r * 4 + c
             position [(0.6 - c * 0.4), (goSurface - 0.0275), (0.6 - r * 0.4)]
             scale [0.2, 0.0275, 0.2]
+            taper: 1
           }
         }
       }
@@ -588,7 +590,7 @@ prototypes {
     }
   }
 
-  // A point's outline: four flat bars round the point the cursor stands on, outside a stone's edge.
+  // A point's outline. Its bars must survive the mesh lattice; sub-cell slivers disappear.
   prototype "goCursor" {
     document {
       name: "goCursor"
@@ -597,22 +599,22 @@ prototypes {
       shape Box "near" {
         material: 0
         position [0, 0, -0.038]
-        scale [0.04, 0.002, 0.002]
+        scale [0.04, 0.008, 0.008]
       }
       shape Box "far" {
         material: 0
         position [0, 0, 0.038]
-        scale [0.04, 0.002, 0.002]
+        scale [0.04, 0.008, 0.008]
       }
       shape Box "left" {
         material: 0
         position [-0.038, 0, 0]
-        scale [0.002, 0.002, 0.04]
+        scale [0.008, 0.008, 0.04]
       }
       shape Box "right" {
         material: 0
         position [0.038, 0, 0]
-        scale [0.002, 0.002, 0.04]
+        scale [0.008, 0.008, 0.04]
       }
     }
   }

@@ -28,6 +28,26 @@ public class TestLoweringLawTests {
     }
     private static string[] RowNames(JsonObject world) => [.. world["state"]!["world"]!.AsArray().Select(selector: static row => row!["name"]!.GetValue<string>())];
     private static JsonObject OneWorld(string source) => Assert.Single(collection: Green(source: source).TestWorlds).Json;
+
+    [Fact]
+    public void ManyExpectationsCanRecordEveryFiringWhenTheTickHasNoArenaGrowthAllowance() {
+        var claims = string.Join(separator: "\n", values: Enumerable.Repeat(count: 12, element: "hp == 1"));
+        var world = OneWorld(source: TestConstructLawTests.Doc(body: $"test \"many verdicts\" {{ expect {{ {claims} }} }}"));
+        var definition = System.Text.Json.JsonSerializer.Deserialize(world, WorldJsonContext.Default.WorldDefinition)!;
+        var arena = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
+
+        arena.GrowthAdmission = _ => "the tick has no work left for reservation growth";
+        var verdicts = definition.State.Where(predicate: row => (row.Verdict is not null)).ToArray();
+
+        Assert.Equal(12, verdicts.Length);
+
+        foreach (var row in verdicts) {
+            Assert.True(condition: definition.StateCatalog.TryResolve(StateLane.Document, row.Name, out var handle));
+            Assert.True(condition: arena.TryWriteOrMint(rowOrdinal: handle.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey),
+                value: CellValue.Int(value: 1L), evicted: out _, reason: out var reason), userMessage: reason);
+        }
+        Assert.Equal(0L, arena.ReservationWorkCharged);
+    }
     [Fact]
     public void TextExpectationsKeepTheirLiteralAndTextWitness() {
         var source = """
@@ -42,8 +62,9 @@ public class TestLoweringLawTests {
               }
             }
             """;
-        var world = OneWorld(source);
-        var witness = TestWorldFixtures.Row(world: world, name: "expect$1$text");
+        var world = OneWorld(source: source);
+        var witness = TestWorldFixtures.Row(name: "expect$1$text", world: world);
+
         Assert.Equal("Text", witness["kind"]!.GetValue<string>());
         Assert.Equal("expect$1", witness["witness"]!.GetValue<string>());
     }
@@ -55,7 +76,8 @@ public class TestLoweringLawTests {
             state { world { slot title = "a" } }
             test "refused" { expect { title == "a" : Int } }
             """, cancellationToken: TestContext.Current.CancellationToken);
-        Assert.True(compilation.Diagnostics.HasErrors);
+
+        Assert.True(condition: compilation.Diagnostics.HasErrors);
     }
     public static TheoryData<string, string> InadmissibleLines() => new() {
         { "given {\n        hp = notALiteral\n    }\n    expect {\n        hp == 1\n    }", "from something other than a literal" },
@@ -175,7 +197,7 @@ public class TestLoweringLawTests {
 
         Assert.Equal(
             actual: keys,
-            expected: ["$status", "hp"]
+            expected: ["$status", "$firedTick", "hp"]
         );
 
         var witness = TestWorldFixtures.Row(
@@ -336,7 +358,7 @@ public class TestLoweringLawTests {
                 separator: " ",
                 values: verdict["cells"]!.AsArray().OfType<JsonObject>().Select(selector: static cell => cell["key"]!.GetValue<string>())
             ),
-            expected: "$status armour hp"
+            expected: "$status $firedTick armour hp"
         );
 
         // A given line lands on the row's own boot value rather than on a schedule row — through `value` for a

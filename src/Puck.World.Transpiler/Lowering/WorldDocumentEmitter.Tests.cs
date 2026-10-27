@@ -58,10 +58,10 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
                 ["document"] = expectation.Document,
                 ["gate"] = expectation.Gate,
                 ["line"] = expectation.Line,
-                ["reads"] = new JsonArray([.. expectation.Reads.Select(selector: static read => (JsonNode?)new JsonObject {
+                ["reads"] = new JsonArray([.. expectation.Reads.Select(selector: static read => ((JsonNode?)new JsonObject {
                     ["key"] = read.Key,
                     ["state"] = read.State,
-                })]),
+                }))]),
                 ["rule"] = expectation.Rule.DeepClone(),
             });
         }
@@ -87,12 +87,13 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
                 Gate: entry["gate"]!.GetValue<string>(),
                 Line: entry["line"]!.GetValue<int>(),
                 Reads: [.. entry["reads"]!.AsArray().Select(selector: static read => (read!["state"]!.GetValue<string>(), read["key"]?.GetValue<string>()))],
-                Rule: (JsonObject)entry["rule"]!.DeepClone()
+                Rule: ((JsonObject)entry["rule"]!.DeepClone())
             ));
         }
 
         return expectations;
     }
+
     /// <summary>Gets the name of the verdict row this expectation declares in its document.</summary>
     public string Row => WorldDocumentEmitter.VerdictRow(line: Line);
 
@@ -134,7 +135,7 @@ public sealed record WorldTestForeign(string Document, int Line, string Gate, IR
             return false;
         }
 
-        var rule = (JsonObject)Rule.DeepClone();
+        var rule = ((JsonObject)Rule.DeepClone());
 
         WorldDocumentEmitter.AddVerdictRows(
             effects: rule["effects"]!.AsArray(),
@@ -579,6 +580,7 @@ public static partial class WorldDocumentEmitter {
             targets: targets,
             test: test
         );
+
         ArmSiblings(targets: targets);
         RerootSiblingReferences(targets: targets);
 
@@ -1224,6 +1226,7 @@ public static partial class WorldDocumentEmitter {
             Rule: rule
         );
     }
+
     // The verdict row for one expectation, and one witness row for each kind other than Int its gate read, appended to
     // `rows`; the effects that copy what the gate read into them are appended to `effects`, after the one that decides
     // the verdict.
@@ -1231,6 +1234,9 @@ public static partial class WorldDocumentEmitter {
         var cells = new JsonArray();
 
         cells.AppendNode(item: new JsonObject { ["key"] = VerdictStatusKey, ["value"] = WorldVerdict.NotEvaluated });
+        // A firing stamps every verdict in the same tick. Seed the engine-owned cell so that recording an answer
+        // never needs a whole-arena reservation growth (and cannot lose its stamp to the tick's growth budget).
+        cells.AppendNode(item: new JsonObject { ["key"] = WorldVerdict.FiredTickKey.Value, ["value"] = 0 });
 
         var folded = new HashSet<(CellKind Kind, string Key)> { (CellKind.Int, VerdictStatusKey) };
         var witnesses = new SortedDictionary<CellKind, JsonArray>();
@@ -1315,6 +1321,7 @@ public static partial class WorldDocumentEmitter {
             });
         }
     }
+
     // The verdict trait's gate ceiling, applied here so a long expectation reports as a verdict rather than as a
     // boot refusal.
     private static string Trimmed(string gate) => ((gate.Length <= WorldVerdict.MaxGateLength)
