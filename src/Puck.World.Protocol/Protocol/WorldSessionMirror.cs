@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Maths;
+using Puck.Commands;
 using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -48,6 +49,11 @@ public sealed class WorldSessionMirror : IClientSink {
     // taken by FollowState, both under m_stampGate. m_followGate serializes followers over the one state mirror.
     private readonly Lock m_stampGate = new();
     private readonly Lock m_followGate = new();
+    private readonly Dictionary<Principal, WorldInputPublication> m_inputs = [];
+    /// <summary>Reads an authority-issued input epoch and its immutable source decisions.</summary>
+    public bool TryInput(Principal owner, out WorldInputPublication publication) {
+        lock (m_snapshotWriteGate) { return m_inputs.TryGetValue(owner, out publication); }
+    }
     private int[] m_pendingRows = [];
     private bool[] m_pendingNoted = [];
 
@@ -506,6 +512,8 @@ public sealed class WorldSessionMirror : IClientSink {
     /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         lock (m_snapshotWriteGate) {
+            m_inputs.Clear();
+            foreach (var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
             var seeded = m_seededRouteEntity;
             var containsSeed = ((seeded is { } address) && SnapshotContains(
                 entity: in address,

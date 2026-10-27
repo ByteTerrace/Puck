@@ -602,11 +602,16 @@ cell. A section the document omits stays omitted, and one the session left
 alone is written as authored. `world.reset`/`world.load`/`world.reload` are ONE
 rebuild-and-swap mechanism (`WorldServer.ApplyRebuild`) over three document
 sources—the server's own base, a different file, or a re-read of the
-current origin—that also wipes and re-seeds the ENTIRE runtime grant table
-(`WorldGrants.Reset`, replaying only the new document's own `Grants` section
-plus every admitted peer connection's re-minted admission grant; every other
-live `world.grant` acquisition drops). The `dirty` count in `world.status` IS
-the journal length.
+current origin. Load and reset re-seed the runtime grants and participant
+registers and require fresh input attachments. A live reload retains existing
+participant registers by name/kind and births newly declared registers. It keeps
+the authority and sessions when the authored grants and admission policy are
+unchanged; a policy replacement re-authorizes them. Input recompilation keeps
+only unchanged action/source meanings, translates their hold origins by logical
+name, and clears partial matches at its epoch boundary. Replacement selectors
+are checked against staged register values before installation, so a forbidden
+current tuple refuses the whole replacement. The `dirty` count in `world.status`
+is the journal length.
 
 `host.journalDepth` bounds the undo horizon: `0` (the default) leaves the
 journal growing for the life of the process, exactly as before the field

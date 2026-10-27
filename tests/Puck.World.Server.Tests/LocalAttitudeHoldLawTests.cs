@@ -21,9 +21,11 @@ namespace Puck.World.Server.Tests;
 /// <c>IntegrateLocalAttitude</c> already built.
 /// </summary>
 public sealed class LocalAttitudeHoldLawTests {
-    private const int DashOrdinal = ChannelLimits.MaxAxes;
-    private const int PitchOrdinal = 2;
-    private const int RollOrdinal = 3;
+    private static readonly Lazy<WorldChannelTable> InputTable = new(() => WorldChannelTable.Compile(BuildLocalAttitudeHoldDocument().Channels));
+    private static int InputAddress(string name) => InputTable.Value.TryGetOrdinal(name, out var address) ? address : throw new InvalidOperationException(name);
+    private static int DashOrdinal => InputAddress("dash");
+    private static int PitchOrdinal => InputAddress("pitch");
+    private static int RollOrdinal => InputAddress("roll");
 
     // Per tick: orientation W/X/Y/Z, then position Y — the raw FixedQ4816 storage in hex. A body spinning under
     // IntegrateLocalAttitude while a one-tick dash kicks its Lift row's own carried residual (m_verticalVelocity):

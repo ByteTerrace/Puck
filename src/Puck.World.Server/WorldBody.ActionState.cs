@@ -147,7 +147,7 @@ public sealed partial class WorldBody {
             m_actionStateDirty[slot] = false;
         }
     }
-    internal WorldSubmittedInput TakeSubmittedInput() {
+    public WorldSubmittedInput TakeSubmittedInput() {
         var input = new WorldSubmittedInput(
             HasIntent: m_hasSubmittedIntent,
             HeldChannels: m_heldChannels,
@@ -251,10 +251,19 @@ public sealed partial class WorldBody {
                 (definition.ResetFact is { } reset) &&
                 FactHolds(fact: reset)
             ) {
+                var initial = InitialRaw(in definition);
+                if (definition.Kind == ActionStateKind.Counter && m_stateLane?.Input is { } input &&
+                    !input.TryValidateReset(m_stateOrdinal, slot, initial, out var reason)) {
+                    m_actionStateRequested[slot] = initial;
+                    m_actionStateLastWriter[slot] = "kit-reset";
+                    m_actionStateLastReason[slot] = reason;
+                    continue;
+                }
                 WriteStateRaw(
-                    raw: InitialRaw(definition: in definition),
+                    raw: initial,
                     slot: slot
                 );
+                if (definition.Kind == ActionStateKind.Counter) { m_stateLane?.Input?.CommitKitEffects(m_stateOrdinal); }
             } else if (definition.Kind == ActionStateKind.Timer) {
                 var previous = StateTimer(slot: slot);
                 var next = SubtractSaturating(
@@ -717,7 +726,9 @@ public sealed partial class WorldBody {
     // its edge — each fire applying its compiled effects in order and consuming the latch. Runs after
     // attitude/planar integration and before gravity/vertical resolution, so effects shape the same tick.
     private void ProcessLaneActions(ref BodyMotionScratch scratch) {
+        var inputEpoch = InputEpoch;
         AdvanceActionState(stepTicks: scratch.StepTicks);
+        if (InputEpoch != inputEpoch) { scratch.Intent = m_engagedIntent; return; }
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (m_laneBindings[ordinal] is not { } binding) {
@@ -725,6 +736,8 @@ public sealed partial class WorldBody {
             }
 
             ref var state = ref m_laneActions[ordinal];
+            var logicalChannel = m_stateLane?.Input is { } inputRuntime && m_channels.IsDeclared(ordinal) &&
+                inputRuntime.Catalog.TryGetLogicalId(m_channels.Name(ordinal)!, out var channel) ? channel : -1;
             var bit = (scratch.Intent[ordinal] >= m_channelThresholds[ordinal]);
             var pressed = (bit && !m_previousChannelBit[ordinal]);
             var released = (!bit && m_previousChannelBit[ordinal]);
@@ -759,11 +772,14 @@ public sealed partial class WorldBody {
                     state: in state
                 )
                 ) {
-                    ApplyEffects(
+                    if (ApplyEffects(
                         effects: press.Effects,
-                        scratch: ref scratch
-                    );
-                    state.Latch = 0;
+                        scratch: ref scratch,
+                        logicalChannel: logicalChannel
+                    )) {
+                        if (InputEpoch != inputEpoch) { return; }
+                        state.Latch = 0;
+                    }
                 }
             }
 
@@ -777,8 +793,10 @@ public sealed partial class WorldBody {
             ) {
                 ApplyEffects(
                     effects: release.Effects,
-                    scratch: ref scratch
+                    scratch: ref scratch,
+                    logicalChannel: logicalChannel
                 );
+                if (InputEpoch != inputEpoch) { return; }
             }
 
             for (var rule = 0; (rule < binding.OnFact.Length); rule++) {
@@ -803,8 +821,10 @@ public sealed partial class WorldBody {
                 ) {
                     ApplyEffects(
                         effects: trigger.Effects,
-                        scratch: ref scratch
+                        scratch: ref scratch,
+                        logicalChannel: logicalChannel
                     );
+                    if (InputEpoch != inputEpoch) { return; }
                 }
             }
         }

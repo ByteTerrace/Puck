@@ -8,7 +8,78 @@ namespace Puck.World.Server;
 /// groups, interactions and tables, their edge latches, the decision, pattern, identity-fact and influence-fact
 /// runtimes, the queries, the trace and the world's own effect arms. The arena is the store every read and write
 /// addresses, and the world facts only the server can answer reach a fact as the facet its declaration names.</summary>
-public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies {
+public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies, IWorldInputEvents {
+    /// <inheritdoc/>
+    public void CollectInputEvents(WorldInputOwnerReference reference, List<CellKey> into) {
+        if (!TryInputOwner(reference, out _, out var owner)) { return; }
+        for (var index = 0; index < owner!.Count; index++) {
+            var record = owner.Record(index);
+            if (record.Epoch == owner.Epoch && record.Admission.Tick == Host.Input.Interval.Tick && RuleReads.TryIndexKey(Arena.Keys, index, out var key)) { into.Add(key); }
+        }
+    }
+    /// <inheritdoc/>
+    public long InputEventGeneration(WorldInputOwnerReference reference, CellKey key) {
+        if (!TryInputOwner(reference, out _, out var owner) || !RuleReads.TryKeyIndex(Arena.Keys, key, out var index) || index < 0 || index >= owner!.Count) { return 0; }
+        return checked((long)owner.Record((int)index).Id);
+    }
+    /// <inheritdoc/>
+    public RuleFact Read(WorldInputOperand operand) {
+        if (!TryInputOwner(operand.Owner, out var principal, out var owner)) {
+            return operand.Facet is WorldInputFacet.Edge or WorldInputFacet.Match ? RuleFact.Finite(0, CellKind.Bool) : RuleFact.Absent(operand.ValueKind);
+        }
+        var policy = Host.Document.Definition.InputHistory?.Judgement ?? WorldInputJudgement.Capture;
+        if (operand.Pattern >= 0) {
+            var matched = owner!.TryMatch(operand.Pattern, Host.Input.Interval, out var match);
+            if (matched) {
+                for (var index = 0; index < owner.Count; index++) {
+                    var matchedRecord = owner.Record(index);
+                    if (matchedRecord.Id >= match.First && matchedRecord.Id <= match.Last) { Host.Input.ObserveActivation(principal, matchedRecord.Event.Activation); }
+                }
+            }
+            if (operand.Facet == WorldInputFacet.Match) { return RuleFact.Finite(matched ? 1 : 0, CellKind.Bool); }
+            if (!matched) { return RuleFact.Absent(operand.ValueKind); }
+            return operand.Facet switch {
+                WorldInputFacet.MatchFirst => RuleFact.Finite(checked((long)match.First), CellKind.Int),
+                WorldInputFacet.MatchLast => RuleFact.Finite(checked((long)match.Last), CellKind.Int),
+                WorldInputFacet.MatchFirstTick => RuleFact.Finite(checked((long)match.FirstTick), CellKind.Int),
+                WorldInputFacet.MatchLastTick => RuleFact.Finite(checked((long)match.LastTick), CellKind.Int),
+                WorldInputFacet.MatchFirstTime => RuleFact.Finite(match.FirstTime),
+                WorldInputFacet.MatchLastTime => RuleFact.Finite(match.LastTime),
+                _ => RuleFact.Absent(operand.ValueKind),
+            };
+        }
+        if (operand.Facet is WorldInputFacet.HeldSince or WorldInputFacet.HeldPress) {
+            if (!owner!.TryHeld(operand.Channel, out var hold)) { return RuleFact.Absent(operand.ValueKind); }
+            Host.Input.ObserveActivation(principal, hold.Origin.Event.Activation);
+            return operand.Facet == WorldInputFacet.HeldSince
+                ? RuleFact.Finite(hold.Origin.Time(policy)) : RuleFact.Finite(checked((long)hold.Press), CellKind.Int);
+        }
+        var found = TryInputRecord(operand, owner!, out var record);
+        if (found) { Host.Input.ObserveActivation(principal, record.Event.Activation); }
+        if (operand.Facet == WorldInputFacet.Edge) { return RuleFact.Finite(found ? 1 : 0, CellKind.Bool); }
+        if (!found) { return RuleFact.Absent(operand.ValueKind); }
+        return operand.Facet switch {
+            WorldInputFacet.Time => RuleFact.Finite(record.Time(policy)),
+            WorldInputFacet.Age => RuleFact.Finite(Host.Input.Interval.Time(default) - record.Time(policy)),
+            WorldInputFacet.Tick => RuleFact.Finite(checked((long)record.Admission.Tick), CellKind.Int),
+            WorldInputFacet.Value => RuleFact.Finite(record.Event.RawValue, operand.ValueKind),
+            _ => RuleFact.Absent(operand.ValueKind),
+        };
+    }
+    private bool TryInputRecord(WorldInputOperand operand, WorldInputOwner owner, out WorldInputRecord record) {
+        if (operand.Occurrence < 0) {
+            var index = BoundEachIndex();
+            record = (uint)index < (uint)owner.Count ? owner.Record(index) : default;
+            return record.Id != 0 && record.Epoch == owner.Epoch && record.Event.Channel == operand.Channel && record.Event.Kind == operand.Kind;
+        }
+        return owner.TryEvent(operand.Channel, operand.Kind, operand.Occurrence, out record);
+    }
+    private bool TryInputOwner(WorldInputOwnerReference reference, out Puck.Commands.Principal principal, out WorldInputOwner? owner) {
+        principal = reference.Principal;
+        owner = null;
+        if (reference.Body is { } body && !Host.Input.TryGetBodyOwner(ResolveBodyRef(body), out principal)) { return false; }
+        return Host.Input.TryGet(principal, out owner);
+    }
     // The compiled `rules` section, adopted by Install on every recompile from the same WorldFactsCompiler path the
     // validator already ran over the candidate. Recomputed unconditionally: rules and state rows are both
     // small-capacity sections, so there is no AffectsRules classification predicate earning its keep here.
@@ -220,10 +291,17 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         : 0L)
     );
     /// <inheritdoc/>
-    public RuleFact Read(ClockOperand operand) => RuleFact.Finite(
-        kind: CellKind.Int,
-        value: Host.ReadClockPhaseError()
-    );
+    public RuleFact Read(ClockOperand operand) {
+        if (operand.Input is not { } input) { return RuleFact.Finite(Host.ReadClockPhaseError(), CellKind.Int); }
+        if (!TryInputOwner(input.Owner, out _, out var owner) || !TryInputRecord(input, owner!, out var record)) {
+            return RuleFact.Absent(CellKind.Fixed);
+        }
+        var capture = (Host.Document.Definition.InputHistory?.Judgement ?? WorldInputJudgement.Capture) == WorldInputJudgement.Capture;
+        var interval = capture ? record.Capture : record.Admission;
+        return interval.Music is { } music
+            ? RuleFact.Finite(music.PhaseError(capture ? record.Event.Offset : default, capture ? record.Calibration : default))
+            : RuleFact.Absent(CellKind.Fixed);
+    }
     /// <inheritdoc/>
     public RuleFact Read(RegionOccupancyOperand operand) {
         ArgumentNullException.ThrowIfNull(argument: operand);

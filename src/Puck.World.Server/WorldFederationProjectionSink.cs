@@ -168,6 +168,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         );
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
+    private WorldInputPublication[] m_inputDisclosure = [];
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (!Current()) {
             return;
@@ -207,6 +208,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             );
         }
         if (server is not null) { projected = projected with { FieldCells = m_stateDisclosure.Filter(server, recipient, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (projected.FieldCells.Span.ContainsAnyExcept(value: default(FieldCellDelta))) { throw new InvalidOperationException(message: "A state change delivery requires its authority arena."); }
+        projected = projected with { Inputs = recipient is { } inputOwner ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default };
         Write(
             WorldFederationResponse.Snapshot,
             WorldFederationCodec.EncodeSnapshot(snapshot: in projected)

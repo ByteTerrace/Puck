@@ -14,7 +14,6 @@ namespace Puck.World.Server.Tests;
 public sealed class ChannelWorldRuleFactLawTests {
     private const string BeaconRow = "beacon";
     private const string PortalChannel = "portal";
-    private const int PortalOrdinal = 3;
 
     private static long BeaconCell(WorldFixture fixture) => fixture.Row(name: BeaconRow).Cells!.Single().Value.Raw;
     // A document carrying the base fixture's three role channels plus one composition channel ("portal", ordinal 3)
@@ -71,6 +70,7 @@ public sealed class ChannelWorldRuleFactLawTests {
         )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
+        Assert.True(body.Channels.TryGetOrdinal(PortalChannel, out var portalAddress));
 
         // Control half: an ordinary tick with no channel submission never crosses the gate.
         fixture.Step();
@@ -86,7 +86,7 @@ public sealed class ChannelWorldRuleFactLawTests {
                 Tick: 0UL,
                 EntityIndex: actor.Index,
                 Intent: default(PlayerIntent).WithChannel(
-                    ordinal: PortalOrdinal,
+                    ordinal: portalAddress,
                     value: FixedQ4816.One
                 ),
                 Principal: actor

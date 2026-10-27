@@ -415,6 +415,17 @@ that hold identity for endpoint pairing. A reset cancels the record without a
 scoring release. These records and their bytes are in the checkpoint/hash and
 budget; partial multi-event patterns do not cross the epoch.
 
+The owner reserves one terminal history slot per potentially live held button,
+in addition to the authored ingress capacity. A full ingress ring therefore
+cannot prevent an authoritative cancellation from being recorded. These slots
+do not admit more producer events. Overflow resets the owner and clears the
+old episode before recording its cancellations; a cancellation names its
+original press and is never a scoring release. Switch records use a separately
+bounded ring with the authored event capacity, retaining commit order, exact
+intervals and per-action continuation reasons. Its overflow also resets the
+owner. `world.budget` reports both capacities, and rule work includes the
+terminal reserve.
+
 Disconnect, input-owner generation replacement, loss of an admitted input
 route, cross-authority transfer and history overflow are unconditional resets.
 An actual host input-capture loss is a recorded reset too; ordinary OS focus
@@ -726,6 +737,12 @@ their existing mutation gates.
 | Enter noclip from a walking form | `forward`, `strafe`, `turn`, facing components, `run` | `rise`/autofly and other unlisted actions clear; entering free flight alone does not start climbing. Run/autorun continue on the same body. |
 | Enter noclip from suited flight, or leave noclip into suited flight | The movement set above plus `rise` | The vertical request keeps its meaning and recipient, so held rise/autofly may continue; transition buttons and jump clear. |
 | Leave noclip into a non-flying form, or change suit while noclip stays active | The movement set above; also `rise` when both sides remain noclip | A destination without vertical travel clears rise/autofly. A suit change that leaves noclip active keeps vertical travel on the same body. Other unlisted actions clear. |
+
+A directed row can add `conditionalKeep` clauses with `from` and `to`
+family selections and a `keep` list. These finite tuple conditions distinguish
+entering noclip from walking from entering it while already flying, without a
+second flight register. Matching clauses add to that row's unconditional keep
+set; the resulting sets still intersect across changed families.
 
 The movement set includes held run and its toggle, and both held forward and
 autorun. The same rules apply in either direction only where the table says so;

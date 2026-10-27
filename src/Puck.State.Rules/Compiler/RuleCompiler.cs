@@ -68,7 +68,7 @@ public static partial class RuleCompiler {
             if (
                 (rule.ForEach is { } forEachName) &&
                 !forEachZones &&
-                !forEachBodies
+                !forEachBodies && context.Iteration is null
             ) {
                 forEachOrdinal = ResolveRowOrdinal(
                     context: context,
@@ -136,7 +136,7 @@ public static partial class RuleCompiler {
                 PoolBindingSlot: poolBindingSlot,
                 PoolForEach: poolForEach,
                 Zones: context.Zones
-            );
+            ) { Iteration = context.Iteration };
 
             return ((extend is null)
                 ? compiled
@@ -176,7 +176,10 @@ public static partial class RuleCompiler {
         );
 
         if (rule.ForEach is { } forEach) {
-            if (IteratesZones(forEach: forEach)) {
+            context.Iteration = context.CompileIteration(forEach, rule.Name.Value);
+            if (context.Iteration is { } iteration) {
+                for (var index = 0; index < iteration.Capacity; index++) { _ = InternKey(context, IndexKeyCache.Get(index)); }
+            } else if (IteratesZones(forEach: forEach)) {
                 if (zones is null) {
                     throw new RuleException(
                         detail: $"iterates 'forEach' over '{RuleFacts.ForEachZones}' but declares no 'zones' table",

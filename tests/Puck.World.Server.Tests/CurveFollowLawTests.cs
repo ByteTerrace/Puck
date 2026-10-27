@@ -177,6 +177,7 @@ public sealed class CurveFollowLawTests {
             );
         }
 
+        Assert.All(fixture.Server.Input.Capture().Owners, owner => Assert.Equal(0UL, owner.Input.RefusedBatches));
         return (sum / windowTicks);
     }
     private static float PlanarDistance(FixedVector3 from, FixedVector3 to) {
@@ -225,6 +226,9 @@ public sealed class CurveFollowLawTests {
         );
 
         return (document with {
+            // Continuous steering changes several axes per tick; retain their full two-second sample path.
+            InputHistory = new(EventCapacity: Math.Max(128, (2 * rateHz + 2) * document.Channels.Count(channel =>
+                channel.Shape is ChannelShape.Bipolar or ChannelShape.Unipolar))),
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, followProgram],
             KitRowsRaw = [kit with {
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {
@@ -582,6 +586,7 @@ public sealed class CurveFollowLawTests {
             );
         }
 
+        Assert.All(fixture.Server.Input.Capture().Owners, owner => Assert.Equal(0UL, owner.Input.RefusedBatches));
         // No separate rate check is needed here (unlike the straight fixture's net-X-displacement check, which
         // cannot generalize to a path that curves back on itself): a SUSTAINED rate mismatch of either sign would
         // accumulate position error linearly over the whole 5 s window and blow through trackingTolerance well

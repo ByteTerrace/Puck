@@ -10,6 +10,9 @@ public sealed partial class WorldBody {
 
     private PlayerIntent m_channelReadScalar;
 
+    /// <summary>The body's current compiled input storage; addresses have meaning only in this mapping.</summary>
+    public WorldChannelTable Channels => m_channels;
+
     /// <summary>Reads the step's scalar projection. Relative values round once with conserved fractional residue.</summary>
     public FixedQ4816 ReadChannelScalar(int ordinal) => m_channelReadScalar[ordinal];
 

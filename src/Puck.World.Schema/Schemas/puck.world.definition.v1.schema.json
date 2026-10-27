@@ -36,6 +36,15 @@
     "channels": {
       "$ref": "./schema/channels.schema.json"
     },
+    "inputModes": {
+      "$ref": "./schema/inputModes.schema.json"
+    },
+    "inputHistory": {
+      "$ref": "./schema/inputHistory.schema.json"
+    },
+    "inputPatterns": {
+      "$ref": "./schema/inputPatterns.schema.json"
+    },
     "targetRegisters": {
       "$ref": "./schema/targetRegisters.schema.json"
     },

@@ -519,6 +519,18 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             select: static definition => definition.Host
         )
     ),
+        ["inputModes"] = new RowSection(
+        RowType: typeof(WorldInputModes),
+        Upsert: Upsert(
+            info: WorldJsonContext.Default.WorldInputModes,
+            toMutation: static (principal, modes) => new WorldMutation.SetInputModes(principal, modes)
+        ),
+        Remove: null,
+        Read: ReadRow(
+            info: WorldJsonContext.Default.WorldInputModes,
+            select: static definition => definition.InputModes
+        )
+    ),
         // Authored payload is SECONDS (WorldInputHoldAuthoring), matching the document field itself; compiled to the
         // mutation's ticks wire shape against the ADDRESSED row's own current rate.
         ["inputHold"] = new RowSection(
@@ -1659,11 +1671,14 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     // is always an object or array literal — never how a bare key or a dotted field path is spelled.
     private static bool LooksLikeJsonContainer(ReadOnlySpan<char> token) => ((token.Length > 0) && ((token[0] == '{') || (token[0] == '[')));
     // The keyless-section reader: the whole row IS the section, read fresh off the live definition.
-    private static Func<WorldDefinition, string, RowReadOutcome> ReadRow<T>(JsonTypeInfo<T> info, Func<WorldDefinition, T> select) {
-        return (definition, _) => ToReadOutcome(node: JsonSerializer.SerializeToNode(
-            value: select(definition),
-            jsonTypeInfo: info
-        ));
+    private static Func<WorldDefinition, string, RowReadOutcome> ReadRow<T>(JsonTypeInfo<T> info, Func<WorldDefinition, T?> select) {
+        return (definition, _) => {
+            var row = select(definition);
+            return ToReadOutcome(node: row is null ? null : JsonSerializer.SerializeToNode(
+                value: row,
+                jsonTypeInfo: info
+            ));
+        };
     }
     // The one section (screens) keyed by its own array POSITION rather than a stable name.
     private static Func<WorldDefinition, string, RowReadOutcome> ReadRowByIndex<T>(JsonTypeInfo<T> info, Func<WorldDefinition, IReadOnlyList<T>> select) {

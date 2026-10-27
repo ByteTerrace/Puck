@@ -7,7 +7,6 @@ using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
-using Puck.World.Protocol;
 using Puck.Physics.Motion;
 
 namespace Puck.World;
@@ -270,28 +269,6 @@ public static partial class WorldDefinitionValidator {
         tryLoad: WorldAssetRowLoader.TryLoadTune,
         validate: AudioCanonicalizer.Validate
     );
-    // THIS document's channel table, for the binding-overlay vocabulary check — or null when the channels section is
-    // itself too malformed to compile (a null row, or more rows than ordinals exist). Null is safe rather than
-    // permissive: every condition that produces it is already an error ValidateChannels added, so the document is
-    // refused on the channel section instead of being judged against a table that would misreport which names are
-    // declared.
-    private static WorldChannelTable? CompilableChannelTable(IReadOnlyList<WorldChannel> channels) {
-        if (
-            (channels is null) ||
-            (channels.Count(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))) > ChannelLimits.MaxAxes) ||
-            (channels.Count(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))) > ChannelLimits.MaxButtons)
-        ) {
-            return null;
-        }
-
-        for (var index = 0; (index < channels.Count); index++) {
-            if (channels[index] is null) {
-                return null;
-            }
-        }
-
-        return WorldChannelTable.Compile(channels: channels);
-    }
     // |cos| between a screen frame's two axes: 0 for the orthogonal pair the slab's geometry and collider both assume,
     // 1 for a parallel one. Callers must have cleared finiteness and non-degeneracy first, or this reads NaN.
     private static float ScreenBasisSkew(WorldScreen screen) => MathF.Abs(x: Vector3.Dot(
@@ -1136,17 +1113,23 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        var channelErrorStart = errors.Count;
         var (allChannelNames, compositionChannelNames) = ValidateChannels(
             definition: definition,
             errors: errors,
             programs: programs
         );
+        WorldInputCatalog? compiledInputCatalog = null;
+        if (errors.Count == channelErrorStart) {
+            try { compiledInputCatalog = WorldInputCatalog.For(definition); }
+            catch (ArgumentException error) { errors.Add(error.Message); }
+            catch (OverflowException error) { errors.Add($"inputModes selector exceeds its fixed-point envelope: {error.Message}"); }
+        }
         if (definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) {
             errors.Add(item: $"targetRegisters declares {definition.TargetRegisters.Count} rows; the maximum is {WorldTargetRegisterTable.MaxRegisters}.");
         }
         if ((definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) ||
-            (definition.Channels.Count(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))) > ChannelLimits.MaxAxes) ||
-            (definition.Channels.Count(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))) > ChannelLimits.MaxButtons)) {
+            (compiledInputCatalog is null)) {
             RefuseCollected(errors: errors);
         }
         var kitNames = ValidateKits(
@@ -1187,7 +1170,7 @@ public static partial class WorldDefinitionValidator {
         ValidateBindingOverlays(
             definition: definition,
             overlays: definition.BindingOverlays,
-            channels: CompilableChannelTable(channels: definition.Channels),
+            channels: compiledInputCatalog?.DefaultMapping.Channels,
             stateRows: stateRows,
             seatModes: definition.SeatModes,
             iconNames: iconNames,

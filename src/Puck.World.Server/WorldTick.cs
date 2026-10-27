@@ -13,6 +13,7 @@ namespace Puck.World.Server;
 /// federation operations reach the queues only under <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>.</remarks>
 public sealed partial class WorldTick {
     private readonly Queue<IntentSubmission> m_intents = new();
+    private readonly Queue<WorldRoutedInput> m_routedInputs = new();
     // Reused scratch for the possessed-inhabitant walk — cleared and refilled on every check rather than allocated
     // per call. Single-threaded on the host tick, like every other tick-facade buffer.
     private readonly List<int> m_possessedInhabitantScratch = [];
@@ -168,6 +169,8 @@ public sealed partial class WorldTick {
 
     /// <summary>Gets the per-tick intent queue, drained at the step boundary after the live-edit ops.</summary>
     internal Queue<IntentSubmission> Intents => m_intents;
+    /// <summary>Derived engagement output awaiting the target's next fold; never a second owner ingress.</summary>
+    internal Queue<WorldRoutedInput> RoutedInputs => m_routedInputs;
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
     internal ulong LastStepTicks => m_lastStepTicks;
     /// <summary>Gets the tick-denominated musical clock, or <see langword="null"/> for a world authoring no

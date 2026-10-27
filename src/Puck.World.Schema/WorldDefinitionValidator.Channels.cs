@@ -654,7 +654,7 @@ public static partial class WorldDefinitionValidator {
         var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
 
         try {
-            var compiled = BindingProfile.Compile(document: composed, channelIsRelative: reference => ((channels is { } table) && table.TryGetOrdinal(ordinal: out var ordinal, reference: reference) && (table.Shape(ordinal: ordinal) == ChannelShape.Relative)));
+            var compiled = BindingProfile.Compile(document: composed, channelIsRelative: reference => ((channels is { } table) && table.TryGetShape(reference, out var shape) && shape == ChannelShape.Relative));
 
             if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
                 errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling.");
@@ -691,13 +691,13 @@ public static partial class WorldDefinitionValidator {
         var roleClaims = new Dictionary<ChannelRole, string>();
         var channels = (definition.Channels ?? []);
 
-        var axes = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape != ChannelShape.Binary))).ToArray();
+        var axes = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape is not (ChannelShape.Binary or ChannelShape.Text)))).ToArray();
         var buttons = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))).ToArray();
 
-        if (axes.Length > ChannelLimits.MaxAxes) {
+        if (definition.InputModes is null && axes.Length > ChannelLimits.MaxAxes) {
             errors.Add(item: $"channels numeric bank requires {axes.Length} slots; the maximum is {ChannelLimits.MaxAxes}: {string.Join(separator: ", ", values: axes.Select(selector: channel => channel.Name))}.");
         }
-        if (buttons.Length > ChannelLimits.MaxButtons) {
+        if (definition.InputModes is null && buttons.Length > ChannelLimits.MaxButtons) {
             errors.Add(item: $"channels button bank requires {buttons.Length} slots; the maximum is {ChannelLimits.MaxButtons}: {string.Join(separator: ", ", values: buttons.Select(selector: channel => channel.Name))}.");
         }
 
@@ -735,7 +735,7 @@ public static partial class WorldDefinitionValidator {
                 } else if (!roleClaims.TryAdd(
                     key: role,
                     value: (channel.Name ?? path)
-                )) {
+                ) && definition.InputModes is null) {
                     errors.Add(item: $"{path}.role '{role}' is already claimed by channel '{roleClaims[role]}'.");
                 }
 
@@ -751,7 +751,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.shape '{channel.Shape}' on channel '{(channel.Name ?? path)}' must be '{ChannelShape.Bipolar}' for role '{role}' — every role channel is a signed axis.");
                 }
             } else {
-                if (!string.IsNullOrWhiteSpace(value: channel.Name) && (channel.Shape != ChannelShape.Relative)) {
+                if (!string.IsNullOrWhiteSpace(value: channel.Name) && (channel.Shape is not (ChannelShape.Relative or ChannelShape.Text))) {
                     _ = compositionNames.Add(item: channel.Name);
                 }
             }

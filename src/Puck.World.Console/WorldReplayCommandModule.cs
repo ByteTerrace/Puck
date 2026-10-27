@@ -137,6 +137,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
 
         try {
             var result = m_tape.StopRecording();
+            var saved = $"Replays/{Path.GetFileName(result.Path)}";
 
             if (result.VerifyFault is { } fault) {
                 // The tape is already on disk at result.Path — this is the LIVE TREE having moved past this
@@ -144,13 +145,13 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
                 // world.row.set addons/world.row.remove addons ran during the capture, mutating the definition while the live runtime kept
                 // its boot receipts (mounting only happens at boot), so the recorded receipts and the embedded
                 // definition legitimately disagree at the offline re-drive (see WorldReplaySnapshot.VerifyMountedAddons).
-                return CommandResult.Error(output: $"[replay.stop: wrote {result.Path}, but the post-persist verify refused — the LIVE TREE moved past this recording's mounted set: {fault}]");
+                return CommandResult.Error(output: $"[replay.stop: wrote {saved}, but the post-persist verify refused — the LIVE TREE moved past this recording's mounted set: {fault}]");
             }
 
             var verdict = result.Verdict!;
 
             if (verdict.Passing) {
-                return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — faithful capture]");
+                return new CommandResult(Output: $"[replay.stop: wrote {saved} | {verdict.Describe()} — faithful capture]");
             }
 
             // Every authority matched, so the set fails only on a crossing whose other half no tape here replays.
@@ -166,7 +167,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
                 )
             );
 
-            return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — {reading}]");
+            return CommandResult.Error(output: $"[replay.stop: wrote {saved} | {verdict.Describe()} — {reading}]");
         } catch (WorldReplayCodecException exception) {
             // A host-side codec bug — WriteFile's encoding refusing a value it cannot represent, or the post-persist
             // re-drive meeting an authority-entry kind it does not handle. Never a corrupt tape, never untrusted bytes,
@@ -247,7 +248,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.inspect",
-            description: "Reads a saved recording back (Immediate): replay.inspect <name> [<from>-<to>] [--all] [--poses] prints the tape's header (shape magic, recorded rate, tick count, the pinned seats with their profile rates, the mounted-addon receipts) and then one line per tick carrying the recorded population hash beside what CHANGED that tick — every authority/server-event entry (command, grant, revoke, session, mutation, rebuild, screen op, …) named compactly, and every intent channel whose value moved from the entity's previous submission (p1 forward=1). Default prints only ticks carrying such an edge; --all prints every tick; <from>-<to> clamps the printed ticks (a from beyond the tape refuses by name). --poses re-drives the tape through the same offline shadow drive replay.verify uses and prints each active body's body.where-style pose beside every printed tick, plus the first tick where the re-driven hash diverges from the recorded one, if any.",
+            description: "Reads a saved recording through the same offline authority drive as replay.verify: replay.inspect <name> [<from>-<to>] [--all] [--poses]. Prints the header, recorded hashes and authority entries, accepted named input events with exact capture time and hold identity, and mode-switch tick/epoch, consumed activations, kept origins and cancellations. Names follow each recorded definition. Default prints changed ticks; --all prints every tick; <from>-<to> clamps the range. --poses also prints each active body's body.where-style pose. Any first replay divergence is named.",
             handler: (_, args) => Inspect(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

@@ -16,6 +16,14 @@ surface (`WorldReplayCommandModule.cs`, `.Drive.cs`, `.Inspect.cs`) lives in
 `src/Puck.World.Console/` and reaches the tape and the read-back by their public
 surface.
 
+Scheduled tests admit `replay.record`, `replay.stop`, `replay.verify` and `replay.inspect`.
+Recording after a held press exercises the mid-session authority checkpoint;
+stopping persists the tape and restores/replays it through a fresh authority.
+A mismatch is a refused command. `replay.stop` reports the tape path relative
+to the session state directory (`Replays/<name>.puckreplay`) so two isolated
+scheduled runs record the same verdict text. Live replay drive remains outside
+scheduled tests because restoring its timeline would also rewind the schedule.
+
 ## Contents
 
 - Format and development version
@@ -559,17 +567,21 @@ VERIFIED (…)` per crossing.
 unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
 `[replay.inspect: …]`:
 
-- Header, one line per fact: path; the file's own shape magic/token (read
+- Header, one line per fact: filename; the file's own shape magic/token (read
   verbatim off the first 8 bytes — `Read` has already refused a mismatch);
   rate, tick count, tail hash; `forked from '<parent>' at tick N` when the
   snapshot carries `ForkedFrom`; one `seat slot=… profile='…' move=… turn=…`
   per pinned seat (`kit` for a null rate, else decimal + raw lane); one
   `addon '…' hash=… fuel=…/tick` per receipt (or `addons none`); the
   resolved `range a-b of N | edges only|every tick | poses on|off`.
-- Per tick, default: a line only for ticks where any authority/server-event
-  entry landed or any intent channel differs from the entity's previous
-  submission (both lanes — the composed intent, and `HeldChannels` as
-  `held.<name>`). `tick T hash=0x… | <entries; …> | p1 forward=1 strafe=-0.5`
+- Per tick, default: a line for authority entries, accepted input events and
+  mode boundaries. The ordinary offline re-drive supplies current logical
+  names from each recorded definition, including reloads. It prints exact
+  capture seconds, admission tick, event identity, activation and paired hold;
+  text prints its Unicode scalar. A switch prints its commit tick/epoch,
+  selected tuples, consumed activations, cancellations and kept hold origins.
+  Older image-only producers still show changed composed and held channels.
+  `tick T hash=0x… | <entries; …> | p1 forward=1 strafe=-0.5`
   — seats are `p1..p4`, everything else `body:N`; only the CHANGED channels
   print, with the new value. The edge baseline is walked from tick 0 even
   when `<from>` clamps the printed range. `--all` prints every tick.
@@ -582,11 +594,12 @@ unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
   `link '…' delivered`). A `body.press` is a COMMAND entry,
   not an intent edge — the seat's own intent lane stays whatever the device
   held, and the server-side auto-release is not a tape event at all.
-- `--poses`: re-drives through the untouched `WorldReplaySnapshot.Drive`,
-  observing the shadow population at the addon seam's third pump point
+- Inspection re-drives through `WorldReplaySnapshot.Drive`, observing accepted
+  input and the shadow population at the addon seam's third pump point
   (`IWorldAddonHost.ResolveReads`, after the population advanced) through a
   forwarding host around the ordinary factory's product, indexed from the tick
-  after the tape's start checkpoint (tick 1 for a boot-image tape); each printed line
+  after the tape's start checkpoint (tick 1 for a boot-image tape). `--poses` adds
+  body poses to this same drive; each printed line
   gains ` | body:0 pos=(x, y, z) yaw=…° pitch=…° roll=…°` per active body,
   and a pose that MOVED (the recorded hash differs from the previous
   tick's; tick 0 always) counts as an edge, so a body advancing under a

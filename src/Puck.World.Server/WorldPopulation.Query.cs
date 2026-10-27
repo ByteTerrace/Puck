@@ -711,6 +711,8 @@ public sealed partial class WorldPopulation {
     /// <param name="index">The population index (0-based).</param>
     /// <returns>The slot's assigned kit's motion tuning.</returns>
     public WorldMotion KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
+    /// <summary>The selected kit's semantic name for authoritative input selectors.</summary>
+    public string KitName(int index) => m_kitRows[ResolveKitIndex(index)].Name;
     /// <summary>The most recent timed <c>body.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
     /// outcome when none has been made (or the last attempt was refused — see <see cref="PressRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
@@ -901,14 +903,16 @@ public sealed partial class WorldPopulation {
     /// keeps the value the body's identity holds when <paramref name="previous"/> declared it under the same name and
     /// kind, and is born at its initial value otherwise or on a body with no identity.</summary>
     /// <param name="previous">The register file installed before the rebuild.</param>
+    /// <param name="keepsParticipant">Whether this is a live reload retaining existing participant registers.</param>
     /// <exception cref="ArgumentNullException"><paramref name="previous"/> is <see langword="null"/>.</exception>
-    public void RebirthActionState(IReadOnlyList<CompiledActionStateSlot> previous) {
+    public void RebirthActionState(IReadOnlyList<CompiledActionStateSlot> previous, bool keepsParticipant = false) {
         ArgumentNullException.ThrowIfNull(argument: previous);
 
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index].Active) {
                 m_actionStateLane.Rebirth(
                     keepsIdentity: (m_entries[index].Body?.Profile is not null),
+                    keepsParticipant: keepsParticipant,
                     ordinal: index,
                     previous: previous
                 );

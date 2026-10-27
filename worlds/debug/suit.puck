@@ -29,6 +29,7 @@ state {
       name: "suit"
       kind: "Counter"
       initial: 1
+      envelope { $type: "set", values [0, 1] }
     }
   ]
 }

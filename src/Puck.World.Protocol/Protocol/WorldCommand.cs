@@ -14,6 +14,12 @@ namespace Puck.World.Protocol;
 /// <param name="Principal">The acting identity the command is checked against.</param>
 /// <param name="EntityIndex">The 0-based entity index the command acts on.</param>
 public abstract record WorldCommand(Principal Principal, int EntityIndex) {
+    /// <summary>Admits the bounded semantic sources of a compiled binding or synthetic producer profile.</summary>
+    public sealed record AdmitInput(Principal Principal, int EntityIndex, IReadOnlyList<WorldInputSource> Sources, bool FreshAttachment = false) : WorldCommand(Principal, EntityIndex);
+    /// <summary>Selects an admitted owner's finite state through the ordered authority path.</summary>
+    public sealed record SelectInputState(Principal Principal, int EntityIndex, Principal Owner, string Family, string State, ulong Activation = 0) : WorldCommand(Principal, EntityIndex);
+    /// <summary>Admits the owner's bounded timing calibration at an unconditional input boundary.</summary>
+    public sealed record CalibrateInput(Principal Principal, int EntityIndex, FixedQ4816 Offset) : WorldCommand(Principal, EntityIndex);
     /// <summary>Snaps selected pose components while preserving every component omitted by <see cref="Mode"/>.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>

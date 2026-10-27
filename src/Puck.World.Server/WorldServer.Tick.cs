@@ -41,7 +41,7 @@ public sealed partial class WorldServer {
     public bool ReplaysInput { get; internal set; }
 
     /// <inheritdoc cref="WorldTick.ApplyIntentSubmission"/>
-    public GrantVerdict ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) =>
+    public WorldIntentAdmission ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) =>
         m_tick.ApplyIntentSubmission(
             body: body,
             submission: in submission

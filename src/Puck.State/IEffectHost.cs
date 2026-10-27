@@ -269,6 +269,10 @@ public readonly record struct EffectFiring(string RuleName, ulong Tick, ulong En
 /// candidate, because the firing's journal scope already is one.</para>
 /// </remarks>
 public interface IEffectHost : IStateReader {
+    /// <summary>Begins one bound gate-and-fire evaluation, including its predicate reads.</summary>
+    void BeginRuleEvaluation() { }
+    /// <summary>Ends that evaluation on success, refusal or a closed gate.</summary>
+    void EndRuleEvaluation() { }
     /// <summary>Opens the host's atomic state transaction for one firing.</summary>
     int BeginStateTransaction() => Arena.BeginScope();
     /// <summary>Checks the complete state batch before its commit.</summary>

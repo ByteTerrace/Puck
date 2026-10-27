@@ -256,6 +256,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private void EachKeys(CompiledRule rule) {
         m_eachKeyScratch.Clear();
 
+        if (rule.Iteration is { } iteration) { iteration.Collect(m_host, m_eachKeyScratch); return; }
+
         if (rule.ForEachZones) {
             if (rule.Zones is { } zones) {
                 m_eachKeyScratch.AddRange(collection: zones.Indices);
@@ -381,7 +383,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         var bindings = latch.Bindings(name: rule.Name);
 
-        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null)) {
+        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && rule.Iteration is null) {
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,
@@ -434,7 +436,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 applied: out var moved,
                 binding: new LatchKey(
                     Left: key.Ordinal,
-                    Right: -1
+                    Right: -1,
+                    LeftGeneration: rule.Iteration?.Generation(m_host, key) ?? 0
                 ),
                 bindings: bindings,
                 latch: latch,
@@ -470,6 +473,12 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="applied">Whether the firing moved the arena or emitted through the host.</param>
     /// <returns>What the evaluation did.</returns>
     public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong stepTicks, out bool applied) {
+        m_host.BeginRuleEvaluation();
+        try { return EvaluateOnceCore(rule, latch, bindings, binding, stepTicks, out applied); }
+        finally { m_host.EndRuleEvaluation(); }
+    }
+
+    private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong stepTicks, out bool applied) {
         ArgumentNullException.ThrowIfNull(argument: bindings);
         ArgumentNullException.ThrowIfNull(argument: latch);
         ArgumentNullException.ThrowIfNull(argument: rule);

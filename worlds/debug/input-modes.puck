@@ -1,0 +1,63 @@
+// Gameplay eligibility follows body registers and engagement, independently of camera pages.
+let movement = ["forward", "strafe", "turn", "faceX", "faceY", "faceZ", "run"]
+let controls = ["jump", "suit", "noclip"]
+let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
+
+inputModes {
+  global ["interact"]
+  families [
+    {
+      name: "form"
+      selector { kind: BodyState, name: "form" }
+      default: "suited"
+      states [
+        { name: "pilot", values ["0"], channels: concat(movement, controls) }
+        { name: "suited", values ["1"], channels: concat(movement, controls, ["rise", "flight"]) }
+        { name: "pilot-noclip", values ["2"], channels: concat(movement, controls, ["rise"]) }
+        { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight"]) }
+      ]
+      suspendedBy [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }]
+      transitions [
+        { from: "pilot", to: "suited", keep: movement }
+        { from: "suited", to: "pilot", keep: movement }
+        { from: "pilot", to: "pilot-noclip", keep: movement }
+        { from: "pilot-noclip", to: "pilot", keep: movement }
+        { from: "pilot", to: "suited-noclip", keep: movement }
+        { from: "suited-noclip", to: "pilot", keep: movement }
+        { from: "suited", to: "pilot-noclip", keep: movement, conditionalKeep: flyingRise }
+        { from: "pilot-noclip", to: "suited", keep: movement, conditionalKeep: flyingRise }
+        { from: "suited", to: "suited-noclip", keep: movement, conditionalKeep: flyingRise }
+        { from: "suited-noclip", to: "suited", keep: movement, conditionalKeep: flyingRise }
+        { from: "pilot-noclip", to: "suited-noclip", keep: concat(movement, ["rise"]) }
+        { from: "suited-noclip", to: "pilot-noclip", keep: concat(movement, ["rise"]) }
+      ]
+    }
+    {
+      name: "flight"
+      selector { kind: BodyState, name: "flightFuel" }
+      default: "walking"
+      states [
+        { name: "walking", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+        { name: "flying", ranges [{ minimum: 0.0000152587890625, maximum: 1000 }], channels [] }
+      ]
+      transitions [
+        { from: "walking", to: "flying", keep: concat(movement, ["rise"]) }
+        { from: "flying", to: "walking", keep: movement }
+      ]
+    }
+    {
+      name: "engagement"
+      selector { kind: Engagement }
+      default: "none"
+      states [
+        { name: "none", values ["none"], channels [] }
+        { name: "tabletop", values ["tabletop"], channels ["forward", "strafe", "confirm", "cancel"] }
+        { name: "machine", values ["machine"], channels ["forward", "strafe", "jump", "flight", "start", "select"] }
+        { name: "screen", values ["screen"], channels ["forward", "strafe", "confirm", "cancel"] }
+        { name: "body", values ["body"], channels: concat(movement, ["jump", "rise", "flight"]) }
+      ]
+      // Omitted directed rows release everything, including global interaction and auto-actions.
+      transitions []
+    }
+  ]
+}

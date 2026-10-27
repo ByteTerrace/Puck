@@ -15,20 +15,20 @@ namespace Puck.World.Protocol;
 /// at the target, or <see langword="null"/> for passthrough — every reached ordinal arrives unchanged, which is what
 /// a body target always wants (the destination body's own kit already assigns meaning) and what a screen naming no
 /// kit falls back to (the engine's two-movement-role default pad).</param>
-/// <param name="Reach">The channel ordinals this application delivers at all. A masked-out ordinal still drives the
+/// <param name="Reach">The logical names this application delivers, or null for every live action. An excluded action still drives the
 /// source body through its own-body application (when that member is present) but never reaches this target.</param>
-public readonly record struct ControlApplication(GrantSubject Target, string? Kit, ChannelReachMask Reach) {
-    /// <summary>Describes the application for a console echo — <c>&lt;target&gt;[/&lt;kit&gt;](mask=0x…)</c>.</summary>
+public readonly record struct ControlApplication(GrantSubject Target, string? Kit, WorldChannelSelection? Reach) {
+    /// <summary>Describes the target, kit and logical action selection.</summary>
     /// <returns>The label.</returns>
     public string Describe() => $"{Target.Describe()}{((Kit is { Length: > 0 } kit)
         ? $"/{kit}"
-        : string.Empty)}(axes=0x{Reach.Bits.Axes:x8},buttons=0x{Reach.Bits.Buttons:x16},registers=0x{Reach.Registers:x16})";
+        : string.Empty)}(channels={((Reach is { } reach) ? string.Join(",", reach.Channels) : "all")})";
     /// <summary>Creates the own-body application — passthrough over every ordinal onto the participant's own body.
     /// Its presence in the set is exactly "the avatar drives itself"; its absence is exactly "captured".</summary>
     /// <param name="bodyIndex">The 0-based entity index of the participant's own body.</param>
     public static ControlApplication OwnBody(int bodyIndex) => new(
         Kit: null,
-        Reach: ChannelReachMask.All,
+        Reach: null,
         Target: GrantSubject.Body(index: bodyIndex)
     );
 }

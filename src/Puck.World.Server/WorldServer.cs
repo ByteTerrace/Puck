@@ -108,6 +108,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     // The tick facade: the intent and ordered queues, the step clock, the contribution fold and its read-back, the
     // engagement/transfer/field/music/response/board/deal per-tick work, and the snapshot it emits.
     private readonly WorldTick m_tick;
+    /// <summary>Authoritative semantic input owners, modes and timed histories.</summary>
+    public WorldInputRuntime Input { get; internal set; }
     // The persistence facade: journal undo, the authority checkpoint, the state hash, and the replay gate. It owns
     // no state — it walks the others.
     private readonly WorldPersistence m_persistence;
@@ -555,6 +557,8 @@ public sealed partial class WorldServer : IWorldServerHost {
         }
         // Assigned before the arena is built: the build binds the population's action-state slot lanes.
         m_population = population;
+        Input = new WorldInputRuntime(this, definition);
+        m_population.ActionStateLane.Input = Input;
         m_events = new WorldEventFeed(capacity: population.Capacity);
         m_tick = new WorldTick(
             definition: definition,

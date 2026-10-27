@@ -10,6 +10,27 @@ namespace Puck.World.Server.Tests;
 public sealed class EngagementTranslationLawTests {
     private const string PadKitName = "cabinet";
 
+    [Fact]
+    public void ReusedAxisSlotTranslatesThroughTheActiveLogicalMapping() {
+        using var fixture = Fixtures.FreshServer(definition: BuildPadKitDocument());
+        var catalog = WorldInputCatalog.Compile([
+            new("forward", ChannelShape.Bipolar), new("turn", ChannelShape.Bipolar)
+        ], new([], [new("focus", new(WorldInputModeSelectorKind.SeatState, "focus"), "advance", [
+            new("advance", ["forward"]), new("rotate", ["turn"])
+        ])]));
+        var advance = Assert.Single(catalog.Mappings.ToArray(), mapping => mapping.Name == "focus=advance");
+        var rotate = Assert.Single(catalog.Mappings.ToArray(), mapping => mapping.Name == "focus=rotate");
+        Assert.Equal(advance.Address(0), rotate.Address(1));
+        var image = default(PlayerIntent).WithChannel(advance.Address(0), FixedQ4816.One);
+        var first = fixture.Server.Engagement.Translate(image, PadKitName, advance.Channels);
+        var second = fixture.Server.Engagement.Translate(image, PadKitName, rotate.Channels);
+        Assert.Equal(1f, first.LeftTrigger);
+        Assert.Equal(0f, first.RightTrigger);
+        Assert.Equal(0f, second.LeftTrigger);
+        Assert.Equal(1f, second.RightTrigger);
+        Assert.Equal(first, fixture.Server.Engagement.Translate(image, PadKitName, advance.Channels));
+    }
+
     // The fixture document plus one pad-bearing kit, and the test-pattern screen pointed at it. The pad kit reuses
     // the fixture's own body arm verbatim: a kit is ONE vocabulary with two destinations, so a kit that a body wears
     // and a kit a screen reads are the same row shape.
@@ -43,6 +64,7 @@ public sealed class EngagementTranslationLawTests {
         using var fixture = Fixtures.FreshServer(definition: BuildPadKitDocument());
 
         var positive = fixture.Server.Engagement.Translate(
+            channels: fixture.Server.Population.Channels,
             intent: default(PlayerIntent)
                 .WithChannel(
                 ordinal: 0,
@@ -59,6 +81,7 @@ public sealed class EngagementTranslationLawTests {
             kit: PadKitName
         );
         var negative = fixture.Server.Engagement.Translate(
+            channels: fixture.Server.Population.Channels,
             intent: default(PlayerIntent)
                 .WithChannel(
                 ordinal: 0,
@@ -107,6 +130,7 @@ public sealed class EngagementTranslationLawTests {
         using var fixture = Fixtures.FreshServer(definition: BuildPadKitDocument());
 
         var pad = fixture.Server.Engagement.Translate(
+            channels: fixture.Server.Population.Channels,
             intent: default(PlayerIntent)
                 .WithChannel(
                 ordinal: 0,

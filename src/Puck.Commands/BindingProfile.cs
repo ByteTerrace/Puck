@@ -345,7 +345,7 @@ public static class BindingProfile {
                         ReleaseValue: CommandValue.Inactive(kind: pressValue.Kind),
                         Reassertable: ((channelScale is not null) && (entry.Mode == BindingEntryMode.Hold)),
                         Mode: entry.Mode,
-                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand),
+                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand, mode: entry.Mode),
                         Text: entry.Text
                     )
                 ));
@@ -1798,7 +1798,7 @@ public static class BindingProfile {
                         Reassertable: (isChannel && (command.Mode == BindingEntryMode.Hold)),
                         Mode: command.Mode,
                         PassThrough: command.PassThrough,
-                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand),
+                        Source: BindingSourceIdentity.ForCommand(command: effectiveCommand, mode: command.Mode),
                         Text: command.Text
                     ),
                     GroupIndex: groupIndex,

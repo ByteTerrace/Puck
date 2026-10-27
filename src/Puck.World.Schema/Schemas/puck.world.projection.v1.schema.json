@@ -15197,7 +15197,8 @@
               "Bipolar",
               "Unipolar",
               "Binary",
-              "Relative"
+              "Relative",
+              "Text"
             ],
             "title": "ChannelShape"
           },
@@ -42039,6 +42040,26 @@
                       ],
                       "additionalProperties": false,
                       "title": "ActionEffectRewindGroup"
+                    },
+                    {
+                      "description": "Consumes the named matched event range only when the enclosing rule commits.",
+                      "properties": {
+                        "$type": {
+                          "const": "consumeInput"
+                        },
+                        "owner": {
+                          "type": "string"
+                        },
+                        "pattern": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "owner",
+                        "pattern"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldEffectConsumeInput"
                     },
                     {
                       "description": "Writes a body\u0027s vertical-velocity channel (the jump launch / the surge).",

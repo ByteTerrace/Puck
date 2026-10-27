@@ -96,7 +96,8 @@ public interface IWorldGrantsView {
     /// <param name="principal">The contributing principal (typically an addon).</param>
     /// <param name="subject">The body subject.</param>
     /// <param name="mask">The reached channel bitmask, when the row carries one.</param>
-    bool TryGetChannelReach(Principal principal, GrantSubject subject, out ChannelReachMask mask);
+    /// <param name="channels">The recipient's current mapping; a reused slot never inherits a dormant action's reach.</param>
+    bool TryGetChannelReach(Principal principal, GrantSubject subject, WorldChannelTable channels, out ChannelReachMask mask);
     /// <summary>Returns the occupying seat's own per-channel pool ceilings over its body — one number per (seat, channel),
     /// authored by the seat and never derived from any contributor row. Empty when the seat has authored none, which
     /// is default-deny for every ordinal: an untrusted contribution to a channel with no authored ceiling folds
@@ -160,6 +161,12 @@ public interface IWorldGrantsView {
     /// <param name="principal">The principal.</param>
     /// <param name="applications">The complete replacement set.</param>
     void SetApplications(Principal principal, IReadOnlyList<ControlApplication> applications);
+    /// <summary>Checks whether a voluntary routing replacement selects an admitted input tuple, before changing the set.</summary>
+    /// <param name="principal">The input owner.</param>
+    /// <param name="applications">The proposed complete application set.</param>
+    /// <param name="reason">The named input-mode refusal, or an empty string.</param>
+    /// <returns>Whether the replacement is admitted.</returns>
+    bool TryValidateApplications(Principal principal, IReadOnlyList<ControlApplication> applications, out string reason);
     /// <summary>Restores <paramref name="principal"/>'s set to its own-body default. Returns whether it had composed
     /// anything.</summary>
     /// <param name="principal">The principal.</param>

@@ -9,7 +9,19 @@ public sealed partial class WorldServer {
     /// <summary>Opens one atomic gameplay batch. Every producer uses this journal boundary.</summary>
     public int BeginStateTransaction() => m_arena.BeginScope();
     /// <summary>Commits a prepared batch. Deliveries happen after this boundary.</summary>
-    public void CommitStateTransaction(int mark) => m_arena.Commit(mark: mark);
+    public void CommitStateTransaction(int mark) {
+        if (m_transactionRows.Length != m_arena.Layout.RowCount) { m_transactionRows = new bool[m_arena.Layout.RowCount]; }
+        Array.Clear(m_transactionRows);
+        m_arena.FlagOpenRows(rows: m_transactionRows);
+        var driveGateChanged = false;
+        for (var row = 0; row < m_arena.Rows.Count; row++) {
+            driveGateChanged |= m_transactionRows[row] && m_arena.Rows[row] is WorldStateRow { GatesDrive: true };
+        }
+        m_arena.Commit(mark: mark);
+        if (driveGateChanged) { m_grants.SyncState(Document.Definition, m_arena); }
+        m_population.SyncBodyCells(Document.Definition);
+        if (!Input.TrySynchronize(0, out var reason)) { throw new InvalidOperationException(reason); }
+    }
     /// <summary>Restores a refused batch.</summary>
     public void RewindStateTransaction(int mark) => m_arena.Rewind(mark: mark);
 
@@ -30,6 +42,7 @@ public sealed partial class WorldServer {
             validateBindings |= DocumentValueRows().Contains(name);
         }
         if (!m_arena.TryValidateRelations(out reason)) { return false; }
+        if (!Input.TryValidate(out reason)) { return false; }
         if (validateBindings) {
             try {
                 if (!WorldDefinitionValidator.TryValidateLocally(definition: m_document.Definition, reason: out reason)) { return false; }

@@ -38,9 +38,9 @@ public static class PlayerCommandNames {
     /// where the camera looks.</summary>
     public const string SteerCommand = "player.steer";
 
-    /// <summary>The runtime command name a seat binding lowers one validated channel ordinal to.</summary>
-    /// <param name="ordinal">The channel ordinal.</param>
-    public static string RoutedChannelCommandName(int ordinal) => $"channel.ordinal.{ordinal}";
+    /// <summary>The runtime command name a seat binding lowers one logical action to, independently of storage reuse.</summary>
+    /// <param name="ordinal">The logical ordinal in canonical name order.</param>
+    public static string RoutedChannelCommandName(int ordinal) => $"channel.logical.{ordinal}";
 }
 /// <summary>Single-sourced command names the root wheel command module's own constants forward to. See
 /// <see cref="PlayerCommandNames"/>.</summary>

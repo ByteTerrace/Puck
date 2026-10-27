@@ -54,6 +54,108 @@ stick, and no step duration multiplies it. Toggle and held/sequence activators
 are invalid for displacement. `player.signal` drives this same binding path
 without a physical device, including from a test's scheduled `when` block.
 
+Simulation eligibility is compiled by `WorldInputCatalog` from `inputModes`;
+it does not follow the visible binding page. `WorldInputRuntime` selects each
+admitted owner's tuple and publishes its mapping, epoch and source decisions.
+`WorldSeatInput` reconciles those decisions before the host submits another
+batch. A `seatModes` family used by a `SeatState` input selector changes through
+the ordered `WorldCommand.SelectInputState` door (`player.mode`); bindings read
+the accepted cell from the authority publication. Presentation-only families
+continue through their existing context path.
+If that authoritative family also targets a camera, the server preflights the
+proposed cell and camera application together through ordinary engagement.
+One successful route barrier publishes both; a refusal restores the old cell
+and application. The camera route retains the existing local-seat admission
+grant and the actor's Drive/Control checks.
+
+`world.row.set inputModes <json>` replaces that policy through the ordinary
+mutation transaction. It validates every finite tuple and the current owners'
+selections before installation; an oversized bank or forbidden current tuple
+leaves the definition, route and held origins intact. Voluntary engagement
+composition and dissolution also validate the proposed application set before
+changing routing. Administrative revocation still tears down its revoked route.
+
+History operands accept the existing typed body-reference grammar as their
+owner, for example ``inputEdge(`cell:inputOwner:$value`, tap, Press, 0)`` with the
+body reference quoted using the DSL's backticks. The runtime resolves the
+body's admitted owner without choosing an arbitrary co-driver. A crossing's
+optional `facingState` names a body counter: its sign orients the axis at
+admission, and the recorded crossing retains that meaning after a later turn.
+
+Install input barriers after each kit firing's state writes and before another
+action or world rule reads channels. A refused sweep restores the body's input
+epoch, origins, mapping and queued-delay image with its motion; input undo is
+captured lazily at an actual boundary, so unchanged steps allocate nothing.
+Foreign state effects belong to that same firing: apply all validated members
+before installing its barrier, and rewind the target's state and input with a
+refused source sweep. Checking foreign members separately rejects a legal
+two-selector transition whose intermediate tuple is forbidden.
+Waiting for the next input submission lets a world rule read an old
+held action against the new state and immediately undo the transition. The
+debug autofly exit scenario exposed this ordering hazard. Route barriers also
+replace the body's engaged intent, so the next routed recipient cannot read
+the previous recipient's image.
+Reset once per application-set replacement, before per-target notifications;
+resetting for both removal and addition hides cancellation in an intermediate
+epoch. Context-button probes resolve the actual body's mapping and carry their
+activation into that boundary; an intervening epoch invalidates a pending probe.
+
+The barrier also replaces queued input-delay samples with the accepted continuing
+baseline. Clearing only the body's current bank leaves delayed old-epoch input
+able to revive a cancelled action. Timed body segments and edge latches use the
+actual per-action continuation decisions, including source rebind cancellations.
+Profiles register stable source names and effective binding meaning as well as
+handles; renumbering an unchanged source preserves its hold, while a rebind
+requires neutral. Steady batches contain active sources and explicit neutral
+observations only; omission contributes zero but does not acknowledge neutral.
+An unchanged binding that was already accepted neutral and live stays armed
+through a continuation-policy edit. Requiring neutral again blocked an untouched
+key's first press after `world.row.set inputModes`. This does not apply to an
+inactive destination, a changed binding, or a source with a held/rearming sibling.
+Recompiling a producer on the same attachment carries real observed source
+levels by binding identity, including a release captured just before reload.
+It never carries pending old-epoch events. A fresh attachment requires neutral;
+owner replacement advances its epoch and preserves monotonic event identities.
+
+Engagement reach stores logical names, including in checkpoints. Machine pad
+translation and addon folding resolve against the source or recipient's current
+mapping; the default table cannot interpret a reused slot. Addon handshake
+handles identify logical declarations, including dormant names, rather than
+permanently assigning storage addresses.
+
+Local snapshot producers use `WorldInputRuntime.TryPublishSnapshot`: each
+actor/body/source has a generation-bearing session for its history, while the
+original actor still supplies Drive and contribution consent. Do not authorize
+an addon by substituting a seat or minting grants for its history session.
+`IntentSubmission.InputOwner` names that separate session. Addon omissions
+publish neutral through `CompleteSnapshots`; detach, disable and replacement
+cancel through `CancelSnapshots`. A body reference resolves the primary admitted
+owner, or a unique co-driver, through the per-body index; ambiguous co-drivers
+are not a substitute for an authored owner reference.
+
+Authored simulation producers enter the same path before motion under the
+local structural `World` actor, only while the body's selected kit declares
+that producer. Their sessions survive checkpoints and end when the source is
+deselected. Physical clients receive no redundant copy of local producer
+profiles. `PublishBorrowed` uses reusable event/contribution arrays for immediate
+admission; never queue or retain that batch. Transport and replay producers use
+the owning `Publish` result instead.
+
+Size history for the authored rate and sample density, including both ends of
+the retention window and any burst. At 240 Hz, two seconds of continuously
+changing steering axes can exceed the default 256 records. An overflow cancels
+the episode and requires rearming; it must not silently overwrite unexpired
+history. The curve-follow fixture sizes this allowance from its rate and axis
+count, and the dense-flock law checks the synchronous path's allocation.
+
+For a scheduled continuity demonstration, establish the physical hold before
+submitting the mode-changing command. Default `player.signal` capture can land
+one interval after a body command submitted on the same schedule row; that
+tests a new press after entry rather than a held contribution crossing entry.
+Use explicit `at:<seconds>` offsets for sub-tick ordering, as the input-history
+and clock scenarios do. `keyboard.text` supplies committed text (including a
+paste) as ordered Unicode scalar events, without parsing it as console input.
+
 The merged document compiles once per change through
 `BindingProfile.Compile` in `Puck.Commands` — deliberately shared, never
 copied. `WorldSeatBindings` compares the filtered composed document plus the
@@ -165,6 +267,12 @@ badge is `OverlayResolvedGlyph.None`, a suppressed label the empty string, suppr
 hints an empty span — each already a case `BindingBarWriter` draws nothing for),
 so the writer carries no text policy of its own.
 
+Authority input publications reconcile in `WorldClientSeats.ClearAnalog`, the
+shared end-of-step seat lifecycle used by headless and presented hosts. Do not
+put epoch, source rearming, or mapping synchronization only in
+`WorldSimulation.PublishSeats`: a headless host must receive every boundary too,
+including boundaries which do not change its authority route.
+
 Every rendered slot's `Pressed` state reflects the PHYSICAL control's live carry
 (`BindingBarSeatComposer.IsPhysicallyPressed`, resolved once from the seat's
 ACTIVE page view by input source id and reused across every bank showing that
@@ -237,10 +345,9 @@ all by row. `player.bindings` leads with the derivation echo:
 `group=<active> (<step>)`, per-family `<family>=<state>→<group>
 (wins)|(shadowed)|(no row)`, and `requested=<group>` marked `(shadowed)` when
 a row overrides it — a matching row that lost to an earlier row is reported,
-never silent. No shipped world authors `seatModes` today — the mechanism above
-(a `{layout, <name>, <name>}` context row flipping the seat onto a
-wheel-restricted group while a matching layout is active) is the shape to
-follow; check `src/Puck.World.Schema/Schemas/schema/seatModes.schema.json` for the current
+never silent. The input-history and continuity scenarios under `worlds/debug`
+exercise authoritative `seatModes`; a presentation context can still select a
+binding group independently. Check `src/Puck.World.Schema/Schemas/schema/seatModes.schema.json` for the current
 field names before authoring one. Every group needs a resting (empty-chord)
 page — a blank-slate group authors one with an empty `entries` list.
 

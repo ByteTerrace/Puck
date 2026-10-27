@@ -379,11 +379,13 @@ public sealed partial class WorldAddonRuntime {
             );
         }
 
-        // Pure reference adoption: five field assignments (the host reference, the host's own three-collection
-        // registry swap, the mounted/receipt lists, and the channel table pair) — no I/O, allocation, compilation,
-        // guest execution, or recoverable failure anywhere in this method. Narration and superseded disposal wait
+        // End replaced producers' input episodes at the commit boundary, then adopt the prepared references.
+        // No I/O, compilation or guest execution happens here. Narration and superseded disposal wait
         // for Finish, which the caller runs only after ITS OWN publication (document install, journal write) is
         // itself durable.
+        foreach (var previous in m_mounted) {
+            if (!install.Mounted.Contains(previous)) { m_server.Input.CancelSnapshots(previous.Principal, "addon"); }
+        }
         m_host = install.Host;
         // Null exactly when no row has ever enabled (an addon-free world, or every row disabled) — the Wasmtime
         // host is lazily constructed, so there is nothing to adopt a registry into yet.
@@ -450,7 +452,7 @@ public sealed partial class WorldAddonRuntime {
         // SequenceEqual's cost only on those rare calls, never on an ordinary UpsertAddon/RemoveAddon.
         var channelsChanged = !m_channelsSource.SequenceEqual(second: candidate.Channels);
         var stagedChannels = (channelsChanged
-            ? WorldChannelTable.Compile(channels: candidate.Channels)
+            ? WorldInputCatalog.For(candidate)
             : m_channels
         );
 
@@ -809,14 +811,14 @@ public sealed partial class WorldAddonRuntime {
     /// consumes in <see cref="Commit"/>/<see cref="Finish"/> — every collection a successful prepare pass built,
     /// plus what disposing an uncommitted plan must release. Linear ownership: exactly one of <see cref="Commit"/>
     /// or <see cref="Dispose"/> runs against a given instance, never both and never neither.</summary>
-    private sealed class PreparedAddonInstall(WorldChannelTable channels, IReadOnlyList<WorldChannel> channelsSource, List<(AddonDescriptor Descriptor, AddonInstance Instance)> freshlyPrepared, AddonHost? host, Dictionary<string, AddonInstance> hostByName, Dictionary<string, AddonDescriptor> hostDescriptors, List<AddonInstance> hostInstances, bool hostIsNew, List<MountedAddon> mounted, List<Func<string?>> narration, List<WorldAddonReceipt> receipts, List<MountedAddon> superseded, AddonHost? supersededHost) : IWorldAddonPreparedPlan {
+    private sealed class PreparedAddonInstall(WorldInputCatalog channels, IReadOnlyList<WorldChannel> channelsSource, List<(AddonDescriptor Descriptor, AddonInstance Instance)> freshlyPrepared, AddonHost? host, Dictionary<string, AddonInstance> hostByName, Dictionary<string, AddonDescriptor> hostDescriptors, List<AddonInstance> hostInstances, bool hostIsNew, List<MountedAddon> mounted, List<Func<string?>> narration, List<WorldAddonReceipt> receipts, List<MountedAddon> superseded, AddonHost? supersededHost) : IWorldAddonPreparedPlan {
         private bool m_committed;
         private bool m_disposed;
 
         /// <summary>Gets the channel table <see cref="Commit"/> adopts — the runtime's existing table when
         /// unchanged, or a freshly compiled one over the candidate's own declarations when the channels section
         /// moved.</summary>
-        public WorldChannelTable Channels { get; } = channels;
+        public WorldInputCatalog Channels { get; } = channels;
         /// <summary>Gets the exact declaration list <see cref="Channels"/> was compiled from — what the NEXT
         /// prepare pass compares a future candidate's own channels against.</summary>
         public IReadOnlyList<WorldChannel> ChannelsSource { get; } = channelsSource;
@@ -952,8 +954,8 @@ public sealed partial class WorldAddonRuntime {
         var declared = default(ChannelDeclaredMask);
 
         foreach (var binding in m_mounted[index].Instance.ChannelBindings) {
-            if (binding.Resolved) {
-                declared = declared.With(ordinal: binding.Ordinal);
+            if (binding.Resolved && channels.TryGetOrdinal(binding.Name, out var address)) {
+                declared = declared.With(ordinal: address);
             }
         }
 

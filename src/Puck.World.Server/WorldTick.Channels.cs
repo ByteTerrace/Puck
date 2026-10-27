@@ -58,6 +58,7 @@ public sealed partial class WorldTick {
                 Host.Population.IsHumanOccupied(bodyIndex: seat) &&
                 (Host.Body(index: seat) is { } body)
             ) {
+                var channels = body.Channels;
                 var h = (m_hasOwnerBase[seat]
                     ? m_ownerBase[seat]
                     : default
@@ -85,8 +86,8 @@ public sealed partial class WorldTick {
                     var trusted = m_trustedSum[slot];
                     var poolCeiling = ceilings[ordinal];
                     var contributedHeld = m_contributedHeld[slot];
-                    var shape = (Host.Population.Channels.IsDeclared(ordinal: ordinal)
-                        ? Host.Population.Channels.Shape(ordinal: ordinal)
+                    var shape = (channels.IsDeclared(ordinal: ordinal)
+                        ? channels.Shape(ordinal: ordinal)
                         : ChannelShape.Bipolar
                     );
 
@@ -97,7 +98,7 @@ public sealed partial class WorldTick {
                         var narrowed = ((poolCeiling > 0) ? Int128.Clamp(max: radius, min: -radius, value: pool) : pool);
                         var raw = ((((Int128)h.Channels.Relative(ordinal: ordinal).Value) + narrowed) + m_relativeTrusted[relativeSlot]);
 
-                        folded = folded.WithRelative(ordinal: ordinal, value: Host.Population.Channels.ClampRelative(ordinal: ordinal, raw: raw));
+                        folded = folded.WithRelative(ordinal: ordinal, value: channels.ClampRelative(ordinal: ordinal, raw: raw));
                         held = held.WithRelative(ordinal: ordinal, value: default);
                         m_channelReadCeiling[slot] = (untrustedAccepted.Contains(ordinal: ordinal) ? poolCeiling : 0);
                         m_channelReadClamped[slot] = (narrowed != pool);
@@ -137,7 +138,7 @@ public sealed partial class WorldTick {
                         continue;
                     }
 
-                    var threshold = Host.Population.Channels.Threshold(ordinal: ordinal);
+                    var threshold = channels.Threshold(ordinal: ordinal);
 
                     var (minimum, maximum, quantizationThreshold) = WorldChannelTable.CompileFoldShape(
                         shape: shape,
@@ -269,12 +270,15 @@ public sealed partial class WorldTick {
     //     m_untrustedAcceptedMask, regardless of the delta's own value — a cancelling pair of contributors must
     //     still read back as "the pool was reached," never as "nothing happened" (body.channels' ceiling report).
     private void StageContribution(int bodyIndex, Principal principal, in IntentSubmission submission) {
+        if (Host.Body(bodyIndex) is not { } body) { return; }
+        var channels = body.Channels;
         var isConsoleOrSeat = (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);
         var isAddon = (principal.Kind == PrincipalKind.Addon);
         var trustedInFold = (isConsoleOrSeat || isAddon);
         var subject = GrantSubject.Body(index: bodyIndex);
         var reach = default(ChannelReachMask);
         var hasReach = (!isConsoleOrSeat && Host.GrantTable.TryGetChannelReach(
+            channels: channels,
             mask: out reach,
             principal: principal,
             subject: subject
@@ -322,8 +326,8 @@ public sealed partial class WorldTick {
                 continue;
             }
 
-            var shape = (Host.Population.Channels.IsDeclared(ordinal: ordinal)
-                ? Host.Population.Channels.Shape(ordinal: ordinal)
+            var shape = (channels.IsDeclared(ordinal: ordinal)
+                ? channels.Shape(ordinal: ordinal)
                 : ChannelShape.Bipolar
             );
 

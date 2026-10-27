@@ -7,21 +7,6 @@ using Puck.World.Server;
 namespace Puck.World.Addons;
 
 public sealed partial class WorldAddonRuntime {
-    // This tick's contribution restricted to the COMPOSITION ordinals — the held-device image's own convention (see
-    // WorldBody.SetHeldChannels and SeatController.HeldChannels): a movement role rides the submitted intent and is
-    // ignored on this path, so publishing one here would be a value nothing reads. Stack-only: ChannelValues is an
-    // InlineArray, so this allocates nothing.
-    private static PlayerIntent CompositionChannels(ChannelValues values, WorldChannelTable channels) {
-        var composition = default(ChannelValues);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ++ordinal) {
-            if (!channels.IsRole(ordinal: ordinal) && (channels.Shape(ordinal: ordinal) != ChannelShape.Relative)) {
-                composition[ordinal] = values[ordinal];
-            }
-        }
-
-        return new PlayerIntent(Channels: composition);
-    }
     // Locate (or open) the accumulator for a body, keeping the array sorted ascending by body index. Bounded by the
     // guest's output capacity, so the insertion shift is over at most that many entries and never allocates.
     private static int Contribution(MountedAddon addon, int bodyIndex) {
@@ -57,7 +42,9 @@ public sealed partial class WorldAddonRuntime {
     // no occupying-seat ceiling to consult, unlike a genuinely untrusted (pooled) contributor. Recomputed here rather
     // than read back from the fold, because ApplyIntentSubmission's verdict answers Drive authority only.
     private bool ContributionAccepted(int bodyIndex, Principal principal, in ChannelValues values) {
+        if (m_server.Body(bodyIndex) is not { } body) { return false; }
         if (!m_server.Grants.TryGetChannelReach(
+            channels: body.Channels,
             principal: principal,
             subject: GrantSubject.Body(index: bodyIndex),
             mask: out var reach
@@ -86,21 +73,21 @@ public sealed partial class WorldAddonRuntime {
 
         return -1;
     }
-    // Fold one validated act into its body's accumulating channel vector, at the ordinal the guest's declared name
-    // resolved to at handshake — the WORLD table's ordinal, and therefore a PlayerIntent ordinal directly. Every
+    // Fold one validated act through the recipient's current mapping. Handshake ids are logical names, never
+    // PlayerIntent storage addresses. Every
     // channel is DECLARATIVE, this tick only: the host holds no channel state between ticks, so a channel a guest
     // stops emitting reads zero the very next tick, like a seat's own analog clear. The pump already refused a
     // duplicate ordinal within one batch as a protocol fault, so no act can overwrite another's channel here.
-    private void Fold(MountedAddon addon, int slot, in AddonActSubmission act) {
+    private void Fold(MountedAddon addon, int slot, in AddonActSubmission act, WorldChannelTable channels, int address) {
         ref var contribution = ref addon.Contributions[slot];
 
         // No hidden negation or axis remapping: the world channel's documented convention IS the wire convention.
         // The Rust guest is the one that must emit the correctly-signed value (see wasm/puck-addon-default) — the
         // old raw-stick negation lived here only because that guest used to speak raw stick space, not the intent's.
         if (act.Shape == AddonChannelValueShape.Relative) {
-            contribution.Values.SetRelative(ordinal: act.ChannelOrdinal, value: FixedQ3232.FromRawBits(value: act.Value));
+            contribution.Values.SetRelative(ordinal: address, value: channels.ClampRelative(address, act.Value));
         } else {
-            contribution.Values[act.ChannelOrdinal] = m_server.Population.Channels.Quantize(ordinal: act.ChannelOrdinal, value: FixedQ4816.FromRawBits(value: act.Value));
+            contribution.Values[address] = channels.Quantize(ordinal: address, value: FixedQ4816.FromRawBits(value: act.Value));
         }
     }
     // PUMP POINT 2, per addon. Two passes over the staged acts with the submissions between them: the first resolves
@@ -223,6 +210,10 @@ public sealed partial class WorldAddonRuntime {
                 }
 
                 var bodyIndex = subject.Value;
+                if (m_server.Body(bodyIndex) is not { } target || !target.Channels.TryGetOrdinal(act.ChannelName, out var address)) {
+                    QueueAnswer(addon: addon, ordinal: act.Ordinal, verdict: AddonVerdict.AttenuatedToEmpty);
+                    continue;
+                }
                 var slot = Contribution(
                     addon: addon,
                     bodyIndex: bodyIndex
@@ -231,6 +222,8 @@ public sealed partial class WorldAddonRuntime {
                 addon.ActBody[index] = bodyIndex;
                 Fold(
                     act: in act,
+                    channels: target.Channels,
+                    address: address,
                     addon: addon,
                     slot: slot
                 );
@@ -373,19 +366,6 @@ public sealed partial class WorldAddonRuntime {
         addon.FaultReported = true;
         Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Fault.Detail}]");
     }
-    // This tick's contribution restricted to the MOVEMENT-ROLE ordinals — the submitted intent's own convention (see
-    // SeatController.HeldIntent). Stack-only: ChannelValues is an InlineArray, so this allocates nothing.
-    private static PlayerIntent RoleChannels(ChannelValues values, WorldChannelTable channels) {
-        var roles = default(ChannelValues);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ++ordinal) {
-            if (channels.IsRole(ordinal: ordinal) || (channels.Shape(ordinal: ordinal) == ChannelShape.Relative)) {
-                roles[ordinal] = values[ordinal];
-            }
-        }
-
-        return new PlayerIntent(Channels: roles);
-    }
     // Insertion sort by (ordinal, part). The answers arrive as at most three already-ascending runs (act refusals, ask
     // answers, query parts), so this is near-linear in practice and never allocates; a stable order matters because a
     // pose's four parts must reach the guest in part order.
@@ -480,29 +460,28 @@ public sealed partial class WorldAddonRuntime {
             return;
         }
 
+        if (!m_server.Input.TryPublishSnapshot(addon.Principal, bodyIndex, "addon", new PlayerIntent(contribution.Values), tick,
+            out var inputOwner, out var input, out var inputReason)) {
+            contribution.Outcome = AddonVerdict.MalformedPayload;
+            Console.Error.WriteLine($"[input.refused: {inputReason}]");
+            return;
+        }
         var submission = new IntentSubmission(
             Tick: tick,
             EntityIndex: bodyIndex,
-            Intent: RoleChannels(
-                values: contribution.Values,
-                channels: m_server.Population.Channels
-            ),
+            Intent: input.Image,
             Principal: addon.Principal,
-            // The same split as SeatController: movement roles ride Intent; composition ordinals ride the held-device
-            // image. The held image overlays a tape-driven body, so a guest's press reaches it like a human's held
-            // button; WorldBody.Advance consumes it after one tick.
-            HeldChannels: CompositionChannels(
-                values: contribution.Values,
-                channels: m_server.Population.Channels
-            )
+            // The common admission derives the role and held folds from this semantic source image.
+            Input: input,
+            InputOwner: inputOwner
         );
         var verdict = m_server.ApplyIntentSubmission(
             body: body,
             submission: in submission
         );
 
-        if (!verdict.IsAllowed) {
-            contribution.Outcome = WorldAddonWire.FromRule(rule: verdict.Rule);
+        if (!verdict.IsAccepted) {
+            contribution.Outcome = verdict.InputRefusal is not null ? AddonVerdict.MalformedPayload : WorldAddonWire.FromRule(rule: verdict.Permission.Rule);
 
             return;
         }
@@ -558,6 +537,7 @@ public sealed partial class WorldAddonRuntime {
             var addon = m_mounted[index];
 
             if (addon.Instance.State != AddonState.Enabled) {
+                m_server.Input.CancelSnapshots(addon.Principal, "addon");
                 // FoldActs did not run this tick, so its own bottom-of-method latch reset did not run either — clear
                 // it here so a guest disabled or faulted between an exhaustion and its next FoldActs call does not
                 // carry an armed-but-orphaned latch into a later enable and swallow the next real exhaustion.
@@ -571,6 +551,7 @@ public sealed partial class WorldAddonRuntime {
                 addon: addon,
                 tick: tick
             );
+            m_server.Input.CompleteSnapshots(addon.Principal, "addon", tick);
         }
     }
     /// <summary>Resolves each guest's disclosures, world-event pushes, and queued asks/pose queries — pump point 3,

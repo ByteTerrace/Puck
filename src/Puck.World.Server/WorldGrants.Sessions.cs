@@ -16,6 +16,17 @@ public sealed partial class WorldGrants {
     // One past the highest ordinal a session ever took here: the bound a read over every live session walks.
     private int m_sessionOrdinalBound;
 
+    /// <summary>Allocates a local input producer's session identity without minting capabilities. Its input owner
+    /// records the actual actor, whose current grants are checked at every submission.</summary>
+    internal Principal AdmitInputControllerSession() {
+        var ordinal = 0;
+        while (m_sessions.ContainsKey(ordinal)) { ordinal++; }
+        var session = Principal.Session(ordinal, checked(m_sessionEpochs.GetValueOrDefault(ordinal) + 1));
+        // Derived from an already recorded producer/command, so replay derives this admission again as well.
+        ApplySessionAdmitted(new(session, [], []));
+        return session;
+    }
+
     // The verdict's rows that name a subject: the grants a session holds with no body.
     private static List<WorldGrant> BuildSessionGrants(Principal session, IReadOnlyList<WorldAdmissionGrant> templates) {
         var minted = new List<WorldGrant>(capacity: templates.Count);
@@ -308,6 +319,7 @@ public sealed partial class WorldGrants {
         ) &&
             (displaced.Principal != session)
         ) {
+            Host.Input.Reset(displaced.Principal);
             foreach (var row in Rows(principal: displaced.Principal)) {
                 Host.Revoke(
                     actor: Principal.Console,
@@ -339,6 +351,8 @@ public sealed partial class WorldGrants {
     internal void ApplySessionEmbodied(WorldServerEvent.SessionEmbodied embodied) {
         var entry = m_sessions[embodied.Session.Index];
 
+        if (entry.BodyIndex != embodied.BodyIndex || entry.BodyGeneration != embodied.BodyGeneration) { Host.Input.Reset(embodied.Session); }
+
         entry.BodyIndex = embodied.BodyIndex;
         entry.BodyGeneration = embodied.BodyGeneration;
 
@@ -352,6 +366,7 @@ public sealed partial class WorldGrants {
     /// <summary>Applies an ended session: revokes its rows and forgets it, keeping its epoch retired.</summary>
     /// <param name="ended">The event.</param>
     internal void ApplySessionEnded(WorldServerEvent.SessionEnded ended) {
+        Host.Input.Reset(ended.Session);
         foreach (var grant in ended.RevokedGrants) {
             Host.Revoke(
                 actor: Principal.Console,
@@ -409,12 +424,26 @@ public sealed partial class WorldGrants {
 
         var entry = m_sessions[submission.Principal.Index];
 
-        entry.Input = submission.Intent;
+        var image = submission.Intent;
+        WorldInputOwner? owner = null;
+        if (submission.Input is { } batch) {
+            if (!Host.Input.TryAdmit(submission.Principal, batch, out var reason, -1)) {
+                Host.Output.Narrate(channel: "input.refused", text: reason);
+                return false;
+            }
+            _ = Host.Input.TryGet(submission.Principal, out owner);
+            image = owner!.Image;
+        } else if (Host.Input.TryGet(submission.Principal, out _)) {
+            Host.Output.Narrate(channel: "input.refused", text: "input.owner: an admitted session must submit its current epoch and source image");
+            return false;
+        }
+
+        entry.Input = image;
 
         var strengthened = false;
 
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            var value = submission.Intent[ordinal];
+            var value = image[ordinal];
 
             if (FixedQ4816.Abs(value: value) > FixedQ4816.Abs(value: entry.PressedSince[ordinal])) {
                 entry.PressedSince[ordinal] = value;
@@ -423,10 +452,28 @@ public sealed partial class WorldGrants {
         }
 
         if (strengthened) {
-            entry.PressedRay = submission.Intent.SourceRay;
+            entry.PressedRay = image.SourceRay;
+        }
+
+        if (owner is not null && submission.Input is { } accepted) {
+            foreach (var inputEvent in accepted.Events.Span) {
+                if (inputEvent.Kind != WorldInputEventKind.Press) { continue; }
+                var address = owner.Mapping.Address(inputEvent.Channel);
+                if (address < 0) { continue; }
+                entry.PressedSince[address] = FixedQ4816.One;
+                entry.PressedRay = image.SourceRay;
+            }
         }
 
         return true;
+    }
+    /// <summary>Installs an epoch barrier in the session pointer readers as well as its timed input owner.</summary>
+    internal void InstallSessionInputBarrier(Principal principal, PlayerIntent image) {
+        if (!IsLiveSession(principal)) { return; }
+        var entry = m_sessions[principal.Index];
+        entry.Input = image;
+        entry.PressedSince = default;
+        entry.PressedRay = null;
     }
     /// <summary>Clears every session's kept presses once a step's rules have read them; the current input stays.</summary>
     internal void SettleSessionPresses() {
@@ -463,7 +510,7 @@ public sealed partial class WorldGrants {
     /// <summary>Reads a live session's channel this step: its current value, or the stronger press it made since the
     /// last step, whichever has the larger magnitude.</summary>
     /// <param name="ordinal">The session ordinal.</param>
-    /// <param name="channel">The channel ordinal.</param>
+    /// <param name="channel">The logical channel id.</param>
     /// <returns>The channel's value, or zero when no live session holds the ordinal.</returns>
     public FixedQ4816 ReadSessionChannel(int ordinal, int channel) {
         if (!m_sessions.TryGetValue(
@@ -473,8 +520,13 @@ public sealed partial class WorldGrants {
             return FixedQ4816.Zero;
         }
 
-        var current = entry.Input[channel];
-        var pressed = entry.PressedSince[channel];
+        var mapping = Host.Input.TryGet(entry.Principal, out var input)
+            ? input!.Mapping : Host.Population.InputCatalog.DefaultMapping;
+        var address = mapping.Address(channel);
+        if (address < 0) { return FixedQ4816.Zero; }
+        Host.Input.ObserveHeld(entry.Principal, (ushort)channel);
+        var current = input is null ? entry.Input[address] : input.Image[address];
+        var pressed = entry.PressedSince[address];
 
         return ((FixedQ4816.Abs(value: pressed) > FixedQ4816.Abs(value: current))
             ? pressed
@@ -485,6 +537,7 @@ public sealed partial class WorldGrants {
     /// template survives it. Their epochs stay retired, so a screen observing through one admits a new session under
     /// the candidate's policy.</summary>
     internal void EndSessionsForRebuild() {
+        foreach (var session in m_sessions.Values) { Host.Input.Reset(session.Principal); }
         m_sessions.Clear();
         Host.DetachSessionSinks();
     }

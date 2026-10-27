@@ -292,6 +292,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
+    private WorldInputPublication[] m_inputDisclosure = [];
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (!Discloses()) {
             return;
@@ -336,7 +337,10 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
                 }
             }
 
-            redacted = redacted with { FieldCells = m_stateDisclosure.Filter(server, observation.Session, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)) };
+            redacted = redacted with {
+                FieldCells = m_stateDisclosure.Filter(server, observation.Session, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
+            };
             inner.DeliverSnapshot(snapshot: in redacted);
             FollowObserverDetach();
         } catch (Exception exception) {

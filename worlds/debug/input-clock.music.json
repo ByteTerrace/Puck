@@ -1,0 +1,16 @@
+{
+  "schema": "puck.music.v1",
+  "name": "input-clock",
+  "tempo": {
+    "beatsPerBar": 4,
+    "ticksPerBeat": 840
+  },
+  "segments": [
+    {
+      "id": "phrase",
+      "transitions": [],
+      "layers": null,
+      "embellishments": null
+    }
+  ]
+}

@@ -12,7 +12,6 @@ public sealed class PlayerSignalSourceLawTests {
     public void AnUnknownSourceIsRefusedByName() {
         // The refusal precedes every dependency the verb would use, so none is supplied.
         var registry = new CommandRegistry(modules: [new WorldBindingCommandModule(
-            clock: null!,
             link: null!,
             ownedWorlds: null!,
             registry: null!,

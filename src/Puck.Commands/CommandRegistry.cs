@@ -409,7 +409,12 @@ public sealed partial class CommandRegistry {
     // Applies one snapshot entry. Extracted from ApplySnapshot's loop so the loop is nothing but the per-entry
     // exception boundary and the barrier release — a body inline there would invite a future `continue` to skip past
     // one or the other, which is the exact defect the boundary exists to close.
-    private void ApplyEntry(in CommandEntry entry, int slot) {
+    private void ApplyEntry(in CommandEntry entry, int slot, in CommandSnapshot snapshot) {
+        if (entry.CommittedText is { } committed) {
+            TextCommitted?.Invoke(new(entry.Principal, slot, committed, snapshot.Tick, entry.CaptureTick,
+                entry.Activation, snapshot.CaptureWindowStart, snapshot.CaptureWindowEnd, entry.SimulationOffset));
+            return;
+        }
         // A submitted text entry is routed FIRST — before the defensive id-range check below, which would otherwise
         // fall through to the bound-entry path with an id that indexes nothing.
         //
@@ -464,7 +469,11 @@ public sealed partial class CommandRegistry {
             source: entry.Source,
             text: null,
             value: entry.Value
-        );
+        ) {
+            CaptureTick = entry.CaptureTick, Activation = entry.Activation,
+            SimulationOffset = entry.SimulationOffset,
+            CaptureWindowStart = snapshot.CaptureWindowStart, CaptureWindowEnd = snapshot.CaptureWindowEnd,
+        };
 
         // One entry's handler must not decide whether the REST of the tick runs: Dispatch converts an escaped
         // exception into an error result observers see, and a fault is counted here so it reaches wire.errors
@@ -1566,7 +1575,8 @@ public sealed partial class CommandRegistry {
                 try {
                     ApplyEntry(
                         entry: in entry,
-                        slot: lane.Slot
+                        slot: lane.Slot,
+                        snapshot: in snapshot
                     );
                 } catch (Exception exception) when (IsContainable(exception: exception)) {
                     NoteRejection();
@@ -1595,6 +1605,8 @@ public sealed partial class CommandRegistry {
             }
         }
     }
+    /// <summary>Ordered committed text, after router provenance validation and before the next captured entry.</summary>
+    public event Action<CommittedTextInput>? TextCommitted;
     /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
     /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
     /// never disagree about where a command sits.</summary>

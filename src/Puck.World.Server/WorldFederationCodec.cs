@@ -625,6 +625,9 @@ public static partial class WorldFederationCodec {
     /// <param name="submission">The intent image.</param>
     /// <returns>The encoded leaf.</returns>
     public static byte[] EncodeIntent(string sourceAuthority, in WorldMobilityIdentity mobility, in IntentSubmission submission) {
+        if (submission.InputOwner is { } owner && owner != submission.Principal) {
+            throw new ArgumentException("a local controller session cannot cross an authority; admit its producer at the destination", nameof(submission));
+        }
         var writer = new WireWriter(capacity: 1024);
 
         writer.WriteString(value: sourceAuthority);
@@ -643,6 +646,8 @@ public static partial class WorldFederationCodec {
             intent: submission.HeldChannels,
             writer: writer
         );
+        writer.WriteBoolean(submission.Input.HasValue);
+        if (submission.Input is { } input && !WorldWireCodec.TryWriteInputBatch(writer, input)) { throw new ArgumentException("invalid timed input batch", nameof(submission)); }
 
         return writer.ToArray();
     }
@@ -856,6 +861,7 @@ public static partial class WorldFederationCodec {
         }
 
         writer.WriteUInt64(value: snapshot.EngineTick);
+        if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException("snapshot input publication exceeds wire bounds", nameof(snapshot)); }
 
         return writer.ToArray();
     }
@@ -1225,6 +1231,7 @@ public static partial class WorldFederationCodec {
         var measured = reader.ReadInt32();
         var intent = WorldWireCodec.ReadIntent(reader: ref reader);
         var held = WorldWireCodec.ReadIntent(reader: ref reader);
+        var input = reader.ReadBoolean() ? WorldWireCodec.ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue) : (WorldInputBatch?)null;
 
         submission = new IntentSubmission(
             tick,
@@ -1232,7 +1239,8 @@ public static partial class WorldFederationCodec {
             intent,
             Principal.Console,
             held,
-            measured
+            measured,
+            input
         );
 
         return Finish(
@@ -1598,10 +1606,12 @@ public static partial class WorldFederationCodec {
         }
 
         var engineTick = reader.ReadUInt64();
+        var inputs = WorldWireCodec.ReadInputPublications(ref reader);
 
         snapshot = new WorldSnapshot(
             Authority: authority,
             EngineTick: engineTick,
+            Inputs: inputs,
             Entries: entries,
             FieldCells: deltas,
             FieldsFull: fieldsFull,

@@ -207,11 +207,11 @@ public readonly record struct FixedWorldKit(
             _ => throw new InvalidOperationException(message: $"Unknown action-state envelope '{state.Envelope.GetType().Name}'."),
         };
     }
-    private static void RequireProgramRoles(string kitName, CompiledBodyMotionProgram program, RoleChannelOrdinals ordinals) {
+    private static void RequireProgramRoles(string kitName, CompiledBodyMotionProgram program, WorldChannelTable channels) {
         foreach (var role in Enum.GetValues<ChannelRole>()) {
             if (
                 program.RequiresRole(role: role) &&
-                (ordinals[role] < 0)
+                !channels.DeclaresRole(role)
             ) {
                 throw new InvalidOperationException(message: $"Kit '{kitName}' body motion program '{program.Name}' requires channel role '{role}', but no declared channel claims it.");
             }
@@ -315,7 +315,7 @@ public readonly record struct FixedWorldKit(
         RequireProgramRoles(
             kitName: kit.Name,
             program: program,
-            ordinals: roleOrdinals
+            channels: channels
         );
 
         var collider = FixedWorldCollider.Compile(

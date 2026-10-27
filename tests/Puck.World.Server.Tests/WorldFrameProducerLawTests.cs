@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Commands;
 using Puck.World.Protocol;
 
 using Xunit;
@@ -45,7 +46,8 @@ public sealed class WorldFrameProducerLawTests {
         ),
         };
 
-        using var fixture = Fixtures.FreshServer(definition: document with { KitRowsRaw = [kit], PopulationRaw = population });
+        var definition = document with { KitRowsRaw = [kit], PopulationRaw = population };
+        using var fixture = Fixtures.FreshServer(definition: definition);
 
         Assert.Equal(
             expected: 1,
@@ -75,5 +77,23 @@ public sealed class WorldFrameProducerLawTests {
             expected: start,
             actual: body.FixedHome
         );
+        var participant = Assert.Single(fixture.Server.Input.Capture().Owners);
+        Assert.Equal(Principal.World, participant.Controller!.Value.Actor);
+        Assert.Equal("roam", participant.Controller.Value.Source);
+        Assert.Equal(PrincipalKind.Session, participant.Principal.Kind);
+        Assert.Contains(participant.Input.History, record => record.Event.Kind == WorldInputEventKind.AxisSample);
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(WorldAuthorityCheckpointCodec.Encode(checkpoint!), out var decoded, out reason), reason);
+        using var restored = Fixtures.FreshServer(definition);
+        restored.Server.RestoreCheckpoint(decoded!);
+        fixture.Step();
+        restored.Step();
+        var sampledTick = fixture.Server.Input.Interval.Tick;
+        Assert.Equal(WorldStateHashComposition.HashAuthoritative(fixture.Server, sampledTick),
+            WorldStateHashComposition.HashAuthoritative(restored.Server, sampledTick));
+        body.SetIntentSource(IntentSource.Idle);
+        fixture.Step();
+        Assert.True(fixture.Server.Input.TryGet(participant.Principal, out var input));
+        Assert.Equal(default, input!.Image);
     }
 }

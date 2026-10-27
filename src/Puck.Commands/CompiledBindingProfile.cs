@@ -1,7 +1,11 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Globalization;
 
 namespace Puck.Commands;
+
+/// <summary>A bounded binding source and destination contract, independent of the currently visible page.</summary>
+public readonly record struct BindingSourceContract(string Source, string Command, BindingEntryMode Mode, bool Relative, string Semantics = "");
 
 /// <summary>
 /// The runtime form of a validated <see cref="BindingProfileDocument"/>: the compiled chord rows (page tables,
@@ -281,6 +285,46 @@ public sealed class CompiledBindingProfile {
         m_rows = rows;
         m_wheelViewByRow = wheelViewByRow.ToFrozenDictionary();
         ActivatorCount = activatorCount;
+        var sourceContracts = new HashSet<BindingSourceContract>();
+        foreach (var row in rows) {
+            var scope = Part(groups[row.GroupIndex]) + Part(string.Concat(row.Held.Select(index => Modifier(modifiers[index])).Order(StringComparer.Ordinal))) +
+                Part(string.Concat(row.Chord.Select(index => Modifier(modifiers[index]))));
+            if (row.Table is { } table) {
+                foreach (var (source, bindings) in table) {
+                    foreach (var binding in bindings) {
+                        if (binding.ChannelScale is null) { continue; }
+                        sourceContracts.Add(new(binding.Mode == BindingEntryMode.Toggle ? BindingSourceIdentity.ForCommand(binding.Command, binding.Mode) : source,
+                            binding.Command, binding.Mode, binding.Relative, scope + Part(source) + string.Create(CultureInfo.InvariantCulture,
+                                $"{BitConverter.SingleToInt32Bits(binding.ChannelScale.Value)}:{(int?)binding.Component}:{(int?)binding.ActivateOn}:{Value(binding.Value)}")));
+                    }
+                }
+            }
+            if (row.Command is { } command && (command.Reassertable || command.Mode == BindingEntryMode.Toggle)) {
+                sourceContracts.Add(new(command.Source, command.Command, command.Mode, false, scope + Edge(command)));
+            }
+            foreach (var activator in row.Activators ?? []) {
+                var edge = activator.Edge;
+                if (edge.Reassertable || edge.Mode == BindingEntryMode.Toggle) {
+                    sourceContracts.Add(new(edge.Source, edge.Command, edge.Mode, false, scope + Edge(edge) +
+                        Part(string.Concat(activator.Activator.Sequence.Select(Part))) + string.Create(CultureInfo.InvariantCulture,
+                            $"{(int)activator.Activator.Mode}:{activator.Activator.TimeoutTicks}")));
+                }
+            }
+        }
+        Sources = sourceContracts.GroupBy(static row => (row.Source, row.Command, row.Mode, row.Relative))
+            .Select(static group => new BindingSourceContract(group.Key.Source, group.Key.Command, group.Key.Mode, group.Key.Relative,
+                string.Concat(group.Select(static row => row.Semantics).Order(StringComparer.Ordinal).Select(Part))))
+            .OrderBy(static row => row.Source, StringComparer.Ordinal).ThenBy(static row => row.Command, StringComparer.Ordinal)
+            .ThenBy(static row => row.Mode).ThenBy(static row => row.Relative).ToImmutableArray();
+
+        static string Part(string value) => value.Length.ToString(CultureInfo.InvariantCulture) + ":" + value;
+        static string Modifier(BindingModifierDefinition modifier) => Part(modifier.Id) +
+            Part(string.Concat(modifier.Sources.Order(StringComparer.Ordinal).Select(Part))) + string.Create(CultureInfo.InvariantCulture,
+                $"{BitConverter.SingleToInt32Bits(modifier.PressThreshold)}:{BitConverter.SingleToInt32Bits(modifier.ReleaseThreshold)}:");
+        static string Value(CommandValue? value) => value is { } v ? string.Create(CultureInfo.InvariantCulture,
+            $"{(int)v.Kind}:{BitConverter.SingleToInt32Bits(v.Raw.X)}:{BitConverter.SingleToInt32Bits(v.Raw.Y)}:{BitConverter.SingleToInt32Bits(v.Raw.Z)}:{BitConverter.SingleToInt32Bits(v.Raw.W)}") : "none";
+        static string Edge(CompiledCommandEdge edge) => string.Create(CultureInfo.InvariantCulture,
+            $"{edge.DispatchRelease}:{edge.Reassertable}:{edge.PassThrough}:") + Part(Value(edge.PressValue)) + Part(Value(edge.ReleaseValue)) + Part(edge.Text ?? "");
 
         // A page id is profile-unique by authoring contract (BindingPageDefinition.Id), so one flat table covers
         // every group; a row with no page meaning (a bare command/channel row) contributes nothing. Ordinal, because
@@ -299,6 +343,8 @@ public sealed class CompiledBindingProfile {
     /// <summary>Gets the total number of row activators declared across every page in this profile — the size a
     /// slot's lazily-populated <see cref="RowActivatorTracker"/> array is allocated to.</summary>
     public int ActivatorCount { get; }
+    /// <summary>All semantic channel sources admitted by this profile, including inactive pages and destination-owned toggles.</summary>
+    public IReadOnlyList<BindingSourceContract> Sources { get; }
     /// <summary>Gets the index of the default group — the first chord row's group, the group a fresh slot resolves in.</summary>
     public int DefaultGroupIndex => 0;
     /// <summary>Gets the group names, in first-declared order (index 0 is the default group).</summary>

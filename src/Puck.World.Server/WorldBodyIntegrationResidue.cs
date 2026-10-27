@@ -75,6 +75,7 @@ namespace Puck.World.Server;
 /// checkpoint interrupted mid-run.</param>
 /// <param name="RigidObstructionMissStreak">The obstruction-channel contact's consecutive-miss run, on the same
 /// terms as <paramref name="RigidGroundMissStreak"/>.</param>
+/// <param name="Input">Exact pending publications, applied read-back and input-bank identity.</param>
 /// <param name="Carrying">The population index of the body this one is carrying, or <c>-1</c>.</param>
 /// <param name="CarriedBy">The population index of the body carrying this one, or <c>-1</c>.</param>
 public readonly record struct WorldBodyIntegrationResidue(
@@ -90,6 +91,7 @@ public readonly record struct WorldBodyIntegrationResidue(
     bool Grounded,
     bool Engaged,
     PlayerIntent EngagedIntent,
+    WorldBodyInputState Input,
     bool OrdinaryAdvanceAdmitted,
     ulong? ContinuumConsumedThroughEngineTick,
     int AffectingSubject,

@@ -45,7 +45,8 @@ public sealed partial class WorldPopulation {
             );
         }
         m_bodyMotionPrograms = programs;
-        m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        InputCatalog = WorldInputCatalog.For(definition);
+        m_channels = InputCatalog.DefaultMapping.Channels;
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
         m_bodyContactPolicy = definition.Collision.BodyContacts;
@@ -61,12 +62,18 @@ public sealed partial class WorldPopulation {
         m_curveRows = definition.Curves;
         m_curves = WorldCurveTable.Compile(curves: definition.Curves);
         m_navigationTable = WorldNavigationDomainTable.Compile(domains: definition.Navigation.Rows);
-        m_kits = new FixedWorldKit[definition.Kits.Count];
-
-        for (var kit = 0; (kit < m_kits.Length); kit++) {
-            m_kits[kit] = FixedWorldKit.Compile(
+        m_inputKits = new FixedWorldKit[InputCatalog.Mappings.Length][];
+        var mappedKits = new Dictionary<WorldChannelTable, FixedWorldKit[]>();
+        foreach (var mapping in InputCatalog.Mappings) {
+            if (mappedKits.TryGetValue(mapping.Channels, out var existing)) {
+                m_inputKits[mapping.Id] = existing;
+                continue;
+            }
+            var kits = new FixedWorldKit[definition.Kits.Count];
+            for (var kit = 0; kit < kits.Length; kit++) {
+                kits[kit] = FixedWorldKit.Compile(
                 kit: definition.Kits[kit],
-                channels: m_channels,
+                channels: mapping.Channels,
                 targets: m_targets,
                 curves: m_curves,
                 navigation: m_navigationTable,
@@ -78,7 +85,11 @@ public sealed partial class WorldPopulation {
                 dynamics: definition.Dynamics,
                 simulationRateHz: definition.SimulationRateHz
             );
+            }
+            mappedKits.Add(mapping.Channels, kits);
+            m_inputKits[mapping.Id] = kits;
         }
+        m_kits = m_inputKits[InputCatalog.DefaultMapping.Id];
 
 
         CompileFlocks();

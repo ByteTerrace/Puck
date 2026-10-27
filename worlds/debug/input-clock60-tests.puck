@@ -1,0 +1,20 @@
+schema: "puck.world.definition.v1"
+basis: "input-clock-fixture"
+documentId: "input-clock60-tests"
+simulation {
+  rateHz: 60
+}
+test "60 Hz judges opposite sides of a half-millisecond beat window" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.00048828125
+    seat1: player.signal keyboard.i press at:0.0005035400390625
+    ticks 3
+  }
+  expect {
+    hits == 1
+    misses == 1
+    insideError == 0.00048828125
+    outsideError == 0.0005035400390625
+  }
+}

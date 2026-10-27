@@ -20,6 +20,8 @@ public enum WorldStateHashScope : byte {
 /// <summary>One named component of the world hash composition. A scope is an ordered list of these and nothing
 /// else, so what a hash covers moves only by a deliberate edit to that list.</summary>
 public enum WorldStateHashComponent : byte {
+    /// <summary>Input epochs, semantic sources, continuation, retained events and their exact interval coordinates.</summary>
+    Input,
     /// <summary>The scope's own domain separator.</summary>
     Seed,
     /// <summary>The simulation tick the scope was asked for.</summary>
@@ -88,6 +90,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.BoardEnforcement,
         WorldStateHashComponent.BodyActionState,
         WorldStateHashComponent.BodyContinuation,
+        WorldStateHashComponent.Input,
         WorldStateHashComponent.Navigation,
         WorldStateHashComponent.Flock,
         WorldStateHashComponent.Search,
@@ -125,6 +128,7 @@ public static partial class WorldStateHashComposition {
     /// <returns>The owner's name.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The component names no owner.</exception>
     public static string Owner(WorldStateHashComponent component) => (component switch {
+        WorldStateHashComponent.Input => "Puck.World.Server.WorldInputRuntime",
         WorldStateHashComponent.Arena => "Puck.State.StateArena",
         WorldStateHashComponent.BoardEnforcement => "Puck.World.Server.WorldServer.BoardEnforcement",
         WorldStateHashComponent.BodyActionState => "Puck.World.Server.WorldBody.ActionState",

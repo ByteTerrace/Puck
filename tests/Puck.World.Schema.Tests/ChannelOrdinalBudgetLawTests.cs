@@ -38,7 +38,11 @@ public sealed class ChannelOrdinalBudgetLawTests {
 
         Assert.Equal(FixedQ4816.One, intent[last]);
         Assert.Equal(-FixedQ4816.One, intent[axis]);
-        Assert.Equal((1UL << 63), intent.Channels.Buttons);
+        foreach (var channel in document.Channels.Where(static row => row.Shape == ChannelShape.Binary)) {
+            Assert.True(table.TryGetOrdinal(channel.Name, out var button));
+            intent = intent.WithChannel(button, FixedQ4816.One);
+        }
+        Assert.Equal(ulong.MaxValue, intent.Channels.Buttons);
         var reach = new ChannelReachMask(default(ChannelMask).With(ordinal: last)).WithRegister(index: 63);
 
         Assert.True(condition: reach.Contains(ordinal: last));

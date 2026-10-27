@@ -218,6 +218,18 @@ public sealed class WorldInputHoldRuntime {
 
         m_maximumSetter = -1;
     }
+    /// <summary>Discards delayed samples from the old epoch and seeds only the authority's continuing baseline.</summary>
+    public void InstallBarrier(int bodyIndex, PlayerIntent accepted, WorldChannelTable channels) {
+        if ((uint)bodyIndex >= (uint)m_participants.Length || !m_participants[bodyIndex].Active) { return; }
+        var movement = accepted with { Channels = default };
+        var held = default(PlayerIntent);
+        for (var address = 0; address < ChannelLimits.MaxChannels; address++) {
+            if (!channels.IsDeclared(address) || channels.Shape(address) == ChannelShape.Relative) { continue; }
+            if (channels.IsRole(address)) { movement = movement.WithChannel(address, accepted[address]); }
+            else { held = held.WithChannel(address, accepted[address]); }
+        }
+        m_participants[bodyIndex].InstallBaseline(new(true, movement, held), m_settings.CeilingTicks);
+    }
     /// <summary>Restores every participant slot's live hold state from a previously captured checkpoint.</summary>
     public void Restore(WorldInputHoldCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
@@ -325,6 +337,12 @@ public sealed class WorldInputHoldRuntime {
             m_lowerStableTicks = 0;
             m_history.Clear();
             m_historyStart = 0;
+        }
+        public void InstallBaseline(WorldSubmittedInput baseline, int ceilingTicks) {
+            m_history.Clear();
+            m_historyStart = 0;
+            m_history.EnsureCapacity(checked(ceilingTicks + 1));
+            for (var index = 0; index <= ceilingTicks; index++) { m_history.Add(baseline); }
         }
         public void Restore(WorldInputHoldParticipantCheckpoint checkpoint) {
             Active = checkpoint.Active;

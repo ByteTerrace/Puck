@@ -190,6 +190,7 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertStateCell m => $"UpsertStateCell '{m.Row}'.'{m.Key}'",
         WorldMutation.RemoveStateCell m => $"RemoveStateCell '{m.Row}'.'{m.Key}'",
         WorldMutation.SetInputHold => "SetInputHold",
+        WorldMutation.SetInputModes => "SetInputModes",
         WorldMutation.Generate m => $"Generate '{m.Row}'",
         WorldMutation.UpsertWorldRule m => $"UpsertWorldRule '{m.Rule.Name}'",
         WorldMutation.RemoveWorldRule m => $"RemoveWorldRule '{m.Name}'",

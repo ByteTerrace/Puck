@@ -4,10 +4,8 @@ namespace Puck.Commands;
 // destination one deterministic source instead: different destinations release independently, while every binding
 // that toggles the same destination addresses the same input-side latch and the same downstream contribution.
 internal static class BindingSourceIdentity {
-    private const string SynthesizedPrefix = "$binding:";
-
-    internal static string ForCommand(string command) => string.Concat(
-        str0: SynthesizedPrefix,
+    internal static string ForCommand(string command, BindingEntryMode mode) => string.Concat(
+        str0: mode == BindingEntryMode.Toggle ? "$toggle:" : "$binding:",
         str1: command
     );
 }

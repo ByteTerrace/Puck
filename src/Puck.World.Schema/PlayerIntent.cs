@@ -38,6 +38,9 @@ public enum ChannelShape : byte {
 
     /// <summary>A Q32.32 displacement accumulated since the preceding input submission, consumed once.</summary>
     Relative,
+
+    /// <summary>Ordered Unicode scalar events with no held value or numeric/button storage.</summary>
+    Text,
 }
 /// <summary>The inline numeric bank; copying it allocates nothing.</summary>
 [InlineArray(ChannelLimits.MaxAxes)]

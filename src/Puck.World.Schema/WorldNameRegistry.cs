@@ -1324,6 +1324,19 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        // Input vocabulary is shared by the composed world, like channels and seat-mode families. These are not
+        // module-private state rows: selectors, binding profiles and history refer to the same semantic names.
+        new(typeof(WorldInputModeFamily), nameof(WorldInputModeFamily.Name), "a composed-world input mode family"),
+        new(typeof(WorldInputModeSelector), nameof(WorldInputModeSelector.Name), "a body register or shared seat-mode family selected by the selector kind"),
+        new(typeof(WorldInputModeState), nameof(WorldInputModeState.Name), "a state token local to its input mode family"),
+        new(typeof(WorldInputModeSuppression), nameof(WorldInputModeSuppression.Family), "a composed-world input mode family"),
+        new(typeof(WorldInputModeTransition), nameof(WorldInputModeTransition.From), "a state token local to its input mode family"),
+        new(typeof(WorldInputModeTransition), nameof(WorldInputModeTransition.To), "a state token local to its input mode family"),
+        new(typeof(WorldInputCrossing), nameof(WorldInputCrossing.Name), "a shared semantic crossing in the world's input history"),
+        new(typeof(WorldInputCrossing), nameof(WorldInputCrossing.FacingState), "a per-body counter name in the body-state lane's namespace"),
+        new(typeof(WorldInputPattern), nameof(WorldInputPattern.Name), "a shared semantic input-pattern name"),
+        new(typeof(WorldInputPattern), nameof(WorldInputPattern.Held), "shared logical input channel names"),
+        new(typeof(WorldEffect.ConsumeInput), nameof(WorldEffect.ConsumeInput.Pattern), "a shared semantic input-pattern name"),
         new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
         new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),

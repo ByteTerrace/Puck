@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Puck.Commands;
 using Puck.Input;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -25,7 +26,7 @@ namespace Puck.World;
 /// streams (Puck.World is not determinism-gated). <c>player.bind</c>/<c>player.signal</c>/<c>identity.bindings.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
-public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, IInputClock clock, WorldServer server, WorldOwnedWorlds ownedWorlds) : ICommandModule {
+public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, WorldServer server, WorldOwnedWorlds ownedWorlds) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly IServerLink m_link = link;
@@ -37,7 +38,6 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
     // The raw window-input fan-out a synthesized mouse control enters through, ahead of the router — lazy for the
     // same cycle (its console sink reaches the registry), and null on a headless boot, which has no window.
     private readonly Func<WorldWindowInputObservers?> m_windowObservers = windowObservers;
-    private readonly IInputClock m_clock = clock;
     private readonly WorldOwnedWorlds m_ownedWorlds = ownedWorlds;
     // The boot instance, whose installed document's channels world.affordances echoes alongside the command manifest
     // — the second vocabulary a binding destination may name, read live so a load or reload is reflected at once.
@@ -639,7 +639,16 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         return new CommandResult(Output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} → world:{profile.Id}]");
     }
     private CommandResult SignalHandler(CommandContext context, WireArgs args) {
-        if (args.Count is not (2 or 3)) {
+        var count = args.Count;
+        FixedQ4816? offset = null;
+        if (count > 2 && args[count - 1].StartsWith("at:", StringComparison.Ordinal)) {
+            if (!decimal.TryParse(args[count - 1][3..], NumberStyles.Number, CultureInfo.InvariantCulture, out var seconds) || seconds < 0 || seconds > 1) {
+                return CommandResult.Error("[player.signal: at:<seconds> requires a nonnegative sub-tick offset no greater than one second]");
+            }
+            offset = FixedQ4816.Parse(seconds.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+            count--;
+        }
+        if (count is not (2 or 3)) {
             return CommandResult.Error(output: "[player.signal: expected <source> <press|release|value> or <source> <x> <y>]");
         }
 
@@ -647,6 +656,14 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
 
         if (string.IsNullOrWhiteSpace(value: source)) {
             return CommandResult.Error(output: "[player.signal: <source> must be non-empty]");
+        }
+
+        if (source == InputSources.Keyboard.Text) {
+            if (count != 2) { return CommandResult.Error("[player.signal: keyboard.text takes one quoted committed text payload and optional at:<seconds>]"); }
+            m_router().Capture(InputSignal.Typed(source, args[1].ToString(), captureTick: InputRouter.EarliestCaptureTick) with {
+                Slot = context.Slot, SimulationOffset = offset,
+            });
+            return new CommandResult(Output: $"[player.signal: p{PlayerRoster.DisplayNumber(context.Slot)} {source} committed]");
         }
 
         // No binding can name an unknown source (the document validator refuses one), so a signal on it would echo as
@@ -662,7 +679,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         // 800-pixel drag into a one-pixel one.
         var relative = InputSourceVocabulary.IsRelative(sourceId: source);
 
-        if (args.Count == 3) {
+        if (count == 3) {
             if (
                 !args.TryFloat(
                 index: 1,
@@ -717,7 +734,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
             return CommandResult.Error(output: "[player.signal: the second value must be press, release, or a number]");
         }
 
-        var captureTick = m_clock.NowTicks;
+        var captureTick = InputRouter.EarliestCaptureTick;
         // The signal addresses the issuing lane directly rather than resolving one from its device: every synthesized
         // signal shares the default device id, and the roster's seating policy places a device on the first seat with
         // no device of its kind, which is not the issuing seat once a physical device of that kind sits there.
@@ -743,6 +760,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
             m_router().Capture(signal: WindowInputMapper.ToInputSignal(inputEvent: in inputEvent) with {
                 CaptureTick = captureTick,
                 Slot = slot,
+                SimulationOffset = offset,
             });
         } else {
             m_router().Capture(signal: new InputSignal(
@@ -752,10 +770,10 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
                 Slot: slot,
                 Source: source,
                 Value: value
-            ));
+            ) { SimulationOffset = offset });
         }
 
-        var describedSample = ((args.Count == 3)
+        var describedSample = ((count == 3)
             ? $"{args[1].ToString().ToLowerInvariant()} {args[2].ToString().ToLowerInvariant()}"
             : args[1].ToString().ToLowerInvariant()
         );

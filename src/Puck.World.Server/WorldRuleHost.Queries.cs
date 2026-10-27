@@ -266,7 +266,11 @@ public sealed partial class WorldRuleHost {
             return FixedQ4816.Zero;
         }
 
-        return (Host.Body(index: seat)?.ReadChannelScalar(ordinal: ordinal) ?? FixedQ4816.Zero);
+        var catalog = Host.Population.InputCatalog;
+        if ((uint)ordinal < (uint)catalog.Channels.Length) { Host.Input.ObserveBodyChannel(seat, (ushort)ordinal); }
+        return (Host.Body(index: seat) is { } body && (uint)ordinal < (uint)catalog.Channels.Length &&
+            body.Channels.TryGetOrdinal(catalog.Channels[ordinal].Name, out var address))
+            ? body.ReadChannelScalar(address) : FixedQ4816.Zero;
     }
     // $pointer: — the local seat's pointer ray as its body integrated it that tick, under the occupancy convention
     // ReadChannelValue sets: an out-of-range or unoccupied seat carries no ray.

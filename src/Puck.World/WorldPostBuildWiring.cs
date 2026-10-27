@@ -67,6 +67,8 @@ public static class WorldPostBuildWiring {
         }
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
+        consoleRegistry.TextCommitted += services.GetRequiredService<WorldClient>().ObserveText;
+        services.GetRequiredService<WorldClient>().UseInputRouter(services.GetRequiredService<InputRouter>());
 
         try {
             services.GetRequiredService<WorldServiceExtensions>().Initialize();

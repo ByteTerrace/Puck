@@ -688,6 +688,7 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
+                Input: Host.Input.Capture(),
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 Arena: Host.Arena.CaptureSnapshot(),
                 DefinitionJson: definitionJson,
@@ -698,6 +699,7 @@ public sealed partial class WorldPersistence {
                 LastCompletedEngineTicks: Host.Tick.CompletedEngineTicks,
                 LastStepTicks: Host.Tick.LastStepTicks,
                 Intents: [.. Host.Tick.Intents],
+                RoutedInputs: [.. Host.Tick.RoutedInputs],
                 Pending: [],
                 Decisions: Decisions.Capture(),
                 MachineBindings: Host.CaptureMachineBindings(),
@@ -809,6 +811,7 @@ public sealed partial class WorldPersistence {
         Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
         var restoredDefinition = admission.Definition;
+        var restoredInput = WorldInputRuntime.PrepareRestore(Host, restoredDefinition, server.Input ?? WorldInputRuntimeCheckpoint.Empty);
         // Equal canonical images are the same operation-owned document. A distinct journal base still needs its
         // own validation; do it before adopting any restored state so malformed base bytes refuse atomically.
         var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
@@ -861,6 +864,8 @@ public sealed partial class WorldPersistence {
         foreach (var intent in server.Intents) {
             Host.Tick.Intents.Enqueue(item: intent);
         }
+        Host.Tick.RoutedInputs.Clear();
+        foreach (var route in server.RoutedInputs) { Host.Tick.RoutedInputs.Enqueue(route); }
         Host.RuleHost.GroupState.Clear();
         foreach (var entry in server.RuleGroups) {
             Host.RuleHost.GroupState.Restore(
@@ -913,6 +918,8 @@ public sealed partial class WorldPersistence {
         // which the arena restored, so it needs the same catch-up every other admission door gives a freshly minted
         // body.
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
+        Host.Input = restoredInput;
+        Host.Input.BindRestoredBodies();
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership

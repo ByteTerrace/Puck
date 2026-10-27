@@ -33,6 +33,8 @@ public static class WorldPredicate {
 /// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, body-state and save
 /// arms belong to world rules and refuse in a kit.</summary>
 public static class WorldEffect {
+    /// <summary>Consumes the named matched event range only when the enclosing rule commits.</summary>
+    public sealed record ConsumeInput(string Owner, string Pattern) : ActionEffect;
     /// <summary>Writes a body's vertical-velocity channel (the jump launch / the surge).</summary>
     /// <param name="Velocity">The vertical velocity, in world units per second at the body's authored size; a body
     /// whose live scale (<c>bodies.scale</c>) is not one launches at this times its scale, so under the gravity

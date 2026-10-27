@@ -179,27 +179,16 @@ public sealed partial class WorldGrants {
         m_revision = checkpoint.Revision;
     }
 
-    private static IReadOnlyList<(int Ordinal, long Ceiling)> CaptureCeilings(ChannelCeilings ceilings) {
-        var rows = new List<(int, long)>();
+    private static IReadOnlyList<(string Channel, long Ceiling)> CaptureCeilings(Dictionary<string, long> ceilings) =>
+        ceilings.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => (pair.Key, pair.Value)).ToArray();
 
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if (ceilings.Support.Contains(ordinal: ordinal)) {
-                rows.Add(item: (ordinal, ceilings[ordinal]));
+    private static Dictionary<string, long> RestoreCeilings(IReadOnlyList<(string Channel, long Ceiling)> rows) {
+        var ceilings = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var row in rows) {
+            if (string.IsNullOrWhiteSpace(row.Channel) || row.Ceiling <= 0 || !ceilings.TryAdd(row.Channel, row.Ceiling)) {
+                throw new ArgumentException("checkpoint contains an invalid or duplicate named channel ceiling", nameof(rows));
             }
         }
-
-        return rows;
-    }
-    private static ChannelCeilings RestoreCeilings(IReadOnlyList<(int Ordinal, long Ceiling)> rows) {
-        var ceilings = default(ChannelCeilings);
-
-        foreach (var row in rows) {
-            ceilings = ceilings.WithCeiling(
-                ceiling: row.Ceiling,
-                channels: new ChannelConsentMask(Bits: default(ChannelMask).With(ordinal: row.Ordinal))
-            );
-        }
-
         return ceilings;
     }
 }

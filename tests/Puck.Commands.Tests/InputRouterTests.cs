@@ -8,6 +8,26 @@ namespace Puck.Commands.Tests;
 /// edges across two controls bound to one command, and the release a device disconnect synthesizes for the state it
 /// was carrying.</summary>
 public sealed class InputRouterTests {
+    [Fact]
+    public void CommittedTextPreservesPasteAndCaptureOrderWithoutCommandParsing() {
+        var registry = new CommandRegistry(modules: []);
+        using var router = new InputRouter(registry, new EmptyBindings(), new ConsolePrincipal());
+        var received = new List<CommittedTextInput>();
+        registry.TextCommitted += received.Add;
+        router.Capture(InputSignal.Typed("keyboard.text", "a", captureTick: 10));
+        router.Capture(InputSignal.Typed("keyboard.text", "delete everything 🙂", captureTick: 11));
+        var snapshot = router.SnapshotForTick(1, 20, 5);
+        registry.ApplySnapshot(snapshot);
+        Assert.Equal(new[] { "a", "delete everything 🙂" }, received.Select(row => row.Text));
+        Assert.All(received, row => {
+            Assert.Equal(Principal.Console, row.Principal);
+            Assert.Equal(5UL, row.WindowStart);
+            Assert.Equal(20UL, row.WindowEnd);
+        });
+        Assert.True(received[0].Activation < received[1].Activation);
+        Assert.Empty(router.SnapshotForTick(2, 30, 20).Lanes);
+    }
+
     private const string Command = "test.move";
 
     private static void CaptureBatch(InputRouter router, ulong captureTick) {
@@ -258,7 +278,7 @@ public sealed class InputRouterTests {
             actual: Assert.Single(collection: Assert.Single(collection: overtyped.SnapshotForTick(
                 tick: 1UL,
                 windowEndTick: ulong.MaxValue
-            ).Lanes).Entries).Text,
+            ).Lanes).Entries, predicate: entry => entry.CommittedText is null).Text,
             expected: $"{Command} 8"
         );
 
@@ -275,7 +295,7 @@ public sealed class InputRouterTests {
         var character = Assert.Single(collection: Assert.Single(collection: typed.SnapshotForTick(
             tick: 1UL,
             windowEndTick: ulong.MaxValue
-        ).Lanes).Entries);
+        ).Lanes).Entries, predicate: entry => entry.CommittedText is null);
 
         Assert.Null(@object: character.Text);
         Assert.Equal(

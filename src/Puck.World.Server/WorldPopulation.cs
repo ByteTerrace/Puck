@@ -74,6 +74,9 @@ public sealed partial class WorldPopulation {
     /// fold's one source of per-channel shape/threshold (<see cref="Server.WorldServer"/>'s fold phase reads it
     /// directly rather than re-deriving it).</summary>
     public WorldChannelTable Channels => m_channels;
+    /// <summary>Logical input names and every admitted storage mapping.</summary>
+    public WorldInputCatalog InputCatalog { get; private set; } = WorldInputCatalog.Compile([], null);
+    private FixedWorldKit[][] m_inputKits = [];
     /// <summary>The live definition's analytic collider census, including placement-derived colliders even when the
     /// selected provider is the SDF field or collision is disabled, measured on first ask after the definition moved.</summary>
     public WorldContactCensus ContactCensus => (m_contactCensus ??= WorldColliderSet.Measure(definition: m_censusDefinition!));

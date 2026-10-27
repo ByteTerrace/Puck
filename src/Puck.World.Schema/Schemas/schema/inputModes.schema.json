@@ -1,0 +1,320 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "global": {
+      "description": "Actions eligible in every tuple.",
+      "type": "array",
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "families": {
+      "description": "Independent selectors, ordered canonically by name at compilation.",
+      "type": "array",
+      "items": {
+        "description": "One selected state and directed continuation policy.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "Family name.",
+            "type": "string"
+          },
+          "selector": {
+            "description": "Authoritative source of the selection.",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "The state owner.",
+                "enum": [
+                  "ActiveKit",
+                  "Engagement",
+                  "BodyState",
+                  "SeatState"
+                ],
+                "title": "WorldInputModeSelectorKind"
+              },
+              "name": {
+                "description": "Body register or seat state family, when required by the kind.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "title": "WorldInputModeSelector"
+          },
+          "default": {
+            "description": "Selection for an owner without the selector\u0027s subject.",
+            "type": "string"
+          },
+          "states": {
+            "description": "Finite named states.",
+            "type": "array",
+            "items": {
+              "description": "One state admits either discrete selector values or disjoint fixed-point ranges.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "Stable state name.",
+                  "type": "string"
+                },
+                "channels": {
+                  "description": "Eligible logical action names.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "values": {
+                  "description": "Discrete selector values.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null
+                },
+                "ranges": {
+                  "description": "Inclusive Q48.16 ranges; adjacent endpoints differ by one raw unit.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "description": "An inclusive, exactly quantized selector interval.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "minimum": {
+                        "description": "Lower endpoint in the register\u0027s units.",
+                        "type": "number"
+                      },
+                      "maximum": {
+                        "description": "Upper endpoint in the register\u0027s units.",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "minimum",
+                      "maximum"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldInputModeRange"
+                  },
+                  "default": null
+                }
+              },
+              "required": [
+                "name",
+                "channels"
+              ],
+              "additionalProperties": false,
+              "title": "WorldInputModeState"
+            }
+          },
+          "suspendedBy": {
+            "description": "Selections which suppress this family\u0027s actions.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "Suppresses channels by another family\u0027s selection, independently of its suppression.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "family": {
+                  "description": "Other family.",
+                  "type": "string"
+                },
+                "states": {
+                  "description": "Selections which suppress this family\u0027s channels.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "family",
+                "states"
+              ],
+              "additionalProperties": false,
+              "title": "WorldInputModeSuppression"
+            },
+            "default": null
+          },
+          "transitions": {
+            "description": "Directed keep sets; omission releases every action.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "Directed continuity, intersected across every changed family.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "from": {
+                  "description": "Old state.",
+                  "type": "string"
+                },
+                "to": {
+                  "description": "New state.",
+                  "type": "string"
+                },
+                "keep": {
+                  "description": "Same-meaning held actions allowed to continue.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "conditionalKeep": {
+                  "description": "Additional continuing actions when the old and new tuples match authored selections.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "description": "Adds continuity for named actions under finite source and destination tuple conditions.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "keep": {
+                        "description": "Additional same-meaning actions.",
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "from": {
+                        "description": "Required selections in the old tuple; omitted families are unconstrained.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "additionalProperties": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "default": null
+                      },
+                      "to": {
+                        "description": "Required selections in the new tuple; omitted families are unconstrained.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "additionalProperties": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "keep"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldInputConditionalKeep"
+                  },
+                  "default": null
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "keep"
+              ],
+              "additionalProperties": false,
+              "title": "WorldInputModeTransition"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "selector",
+          "default",
+          "states"
+        ],
+        "additionalProperties": false,
+        "title": "WorldInputModeFamily"
+      }
+    },
+    "combinations": {
+      "description": "The complete allowed tuples, keyed by family; absence admits the Cartesian product.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "default": null
+    }
+  },
+  "required": [
+    "global",
+    "families"
+  ],
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldInputModes"
+}

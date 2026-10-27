@@ -557,13 +557,13 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // built, against this seat's currently routed table; the resulting command lives in the fixed ordinal vocabulary
     // PlayerCommandModule registers in full. A late-mounted or remote world therefore needs no command-registry
     // mutation, while a malformed/undeclared name still refuses loudly at the same composition boundary.
-    private static bool IsRelative(WorldChannelTable channels, ChannelRef reference) => (channels.TryGetOrdinal(ordinal: out var ordinal, reference: reference) && (channels.Shape(ordinal: ordinal) == ChannelShape.Relative));
+    private static bool IsRelative(WorldChannelTable channels, ChannelRef reference) => channels.TryGetShape(reference, out var shape) && shape == ChannelShape.Relative;
     private static string RoutedChannelCommandName(WorldChannelTable channels, ChannelRef channel) {
         if (
             (channel is ChannelRef.Name name) &&
-            channels.TryGetOrdinal(
+            channels.TryGetLogicalId(
             name: name.Value,
-            ordinal: out var ordinal
+            logical: out var ordinal
         )
         ) {
             return PlayerCommandNames.RoutedChannelCommandName(ordinal: ordinal);
@@ -940,10 +940,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private static bool TryDescribeUnavailableChannel(WorldChannelTable channels, ChannelRef reference, float? scale, out string finding) {
         var description = DescribeChannel(reference: reference);
 
-        if (!channels.TryGetOrdinal(
-            ordinal: out var ordinal,
-            reference: reference
-        )) {
+        if (!channels.TryGetShape(reference, out var shape) || shape == ChannelShape.Text) {
             finding = $"{description} is not declared in this composition";
 
             return true;
@@ -952,7 +949,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         if (
             (scale is { } authoredScale) &&
             (authoredScale != 1f) &&
-            (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)
+            (shape == ChannelShape.Binary)
         ) {
             finding = $"{description} resolves to a binary channel but carries scale {authoredScale} instead of +1";
 
@@ -1272,6 +1269,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     public IReadOnlyList<WorldSeatModeFamily> SeatModes(int slot) => m_definitions[((((uint)slot) < SeatCount)
         ? slot
         : 0)].SeatModes;
+    /// <summary>The complete, deterministic source profile, including hidden-page toggles.</summary>
+    public IReadOnlyList<BindingSourceContract> Sources(int slot) => m_seats[slot].Sources;
     /// <summary>The seat's current live session-rebind layer, or <see langword="null"/> when it has none.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public BindingProfileDocument? SessionRebind(int slot) => ((((uint)slot) < SeatCount)
@@ -1490,7 +1489,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         if (bindingsChanged) {
             m_overlays[slot] = (overlays ?? []);
             m_channelSource[slot] = channels;
-            m_channels[slot] = WorldChannelTable.Compile(channels: channels);
+            m_channels[slot] = WorldChannelTable.For(definition);
             RecomposeSeat(slot: slot);
 
             return;
@@ -1525,6 +1524,22 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             entityIndex: route.EntityIndex,
             nextInputTick: route.Endpoint.NextInputTick
         );
+        client.SynchronizeInput(slot, Sources(slot));
+        if (client.Roster.Seat(slot)?.Input is { Admitted: true } input) { m_channels[slot] = input.Channels; }
+        if (route.Endpoint.Mirror.TryInput(client.Roster.PrincipalOf(slot), out var publication)) {
+            foreach (var cell in publication.SeatStates.Span) {
+                // Presentation-only families remain local; selector cells are published by the authority.
+                if (route.Endpoint.Definition.InputModes is { } modes) {
+                    for (var familyIndex = 0; familyIndex < modes.Families.Count; familyIndex++) {
+                        var selector = modes.Families[familyIndex].Selector;
+                        if (selector.Kind == WorldInputModeSelectorKind.SeatState && selector.Name == cell.Family) {
+                            SetContextState(slot, cell.Family, cell.State);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
     /// <summary>Subscribes this seat table to <paramref name="routes"/>' claim changes, so a crossing recomposes the
     /// crossing seat's binding pages, wheels, contexts, and channel vocabulary from its new route's document (see
@@ -1783,7 +1798,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         // every seat seeds from the SAME boot overlays/channels here — SyncSeat is what lets them diverge later.
         var bootOverlays = (definition.BindingOverlays ?? []);
         var bootChannels = definition.Channels;
-        var bootTable = WorldChannelTable.Compile(channels: bootChannels);
+        var bootTable = WorldChannelTable.For(definition);
 
         var bootGateSignature = OverlayGateSignature(
             definition: definition,

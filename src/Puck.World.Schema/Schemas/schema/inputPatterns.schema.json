@@ -1,0 +1,128 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "A bounded semantic history pattern. Adjacent steps with one group name match in any order.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "steps": {
+        "type": "array",
+        "items": {
+          "description": "One event predicate. Tick gaps refer to the preceding stage\u0027s admitted tick.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "channel": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "Press",
+                "Release",
+                "AxisSample",
+                "Text",
+                "AxisCrossing",
+                "Cancel"
+              ],
+              "default": "Press",
+              "title": "WorldInputEventKind"
+            },
+            "rawValue": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null
+            },
+            "crossing": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "simultaneousGroup": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "toleranceSeconds": {
+              "type": "number",
+              "default": 0
+            },
+            "minimumTickGap": {
+              "type": "integer",
+              "default": 0
+            },
+            "maximumTickGap": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "channel"
+          ],
+          "additionalProperties": false,
+          "title": "WorldInputPatternStep"
+        }
+      },
+      "maximumDurationSeconds": {
+        "type": "number",
+        "default": 0.5
+      },
+      "maximumGapSeconds": {
+        "type": "number",
+        "default": 0.25
+      },
+      "bufferTicks": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "default": null
+      },
+      "held": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default": null
+      },
+      "consumptionGroup": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "name",
+      "steps"
+    ],
+    "additionalProperties": false,
+    "title": "WorldInputPattern"
+  },
+  "default": null
+}

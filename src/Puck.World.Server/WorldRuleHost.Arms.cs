@@ -22,6 +22,10 @@ namespace Puck.World.Server;
 /// </remarks>
 public sealed partial class WorldRuleHost {
     /// <inheritdoc/>
+    public void BeginRuleEvaluation() => Host.Input.BeginActivationScope();
+    /// <inheritdoc/>
+    public void EndRuleEvaluation() => Host.Input.EndActivationScope();
+    /// <inheritdoc/>
     public int BeginStateTransaction() => Host.BeginStateTransaction();
     /// <inheritdoc/>
     public bool PrepareStateCommit(out EffectRefusal refusal) {
@@ -37,6 +41,7 @@ public sealed partial class WorldRuleHost {
     // clears both.
     private readonly List<WorldMutation> m_documentArms = [];
     private readonly Dictionary<int, FixedVector3> m_preflightRigidVelocity = [];
+    private readonly Dictionary<WorldInputConsumeEffect, (Puck.Commands.Principal Owner, WorldInputMatch Match)> m_preflightInput = [];
 
     private WorldArenaPublication? m_proposedPublication;
     // The firing's document rows, past every gate and waiting on the commit.
@@ -66,6 +71,7 @@ public sealed partial class WorldRuleHost {
         m_preparedDocument = null;
         m_documentArms.Clear();
         m_preflightRigidVelocity.Clear();
+        m_preflightInput.Clear();
         m_proposedPublication = null;
     }
     /// <inheritdoc/>
@@ -134,6 +140,23 @@ public sealed partial class WorldRuleHost {
     /// <inheritdoc/>
     public bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         switch (effect) {
+            case WorldInputConsumeEffect consume:
+                if (!TryInputOwner(consume.Owner, out var inputPrincipal, out var input)) { return Refuse(RuleEffectRefusal.MutationRejected, "input owner is not admitted", out refusal); }
+                if (firing.Preflight) {
+                    if (!input!.TryMatch(consume.Pattern, Host.Input.Interval, out var match)) { return Refuse(RuleEffectRefusal.MutationRejected, "input pattern has no unconsumed match", out refusal); }
+                    foreach (var (preparedEffect, preparedMatch) in m_preflightInput) {
+                        if (preparedMatch.Owner == inputPrincipal && input.SharesConsumption(preparedEffect.Pattern, consume.Pattern) &&
+                            match.First <= preparedMatch.Match.Last && preparedMatch.Match.First <= match.Last) {
+                            return Refuse(RuleEffectRefusal.MutationRejected, "input range is already claimed by this firing", out refusal);
+                        }
+                    }
+                    m_preflightInput[consume] = (inputPrincipal, match);
+                } else if (m_preflightInput.TryGetValue(consume, out var prepared)) {
+                    if (inputPrincipal != prepared.Owner) { return Refuse(RuleEffectRefusal.MutationRejected, "input owner changed during the firing", out refusal); }
+                    _ = input!.Consume(consume.Pattern, prepared.Match);
+                }
+                refusal = EffectRefusal.None;
+                return true;
             case WorldCueEffect cue:
                 if (!firing.Preflight) {
                     FireGameplayCue(

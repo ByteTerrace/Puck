@@ -1,0 +1,127 @@
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "input-pattern-tests"
+channels [
+  { name: "directionX", shape: Bipolar, composition: true }
+  { name: "directionY", shape: Bipolar, composition: true }
+  { name: "attack", shape: Binary, composition: true }
+  { name: "changeFacing", shape: Binary, composition: true }
+]
+inputHistory {
+  eventCapacity: 8
+  maximumEventsPerStep: 8
+  crossings [
+    { name: "down", channel: "directionY", press: -0.75, release: -0.5, direction: -1 }
+    { name: "forward", channel: "directionX", press: 0.75, release: 0.5, facingState: "inputFacing" }
+  ]
+}
+inputPatterns [
+  {
+    name: "motion"
+    maximumDurationSeconds: 0.25
+    maximumGapSeconds: 0.1
+    steps [
+      { channel: "directionY", kind: AxisCrossing, crossing: "down" }
+      { channel: "directionX", kind: AxisCrossing, crossing: "forward" }
+      { channel: "attack" }
+    ]
+  }
+  { name: "buffered", bufferTicks: 3, steps [{ channel: "attack" }] }
+]
+state {
+  body [{ name: "inputFacing", kind: Counter, initial: 1, envelope { $type: "set", values [-1, 1] } }]
+  world {
+    row {
+      name: "motions"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "buffered"
+      kind: Int
+      value: 0
+    }
+  }
+}
+bindingOverlays [{
+    id: "pattern-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { id: "down", channel: "directionY", scale: -1, sources ["keyboard.u"] }
+              { id: "motion-forward", channel: "directionX", sources ["keyboard.i"] }
+              { id: "motion-back", channel: "directionX", scale: -1, sources ["keyboard.j"] }
+              { id: "attack", channel: "attack", sources ["keyboard.o"] }
+              { id: "change-facing", channel: "changeFacing", sources ["keyboard.k"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+rule "motion" {
+  when inputMatch(1, motion)
+  mode: Level
+  motions += 1
+  consumeInput(owner: "1", pattern: "motion")
+}
+rule "change-facing" {
+  when inputEdge(1, changeFacing, Press, 0)
+  mode: Edge
+  setBodyState(key: 0, state: "inputFacing", expression: -bodyState(body, 0, inputFacing))
+}
+rule "buffered-action" {
+  local age = inputAge(1, attack, Press, 0) ?? 0.0
+  when inputMatch(1, buffered) and age >= 0.05
+  mode: Level
+  buffered += 1
+  consumeInput(owner: "1", pattern: "buffered")
+}
+test "a directional motion matches ordered crossings and its attack survives two recovery ticks" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    seat1: player.signal keyboard.o press at:0.003
+    ticks 6
+  }
+  expect {
+    motions == 1
+    buffered == 1
+  }
+}
+test "facing resolves a negative axis as forward at admission" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.k press
+    ticks 2
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.j press at:0.002
+    seat1: player.signal keyboard.o press at:0.003
+    ticks 6
+  }
+  expect {
+    motions == 1
+    buffered == 1
+    bodyState(body, 0, inputFacing) == -1
+  }
+}
+test "a later turn cannot reinterpret an admitted forward crossing" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    ticks 1
+    seat1: player.signal keyboard.k press
+    ticks 1
+    seat1: player.signal keyboard.o press at:0.003
+    ticks 6
+  }
+  expect {
+    motions == 1
+    buffered == 1
+    bodyState(body, 0, inputFacing) == -1
+  }
+}

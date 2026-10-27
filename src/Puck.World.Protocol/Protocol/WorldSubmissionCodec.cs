@@ -285,6 +285,15 @@ public static partial class WorldSubmissionCodec {
                     EntityIndex: entity,
                     Principal: principal
                 );
+            case 13:
+                return new WorldCommand.AdmitInput(principal, entity, reader.ReadArray(
+                    field: "AdmitInput.Sources", maximum: WorldInputCatalog.MaximumSources,
+                    readItem: WorldWireCodec.ReadInputSource), reader.ReadBoolean());
+            case 14:
+                return new WorldCommand.SelectInputState(principal, entity, ReadPrincipal(ref reader),
+                    reader.ReadRequiredString("SelectInputState.Family"), reader.ReadRequiredString("SelectInputState.State"), reader.ReadUInt64());
+            case 15:
+                return new WorldCommand.CalibrateInput(principal, entity, reader.ReadFixed());
             default:
                 throw new LeafCodecException(failure: Fail(
                     detail: $"command discriminant {discriminant} is not declared",
@@ -333,8 +342,8 @@ public static partial class WorldSubmissionCodec {
         var subject = WorldWireCodec.ReadSubject(reader: ref reader);
         var exclusive = reader.ReadBoolean();
         var budget = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt16());
-        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelReach(reader: ref r));
-        var consent = reader.ReadOptional(readValue: static (ref WireReader r) => new ChannelConsentMask(Bits: WorldWireCodec.ReadChannelMask(reader: ref r)));
+        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelSelection(reader: ref r));
+        var consent = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelSelection(reader: ref r));
         var ceiling = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadInt64());
         var kindMask = reader.ReadOptional(readValue: static (ref WireReader r) => new MutationKindMask(Bits: r.ReadUInt128()));
         var eventBudget = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt16());
@@ -1050,6 +1059,26 @@ public static partial class WorldSubmissionCodec {
             case WorldCommand.ReleaseCarry:
                 writer.WriteByte(value: 12);
                 break;
+            case WorldCommand.AdmitInput value:
+                writer.WriteByte(13);
+                if (value.Sources.Count > WorldInputCatalog.MaximumSources) { throw new LeafCodecException(failure: Fail(detail: $"input source profile exceeds {WorldInputCatalog.MaximumSources}", refusal: WorldCodecRefusal.PayloadTooLarge)); }
+                writer.WriteInt32(value.Sources.Count);
+                foreach (var source in value.Sources) {
+                    WorldWireCodec.WriteInputSource(writer, source);
+                }
+                writer.WriteBoolean(value.FreshAttachment);
+                break;
+            case WorldCommand.SelectInputState value:
+                writer.WriteByte(14);
+                WritePrincipal(writer, value.Owner);
+                writer.WriteString(value.Family);
+                writer.WriteString(value.State);
+                writer.WriteUInt64(value.Activation);
+                break;
+            case WorldCommand.CalibrateInput value:
+                writer.WriteByte(15);
+                writer.WriteFixed(value.Offset);
+                break;
             default:
                 throw UnknownLeaf(value: command);
         }
@@ -1086,11 +1115,11 @@ public static partial class WorldSubmissionCodec {
         );
         writer.WriteOptional(
             value: grant.Reach,
-            writeValue: static (w, value) => WorldWireCodec.WriteChannelReach(reach: value, writer: w)
+            writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(selection: value, writer: w)
         );
         writer.WriteOptional(
             value: grant.Consent,
-            writeValue: static (w, value) => WorldWireCodec.WriteChannelMask(writer: w, mask: value.Bits)
+            writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(writer: w, selection: value)
         );
         writer.WriteOptional(
             value: grant.Ceiling,

@@ -66,9 +66,18 @@ public sealed partial class WorldBody {
             return false;
         }
 
+        // Producer observations enter history before motion, just like external input. A refused sweep does not
+        // erase an accepted observation or turn the same held sample into another press on the following tick.
+        var inputRuntime = m_stateLane?.Input;
+        if (m_hasProducerIntent && SourceNamesProducer(m_source) && inputRuntime is not null) {
+            m_producerIntent = inputRuntime.AdmitProgramSnapshot(entityIndex, m_producerIntent, tick);
+        }
+
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
         // meets a refusal, and the outputs it emitted are withdrawn (WorldBody.SweepRefusal.cs).
         CaptureMotion(scratch: scratch);
+        inputRuntime?.BeginKitStep();
+        var inputEpoch = InputEpoch;
         var effectOutputCount = (effectOutputs?.Count ?? 0);
         var designationOutputCount = (designationOutputs?.Count ?? 0);
         var generatorInvocationCount = (generatorInvocations?.Count ?? 0);
@@ -165,6 +174,8 @@ public sealed partial class WorldBody {
             }
         }
 
+        // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
+        if (InputEpoch != inputEpoch) { intent = m_engagedIntent; }
         // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             m_previousChannelBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
@@ -193,22 +204,37 @@ public sealed partial class WorldBody {
 
         if (refused) {
             RestoreMotion(scratch: scratch);
+            inputRuntime?.CompleteKitStep(accepted: false);
+            // Selection reconciliation can retune the body; restore the exact captured motion over that old kit.
+            RestoreMotion(scratch: scratch);
+            // A refused motion step still consumes its one-tick publications. They are sampled again by their
+            // producers next tick; restoring the motion must not turn a missed impulse into a retained request.
+            m_submittedIntent = default;
+            m_hasSubmittedIntent = false;
+            m_heldChannels = default;
+            m_producerIntent = default;
+            m_hasProducerIntent = false;
             effectOutputs?.RemoveRange(index: effectOutputCount, count: (effectOutputs.Count - effectOutputCount));
             designationOutputs?.RemoveRange(index: designationOutputCount, count: (designationOutputs.Count - designationOutputCount));
             generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
+        } else {
+            inputRuntime?.CompleteKitStep(accepted: true);
         }
 
         return engageEdge;
     }
-    internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction) {
-        // A foreign effect always targets a live consequence (velocity, state, a pose), so a sleeping target wakes
-        // unconditionally rather than sleeping through whatever this instruction just changed about it.
-        WakeUp();
-
+    internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction, bool validatedFiring = false) {
         var slot = ((instruction.StateName is null)
             ? -1
             : FindActionState(name: instruction.StateName)
         );
+        // A deferred delivery is checked against the state preceding that delivery as well as the firing's
+        // earlier proposal. Another body's intervening firing may have changed the allowed tuple.
+        var local = instruction with { Target = ActionTarget.Self, StateSlot = slot };
+        if (!validatedFiring && m_stateLane?.Input is { } input && !input.TryValidateEffects(m_stateOrdinal,
+            new ReadOnlySpan<CompiledBodyInstruction>(in local), default, out _)) { return false; }
+        // Only an admitted consequence wakes its target.
+        WakeUp();
         var applied = true;
 
         switch (instruction.Operation) {
@@ -265,6 +291,9 @@ public sealed partial class WorldBody {
         }
         if (applied) {
             m_affectingSubject = sourceIndex;
+            if (!validatedFiring && instruction.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer) {
+                m_stateLane?.Input?.CommitKitEffects(m_stateOrdinal);
+            }
         }
         return applied;
     }
@@ -300,9 +329,15 @@ public sealed partial class WorldBody {
         StageProducerIntent(intent: in scratch.Intent);
     }
 
-    private void ApplyEffects(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
+    private bool ApplyEffects(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch, int logicalChannel = -1) {
+        if (m_stateLane?.Input is { } input && !input.TryValidateEffects(scratch.EntityIndex, effects, scratch.EffectTargets, out _)) {
+            return false;
+        }
+        var epoch = InputEpoch;
+        var writesState = false;
         foreach (var effect in effects) {
             if (effect.Target == ActionTarget.Self) {
+                writesState |= effect.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer;
                 ExecuteOperation(
                     instruction: in effect,
                     scratch: ref scratch
@@ -311,6 +346,13 @@ public sealed partial class WorldBody {
             }
 
             var target = scratch.EffectTargets.Resolve(target: effect.Target);
+
+            if (target >= 0 && m_stateLane?.Input is { } runtime &&
+                effect.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer) {
+                runtime.ApplyKitForeignState(scratch.EntityIndex, target, effect);
+                writesState = true;
+                continue;
+            }
 
             if (
                 (target >= 0) &&
@@ -323,6 +365,9 @@ public sealed partial class WorldBody {
                 ));
             }
         }
+        if (writesState) { m_stateLane?.Input?.CommitKitEffects(scratch.EntityIndex, logicalChannel); }
+        if (InputEpoch != epoch) { scratch.Intent = m_engagedIntent; }
+        return true;
     }
     // The shared hard-teleport commit: clear the affected integration carries. Face only resets rotation; Warp resets
     // position and vertical state but preserves rotation; full Pose/Reconcile operations reset every carry. SetBodyMotionProgram

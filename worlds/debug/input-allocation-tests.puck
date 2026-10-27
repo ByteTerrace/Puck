@@ -1,0 +1,164 @@
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "input-allocation-tests"
+
+// The authored vocabulary exceeds both banks. Each selected page uses 16 axes
+// and 32 buttons; binding pages cannot grant eligibility to a dormant action.
+channels: concat(
+  map(range(0, 48), i => { name: $"axis{i}", shape: Bipolar, composition: true }),
+  map(range(0, 96), i => { name: $"action{i}", shape: Binary, composition: true })
+)
+seatModes [{name: "selection", defaultState: "first", states [
+      { name: "first" }, { name: "middle" }, { name: "last" }
+    ]
+  }
+]
+inputModes {
+  global []
+  families [{
+      name: "selection"
+      selector { kind: SeatState, name: "selection" }
+      default: "first"
+      states [
+        {
+          name: "first"
+          values ["first"]
+          channels: concat(map(range(0, 16), i => $"axis{i}"), map(range(0, 32), i => $"action{i}"))
+        }
+        {
+          name: "middle"
+          values ["middle"]
+          channels: concat(map(range(16, 16), i => $"axis{i}"), map(range(32, 32), i => $"action{i}"))
+        }
+        {
+          name: "last"
+          values ["last"]
+          channels: concat(map(range(32, 16), i => $"axis{i}"), map(range(64, 32), i => $"action{i}"))
+        }
+      ]
+    }
+  ]
+}
+inputHistory {
+  eventCapacity: 32
+  maximumEventsPerStep: 16
+}
+bindingOverlays [{
+    id: "allocation-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { id: "first-button", channel: "action0", sources ["keyboard.u"] }
+              { id: "middle-button", channel: "action32", sources ["keyboard.u"] }
+              { id: "last-button", channel: "action64", sources ["keyboard.u"] }
+              { id: "first-axis", channel: "axis0", sources ["keyboard.i"] }
+              { id: "middle-axis", channel: "axis16", sources ["keyboard.i"] }
+              { id: "last-axis", channel: "axis32", sources ["keyboard.i"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+state {
+  world {
+    row {
+      name: "firstPresses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "middlePresses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "lastPresses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "releasedAtSwitch"
+      kind: Int
+      value: 0
+    }
+  }
+}
+rule "first-press" {
+  forEach: $inputEvents:1
+  when inputEdge(1, action0, Press, each)
+  mode: Level
+  firstPresses += 1
+}
+rule "middle-press" {
+  forEach: $inputEvents:1
+  when inputEdge(1, action32, Press, each)
+  mode: Level
+  middlePresses += 1
+}
+rule "last-press" {
+  forEach: $inputEvents:1
+  when inputEdge(1, action64, Press, each)
+  mode: Level
+  lastPresses += 1
+}
+rule "switch-does-not-reuse-held-values" {
+  when firstPresses == 1 and middlePresses == 0 and channel(1, action0) == 0 and channel(1, action32) == 0 and channel(
+      1,
+      axis0
+    ) == 0 and channel(1, axis16) == 0
+  mode: Edge
+  releasedAtSwitch = 1
+}
+test "48 axes and 96 buttons use three bounded mappings without slot carry" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    ticks 3
+    seat1: player.mode selection middle
+    ticks 3
+    seat1: player.signal keyboard.u release at:0.001
+    seat1: player.signal keyboard.i release at:0.002
+    ticks 2
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    ticks 3
+    seat1: player.mode selection last
+    ticks 3
+    seat1: player.signal keyboard.u release at:0.001
+    seat1: player.signal keyboard.i release at:0.002
+    ticks 2
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    ticks 3
+  }
+  expect {
+    firstPresses == 1
+    middlePresses == 1
+    lastPresses == 1
+    releasedAtSwitch == 1
+    channel(1, action0) == 0
+    channel(1, action32) == 0
+    channel(1, action64) == 1
+    channel(1, axis0) == 0
+    channel(1, axis16) == 0
+    channel(1, axis32) == 1
+  }
+}
+test "an over-budget replacement names the numeric bank and preserves the live mode" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press
+    ticks 2
+    seat1 refused "numeric bank requires 33; maximum 32": world.row.set inputModes {"global":["axis0","axis1","axis2","axis3","axis4","axis5","axis6","axis7","axis8","axis9","axis10","axis11","axis12","axis13","axis14","axis15","axis16","axis17","axis18","axis19","axis20","axis21","axis22","axis23","axis24","axis25","axis26","axis27","axis28","axis29","axis30","axis31","axis32"],"families":[]}
+    ticks 3
+  }
+  expect {
+    firstPresses == 1
+    channel(1, action0) == 1
+    channel(1, action32) == 0
+  }
+}

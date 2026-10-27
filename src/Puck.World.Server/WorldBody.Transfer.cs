@@ -618,6 +618,9 @@ public sealed partial class WorldBody {
         Grounded: m_grounded,
         Engaged: m_engaged,
         EngagedIntent: m_engagedIntent,
+        Input: new(m_submittedIntent, m_hasSubmittedIntent, m_heldChannels, m_producerIntent, m_hasProducerIntent,
+            m_transferHeldChannels, m_hasTransferHeldChannels, m_channelReadHeld, m_channelReadComposed, m_channelReadScalar,
+            InputMappingId, InputEpoch),
         OrdinaryAdvanceAdmitted: m_ordinaryAdvanceAdmitted,
         ContinuumConsumedThroughEngineTick: m_continuumConsumedThroughEngineTick,
         AffectingSubject: m_affectingSubject,
@@ -688,6 +691,18 @@ public sealed partial class WorldBody {
         m_grounded = residue.Grounded;
         m_engaged = residue.Engaged;
         m_engagedIntent = residue.EngagedIntent;
+        m_submittedIntent = residue.Input.Submitted;
+        m_hasSubmittedIntent = residue.Input.HasSubmitted;
+        m_heldChannels = residue.Input.Held;
+        m_producerIntent = residue.Input.Producer;
+        m_hasProducerIntent = residue.Input.HasProducer;
+        m_transferHeldChannels = residue.Input.TransferHeld;
+        m_hasTransferHeldChannels = residue.Input.HasTransferHeld;
+        m_channelReadHeld = residue.Input.ReadHeld;
+        m_channelReadComposed = residue.Input.ReadComposed;
+        m_channelReadScalar = residue.Input.ReadScalar;
+        InputMappingId = residue.Input.Mapping;
+        InputEpoch = residue.Input.Epoch;
         m_ordinaryAdvanceAdmitted = residue.OrdinaryAdvanceAdmitted;
         m_continuumConsumedThroughEngineTick = residue.ContinuumConsumedThroughEngineTick;
         m_affectingSubject = residue.AffectingSubject;

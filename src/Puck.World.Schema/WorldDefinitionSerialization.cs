@@ -286,6 +286,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldEffect.StartTimer))]
 [JsonSerializable(typeof(WorldEffect.Designate))]
 [JsonSerializable(typeof(WorldEffect.EmitCue))]
+[JsonSerializable(typeof(WorldEffect.ConsumeInput))]
 [JsonSerializable(typeof(WorldEffect.ApplyRigidImpulse))]
 [JsonSerializable(typeof(WorldEffect.PaintField))]
 [JsonSerializable(typeof(WorldEffect.UpsertHudPanel))]
@@ -444,6 +445,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldHudPanel> WorldHudPanel => Get<WorldHudPanel>();
     /// <summary>Gets the type info for <see cref="WorldInputHoldAuthoring"/>.</summary>
     public JsonTypeInfo<WorldInputHoldAuthoring> WorldInputHoldAuthoring => Get<WorldInputHoldAuthoring>();
+    /// <summary>Gets the type info for <see cref="WorldInputModes"/>.</summary>
+    public JsonTypeInfo<WorldInputModes> WorldInputModes => Get<WorldInputModes>();
     /// <summary>Gets the type info for <see cref="WorldInteraction"/>.</summary>
     public JsonTypeInfo<WorldInteraction> WorldInteraction => Get<WorldInteraction>();
     /// <summary>Gets the type info for <see cref="WorldKit"/>.</summary>

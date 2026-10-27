@@ -15,6 +15,9 @@ export type WorldDefinition = {
   bodies?: WorldBodiesDefaults | null;
   seatDefaults?: WorldPlayerDefaults | null;
   channels?: (WorldChannel | null)[] | null;
+  inputModes?: WorldInputModes | null;
+  inputHistory?: WorldInputHistory | null;
+  inputPatterns?: (WorldInputPattern | null)[] | null;
   targetRegisters?: (WorldTargetRegister | null)[] | null;
   bodyMotionPrograms?: (BodyMotionProgram | null)[] | null;
   kits?: WorldKitsSection | null;
@@ -99,7 +102,7 @@ export type WorldDefinition = {
 /**
  * An authored effect row a rule fires when its gate holds. The arms declared here are the ones this library owns — every one addresses a state row and nothing else; a document project appends its own derived arms (a participant's kinematics, a presentation cue, a whole-row document upsert) through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.
  */
-export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
+export type ActionEffect = ActionEffectSetState | ActionEffectAddState | ActionEffectPushState | ActionEffectTransformState | ActionEffectGenerate | ActionEffectRemoveStateCell | ActionEffectScheduleState | ActionEffectTransaction | ActionEffectIf | ActionEffectClaim | ActionEffectRelease | ActionEffectForEachPool | ActionEffectClaimPair | ActionEffectRewindGroup | WorldEffectConsumeInput | WorldEffectSetVerticalVelocity | WorldEffectScaleVerticalVelocity | WorldEffectPlanarImpulse | WorldEffectStartTimer | WorldEffectDesignate | WorldEffectEmitCue | WorldEffectApplyRigidImpulse | WorldEffectPaintField | WorldEffectUpsertHudPanel | WorldEffectRemoveHudPanel | WorldEffectUpsertPlacement | WorldEffectRemovePlacement | WorldEffectSave | WorldEffectPoseCell | WorldEffectPose | WorldEffectSetIdentityFact | WorldEffectSetBodyState | null;
 
 /**
  * Adds to a named state cell — the same shape as SetState, here the source is the addend rather than the replacement.
@@ -1086,45 +1089,13 @@ export type CellValueJsonConverterVectorShape = {
   value: number[];
 };
 
-export type ChannelConsentMask = {
-  /**
-   * The numeric and button banks, one bit per consented channel ordinal.
-   */
-  bits?: ChannelMask;
-};
-
 export type ChannelFrame = "World" | "Camera" | "Heading";
-
-/**
- * Independent support masks for the numeric and button banks.
- */
-export type ChannelMask = {
-  /**
-   * One bit per numeric lane.
-   */
-  axes?: number;
-  /**
-   * One bit per button lane.
-   */
-  buttons?: number;
-};
-
-export type ChannelReachMask = {
-  /**
-   * The numeric and button reach banks.
-   */
-  bits?: ChannelMask;
-  /**
-   * Independent target-register reach.
-   */
-  registers?: number;
-};
 
 export type ChannelRef = unknown;
 
 export type ChannelRole = "MoveAdvance" | "MoveStrafe" | "Turn" | "MoveUp" | "Pitch" | "Roll" | "FaceX" | "FaceY" | "FaceZ" | "MoveX" | "MoveY" | "MoveZ";
 
-export type ChannelShape = "Bipolar" | "Unipolar" | "Binary" | "Relative";
+export type ChannelShape = "Bipolar" | "Unipolar" | "Binary" | "Relative" | "Text";
 
 export type ClosedBitset256 = unknown;
 
@@ -4561,6 +4532,17 @@ export type WorldChannel = {
   relative?: WorldRelativeChannel | null;
 };
 
+export type WorldChannelSelection = {
+  /**
+   * Canonical logical names, including currently inactive actions.
+   */
+  channels: StringList;
+  /**
+   * Independent target-register reach.
+   */
+  registers?: number;
+};
+
 export type WorldClock = {
   /**
    * The clock's name, unique within the section.
@@ -5169,6 +5151,15 @@ export type WorldEffectApplyRigidImpulse = {
 };
 
 /**
+ * Consumes the named matched event range only when the enclosing rule commits.
+ */
+export type WorldEffectConsumeInput = {
+  $type?: "consumeInput";
+  owner: string;
+  pattern: string;
+};
+
+/**
  * Designates a subject into a body's named target register, or clears the register. A kit's action designates into its own body the participant that last affected it; a world rule names the body with Key and the subject with TargetKey.
  */
 export type WorldEffectDesignate = {
@@ -5646,11 +5637,11 @@ export type WorldGrant = {
   /**
    * An untrusted contributor's channel reach on a Drive row, carried alone: which declared ordinals this contributor may touch at all. Reach is not consent; a reached channel contributes nothing until the occupying seat authors a positive ceiling for it.
    */
-  reach?: ChannelReachMask | null;
+  reach?: WorldChannelSelection | null;
   /**
-   * The ordinals named by the occupying seat's ceiling gesture on its own Drive row. The seat may issue the gesture repeatedly to give different channels different ceilings; each gesture writes only the ordinals it names and leaves the rest unchanged, while revocation clears the whole ceiling value.
+   * The logical names selected by the occupying seat's ceiling gesture on its own Drive row. The seat may issue the gesture repeatedly to give different channels different ceilings; each gesture writes only the names it selects and leaves the rest unchanged, while revocation clears the whole ceiling value.
    */
-  consent?: ChannelConsentMask | null;
+  consent?: WorldChannelSelection | null;
   /**
    * The pool ceiling c (raw Q16.16, 0 < c ≤ One) bounding how far the untrusted pool may pull the channels Consent names away from the human's own value. It is one number per (seat, channel), authored by the seat, and the grant door enforces exactly that: a row carrying a ceiling must be the occupying seat's own row (seatN drive body:N) and must name the channels it applies to. It is never carried on a contributor's row and never derived across rows — no combination of contributor-declared numbers (max, sum, or min) is defensible, and a contract nobody can state as a single number is not one. 0 is refused at the door, mirroring Budget's 0 refusal verbatim: pool-but-never-reach is accepted-and-inert, so grant nothing instead of a ceiling that can never fire. A ceiling authored in the world document is withheld at boot (the row itself still applies) — see Server.WorldServer's constructor: the document may pre-wire a contributor's reach, but consent is a thing only a seated human grants live.
    */
@@ -6449,6 +6440,85 @@ export type WorldImport = {
   as?: string | null;
 };
 
+export type WorldInputConditionalKeep = {
+  /**
+   * Additional same-meaning actions.
+   */
+  keep: (string | null)[];
+  /**
+   * Required selections in the old tuple; omitted families are unconstrained.
+   */
+  from?: {
+    [k: string]: string | null;
+  } | null;
+  /**
+   * Required selections in the new tuple; omitted families are unconstrained.
+   */
+  to?: {
+    [k: string]: string | null;
+  } | null;
+};
+
+export type WorldInputCrossing = {
+  /**
+   * Pattern-visible crossing name.
+   */
+  name: string;
+  /**
+   * Declared normalized axis.
+   */
+  channel: string;
+  /**
+   * Threshold which enters the predicate.
+   */
+  press: number;
+  /**
+   * Threshold which leaves the predicate.
+   */
+  release: number;
+  /**
+   * One for increasing and minus one for decreasing values.
+   */
+  direction?: number;
+  /**
+   * Optional authoritative body counter whose sign orients this axis at admission. Zero has no facing and cannot enter the crossing. History retains the resolved crossing, not a later counter read.
+   */
+  facingState?: string | null;
+};
+
+export type WorldInputEventKind = "Press" | "Release" | "AxisSample" | "Text" | "AxisCrossing" | "Cancel";
+
+export type WorldInputHistory = {
+  /**
+   * How long an admitted event remains eligible.
+   */
+  retentionSeconds?: number;
+  /**
+   * Ring capacity, allocated when the owner is admitted.
+   */
+  eventCapacity?: number;
+  /**
+   * Atomic per-step ingress bound, including derived crossings.
+   */
+  maximumEventsPerStep?: number;
+  /**
+   * Capture horizon behind the next open interval.
+   */
+  maximumLatenessSeconds?: number;
+  /**
+   * Absolute calibration bound.
+   */
+  calibrationLimitSeconds?: number;
+  /**
+   * Which recorded time rules use.
+   */
+  judgement?: WorldInputJudgement;
+  /**
+   * Named threshold/hysteresis predicates over ordered samples.
+   */
+  crossings?: (WorldInputCrossing | null)[] | null;
+};
+
 export type WorldInputHoldAuthoring = {
   ceilingSeconds: number;
   lowerAfterSeconds: number;
@@ -6461,6 +6531,146 @@ export type WorldInputHoldParticipantAuthoring = {
   bodyIndex: number;
   seconds: number;
   equalized: boolean;
+};
+
+export type WorldInputJudgement = "Capture" | "Admission";
+
+export type WorldInputModeFamily = {
+  /**
+   * Family name.
+   */
+  name: string;
+  /**
+   * Authoritative source of the selection.
+   */
+  selector: WorldInputModeSelector;
+  /**
+   * Selection for an owner without the selector's subject.
+   */
+  default: string;
+  /**
+   * Finite named states.
+   */
+  states: (WorldInputModeState | null)[];
+  /**
+   * Selections which suppress this family's actions.
+   */
+  suspendedBy?: (WorldInputModeSuppression | null)[] | null;
+  /**
+   * Directed keep sets; omission releases every action.
+   */
+  transitions?: (WorldInputModeTransition | null)[] | null;
+};
+
+export type WorldInputModeRange = {
+  /**
+   * Lower endpoint in the register's units.
+   */
+  minimum: number;
+  /**
+   * Upper endpoint in the register's units.
+   */
+  maximum: number;
+};
+
+export type WorldInputModeSelector = {
+  /**
+   * The state owner.
+   */
+  kind: WorldInputModeSelectorKind;
+  /**
+   * Body register or seat state family, when required by the kind.
+   */
+  name?: string | null;
+};
+
+export type WorldInputModeSelectorKind = "ActiveKit" | "Engagement" | "BodyState" | "SeatState";
+
+export type WorldInputModeState = {
+  /**
+   * Stable state name.
+   */
+  name: string;
+  /**
+   * Eligible logical action names.
+   */
+  channels: (string | null)[];
+  /**
+   * Discrete selector values.
+   */
+  values?: (string | null)[] | null;
+  /**
+   * Inclusive Q48.16 ranges; adjacent endpoints differ by one raw unit.
+   */
+  ranges?: (WorldInputModeRange | null)[] | null;
+};
+
+export type WorldInputModeSuppression = {
+  /**
+   * Other family.
+   */
+  family: string;
+  /**
+   * Selections which suppress this family's channels.
+   */
+  states: (string | null)[];
+};
+
+export type WorldInputModeTransition = {
+  /**
+   * Old state.
+   */
+  from: string;
+  /**
+   * New state.
+   */
+  to: string;
+  /**
+   * Same-meaning held actions allowed to continue.
+   */
+  keep: (string | null)[];
+  /**
+   * Additional continuing actions when the old and new tuples match authored selections.
+   */
+  conditionalKeep?: (WorldInputConditionalKeep | null)[] | null;
+};
+
+export type WorldInputModes = {
+  /**
+   * Actions eligible in every tuple.
+   */
+  global: (string | null)[];
+  /**
+   * Independent selectors, ordered canonically by name at compilation.
+   */
+  families: (WorldInputModeFamily | null)[];
+  /**
+   * The complete allowed tuples, keyed by family; absence admits the Cartesian product.
+   */
+  combinations?: ({
+    [k: string]: string | null;
+  } | null)[] | null;
+};
+
+export type WorldInputPattern = {
+  name: string;
+  steps: (WorldInputPatternStep | null)[];
+  maximumDurationSeconds?: number;
+  maximumGapSeconds?: number;
+  bufferTicks?: number | null;
+  held?: (string | null)[] | null;
+  consumptionGroup?: string | null;
+};
+
+export type WorldInputPatternStep = {
+  channel: string;
+  kind?: WorldInputEventKind;
+  rawValue?: number | null;
+  crossing?: string | null;
+  simultaneousGroup?: string | null;
+  toleranceSeconds?: number;
+  minimumTickGap?: number;
+  maximumTickGap?: number | null;
 };
 
 export type WorldInteraction = {

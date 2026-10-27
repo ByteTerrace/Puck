@@ -1,0 +1,229 @@
+// Semantic events travel through the same source capture and authority queue as physical input.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "input-history-tests"
+
+channels [
+  { name: "tapA", shape: Binary, composition: true }
+  { name: "tapB", shape: Binary, composition: true }
+  { name: "typed", shape: Text, composition: true }
+]
+state {
+  world {
+    row {
+      name: "inputOwner"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "dynamicOwnerPresses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "presses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "releases"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "characters"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "correctKeys"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "textOrder"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "firstTextTime"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "lastTextTime"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "wordsPerMinute"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "keyAccuracy"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "simultaneous"
+      kind: Int
+      value: 0
+    }
+  }
+}
+inputHistory {
+  eventCapacity: 32
+  maximumEventsPerStep: 32
+  retentionSeconds: 5
+}
+seatModes [{ name: "focus", defaultState: "play", states [{ name: "play" }, { name: "text" }] }]
+inputModes {
+  global []
+  families [{
+      name: "focus"
+      selector { kind: SeatState, name: "focus" }
+      default: "play"
+      states [
+        { name: "play", values ["play"], channels ["forward", "strafe", "tapA", "tapB"] }
+        { name: "text", values ["text"], channels ["typed"] }
+      ]
+      transitions []
+    }
+  ]
+}
+inputPatterns [{
+    name: "two-buttons"
+    maximumDurationSeconds: 0.001
+    maximumGapSeconds: 0.001
+    steps [
+      { channel: "tapA", simultaneousGroup: "together", toleranceSeconds: 0 }
+      { channel: "tapB", simultaneousGroup: "together", toleranceSeconds: 0 }
+    ]
+  }
+]
+bindingOverlays [{
+    id: "history-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { id: "tapA", channel: "tapA", sources ["keyboard.u"] }
+              { id: "tapB", channel: "tapB", sources ["keyboard.i"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+rule "count-presses" {
+  forEach: $inputEvents:1
+  when inputEdge(1, tapA, Press, each)
+  mode: Level
+  presses += 1
+}
+rule "count-current-owner" {
+  when inputEdge(`cell:inputOwner:$value`, tapA, Press, 0)
+  mode: Edge
+  dynamicOwnerPresses += 1
+}
+rule "count-releases" {
+  forEach: $inputEvents:1
+  when inputEdge(1, tapA, Release, each)
+  mode: Level
+  releases += 1
+}
+rule "score-simultaneous" {
+  when inputMatch(1, `two-buttons`)
+  mode: Level
+  simultaneous += 1
+  consumeInput(owner: "1", pattern: "two-buttons")
+}
+rule "score-typed-line" {
+  forEach: $inputEvents:1
+  local scalar = inputValue(1, typed, Text, each) ?? 0
+  local time = inputTime(1, typed, Text, each) ?? 0.0
+  when inputEdge(1, typed, Text, each)
+  mode: Level
+  if characters == 0 {
+    firstTextTime = time
+  }
+  // The lesson is "a b": each accepted scalar is judged independently, including the pasted space and b.
+  if (characters == 0 and scalar == 97) or (characters == 1 and scalar == 32) or (characters == 2 and scalar == 98) {
+    correctKeys += 1
+  }
+  characters += 1
+  textOrder = textOrder * 257 + scalar
+  lastTextTime = time
+}
+rule "typing-rates" {
+  when characters > 1 and lastTextTime > firstTextTime
+  mode: Level
+  wordsPerMinute = characters * 12.0 / (lastTextTime - firstTextTime)
+  keyAccuracy = correctKeys * 100.0 / characters
+}
+
+test "a press and release in one step retain both edges" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.u release at:0.002
+    ticks 3
+  }
+  expect {
+    presses == 1
+    releases == 1
+    dynamicOwnerPresses == 1
+  }
+}
+test "equal-time simultaneous presses are order independent" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.i press at:0.001
+    seat1: player.signal keyboard.u press at:0.001
+    ticks 3
+  }
+  expect {
+    simultaneous == 1
+  }
+}
+test "typed and pasted text share focus history and per-key judgement" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.w press
+    seat1: player.mode focus text
+    ticks 3
+    seat1: player.signal keyboard.text "a" at:0.001
+    ticks 30
+    seat1: player.signal keyboard.text " b" at:0.001
+    ticks 3
+  }
+  expect {
+    characters == 3
+    correctKeys == 3
+    keyAccuracy == 100
+    wordsPerMinute == 36
+    textOrder == 6415075
+    channel(1, forward) == 0
+  }
+}
+test "a wrong pasted key reduces accuracy without changing the capture-time rate" {
+  when {
+    ticks 4
+    seat1: player.mode focus text
+    ticks 3
+    seat1: player.signal keyboard.text "a" at:0.001
+    ticks 30
+    seat1: player.signal keyboard.text " c" at:0.001
+    ticks 3
+  }
+  expect {
+    characters == 3
+    correctKeys == 2
+    keyAccuracy > 66 and keyAccuracy < 67
+    wordsPerMinute == 36
+    textOrder == 6415076
+  }
+}

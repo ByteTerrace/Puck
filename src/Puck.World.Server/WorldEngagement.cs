@@ -60,21 +60,20 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// launcher's window-pump thread, so no lock guards this state.</para>
 /// </remarks>
 public sealed partial class WorldEngagement {
-    private readonly WorldPadElement?[] m_defaultPad;
+    private readonly Dictionary<WorldChannelTable, WorldPadElement?[]> m_defaultPads = [];
+    private WorldInputCatalog? m_padCatalog;
     private readonly Func<WorldDefinition> m_definition;
     private readonly IWorldGrantsView m_grants;
     private readonly WorldPopulation m_population;
 
-    // The policy cache, the one place a screen's or a kit's engagement policy is compiled: each entry is compiled from
-    // the live definition's row against the population's live channel table, and kept only while the definition still
-    // holds the very same row object and the population the very same table, so a live edit (world.row.set, a reload)
-    // that replaces either compiles the entry again on its next read, once. A screen's entry is
+    // Screen policies retain logical names. Pad tables are compiled for the source owner's active mapping and
+    // cached per kit/mapping until the catalog changes. A screen's entry is
     // its authored reach mask and pad-kit name (what Compose stamps and FoldTick reads) and its light gun's mapping
     // (what FoldTick aims through); a kit's is its compiled pad map (channel ordinal -> pad element, or null when
     // unmapped). A kit that declares no pad, like a screen naming no kit, reads the engine's baked default table; a null
     // Kit on a body target never reaches a pad at all (pure passthrough).
-    private readonly Dictionary<int, (WorldScreen Row, WorldChannelTable Channels, ScreenPolicy Policy)> m_screenPolicies = new();
-    private readonly Dictionary<string, (WorldKit Row, WorldChannelTable Channels, WorldPadElement?[] Pad)> m_kitPads = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<int, (WorldScreen Row, ScreenPolicy Policy)> m_screenPolicies = new();
+    private readonly Dictionary<(string Name, WorldChannelTable Channels), (WorldKit Row, WorldPadElement?[] Pad)> m_kitPads = new();
     // The live definition's screen and kit rows by index and name (IndexRows), for the section objects they were read from.
     private readonly Dictionary<int, WorldScreen> m_screenRows = new();
     private readonly Dictionary<string, WorldKit> m_kitRows = new(comparer: StringComparer.Ordinal);
@@ -143,11 +142,12 @@ public sealed partial class WorldEngagement {
     // The engine's baked pad map for a screen naming no kit: the two movement ROLES to the left stick (structural
     // ChannelRole ordinals, no channel name involved). It names no gameplay channel — a screen whose machine needs
     // a face button must name a kit whose pad map binds it.
-    private static WorldPadElement?[] CompileDefaultPad() {
+    private static WorldPadElement?[] CompileDefaultPad(WorldChannelTable channels) {
         var table = new WorldPadElement?[ChannelLimits.MaxChannels];
 
-        table[((int)ChannelRole.MoveStrafe)] = WorldPadElement.LeftStickX;
-        table[((int)ChannelRole.MoveAdvance)] = WorldPadElement.LeftStickY;
+        var roles = channels.RoleOrdinals;
+        if (roles.MoveStrafe >= 0) { table[roles.MoveStrafe] = WorldPadElement.LeftStickX; }
+        if (roles.MoveAdvance >= 0) { table[roles.MoveAdvance] = WorldPadElement.LeftStickY; }
 
         return table;
     }
@@ -167,25 +167,6 @@ public sealed partial class WorldEngagement {
         }
 
         return table;
-    }
-    // An authored channel-name list compiled to a ChannelReachMask — every ordinal when the screen authors none.
-    private static ChannelReachMask CompileReach(IReadOnlyList<string>? names, WorldChannelTable channels) {
-        if (names is not { Count: > 0 }) {
-            return ChannelReachMask.All;
-        }
-
-        var bits = default(ChannelMask);
-
-        foreach (var name in names) {
-            if (channels.TryGetOrdinal(
-                name: name,
-                ordinal: out var ordinal
-            )) {
-                bits = bits.With(ordinal: ordinal);
-            }
-        }
-
-        return new ChannelReachMask(Bits: bits);
     }
     // Whether the set still contains the participant's own-body application — the one predicate the capture latch
     // is derived from.
@@ -249,6 +230,11 @@ public sealed partial class WorldEngagement {
 
         if (!composed) {
             return ControlOutcome.NotApplied;
+        }
+
+        if (!m_grants.TryValidateApplications(targetPrincipal,
+            [ControlApplication.OwnBody(bodyIndex: targetPrincipal.Index)], out _)) {
+            return ControlOutcome.Denied;
         }
 
         if (apply) {
@@ -415,9 +401,13 @@ public sealed partial class WorldEngagement {
 
         m_composeScratch.Add(item: new ControlApplication(
             Kit: policy?.Kit,
-            Reach: (policy?.Reach ?? ChannelReachMask.All),
+            Reach: policy?.Reach,
             Target: target
         ));
+
+        if (!m_grants.TryValidateApplications(targetPrincipal, m_composeScratch, out _)) {
+            return false;
+        }
 
         m_grants.SetApplications(
             applications: m_composeScratch,
@@ -609,6 +599,7 @@ public sealed partial class WorldEngagement {
                         if (!replaysInput) {
                             StagePortalForward(
                                 intent: body.EngagedIntent,
+                                channels: body.Channels,
                                 principal: principal,
                                 screenIndex: application.Target.Value
                             );
@@ -619,10 +610,11 @@ public sealed partial class WorldEngagement {
 
                     var masked = ApplyMask(
                         intent: body.EngagedIntent,
-                        mask: policy.Reach
+                        mask: policy.Reach?.Project(body.Channels) ?? ChannelReachMask.All
                     );
                     var pad = (Translate(
                         intent: masked,
+                        channels: body.Channels,
                         kit: policy.Kit
                     ) with {
                         Pointer = AimThrough(
@@ -643,11 +635,12 @@ public sealed partial class WorldEngagement {
                     );
                 } else if (application.Target.Kind == GrantSubjectKind.Body) {
                     m_bodyContributions.Add(item: new BodyRouteContribution(
+                        SourceBody: index,
                         TargetBody: application.Target.Value,
                         Principal: principal,
                         Intent: ApplyMask(
                             intent: body.EngagedIntent,
-                            mask: application.Reach
+                            mask: application.Reach?.Project(body.Channels) ?? ChannelReachMask.All
                         )
                     ));
                 }
@@ -778,9 +771,10 @@ public sealed partial class WorldEngagement {
     /// float round-trip.</summary>
     /// <param name="intent">The resolved (and reach-masked) intent to translate.</param>
     /// <param name="kit">The application's kit name, or <see langword="null"/> for the engine default.</param>
+    /// <param name="channels">The source owner's current input mapping.</param>
     /// <returns>The controller image the intent presses.</returns>
-    public MachinePadState Translate(PlayerIntent intent, string? kit) {
-        var table = PadOf(kit: kit);
+    public MachinePadState Translate(PlayerIntent intent, string? kit, WorldChannelTable channels) {
+        var table = PadOf(kit: kit, channels: channels);
         var buttons = MachineButtons.None;
         var leftStick = Vector2.Zero;
         var rightStick = Vector2.Zero;
@@ -835,7 +829,6 @@ public sealed partial class WorldEngagement {
         m_population = population;
         m_grants = grants;
         m_definition = definition;
-        m_defaultPad = CompileDefaultPad();
     }
 
     /// <summary>Returns an application as the fold delivers it now: a screen member carries its screen's live policy
@@ -896,7 +889,7 @@ public sealed partial class WorldEngagement {
                 );
             }
             foreach (var kitName in m_kitPads.Keys) {
-                if (!m_kitRows.ContainsKey(key: kitName)) {
+                if (!m_kitRows.ContainsKey(key: kitName.Name)) {
                     _ = m_kitPads.Remove(key: kitName);
                 }
             }
@@ -914,8 +907,6 @@ public sealed partial class WorldEngagement {
             return null;
         }
 
-        var channels = m_population.Channels;
-
         if (
             m_screenPolicies.TryGetValue(
                 key: screenIndex,
@@ -924,10 +915,6 @@ public sealed partial class WorldEngagement {
             ReferenceEquals(
                 objA: cached.Row,
                 objB: screen
-            ) &&
-            ReferenceEquals(
-                objA: cached.Channels,
-                objB: channels
             )
         ) {
             return cached.Policy;
@@ -943,21 +930,23 @@ public sealed partial class WorldEngagement {
                 : null
             ),
             Kit: screen.Route.Kit,
-            Reach: CompileReach(
-                channels: channels,
-                names: screen.Route.Channels
-            )
+            Reach: screen.Route.Channels is { Count: > 0 } names ? new WorldChannelSelection(names) : null
         );
 
-        m_screenPolicies[screenIndex] = (screen, channels, policy);
+        m_screenPolicies[screenIndex] = (screen, policy);
 
         return policy;
     }
     // A kit's compiled pad map from the live definition's row of that name, compiled once per row object; the engine's
     // baked default table for no kit, a kit the definition does not declare, or a kit that declares no pad.
-    private WorldPadElement?[] PadOf(string? kit) {
+    private WorldPadElement?[] PadOf(string? kit, WorldChannelTable channels) {
+        if (!ReferenceEquals(m_padCatalog, m_population.InputCatalog)) {
+            m_padCatalog = m_population.InputCatalog;
+            m_defaultPads.Clear();
+            m_kitPads.Clear();
+        }
         if (kit is not { Length: > 0 } name) {
-            return m_defaultPad;
+            return DefaultPad(channels);
         }
 
         IndexRows();
@@ -969,23 +958,17 @@ public sealed partial class WorldEngagement {
             ) ||
             (row.PadRaw is not { Count: > 0 })
         ) {
-            return m_defaultPad;
+            return DefaultPad(channels);
         }
-
-        var channels = m_population.Channels;
 
         if (
             m_kitPads.TryGetValue(
-                key: name,
+                key: (name, channels),
                 value: out var cached
             ) &&
             ReferenceEquals(
                 objA: cached.Row,
                 objB: row
-            ) &&
-            ReferenceEquals(
-                objA: cached.Channels,
-                objB: channels
             )
         ) {
             return cached.Pad;
@@ -996,27 +979,33 @@ public sealed partial class WorldEngagement {
             pad: row.Pad
         );
 
-        m_kitPads[name] = (row, channels, pad);
+        m_kitPads[(name, channels)] = (row, pad);
 
+        return pad;
+    }
+    private WorldPadElement?[] DefaultPad(WorldChannelTable channels) {
+        if (!m_defaultPads.TryGetValue(channels, out var pad)) { m_defaultPads.Add(channels, pad = CompileDefaultPad(channels)); }
         return pad;
     }
 
     /// <summary>Gets this tick's body-target contributions — <see cref="WorldServer.Step"/> drains this right after
-    /// <see cref="FoldTick"/> and enqueues each as an ordinary <see cref="IntentSubmission"/> for the next tick's
+    /// <see cref="FoldTick"/> and queues its derived fold for the next tick's
     /// drain, landing in <see cref="WorldTick.StageContribution"/> under the same Drive-over-body check every
     /// co-driving seat or addon contribution passes through — possession is Drive-over-body plus this application,
     /// never a second authority path.</summary>
     public IReadOnlyList<BodyRouteContribution> BodyContributions => m_bodyContributions;
+    /// <summary>Releases derived scratch after the tick has queued every target fold.</summary>
+    internal void CompleteBodyRouting() => m_bodyContributions.Clear();
 }
 /// <summary>One body-target application's per-tick contribution — <see cref="WorldEngagement.FoldTick"/>'s output for
 /// a possession/co-drive member, drained by <see cref="WorldServer.Step"/> right after
-/// <see cref="WorldEngagement.FoldTick"/> and enqueued as an ordinary <see cref="IntentSubmission"/> for the
-/// target's next tick.</summary>
+/// <see cref="WorldEngagement.FoldTick"/> and queued as derived input for the target's next tick.</summary>
+/// <param name="SourceBody">The body whose already composed input is routed.</param>
 /// <param name="TargetBody">The 0-based entity index the contribution targets.</param>
 /// <param name="Principal">The applying principal — the contribution's acting identity (still checked for Drive over
-/// <paramref name="TargetBody"/> at the ordinary intent-submission door; an application alone never grants Drive).</param>
+/// <paramref name="TargetBody"/> at delivery; an application alone never grants Drive).</param>
 /// <param name="Intent">The reach-masked intent to contribute.</param>
-public readonly record struct BodyRouteContribution(int TargetBody, Principal Principal, PlayerIntent Intent);
+public readonly record struct BodyRouteContribution(int SourceBody, int TargetBody, Principal Principal, PlayerIntent Intent);
 
 /// <summary>A screen's engagement policy as its row authors it: the pad kit its applications translate through, the
 /// channels they reach, and the mapping its light gun aims through.</summary>
@@ -1024,5 +1013,5 @@ public readonly record struct BodyRouteContribution(int TargetBody, Principal Pr
 /// <c>$pointer:</c> rule read maps through, or <see langword="null"/> for a screen whose route input is not
 /// <see cref="SourceDestination.Simulation"/> or that maps no ray.</param>
 /// <param name="Kit">The route's <see cref="WorldScreenRoute.Kit"/>, or <see langword="null"/> for the engine default.</param>
-/// <param name="Reach">The compiled mask of the route's <see cref="WorldScreenRoute.Channels"/>.</param>
-internal readonly record struct ScreenPolicy(SourceMapping? Aim, string? Kit, ChannelReachMask Reach);
+/// <param name="Reach">The logical names from the route's <see cref="WorldScreenRoute.Channels"/>, or null for all.</param>
+internal readonly record struct ScreenPolicy(SourceMapping? Aim, string? Kit, WorldChannelSelection? Reach);

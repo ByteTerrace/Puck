@@ -19,6 +19,40 @@ namespace Puck.World.Server.Tests;
 /// act under one reversed fact.
 /// </summary>
 public sealed class SessionPrincipalLawTests {
+    [Fact]
+    public void BodylessTimedInputRetainsBothEdgesAndResetsItsPointerImage() {
+        var document = Document();
+        document = document with { ChannelsRaw = [.. document.Channels, new("sessionConfirm", ChannelShape.Binary, Composition: true)] };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var session = AdmitSession(fixture);
+        fixture.Step();
+        var catalog = fixture.Server.Population.InputCatalog;
+        Assert.True(catalog.TryGetLogicalId("sessionConfirm", out var channel));
+        WorldInputSource[] sources = [new(0, channel, WorldInputContributionKind.Level, "portal:confirm")];
+        var owner = fixture.Server.Input.Admit(session, -1, sources);
+        var producer = new WorldInputProducer(catalog, owner.Mapping, sources, 128, owner.Revision, owner.Epoch);
+        var tick = fixture.Server.NextInputTick;
+        Assert.True(producer.Observe(0, FixedQ4816.One.Value, tick, FixedQ4816.FromRawBits(1), 1));
+        Assert.True(producer.Observe(0, 0, tick, FixedQ4816.FromRawBits(2), 1));
+        fixture.Server.EnqueueIntent(new(tick, -1, default, session, Input: producer.Publish(tick)));
+        fixture.Step();
+        Assert.True(owner.TryEvent(channel, WorldInputEventKind.Press, 0, out var press));
+        Assert.True(owner.TryEvent(channel, WorldInputEventKind.Release, 0, out var release));
+        Assert.Equal(press.Id, release.HoldPress);
+        Assert.False(owner.TryHeld(channel, out _));
+        tick = fixture.Server.NextInputTick;
+        Assert.True(producer.Observe(0, FixedQ4816.One.Value, tick, default, 2));
+        fixture.Server.EnqueueIntent(new(tick, -1, default, session, Input: producer.Publish(tick)));
+        fixture.Step();
+        Assert.Equal(FixedQ4816.One, fixture.Server.GrantTable.ReadSessionChannel(session.Index, channel));
+        fixture.Server.Input.Reset(session);
+        Assert.Equal(FixedQ4816.Zero, fixture.Server.GrantTable.ReadSessionChannel(session.Index, channel));
+        fixture.Server.EnqueueIntent(new(fixture.Server.NextInputTick, -1, default, session, Input: producer.Publish(fixture.Server.NextInputTick)));
+        fixture.Step();
+        Assert.False(owner.TryHeld(channel, out _));
+        Assert.Equal(FixedQ4816.Zero, fixture.Server.GrantTable.ReadSessionChannel(session.Index, channel));
+    }
+
     /// <summary>The authority every session in these laws observes from; the wildcard entry admits it.</summary>
     private const string Viewer = "viewer/portal";
     /// <summary>The placement row the admission verdict grants a session, absent from the fixture document.</summary>

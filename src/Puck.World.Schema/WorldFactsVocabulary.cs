@@ -45,6 +45,14 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <summary>Gets the document every name resolves against.</summary>
     public WorldDefinition Definition { get; }
     /// <inheritdoc/>
+    public override Puck.State.Rules.RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) {
+        if (reference.Call is not { Channel: "inputEvents" } call) { return null; }
+        if (call.Count < 1) { throw new RuleException(WorldRuleRefusal.ChannelMalformed, ruleName, "inputEvents expects one input owner"); }
+        var owner = WorldFactsVocabulary.CompileInputOwner(string.Join(':', call.Texts()), this, ruleName);
+        Needs.Add(FacetRef.Of<IWorldInputEvents>());
+        return new WorldInputIteration(owner, WorldInputCatalog.For(Definition).HistoryCapacity(Definition.InputHistory?.EventCapacity ?? 256));
+    }
+    /// <inheritdoc/>
     /// <remarks>The document's entity-table capacity.</remarks>
     public override long BodyCapacity => Definition.Population.Capacity;
 
@@ -102,7 +110,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <summary>Returns a declared channel's ordinal, or <c>-1</c>.</summary>
     /// <param name="name">The channel name.</param>
     /// <returns>The ordinal, or <c>-1</c>.</returns>
-    public int ChannelOrdinal(string name) => (WorldChannelTable.For(definition: Definition).TryGetOrdinal(name: name, ordinal: out var ordinal) ? ordinal : -1);
+    public int ChannelOrdinal(string name) => (WorldInputCatalog.For(Definition).TryGetLogicalId(name, out var logicalId) ? logicalId : -1);
     /// <inheritdoc/>
     public override Draw? FindDraw(StateRow row) {
         ArgumentNullException.ThrowIfNull(argument: row);
@@ -470,6 +478,13 @@ public static partial class WorldFactsVocabulary {
     /// <summary>Gets the one registry every world compile against the arena-addressed compiler shares.</summary>
     public static RuleVocabulary Instance { get; } = new(
         effects: [
+            new WorldFactsEffectArm(typeof(WorldEffect.ConsumeInput), "consumeInput", static (effect, rule, context) => {
+                var consume = (WorldEffect.ConsumeInput)effect;
+                var pattern = WorldFactsOperandFamily.CompileInputPattern(consume.Pattern, context, rule);
+                return new WorldInputConsumeEffect(WorldFactsOperandFamily.CompileInputOwner(consume.Owner, context, rule),
+                    pattern, WorldInputCatalog.For(context.Definition).PatternWork(pattern, context.Definition.InputHistory?.EventCapacity ?? 256),
+                    $"consumeInput {consume.Owner} {consume.Pattern}");
+            }),
             BodyMotionArm<WorldEffect.SetVerticalVelocity>(discriminator: "setVerticalVelocity"),
             BodyMotionArm<WorldEffect.ScaleVerticalVelocity>(discriminator: "scaleVerticalVelocity"),
             BodyMotionArm<WorldEffect.PlanarImpulse>(discriminator: "planarImpulse"),

@@ -1,0 +1,291 @@
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "input-continuity-tests"
+
+channels [
+  { name: "note", shape: Binary, composition: true }
+  { name: "charge", shape: Binary, composition: true }
+  { name: "section", shape: Binary, composition: true }
+]
+state {
+  body [{ name: "section", kind: Counter, initial: 0, envelope { $type: "set", values [0, 1] } }]
+  world {
+    row {
+      name: "notePresses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "noteReleases"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "noteOrigin"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "noteIdentity"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "chargeOrigin"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "chargeIdentity"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "keptNote"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "keptCharge"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "chargedRelease"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "cancelledNotes"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "cancelledCharges"
+      kind: Int
+      value: 0
+    }
+  }
+}
+// The original press expires long before release; the continuation owns its identity.
+inputHistory {
+  eventCapacity: 8
+  maximumEventsPerStep: 8
+  retentionSeconds: 0.1
+}
+inputModes {
+  global ["section"]
+  families [{
+      name: "section"
+      selector { kind: BodyState, name: "section" }
+      default: "first"
+      states [
+        { name: "first", values ["0"], channels ["note", "charge"] }
+        { name: "second", values ["1"], channels ["note", "charge"] }
+      ]
+      transitions [{ from: "first", to: "second", keep ["note", "charge"] }]
+    }
+  ]
+}
+bindingOverlays [{
+    id: "continuity-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { id: "note", channel: "note", sources ["keyboard.u"] }
+              { id: "charge", channel: "charge", sources ["keyboard.i"] }
+              { id: "section", channel: "section", sources ["keyboard.o"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+rule "remember-note" {
+  forEach: $inputEvents:1
+  when inputEdge(1, note, Press, each)
+  mode: Level
+  notePresses += 1
+  noteOrigin = inputHeldSince(1, note)
+  noteIdentity = inputHeldPress(1, note)
+}
+rule "remember-charge" {
+  forEach: $inputEvents:1
+  when inputEdge(1, charge, Press, each)
+  mode: Level
+  chargeOrigin = inputHeldSince(1, charge)
+  chargeIdentity = inputHeldPress(1, charge)
+}
+rule "change-section" {
+  when inputEdge(1, section, Press, 0)
+  mode: Level
+  setBodyState(key: 0, state: "section", expression: 1 - bodyState(body, 0, section))
+}
+rule "note-continues" {
+  when (bodyState(body, 0, section) == 1 and
+    inputHeldSince(1, note) == noteOrigin and
+    inputHeldPress(1, note) == noteIdentity)
+  mode: Level
+  keptNote = 1
+}
+rule "charge-continues" {
+  when (bodyState(body, 0, section) == 1 and
+    inputHeldSince(1, charge) == chargeOrigin and
+    inputHeldPress(1, charge) == chargeIdentity)
+  mode: Level
+  keptCharge = 1
+}
+rule "release-note" {
+  forEach: $inputEvents:1
+  when inputEdge(1, note, Release, each)
+  mode: Level
+  noteReleases += 1
+}
+rule "release-charge" {
+  forEach: $inputEvents:1
+  local released = inputTime(1, charge, Release, each) ?? 0.0
+  when inputEdge(1, charge, Release, each) and (released - chargeOrigin) >= 0.5
+  mode: Level
+  chargedRelease += 1
+}
+rule "cancel-note" {
+  forEach: $inputEvents:1
+  when inputEdge(1, note, Cancel, each)
+  mode: Level
+  cancelledNotes += 1
+}
+rule "cancel-charge" {
+  forEach: $inputEvents:1
+  when inputEdge(1, charge, Cancel, each)
+  mode: Level
+  cancelledCharges += 1
+}
+test "a rhythm hold and fighting charge retain original identity across a section switch" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    ticks 12
+    seat1: player.signal keyboard.o press
+    ticks 24
+    seat1: player.signal keyboard.u release at:0.001
+    seat1: player.signal keyboard.i release at:0.002
+    ticks 3
+  }
+  expect {
+    bodyState(body, 0, section) == 1
+    keptNote == 1
+    keptCharge == 1
+    notePresses == 1
+    noteReleases == 1
+    chargedRelease == 1
+  }
+}
+test "a mid-session checkpoint restores held origins and replays their later release" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press at:0.001
+    seat1: player.signal keyboard.i press at:0.002
+    ticks 12
+    seat1: replay.record input-held-continuation
+    ticks 2
+    seat1: player.signal keyboard.o press
+    ticks 24
+    seat1: player.signal keyboard.u release at:0.001
+    seat1: player.signal keyboard.i release at:0.002
+    ticks 3
+    seat1: replay.stop
+    seat1: replay.inspect input-held-continuation
+  }
+  expect {
+    keptNote == 1
+    keptCharge == 1
+    notePresses == 1
+    noteReleases == 1
+    chargedRelease == 1
+  }
+}
+test "history wraps while a held note retains its original press" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press
+    seat1: player.signal keyboard.i press
+    seat1: player.signal keyboard.i release
+    ticks 4
+    seat1: player.signal keyboard.i press
+    seat1: player.signal keyboard.i release
+    ticks 4
+    seat1: player.signal keyboard.i press
+    seat1: player.signal keyboard.i release
+    ticks 4
+    seat1: player.signal keyboard.i press
+    seat1: player.signal keyboard.i release
+    ticks 4
+    seat1: player.signal keyboard.i press
+    seat1: player.signal keyboard.i release
+    ticks 4
+    seat1: player.signal keyboard.o press
+    ticks 4
+    seat1: player.signal keyboard.u release
+    ticks 3
+  }
+  expect {
+    keptNote == 1
+    notePresses == 1
+    noteReleases == 1
+  }
+}
+test "an unlisted return cancels a note and charge without scoring a release" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press
+    seat1: player.signal keyboard.i press
+    ticks 12
+    seat1: player.signal keyboard.o press
+    ticks 4
+    seat1: player.signal keyboard.o release
+    ticks 12
+    seat1: player.signal keyboard.o press
+    ticks 4
+    seat1: player.signal keyboard.u release
+    seat1: player.signal keyboard.i release
+    ticks 3
+  }
+  expect {
+    bodyState(body, 0, section) == 0
+    keptNote == 1
+    keptCharge == 1
+    notePresses == 1
+    noteReleases == 0
+    chargedRelease == 0
+    cancelledNotes == 1
+    cancelledCharges == 1
+    channel(1, note) == 0
+    channel(1, charge) == 0
+  }
+}
+test "a policy edit preserves an unchanged note and cancels the changed charge" {
+  when {
+    ticks 4
+    seat1: player.signal keyboard.u press
+    seat1: player.signal keyboard.i press
+    ticks 4
+    seat1: world.row.set inputModes families[0].transitions[0].keep ["note"]
+    ticks 4
+    seat1: player.signal keyboard.o press
+    ticks 24
+    seat1: player.signal keyboard.u release
+    seat1: player.signal keyboard.i release
+    ticks 3
+  }
+  expect {
+    keptNote == 1
+    notePresses == 1
+    noteReleases == 1
+    chargedRelease == 0
+    cancelledCharges == 1
+    channel(1, charge) == 0
+  }
+}

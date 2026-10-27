@@ -13,6 +13,16 @@ namespace Puck.Commands;
 /// only builders; every other surface reads a command through <see cref="CommandMetadata"/> instead.
 /// </remarks>
 public readonly record struct CommandContext {
+    /// <summary>The original capture-clock coordinate, or zero for a boundary-synthesized edge.</summary>
+    public ulong CaptureTick { get; internal init; }
+    /// <summary>Explicit next-interval offset from scripted input, otherwise null.</summary>
+    public Puck.Maths.FixedQ4816? SimulationOffset { get; internal init; }
+    /// <summary>Shared identity of sibling outputs from one captured activation.</summary>
+    public ulong Activation { get; internal init; }
+    /// <summary>The host interval's inclusive capture-clock start.</summary>
+    public ulong CaptureWindowStart { get; internal init; }
+    /// <summary>The host interval's exclusive capture-clock end.</summary>
+    public ulong CaptureWindowEnd { get; internal init; }
     /// <summary>Initializes a new instance of the <see cref="CommandContext"/> struct.</summary>
     /// <param name="value">The command value for this invocation.</param>
     /// <param name="phase">The transition this invocation represents.</param>

@@ -76,8 +76,9 @@ public sealed class WorldObservationSession {
 
     // Set once a destination that ended the session refused another: the observer holds its last image.
     internal bool ReadmissionRefused { get; set; }
-    // Whether the last settle forwarded input through this screen, so a stop sends one release.
+    // Whether the last settle forwarded input through this screen, so a stop sends one cancellation boundary.
     internal bool WasForwarding { get; set; }
+    internal WorldPortalInputProducer? Input { get; set; }
 }
 public sealed partial class WorldInstanceHost {
     // Each owning instance's observations, and the definition they were reconciled against.
@@ -357,7 +358,7 @@ public sealed partial class WorldInstanceHost {
     }
     // Maps one forward through the portal onto the destination: the glass point and direction through the door the
     // face's portal names, and the channels by name into the destination's own ordinals.
-    private static bool TryMapForward(WorldDefinition source, WorldDefinition destination, in WorldPortalFace face, in WorldPortalForward forward, out PlayerIntent mapped) {
+    private static bool TryMapForward(WorldDefinition destination, WorldChannelTable targetChannels, in WorldPortalFace face, in WorldPortalForward forward, out PlayerIntent mapped) {
         mapped = default;
 
         // The counterpart names a declared creation face on a destination placement: its geometry is what the glass maps
@@ -379,8 +380,7 @@ public sealed partial class WorldInstanceHost {
 
         var channels = new ChannelValues();
 
-        var sourceChannels = WorldChannelTable.For(definition: source);
-        var targetChannels = WorldChannelTable.For(definition: destination);
+        var sourceChannels = forward.Channels;
 
         for (var index = 0; (index < sourceChannels.ChannelCount); index++) {
             var address = sourceChannels.Address(declaration: index);
@@ -428,10 +428,10 @@ public sealed partial class WorldInstanceHost {
         (instance.Tape is not { Mode: WorldReplayMode.Replaying })
     );
     // Forwards what an instance's engagement routed through its portal faces this step to each face's session, and
-    // one release to a face whose forwarding stopped (a disengage, a lost Control hold, a ray off the glass, a replayed
+    // one cancellation to a face whose forwarding stopped (a disengage, a lost Control hold, a ray off the glass, a replayed
     // tick, or an owner that did not step). Each travels the destination's own link, where its tape records it. A
     // destination that is not taking input (paused, stopped, held, or driving its own tape) is sent nothing, and a
-    // release owed to it waits.
+    // cancellation owed to it waits.
     private void ForwardScreenSessions(WorldInstance owner, SortedList<WorldObservationSite, WorldObservationSession> sessions, bool stepped) {
         var engagement = owner.Server.Engagement;
 
@@ -461,6 +461,7 @@ public sealed partial class WorldInstanceHost {
 
             var mapped = default(PlayerIntent);
             var found = false;
+            var selected = default(WorldPortalForward);
 
             if (
                 stepped &&
@@ -478,13 +479,15 @@ public sealed partial class WorldInstanceHost {
                         (forward.ScreenIndex == physical.Index) &&
                         TryMapForward(
                         destination: destination.Server.Configuration,
+                        targetChannels: destination.Server.Input.TryGet(observation.Session, out var inputOwner)
+                            ? inputOwner!.Mapping.Channels : destination.Server.Population.InputCatalog.DefaultMapping.Channels,
                         face: in face,
                         forward: in forward,
-                        mapped: out mapped,
-                        source: owner.Server.Configuration
+                        mapped: out mapped
                     )
                     ) {
                         found = true;
+                        selected = forward;
 
                         break;
                     }
@@ -498,12 +501,12 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            destination.Link.SubmitIntent(submission: new IntentSubmission(
-                EntityIndex: -1,
-                Intent: mapped,
-                Principal: observation.Session,
-                Tick: destination.Server.NextInputTick
-            ));
+            if (found) {
+                session.Input ??= new WorldPortalInputProducer(destination, observation.Session);
+                _ = session.Input.Forward(destination, owner.Server, in selected, mapped);
+            } else {
+                session.Input?.Stop(destination);
+            }
             session.WasForwarding = found;
         }
     }
@@ -605,6 +608,7 @@ public sealed partial class WorldInstanceHost {
                 sourceAuthority: instance.Server.AuthorityIdentity
             ) is { } observation) {
                 session.Observation = observation;
+                session.Input = null;
                 NarrateScreenSession(text: $"[world.screen: {instance.Name} session {screen} -> destination '{session.Source.Destination}' ended its session — observing again as {observation.Session.Describe()}]");
             } else {
                 session.ReadmissionRefused = true;

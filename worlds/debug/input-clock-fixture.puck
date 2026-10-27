@@ -1,0 +1,75 @@
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+music [
+  {
+    name: "pulse"
+    source: "input-clock.music.json"
+    hash: "sha256/9f412320c26f54c5617fe54c7f6f439a8d7ad415cbe65d0b215a08c560cce177"
+  }
+]
+channels [
+  { name: "inside", shape: Binary, composition: true }
+  { name: "outside", shape: Binary, composition: true }
+]
+inputHistory {
+  eventCapacity: 8
+  maximumEventsPerStep: 8
+}
+state {
+  world {
+    row {
+      name: "insideError"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "outsideError"
+      kind: Fixed
+      value: "0"
+    }
+    row {
+      name: "hits"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "misses"
+      kind: Int
+      value: 0
+    }
+  }
+}
+bindingOverlays [{
+    id: "clock-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { id: "inside", channel: "inside", sources ["keyboard.u"] }
+              { id: "outside", channel: "outside", sources ["keyboard.i"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+rule "inside-window" {
+  local error = clock(pulse, phaseErrorAt, 1, inside, Press, 0) ?? 0.0
+  when inputEdge(1, inside, Press, 0)
+  mode: Edge
+  insideError = error
+  // The first representable value at or above half a millisecond is 33 raw units.
+  if error < 0.0005 {
+    hits += 1
+  }
+}
+rule "outside-window" {
+  local error = clock(pulse, phaseErrorAt, 1, outside, Press, 0) ?? 0.0
+  when inputEdge(1, outside, Press, 0)
+  mode: Edge
+  outsideError = error
+  if error >= 0.0005 {
+    misses += 1
+  }
+}

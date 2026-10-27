@@ -80,12 +80,12 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ushort> m_eventBudgets = new();
     private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), long> m_holdCeilings = new();
     // Co-driving payload, split by writer: m_channelReach keys an untrusted contributor's Drive row to which channel
-    // ordinals it may touch; m_poolCeilings keys the OCCUPYING SEAT'S OWN Drive row (seatN drive body:N) to one
-    // ceiling per channel ordinal, bounding how far the pool may pull that channel. A ceiling is never derived from
+    // names it may touch; m_poolCeilings keys the OCCUPYING SEAT'S OWN Drive row (seatN drive body:N) to one
+    // ceiling per logical channel name, bounding how far the pool may pull that channel. A ceiling is never derived from
     // contributor rows. Both are written unconditionally by TryGrant on every accepted grant that carries one
     // (last-write-wins) and cleared by Revoke.
-    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ChannelReachMask> m_channelReach = new();
-    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), ChannelCeilings> m_poolCeilings = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), WorldChannelSelection> m_channelReach = new();
+    private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), Dictionary<string, long>> m_poolCeilings = new();
     // (principal, capability, subject) -> the mutation-kind ordinals a Mutate-over-section or Edit-over-state row
     // may dispatch. A null mask on a re-grant of the same row CLEARS the entry, rather than leaving it untouched.
     private readonly Dictionary<(Grantee Grantee, WorldCapability Capability, GrantSubject Subject), MutationKindMask> m_kindMasks = new();
@@ -1162,6 +1162,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         _ = m_applications.Remove(key: principal);
 
+        m_host?.Input.ResetRoute(principal);
+
         foreach (var dissolved in composed) {
             NotifyApplicationTransition(
                 current: null,
@@ -1270,7 +1272,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     key: (pair.Key, capability, subject),
                     value: out var reach
                 )) {
-                    _ = builder.Append(value: " channels:0x").Append(value: $"{reach.Bits.Axes:x}/{reach.Bits.Buttons:x} registers:{reach.Registers:x}");
+                    _ = builder.Append(value: " channels:").AppendJoin(',', reach.Channels).Append(value: $" registers:{reach.Registers:x}");
                 }
 
                 // NAMES, never a hex lane: a read-back an operator cannot decode by eye is a read-back that does
@@ -1289,7 +1291,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     _ = builder.Append(value: " writes:").Append(value: writeMask.Describe());
                 }
 
-                // The seat's authored ceilings render per ORDINAL, never as one scalar: a row carrying a `forward`
+                // The seat's authored ceilings render per logical name: a row carrying a `forward`
                 // ceiling and a different `turn` ceiling has to read as the two numbers it is.
                 if (m_poolCeilings.TryGetValue(
                     key: (pair.Key, capability, subject),
@@ -1297,14 +1299,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 )) {
                     var first = true;
 
-                    for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-                        if (ceilings[ordinal] == 0L) {
-                            continue;
-                        }
-
+                    foreach (var (channel, ceiling) in ceilings) {
                         _ = builder.Append(value: (first
                             ? " ceilings:"
-                            : ",")).Append(value: ordinal).Append(value: '=').Append(value: ceilings[ordinal]);
+                            : ",")).Append(value: channel).Append(value: '=').Append(value: ceiling);
                         first = false;
                     }
                 }
@@ -1487,14 +1485,24 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     internal static bool IsTrusted(Principal principal) => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat or PrincipalKind.World);
 
     /// <inheritdoc/>
-    public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) =>
-        (m_poolCeilings.TryGetValue(
+    public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) {
+        var projected = default(ChannelCeilings);
+        if (m_poolCeilings.TryGetValue(
             key: (seat, WorldCapability.Drive, subject),
             value: out var ceilings
-        )
-            ? ceilings
-            : default
-        );
+        )) {
+            var table = ChannelsFor(subject);
+            foreach (var (name, ceiling) in ceilings) {
+                if (table.TryGetOrdinal(name, out var ordinal)) {
+                    projected = projected.WithCeiling(new(default(ChannelMask).With(ordinal)), ceiling);
+                }
+            }
+        }
+        return projected;
+    }
+
+    private WorldChannelTable ChannelsFor(GrantSubject subject) =>
+        subject.Kind == GrantSubjectKind.Body && Host.Body(subject.Value) is { } body ? body.Channels : Host.Population.Channels;
     /// <inheritdoc/>
     /// <remarks>
     /// Sorted by (<see cref="GrantSubjectKind"/>, value, id) rather than returned in <see cref="HashSet{T}"/>
@@ -1607,6 +1615,9 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_ownedGroups.Clear();
         m_ownedGroupRoleReach.Clear();
 
+        foreach (var principal in droppedApplications.Select(static row => row.Principal).Distinct()) {
+            m_host?.Input.ResetRoute(principal);
+        }
         foreach (var (principal, target) in droppedApplications) {
             NotifyApplicationTransition(
                 current: null,
@@ -1708,6 +1719,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // WorldHandleTable's own remarks on why a cleared slot is what the projection BECOMES, never an
             // independent edit made here.
             m_revision++;
+            if (capability == WorldCapability.Drive) { m_host?.Input.RevokeDrive(grantee, subject); }
 
             // Revoking Control re-tests every application this principal stands on: the authority to apply and the
             // application are separate storage, so nothing else would ever drop one whose authority has been
@@ -1722,6 +1734,15 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         return removed;
+    }
+    /// <inheritdoc/>
+    public bool TryValidateApplications(Principal principal, IReadOnlyList<ControlApplication> applications, out string reason) {
+        if (m_host is not null && !m_host.Input.TryValidateApplications(principal, applications, out reason)) {
+            m_host.Output.Narrate(channel: "input.refused", text: reason);
+            return false;
+        }
+        reason = string.Empty;
+        return true;
     }
     /// <inheritdoc/>
     public void SetApplications(Principal principal, IReadOnlyList<ControlApplication> applications) {
@@ -1740,6 +1761,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         } else {
             m_applications[principal] = composed;
         }
+
+        if (!SameApplications(previous, composed)) { m_host?.Input.ResetRoute(principal); }
 
         foreach (var dropped in previous) {
             if (!Holds(
@@ -1829,13 +1852,18 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             value: out budget
         );
     /// <inheritdoc/>
-    public bool TryGetChannelReach(Principal principal, GrantSubject subject, out ChannelReachMask mask) =>
-        TryGetGrantValue(
+    public bool TryGetChannelReach(Principal principal, GrantSubject subject, WorldChannelTable channels, out ChannelReachMask mask) {
+        var found = TryGetInputReach(principal, subject, out var selection);
+        mask = found ? selection.Project(channels) : default;
+        return found;
+    }
+    /// <summary>Reads semantic Drive reach before storage projection, so text/history admission obeys the same grant.</summary>
+    public bool TryGetInputReach(Principal principal, GrantSubject subject, out WorldChannelSelection selection) => TryGetGrantValue(
             capability: WorldCapability.Drive,
             grantee: principal,
             subject: subject,
             table: m_channelReach,
-            value: out mask
+            value: out selection
         );
     /// <summary>Determines whether <paramref name="bodyIndex"/> is currently drive-gated — carries a nonzero cell on a state row
     /// declaring <see cref="WorldStateRow.GatesDrive"/> — and, when it is, which row decided it. Checked fresh every
@@ -1934,6 +1962,15 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="reason">On rejection, the human-readable reason; empty on success.</param>
     /// <returns><see langword="true"/> when the grant was added.</returns>
     public bool TryGrant(WorldGrant grant, out string reason) {
+        if (grant.Consent is { Registers: not 0 }) { reason = "pool consent cannot name target registers"; return false; }
+        if (m_host is not null) {
+            foreach (var name in grant.Reach?.Channels ?? []) {
+                if (!Host.Population.Channels.TryGetLogicalId(name, out _)) { reason = $"reach names undeclared channel '{name}'"; return false; }
+            }
+            foreach (var name in grant.Consent?.Channels ?? []) {
+                if (!Host.Population.Channels.TryGetLogicalId(name, out _)) { reason = $"consent names undeclared channel '{name}'"; return false; }
+            }
+        }
         if (Conflicts(
             grant: grant,
             reason: out reason
@@ -1979,10 +2016,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 key: key
             );
 
-            ceilings = ceilings.WithCeiling(
-                ceiling: authoredCeiling,
-                channels: consent
-            );
+            ceilings ??= new(StringComparer.Ordinal);
+            foreach (var name in consent.Channels) { ceilings[name] = authoredCeiling; }
         } else if (grant.Reach is { } reach) {
             // A contributor's REACH, last-write-wins exactly like a budget re-grant: a re-grant naming a different
             // channel set IS the reach-update verb, no new grammar needed.

@@ -807,6 +807,7 @@ public static class WorldBootComposition {
         // The moved host engine's one seam into the desktop's client/roster/seat-router/input-router — see
         // IWorldEmbodiedSeats.
         services.AddSingleton<IWorldEmbodiedSeats>(implementationFactory: static sp => new WorldClientSeats(
+            bindings: sp.GetRequiredService<WorldSeatBindings>(),
             client: sp.GetRequiredService<WorldClient>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             seatRouter: sp.GetRequiredService<WorldSeatAuthorityRouter>(),

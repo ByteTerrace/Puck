@@ -345,7 +345,7 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                if (!Host.Population.Channels.TryGetOrdinal(
+                if (!body.Channels.TryGetOrdinal(
                     name: channelName,
                     ordinal: out var ordinal
                 )) {
@@ -377,7 +377,7 @@ public sealed partial class WorldTick {
 
                 if (
                     (placement.Board?.Engage is not { } engage) ||
-                    !Host.Population.Channels.TryGetOrdinal(
+                    !body.Channels.TryGetOrdinal(
                     name: engage.Channel,
                     ordinal: out var ordinal
                 ) ||
@@ -415,6 +415,8 @@ public sealed partial class WorldTick {
     // kit plays as a pad button, so the press that leaves is never also a machine button.
     private bool ResolveLeaveProbe(Principal principal, out int ordinal, out GrantSubject target) {
         target = default;
+        ordinal = -1;
+        if (Host.Body(principal.Index) is not { } body) { return false; }
 
         foreach (var application in Host.GrantTable.Applications(principal: principal)) {
             if (
@@ -425,7 +427,7 @@ public sealed partial class WorldTick {
                 placementId: (application.Target.Id ?? string.Empty),
                 topology: out _
             ) &&
-                Host.Population.Channels.TryGetOrdinal(
+                body.Channels.TryGetOrdinal(
                 name: engage.Channel,
                 ordinal: out ordinal
             )
@@ -443,7 +445,7 @@ public sealed partial class WorldTick {
                 if (
                     (screen.Index == application.Target.Value) &&
                     (screen.Route.EngageChannel is { Length: > 0 } channelName) &&
-                    Host.Population.Channels.TryGetOrdinal(
+                    body.Channels.TryGetOrdinal(
                         name: channelName,
                         ordinal: out ordinal
                     )

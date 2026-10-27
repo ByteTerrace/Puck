@@ -236,6 +236,7 @@ public static partial class RuleWorkBudget {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
+        if (rule.Iteration is { } iteration) { return iteration.Capacity; }
         if (rule.ForEachBodies) {
             return context.BodyCapacity;
         }
@@ -257,7 +258,7 @@ public static partial class RuleWorkBudget {
     public static RuleWork ForEachSetup(CompiledRule rule, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies)
+        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && rule.Iteration is null)
             ? RuleWork.Zero
             : RuleWork.Known(units: ForEachCount(
                 context: context,

@@ -56,6 +56,7 @@ A document's `schema:` field selects its vocabulary, never the filename.
   behavior is unchanged. A lambda anywhere else is **PUCK042**; an unevaluable
   call **PUCK041**; a `for` over something not known at compile time
   **PUCK044**.
+  `range(start, count)` takes a count: `range(16, 16)` emits 16 through 31.
 - **A `for` inside a rule body unrolls into the body.** A loop
   over an n-element array that declares `local $"name{i}" = …` compiles to a
   rule carrying n separate locals, `name0` through `name<n-1>`, each with its

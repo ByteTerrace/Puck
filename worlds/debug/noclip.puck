@@ -30,6 +30,7 @@ state {
       name: "noclip"
       kind: "Counter"
       initial: 0
+      envelope { $type: "set", values [0, 1] }
     }
     // The kit selector's register: suit + 2 * noclip. Born 1, a suited body with noclip off, which no case names, so a
     // chess piece keeps the kit it was given.
@@ -37,6 +38,7 @@ state {
       name: "form"
       kind: "Counter"
       initial: 1
+      envelope { $type: "set", values [0, 1, 2, 3] }
     }
   ]
 }

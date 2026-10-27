@@ -41,6 +41,7 @@ public sealed record WorldServerCheckpoint(
     ulong LastCompletedEngineTicks,
     ulong LastStepTicks,
     IReadOnlyList<IntentSubmission> Intents,
+    IReadOnlyList<WorldRoutedInput> RoutedInputs,
     IReadOnlyList<WorldPendingOpCheckpoint> Pending,
     IReadOnlyList<WorldRuleLatchEntry> RuleGateHeld,
     IReadOnlyList<WorldRuleLatchEntry> InteractionGateHeld,
@@ -58,5 +59,6 @@ public sealed record WorldServerCheckpoint(
     ulong? MusicDirectorLastEmbellishmentTick,
     IReadOnlyList<WorldDecisionCheckpoint> Decisions,
     IReadOnlyList<WorldMachineBindingEntry> MachineBindings,
-    ArenaUndoSnapshot? Undo = null
+    ArenaUndoSnapshot? Undo = null,
+    WorldInputRuntimeCheckpoint? Input = null
 );

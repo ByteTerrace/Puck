@@ -97,21 +97,19 @@ internal static class WorldAddonWire {
 /// declared name table by position: the wire's act verb carries that guest-local index, which never leaves
 /// <c>AddonSimulationPump</c> — it is used there only to select the <see cref="AddonChannelBinding"/> the
 /// handshake decoded. The ordinal on the binding, and therefore on every act the server folds, is the one
-/// <see cref="TryResolve"/> returns: an index into the world's <see cref="WorldChannelTable"/>, where every channel
-/// occupies its consecutive document-order slot and role claims are table metadata. The two namespaces never
-/// coincide by construction — a guest declaring <c>["forward", "strafe", "jump"]</c> speaks 0/1/2 even when the
-/// world's declaration order assigns those names different ordinals — so a folded
-/// contribution must only ever be written through a resolved ordinal, never through the guest's own index.</para>
+/// <see cref="TryResolve"/> returns: a logical declaration in <see cref="WorldInputCatalog"/>. The fold resolves
+/// that name through the recipient's current <see cref="WorldChannelTable"/>; an inactive declaration contributes
+/// nothing. Neither the guest index nor the logical id is a storage address.</para>
 /// <para>The table is the swappable part, the resolver is not: a world's channels section is data, so a different
-/// world simply constructs this against a different <see cref="WorldChannelTable"/> — never a second class
+/// world simply constructs this against a different <see cref="WorldInputCatalog"/> — never a second class
 /// implementing <see cref="IAddonChannelResolver"/>. If a future change is tempted to add a parallel
 /// name→(ordinal, shape) lookup anywhere else in this project, that is the sign to route it through this resolver
 /// instead.</para>
 /// </remarks>
-/// <param name="channels">The boot world document's compiled channel table.</param>
+/// <param name="channels">The boot world document's logical catalog.</param>
 /// <exception cref="ArgumentNullException"><paramref name="channels"/> is <see langword="null"/>.</exception>
-internal sealed class WorldAddonChannelResolver(WorldChannelTable channels) : IAddonChannelResolver {
-    private readonly WorldChannelTable m_channels = (channels ?? throw new ArgumentNullException(paramName: nameof(channels)));
+internal sealed class WorldAddonChannelResolver(WorldInputCatalog channels) : IAddonChannelResolver {
+    private readonly WorldInputCatalog m_channels = (channels ?? throw new ArgumentNullException(paramName: nameof(channels)));
 
     // The world document's declared shape as the wire's own — the ABI value domain a resolved act is checked
     // against (see AddonSimulationPump.TryValidateInputAct). Total over ChannelShape: a new shape must be given a
@@ -132,10 +130,7 @@ internal sealed class WorldAddonChannelResolver(WorldChannelTable channels) : IA
 
     /// <inheritdoc/>
     public bool TryResolve(string name, out int ordinal, out AddonChannelValueShape shape) {
-        if (!m_channels.TryGetOrdinal(
-            name: name,
-            ordinal: out ordinal
-        )) {
+        if (!m_channels.TryGetLogicalId(name, out var logical) || m_channels.Channels[logical].Shape == ChannelShape.Text) {
             // The sentinel is restated rather than left as TryGetValue's default 0, which is a REAL ordinal (the
             // first movement role) — a caller reading the out value without the return would otherwise silently
             // drive it.
@@ -145,7 +140,8 @@ internal sealed class WorldAddonChannelResolver(WorldChannelTable channels) : IA
             return false;
         }
 
-        shape = WireShape(shape: m_channels.Shape(ordinal: ordinal));
+        ordinal = logical;
+        shape = WireShape(shape: m_channels.Channels[logical].Shape);
 
         return true;
     }

@@ -243,7 +243,7 @@ public sealed class ControlApplicationLawTests {
         void Set(params GrantSubject[] targets) => fixture.Server.Grants.SetApplications(
             applications: targets.Select(selector: static target => new ControlApplication(
                 Kit: null,
-                Reach: ChannelReachMask.All,
+                Reach: null,
                 Target: target
             )).ToArray(),
             principal: seat

@@ -14,6 +14,9 @@ public sealed class WorldActionStateLane {
     private CompiledActionStateSlot[] m_definitions = [];
     private int[] m_rows = [];
 
+    // The authority which validates prospective kit writes before a firing has any outward effects.
+    internal WorldInputRuntime? Input { get; set; }
+
     /// <summary>Gets the compiled register file the lanes answer, in slot order.</summary>
     public IReadOnlyList<CompiledActionStateSlot> Definitions => m_definitions;
     /// <summary>Gets a value indicating whether an arena has been bound.</summary>
@@ -112,11 +115,11 @@ public sealed class WorldActionStateLane {
     /// <param name="previous">The register file installed before the document that installed this one.</param>
     /// <param name="keepsIdentity"><see langword="true"/> when the body at <paramref name="ordinal"/> has an identity
     /// that owns its identity slots.</param>
-    public void Rebirth(int ordinal, IReadOnlyList<CompiledActionStateSlot> previous, bool keepsIdentity) {
+    /// <param name="keepsParticipant">A live reload retains same-meaning participant registers too.</param>
+    public void Rebirth(int ordinal, IReadOnlyList<CompiledActionStateSlot> previous, bool keepsIdentity, bool keepsParticipant = false) {
         for (var slot = 0; (slot < m_definitions.Length); slot++) {
             if (
-                !keepsIdentity ||
-                (m_definitions[slot].Lifetime != ActionStateLifetime.Durable) ||
+                !(m_definitions[slot].Lifetime == ActionStateLifetime.Durable ? keepsIdentity : keepsParticipant) ||
                 !Declares(
                     definition: in m_definitions[slot],
                     file: previous
@@ -134,7 +137,7 @@ public sealed class WorldActionStateLane {
     private static bool Declares(in CompiledActionStateSlot definition, IReadOnlyList<CompiledActionStateSlot> file) {
         for (var index = 0; (index < file.Count); index++) {
             if (
-                (file[index].Lifetime == ActionStateLifetime.Durable) &&
+                (file[index].Lifetime == definition.Lifetime) &&
                 (file[index].Kind == definition.Kind) &&
                 string.Equals(
                     a: file[index].Name,

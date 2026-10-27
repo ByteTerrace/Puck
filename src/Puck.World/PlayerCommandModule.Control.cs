@@ -18,13 +18,13 @@ internal sealed partial class PlayerCommandModule {
     // continuous edges hold the channel at the binding's scaled value; a release edge frees it. While the keyboard's
     // player is pending, the Turn-role channel becomes the profile picker (positive scale cycles forward, negative
     // back) and every other channel stays inert.
-    private CommandDefinition ChannelVerb(int ordinal) {
-        var commandName = RoutedChannelCommandName(ordinal: ordinal);
+    private CommandDefinition ChannelVerb(int logical) {
+        var commandName = RoutedChannelCommandName(ordinal: logical);
 
         return CommandDefinition.Verb(
             bindability: CommandBindability.Bindable,
             name: commandName,
-            description: $"Holds the currently routed world's declared channel at ordinal {ordinal} while its source is active — an internal binding target lowered from the authored channel name, not a typed verb.",
+            description: $"Holds logical action {logical} in the currently routed world while its source is active. Bindings compile this handle from the authored name.",
             valueKind: CommandValueKind.Axis1D,
             handler: context => {
                 if (context.Origin != CommandOrigin.Binding) {
@@ -40,7 +40,7 @@ internal sealed partial class PlayerCommandModule {
                 // Checked against the DISPATCHING SEAT's own CURRENTLY ROUTED table. A release always runs even if
                 // the route changed since the press: it frees whatever this physical control last actually held.
                 var seatTable = m_seatBindings.Channels(slot: slot);
-                var declared = seatTable.IsDeclared(ordinal: ordinal);
+                var declared = seatTable.TryGetAddress(logical, out var ordinal);
                 var scale = FixedQ4816.FromDouble(value: context.Value.AsAxis1D);
 
                 // The roster owns the pending-vs-locomotion decision: while the slot is pending it consumes a Turn-role
@@ -68,6 +68,9 @@ internal sealed partial class PlayerCommandModule {
                     // An off-Live seat masks the human's live input: the device hold/release no-ops so the held set
                     // stays clean and nothing bursts on the return to live. Roster membership is untouched.
                     if (seat.Source != IntentSource.Live) {
+                        return CommandResult.None;
+                    }
+                    if (seat.Input is { } input && !input.Observe(logical, context, seatRouter.Route(slot).Endpoint.NextInputTick)) {
                         return CommandResult.None;
                     }
 
@@ -105,8 +108,8 @@ internal sealed partial class PlayerCommandModule {
     // profile. This is complete for every legal world because ChannelLimits.MaxChannels is the document ceiling; it
     // does not crawl references, assume a target exists at boot, or change the command-id table when one appears.
     private IEnumerable<CommandDefinition> ChannelVerbs() {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            yield return ChannelVerb(ordinal: ordinal);
+        for (var logical = 0; logical < WorldInputCatalog.MaximumLogicalChannels; logical++) {
+            yield return ChannelVerb(logical: logical);
         }
     }
     private CommandResult ChannelsHandler(CommandContext context, WireArgs args) {
@@ -263,6 +266,9 @@ internal sealed partial class PlayerCommandModule {
             behavior: behavior,
             actingPrincipal: context.Principal
         );
+        if (m_roster.Seat(context.Slot)?.Input is { } input && seatRouter.TryRoute(context.Slot) is { } route) {
+            input.ObserveMove(value, context, route.Endpoint.NextInputTick);
+        }
 
         return CommandResult.None;
     }
@@ -446,7 +452,7 @@ internal sealed partial class PlayerCommandModule {
             )
             ) {
                 routedLocation = location;
-                targetChannels = WorldChannelTable.Compile(channels: m_instances.ResolveRoutedDefinition(slot: rosterSlot).Channels);
+                targetChannels = WorldChannelTable.For(m_instances.ResolveRoutedDefinition(slot: rosterSlot));
             }
         }
 

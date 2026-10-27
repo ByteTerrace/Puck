@@ -1,0 +1,99 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "retentionSeconds": {
+      "description": "How long an admitted event remains eligible.",
+      "type": "number",
+      "default": 2
+    },
+    "eventCapacity": {
+      "description": "Ring capacity, allocated when the owner is admitted.",
+      "type": "integer",
+      "default": 256
+    },
+    "maximumEventsPerStep": {
+      "description": "Atomic per-step ingress bound, including derived crossings.",
+      "type": "integer",
+      "default": 128
+    },
+    "maximumLatenessSeconds": {
+      "description": "Capture horizon behind the next open interval.",
+      "type": "number",
+      "default": 0
+    },
+    "calibrationLimitSeconds": {
+      "description": "Absolute calibration bound.",
+      "type": "number",
+      "default": 0
+    },
+    "judgement": {
+      "description": "Which recorded time rules use.",
+      "enum": [
+        "Capture",
+        "Admission"
+      ],
+      "default": "Capture",
+      "title": "WorldInputJudgement"
+    },
+    "crossings": {
+      "description": "Named threshold/hysteresis predicates over ordered samples.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A hysteretic semantic crossing, derived only from accepted ordered axis samples.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "Pattern-visible crossing name.",
+            "type": "string"
+          },
+          "channel": {
+            "description": "Declared normalized axis.",
+            "type": "string"
+          },
+          "press": {
+            "description": "Threshold which enters the predicate.",
+            "type": "number"
+          },
+          "release": {
+            "description": "Threshold which leaves the predicate.",
+            "type": "number"
+          },
+          "direction": {
+            "description": "One for increasing and minus one for decreasing values.",
+            "type": "integer",
+            "default": 1
+          },
+          "facingState": {
+            "description": "Optional authoritative body counter whose sign orients this axis at admission. Zero has no facing and cannot enter the crossing. History retains the resolved crossing, not a later counter read.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "channel",
+          "press",
+          "release"
+        ],
+        "additionalProperties": false,
+        "title": "WorldInputCrossing"
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldInputHistory"
+}

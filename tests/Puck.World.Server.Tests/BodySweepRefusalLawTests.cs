@@ -21,7 +21,7 @@ public sealed class BodySweepRefusalLawTests {
     private static readonly FixedQ4816 Quarter = FixedQ4816.FromDouble(value: 0.25);
 
     // A lattice world whose seat kit carries a half-unit sphere: its core sits half a unit above the body's foot point.
-    private static WorldDefinition LatticeWorld(bool rigid = false) {
+    internal static WorldDefinition LatticeWorld(bool rigid = false) {
         var source = Fixtures.BuildDocument();
         var world = source with {
             KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {

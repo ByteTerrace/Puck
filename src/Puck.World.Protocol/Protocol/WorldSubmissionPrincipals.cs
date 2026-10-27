@@ -14,6 +14,7 @@ public static class WorldSubmissionPrincipals {
     private static bool NamesSession(WorldCommand command) => (IsSession(principal: command.Principal) || command switch {
         WorldCommand.ComposeControl compose => IsSession(principal: compose.TargetPrincipal),
         WorldCommand.DissolveControl dissolve => IsSession(principal: dissolve.TargetPrincipal),
+        WorldCommand.SelectInputState select => IsSession(principal: select.Owner),
         _ => false,
     });
     private static bool NamesSession(WorldMutation mutation) => (IsSession(principal: mutation.Principal) || mutation switch {

@@ -18,9 +18,9 @@ namespace Puck.World.Addons;
 /// <remarks>
 /// <para><b>A guest reaches the world through typed channels only.</b> There is no roster slot, no
 /// <c>InputDeviceId</c>, and no binding page anywhere on this path: an input-channel act names a Drive handle and a
-/// declared channel name, resolved once at handshake against the world document's channel table through
+/// declared channel name, resolved once at handshake against the world document's logical catalog through
 /// <see cref="WorldAddonChannelResolver"/>, and the server writes each validated record into
-/// <see cref="PlayerIntent"/>'s channel vector at that same resolved ordinal (<see cref="Fold"/>) — the guest's own
+/// <see cref="PlayerIntent"/>'s channel vector through the recipient's current mapping (<see cref="Fold"/>) — the guest's own
 /// declaration index never reaches this type. Unlike the source vocabulary this replaces, an
 /// unresolvable declared name is never a whole-mount refusal — it is report-and-inert (one line at mount, then a
 /// per-act <see cref="AddonVerdict.AttenuatedToEmpty"/> if the guest ever acts through it) — so nothing a guest
@@ -47,12 +47,9 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
     // body. Such an act was already answered when it was folded and takes no part in the second pass.
     private const int NoBody = -1;
 
-    // The world's own channel table — every guest's declared names resolve against it, at boot AND at every later
-    // prepare, so an act's ordinal IS a PlayerIntent ordinal on either path and the fold never needs a second
-    // mapping of its own. Reassigned WHOLESALE by Commit, alongside m_mounted/m_receipts, when a prepare pass finds
-    // the candidate's own channel declarations changed (a whole-document rebuild/undo, never a live mutation — no
-    // live mutation kind touches the channels section for a running server's whole life).
-    private WorldChannelTable m_channels;
+    // Handshake handles identify logical declarations. Folding resolves the recipient's active mapping, so
+    // dormant declarations remain valid names without retaining another action's reused storage slot.
+    private WorldInputCatalog m_channels;
     // The exact declaration list m_channels was last compiled from — TryPrepare's own channel-table dependency
     // check compares a candidate's Channels against this by content, never by reference (a freshly deserialized
     // rebuild/undo candidate never shares object identity with what booted).
@@ -82,7 +79,7 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
 
     private WorldAddonRuntime(WorldDefinition definition, WorldServer server) {
         m_server = server;
-        m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        m_channels = WorldInputCatalog.For(definition);
         m_channelsSource = definition.Channels;
     }
 

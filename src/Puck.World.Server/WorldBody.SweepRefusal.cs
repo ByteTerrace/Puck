@@ -1,6 +1,5 @@
 using Puck.Maths;
 using Puck.Physics;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -44,8 +43,8 @@ public sealed partial class WorldBody {
     // position, rotation and up-turn remainders, up, frame, grounded, sleep, hold, tether and rigid state). A field
     // added to either record is covered here without a change. The rest are the facts both records leave to be
     // re-derived from the pose after a discontinuous restore, which a refused step is not: the pose itself, the contact
-    // count, the obstruction witness, the medium facts, and the transfer-held channel image, which ApplyTransferState
-    // seeds for an arrival rather than restoring as it stood.
+    // count, the obstruction witness and the medium facts. The residue restores exact pending input after the
+    // transfer state seeds its arrival-held image.
     internal readonly record struct MotionSnapshot(
         FixedVector3 Position,
         FixedQ4816 Yaw,
@@ -56,9 +55,7 @@ public sealed partial class WorldBody {
         ulong ObstructionWitnessGraceTicks,
         FixedVector3 ObstructionWitnessPosition,
         bool InMedium,
-        bool AtMediumBand,
-        PlayerIntent TransferHeldChannels,
-        bool HasTransferHeldChannels
+        bool AtMediumBand
     );
     /// <summary>The scratch a step restores from when its sweep is refused: one snapshot, captured when a step begins and
     /// read only until that step ends. It belongs to whoever runs the steps, not to a body: a population steps its
@@ -71,11 +68,10 @@ public sealed partial class WorldBody {
     }
 
     // Captures this body into the scratch, overwriting whatever the last step left there.
-    private void CaptureMotion(StepScratch scratch) {
+    internal void CaptureMotion(StepScratch scratch) {
         scratch.Buffers.Reset();
         scratch.Snapshot = new(
             AtMediumBand: m_atMediumBand,
-            HasTransferHeldChannels: m_hasTransferHeldChannels,
             InMedium: m_inMedium,
             LastContactCount: m_lastContactCount,
             ObstructionWitness: m_obstructionWitness,
@@ -84,27 +80,24 @@ public sealed partial class WorldBody {
             Position: m_position,
             Residue: CaptureIntegrationResidue(),
             Transfer: CaptureTransferStateInto(buffers: scratch.Buffers),
-            TransferHeldChannels: m_transferHeldChannels,
             Yaw: m_yaw
         );
     }
     // The order the checkpoint restore uses: the transfer state, then the residue over it (which undoes the transfer
     // state's own wake and latch writes), then the pose and the re-derived facts, which a program switch inside
     // ApplyTransferState may have re-pinned.
-    private void RestoreMotion(StepScratch scratch) {
+    internal void RestoreMotion(StepScratch scratch) {
         ref readonly var motion = ref scratch.Snapshot;
 
         ApplyTransferState(state: motion.Transfer);
         ApplyIntegrationResidue(residue: motion.Residue);
         m_atMediumBand = motion.AtMediumBand;
-        m_hasTransferHeldChannels = motion.HasTransferHeldChannels;
         m_inMedium = motion.InMedium;
         m_lastContactCount = motion.LastContactCount;
         m_obstructionWitness = motion.ObstructionWitness;
         m_obstructionWitnessGraceTicks = motion.ObstructionWitnessGraceTicks;
         m_obstructionWitnessPosition = motion.ObstructionWitnessPosition;
         m_position = motion.Position;
-        m_transferHeldChannels = motion.TransferHeldChannels;
         m_yaw = motion.Yaw;
     }
 

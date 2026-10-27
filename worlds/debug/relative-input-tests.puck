@@ -3,6 +3,10 @@ schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "relative-input-tests"
 
+inputModes {
+  global ["interact", "sampleDelta"]
+}
+
 channels [
   {
     name: "sampleDelta"

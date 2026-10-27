@@ -197,6 +197,8 @@ public enum WorldSection : byte {
 
     /// <summary>The static lookup-table asset rows (<see cref="TableRow"/>).</summary>
     Tables,
+    /// <summary>The authoritative input-mode selectors, finite combinations and directed continuity policy.</summary>
+    InputModes,
 }
 /// <summary>Which flavor of subject a <see cref="GrantSubject"/> addresses.</summary>
 public enum GrantSubjectKind : byte {
@@ -752,9 +754,9 @@ public readonly record struct GrantVerdict(GrantRule Rule, Grantee? Reserver = n
 /// <param name="Reach">An untrusted contributor's channel reach on a <see cref="WorldCapability.Drive"/> row,
 /// carried alone: which declared ordinals this contributor may touch at all. Reach is not consent; a reached channel
 /// contributes nothing until the occupying seat authors a positive ceiling for it.</param>
-/// <param name="Consent">The ordinals named by the occupying seat's ceiling gesture on its own Drive row. The seat
+/// <param name="Consent">The logical names selected by the occupying seat's ceiling gesture on its own Drive row. The seat
 /// may issue the gesture repeatedly to give different channels different ceilings; each gesture writes only the
-/// ordinals it names and leaves the rest unchanged, while revocation clears the whole ceiling value.</param>
+/// names it selects and leaves the rest unchanged, while revocation clears the whole ceiling value.</param>
 /// <remarks>An empty reach or consent mask is refused at the door, mirroring <see cref="Budget"/>'s <c>0</c> refusal:
 /// reach-nothing is accepted-and-inert, so grant nothing instead. An unoccupied body is unaffected by any of this
 /// (occupancy gates the pool's very existence — see <c>Server.WorldPopulation.IsHumanOccupied</c> — so a bot
@@ -817,7 +819,7 @@ public readonly record struct GrantVerdict(GrantRule Rule, Grantee? Reserver = n
 /// <param name="HoldCeiling">The timed-channel-press ceiling in raw Q16.16 seconds. Legal only on a
 /// <see cref="WorldCapability.Drive"/> row and bounded by the server's engine backstop. Omission selects
 /// <see cref="DefaultHoldSeconds"/>; zero forbids timed holds while leaving live held input untouched.</param>
-public readonly record struct WorldGrant(Grantee Grantee, WorldCapability Capability, GrantSubject Subject, bool Exclusive, ushort? Budget = null, ChannelReachMask? Reach = null, ChannelConsentMask? Consent = null, long? Ceiling = null, MutationKindMask? KindMask = null, ushort? EventBudget = null, long? HoldCeiling = null, DocumentWriteMask? WriteMask = null) {
+public readonly record struct WorldGrant(Grantee Grantee, WorldCapability Capability, GrantSubject Subject, bool Exclusive, ushort? Budget = null, WorldChannelSelection? Reach = null, WorldChannelSelection? Consent = null, long? Ceiling = null, MutationKindMask? KindMask = null, ushort? EventBudget = null, long? HoldCeiling = null, DocumentWriteMask? WriteMask = null) {
     /// <summary>The default timed-press policy, in seconds, for a Drive row that omits <see cref="HoldCeiling"/>.</summary>
     public const float DefaultHoldSeconds = 2f;
 }

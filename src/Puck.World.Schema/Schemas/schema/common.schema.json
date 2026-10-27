@@ -6848,6 +6848,26 @@
       "additionalProperties": false,
       "title": "ActionEffectRewindGroup"
     },
+    "WorldEffectConsumeInput": {
+      "description": "Consumes the named matched event range only when the enclosing rule commits.",
+      "properties": {
+        "$type": {
+          "const": "consumeInput"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner",
+        "pattern"
+      ],
+      "additionalProperties": false,
+      "title": "WorldEffectConsumeInput"
+    },
     "WorldEffectSetVerticalVelocity": {
       "description": "Writes a body\u0027s vertical-velocity channel (the jump launch / the surge).",
       "properties": {
@@ -8658,6 +8678,9 @@
           "$ref": "#/$defs/ActionEffectRewindGroup"
         },
         {
+          "$ref": "#/$defs/WorldEffectConsumeInput"
+        },
+        {
           "$ref": "#/$defs/WorldEffectSetVerticalVelocity"
         },
         {
@@ -9273,21 +9296,27 @@
         null
       ]
     },
-    "ChannelMask": {
-      "description": "Independent support masks for the numeric and button banks.",
-      "type": "object",
+    "WorldChannelSelection": {
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
-        "axes": {
-          "description": "One bit per numeric lane.",
-          "type": "integer"
+        "channels": {
+          "$ref": "#/$defs/StringList",
+          "description": "Canonical logical names, including currently inactive actions."
         },
-        "buttons": {
-          "description": "One bit per button lane.",
-          "type": "integer"
+        "registers": {
+          "description": "Independent target-register reach.",
+          "type": "integer",
+          "default": 0
         }
       },
+      "required": [
+        "channels"
+      ],
       "additionalProperties": false,
-      "title": "ChannelMask"
+      "title": "WorldChannelSelection"
     },
     "ShapeNonNullable50": {
       "anyOf": [

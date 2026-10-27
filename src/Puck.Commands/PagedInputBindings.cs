@@ -45,6 +45,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
     private readonly List<(int Slot, BindingChordEdge Edge)> m_scheduledEdges = [];
 
     private volatile CompiledBindingProfile m_profile;
+    /// <summary>The complete source contract of the current compiled profile, independent of the active page.</summary>
+    public IReadOnlyList<BindingSourceContract> Sources => m_profile.Sources;
     private bool m_scheduledEdgesPending;
 
     event Action<int?> IInputBindingsReloadSource.Reloading {

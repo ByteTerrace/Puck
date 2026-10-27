@@ -20,7 +20,8 @@
           "Bipolar",
           "Unipolar",
           "Binary",
-          "Relative"
+          "Relative",
+          "Text"
         ],
         "title": "ChannelShape"
       },

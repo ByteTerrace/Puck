@@ -37,7 +37,7 @@ public sealed partial class WorldDocument {
     ) || (mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetSpawns or
-        WorldMutation.SetCollision or
+        WorldMutation.SetCollision or WorldMutation.SetInputModes or
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         // The LOOK mutations re-resolve the population's look table (PRESENTATION-ONLY, but Rebuild is the one path that
         // re-runs ResolveLookIndices and bumps the client's program-rebuild revision).
@@ -326,6 +326,7 @@ public sealed partial class WorldDocument {
         // section.
         WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate or WorldMutation.TransformState => WorldSection.State,
         WorldMutation.SetInputHold => WorldSection.InputHold,
+        WorldMutation.SetInputModes => WorldSection.InputModes,
         WorldMutation.Batch => WorldSection.State,
         WorldMutation.UpsertWorldRule or WorldMutation.RemoveWorldRule => WorldSection.Rules,
         WorldMutation.UpsertGroupKind or WorldMutation.RemoveGroupKind or WorldMutation.FormGroup or WorldMutation.JoinGroup or WorldMutation.LeaveGroup or WorldMutation.KickMember
@@ -1460,6 +1461,9 @@ public sealed partial class WorldDocument {
                         CloseComposeArena(arena: arena, mark: mark);
                     }
                 }
+            case WorldMutation.SetInputModes m:
+                candidate = current with { InputModes = m.Modes };
+                return true;
             case WorldMutation.SetInputHold m:
                 // The mutation's own wire shape is the COMPILED (ticks) form — the addon-mutation ABI's raw-ticks
                 // contract, unchanged — but InputHold itself stores the AUTHORED (seconds) shape (see its remarks), so

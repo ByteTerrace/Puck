@@ -31,6 +31,10 @@ public sealed class ClockOperand : WorldOperandFact {
     public static readonly ClockOperand Instance = new();
 
     private ClockOperand() : base(CellKind.Int) { }
+    /// <summary>Judges an input event against its historical music segment, returning fixed seconds.</summary>
+    public ClockOperand(WorldInputOperand input) : base(CellKind.Fixed) => Input = input;
+    /// <summary>The guarded event, or null for the current integer engine-tick phase.</summary>
+    public WorldInputOperand? Input { get; }
 }
 /// <summary>The occupant count of a region placement (<see cref="WorldRuleFacts.RegionPrefix"/>).</summary>
 public sealed class RegionOccupancyOperand : WorldOperandFact {

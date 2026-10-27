@@ -428,10 +428,12 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: section.LastCompletedTick);
         writer.WriteUInt64(value: section.LastCompletedEngineTicks);
         writer.WriteUInt64(value: section.LastStepTicks);
+        WriteInputRuntime(writer, section.Input ?? WorldInputRuntimeCheckpoint.Empty);
         writer.WriteArray(
             items: section.Intents,
             writeItem: WriteIntentSubmission
         );
+        writer.WriteArray(items: section.RoutedInputs, writeItem: WriteRoutedInput);
         writer.WriteArray(
             items: section.Pending,
             writeItem: WritePendingOp
@@ -557,11 +559,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         var lastCompletedTick = reader.ReadUInt64();
         var lastCompletedEngineTicks = reader.ReadUInt64();
         var lastStepTicks = reader.ReadUInt64();
+        var inputRuntime = ReadInputRuntime(ref reader);
         var intents = reader.ReadArray(
             field: "server intents",
             readItem: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r),
             maximum: MaxCollectionCount
         );
+        var routedInputs = reader.ReadArray(field: "server routed input", readItem: ReadRoutedInput, maximum: MaxCollectionCount);
         var pending = reader.ReadArray(
             field: "server pending",
             readItem: static (ref WireReader r) => ReadPendingOp(reader: ref r),
@@ -714,12 +718,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldServerCheckpoint(
+            Input: inputRuntime,
             Arena: arena,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,
             DefinitionJson: definitionJson,
             Intents: intents,
+            RoutedInputs: routedInputs,
             InteractionGateHeld: interactionGateHeld,
             Journal: journal,
             LastCompletedEngineTicks: lastCompletedEngineTicks,
@@ -1100,6 +1106,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             intent: residue.EngagedIntent,
             writer: writer
         );
+        WriteBodyInputState(writer, residue.Input);
         writer.WriteBoolean(value: residue.OrdinaryAdvanceAdmitted);
         writer.WriteOptional(
             value: residue.ContinuumConsumedThroughEngineTick,
@@ -1151,6 +1158,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var grounded = reader.ReadBoolean();
         var engaged = reader.ReadBoolean();
         var engagedIntent = WorldWireCodec.ReadIntent(reader: ref reader);
+        var input = ReadBodyInputState(ref reader);
         var ordinaryAdvanceAdmitted = reader.ReadBoolean();
         var continuumConsumedThroughEngineTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
@@ -1198,6 +1206,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,
             Engaged: engaged,
             EngagedIntent: engagedIntent,
+            Input: input,
             FieldUpTurnRemainder: fieldUpTurnRemainder,
             Frame: frame,
             Grounded: grounded,

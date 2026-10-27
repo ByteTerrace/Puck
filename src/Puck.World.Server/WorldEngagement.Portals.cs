@@ -18,7 +18,8 @@ public readonly record struct WorldPortalFace(int ScreenIndex, WorldFaceFrame Fr
 /// <param name="Hit">Where the ray met the glass.</param>
 /// <param name="Direction">The ray's direction.</param>
 /// <param name="Intent">The body's engaged intent: its channels, in the producing world's ordinals.</param>
-public readonly record struct WorldPortalForward(int ScreenIndex, Principal Source, FixedVector3 Hit, FixedVector3 Direction, PlayerIntent Intent);
+/// <param name="Channels">The active source mapping that gives the packed image its names.</param>
+public readonly record struct WorldPortalForward(int ScreenIndex, Principal Source, FixedVector3 Hit, FixedVector3 Direction, PlayerIntent Intent, WorldChannelTable Channels);
 public sealed partial class WorldEngagement {
     // The live definition's portal faces by screen index, for the definition they were derived from.
     private readonly Dictionary<int, WorldPortalFace> m_portalFaces = new();
@@ -108,7 +109,7 @@ public sealed partial class WorldEngagement {
     }
     // Stages one body's engaged input through a portal face, when the face is one and no earlier body already routed
     // through it this tick, and only when its ray passes through the glass.
-    private void StagePortalForward(int screenIndex, Principal principal, in PlayerIntent intent) {
+    private void StagePortalForward(int screenIndex, Principal principal, in PlayerIntent intent, WorldChannelTable channels) {
         if (
             !TryPortalFace(
             face: out var face,
@@ -133,6 +134,7 @@ public sealed partial class WorldEngagement {
             Direction: ray.Direction,
             Hit: hit,
             Intent: intent,
+            Channels: channels,
             ScreenIndex: screenIndex,
             Source: principal
         ));

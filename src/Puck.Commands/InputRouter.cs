@@ -52,6 +52,9 @@ public sealed partial class InputRouter : IDisposable {
     private bool m_hasProducedSnapshot;
     private ulong m_previousSnapshotTick;
     private ulong m_sequence;
+    private ulong m_captureTick;
+    private ulong m_activation;
+    private FixedQ4816? m_simulationOffset;
     private int m_snapshotLaneCount;
 
     private readonly Lock m_captureGate = new();
@@ -347,7 +350,7 @@ public sealed partial class InputRouter : IDisposable {
                 text: edge.Text
             ),
             value: value
-        );
+        ) { CaptureTick = m_captureTick, Activation = m_activation, SimulationOffset = m_simulationOffset };
 
         WorkingFor(
             slot: slot,
@@ -436,6 +439,9 @@ public sealed partial class InputRouter : IDisposable {
             value: injection.Value
         ) {
             Session = injection.Session,
+            CaptureTick = m_captureTick,
+            SimulationOffset = m_simulationOffset,
+            Activation = m_activation,
         });
     }
     private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick, bool focusExemptOnly) {
@@ -475,6 +481,13 @@ public sealed partial class InputRouter : IDisposable {
             m_lastInputTickBySlot[slot] = tick;
         }
         var modality = ModalityFor(slot: slot);
+
+        if (signal.Text is { Length: > 0 } committed && !focusExemptOnly) {
+            WorkingFor(workingBySlot, slot).Add(new CommandEntry(0, default, CommandPhase.Started, CommandOrigin.Binding,
+                device: signal.DeviceId, source: signal.Source) {
+                CommittedText = committed, CaptureTick = m_captureTick, Activation = m_activation, SimulationOffset = m_simulationOffset,
+            });
+        }
 
         var physicalControl = new HeldControlId(
             Device: signal.DeviceId,
@@ -822,7 +835,7 @@ public sealed partial class InputRouter : IDisposable {
                 ),
                 value: value,
                 assignedSlot: assignedSlot
-            );
+            ) { CaptureTick = m_captureTick, Activation = m_activation, SimulationOffset = m_simulationOffset };
 
             working.Add(item: entry);
 
@@ -1617,7 +1630,7 @@ public sealed partial class InputRouter : IDisposable {
                 Binding: binding,
                 CommandId: commandId,
                 ToggleSource: ((binding.Mode == BindingEntryMode.Toggle)
-                ? BindingSourceIdentity.ForCommand(command: binding.Command)
+                ? BindingSourceIdentity.ForCommand(command: binding.Command, mode: binding.Mode)
                 : null)
             );
         }
@@ -1876,6 +1889,22 @@ public sealed partial class InputRouter : IDisposable {
 
         return clearedLatches;
     }
+
+    /// <summary>Applies an authoritative cancellation of one destination-owned toggle. Physical first-down
+    /// tracking remains intact, so an OS repeat cannot turn the cancelled latch back on.</summary>
+    public void ClearToggle(int slot, string command) {
+        if (!m_registry.TryGetId(command, out var id)) { return; }
+        _ = m_toggleLatches.Remove((slot, id));
+        if (!m_heldBySlot.TryGetValue(slot, out var held) || !held.TryGetValue(id, out var state)) { return; }
+        var source = BindingSourceIdentity.ForCommand(command, BindingEntryMode.Toggle);
+        if (state.Contributions is { } contributions) {
+            for (var index = contributions.Count - 1; index >= 0; index--) {
+                if (contributions[index].Entry.Source == source) { contributions.RemoveAt(index); }
+            }
+        }
+        if (state.HasEntry && state.Entry.Source == source) { state.HasEntry = false; }
+        if (state.IsEmpty) { DropHold(slot, id); }
+    }
     /// <summary>Detaches this router from the collaborators it subscribed to at construction — the binding
     /// resolver's <see cref="IInputBindingsReloadSource.Reloading"/> edge and the slot resolver's
     /// <see cref="IInputSlotResolver.DeviceSlotChanging"/> edge — and drops every queue and held table it carries.
@@ -2124,6 +2153,7 @@ public sealed partial class InputRouter : IDisposable {
     }
     /// <summary>Produces the snapshot for <paramref name="tick"/> from captured input.</summary>
     /// <param name="tick">The fixed-step tick to produce input for.</param>
+    /// <param name="windowStartTick">Inclusive capture-clock boundary supplied by the fixed-step pump.</param>
     /// <param name="windowEndTick">
     /// The engine-tick time at which this tick's window closes. Captured input whose
     /// <see cref="InputSignal.CaptureTick"/> precedes it is consumed; later-stamped input waits for a future tick.
@@ -2133,7 +2163,7 @@ public sealed partial class InputRouter : IDisposable {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="tick"/> precedes the tick this router last
     /// produced a snapshot for.</exception>
     /// <exception cref="ObjectDisposedException">This router has been disposed.</exception>
-    public CommandSnapshot SnapshotForTick(ulong tick, ulong windowEndTick) {
+    public CommandSnapshot SnapshotForTick(ulong tick, ulong windowEndTick, ulong windowStartTick = 0) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -2169,6 +2199,9 @@ public sealed partial class InputRouter : IDisposable {
         // Working per-slot ordered state for this tick: carried state first, then every due signal is appended in order;
         // repeated commands stay repeated.
         SeedCarried();
+        m_captureTick = 0;
+        m_activation = 0;
+        m_simulationOffset = null;
 
         // Router-synthesized edges owed from an EARLIER tick fold next: a transient impulse's inactive twin and every
         // deterministic cancellation. Draining them HERE — after the held seeding, before this tick's own due
@@ -2232,6 +2265,9 @@ public sealed partial class InputRouter : IDisposable {
                 )
             ) {
                 ref readonly var captured = ref dueSignals[signalIndex++];
+                m_captureTick = captured.CaptureTick;
+                m_activation = captured.Sequence;
+                m_simulationOffset = captured.Signal.SimulationOffset;
 
                 ApplySignal(
                     workingBySlot: m_workingBySlot,
@@ -2241,6 +2277,9 @@ public sealed partial class InputRouter : IDisposable {
                 );
             } else {
                 ref readonly var captured = ref dueInjections[injectionIndex++];
+                m_captureTick = captured.CaptureTick;
+                m_activation = captured.Sequence;
+                m_simulationOffset = null;
 
                 ApplyInjection(
                     workingBySlot: m_workingBySlot,
@@ -2249,7 +2288,7 @@ public sealed partial class InputRouter : IDisposable {
             }
         }
 
-        return Build(tick: tick);
+        return Build(tick: tick) with { CaptureWindowStart = windowStartTick, CaptureWindowEnd = windowEndTick };
     }
     /// <summary>Releases a device's gameplay holds for a focus handoff while preserving its physical first-down
     /// latches until the corresponding releases arrive. This prevents an OS repeat of the console opener from

@@ -616,7 +616,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         var exclusive = false;
         ushort? budget = null;
         ushort? eventBudget = null;
-        ChannelDeclaredMask? namedChannels = null;
+        WorldChannelSelection? namedChannels = null;
         ulong? namedRegisters = null;
         long? ceiling = null;
         long? holdCeiling = null;
@@ -798,25 +798,25 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                     return false;
                 }
 
-                var mask = default(ChannelDeclaredMask);
+                var names = new List<string>();
 
                 foreach (var name in token[9..].ToString().Split(
                     options: StringSplitOptions.None,
                     separator: ','
                 )) {
-                    if (!channels.TryGetOrdinal(
+                    if (!channels.TryGetLogicalId(
                         name: name,
-                        ordinal: out var ordinal
+                        logical: out _
                     )) {
                         error = CommandResult.Error(output: $"[{verb}: channels:<> names '{name}', which names no declared channel]");
 
                         return false;
                     }
 
-                    mask = mask.With(ordinal: ordinal);
+                    names.Add(name);
                 }
 
-                namedChannels = mask;
+                namedChannels = new(names);
 
                 continue;
             }
@@ -965,16 +965,13 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
             return false;
         }
 
-        var reachedBits = ((ceiling is null)
-            ? (namedChannels?.Bits ?? default)
-            : default);
-        var reach = (((ceiling is null) && (!reachedBits.IsEmpty || (namedRegisters is not null)))
-            ? new ChannelReachMask(Bits: reachedBits, Registers: (namedRegisters ?? 0UL))
-            : (ChannelReachMask?)null
+        var reach = (((ceiling is null) && (namedChannels is not null || namedRegisters is not null))
+            ? new WorldChannelSelection(namedChannels?.Channels ?? [], namedRegisters ?? 0UL)
+            : (WorldChannelSelection?)null
         );
         var consent = (((ceiling is not null) && (namedChannels is { } consented))
-            ? new ChannelConsentMask(Bits: consented.Bits)
-            : (ChannelConsentMask?)null
+            ? consented
+            : (WorldChannelSelection?)null
         );
 
         grant = new WorldGrant(

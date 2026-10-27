@@ -19,6 +19,11 @@ namespace Puck.World.Protocol;
 /// <see cref="WorldMutationKindCatalog"/> (see that type's remarks).</remarks>
 /// <param name="Principal">The acting identity the mutation is checked against.</param>
 public abstract record WorldMutation(Principal Principal) {
+    /// <summary>Replaces the authoritative mode policy after validating every tuple and the owners' current selections.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Modes">The complete input-mode policy.</param>
+    [MutationKind(ordinal: 80, section: WorldSection.InputModes)]
+    public sealed record SetInputModes(Principal Principal, WorldInputModes Modes) : WorldMutation(Principal);
     /// <summary>Upserts a named machine. Configuration changes prepare a replacement before admission;
     /// changing only its running state preserves hardware state and generation.</summary>
     /// <param name="Principal">The acting identity.</param>

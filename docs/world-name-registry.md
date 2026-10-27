@@ -2896,6 +2896,16 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `seatDefaults.identities[].name` | `WorldIdentitySeed.Name` | an identity display name |
 | `seatDefaults.colorSequence.name` | `WorldSequence.Name` | a sequence name |
 | `channels[].name` | `WorldChannel.Name` | an input channel name |
+| `inputModes.families[].name` | `WorldInputModeFamily.Name` | a composed-world input mode family |
+| `inputModes.families[].selector.name` | `WorldInputModeSelector.Name` | a body register or shared seat-mode family selected by the selector kind |
+| `inputModes.families[].states[].name` | `WorldInputModeState.Name` | a state token local to its input mode family |
+| `inputModes.families[].suspendedBy[].family` | `WorldInputModeSuppression.Family` | a composed-world input mode family |
+| `inputModes.families[].transitions[].from` | `WorldInputModeTransition.From` | a state token local to its input mode family |
+| `inputModes.families[].transitions[].to` | `WorldInputModeTransition.To` | a state token local to its input mode family |
+| `inputHistory.crossings[].name` | `WorldInputCrossing.Name` | a shared semantic crossing in the world's input history |
+| `inputHistory.crossings[].facingState` | `WorldInputCrossing.FacingState` | a per-body counter name in the body-state lane's namespace |
+| `inputPatterns[].name` | `WorldInputPattern.Name` | a shared semantic input-pattern name |
+| `inputPatterns[].held` | `WorldInputPattern.Held` | shared logical input channel names |
 | `targetRegisters[].name` | `WorldTargetRegister.Name` | a target register name |
 | `bodyMotionPrograms[].name` | `BodyMotionProgram.Name` | a body motion program name |
 | `bodyMotionPrograms[].target[designated].register` | `BodyTargetSource.Designated.Register` | a target register name |
@@ -2917,6 +2927,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `kits.rows[].actions{*}.onPress.effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `kits.rows[].actions{*}.onPress.effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `kits.rows[].actions{*}.onPress.effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `kits.rows[].actions{*}.onPress.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -2950,6 +2961,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `kits.rows[].actions{*}.onRelease.effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `kits.rows[].actions{*}.onRelease.effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `kits.rows[].actions{*}.onRelease.effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -2983,6 +2995,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `kits.rows[].actions{*}.onFact[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `kits.rows[].actions{*}.onFact[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `kits.rows[].actions{*}.onFact[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -3125,6 +3138,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `rules[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `rules[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `rules[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -3159,6 +3173,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `rules[].decision.options[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `rules[].decision.options[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `rules[].decision.options[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.options[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -3193,6 +3208,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `rules[].decision.onNoChoice[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `rules[].decision.onNoChoice[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `rules[].decision.onNoChoice[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.onNoChoice[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
@@ -3240,6 +3256,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][claimPair].left` | `ActionEffect.ClaimPair.Left` | a lexical endpoint binding |
 | `interactions.interactions[].effects[][claimPair].right` | `ActionEffect.ClaimPair.Right` | a lexical endpoint binding |
 | `interactions.interactions[].effects[][claimPair].binding` | `ActionEffect.ClaimPair.Binding` | a lexical pair binding |
+| `interactions.interactions[].effects[][consumeInput].pattern` | `WorldEffect.ConsumeInput.Pattern` | a shared semantic input-pattern name |
 | `interactions.interactions[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `interactions.interactions[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |

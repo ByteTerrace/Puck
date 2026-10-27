@@ -72,7 +72,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             subject: application.Target
         );
         writer.WriteString(value: (application.Kit ?? string.Empty));
-        WorldWireCodec.WriteChannelReach(writer, application.Reach);
+        writer.WriteOptional(value: application.Reach, writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(w, value));
     }
     private static ControlApplication ReadControlApplication(ref WireReader reader) {
         var target = WorldWireCodec.ReadSubject(reader: ref reader);
@@ -80,7 +80,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "control application kit",
             maxBytes: MaxStringBytes
         );
-        var reach = WorldWireCodec.ReadChannelReach(reader: ref reader);
+        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelSelection(ref r));
 
         return new ControlApplication(
             Kit: ((kit.Length == 0)
@@ -202,7 +202,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     subject: row.Subject,
                     writer: w
                 );
-                WorldWireCodec.WriteChannelReach(reach: row.Reach, writer: w);
+                WorldWireCodec.WriteChannelSelection(selection: row.Reach, writer: w);
             }
         );
         writer.WriteArray(
@@ -217,7 +217,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteArray(
                     items: row.Ceilings,
                     writeItem: static (w2, cell) => {
-                        w2.WriteInt32(value: cell.Ordinal);
+                        w2.WriteString(value: cell.Channel);
                         w2.WriteInt64(value: cell.Ceiling);
                     }
                 );
@@ -385,7 +385,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "grants channel reach",
             readItem: static (ref WireReader r) => {
                 var (grantee, capability, subject) = ReadGrantKey(reader: ref r);
-                var reach = WorldWireCodec.ReadChannelReach(reader: ref r);
+                var reach = WorldWireCodec.ReadChannelSelection(reader: ref r);
 
                 return (grantee, capability, subject, reach);
             },
@@ -398,15 +398,15 @@ public static partial class WorldAuthorityCheckpointCodec {
                 var ceilings = r.ReadArray(
                     field: "grants pool ceiling cells",
                     readItem: static (ref WireReader r2) => {
-                        var ordinal = r2.ReadInt32();
+                        var channel = r2.ReadRequiredString(field: "channel ceiling name");
                         var ceiling = r2.ReadInt64();
 
-                        return (ordinal, ceiling);
+                        return (channel, ceiling);
                     },
                     maximum: MaxCollectionCount
                 );
 
-                return (grantee, capability, subject, ((IReadOnlyList<(int Ordinal, long Ceiling)>)ceilings));
+                return (grantee, capability, subject, ((IReadOnlyList<(string Channel, long Ceiling)>)ceilings));
             },
             maximum: MaxCollectionCount
         );

@@ -126,6 +126,7 @@ public readonly record struct EntitySnapshot(
 /// <param name="EngineTick">The engine-tick coordinate <see cref="Tick"/> completed at — what a presentation-side
 /// reader (a HUD binding, a gait driver) must pass to evaluate a <c>StateAdvance</c> row's live value; never derived
 /// from <see cref="Tick"/> at a simulation rate.</param>
+/// <param name="Inputs">Authority-issued input epochs and continuation decisions, disclosed only to their owner.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -137,7 +138,8 @@ public readonly record struct WorldSnapshot(
     string Authority = "",
     ReadOnlyMemory<FieldCellDelta> FieldCells = default,
     bool FieldsFull = false,
-    ulong EngineTick = 0UL
+    ulong EngineTick = 0UL,
+    ReadOnlyMemory<WorldInputPublication> Inputs = default
 );
 /// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
 /// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
@@ -161,13 +163,18 @@ public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int
 /// directly. Replaces the old <c>ActionLanes HeldLanes</c> bitmask.</param>
 /// <param name="MeasuredHoldTicks">An externally conditioned input-hold measurement in simulation ticks. No
 /// simulation code samples a clock; this tick-stamped value is recorded with the intent.</param>
+/// <param name="Input">The owner-scoped semantic batch, admitted at the simulation interval boundary.</param>
+/// <param name="InputOwner">A local producer's admitted history session when distinct from its acting principal.
+/// Its authority must resolve back to <paramref name="Principal"/> and this exact target; it grants no capability.</param>
 public readonly record struct IntentSubmission(
     ulong Tick,
     int EntityIndex,
     PlayerIntent Intent,
     Principal Principal,
     PlayerIntent HeldChannels = default,
-    int MeasuredHoldTicks = 0
+    int MeasuredHoldTicks = 0,
+    WorldInputBatch? Input = null,
+    Principal? InputOwner = null
 );
 /// <summary>Evaluates a <see cref="WorldObserverDisclosure"/> policy against an <see cref="EntitySnapshot"/> — kept
 /// beside <see cref="EntitySnapshot"/> rather than on the policy record itself, since the policy is document data

@@ -6,6 +6,8 @@ namespace Puck.World;
 /// <see cref="IWorldFacts"/> as its facet type receives the instance as an argument.</summary>
 /// <remarks>Every member is read on the tick path and allocates nothing.</remarks>
 public interface IWorldFacts : IFacet {
+    /// <summary>Reads bounded semantic input history or held continuation.</summary>
+    RuleFact Read(WorldInputOperand operand);
     /// <summary>Returns the active body count.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

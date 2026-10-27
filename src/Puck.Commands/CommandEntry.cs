@@ -14,6 +14,14 @@ namespace Puck.Commands;
 /// per-tick mixer is the only builder; every other surface READS an entry.
 /// </remarks>
 public readonly record struct CommandEntry {
+    /// <summary>Capture-clock coordinate before the command was folded; zero denotes a deterministic boundary edge.</summary>
+    public ulong CaptureTick { get; internal init; }
+    /// <summary>Identity shared by every semantic output of the same captured activation.</summary>
+    public ulong Activation { get; internal init; }
+    /// <summary>Committed characters, delivered only to the host's text input consumer; never parsed as a verb.</summary>
+    public string? CommittedText { get; internal init; }
+    /// <summary>Explicit next-interval offset from a scripted signal, otherwise the host maps its capture clock.</summary>
+    public Puck.Maths.FixedQ4816? SimulationOffset { get; internal init; }
     /// <summary>Initializes a new instance of the <see cref="CommandEntry"/> struct.</summary>
     /// <param name="commandId">The interned command id (<see cref="CommandRegistry.TryGetId"/>).</param>
     /// <param name="value">The command's value for this tick.</param>
@@ -104,6 +112,10 @@ public readonly record struct CommandEntry {
     public bool Equals(CommandEntry other) {
         return (
             (AssignedSlot == other.AssignedSlot) &&
+            (CaptureTick == other.CaptureTick) &&
+            (Activation == other.Activation) &&
+            (SimulationOffset == other.SimulationOffset) &&
+            string.Equals(CommittedText, other.CommittedText, StringComparison.Ordinal) &&
             (CommandId == other.CommandId) &&
             (Dispatch == other.Dispatch) &&
             (Origin == other.Origin) &&
@@ -127,6 +139,10 @@ public readonly record struct CommandEntry {
         var hash = new HashCode();
 
         hash.Add(value: AssignedSlot);
+        hash.Add(value: CaptureTick);
+        hash.Add(value: Activation);
+        hash.Add(SimulationOffset);
+        hash.Add(CommittedText, StringComparer.Ordinal);
         hash.Add(value: CommandId);
         hash.Add(value: Dispatch);
         hash.Add(value: Origin);

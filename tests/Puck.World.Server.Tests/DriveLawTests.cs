@@ -17,11 +17,13 @@ namespace Puck.World.Server.Tests;
 /// kit authoring no row, where the same kit with one is admitted.
 /// </summary>
 public sealed class DriveLawTests {
-    private const int BoostOrdinal = (ChannelLimits.MaxAxes + 1);
-    private const int DriftOrdinal = ChannelLimits.MaxAxes;
-    private const int ForwardOrdinal = 0;
-    private const int PitchOrdinal = 3;
-    private const int TurnOrdinal = 2;
+    private static readonly Lazy<WorldChannelTable> InputTable = new(() => WorldChannelTable.Compile(BuildDriveDocument().Channels));
+    private static int InputAddress(string name) => InputTable.Value.TryGetOrdinal(name, out var address) ? address : throw new InvalidOperationException(name);
+    private static int BoostOrdinal => InputAddress("boost");
+    private static int DriftOrdinal => InputAddress("drift");
+    private static int ForwardOrdinal => InputAddress("forward");
+    private static int PitchOrdinal => InputAddress("pitch");
+    private static int TurnOrdinal => InputAddress("turn");
 
     // Per tick: position x/y/z, planar velocity x/y/z, vertical velocity, yaw, drive pitch — each the raw
     // FixedQ4816 storage in hex. Recorded from the run this fixture describes; a deliberate correction to the drive

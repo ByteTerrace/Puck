@@ -275,14 +275,8 @@ public static class WorldAffordances {
             ? null
             : name => Lookup(commands: commands, name: name, registry: registry)),
                 SourceKind: SourceKind,
-                Channel: reference => channels.TryGetOrdinal(
-                    ordinal: out _,
-                    reference: reference
-                ),
-                ChannelBinary: reference => (channels.TryGetOrdinal(
-                    ordinal: out var ordinal,
-                    reference: reference
-                ) && (channels.Shape(ordinal: ordinal) == ChannelShape.Binary)),
+                Channel: reference => channels.TryGetShape(reference, out var shape) && shape != ChannelShape.Text,
+                ChannelBinary: reference => channels.TryGetShape(reference, out var shape) && shape == ChannelShape.Binary,
                 SourceAddressable: source => !InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source)
             )
         ).Errors);

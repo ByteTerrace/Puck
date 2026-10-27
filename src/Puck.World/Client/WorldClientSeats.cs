@@ -6,14 +6,20 @@ namespace Puck.World.Client;
 
 /// <summary>The desktop's <see cref="IWorldEmbodiedSeats"/> — the moved <c>WorldInstanceHost</c> engine's one seam
 /// into <see cref="WorldClient"/>/<see cref="PlayerRoster"/>/<see cref="WorldSeatAuthorityRouter"/>/<see cref="InputRouter"/>.</summary>
-internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, WorldSeatAuthorityRouter seatRouter, Func<InputRouter> router) : IWorldEmbodiedSeats {
+internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings bindings, Func<InputRouter> router) : IWorldEmbodiedSeats {
     /// <inheritdoc/>
     public int SeatCount => WorldSeatBindings.SeatCount;
 
     /// <inheritdoc/>
     public void AdvanceSeatViews(float deltaSeconds) => client.AdvanceSeatViews(deltaSeconds: deltaSeconds);
     /// <inheritdoc/>
-    public void ClearAnalog() => roster.ClearAnalog();
+    public void ClearAnalog() {
+        for (var slot = 0; slot < WorldSeatBindings.SeatCount; slot++) {
+            bindings.SyncRoute(slot, seatRouter, client);
+            roster.Seat(slot)?.Channels = bindings.Channels(slot);
+        }
+        roster.ClearAnalog();
+    }
     /// <inheritdoc/>
     public void ClearHeld(int slot) => _ = router().ClearSlotHeld(slot: slot);
     /// <inheritdoc/>

@@ -287,7 +287,7 @@ public sealed class WorldScheduleLawTests {
     [InlineData("world.capture")]
     [InlineData("world.screenshot")]
     [InlineData("world.control start")]
-    [InlineData("replay.record on")]
+    [InlineData("replay.drive saved")]
     [InlineData("world.state.cel.set counter n 7")]
     [Theory]
     public void ACommandOutsideTheScheduledStepVocabularyIsRefusedByNameWithItsRowIndex(string command) {

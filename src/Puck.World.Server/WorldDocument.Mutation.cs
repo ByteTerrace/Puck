@@ -177,6 +177,7 @@ public sealed partial class WorldDocument {
         if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out var compilation)) {
             return false;
         }
+        if (!Host.Input.TryValidateDefinition(candidate, arena, out reason)) { return false; }
         if (!TryAdmitPipelineOverrides(
             candidate: candidate,
             current: current,

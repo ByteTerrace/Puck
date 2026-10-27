@@ -42,7 +42,8 @@ public static class WorldFrameCodec {
     /// <param name="kind">The declared kind.</param>
     /// <returns>The maximum leaf bytes accepted.</returns>
     public static int MaxPayloadBytes(WorldSubmissionKind kind) => kind switch {
-        WorldSubmissionKind.Command => (4 * 1024),
+        // Profile admission carries bounded source names and binding contracts, not just a scalar command.
+        WorldSubmissionKind.Command => ((4 * 1024) * 1024),
         WorldSubmissionKind.Grant => (4 * 1024),
         WorldSubmissionKind.Revoke => (4 * 1024),
         WorldSubmissionKind.Session => (256 * 1024),
@@ -53,7 +54,7 @@ public static class WorldFrameCodec {
         WorldSubmissionKind.Lever => WorldSubmissionCodec.MaxLeverBytes,
         WorldSubmissionKind.Query => (4 * 1024),
         // A screen.insert content path is a filesystem path, never file bytes — 4 KiB matches the other small
-        // structural leaves (Command/Grant/Query) rather than Rebuild's document-embedding cap.
+        // structural leaves (Grant/Query) rather than Rebuild's document-embedding cap.
         WorldSubmissionKind.ScreenOp => (4 * 1024),
         WorldSubmissionKind.Designation => (4 * 1024),
         // Generic provider payloads are bounded structural leaves; the complete leaf (instance, generation, operation id, and JSON) must fit this cap.

@@ -61,6 +61,10 @@ public class RuleCompileContext : IRuleCostContext {
     /// <summary>Gets or sets the enclosing rule's declared <see cref="Rule.ForEach"/> row name, for the duration of
     /// one compile.</summary>
     public string? ForEachRow { get; set; }
+    /// <summary>The bounded extension selected for the rule currently being compiled.</summary>
+    public RuleIteration? Iteration { get; set; }
+    /// <summary>Resolves a document-owned each source; null leaves resolution to the core row and body vocabulary.</summary>
+    public virtual RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) => null;
     /// <summary>Gets the section's generator rows.</summary>
     public IReadOnlyList<GeneratorRow>? Generators { get; }
     /// <summary>Gets the section's lattice topologies.</summary>
@@ -156,6 +160,7 @@ public class RuleCompileContext : IRuleCostContext {
     public void ClearScope() {
         BindingScope = null;
         ForEachRow = null;
+        Iteration = null;
         m_instanceBindings.Clear();
         m_releasedInstanceSlots.Clear();
         RuleLocals = null;

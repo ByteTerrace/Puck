@@ -7799,6 +7799,7 @@ state {
       name: "flightFuel"
       kind: "Counter"
       initial: 0
+      envelope { $type: "range", minimum: 0, maximum: 1000 }
     }
     {
       name: "flightPress"
