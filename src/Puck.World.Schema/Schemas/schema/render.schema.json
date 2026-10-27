@@ -644,6 +644,11 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldRenderToon"
+    },
+    "bloom": {
+      "$ref": "./common.schema.json#/$defs/CameraBloom",
+      "description": "Optional camera scatter. Absent is off.",
+      "default": null
     }
   },
   "additionalProperties": false,

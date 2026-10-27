@@ -11,13 +11,13 @@ using Puck.World.Client;
 namespace Puck.World;
 
 public sealed partial class WorldScreenBinder {
-
     /// <summary>Gets the restrictions a camera view adds to the world's quality: a low-resolution diegetic display skips
     /// ambient occlusion and soft shadows.</summary>
     public static SdfViewQuality CameraViewQuality { get; } = new() {
         DisableAmbientOcclusion = true,
         DisableSoftShadows = true,
     };
+
     private bool TryResolveRankedAnchor(WorldCamera camera, int slot, out SdfAnchor anchor) {
         var selected = WorldSeatAnchors.SelectAnchor(
             camera: camera,
@@ -100,6 +100,7 @@ public sealed partial class WorldScreenBinder {
 
         return false;
     }
+
     /// <inheritdoc/>
     /// <remarks>Each camera view is a view of the frame after the presentation's own, at the quality of its first view
     /// with ambient occlusion and soft shadows off (<see cref="CameraViewQuality"/>): a low-resolution diegetic display
@@ -133,6 +134,9 @@ public sealed partial class WorldScreenBinder {
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
                 CutRevision = registration.CutRevision,
+                Bloom = BloomSettings?.ResolveBloom((BootDefinition()?.Render ?? WorldRenderDefaults.Absent), registration.Row.Rig.Bloom),
+                BloomQuality = (BloomSettings?.BloomQualityOf(view: name) ?? Puck.Hosting.BloomQuality.Off),
+                BloomStandalone = true,
                 Quality = quality,
             });
 
@@ -151,6 +155,7 @@ public sealed partial class WorldScreenBinder {
             names.Add(item: null);
         }
     }
+
     // Films every session of the boot world, at any depth, as a view of the world's own frame after its camera views
     // (SettleSessionRoutes), then the cameras of each level those sessions show: the world is resident once, however many
     // windows show it. Each view records the level whose screens it shows (ReadOf).
@@ -271,6 +276,7 @@ public sealed partial class WorldScreenBinder {
             );
         }
     }
+
     // The camera a session the presentation routed rendered its last frame from: a session of the boot world's, filmed
     // into the world's frame, or the routed window's.
     private bool TryPresentedSessionCamera(SessionFeed feed, string view, out CameraSnapshot camera) => (feed.Home
@@ -316,4 +322,5 @@ public sealed partial class WorldScreenBinder {
         point = default;
 
         return false;
-    }}
+    }
+}

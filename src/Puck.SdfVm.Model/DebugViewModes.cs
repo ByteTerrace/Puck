@@ -23,9 +23,12 @@ public static class DebugViewModes {
         "rate-flash",
         "colliders",
         "contacts",
+        "bloom",
     ];
     /// <summary>The <c>motion</c> view's mode value, which reads the previous view and transform tables.</summary>
     public static readonly int Motion = Array.IndexOf(array: Names, value: "motion");
+    /// <summary>The camera's scatter alone, before the display curve.</summary>
+    public static readonly int Bloom = Array.IndexOf(array: Names, value: "bloom");
     /// <summary>The sky-cost diagnostic, whose RGB shows evaluations, hashes and texture loads.</summary>
     public static readonly int SkyCost = Array.IndexOf(array: Names, value: "sky-cost");
     /// <summary>The tier view: the final image with every item a <c>world.rates</c> lever holds tinted by the tier it
@@ -38,7 +41,7 @@ public static class DebugViewModes {
     /// <summary>Whether diagnostics annotate a normally resolved scene without replacing its shading.</summary>
     /// <param name="mode">The debug mode.</param>
     /// <returns>True for the untouched scene and evidence-preserving diagnostics.</returns>
-    public static bool PreservesScene(int mode) => (mode == 0) || (Name(mode) is "colliders" or "contacts");
+    public static bool PreservesScene(int mode) => ((mode == 0) || (Name(mode: mode) is "colliders" or "contacts" or "bloom"));
 
     /// <summary>Gets the number of debug view modes.</summary>
     public static int Count => Names.Length;

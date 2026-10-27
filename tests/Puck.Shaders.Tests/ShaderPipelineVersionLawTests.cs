@@ -364,6 +364,7 @@ public sealed class ShaderPipelineVersionLawTests {
             plan: plan
         );
         var imageStorage = plan.FindResource(name: "image")!.Storage;
+        var publishedStorage = plan.Outputs.Select(selector: name => plan.FindResource(name: name)!.Storage).ToHashSet();
         var published = new ShaderPipelineAccessState(
             Access: GpuAccess.ShaderRead,
             Layout: GpuImageLayout.General,
@@ -376,7 +377,7 @@ public sealed class ShaderPipelineVersionLawTests {
         foreach (var pass in plan.Passes) {
             foreach (var access in pass.Accesses) {
                 // The published output starts its next frame from the presentation, which the plan cannot place.
-                var barrier = (((access.Storage == imageStorage) && (access.PriorKind == ShaderPipelinePriorKind.CrossFrame))
+                var barrier = ((publishedStorage.Contains(item: access.Storage) && (access.PriorKind == ShaderPipelinePriorKind.CrossFrame))
                     ? ShaderPipelineBarrier.Always(kind: ShaderPipelineResourceKind.Image, prior: published, use: access.Use)
                     : access.Barrier);
 
@@ -394,6 +395,11 @@ public sealed class ShaderPipelineVersionLawTests {
         expected.Add(item: AsRecorded(barrier: ShaderPipelineBarrier.Between(
             kind: ShaderPipelineResourceKind.Image,
             prior: plan.Storages[imageStorage].FrameEnd,
+            use: published
+        )));
+        expected.Add(item: AsRecorded(barrier: ShaderPipelineBarrier.Between(
+            kind: ShaderPipelineResourceKind.Image,
+            prior: plan.Storages[plan.FindResource(name: "peeked")!.Storage].FrameEnd,
             use: published
         )));
 

@@ -10,6 +10,38 @@ The sequence exposes where the GPU work goes, how render-scale tiers trade
 resolution for frame budget, and how frames stay in flight without stalling the
 whole device.
 
+## Camera bloom
+
+A world opts into optical scatter with `render.bloom { scatter: 0.04, radius: 0.08 }`.
+The engine default scatter is zero. A camera program's `bloom` overrides the world;
+`scatter` is the redistributed share (0–1), and `radius` is a fraction of the
+output's shorter side (0.001–1). The optional `cutoff` defaults to zero. A positive
+cutoff softly selects exposed HDR luminance between half and one-and-a-half times
+that value; unlike the default linear filter, this selection changes with exposure.
+
+Each optical endpoint filters its complete exposed HDR composite, including glass,
+sky and air. High builds six RGBA16F levels from half output resolution; Low builds
+five from quarter; Off allocates no pyramid. Thirteen linear samples downfilter,
+and normalized 3×3 tents upfilter, all with FP32 arithmetic. Radius blends the
+coarse contribution continuously across levels. The output grid fixes support
+while dynamic resolution changes the scene grid. There is no bloom history.
+
+The view exports `bloom` alongside its direct image. Root `place.bloom` sharpens
+the direct image, then combines `(1 - scatter) * direct + scatter * bloom` before
+tonemapping. A filmed camera without root placement uses `bloom-apply` instead.
+Panes, letterboxes and overlays never enter this filter. Portals, windows, mirror
+continuations, sky layers and raw machine/video images are transport and bypass it.
+All diagnostics bypass it except `world.debug-view bloom`, which displays the
+scatter alone. Screen fidelity fades scatter to zero and removes its pyramid at
+full fidelity. CRT material has no separate brightness knee.
+
+The quality preset's `bloom` is Off, Low or High. Each seat independently scales
+scatter from zero (accessibility off) to one. `world.bloom` reports effective
+values and bypass reasons; its controls are in the [commands reference](../../../reference/commands.md#camera-bloom).
+`world.gpu-timing` names each `sdf.world$bloom-down-*` and `bloom-up-*` pass;
+`world.counters gpu` exposes their dispatches, storage bytes and written pixels.
+The target is 0.3 ms at 1280×900 High on the RTX 4070, judged on both backends and
+with presented motion bursts as well as settled images.
 ## One render pipeline
 
 A world frame has two halves. The scene's shared tables — the program, the

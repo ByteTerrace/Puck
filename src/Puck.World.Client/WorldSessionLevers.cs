@@ -54,6 +54,12 @@ public static partial class WorldSessionLevers {
     public const string Temporal = "temporal";
     /// <summary>The presentation-only cel-shading choice (<c>world.toon</c>).</summary>
     public const string Toon = "toon";
+    /// <summary>Camera bloom enable override, negative restoring authored settings.</summary>
+    public const string Bloom = "bloom";
+    /// <summary>The per-view optical cost gate, negative restoring the preset.</summary>
+    public const string BloomQuality = "bloom-quality";
+    /// <summary>The named seat's accessibility scale.</summary>
+    public const string BloomScale = "bloom-scale";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -110,7 +116,7 @@ public static partial class WorldSessionLevers {
         );
         sink.Register(
             name: Rates,
-            setter: lever => settings.UpdateRates = (((SdfUpdateRates)((int)lever.A)) & SdfUpdateRates.All)
+            setter: lever => settings.UpdateRates = ((SdfUpdateRates)((int)lever.A)) & SdfUpdateRates.All
         );
         sink.Register(
             name: Indirect,
@@ -129,6 +135,11 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(name: Toon, setter: lever => settings.Toon = Flag(lever: lever));
+        sink.Register(name: Bloom, setter: lever => settings.BloomOverride = ((lever.A < 0) ? null : Flag(lever: lever)));
+        sink.Register(name: BloomScale, setter: lever => settings.SetBloomScale(lever.Seat, ((float)lever.A)));
+        sink.Register(name: BloomQuality, setter: lever => {
+            if (lever.View is { } view) { settings.SetBloomQuality(view, ((lever.A < 0) ? null : (Puck.Hosting.BloomQuality)((int)lever.A))); } else { settings.BloomQuality = ((Puck.Hosting.BloomQuality)((int)lever.A)); }
+        });
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
                 Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");

@@ -157,6 +157,8 @@ public sealed class SdfKernelInterfaces {
             members: [.. SdfWorldPackage.GlassMembers, .. LightAndSkyTables],
             package: "sdf-glass"
         ).Stamped(stamp: stamp);
+        BloomParameters = ShaderPipelineParameterLayout.ForPackage(config: null,
+            members: SdfWorldPackage.BloomMembers, package: "sdf-bloom").Stamped(stamp: stamp);
         Mesh = new(
             members: [
                 .. World.Members.Where(predicate: static member => (
@@ -185,6 +187,7 @@ public sealed class SdfKernelInterfaces {
         );
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
+            (IncludePath(shaderInterface: BloomParameters.Interface), BloomParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
             (IncludePath(shaderInterface: BrickBake), BrickBake),
@@ -229,6 +232,8 @@ public sealed class SdfKernelInterfaces {
 
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
+    /// <summary>The optical scatter filters, independent of scene and bake tables.</summary>
+    public ShaderPipelineParameterLayout BloomParameters { get; }
     /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of
     /// <see cref="Stamp"/>.</summary>
     public string FieldStamp { get; }

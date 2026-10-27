@@ -83,6 +83,7 @@ public static class WorldApplicationDefaults {
 /// <param name="Sky">The sky's quality tier the preset selects (<c>world.sky-quality</c>).</param>
 /// <param name="Indirect">The indirect tier override. Absent selects Off for Low, Medium for Medium and High for High.</param>
 /// <param name="SkyFieldScale">The independent sky field grid fraction, one or one half.</param>
+/// <param name="Bloom">The optical scatter cost gate.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -97,7 +98,8 @@ public readonly record struct WorldQualityPreset(
     WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter,
     WorldSkyTier Sky = WorldSkyTier.High,
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null,
-    float SkyFieldScale = 1f
+    float SkyFieldScale = 1f,
+    Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -147,6 +149,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
 /// tonemap. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
 /// <param name="Toon">Optional cel shading and its tuning. Absent is off.</param>
+/// <param name="Bloom">Optional camera scatter. Absent is off.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -171,7 +174,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null,
     float SkyFieldScale = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderExposure? Exposure = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderToon? Toon = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderToon? Toon = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units, the largest power of two
     /// at which a float's spacing (2^13 · 2^-23 = 0.00098) still resolves a millimetre, so a depth anywhere in the view
@@ -272,6 +276,7 @@ public sealed record WorldRenderExposure(
             })
             : authored);
     }
+
     private static SdfExposure ResolveSection(WorldRenderExposure exposure) {
 
         var automatic = (exposure.Mode == SdfExposureMode.Auto);

@@ -434,6 +434,10 @@ prototypes {
 // samples resolve detail finer than a pixel, such as the shadowed crease under each reference cube's filleted foot,
 // which one sample a pixel catches only where the silhouette steps.
 render {
+  bloom {
+    scatter: 0.04
+    radius: 0.08
+  }
   farDistance: 200
   temporal: true
   sky {

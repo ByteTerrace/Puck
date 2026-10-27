@@ -27,7 +27,10 @@ namespace Puck.Shaders;
 /// <param name="Crop">The part of the source the rect shows, as fractions of the source's extent: left, top, width and
 /// height in <c>X</c>, <c>Y</c>, <c>Z</c> and <c>W</c> (<see cref="RenderGraphPackageCatalog.PlaceCrop"/>); a zero
 /// width or height shows the whole source. A crop whose pixels match the rect's is an exact copy of them.</param>
-public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false, bool Sharpen = false, System.Numerics.Vector4? LetterboxColor = null, float Fidelity = 0f, System.Numerics.Vector4 Crop = default);
+/// <param name="BloomScatter">The resolved optical scatter fraction.</param>
+/// <param name="BloomCutoff">The optional exposed-HDR cutoff.</param>
+/// <param name="BloomOnly">Whether to show only the scattered light.</param>
+public readonly record struct RenderGraphPlacement(bool Shown, float Left, float Top, float Width, float Height, float Sharpness, bool Uncovered = false, bool Sharpen = false, System.Numerics.Vector4? LetterboxColor = null, float Fidelity = 0f, System.Numerics.Vector4 Crop = default, float BloomScatter = 0f, float BloomCutoff = 0f, bool BloomOnly = false);
 /// <summary>Answers where a host shows each <c>place</c> pass's source this frame. The recorder asks once per recorded
 /// frame, on the frame thread.</summary>
 public interface IRenderGraphPlacements {
@@ -89,7 +92,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         if (
-            (context.Inputs.Count != 2) ||
+            (context.Inputs.Count != ((context.Package == RenderGraphPackageCatalog.PlaceBloom) ? 3 : 2)) ||
             (context.Outputs.Count != 1) ||
             context.Inputs.Concat(second: context.Outputs).Any(predicate: static resource => (resource.Kind != ShaderPipelineResourceKind.Image))
         ) {
@@ -179,6 +182,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private readonly int m_sharpnessOffset;
         private readonly int m_sharpenOffset;
         private readonly uint m_source;
+        private readonly uint m_bloom;
+        private readonly int m_bloomScatterOffset;
+        private readonly int m_bloomCutoffOffset;
+        private readonly int m_bloomOnlyOffset;
         private readonly RenderGraphPackageWorkCounters m_workCounters = null!;
 
         private bool m_disposed;
@@ -208,6 +215,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 );
                 m_base = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceBase);
                 m_source = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceSource);
+                m_bloom = m_sets.BindingOf(member: "bloom");
+                m_bloomScatterOffset = ((int)parameters.BlockOffsetOf(member: "bloomScatter"));
+                m_bloomCutoffOffset = ((int)parameters.BlockOffsetOf(member: "bloomCutoff"));
+                m_bloomOnlyOffset = ((int)parameters.BlockOffsetOf(member: "bloomOnly"));
                 m_destination = m_sets.BindingOf(member: RenderGraphPackageCatalog.PlaceDestination);
                 m_workCounters = new RenderGraphPackageWorkCounters(
                     context: context,
@@ -216,6 +227,8 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 m_sampler = m_services.Bindings.CreateSampler();
 
                 for (var slot = 0; (slot < context.InFlightFrames); slot++) {
+                    m_services.Bindings.WriteSampler(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomSampler"),
+                        descriptorSetHandle: m_sets.PassSet(slot: slot), samplerHandle: m_sampler);
                     foreach (var image in ((ReadOnlySpan<string>)[RenderGraphPackageCatalog.PlaceBase, RenderGraphPackageCatalog.PlaceSource])) {
                         m_services.Bindings.WriteSampler(
                             arrayElement: 0,
@@ -244,6 +257,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination[8..], value: value.Z);
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination[12..], value: value.W);
         }
+
         public void Dispose() {
             if (m_disposed) {
                 return;
@@ -285,6 +299,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
 
                 var rect = recording.PassBlock[m_rectOffset..];
 
+                BinaryPrimitives.WriteSingleLittleEndian(destination: recording.PassBlock[m_bloomScatterOffset..], value: placement.BloomScatter);
+                BinaryPrimitives.WriteSingleLittleEndian(destination: recording.PassBlock[m_bloomCutoffOffset..], value: placement.BloomCutoff);
+                BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[m_bloomOnlyOffset..], value: (placement.BloomOnly ? 1u : 0u));
+
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect, value: (placement.Shown ? placement.Left : 0f));
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect[4..], value: (placement.Shown ? placement.Top : 0f));
                 BinaryPrimitives.WriteSingleLittleEndian(destination: rect[8..], value: (placement.Shown ? placement.Width : 0f));
@@ -306,7 +324,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     destination: recording.PassBlock[m_cropOffset..],
                     value: (((placement.Crop.Z > 0f) && (placement.Crop.W > 0f))
                         ? placement.Crop
-                        : new System.Numerics.Vector4(x: 0f, y: 0f, z: 1f, w: 1f))
+                        : new System.Numerics.Vector4(w: 1f, x: 0f, y: 0f, z: 1f))
                 );
                 BinaryPrimitives.WriteSingleLittleEndian(
                     destination: recording.PassBlock[m_fidelityOffset..],
@@ -332,6 +350,8 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                 passSet: set,
                 recording: recording
             );
+            m_services.Bindings.WriteSampledImage(arrayElement: 0, binding: m_bloom, descriptorSetHandle: set,
+                imageViewHandle: recording.Inputs[((recording.Inputs.Length == 3) ? 2 : 1)].Image.ImageViewHandle);
 
             m_services.Bindings.WriteStorageImage(
                 arrayElement: 0,

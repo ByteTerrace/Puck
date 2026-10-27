@@ -143,6 +143,7 @@ public static partial class WorldDefinitionValidator {
 
             return;
         }
+        ValidateBloom(program.Bloom, (path + ".bloom"), errors);
 
         if (string.IsNullOrWhiteSpace(value: program.Name)) {
             errors.Add(item: $"{path}.name is required.");

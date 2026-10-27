@@ -60,6 +60,8 @@ public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineRea
         Device?.Capabilities;
     /// <summary>The world's SDF residency, or <see langword="null"/> until the render factory has run.</summary>
     public SdfWorldResidency? Residency { get; set; }
+    /// <summary>The live instance-to-optical-view mapping used by render diagnostics.</summary>
+    public SdfWorldPasses? Views { get; set; }
     /// <inheritdoc/>
     public bool CapturesSettled => (Root?.PendingCapturePath is null);
     /// <inheritdoc/>

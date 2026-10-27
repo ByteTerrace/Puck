@@ -44,6 +44,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Gets the synthesized root graph the runtime runs, which a live <c>views.post</c> or pane change recomposes,
     /// or <see langword="null"/> when the document names its own root or no runtime is attached.</summary>
     public WorldRootGraph? Synthesized => m_synthesized;
+    /// <summary>Whether the current cameras require optical endpoint placement.</summary>
+    public bool OpticalPlacement { get; set; }
     /// <summary>A non-destructive pointer read; an offscreen host reports no hardware position or press.</summary>
     public Func<WorldPipelinePointerSample>? ReadPointer { get; set; }
     /// <summary>Completed compilation reports, delivered only from the presentation thread.</summary>
@@ -703,7 +705,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="crop">The part of the view's output the rect shows, as fractions of the output: left, top, width and
     /// height (<see cref="RenderGraphPlacement.Crop"/>); zero shows the whole output.</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, bool sharpen = false, Vector4? letterboxColor = null, float fidelity = 0f, Vector4 crop = default) {
+    /// <param name="bloom">The resolved camera scatter.</param>
+    /// <param name="bloomQuality">The optical cost gate.</param>
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, bool sharpen = false, Vector4? letterboxColor = null, float fidelity = 0f, Vector4 crop = default, CameraBloom? bloom = null, BloomQuality bloomQuality = BloomQuality.Off) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -711,7 +715,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return false;
         }
 
+        var mode = (Pickers?.ViewOf(instance: synthesized.Producers[view].Name)?.Residency.DebugMode ?? 0);
+        var scatter = ((((mode != 0) && (mode != DebugViewModes.Bloom)) || (bloomQuality == BloomQuality.Off)) ? 0f : ((bloom?.Scatter ?? 0f) * (1f - Math.Clamp(max: 1f, min: 0f, value: fidelity))));
+
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
+            BloomScatter: scatter,
+            BloomCutoff: (bloom?.Cutoff ?? 0f),
+            BloomOnly: (mode == DebugViewModes.Bloom),
             Crop: crop,
             Fidelity: fidelity,
             Uncovered: uncovered,
@@ -788,7 +798,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         // shown like any other.
         var standsFor = (
             lone &&
-            (m_synthesized is not { Tonemap: WorldTonemap.Filmic } and not { Sharpens: true }) &&
+            (m_synthesized is not { Tonemap: WorldTonemap.Filmic } and not { Sharpens: true } and not { Blooms: true }) &&
             (mattes?.Invoke(arg: 0) is null)
         );
         var covered = (panesCover || standsFor);
@@ -825,6 +835,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 crop: ((matte is { } shownPart)
                     ? CropOf(part: shownPart, whole: snapshot.Region)
                     : default),
+                bloom: snapshot.Bloom,
+                bloomQuality: snapshot.BloomQuality,
                 fidelity: snapshot.ScreenFidelity,
                 letterboxColor: letterboxColor,
                 uncovered: !covered,
@@ -1190,6 +1202,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (
                 (m_lastTonemap == curve) &&
                 (m_lastSharpens == sharpens) &&
+                (m_synthesized?.Blooms == OpticalPlacement) &&
                 !EnvironmentChanged() &&
                 (m_lastComparisonRevision == (Comparison?.Revision ?? 0UL)) &&
                 ReferenceEquals(
@@ -1238,6 +1251,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 (synthesized.Views != composedViews) ||
                 (synthesized.Tonemap != tonemap) ||
                 (synthesized.Sharpens != sharpens) ||
+                (synthesized.Blooms != OpticalPlacement) ||
                 !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal) ||
                 !synthesized.Post.SequenceEqual(second: (views.Post ?? []))
             ) {

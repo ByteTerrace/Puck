@@ -130,6 +130,7 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             var resource = m_resources[access.Storage];
+
             if (!access.PreviousFrame && !access.Use.Writes && (resource.Alias.Target is not null)) {
                 // Package inputs resolve through the forwarded image, already shader-readable from the read that
                 // established the alias. This allocation was not read or written; preserve its state for a later draw.
@@ -338,6 +339,21 @@ public sealed partial class ShaderPipelineRenderNode {
             );
         }
 
+        // Every named image output is published in the same readable layout as the default.
+        var outputs = m_pipeline!.Plan.Outputs;
+
+        for (var output = 0; (output < outputs.Count); output++) {
+            var name = outputs[output];
+            var resource = m_resourceLookup[name];
+
+            if ((resource == selected) || (resource.Spec.Kind != ShaderPipelineResourceKind.Image)) { continue; }
+            var (named, _, namedInstance) = PublicationOf(selected: resource, slot: slot);
+            if (named.Spec.IsExternal) { continue; }
+            RecordBarrier(barrier: Present(instance: namedInstance, resource: named,
+                use: new ShaderPipelineAccessState(Access: GpuAccess.ShaderRead, Layout: outputLayout, Stage: ShaderStages)),
+                command: command, instance: namedInstance, recorder: recorder, resource: named);
+        }
+
         ShaderPipelineBarrier? handBack = null;
 
         foreach (var resource in m_resources) {
@@ -358,10 +374,10 @@ public sealed partial class ShaderPipelineRenderNode {
             if (barrier.Kind == ShaderPipelineBarrierKind.Memory) {
                 handBack = ((handBack is { } joined)
                     ? joined with {
-                        DestinationAccess = (joined.DestinationAccess | barrier.DestinationAccess),
-                        DestinationStage = (joined.DestinationStage | barrier.DestinationStage),
-                        SourceAccess = (joined.SourceAccess | barrier.SourceAccess),
-                        SourceStage = (joined.SourceStage | barrier.SourceStage),
+                        DestinationAccess = joined.DestinationAccess | barrier.DestinationAccess,
+                        DestinationStage = joined.DestinationStage | barrier.DestinationStage,
+                        SourceAccess = joined.SourceAccess | barrier.SourceAccess,
+                        SourceStage = joined.SourceStage | barrier.SourceStage,
                     }
                     : barrier);
                 continue;

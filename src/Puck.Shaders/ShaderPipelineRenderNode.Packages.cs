@@ -56,7 +56,16 @@ public sealed partial class ShaderPipelineRenderNode {
                     }
                 }
             }
-            next[index] = new BufferOutput(Buffer: buffer, Name: name, Publication: publication);
+            var image = default(ShaderPipelineExternalImage);
+
+            if (resource.Spec.Kind == ShaderPipelineResourceKind.Image) {
+                var (published, publishedName, instance) = PublicationOf(selected: resource, slot: slot);
+                image = ResolveImage(index: instance, name: publishedName, resource: published) with {
+                    Layout = (published.Spec.IsExternal ? m_externalImages[publishedName].Layout : m_outputLayout),
+                };
+                publication = new GpuImagePublication(Owner: this, Sequence: m_submissions);
+            }
+            next[index] = new BufferOutput(Buffer: buffer, Image: image, Name: name, Publication: publication);
         }
         m_previousBuffers = m_publishedBuffers;
         m_publishedBuffers = next;
@@ -94,7 +103,7 @@ public sealed partial class ShaderPipelineRenderNode {
         return result;
     }
 
-    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer, GpuImagePublication Publication);
+    internal readonly record struct BufferOutput(string Name, IGpuBuffer? Buffer, GpuImagePublication Publication, ShaderPipelineExternalImage Image = default);
 
     // What a package pass's factory builds and creates its recorder for, captured on the frame thread's request and read
     // on the pool.

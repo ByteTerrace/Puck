@@ -12,6 +12,12 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
+    /// <summary>The camera's resolved optical scatter; absent on intermediate transport views.</summary>
+    public CameraBloom? Bloom { get; init; }
+    /// <summary>The resolved cost gate. Off allocates no pyramid.</summary>
+    public BloomQuality BloomQuality { get; init; }
+    /// <summary>A filmed camera without root placement combines its lens scatter into its own output.</summary>
+    public bool BloomStandalone { get; init; }
     /// <summary>A screen-door fade of one stamp's transform-slot range in this view only. Default draws every stamp.</summary>
     public SdfStampFade StampFade { get; init; }
 
@@ -60,7 +66,7 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public SdfViewQuality Quality { get; init; }
     /// <summary>The view's screen fidelity, from 0 to 1, which its pass block carries
     /// (<c>SdfWorldPackage.ScreenFidelity</c>): the share of a screen's own pixels that reaches the view untouched, past
-    /// a CRT material's grille, scanlines, bloom, vignette, glint and bezel mask, and past the world's atmosphere. A seat
+    /// a CRT material's grille, scanlines, vignette, glint and bezel mask, and past camera bloom and the world's atmosphere. A seat
     /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
     public float ScreenFidelity { get; init; }
     /// <summary>Whether the view publishes the luminance it shades for a window: a window's view of the world beyond its

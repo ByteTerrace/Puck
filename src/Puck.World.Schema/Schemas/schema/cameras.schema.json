@@ -30,6 +30,11 @@
             "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpList",
             "description": "The selected ops, in authored evaluation order."
           },
+          "bloom": {
+            "$ref": "./common.schema.json#/$defs/CameraBloom",
+            "description": "The camera\u0027s optical scatter override; absent inherits the world.",
+            "default": null
+          },
           "anchorOp": {
             "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpAnchorNullable",
             "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."

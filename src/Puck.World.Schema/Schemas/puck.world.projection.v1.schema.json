@@ -241,6 +241,16 @@
               "description": "The independent sky field grid fraction, one or one half.",
               "type": "number",
               "default": 1
+            },
+            "bloom": {
+              "description": "The optical scatter cost gate.",
+              "enum": [
+                "Off",
+                "Low",
+                "High"
+              ],
+              "default": "High",
+              "title": "BloomQuality"
             }
           },
           "required": [
@@ -348,6 +358,16 @@
               "description": "The independent sky field grid fraction, one or one half.",
               "type": "number",
               "default": 1
+            },
+            "bloom": {
+              "description": "The optical scatter cost gate.",
+              "enum": [
+                "Off",
+                "Low",
+                "High"
+              ],
+              "default": "High",
+              "title": "BloomQuality"
             }
           },
           "required": [
@@ -455,6 +475,16 @@
               "description": "The independent sky field grid fraction, one or one half.",
               "type": "number",
               "default": 1
+            },
+            "bloom": {
+              "description": "The optical scatter cost gate.",
+              "enum": [
+                "Off",
+                "Low",
+                "High"
+              ],
+              "default": "High",
+              "title": "BloomQuality"
             }
           },
           "required": [
@@ -10699,6 +10729,30 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderToon"
+        },
+        "bloom": {
+          "description": "Optional camera scatter. Absent is off.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "scatter": {
+              "type": "number",
+              "default": 0
+            },
+            "radius": {
+              "type": "number",
+              "default": 0.08
+            },
+            "cutoff": {
+              "type": "number",
+              "default": 0
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "CameraBloom"
         }
       },
       "additionalProperties": false,
@@ -12463,6 +12517,30 @@
                   ],
                   "title": "WorldCameraProgramOp"
                 }
+              },
+              "bloom": {
+                "description": "The camera\u0027s optical scatter override; absent inherits the world.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "scatter": {
+                    "type": "number",
+                    "default": 0
+                  },
+                  "radius": {
+                    "type": "number",
+                    "default": 0.08
+                  },
+                  "cutoff": {
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false,
+                "default": null,
+                "title": "CameraBloom"
               },
               "anchorOp": {
                 "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly).",
@@ -27212,7 +27290,7 @@
           ],
           "properties": {
             "candidateBudget": {
-              "description": "The most box-overlapping candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
+              "description": "The most sweep candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
               "type": "integer",
               "default": 32
             },
@@ -27316,6 +27394,10 @@
             },
             "operations": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/operations"
+            },
+            "bloom": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/bloom",
+              "default": null
             },
             "anchorOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/anchorOp"
@@ -27510,6 +27592,10 @@
             },
             "operations": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/operations"
+            },
+            "bloom": {
+              "$ref": "#/properties/cameras/items/properties/rig/properties/bloom",
+              "default": null
             },
             "anchorOp": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/anchorOp"

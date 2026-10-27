@@ -27,7 +27,7 @@ namespace Puck.World;
 /// <param name="server">The authority whose live definition and grants the commands inspect.</param>
 /// <param name="link">The existing submission path for authoritative session levers.</param>
 /// <param name="renderProbe">The presentation owner's live renderer.</param>
-public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
+public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     // The world.quality echo: the current individual settings the preset (or a later override) left in place.
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTierName(tier: settings.Shadows)} ao={(settings.AmbientOcclusion
@@ -68,9 +68,9 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
         var echo = new System.Text.StringBuilder();
 
         _ = echo.Append(provider: CultureInfo.InvariantCulture,
-            handler: $"[world.rates: bodies={On(rates: rates, lever: SdfUpdateRates.Bodies)} views={On(rates: rates, lever: SdfUpdateRates.Views)} screens={On(rates: rates, lever: SdfUpdateRates.Screens)} shadow-far={On(rates: rates, lever: SdfUpdateRates.ShadowFar)} bodies.posed={counts.Read(kind: SdfUpdateRateCounts.BodiesPosed)} bodies.held={counts.Read(kind: SdfUpdateRateCounts.BodiesHeld)} views.rated={counts.Read(kind: SdfUpdateRateCounts.ViewsRated)} screens.rated={counts.Read(kind: SdfUpdateRateCounts.ScreensRated)} shadow-far.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered)} shadow-far.held={counts.Read(kind: SdfUpdateRateCounts.ShadowFarHeld)}");
+            handler: $"[world.rates: bodies={On(lever: SdfUpdateRates.Bodies, rates: rates)} views={On(lever: SdfUpdateRates.Views, rates: rates)} screens={On(lever: SdfUpdateRates.Screens, rates: rates)} shadow-far={On(lever: SdfUpdateRates.ShadowFar, rates: rates)} bodies.posed={counts.Read(kind: SdfUpdateRateCounts.BodiesPosed)} bodies.held={counts.Read(kind: SdfUpdateRateCounts.BodiesHeld)} views.rated={counts.Read(kind: SdfUpdateRateCounts.ViewsRated)} screens.rated={counts.Read(kind: SdfUpdateRateCounts.ScreensRated)} shadow-far.rendered={counts.Read(kind: SdfUpdateRateCounts.ShadowFarRendered)} shadow-far.held={counts.Read(kind: SdfUpdateRateCounts.ShadowFarHeld)}");
         _ = echo.Append(provider: CultureInfo.InvariantCulture,
-            handler: $" display={rate.DisplayHertz}hz grid={((rate.GridHertz > 0d) ? rate.GridHertz.ToString(format: "0.###", provider: CultureInfo.InvariantCulture) + "hz" : "none")} period-ms:");
+            handler: $" display={rate.DisplayHertz}hz grid={((rate.GridHertz > 0d) ? (rate.GridHertz.ToString(format: "0.###", provider: CultureInfo.InvariantCulture) + "hz") : "none")} period-ms:");
         foreach (var tier in SdfUpdateRateIntervals.Tiers) {
             _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {tier}hz={(rate.PeriodSeconds(hertz: tier) * 1000d):0.0}");
         }
@@ -87,7 +87,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
             }
         }
 
-        foreach (var lever in (ReadOnlySpan<SdfUpdateRates>)[SdfUpdateRates.Bodies, SdfUpdateRates.Views, SdfUpdateRates.Screens]) {
+        foreach (var lever in ((ReadOnlySpan<SdfUpdateRates>)[SdfUpdateRates.Bodies, SdfUpdateRates.Views, SdfUpdateRates.Screens])) {
             _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {LeverName(lever: lever)}:");
 
             var readings = settings.RateReadings.Latest(lever: lever);
@@ -290,6 +290,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return BloomCommand();
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.sky-layer",
@@ -378,10 +379,11 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                 CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}]");
                 if (args.Count == 0) { return Echo(); }
                 if (args.Count != 1) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
-                var on = args.Is(0, "toggle") ? !settings.Toon : ParseOnOff(args[0]);
+                var on = (args.Is(index: 0, value: "toggle") ? !settings.Toon : ParseOnOff(token: args[0]));
+
                 if (on is not { } resolved) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Toon,
-                    a: resolved ? 1d : 0d, formatEcho: Echo);
+                    a: (resolved ? 1d : 0d), formatEcho: Echo);
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -496,7 +498,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                 } else if ((args.Count == 1) && (ParseOnOff(token: args[0]) is { } all)) {
                     selected = (all ? SdfUpdateRates.All : SdfUpdateRates.None);
                 } else if ((args.Count == 2) && (RatesLever(token: args[0]) is { } lever) && (ParseOnOff(token: args[1]) is { } on)) {
-                    selected = (on ? (rates | lever) : (rates & ~lever));
+                    selected = (on ? rates | lever : rates & ~lever);
                 }
 
                 if (selected is not { } chosen) {
@@ -739,6 +741,7 @@ public sealed class WorldRenderLeverCommandModule(WorldRenderSettings settings, 
                     a: ((double)preset.Sky)
                 );
                 SubmitLever(link, context.Principal, WorldSessionLevers.SkyFieldScale, preset.SkyFieldScale);
+                SubmitLever(link, context.Principal, WorldSessionLevers.BloomQuality, ((double)preset.Bloom));
                 SubmitLever(link, context.Principal, WorldSessionLevers.Indirect, ((double)(preset.Indirect ?? (tier switch {
                     QualityTier.Low => SdfIndirectTier.Off,
                     QualityTier.Medium => SdfIndirectTier.Medium,

@@ -384,7 +384,7 @@ public static class WorldBootComposition {
         // shared by WorldMachineHost and WorldScreenBinder below so BOTH see the identical index set.
         static IReadOnlyList<WorldScreen> ExpandedScreens(WorldDefinition definition) =>
             [.. definition.Screens, .. WorldPrototypeFacets.ReservedFaceSlots(
-                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
+                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
@@ -483,6 +483,7 @@ public static class WorldBootComposition {
                 MeshLibrary = new SdfMeshLibrary(store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes) : null)),
                 SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers,
                 ToonOverride = () => sp.GetRequiredService<WorldRenderSettings>().ToonOverride,
+                BloomSettings = sp.GetRequiredService<WorldRenderSettings>(),
             };
 
             probe?.MeshSettle.Retarget(target: binder.MeshLibrary.Settles);

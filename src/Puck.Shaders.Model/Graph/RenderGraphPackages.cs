@@ -262,14 +262,18 @@ public sealed class RenderGraphPackageCatalog {
     /// it engaged places its view at its ease's weight, so a framed picture reaches the display untouched. 0, the
     /// default, applies both as configured.</summary>
     public const string PlaceFidelity = "fidelity";
+    /// <summary>Placement with an optional camera scatter image as its third input.</summary>
+    public const string PlaceBloom = "place.bloom";
     /// <summary>The <see cref="Place"/> config field holding the part of the source the rect shows, as fractions of the
     /// source's extent: left, top, width, height, each edge rounded to the nearest source pixel. The default, the whole
     /// source, keeps a rect of the source's own extent an exact copy, as does a crop of the rect's own pixel extent: a
     /// seat framing the screen it engaged shows only its matte of its view this way.</summary>
     public const string PlaceCrop = "crop";
+
     /// <summary>The letterbox color a <see cref="Place"/> pass writes unless its host places another: a near-black with
     /// a faint blue cast, opaque.</summary>
-    public static System.Numerics.Vector4 DefaultLetterboxColor => new(x: 0.015f, y: 0.016f, z: 0.02f, w: 1f);
+    public static System.Numerics.Vector4 DefaultLetterboxColor => new(w: 1f, x: 0.015f, y: 0.016f, z: 0.02f);
+
     /// <summary>The <see cref="Place"/> config field holding the destination rect as fractions of the output's extent:
     /// left, top, width, height.</summary>
     public const string PlaceRect = "rect";
@@ -441,6 +445,9 @@ public sealed class RenderGraphPackageCatalog {
             Min: 0,
             Type: ShaderValueType.Float
         ),
+        ["bloomScatter"] = new ShaderConfigField(Default: System.Text.Json.JsonDocument.Parse("0").RootElement.Clone(), Type: ShaderValueType.Float, Min: 0, Max: 1),
+        ["bloomCutoff"] = new ShaderConfigField(Default: System.Text.Json.JsonDocument.Parse("0").RootElement.Clone(), Type: ShaderValueType.Float, Min: 0),
+        ["bloomOnly"] = new ShaderConfigField(Default: System.Text.Json.JsonDocument.Parse("0").RootElement.Clone(), Type: ShaderValueType.Uint, Min: 0, Max: 1),
         [PlaceLetterboxColor] = new ShaderConfigField(
             Default: System.Text.Json.JsonDocument.Parse(json: "[0.015, 0.016, 0.02, 1]").RootElement.Clone(),
             Description: "The linear RGBA letterbox color the destination shows outside the rect when letterbox is 1.",
@@ -489,6 +496,8 @@ public sealed class RenderGraphPackageCatalog {
     /// document pass compiling the same kernel derives from ports named for them. The kernel loads every texel, so it
     /// never samples through either sampler.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> PlaceMembers { get; } = [
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "bloom", type: ShaderValueType.Float4),
+        ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "bloomSampler"),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceBase, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: (PlaceBase + ShaderPipelinePassPorts.SamplerSuffix)),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: PlaceSource, type: ShaderValueType.Float4),
@@ -659,6 +668,15 @@ public sealed class RenderGraphPackageCatalog {
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Members: PlaceMembers,
             Summary: "The base image with the source reconstructed into a rect over it, bilinear to clamped Catmull-Rom by sharpness, and tonemapped when asked."
+        ),
+        new RenderGraphPackage(
+            Config: PlaceConfig, Id: PlaceBloom,
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
+                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead),
+                RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Members: PlaceMembers,
+            Summary: "The optical endpoint: sharpen direct light, combine its scatter, then tonemap inside the view rect."
         ),
         .. SourceConversions.Select(selector: static id => new RenderGraphPackage(
             Id: id,

@@ -154,7 +154,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // Appends volumes to the frame's, up to the engine's ceiling, indexed so the interface's enumerator is never boxed.
     private void AppendVolumes(IReadOnlyList<SdfVolume> volumes) {
         if ((m_volumes.Count + volumes.Count) > SdfProgramBuilder.MaxVolumes) {
-            throw new InvalidOperationException($"The world frame needs {(m_volumes.Count + volumes.Count)} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
+            throw new InvalidOperationException(message: $"The world frame needs {(m_volumes.Count + volumes.Count)} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}.");
         }
         for (var index = 0; (index < volumes.Count); index++) {
             m_volumes.Add(item: volumes[index]);
@@ -479,7 +479,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
             var facets = WorldPrototypeFacets.Derive(
                 definition: definition,
-                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
+                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
                 derivedFaceScreens: definition.Authoring.DerivedFaceScreens
             );
 
@@ -536,7 +536,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // face range re-points the boot-registered slots. Never written to the document — recomputed each delivery.
         var facets = WorldPrototypeFacets.Derive(
             definition: m_client.Definition,
-            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(m_client.Definition),
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: m_client.Definition),
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -750,7 +750,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The chase boom eases only while the seat frames through its own chase rig — a camera control application
         // resolves through views.cameraRig, whose framing is the possessed body's own pose and must not lag it. The
         // response is the one the program's dynamics op just reported; None passes eye/target through bit for bit.
-        var viewForward = Vector3.Normalize((target - eye));
+        var viewForward = Vector3.Normalize(value: (target - eye));
 
         view.Follow(
             dynamics: chase.Dynamics,
@@ -1419,6 +1419,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             return;
         }
 
+        graphs.OpticalPlacement = ((m_settings.ResolveBloom(m_client.Definition.Render).Scatter > 0f) ||
+            m_client.Definition.Cameras.Any(predicate: camera => (camera.Rig.Bloom is { Scatter: > 0f })) ||
+            (m_client.Definition.Views.SeatRig.Bloom is { Scatter: > 0f }));
         graphs.BeginFrame(
             rate: m_presentationRate,
             sharpens: (m_settings.Temporal && (m_settings.UpscaleSharpness > 0f)),
@@ -1769,6 +1772,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     ) {
                         // A new pose is a new record, so every operator move cuts the temporal history like a teleport.
                         CutRevision = ViewCut(index: m_views.Count, source: pose, revision: 0),
+                        Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
+                        BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,
                         ResolvedRenderScale = transitionScale,
@@ -1799,6 +1804,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Region: region
                     ) {
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
+                        Bloom = m_settings.ResolveBloom(m_client.Definition.Render, m_client.Definition.Cameras.First(predicate: camera => (camera.Name == cameraName)).Rig.Bloom),
+                        BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,
                         ResolvedRenderScale = transitionScale,
@@ -1920,6 +1927,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: m_seatCameraRigs[slot]!, revision: m_roster.Seat(slot: slot)!.View.CutRevision),
                 Elsewhere = (presentedElsewhere is not null),
                 Grid = SeatGrid(slot: slot),
+                Bloom = m_settings.ResolveBloom(m_client.Definition.Render, m_client.Definition.Views.SeatRig.Bloom, m_settings.BloomScale(seat: slot)),
+                BloomQuality = m_settings.BloomQuality,
                 Quality = quality,
                 // A matted view renders at native scale whatever the dynamic resolution's floor, so the picture is never
                 // resampled.
@@ -2038,6 +2047,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 )
             ) {
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
+                Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
+                BloomQuality = m_settings.BloomQuality,
                 Quality = quality,
                 RenderScale = m_settings.RenderCeiling,
                 ResolvedRenderScale = 1f,

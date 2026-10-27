@@ -787,6 +787,8 @@ export type BindingWheelStyleDefinition = {
   fadeOutEase?: number;
 };
 
+export type BloomQuality = "Off" | "Low" | "High";
+
 /**
  * What BoardCombine writes into its board, cell by cell. A cell is a member of a board when its value is not the board's declared empty.
  */
@@ -886,6 +888,12 @@ export type BodyTargetSourceSensed = {
   range: number;
   halfAngleDegrees: number;
   requiresLineOfSight: boolean;
+};
+
+export type CameraBloom = {
+  scatter?: number;
+  radius?: number;
+  cutoff?: number;
 };
 
 export type CellKind = "Int" | "Fixed" | "Bool" | "Text" | "Vector";
@@ -3873,6 +3881,10 @@ export type WorldCameraProgram = {
    * The selected ops, in authored evaluation order.
    */
   operations: WorldCameraProgramOpList;
+  /**
+   * The camera's optical scatter override; absent inherits the world.
+   */
+  bloom?: CameraBloom | null;
   /**
    * Gets the program's Anchor op, or null when absent (an absent anchor starts from Reference implicitly).
    */
@@ -7228,7 +7240,7 @@ export type WorldPlacement = {
    */
   mirror?: WorldPlacementMirror | null;
   /**
-   * The placement's emission facet (a synth voice the stamp itself makes — see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row's source point rides the resolved live pose (Client.WorldStampPool.TryShapePosition) instead of the row's static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.
+   * The placement's emission facet (a synth voice the stamp itself makes — see WorldEmission), or null for silent. Under Distribution the emission binds to the placement root only. Omitted from the wire when null. Composes with Attach: an attached row's source point rides the resolved live pose (Client.WorldCreationInstances.TryShapePosition) instead of the row's static position, and an inactive carrier silences the emitter rather than leaving it at a stale point.
    */
   emission?: WorldEmission | null;
   /**
@@ -7290,7 +7302,7 @@ export type WorldPlacement = {
 };
 
 /**
- * A placement's attach facet — binds the row's stamp to a live population body's transform, so the resolved world pose follows that body every tick (an avatar's hat, held item, nameplate, or aura) instead of sitting at the row's own authored Position/YawDegrees. The offset rides the body's own local frame — rotated by the body's orientation before adding, the Puck.SdfVm.Views.OrientedFollowRig/FirstPersonRig convention for a moving anchor, never the world-axis FollowRig shape a fixed subject would use. The resolved pose is never written back into the document, and it is derived twice, at two clocks, from the one authored facet: the authoritative answer is fixed point — the body's fixed-point pose composed with this facet's authored (float, quantized at resolution like every other placement field) offset, by Puck.World.Server.WorldPlacementAttachment.TryResolve, on demand by world.attachments and once per tick by attached local gravity areas;the rendered pose is presentation float — the same composition over the client's interpolated body pose, packed every frame by Client.WorldStampPool, which is what makes an attached row visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and not as a static stamp (Client.WorldPlacementStamper.IsStaticStamp), and it charges MaxStampRegistrations like an animated row does. Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one because each read the row's own static transform — all three now read the same resolved dynamic pose instead (Server.WorldEventFeed.CollectRegions, Server.WorldColliderSet.RefreshAttached, Server.WorldGravityField.RefreshAttachedAreas, Client.WorldStampPool.TryShapePosition/RootPose), so a region's aura, an analytic collider's hitbox, and an emission's voice all track the carrier: an equipped item's sensing sphere, hitbox, or source point rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an animated or inhabited row already enforces), inhabit (a row cannot both spawn its own driven bodies and ride another's), and solid specifically under the field contact provider (it compiles every solid row's geometry once into one SDF program and never rebuilds it per tick) — refused by name rather than defining a blend (see WorldDefinitionValidator).
+ * A placement's attach facet — binds the row's stamp to a live population body's transform, so the resolved world pose follows that body every tick (an avatar's hat, held item, nameplate, or aura) instead of sitting at the row's own authored Position/YawDegrees. The offset rides the body's own local frame — rotated by the body's orientation before adding, the Puck.SdfVm.Views.OrientedFollowRig/FirstPersonRig convention for a moving anchor, never the world-axis FollowRig shape a fixed subject would use. The resolved pose is never written back into the document, and it is derived twice, at two clocks, from the one authored facet: the authoritative answer is fixed point — the body's fixed-point pose composed with this facet's authored (float, quantized at resolution like every other placement field) offset, by Puck.World.Server.WorldPlacementAttachment.TryResolve, on demand by world.attachments and once per tick by attached local gravity areas;the rendered pose is presentation float — the same composition over the client's interpolated body pose, packed every frame by Client.WorldCreationInstances, which is what makes an attached row visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and not as a static stamp (Client.WorldPlacementStamper.IsStaticStamp), and it charges the live creation instance storage like an animated row does. Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one because each read the row's own static transform — all three now read the same resolved dynamic pose instead (Server.WorldEventFeed.CollectRegions, Server.WorldColliderSet.RefreshAttached, Server.WorldGravityField.RefreshAttachedAreas, Client.WorldCreationInstances.TryShapePosition/RootPose), so a region's aura, an analytic collider's hitbox, and an emission's voice all track the carrier: an equipped item's sensing sphere, hitbox, or source point rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an animated or inhabited row already enforces), inhabit (a row cannot both spawn its own driven bodies and ride another's), and solid specifically under the field contact provider (it compiles every solid row's geometry once into one SDF program and never rebuilds it per tick) — refused by name rather than defining a blend (see WorldDefinitionValidator).
  */
 export type WorldPlacementAttach = {
   /**
@@ -7531,7 +7543,7 @@ export type WorldPlacementPolicyDefaults = {
    */
   minPlacementScale: number;
   /**
-   * Live-consumed. The placement uniform-scale envelope's ceiling — also the worst-case scale Client.WorldStampPool's probe bound-radius reads (bound radius is spatial-cull metadata, never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).
+   * Live-consumed. The placement uniform-scale envelope's ceiling — also the worst-case scale Client.WorldCreationInstances's probe bound-radius reads (bound radius is spatial-cull metadata, never a word-capacity term, so re-reading it live every build cannot desync the frozen capacity floor).
    */
   maxPlacementScale: number;
   /**
@@ -9389,6 +9401,10 @@ export type WorldQualityPreset = {
    * The independent sky field grid fraction, one or one half.
    */
   skyFieldScale?: number;
+  /**
+   * The optical scatter cost gate.
+   */
+  bloom?: BloomQuality;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -9675,6 +9691,10 @@ export type WorldRenderDefaults = {
    * Optional cel shading and its tuning. Absent is off.
    */
   toon?: WorldRenderToon | null;
+  /**
+   * Optional camera scatter. Absent is off.
+   */
+  bloom?: CameraBloom | null;
 };
 
 export type WorldRenderEnvironment = {

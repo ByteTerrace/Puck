@@ -133,6 +133,28 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             ? placeSharpen((pixel + cropMin), sourceDims, passGroup.sharpness)
             : puckReconstructRegion(source, pixel, rectDims, cropDims, cropMin, passGroup.sharpness).rgb);
 
+        if ((passGroup.bloomScatter > 0.0) || (passGroup.bloomOnly != 0u)) {
+            uint2 bloomDims;
+            bloom.GetDimensions(bloomDims.x, bloomDims.y);
+            float2 uv = (float2(cropMin) + ((float2(pixel) + 0.5) / float2(rectDims)) * float2(cropDims)) / float2(sourceDims);
+            float2 texel = 1.0 / float2(bloomDims);
+            float3 veil = 0.0;
+            [unroll] for (int y = -1; y <= 1; y++) {
+                [unroll] for (int x = -1; x <= 1; x++) {
+                    veil += float((2 - abs(x)) * (2 - abs(y))) / 16.0 * bloom.SampleLevel(bloomSampler,
+                        clamp(uv + float2(x,y) * texel, texel * 0.5, 1.0 - texel * 0.5), 0).rgb;
+                }
+            }
+            // An absent optional publication binds the shared one-pixel stand-in. It scatters nothing while
+            // the endpoint's new graph is building, and no old transport image can become a lens image.
+            float scatter = all(bloomDims > 1u) ? passGroup.bloomScatter : 0.0;
+            float3 selected = color;
+            if (passGroup.bloomCutoff > 0.0) {
+                selected *= smoothstep(passGroup.bloomCutoff * 0.5, passGroup.bloomCutoff * 1.5,
+                    dot(color, float3(0.2126, 0.7152, 0.0722)));
+            }
+            color = passGroup.bloomOnly != 0u ? (all(bloomDims > 1u) ? veil : 0.0) : color + scatter * (veil - selected);
+        }
         color = ((passGroup.tonemap != 0u) ? filmicTonemap(color) : color);
 
         // A view's fidelity writes that share of its source as it is, past the sharpen and the tonemap: a framed screen's

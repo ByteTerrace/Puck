@@ -28,8 +28,6 @@ float sdfCrtPatternGain(float footprintTexels) {
     return (1.0 - smoothstep(0.25, 0.5, footprintTexels));
 }
 static const float CrtVignette = 0.0;        // radial corner darkening (0 = flat, even brightness)
-static const float CrtBloomGain = 0.5;
-static const float CrtBloomThreshold = 0.6;
 static const float CrtGlint = 0.0;           // fresnel rim brighten at glancing angles (0 = no glass glint)
 static const float CrtGlintPower = 3.0;
 // Rec.601 luma weights, for the bloom knee's brightness test.
@@ -320,10 +318,6 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     // Native-line scanlines (soft cosine, dark between source rows), and a radial vignette when CrtVignette is non-zero.
     float scanline = (1.0 - (((CrtScanAmplitude * treatment) * sdfCrtPatternGain(footprintTexels.y)) * (0.5 + (0.5 * cos(((source.y * sourceSize.y) * SDF_TAU))))));
     float vignette = (1.0 - ((CrtVignette * treatment) * radiusSquared));
-
-    // Bloom knee: bright pixels bleed a little (single-pixel fake — no neighborhood pass).
-    float luminance = dot(sampled, CrtLumaWeights);
-    sampled += (((CrtBloomGain * treatment) * smoothstep(CrtBloomThreshold, 1.0, luminance)) * sampled);
 
     // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The pair is
     // orthonormal by contract (SdfScreenSurface), so the normalize only absorbs the uploaded table's float drift.
