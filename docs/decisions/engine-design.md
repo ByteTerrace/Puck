@@ -297,6 +297,45 @@ Why: a default that carries one game's look is a cost every other game pays to
 undo, and a token named after a feature cannot be retuned without that
 feature's vocabulary.
 
+## Combat is world content on generic queries, fields and input
+
+Codex and Antigravity proposed the groundwork for action combat
+independently, cross-reviewed, and converged; the lead settled what they still
+held.
+
+- **The engine stays generic.** Spatial queries, named physical regions, input
+  history and state projections are engine mechanisms. Elements, vitality,
+  statuses, abilities, recipes, art and the faerie's reactions are world
+  content, authored as states and tags, never engine enums.
+- **Pairs are found by a bounded spatial query.** `WorldInteraction.Distance`
+  runs over `FixedSpatialNeighborhood` and replaces the Cartesian scan; targeting
+  and area effects reuse the same compiled query. An author bounds the
+  candidates inspected and the results kept separately, and may ask for the
+  nearest K; omitting K keeps every result in range. A query is resolved
+  completely before any effect fires. A source whose neighbourhood exceeds its
+  bound is refused visibly and applies nothing, never a silent sample.
+  Membership, poses and generations are frozen per interaction row; recipients
+  are ordered by exact squared distance, then by stable handle; a body never
+  pairs with itself. Every inspected candidate is charged, exclusions included.
+- **A world holds several physical field regions.** Each named topology is its
+  own lattice with its own origin, cells, cadence, fields and reactions;
+  reactions stay local to their region. Region and field identity are carried
+  through snapshots, primers, checkpoints, hashes and replay. Limits are budgets
+  of cells, fields, bytes and work across all regions, not a fixed count of
+  topologies tied to the render pool; a surface is never silently omitted.
+- **Action input uses the landed wire.** The 32-axis, 64-button, 64-register
+  intent is enough. What action combat lacks is ordered press and release
+  events and input history, steps C3 to C6 of the
+  [input-channels decision](input-channels.md). A short tap is an ordered event,
+  never a stretched held bit. Pad and keyboard drive the same semantic actions.
+- **Prediction is new work and is proved before scale.** Two clients on one
+  authority come first: acknowledged inputs, and speculative local movement and
+  action timing replayed on correction, while hits and statuses stay
+  authoritative. Interest management extends the existing disclosure with
+  indexed entity and field subscriptions.
+- **Costs are measured, never ledgered.** Admission charges what the
+  implementation bounds; frame-time claims come from quiet-machine readings.
+
 ## A collider follows the drawn solid
 
 A placement collides as the solid it draws, not as a bound around it. A
