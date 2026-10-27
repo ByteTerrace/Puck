@@ -63,7 +63,8 @@ ends with the check named in it.
 5. **Atmosphere, clouds and flight.** A body-frame spherical-shell atmosphere
    with surface occlusion, keeping local valley mist; bounded clouds before
    flying through them; exposure continuous into vacuum. Flight reuses the
-   Moth's local flight with optional assisted cruise and touchdown.
+   Moth's free flight unassisted (the owner's ruling); assisted cruise and
+   touchdown are a later pass.
 6. **Approach and handoff.** The ascent stays under the parent authority;
    the moon's far image and its detailed surface depict one surface with no
    duplicate silhouette; the frame handoff carries orientation, up, linear and
@@ -82,11 +83,13 @@ ends with the check named in it.
   Phase 1 sizes the relief and floor to that.
 - **The Nexus island is not part of this design yet.** The valley stands on its
   own.
-- **Two moons** that look relatively close in the sky; no rings yet. Phase 2
-  finishes one and measures it before the second.
-- **Flight is the Moth's wings** for now; no craft.
+- **Two moons** that look relatively close in the sky, one lighter and one
+  darker, both pocked by asteroid craters; no rings yet. Phase 2 finishes one
+  and measures it before the second.
+- **Flight is the Moth's wings** for now; no craft, and no assistance in this
+  wave. Assisted flight (horizon leveling, cruise) is a later pass, so phase 5
+  reuses the Moth's existing free flight as it is.
+- **Landing is open,** anywhere a body can stand, as it is now.
 
-Still open, for when the work reaches them: the moons' colour and surface, and
-whether they dominate the day or the night; whether flight is assisted
-toward the horizon or freer in attitude; how long the ascent is; and whether
-landing is open or at authored destinations.
+Still open, for when the work reaches them: whether the moons dominate the day
+or the night, and how long the ascent is.
