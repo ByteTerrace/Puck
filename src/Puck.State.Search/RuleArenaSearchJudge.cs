@@ -33,7 +33,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         m_host = host;
         m_rules = rules;
         m_score = score;
-        m_keyRows = KeyRowsOf(
+        m_keyRows = RuleDataflow.KeyRows(
             rules: rules,
             score: score
         );
@@ -123,39 +123,6 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         return true;
     }
 
-    // Every row a verdict can depend on: what the rules read, what they write (a judge rule's own scratch row is a
-    // later rule's input), and what the score reads.
-    private static int[] KeyRowsOf(CompiledRule[] rules, CompiledExpressionToken[]? score) {
-        var accesses = new List<CellAccess>();
-        var rows = new SortedSet<int>();
-
-        foreach (var rule in rules) {
-            accesses.Clear();
-            rule.CollectReads(into: accesses);
-            rule.CollectWrites(into: accesses);
-
-            foreach (var access in accesses) {
-                if (access.RowOrdinal >= 0) {
-                    _ = rows.Add(item: access.RowOrdinal);
-                }
-            }
-        }
-
-        accesses.Clear();
-
-        RuleDataflow.CollectExpression(
-            into: accesses,
-            tokens: score
-        );
-
-        foreach (var access in accesses) {
-            if (access.RowOrdinal >= 0) {
-                _ = rows.Add(item: access.RowOrdinal);
-            }
-        }
-
-        return [.. rows];
-    }
     // Tick is an operand rather than a state row, so the row reach above cannot express this dependency. Rules
     // carry compiler-owned needs; a standalone score has no rule needs, so walk its already-bounded token DAG.
     private static bool ReadsTickOf(CompiledRule[] rules, CompiledExpressionToken[]? score) {

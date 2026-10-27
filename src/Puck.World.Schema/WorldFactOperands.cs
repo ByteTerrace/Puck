@@ -51,8 +51,8 @@ public sealed class WorldPopulationOperand : WorldFactOperand {
         return facet.Read(operand: PopulationOperand.Instance);
     }
 }
-/// <summary>Whether every rigid body is at rest (<see cref="WorldRuleFacts.PhysicsQuiescent"/>); scans every
-/// population slot, so it is priced at capacity.</summary>
+/// <summary>Whether every active rigid body rests uncarried (<see cref="WorldRuleFacts.PhysicsQuiescent"/>);
+/// the global read scans every population slot, so it is priced at capacity.</summary>
 public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
     /// <summary>The shared instance.</summary>
     public static readonly WorldPhysicsQuiescentOperand Instance = new();

@@ -152,23 +152,38 @@ public sealed partial class WorldPopulation {
 
         return count;
     }
-    /// <summary>Returns whether every active, UNCARRIED rigid body currently latches
-    /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/> — the <c>$physics:quiescent</c> rule fact. A carried
-    /// body's own integration is suspended (its pose is derived from its carrier, never solved), so it contributes
-    /// neither a settle nor a bounce here — carrying the world's one rigid body off a resting surface must not read
-    /// as newly quiescent, and neither must it read as newly unsettled. Vacuously <see langword="true"/> when the
-    /// world activates no rigid body.</summary>
+    /// <summary>Returns whether every active rigid body rests on its own support. A carried rigid body is never
+    /// quiescent: its carrier still controls its pose. Vacuously true when no rigid body is active.</summary>
     public bool RigidBodiesQuiescent() {
         for (var index = 0; (index < m_entries.Length); index++) {
-            if (
-                (m_entries[index] is { Active: true, Body: { IsRigid: true, Resting: false, CarriedBy: null } })
-            ) {
+            if (!RigidBodyQuiescent(index: index)) {
                 return false;
             }
         }
 
         return true;
     }
+    /// <summary>Returns whether every active rigid inhabitant in an authored placement roster rests on its own
+    /// support. Resolves each compiled placement ordinal directly, without scanning the population per stone.</summary>
+    /// <param name="placementOrdinals">The placement roster, compiled from a keyed row's authored keys.</param>
+    public bool RigidPlacementsQuiescent(IReadOnlyList<int> placementOrdinals) {
+        ArgumentNullException.ThrowIfNull(argument: placementOrdinals);
+
+        foreach (var ordinal in placementOrdinals) {
+            var index = BodyForPlacementOrdinal(ordinal: ordinal);
+
+            if ((index >= 0) && !RigidBodyQuiescent(index: index)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool RigidBodyQuiescent(int index) =>
+        ((m_entries[index] is not { Active: true, Body: { IsRigid: true } body }) ||
+        (body.Resting && (body.CarriedBy is null)));
+
     /// <summary>Counts the active entities per kit row for console diagnostics (one slot per definition row).</summary>
     public int[] ActiveKitCounts() {
         var counts = new int[m_kits.Length];

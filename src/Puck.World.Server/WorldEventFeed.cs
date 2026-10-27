@@ -640,6 +640,13 @@ public sealed class WorldEventFeed {
     // exact kernel on either side; it reads world-axis bounds, as the solver does.
     private static bool Overlaps(FixedVector3 leftPosition, FixedQuaternion leftOrientation, in FixedBodyColliderVolume left,
         FixedVector3 rightPosition, FixedQuaternion rightOrientation, in FixedBodyColliderVolume right) {
+        if ((left.Kind == FixedBodyColliderKind.Ellipsoid) || (right.Kind == FixedBodyColliderKind.Ellipsoid)) {
+            ReadOnlySpan<FixedBodyColliderVolume> leftVolumes = [left];
+            ReadOnlySpan<FixedBodyColliderVolume> rightVolumes = [right];
+
+            return FixedDynamicBodyContacts.TryCorrection(correction: out _, leftOrientation: leftOrientation, leftPosition: leftPosition,
+                leftVolumes: leftVolumes, rightOrientation: rightOrientation, rightPosition: rightPosition, rightVolumes: rightVolumes, tieBreaker: 0);
+        }
         if (
             (left.Kind != FixedBodyColliderKind.Box) &&
             (right.Kind != FixedBodyColliderKind.Box)

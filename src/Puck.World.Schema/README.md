@@ -2806,8 +2806,8 @@ bounded by 1)—the SAME meaning against the static world and, as the pair's
 average, against another rigid body; `rollingFriction`/`linearDamping`/`angularDamping`
 are non-negative per-second decay RATES (applied as `1 - rate·dt`, never a
 flat per-tick fraction, so the same authored value decays identically at any
-simulation rate). A rigid kit REQUIRES `collider` (sphere, capsule, or box—never
-`fromCreation`, whose compound shape has no single closed-form inertia) and
+simulation rate). A rigid kit REQUIRES `collider` with one sphere, capsule,
+box or ellipsoid volume (a single primitive from `fromCreation` is admitted) and
 `bodyContact: solid` (a rigid body that never depenetrates is inert). Mass and
 inertia derive from the collider's own shape and the authored mass through
 `Puck.Maths.FixedMassProperties`—density and the inertia tensor are never
@@ -3140,8 +3140,10 @@ frames, and seed ride the checkpoint and hash.
 
 Search spends work, not nodes. One judge run costs the sum of the
 frame-evaluable rules' work-sheet lines. What `RuleCapacity.
-MaxWorkUnitsPerTick` leaves after the sheet, less one fold of every row (the
-stamp that tells a job its inputs moved), is every job's allowance: a tick
+MaxWorkUnitsPerTick` leaves after the sheet, less every job's worst-case fold of
+its input dependency rows (the stamp that tells it its inputs moved), is every
+job's allowance. Position-key prices use only that job's plan and judge rows;
+unrelated state is never folded or charged. A tick
 steps one job with work to do (enabled, and its inputs moved, its walk open or
 its answer not yet landed), the tick's turn picking which when several have it
 (`ArenaSearch.Step`), and nothing carries to the next tick. Every unit of the walk has

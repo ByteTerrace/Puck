@@ -450,12 +450,21 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 instead of a locomotion program — see
 [the server reference](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 `mass` is required and positive; the other four are non-negative per-second
-decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
-or box — never `fromCreation`) and `bodyContact: solid`.
+decay rates, never per-tick fractions. Requires `collider` with exactly one
+sphere, capsule, box or ellipsoid volume and `bodyContact: solid`. A
+`fromCreation` collider admits a creation's single primitive too; a nonuniform
+Sphere or Ellipsoid retains its actual radii and curved support, rather than
+its bounding box. Compound creations still refuse rigid inertia derivation.
+An ellipsoid's creation-local rotation must keep its principal inertia axes
+aligned with the body (axis permutations and equal-radius-plane rotations
+are admitted); rotate the body itself to give it an arbitrary orientation.
+The older Box mass path still reads its original half-extents without rotating
+the tensor for a collider-local rotation; keep an anisotropic box primitive
+unrotated until that path has the same principal-axis admission check.
 
 A kit's `rigid` facet (`Puck.World.Schema.WorldRigid`) is a passive
 physical entity — mass/restitution/friction/damping derived to
-mass/inertia from the kit's own sphere/capsule/box collider, never a free
+mass/inertia from the kit's own primitive collider, never a free
 density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
 whole step to the rigid solver instead of the grounded/free motion
 program. Every contact anchor — static (ground/obstruction) and pair alike —
@@ -482,7 +491,14 @@ wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
 teleport, or a live solid edit replacing the contact field it rested
 against) — this is what makes `Resting`/`$physics:quiescent` mean the body
 is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
-`$physics:quiescent` rule operand are the console/rule surface; see
+`physics(quiescent)` rule operand are the console/rule surface. A carried rigid
+body is never quiescent. `physics(quiescent, roster)` limits the check to the
+authored keys of a keyed state row, each naming one count-1 inhabited placement;
+the compiler resolves those names to placement ordinals, so each read costs one
+lookup per listed placement rather than a population scan per member. Cell
+values do not filter membership, and uninhabited or inactive bodies contribute
+no motion. Resting body pairs skip the dynamic narrowphase until a body wakes;
+awake neighbours still collide with resting bodies normally. See
 [Crowd scale policies](#crowd-scale-policies)
 for the authored `collision.bodyContacts` rigid fields, and the
 [server](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)

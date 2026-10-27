@@ -4,7 +4,7 @@ namespace Puck.Physics;
 
 /// <summary>
 /// Computes the true support ("witness") point of a body-local collider volume along a contact normal, oriented by
-/// the body's own quaternion — the actual point a sphere, capsule, or box collider touches a surface at, rather than
+/// the body's own quaternion — the actual point a sphere, capsule, box or ellipsoid touches a surface at, rather than
 /// a single point read off the body's conservative bounding sphere along the normal. A normal impulse applied at a
 /// witness point carries a lever arm (<c>r = anchor</c>, relative to the body's centre of mass) away from that
 /// centre whenever the true contact sits off-axis, so it imparts torque; the bounding-sphere approximation always
@@ -47,6 +47,13 @@ public static class FixedRigidWitness {
         var unit = localDirection.Normalize();
 
         switch (volume.Kind) {
+            case FixedBodyColliderKind.Ellipsoid: {
+                    var shape = FixedStaticCollider.Superellipsoid(FixedVector3.Zero, FixedQuaternion.Identity,
+                        volume.HalfExtents, FixedQ4816.FromInteger(value: 2));
+                    var support = FixedConvexGeometry.Support(collider: in shape, direction: volume.Rotation.RotateInverse(vector: unit));
+
+                    return (volume.Center + volume.Rotation.Rotate(vector: support));
+                }
             case FixedBodyColliderKind.Sphere:
                 return (volume.Center + (unit * volume.Radius));
 

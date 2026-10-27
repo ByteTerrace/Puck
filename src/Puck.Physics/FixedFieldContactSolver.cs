@@ -306,6 +306,12 @@ public sealed class FixedFieldContactSolver(
         var support = (((FixedQ4816.Abs(value: localNormal.X) * volume.HalfExtents.X) +
                        (FixedQ4816.Abs(value: localNormal.Y) * volume.HalfExtents.Y)) +
                        (FixedQ4816.Abs(value: localNormal.Z) * volume.HalfExtents.Z));
+
+        if (volume.Kind == FixedBodyColliderKind.Ellipsoid) {
+            var bodyNormal = orientation.RotateInverse(vector: normal);
+
+            support = -FixedVector3.Dot(left: (FixedRigidWitness.LocalSupportPoint(localDirection: -bodyNormal, volume: volume) - volume.Center), right: bodyNormal);
+        }
         var minimum = (support + m_skin);
 
         if (distance >= minimum) {
@@ -788,7 +794,7 @@ public sealed class FixedFieldContactSolver(
         (ColliderRadius(volume: in volume).Value >= MinimumColliderRadiusRaws);
 
     // The radius a volume's core spheres take half of: a sphere's or capsule's own, or a box's least half extent.
-    private static FixedQ4816 ColliderRadius(in FixedBodyColliderVolume volume) => ((volume.Kind == FixedBodyColliderKind.Box)
+    private static FixedQ4816 ColliderRadius(in FixedBodyColliderVolume volume) => ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
         ? FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z))
         : volume.Radius);
     // A core sphere's radius: half the volume's least radius, so a body resting against a surface keeps half its radius
@@ -811,6 +817,7 @@ public sealed class FixedFieldContactSolver(
                     refusal = Core(certified: certified, delta: in delta, least: ref least, offset: lowerOffset, previousPosition: in previousPosition, radius: CoreRadius(volume: in volume), reached: ref reached, unproved: ref unproved);
                     break;
                 case FixedBodyColliderKind.Box:
+                case FixedBodyColliderKind.Ellipsoid:
                     refusal = Core(
                         certified: certified,
                         delta: in delta,
@@ -965,7 +972,7 @@ public sealed class FixedFieldContactSolver(
             : new FixedQ4816[volumes.Length])[..volumes.Length];
 
         for (var index = 0; (index < volumes.Length); index++) {
-            if (volumes[index].Kind == FixedBodyColliderKind.Box) {
+            if (volumes[index].Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid) {
                 boxConservativeMinimum[index] = (volumes[index].HalfExtents.Length + m_skin);
             }
         }
@@ -1018,7 +1025,7 @@ public sealed class FixedFieldContactSolver(
                     velocity: ref velocity,
                     volume: in volume
                 ),
-                    FixedBodyColliderKind.Box => ResolveBox(
+                    FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid => ResolveBox(
                     conservativeMinimum: boxConservativeMinimum[volumeIndex],
                     extracted: ref extracted,
                     groundNormal: ref groundNormal,

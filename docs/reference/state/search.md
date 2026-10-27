@@ -421,7 +421,10 @@ that deep.
 
 In Puck.World, the document compiler derives these prices. It takes what
 `RuleCapacity.MaxWorkUnitsPerTick` leaves after the rules' own work sheet, subtracts
-one fold of every row (the stamp below), and the rest is every job's allowance:
+every job's worst-case input-stamp fold (the dependency rows below), and the rest
+is every job's allowance. Position-key prices likewise fold only that job's
+plan and judge dependency rows, so another table's unrelated state adds no key
+cost. Shared input rows are charged once per job that stamps them:
 `ArenaSearch.Step` advances one job a step, of those with work to do (enabled,
 and its inputs moved, its walk open or its answer not yet landed), the step's
 tick choosing which when several have it, so a job alone steps every tick and

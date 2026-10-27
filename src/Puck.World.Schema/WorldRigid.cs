@@ -8,8 +8,8 @@ namespace Puck.World;
 /// hands its body's integration to the rigid solver instead of the grounded/free motion program, so <see cref="Mass"/>,
 /// <see cref="Restitution"/>, <see cref="Friction"/>, <see cref="RollingFriction"/>, <see cref="LinearDamping"/> and
 /// <see cref="AngularDamping"/> are the WHOLE authored physics — nothing here is a C# constant. Mass and inertia derive
-/// from <see cref="WorldKit.Collider"/> (required: sphere, capsule, or box — never <c>fromCreation</c>, whose compound
-/// shape has no single closed-form inertia here) and <see cref="Mass"/> through <see cref="FixedMassProperties"/>, so
+/// from <see cref="WorldKit.Collider"/> (one sphere, capsule, box or ellipsoid volume, including a creation's single
+/// primitive) and <see cref="Mass"/> through <see cref="FixedMassProperties"/>, so
 /// authoring only the mass, never the density or the tensor, keeps the derived-limits rule: the SHAPE decides how mass
 /// distributes, the author decides only how much of it there is.</summary>
 /// <param name="Mass">The body's mass, in the same units <c>gravity.attractors</c> masses use. Must be strictly
@@ -62,7 +62,7 @@ public readonly record struct FixedWorldRigid(
     /// Validation (<see cref="WorldDefinitionValidator"/>) has already proved that the derived room-scale mass
     /// properties are representable by the time this runs.</summary>
     /// <param name="rigid">The authored facet.</param>
-    /// <param name="collider">The kit's own compiled collider — exactly one volume, a sphere, capsule, or box.</param>
+    /// <param name="collider">The kit's own compiled collider — exactly one sphere, capsule, box or ellipsoid.</param>
     /// <exception cref="InvalidOperationException">The caller bypassed document validation and the derived mass
     /// properties are not representable at <see cref="Scales"/>.</exception>
     public static FixedWorldRigid Compile(WorldRigid rigid, FixedWorldCollider collider) {
@@ -121,6 +121,7 @@ public readonly record struct FixedWorldRigid(
         // computed once instead of twice.
         const long UnitDensity = (1L << MassFractionBitCount);
         long unitMass, unitIxx, unitIyy, unitIzz;
+        var unitInertiaFractionBits = InertiaFractionBitCount;
         FixedVector3 centerOffset;
         FixedQ4816 boundingRadius;
 
@@ -176,27 +177,46 @@ public readonly record struct FixedWorldRigid(
                     boundingRadius = (volume.Radius + (centerDistance / FixedQ4816.FromInteger(value: 2L)));
                     break;
                 }
+            case FixedBodyColliderKind.Ellipsoid:
             case FixedBodyColliderKind.Box: {
+                    // At a fixed mass an ellipsoid's diagonal moments are 3/5 of a box's with the same
+                    // radii. Keep extra bits in the unit-density moments before the mass scaling; small
+                    // round bodies otherwise lose much of their inertia to the unit-density Q32 grid.
+                    var ellipsoid = (volume.Kind == FixedBodyColliderKind.Ellipsoid);
+                    var massRadii = volume.HalfExtents;
+
+                    if (ellipsoid && !TryPrincipalEllipsoidRadii(radii: out massRadii, volume: volume)) {
+                        reason = "A rigid ellipsoid's creation-local rotation does not align its principal inertia axes with the body; rotate the body instead of the primitive.";
+                        return false;
+                    }
+                    if (ellipsoid) { unitInertiaFractionBits = 48; }
                     if (!FixedMassProperties.TryBoxBody(
                         density: UnitDensity,
                         fractionBitsDensity: MassFractionBitCount,
-                        halfX: volume.HalfExtents.X.Value,
-                        halfY: volume.HalfExtents.Y.Value,
-                        halfZ: volume.HalfExtents.Z.Value,
+                        halfX: massRadii.X.Value,
+                        halfY: massRadii.Y.Value,
+                        halfZ: massRadii.Z.Value,
                         fractionBitsLength: FixedQ4816.FractionBitCount,
                         fractionBitsMass: MassFractionBitCount,
-                        fractionBitsInertia: InertiaFractionBitCount,
+                        fractionBitsInertia: unitInertiaFractionBits,
                         mass: out unitMass,
                         ixx: out unitIxx,
                         iyy: out unitIyy,
                         izz: out unitIzz
                     )) {
-                        reason = "A rigid box's mass properties are not representable.";
+                        reason = "A rigid box or ellipsoid's mass properties are not representable.";
                         return false;
                     }
 
+                    if (ellipsoid) {
+                        unitIxx = ((long)((((Int128)unitIxx) * 3) / 5));
+                        unitIyy = ((long)((((Int128)unitIyy) * 3) / 5));
+                        unitIzz = ((long)((((Int128)unitIzz) * 3) / 5));
+                    }
+
                     centerOffset = volume.Center;
-                    boundingRadius = volume.HalfExtents.Length;
+                    boundingRadius = (ellipsoid ? FixedQ4816.Max(x: volume.HalfExtents.X,
+                        y: FixedQ4816.Max(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z)) : volume.HalfExtents.Length);
                     break;
                 }
             default:
@@ -238,7 +258,7 @@ public readonly record struct FixedWorldRigid(
             !FusedArithmetic.TryMixedScaleProduct(
             a: unitIxx,
             b: massRatio,
-            fractionBitsA: InertiaFractionBitCount,
+            fractionBitsA: unitInertiaFractionBits,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: InertiaFractionBitCount,
             result: out var ixx
@@ -246,7 +266,7 @@ public readonly record struct FixedWorldRigid(
             !FusedArithmetic.TryMixedScaleProduct(
             a: unitIyy,
             b: massRatio,
-            fractionBitsA: InertiaFractionBitCount,
+            fractionBitsA: unitInertiaFractionBits,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: InertiaFractionBitCount,
             result: out var iyy
@@ -254,7 +274,7 @@ public readonly record struct FixedWorldRigid(
             !FusedArithmetic.TryMixedScaleProduct(
             a: unitIzz,
             b: massRatio,
-            fractionBitsA: InertiaFractionBitCount,
+            fractionBitsA: unitInertiaFractionBits,
             fractionBitsB: MassFractionBitCount,
             fractionBitsOut: InertiaFractionBitCount,
             result: out var izz
@@ -310,5 +330,21 @@ public readonly record struct FixedWorldRigid(
         );
         reason = "";
         return true;
+    }
+
+    // On a principal axis an ellipsoid's support point lies on that axis. This also admits rotations
+    // inside an equal-radius plane and permutations of the principal axes; the resulting body-axis
+    // radii, rather than the primitive's original ordering, determine its diagonal inertia. The
+    // tolerance covers two fixed-point rotations and support normalization, not physical tilt.
+    private static bool TryPrincipalEllipsoidRadii(FixedBodyColliderVolume volume, out FixedVector3 radii) {
+        var x = (FixedRigidWitness.LocalSupportPoint(volume, FixedVector3.UnitX) - volume.Center);
+        var y = (FixedRigidWitness.LocalSupportPoint(volume, FixedVector3.UnitY) - volume.Center);
+        var z = (FixedRigidWitness.LocalSupportPoint(volume, FixedVector3.UnitZ) - volume.Center);
+        var tolerance = (FixedQ4816.Epsilon * FixedQ4816.FromInteger(value: 2));
+
+        radii = new FixedVector3(X: FixedQ4816.Abs(value: x.X), Y: FixedQ4816.Abs(value: y.Y), Z: FixedQ4816.Abs(value: z.Z));
+        return ((FixedQ4816.Abs(value: x.Y) <= tolerance) && (FixedQ4816.Abs(value: x.Z) <= tolerance) &&
+            (FixedQ4816.Abs(value: y.X) <= tolerance) && (FixedQ4816.Abs(value: y.Z) <= tolerance) &&
+            (FixedQ4816.Abs(value: z.X) <= tolerance) && (FixedQ4816.Abs(value: z.Y) <= tolerance));
     }
 }

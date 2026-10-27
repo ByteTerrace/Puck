@@ -51,7 +51,7 @@ public sealed class WorldPortalHoleContactField : IContactField {
     // of its half-extents along any axis, whatever its rotation.
     private static bool Fits(in WorldFaceFrame frame, in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
         foreach (var volume in volumes) {
-            var reach = ((volume.Kind == FixedBodyColliderKind.Box)
+            var reach = ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
                 ? ((FixedQ4816.Abs(value: volume.HalfExtents.X) + FixedQ4816.Abs(value: volume.HalfExtents.Y)) + FixedQ4816.Abs(value: volume.HalfExtents.Z))
                 : volume.Radius
             );

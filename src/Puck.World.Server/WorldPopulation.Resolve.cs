@@ -968,6 +968,11 @@ public sealed partial class WorldPopulation {
                     if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                         continue;
                     }
+                    // Both poses are unchanged until a body wakes. An awake neighbour still visits a resting
+                    // body normally, so an arriving impulse can wake an entire contact chain in this sweep.
+                    if (left.Resting && right.Resting) {
+                        continue;
+                    }
 
                     DynamicContactNarrowPairs++;
 

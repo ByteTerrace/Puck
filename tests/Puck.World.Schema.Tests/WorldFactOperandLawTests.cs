@@ -39,6 +39,46 @@ public sealed class WorldFactOperandLawTests {
         placementId: PlacementId
     );
 
+    [InlineData(TopologyKind.Grid)]
+    [InlineData(TopologyKind.Box)]
+    [InlineData(TopologyKind.Hex)]
+    [InlineData(TopologyKind.Graph)]
+    [InlineData(TopologyKind.Tiling)]
+    [Theory]
+    public void CellOfPricesDirectCoordinateResolutionIndependentlyOfBoardSizeAndScansGraphCentres(TopologyKind kind) {
+        long Price(int size) {
+            var origin = new Puck.Assets.Documents.DocumentVector3(x: 0, y: 0, z: 0);
+            LatticeTopology topology = kind switch {
+                TopologyKind.Grid => new LatticeTopology.Grid("grid", origin, 1, size, size),
+                TopologyKind.Box => new LatticeTopology.Box("grid", origin, 1, size, size, size, 1),
+                TopologyKind.Hex => new LatticeTopology.Hex("grid", origin, 1, size),
+                TopologyKind.Tiling => new LatticeTopology.Tiling(CellSize: 1, Family: TilingFamily.Triangular, Name: "grid", Origin: origin, Radius: size),
+                _ => new LatticeTopology.Graph("grid", origin, 1,
+                    Enumerable.Range(count: size, start: 0).Select(selector: i => new GraphCell(i.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                        new Puck.Assets.Documents.DocumentVector3(x: i, y: 0, z: 0))).ToArray(),
+                    [new GraphDirection(Name: "next", Opposite: "next")], []),
+            };
+            var definition = Fixtures.BuildDocument() with {
+                StateRaw = new WorldStateSection(Lattices: [topology], World: [
+                    new WorldStateRow(CellName.Parse(candidate: "board"), CellKind.Int, Domain: new StateDomain.CellsOf("grid")),
+                    StateFixtures.IntSlot("point"),
+                ]),
+                Rules = [new WorldRule(CellName.Parse(candidate: "cell-of"), [
+                    new ActionEffect.SetState(State: "point", FromState: "$board:cellOf:board:body:0"),
+                ])],
+            };
+            var context = WorldFactsCompiler.Context(definition: definition);
+            var rule = Assert.Single(collection: WorldFactsCompiler.CompileAll(definition: definition));
+
+            return RuleWorkBudget.EffectsCost(rule.Effects, context).Units;
+        }
+
+        if (kind is TopologyKind.Graph or TopologyKind.Tiling) {
+            Assert.True(condition: (Price(size: 3) > Price(size: 1)));
+        } else {
+            Assert.Equal(Price(size: 1), Price(size: (kind == TopologyKind.Box) ? 7 : 19));
+        }
+    }
     [Fact]
     public void ThePlacementInfluenceOperandReadsInTheIntegerEncodingItsHostAnswersIn() {
         Assert.Equal(

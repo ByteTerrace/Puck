@@ -19,12 +19,21 @@ public sealed class PopulationOperand : WorldOperandFact {
 
     private PopulationOperand() : base(CellKind.Int) { }
 }
-/// <summary>Whether every rigid body is at rest (<see cref="WorldRuleFacts.PhysicsQuiescent"/>); scans every
-/// population slot, so it is priced at capacity.</summary>
+/// <summary>Whether every active rigid body in the world or an authored placement roster rests uncarried.</summary>
 public sealed class PhysicsQuiescentOperand : WorldOperandFact {
     public static readonly PhysicsQuiescentOperand Instance = new();
 
     private PhysicsQuiescentOperand() : base(CellKind.Bool) { }
+
+    /// <summary>Initializes a read scoped to the compiled placement roster.</summary>
+    public PhysicsQuiescentOperand(IReadOnlyList<int> placementOrdinals) : base(CellKind.Bool) {
+        ArgumentNullException.ThrowIfNull(argument: placementOrdinals);
+
+        PlacementOrdinals = placementOrdinals;
+    }
+
+    /// <summary>The compiled placement ordinals, or null for every population slot.</summary>
+    public IReadOnlyList<int>? PlacementOrdinals { get; }
 }
 /// <summary>The music clock's phase error (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
 public sealed class ClockOperand : WorldOperandFact {

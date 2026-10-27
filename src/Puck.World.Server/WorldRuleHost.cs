@@ -215,7 +215,9 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
     /// <inheritdoc/>
     public RuleFact Read(PhysicsQuiescentOperand operand) => RuleFact.Finite(
         kind: CellKind.Bool,
-        value: (Host.Population.RigidBodiesQuiescent()
+        value: (((operand.PlacementOrdinals is { } ordinals)
+        ? Host.Population.RigidPlacementsQuiescent(placementOrdinals: ordinals)
+        : Host.Population.RigidBodiesQuiescent())
         ? 1L
         : 0L)
     );

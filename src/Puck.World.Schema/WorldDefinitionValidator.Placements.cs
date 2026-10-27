@@ -250,17 +250,16 @@ public static partial class WorldDefinitionValidator {
         );
     }
     // A rigid kit's mass properties derive from its own collider shape (WorldRigid.cs), so the collider it names must
-    // be one FixedMassProperties actually has a closed form for — a compound fromCreation shape is refused rather
-    // than silently approximated by its first primitive.
-    private static void ValidateRigid(WorldRigid? rigid, WorldCollider? collider, WorldBodyContactMode bodyContact, string path, List<string> errors) {
+    // have exactly one compiled primitive with closed-form inertia — a compound creation is refused rather than
+    // silently approximated by its first primitive.
+    private static void ValidateRigid(WorldRigid? rigid, WorldCollider? collider, IReadOnlyList<WorldPrototype> creations,
+        WorldBodyContactMode bodyContact, string path, List<string> errors) {
         if (rigid is null) {
             return;
         }
 
         if (collider is null) {
-            errors.Add(item: $"{path} requires a collider (sphere, capsule, or box) to derive mass properties from.");
-        } else if (collider is WorldCollider.FromCreation) {
-            errors.Add(item: $"{path} requires a sphere, capsule, or box collider; 'fromCreation' has no closed-form mass properties.");
+            errors.Add(item: $"{path} requires a collider to derive mass properties from.");
         }
 
         if (bodyContact != WorldBodyContactMode.Solid) {
@@ -297,8 +296,8 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (
-            ColliderCanDeriveRigidMass(collider: collider) &&
-            (FixedWorldCollider.Compile(collider: collider, creations: []) is { } fixedCollider) &&
+            ColliderCanDeriveRigidMass(collider: collider, creations: creations) &&
+            (FixedWorldCollider.Compile(collider: collider, creations: creations) is { } fixedCollider) &&
             !FixedWorldRigid.TryCompile(
                 collider: fixedCollider,
                 compiled: out _,
@@ -309,7 +308,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} cannot compile deterministic mass properties: {reason}");
         }
     }
-    private static bool ColliderCanDeriveRigidMass(WorldCollider? collider) => (collider switch {
+    private static bool ColliderCanDeriveRigidMass(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations) => (collider switch {
         WorldCollider.Sphere sphere => (float.IsFinite(f: sphere.Radius) && (sphere.Radius > 0f)),
         WorldCollider.Capsule capsule => (float.IsFinite(f: capsule.Radius) &&
             (capsule.Radius > 0f) &&
@@ -321,6 +320,8 @@ public static partial class WorldDefinitionValidator {
             (box.HalfExtents.Z > 0f) &&
             float.IsFinite(f: box.Rotation.LengthSquared()) &&
             (box.Rotation.LengthSquared() > 0f)),
+        WorldCollider.FromCreation fromCreation => (WorldDefinitionRows.FindCreation(creations: creations,
+            id: fromCreation.PrototypeId) is { Document.Shapes.Count: > 0 }),
         _ => false,
     });
     private static void ValidateCarry(WorldCarry? carry, string path, List<string> errors) {
@@ -1129,6 +1130,7 @@ public static partial class WorldDefinitionValidator {
             ValidateRigid(
                 rigid: kit.Rigid,
                 collider: kit.Collider,
+                creations: definition.Creations,
                 bodyContact: kit.BodyContact,
                 path: $"{path}.rigid",
                 errors: errors

@@ -5,7 +5,7 @@ namespace Puck.Physics;
 /// <summary>Deterministic compound convex-body overlap and depenetration geometry.</summary>
 public static class FixedDynamicBodyContacts {
     private static bool IsSupported(FixedBodyColliderKind kind) =>
-        (kind is FixedBodyColliderKind.Sphere or FixedBodyColliderKind.Capsule or FixedBodyColliderKind.Box);
+        (kind is FixedBodyColliderKind.Sphere or FixedBodyColliderKind.Capsule or FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid);
     private static bool TryVolumeCorrection(
         FixedVector3 leftPosition,
         FixedQuaternion leftOrientation,
@@ -21,6 +21,25 @@ public static class FixedDynamicBodyContacts {
             !IsSupported(kind: right.Kind)
         ) {
             throw new InvalidOperationException(message: $"Unknown body collider pair {left.Kind}/{right.Kind}.");
+        }
+
+        if ((left.Kind == FixedBodyColliderKind.Ellipsoid) || (right.Kind == FixedBodyColliderKind.Ellipsoid)) {
+            var ellipsoidIsLeft = (left.Kind == FixedBodyColliderKind.Ellipsoid);
+            var ellipsoid = (ellipsoidIsLeft ? left : right);
+            var shapePosition = (ellipsoidIsLeft ? leftPosition : rightPosition);
+            var shapeOrientation = (ellipsoidIsLeft ? leftOrientation : rightOrientation);
+            var ellipsoidCollider = FixedStaticCollider.Superellipsoid(
+                (shapePosition + shapeOrientation.Rotate(vector: ellipsoid.Center)),
+                (shapeOrientation * ellipsoid.Rotation).Normalize(), ellipsoid.HalfExtents,
+                FixedQ4816.FromInteger(value: 2));
+            var moving = (ellipsoidIsLeft ? right : left);
+            var movingPosition = (ellipsoidIsLeft ? rightPosition : leftPosition);
+            var movingOrientation = (ellipsoidIsLeft ? rightOrientation : leftOrientation);
+            var found = FixedConvexContact.TryPush(in ellipsoidCollider, movingPosition, in movingOrientation,
+                in moving, FixedQ4816.Zero, out var ellipsoidPush);
+
+            correction = (found ? (ellipsoidPush.Normal * (ellipsoidIsLeft ? -ellipsoidPush.Penetration : ellipsoidPush.Penetration)) : FixedVector3.Zero);
+            return found;
         }
 
         if (
@@ -127,6 +146,8 @@ public static class FixedDynamicBodyContacts {
                     ? volume.Center
                     : volume.Endpoint).Length + volume.Radius),
                 FixedBodyColliderKind.Box => (volume.Center.Length + volume.HalfExtents.Length),
+                FixedBodyColliderKind.Ellipsoid => (volume.Center.Length + FixedQ4816.Max(x: volume.HalfExtents.X,
+                    y: FixedQ4816.Max(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z))),
                 _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
             };
 

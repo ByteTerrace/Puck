@@ -19,6 +19,7 @@ public static partial class WorldFactsVocabulary {
         public override IReadOnlyList<string> Spellings { get; } = [
             WorldRuleFacts.Population,
             WorldRuleFacts.PhysicsQuiescent,
+            $"{WorldRuleFacts.PhysicsQuiescent}:<placementRow>",
             $"{WorldRuleFacts.RegionPrefix}<placementId>",
             $"{WorldRuleFacts.InfluencePrefix}<channel>:<placementId>",
             $"{WorldRuleFacts.MachinePrefix}<screen>:<address>",
@@ -289,6 +290,51 @@ public static partial class WorldFactsVocabulary {
                     ruleName: ruleName
                 );
                 fact = WorldPopulationOperand.Instance;
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: (WorldRuleFacts.PhysicsQuiescent + ":")
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+
+                var tokens = call!.Texts();
+                var row = ((tokens.Length == 2) ? world.FindRow(name: tokens[1]) : null);
+
+                if ((row is null) || !row.IsKeyed) {
+                    throw new RuleException(
+                        detail: $"'{name}' requires physics(quiescent, <keyed placement roster row>)",
+                        refusal: WorldRuleRefusal.SpatialChannelMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var cells = (row.Cells ?? []);
+                var ordinals = new int[cells.Count];
+
+                for (var index = 0; (index < cells.Count); index++) {
+                    ordinals[index] = world.PlacementOrdinal(
+                        channel: name,
+                        placementId: cells[index].Key.Value,
+                        ruleName: ruleName
+                    );
+                }
+
+                var operand = new PhysicsQuiescentOperand(placementOrdinals: ordinals);
+
+                fact = BodyFact(
+                    bodyA: default,
+                    bodyB: default,
+                    cost: Math.Max(val1: 1, val2: ordinals.Length),
+                    describe: name,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: RuleCompiler.ResolveRowOrdinal(context: world, name: row.Name.Value),
+                    valueKind: CellKind.Bool,
+                    world: world
+                );
             } else if (string.Equals(
                 a: name,
                 b: WorldRuleFacts.PhysicsQuiescent,
@@ -1211,7 +1257,8 @@ public static partial class WorldFactsVocabulary {
                 fact = BodyFact(
                     bodyA: body,
                     bodyB: default,
-                    cost: topology.CellCount,
+                    // Grid, box and hex resolve directly; only authored/generated graph centres are scanned.
+                    cost: ((topology.Kind is TopologyKind.Graph or TopologyKind.Tiling) ? topology.CellCount : 1L),
                     describe: name,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: RuleCompiler.ResolveRowOrdinal(
@@ -1239,6 +1286,7 @@ public static partial class WorldFactsVocabulary {
 
             return (fact is not null);
         }
+
         private static bool DeclaresScreen(WorldDefinition definition, int index) {
             foreach (var screen in definition.Screens) {
                 if (screen.Index == index) {

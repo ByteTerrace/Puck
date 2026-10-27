@@ -158,7 +158,9 @@ public static class WorldRuleFacts {
     /// <summary>Reads <c>1</c> when every active rigid body (a kit authoring <c>rigid</c>) currently latches
     /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/>, <c>0</c> otherwise — vacuously <c>1</c> when the world
     /// authors no rigid body, so a turn-waiting rule composes without a special case for a world that never wired one
-    /// in.</summary>
+    /// in. A carried rigid body is never quiescent. The optional second argument in
+    /// <c>physics(quiescent, placementRow)</c> scopes the read to that keyed row's authored placement keys, compiled
+    /// to ordinals; its cell values do not filter membership.</summary>
     public const string PhysicsQuiescent = "$physics:quiescent";
     /// <summary>The prefix; <c>$pointer:&lt;seat&gt;:&lt;screenIndex&gt;:x|y|on</c> reads the 1-based local seat's pointer
     /// ray, carried in its intent this tick, mapped through the declared screen's row in fixed point — the row's face

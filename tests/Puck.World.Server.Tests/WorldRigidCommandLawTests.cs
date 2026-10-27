@@ -468,6 +468,47 @@ public sealed class WorldRigidCommandLawTests {
         );
     }
     [Fact]
+    public void ASettledPlacementRosterIgnoresMotionOutsideItAndRestingPairsSkipTheNarrowphase() {
+        var source = FallingRigidBallDocument();
+        var inhabit = new WorldPlacementInhabit(
+            Kit: source.Kits[0].Name,
+            Look: null,
+            Source: IntentSource.Idle,
+            Distribution: WorldDistribution.Default
+        );
+        var focus = new WorldPlacement(
+            Id: "focus",
+            PrototypeId: source.Creations[0].Id,
+            Position: new Vector3(x: -0.3f, y: 3f, z: -0.3f),
+            YawDegrees: 0f,
+            Scale: 1f,
+            Inhabit: inhabit
+        );
+        var definition = source with {
+            PopulationRaw = source.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2) },
+            PlacementRowsRaw = [source.Placements[0], focus, focus with {
+                Id = "other",
+                Position = new Vector3(x: 0.3f, y: 3f, z: 0.3f),
+            }],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var population = fixture.Server.Population;
+
+        Assert.False(condition: population.RigidPlacementsQuiescent(placementOrdinals: [1]));
+        _ = fixture.StepUntil(ceiling: 3000, settled: population.RigidBodiesQuiescent);
+        Assert.True(condition: population.RigidBodiesQuiescent());
+        fixture.Step();
+        Assert.True(condition: (population.DynamicContactCandidates > 0));
+        Assert.Equal(expected: 0, actual: population.DynamicContactNarrowPairs);
+
+        var other = fixture.Server.Body(index: population.BodyForPlacementOrdinal(ordinal: 2))!;
+
+        other.Pose(pitchRadians: 0f, rollRadians: 0f, x: 2f, y: 3f, yawRadians: 0f, z: 0f);
+        Assert.False(condition: population.RigidBodiesQuiescent());
+        Assert.False(condition: population.RigidPlacementsQuiescent(placementOrdinals: [2]));
+        Assert.True(condition: population.RigidPlacementsQuiescent(placementOrdinals: [1]));
+    }
+    [Fact]
     public void PhysicsQuiescentReadsFalseWhileFallingAndTrueOnceEveryRigidBodyRests() {
         using var fixture = Fixtures.FreshServer(definition: FallingRigidBallDocument());
         var seat = Principal.Seat(slot: 0);

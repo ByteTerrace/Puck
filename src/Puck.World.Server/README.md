@@ -1191,7 +1191,12 @@ second way when the impulse's scaled velocity delta overflows the fixed-point
 representation, leaving velocity entirely unchanged rather than applying a
 wrapped or partial result) wakes it. `$physics:quiescent`
 (`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
-rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
+rests uncarried, vacuously 1 for a world authoring none. The scoped expression
+`physics(quiescent, roster)` checks only the count-1 inhabitants named by a keyed
+row's authored keys (`WorldPopulation.RigidPlacementsQuiescent`); its compiled
+placement ordinals make a read one lookup per member. A carried member keeps
+the read false. Resting pairs skip the dynamic narrowphase until one body wakes.
+`world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are

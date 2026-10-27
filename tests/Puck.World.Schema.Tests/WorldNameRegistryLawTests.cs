@@ -360,6 +360,8 @@ public sealed class WorldNameRegistryLawTests {
     [InlineData("$region:placement", "$region:a_placement", WorldNameRole.Names)]
     [InlineData("$distance:placement:cell:body:0", "$distance:placement:a_cell:body:0", WorldNameRole.Names)]
     [InlineData("$physics:quiescent", "$physics:quiescent", WorldNameRole.Names)]
+    [InlineData("$physics:quiescent:board", "$physics:quiescent:a_board", WorldNameRole.Names)]
+    [InlineData("physics(quiescent, board)", "$physics:quiescent:a_board", WorldNameRole.Expression)]
     [InlineData("$match:score:board:any", "$match:a_score:a_board:any", WorldNameRole.Names)]
     [InlineData("$zone:board:last", "$zone:a_board:last", WorldNameRole.Key)]
     [InlineData("$pair:body:0:cell:score:max", "$pair:body:0:cell:a_score:max", WorldNameRole.Key)]

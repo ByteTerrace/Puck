@@ -311,41 +311,44 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         in FixedBodyColliderVolume volume,
         FixedQ4816 skin,
         out FixedContactPush push
-    ) => Kind switch {
-        FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.TryPush(
-            collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),
-        FixedStaticColliderKind.RoundedBox => FixedRoundedBoxContact.TryPush(box: in this, orientation: in orientation,
-            position: position, push: out push, skin: skin, volume: in volume),
-        FixedStaticColliderKind.Cylinder => FixedCylinderContact.TryPush(cylinder: in this, orientation: in orientation,
-            position: position, push: out push, skin: skin, volume: in volume),
-        FixedStaticColliderKind.Sphere => TrySpherePush(
-        orientation: in orientation,
-        position: position,
-        push: out push,
-        skin: skin,
-        volume: in volume
-    ),
-        FixedStaticColliderKind.AxisAlignedBox => TryBoxPush(
-        orientation: in orientation,
-        position: position,
-        push: out push,
-        skin: skin,
-        volume: in volume
-    ),
-        FixedStaticColliderKind.OrientedBox => TryBoxPush(
-        orientation: in orientation,
-        position: position,
-        push: out push,
-        skin: skin,
-        volume: in volume
-    ),
-        FixedStaticColliderKind.HalfSpace => TryHalfSpacePush(
-        orientation: in orientation,
-        position: position,
-        push: out push,
-        skin: skin,
-        volume: in volume
-    ),
-        _ => throw new InvalidOperationException(message: $"Unknown collider kind {Kind}."),
-    };
+    ) => (((volume.Kind == FixedBodyColliderKind.Ellipsoid) && (Kind != FixedStaticColliderKind.HalfSpace))
+        ? FixedConvexContact.TryPush(collider: in this, orientation: in orientation, position: position,
+            push: out push, skin: skin, volume: in volume)
+        : Kind switch {
+            FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.TryPush(
+                collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume),
+            FixedStaticColliderKind.RoundedBox => FixedRoundedBoxContact.TryPush(box: in this, orientation: in orientation,
+                position: position, push: out push, skin: skin, volume: in volume),
+            FixedStaticColliderKind.Cylinder => FixedCylinderContact.TryPush(cylinder: in this, orientation: in orientation,
+                position: position, push: out push, skin: skin, volume: in volume),
+            FixedStaticColliderKind.Sphere => TrySpherePush(
+            orientation: in orientation,
+            position: position,
+            push: out push,
+            skin: skin,
+            volume: in volume
+        ),
+            FixedStaticColliderKind.AxisAlignedBox => TryBoxPush(
+            orientation: in orientation,
+            position: position,
+            push: out push,
+            skin: skin,
+            volume: in volume
+        ),
+            FixedStaticColliderKind.OrientedBox => TryBoxPush(
+            orientation: in orientation,
+            position: position,
+            push: out push,
+            skin: skin,
+            volume: in volume
+        ),
+            FixedStaticColliderKind.HalfSpace => TryHalfSpacePush(
+            orientation: in orientation,
+            position: position,
+            push: out push,
+            skin: skin,
+            volume: in volume
+        ),
+            _ => throw new InvalidOperationException(message: $"Unknown collider kind {Kind}."),
+        });
 }
