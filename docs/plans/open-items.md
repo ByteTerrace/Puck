@@ -324,6 +324,11 @@ and none is run until the owner calls for qualification.
 
 ## Cross-plan maintenance
 
+- [ ] Quiet-machine findings on the RTX 4070 after the limits redesign (both backends hold 60 FPS settled, world view about 5 ms of GPU per frame):
+  - A cold bake of the debug world takes 314 s on Direct3D 12 and 333 s on Vulkan (2,022 groups, 1.09 billion samples), and each backend keeps its own store, so a machine's first boot on each backend pays it. A warm boot settles in about 14 s.
+  - The bake identity hashes `SdfMeshInstance` (a draw record, not a bake input): the teleport fix, which changed only its motion identity, sent the next Vulkan boot into a full 333 s rebake. Hash only what the bake reads, or edit-to-running pays a cold bake for draw-side edits.
+  - Vulkan's first reading after its cold bake had eight frames of 14 to 15 ms frame-thread work (p99 19.8 ms); a later reading in the same view was clean, so it is a post-bake transient to find.
+  - A generation-1 collection paused one Vulkan frame 9.3 ms (19.4 ms frame). The managed heap holds 3.3 GB, 2.9 GB of it on the large object heap.
 - [ ] A connected Claude Code session keeps a tool's old output schema when the MCP front switches to a backend whose schemas changed: the first `puck_adapter` call after the MCP quieting activated failed with "Structured content does not match the tool's output schema" until `/mcp` reconnected. The front's tool-list notification does not refresh it. Make a schema change survive the switch (keep output schemas additive across a live switch, or have the front answer with the schemas the client was given until it reconnects).
 - [ ] Review findings left after the pre-`main` reviews, each read from the code and not yet reproduced; confirm with a failing test before fixing:
   - `replay.record` mid-session re-grants document grants revoked at runtime (`Host.Addons.Finish` after the checkpoint captures grants), and refuses `StartNotCheckpointable` after every pumped addon was removed (`WorldPersistence.Checkpoint`).
