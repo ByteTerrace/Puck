@@ -18,10 +18,12 @@ using Puck.World.Machines;
 // The setter suppresses the byte-order mark. A test batch's boots share it.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 if ((args.Length == 4) && (args[0] == "--devices") && (args[1] == "none") && (args[2] == "--test-batch")) {
-    return await WorldTestBatch.RunAsync(path: args[3], boot: RunWorldAsync);
+    var batchHost = new WorldTestHost();
+
+    return await WorldTestBatch.RunAsync(path: args[3], host: batchHost, boot: (arguments, script) => RunWorldAsync(args: arguments, batchHost: batchHost, script: script));
 }
 return await RunWorldAsync(args: args, script: null);
-static async Task<int> RunWorldAsync(string[] args, string? script) {
+static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHost? batchHost = null) {
     // Every line written through the console from here on is also held in a bounded ring that host.log reads, so an
     // Operator attachment reads what only this process's launcher otherwise sees.
     var hostLog = HostLog.CaptureConsole();
@@ -605,7 +607,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script) {
         ),
         releaseSource: releaseSource
     );
-    var host = builder.Build();
+    var host = (batchHost?.Build(builder: builder) ?? builder.Build());
     // The signing oracle is configured before DI exists; each fresh batch host binds its own live definition.
     admissionServer = host.Services.GetRequiredService<Puck.World.Server.WorldServer>();
     // The every-shape post-build wiring step: affordance install, the boot document's genuine binding-vocabulary
