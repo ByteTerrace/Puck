@@ -152,41 +152,6 @@ public sealed partial class WorldReplayInspector {
             lines.Add(item: $"{Prefix}machine '{digest.Name}' core=0x{digest.Digest:X16} at the tape's end]");
         }
     }
-    // One entity's changed channels against its previous submission — appended as "p1 forward=1 strafe=-0.5" (seats)
-    // or "body:7 turn=0.25" (everything else); nothing when the vector is unchanged. `previous` is advanced either way.
-    private static void AppendIntentEdge(WorldChannelTable channels, StringBuilder edges, PlayerIntent[] previous, int index, PlayerIntent after, string lane) {
-        if (((uint)index) >= ((uint)previous.Length)) {
-            return;
-        }
-
-        var before = previous[index];
-        var labelled = false;
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if ((before[ordinal] == after[ordinal]) && ((channels.Shape(ordinal: ordinal) != ChannelShape.Relative) || (after.Channels.Relative(ordinal: ordinal).Value == 0))) {
-                continue;
-            }
-
-            if (!labelled) {
-                if (edges.Length > 0) {
-                    edges.Append(value: ' ');
-                }
-
-                edges.Append(value: DescribeEntity(index: index));
-                labelled = true;
-            }
-
-            edges.Append(value: ' ');
-            edges.Append(value: lane);
-            edges.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
-            edges.Append(value: '=');
-            edges.Append(value: ((channels.Shape(ordinal: ordinal) == ChannelShape.Relative)
-                ? channels.DescribeValue(intent: after, ordinal: ordinal)
-                : DescribeValue(value: after[ordinal])));
-        }
-
-        previous[index] = after;
-    }
     private static string[] CapturePoses(WorldPopulation population) {
         var poses = new List<string>();
 
@@ -358,11 +323,6 @@ public sealed partial class WorldReplayInspector {
         ArgumentNullException.ThrowIfNull(argument: hashes);
         ArgumentNullException.ThrowIfNull(argument: channels);
 
-        // The last submitted intent per entity — the "previous tick" an edge is measured against. Starts at the zero
-        // vector, which is what a body reads before its first submission, so a tape whose first tick already holds a
-        // stick prints that as the edge it is.
-        var previous = new PlayerIntent[WorldBodiesLimits.CapacityCeiling];
-        var previousHeld = new PlayerIntent[WorldBodiesLimits.CapacityCeiling];
         var last = Math.Min(
             val1: to,
             val2: (ticks.Count - 1)
@@ -374,30 +334,6 @@ public sealed partial class WorldReplayInspector {
 
             edges.Clear();
             if (acceptedInputs is not null && tick < acceptedInputs.Count) { edges.Append(acceptedInputs[tick]); }
-
-            foreach (var submission in input.Intents) {
-                // The authority observation uses each tick's actual definition and mapping. Packed ingress
-                // slots must not be relabelled through the tape's initial, all-declared channel table.
-                if (submission.Input.HasValue) { continue; }
-                // Both lanes of a submission: the composed device intent, and the client's held-control overlay
-                // (a bound held verb), the latter named `held.<channel>` so the two never read as one.
-                AppendIntentEdge(
-                    after: submission.Intent,
-                    channels: channels,
-                    edges: edges,
-                    index: submission.EntityIndex,
-                    lane: "",
-                    previous: previous
-                );
-                AppendIntentEdge(
-                    after: submission.HeldChannels,
-                    channels: channels,
-                    edges: edges,
-                    index: submission.EntityIndex,
-                    lane: "held.",
-                    previous: previousHeld
-                );
-            }
 
             if (tick < from) {
                 continue;

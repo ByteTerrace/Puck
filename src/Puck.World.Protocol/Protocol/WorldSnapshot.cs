@@ -150,17 +150,13 @@ public readonly record struct WorldSnapshot(
 public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw, int Row = -1, ArenaCellImage Image = default);
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a
 /// connection carries up to four per tick, one per local seat). The server resolves the intent against the body's live
-/// tape and server-side producer in <c>NextIntent</c> precedence; <paramref name="HeldChannels"/> is the always-overlay
-/// device-channel image (a held jump button rides a tape-driven runner).</summary>
+/// tape and server-side producer in <c>NextIntent</c> precedence. Timed admission derives the held overlay from the
+/// semantic batch; transport carries no second held image.</summary>
 /// <param name="Tick">The tick this intent is submitted for.</param>
 /// <param name="EntityIndex">The 0-based entity index the intent drives.</param>
-/// <param name="Intent">The merged movement and action image for the tick.</param>
+/// <param name="Intent">The camera-projected movement image for the tick; semantic levels and events come from Input.</param>
 /// <param name="Principal">The acting identity the submission is checked against — the server drops it (loud, once per
 /// denial episode) unless the principal holds <see cref="WorldCapability.Drive"/> over the target body.</param>
-/// <param name="HeldChannels">The live-held device channel image overlaid regardless of tape/producer precedence —
-/// only ordinals the world's channel table does not resolve to a claimed movement role are meaningful (channels take
-/// consecutive ordinals in document order); movement-role ordinals ride <paramref name="Intent"/>
-/// directly. Replaces the old <c>ActionLanes HeldLanes</c> bitmask.</param>
 /// <param name="MeasuredHoldTicks">An externally conditioned input-hold measurement in simulation ticks. No
 /// simulation code samples a clock; this tick-stamped value is recorded with the intent.</param>
 /// <param name="Input">The owner-scoped semantic batch, admitted at the simulation interval boundary.</param>
@@ -171,9 +167,8 @@ public readonly record struct IntentSubmission(
     int EntityIndex,
     PlayerIntent Intent,
     Principal Principal,
-    PlayerIntent HeldChannels = default,
+    WorldInputBatch Input,
     int MeasuredHoldTicks = 0,
-    WorldInputBatch? Input = null,
     Principal? InputOwner = null
 );
 /// <summary>Evaluates a <see cref="WorldObserverDisclosure"/> policy against an <see cref="EntitySnapshot"/> — kept

@@ -154,7 +154,12 @@ internal static class WorldBenchmarks {
 
             for (var tick = 0; (tick < samples.Length); tick++) {
                 Pace();
-                server.EnqueueIntent(submission: new Puck.World.Protocol.IntentSubmission(server.NextInputTick, 0, intent, Puck.Commands.Principal.Console));
+                if (!server.Input.TryPublishSnapshot(Puck.Commands.Principal.Console, 0, "bench-walk", intent, server.NextInputTick,
+                    out var inputOwner, out var input, out var reason)) { throw new InvalidOperationException(reason); }
+                // A queued publication owns its arrays; local snapshot producers otherwise return borrowed scratch.
+                input = input with { Contributions = input.Contributions.ToArray(), Events = input.Events.ToArray() };
+                server.EnqueueIntent(submission: new Puck.World.Protocol.IntentSubmission(server.NextInputTick, 0, intent,
+                    Puck.Commands.Principal.Console, input, InputOwner: inputOwner));
                 samples[tick] = AllocationWindow.Total(window: advance);
             }
             Array.Sort(array: samples);

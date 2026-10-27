@@ -170,12 +170,12 @@ public sealed class MappedArrivalApplicationLawTests {
             actual: body.ChannelReadHeld[ordinal]
         );
 
-        var neutral = new IntentSubmission(
-            Tick: fixture.Server.NextInputTick,
-            EntityIndex: actor.Index,
-            Intent: default,
-            Principal: actor,
-            HeldChannels: default
+        var neutral = Fixtures.Input(
+            server: fixture.Server,
+            tick: fixture.Server.NextInputTick,
+            body: actor.Index,
+            image: default,
+            actor: actor
         );
 
         fixture.Server.EnqueueIntent(submission: in neutral);

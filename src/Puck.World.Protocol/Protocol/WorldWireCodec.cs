@@ -152,13 +152,11 @@ public static partial class WorldWireCodec {
         var intent = ReadIntent(reader: ref reader);
         var principal = ReadPrincipal(reader: ref reader);
         var inputOwner = ReadPrincipal(reader: ref reader);
-        var heldChannels = ReadIntent(reader: ref reader);
         var measuredHoldTicks = reader.ReadInt32();
-        var input = reader.ReadBoolean() ? ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue) : (WorldInputBatch?)null;
+        var input = ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue);
 
         return new IntentSubmission(
             EntityIndex: entityIndex,
-            HeldChannels: heldChannels,
             Intent: intent,
             MeasuredHoldTicks: measuredHoldTicks,
             Input: input,
@@ -403,13 +401,8 @@ public static partial class WorldWireCodec {
         }
         if (!TryWritePrincipal(writer, submission.InputOwner ?? submission.Principal)) { return false; }
 
-        WriteIntent(
-            intent: submission.HeldChannels,
-            writer: writer
-        );
         writer.WriteInt32(value: submission.MeasuredHoldTicks);
-        writer.WriteBoolean(submission.Input.HasValue);
-        if (submission.Input is { } input && !TryWriteInputBatch(writer, input)) { return false; }
+        if (!TryWriteInputBatch(writer, submission.Input)) { return false; }
 
         return true;
     }

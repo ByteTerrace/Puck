@@ -47,7 +47,7 @@ public sealed partial class WorldTick {
             }
             // Engagement output includes the source body's already composed channels. Keep it in the contribution
             // fold; replaying it through TryAdmit would forge duplicate edges and bind the owner to another body.
-            var applied = new IntentSubmission(m_deliveryTick, route.TargetBody, image, route.Principal);
+            var applied = new WorldAcceptedInput(m_deliveryTick, route.TargetBody, image, route.Principal);
             ApplyAcceptedBodyInput(target, in applied);
         }
     }

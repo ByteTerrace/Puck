@@ -700,6 +700,7 @@ public sealed partial class WorldPersistence {
                 LastStepTicks: Host.Tick.LastStepTicks,
                 Intents: [.. Host.Tick.Intents],
                 RoutedInputs: [.. Host.Tick.RoutedInputs],
+                FederatedInputs: Host.Tick.CaptureFederatedIntents(),
                 Pending: [],
                 Decisions: Decisions.Capture(),
                 MachineBindings: Host.CaptureMachineBindings(),
@@ -812,6 +813,12 @@ public sealed partial class WorldPersistence {
 
         var restoredDefinition = admission.Definition;
         var restoredInput = WorldInputRuntime.PrepareRestore(Host, restoredDefinition, server.Input ?? WorldInputRuntimeCheckpoint.Empty);
+        WorldTick.ValidateFederatedInputs(server.FederatedInputs, restoredDefinition.Population.Capacity);
+        foreach (var input in server.FederatedInputs) {
+            if (!checkpoint.Population.Entries.Any(entry => entry.Index == input.Index && entry.Generation == input.Principal.Generation && entry.IsRemoteHuman)) {
+                throw new ArgumentException("federated input checkpoint does not name its admitted peer generation");
+            }
+        }
         // Equal canonical images are the same operation-owned document. A distinct journal base still needs its
         // own validation; do it before adopting any restored state so malformed base bytes refuse atomically.
         var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
@@ -865,6 +872,7 @@ public sealed partial class WorldPersistence {
             Host.Tick.Intents.Enqueue(item: intent);
         }
         Host.Tick.RoutedInputs.Clear();
+        Host.Tick.ReplaceFederatedIntents(server.FederatedInputs, resetRemoved: false);
         foreach (var route in server.RoutedInputs) { Host.Tick.RoutedInputs.Enqueue(route); }
         Host.RuleHost.GroupState.Clear();
         foreach (var entry in server.RuleGroups) {
@@ -910,6 +918,7 @@ public sealed partial class WorldPersistence {
         }
         Host.AdoptPreparedArena(arena: restoredArena, definition: restoredDefinition);
         Host.Population.Restore(
+            continuingFederatedBodies: server.FederatedInputs.Select(static input => input.Index).ToHashSet(),
             checkpoint: checkpoint.Population,
             defaults: Host.Document.Definition.PlayerDefaults,
             tick: Host.Tick.CompletedTick

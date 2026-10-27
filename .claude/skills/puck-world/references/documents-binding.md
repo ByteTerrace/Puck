@@ -123,6 +123,15 @@ mapping; the default table cannot interpret a reused slot. Addon handshake
 handles identify logical declarations, including dormant names, rather than
 permanently assigning storage addresses.
 
+`IntentSubmission.Input` is required. Transport and replay carry one semantic
+batch; the separate `Intent` is only the camera projection of movement roles.
+The authority derives its held overlay after admission. `WorldAcceptedInput`
+is that derived body fold, also used by already-admitted body routes; it is
+never an alternative transport ingress. Bodyless sessions use the same timed
+admission. A switch-tick batch can repeat its retained baseline or acknowledge
+neutral, but fresh events, levels and source activations start on the following
+tick. Local snapshot producers publish that baseline during the barrier tick.
+
 Local snapshot producers use `WorldInputRuntime.TryPublishSnapshot`: each
 actor/body/source has a generation-bearing session for its history, while the
 original actor still supplies Drive and contribution consent. Do not authorize

@@ -42,6 +42,7 @@ public sealed record WorldServerCheckpoint(
     ulong LastStepTicks,
     IReadOnlyList<IntentSubmission> Intents,
     IReadOnlyList<WorldRoutedInput> RoutedInputs,
+    IReadOnlyList<WorldFederatedIntentCheckpoint> FederatedInputs,
     IReadOnlyList<WorldPendingOpCheckpoint> Pending,
     IReadOnlyList<WorldRuleLatchEntry> RuleGateHeld,
     IReadOnlyList<WorldRuleLatchEntry> InteractionGateHeld,

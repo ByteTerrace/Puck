@@ -40,6 +40,12 @@ public sealed partial class WorldInputRuntime {
     }
     /// <summary>The open processing interval, with its original rate's exact engine coordinates.</summary>
     public WorldInputInterval Interval { get; private set; }
+    /// <summary>Number of admitted owners, including local script and simulation observation sessions.</summary>
+    public int OwnerCount => m_ordered.Count;
+    /// <summary>Reads an owner in deterministic principal order at a settled authority boundary.</summary>
+    public Principal OwnerPrincipal(int index) => m_ordered[index].Principal;
+    /// <summary>Reads a local producer's authorizing actor and source without changing its input episode.</summary>
+    public WorldInputControllerOrigin? ControllerOrigin(Principal principal) => m_owners.TryGetValue(principal, out var owner) ? owner.Controller : null;
     internal WorldInputCatalog Catalog => m_host.Population.InputCatalog;
     /// <summary>Publishes epoch decisions with immutable source images; unchanged held ticks allocate nothing.</summary>
     public ReadOnlyMemory<WorldInputPublication> Publish() {

@@ -133,14 +133,16 @@ public sealed class LightGunLawTests {
 
         return seat;
     }
-    private static IntentSubmission Pointing(ulong tick, SourceRay? ray) => new(
-        EntityIndex: 0,
-        Intent: new PlayerIntent(
+    private static IntentSubmission Pointing(WorldServer server, ulong tick, SourceRay? ray, IServerLink? link = null) => Fixtures.Input(
+        server: server,
+        link: link,
+        body: 0,
+        image: new PlayerIntent(
             Channels: default,
             SourceRay: ray
         ),
-        Principal: Principal.Seat(slot: 0),
-        Tick: tick
+        actor: Principal.Seat(slot: 0),
+        tick: tick
     );
     private static long Sensed(WorldFixture fixture) => fixture.Row(name: LightRow).Cells!.Single().Value.Raw;
     // Holds one aim for a few ticks, long enough for the machine to draw under it and the mirror to carry the byte out.
@@ -149,8 +151,9 @@ public sealed class LightGunLawTests {
             fixture.Server.ApplyIntentSubmission(
                 body: fixture.Server.Body(index: 0)!,
                 submission: Pointing(
+                    server: fixture.Server,
                     ray: ray,
-                    tick: 0UL
+                    tick: fixture.Server.Input.Interval.Tick
                 )
             );
             fixture.Step();
@@ -337,6 +340,8 @@ public sealed class LightGunLawTests {
 
             for (var tick = 0; (tick < stream.Length); tick++) {
                 transport.SubmitIntent(submission: Pointing(
+                    server: fixture.Server,
+                    link: transport,
                     ray: stream[tick],
                     tick: ((ulong)(tick + 1))
                 ));

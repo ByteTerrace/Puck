@@ -715,45 +715,40 @@ public sealed partial class WorldTick {
         if (inputOwner != submission.Principal && !Host.Input.IsController(inputOwner, submission.Principal, submission.EntityIndex)) {
             return new(verdict, "input.owner: this actor does not own the submitted controller session and route");
         }
-        var sourceTable = submission.Input.HasValue && Host.Input.TryGet(inputOwner, out var admittedOwner)
+        var sourceTable = Host.Input.TryGet(inputOwner, out var admittedOwner)
             ? admittedOwner!.Mapping.Channels : body.Channels;
         if (Host.GrantTable.TryGetInputReach(submission.Principal, GrantSubject.Body(submission.EntityIndex), out var reach)) {
             for (var ordinal = 0; ordinal < ChannelLimits.MaxChannels; ordinal++) {
                 if (sourceTable.IsDeclared(ordinal) &&
-                    (submission.Intent[ordinal] != FixedQ4816.Zero || submission.HeldChannels[ordinal] != FixedQ4816.Zero) &&
+                    (submission.Intent[ordinal] != FixedQ4816.Zero || submission.Input.Image[ordinal] != FixedQ4816.Zero) &&
                     !reach.Contains(sourceTable.Name(ordinal)!)) {
                     return new(verdict, $"input.permission: Drive reach excludes '{sourceTable.Name(ordinal)}'");
                 }
             }
         }
-        var applied = submission;
-        if (submission.Input is { } input) {
-            if (!Host.Input.TryAdmit(inputOwner, input, out var reason, submission.EntityIndex)) {
-                Host.Input.RejectControllerBatch(inputOwner);
-                Host.Output.Narrate(channel: "input.refused", text: reason);
-                return new(verdict, reason);
-            }
-            var table = Host.Population.InputCatalog.Mappings[input.Mapping].Channels;
-            var target = body.Channels;
-            var movement = input.Image with { Channels = default };
-            var held = default(PlayerIntent);
-            for (var ordinal = 0; ordinal < ChannelLimits.MaxChannels; ordinal++) {
-                if (!table.IsDeclared(ordinal) || !target.TryGetOrdinal(table.Name(ordinal)!, out var destination)) { continue; }
-                if (table.Shape(ordinal) == ChannelShape.Relative) { movement = movement.WithRelative(destination, input.Image.Channels.Relative(ordinal)); }
-                else if (table.IsRole(ordinal)) { movement = movement.WithChannel(destination, target.Quantize(destination, submission.Intent[ordinal])); }
-                else { held = held.WithChannel(destination, input.Image[ordinal]); }
-            }
-            applied = submission with { Intent = movement, HeldChannels = held };
-        } else if (Host.Input.TryGet(inputOwner, out _)) {
-            const string Refusal = "input.owner: an admitted owner must submit its current epoch and source image";
-            Host.Output.Narrate(channel: "input.refused", text: Refusal);
-            return new(verdict, Refusal);
+        var input = submission.Input;
+        if (!Host.Input.TryAdmit(inputOwner, input, out var reason, submission.EntityIndex)) {
+            Host.Input.RejectControllerBatch(inputOwner);
+            Host.Output.Narrate(channel: "input.refused", text: reason);
+            return new(verdict, reason);
         }
+        var table = Host.Population.InputCatalog.Mappings[input.Mapping].Channels;
+        var target = body.Channels;
+        var movement = input.Image with { Channels = default };
+        var held = default(PlayerIntent);
+        for (var ordinal = 0; ordinal < ChannelLimits.MaxChannels; ordinal++) {
+            if (!table.IsDeclared(ordinal) || !target.TryGetOrdinal(table.Name(ordinal)!, out var destination)) { continue; }
+            if (table.Shape(ordinal) == ChannelShape.Relative) { movement = movement.WithRelative(destination, input.Image.Channels.Relative(ordinal)); }
+            else if (table.IsRole(ordinal)) { movement = movement.WithChannel(destination, target.Quantize(destination, submission.Intent[ordinal])); }
+            else { held = held.WithChannel(destination, input.Image[ordinal]); }
+        }
+        var applied = new WorldAcceptedInput(submission.Tick, submission.EntityIndex, movement, submission.Principal,
+            held, submission.MeasuredHoldTicks);
         ApplyAcceptedBodyInput(body, in applied);
         return new(verdict);
     }
 
-    private void ApplyAcceptedBodyInput(WorldBody body, in IntentSubmission applied) {
+    private void ApplyAcceptedBodyInput(WorldBody body, in WorldAcceptedInput applied) {
         Host.InputHold.ObserveMeasurement(submission: in applied);
 
         var bodyIndex = applied.EntityIndex;
@@ -769,7 +764,8 @@ public sealed partial class WorldTick {
                 entityIndex: bodyIndex,
                 principal: applied.Principal
             );
-            body.SubmitIntent(intent: applied.Intent);
+            var submitted = body.MergeSubmittedRelative(applied.Intent);
+            body.SubmitIntent(intent: submitted);
             body.SetHeldChannels(channels: applied.HeldChannels);
 
             if (isOwningSeat) {
@@ -778,7 +774,7 @@ public sealed partial class WorldTick {
                 // FoldChannelContributions's common-case check (m_hasContribution) stays the only extra cost an
                 // uncontended body pays. The held image is recorded because the fold may have to REPLACE the direct
                 // write above with the max of it and a contributor's own composition act.
-                m_ownerBase[bodyIndex] = applied.Intent;
+                m_ownerBase[bodyIndex] = submitted;
                 m_ownerHeld[bodyIndex] = applied.HeldChannels;
                 m_hasOwnerBase[bodyIndex] = true;
                 // The read-back's baseline for THIS write: no pool, no contributors — true unless
@@ -787,7 +783,7 @@ public sealed partial class WorldTick {
                 // quiet since does not keep reporting a pool that no longer exists.
                 RecordDirectChannelRead(
                     seat: bodyIndex,
-                    intent: applied.Intent
+                    intent: submitted
                 );
             }
         } else {

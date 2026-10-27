@@ -94,20 +94,23 @@ public sealed class PointerWorldRuleFactLawTests {
         IdentityName: null,
         WireProtocolKey: WorldProtocol.WireProtocolKey
     )).Accepted);
-    private static IntentSubmission Pointing(ulong tick, SourceRay? ray) => new(
-        Tick: tick,
-        EntityIndex: 0,
-        Intent: new PlayerIntent(
+    private static IntentSubmission Pointing(WorldServer server, ulong tick, SourceRay? ray, IServerLink? link = null) => Fixtures.Input(
+        server: server,
+        link: link,
+        tick: tick,
+        body: 0,
+        image: new PlayerIntent(
             Channels: default,
             SourceRay: ray
         ),
-        Principal: Principal.Seat(slot: 0)
+        actor: Principal.Seat(slot: 0)
     );
     private static void Submit(WorldFixture fixture, SourceRay? ray) => fixture.Server.ApplyIntentSubmission(
         body: fixture.Server.Body(index: 0)!,
         submission: Pointing(
+            server: fixture.Server,
             ray: ray,
-            tick: 0UL
+            tick: fixture.Server.Input.Interval.Tick
         )
     );
     private static SourceHit Expected(SourceRay ray) => WorldScreenMappings.Normalized(screen: PointerDocument().Screens.Single()).MapRay(ray: ray);
@@ -331,6 +334,8 @@ public sealed class PointerWorldRuleFactLawTests {
 
             for (var tick = 0; (tick < stream.Length); tick++) {
                 transport.SubmitIntent(submission: Pointing(
+                    server: fixture.Server,
+                    link: transport,
                     ray: stream[tick],
                     tick: ((ulong)(tick + 1))
                 ));

@@ -1,247 +1,99 @@
 using Puck.Testing;
 using Puck.Commands;
 using Xunit;
-
 using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>
-/// The law behind <c>replay.inspect</c>'s default view: a tick prints when, and only when, an intent channel value
-/// moved from the entity's previous submission or an authority entry landed. The intent edges are judged over a
-/// hand-built tape; the authority tick over a real recording, since the entry leaves are not constructible here.
-/// </summary>
+/// <summary>Inspection names admitted events from the tape's actual re-drive, including unchanged held ticks,
+/// several owners and authority entries. It never infers edges from a retired raw intent image.</summary>
 public sealed class ReplayInspectLawTests {
-    private static readonly WorldChannelTable Channels = WorldChannelTable.Compile(channels: Fixtures.BuildDocument().Channels);
-    private static readonly ulong[] Hashes = [0x1UL, 0x2UL, 0x3UL, 0x4UL, 0x5UL];
-
-    // Five ticks: forward rises at 0, holds at 1, falls at 2, and stays down through 3 and 4.
-    private static List<WorldReplayTickInput> BuildTicks() => [
-        Tick(Submit(
-            tick: 0,
-            entity: 0,
-            forward: FixedQ4816.One
-        )),
-        Tick(Submit(
-            tick: 1,
-            entity: 0,
-            forward: FixedQ4816.One
-        )),
-        Tick(Submit(
-            tick: 2,
-            entity: 0,
-            forward: FixedQ4816.Zero
-        )),
-        Tick(Submit(
-            tick: 3,
-            entity: 0,
-            forward: FixedQ4816.Zero
-        )),
-        Tick(Submit(
-            tick: 4,
-            entity: 0,
-            forward: FixedQ4816.Zero
-        )),
-    ];
-    private static IntentSubmission Submit(int tick, int entity, FixedQ4816 forward, FixedQ4816 strafe = default) => new(
-        Tick: ((ulong)tick),
-        EntityIndex: entity,
-        Intent: Channels.RoleOrdinals.Intent(
-            moveAdvance: forward,
-            moveStrafe: strafe
-        ),
-        Principal: Principal.Seat(slot: entity)
-    );
-    private static WorldReplayTickInput Tick(params IntentSubmission[] intents) => new(
-        Authority: [],
-        Intents: intents
-    );
-    // "[replay.inspect: tick N hash=…" — the tick is the third space-separated token.
-    private static int TickOf(string line) => int.Parse(s: line.Split(separator: ' ')[2]);
-    private static List<string> Walk(IReadOnlyList<WorldReplayTickInput>? ticks = null, IReadOnlyList<ulong>? hashes = null, int from = 0, int to = int.MaxValue, bool all = false, int divergedAt = -1) {
-        var lines = new List<string>();
-
-        WorldReplayInspector.AppendTicks(
-            all: all,
-            channels: Channels,
-            divergedAt: divergedAt,
-            from: from,
-            hashes: (hashes ?? Hashes),
-            lines: lines,
-            poses: null,
-            ticks: (ticks ?? BuildTicks()),
-            to: to
-        );
-
-        return lines;
+    [Fact]
+    public void AdmittedEventsUseRecordedNamesAndTheDefaultViewOmitsUnchangedHolds() {
+        using var run = new Recording();
+        run.Record(secondSeat: false);
+        var lines = run.Inspect();
+        Assert.Equal([0, 2], lines.Select(TickOf).ToArray());
+        Assert.Contains("forward AxisSample", lines[0]);
+        Assert.Contains("raw=65536", lines[0]);
+        Assert.Contains("forward AxisSample", lines[1]);
+        Assert.Contains("raw=0", lines[1]);
+        Assert.Equal([0, 1, 2, 3, 4], run.Inspect(all: true).Select(TickOf).ToArray());
+        var ranged = Assert.Single(run.Inspect(from: 2));
+        Assert.Equal(2, TickOf(ranged));
+        Assert.Contains("forward AxisSample", ranged);
+        Assert.DoesNotContain(run.Inspect(), line => line.Contains("DIVERGED", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void AllView_PrintsEveryTickInRange() {
-        Assert.Equal(
-            expected: [0, 1, 2, 3, 4],
-            actual: Walk(all: true).Select(selector: TickOf).ToArray()
-        );
+    public void EachOwnersEventsNameOnlyItsChangedChannels() {
+        using var run = new Recording();
+        run.Record(secondSeat: true);
+        var line = Assert.Single(run.Inspect(), text => TickOf(text) == 1);
+        Assert.Contains("seat2 strafe AxisSample", line);
+        Assert.Contains("raw=-32768", line);
+        Assert.DoesNotContain("seat1", line);
+        Assert.DoesNotContain("forward", line);
     }
+
     [Fact]
-    public void AuthorityEntry_PrintsItsTickCompactlyNamed() {
-        using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
-
-        using var fixture = Fixtures.FreshServer();
-        var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(
-            stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
-            liveServer: fixture.Server,
-            profiles: fixture.Server.Profiles,
-            transport: transport,
-            engines: [],
-            machineHostFactory: Fixtures.MachineHostFactory,
-            addonHostFactory: static (_, _) => new NullAddonHost()
-        );
-        var name = $"inspect-authority-{Guid.NewGuid():N}";
-
-        Assert.True(
-            condition: tape.TryBeginRecording(
-                name: name,
-                refusal: out var refusal
-            ),
-            userMessage: $"refused to arm: {refusal}"
-        );
-
-        // Tick 0 carries nothing; tick 1 carries one grant and no intent at all — the only thing that can make it
-        // print is the authority entry.
-        fixture.Step();
-        tape.NoteTick();
-        transport.SubmitGrant(
-            grant: new WorldGrant(
-                Grantee: Principal.Seat(slot: 1),
-                Capability: WorldCapability.Drive,
-                Subject: GrantSubject.Body(index: 0),
-                Exclusive: false
-            ),
-            actor: Principal.Console
-        );
-        fixture.Step();
-        tape.NoteTick();
-
-        _ = tape.StopRecording();
-
-        using var stream = File.OpenRead(path: tape.PathFor(name: name));
-        var persisted = WorldReplaySnapshot.Read(stream: stream);
-        var lines = Walk(
-            ticks: persisted.Ticks,
-            hashes: persisted.RecordedHashes
-        );
-
-        var line = Assert.Single(collection: lines);
-
-        Assert.Equal(
-            expected: 1,
-            actual: TickOf(line: line)
-        );
-        Assert.Contains(
-            actualString: line,
-            expectedSubstring: "grant drive body:0 -> seat2 by console"
-        );
-        Assert.Contains(
-            expectedSubstring: $"hash=0x{persisted.RecordedHashes[1]:X16}",
-            actualString: line
-        );
+    public void AnAuthorityEntryPrintsWithoutAnInputEvent() {
+        using var run = new Recording();
+        run.Record(secondSeat: false, grant: true);
+        var line = Assert.Single(run.Inspect(), text => TickOf(text) == 3);
+        Assert.Contains("grant drive body:0 -> seat2 by console", line);
+        Assert.DoesNotContain("AxisSample", line);
     }
-    [Fact]
-    public void ChangedChannelsOnly_AreNamed() {
-        // A second seat moving only strafe names only strafe — never the whole vector, never the other seat.
-        var ticks = BuildTicks();
 
-        ticks[1] = Tick(
-            Submit(
-                tick: 1,
-                entity: 0,
-                forward: FixedQ4816.One
-            ),
-            Submit(
-                tick: 1,
-                entity: 1,
-                forward: FixedQ4816.Zero,
-                strafe: -(FixedQ4816.One / FixedQ4816.FromInteger(value: 2L))
-            )
-        );
+    private static int TickOf(string line) => int.Parse(line.Split(' ')[2]);
 
-        var tick1 = Assert.Single(
-            collection: Walk(ticks: ticks),
-            predicate: line => (TickOf(line: line) == 1)
-        );
+    private sealed class Recording : IDisposable {
+        private readonly TemporaryDirectory m_directory = new(prefix: "puck-replay-input-");
+        private readonly WorldFixture m_fixture = Fixtures.FreshServer();
+        private readonly LoopbackTransport m_transport;
+        private readonly WorldReplayTape m_tape;
+        private WorldReplayLoad m_loaded;
 
-        Assert.Contains(
-            actualString: tick1,
-            expectedSubstring: "p2 strafe=-0.5"
-        );
-        Assert.DoesNotContain(
-            actualString: tick1,
-            expectedSubstring: "p1"
-        );
-        Assert.DoesNotContain(
-            actualString: tick1,
-            expectedSubstring: "forward"
-        );
-    }
-    [Fact]
-    public void DefaultView_PrintsOnlyTheEdges() {
-        var lines = Walk();
+        public Recording() {
+            m_transport = new(m_fixture.Server);
+            m_tape = new(stateRoot: new(m_directory.RootPath), liveServer: m_fixture.Server,
+                profiles: m_fixture.Server.Profiles, transport: m_transport, engines: [],
+                machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
+            m_fixture.JoinSeat(0);
+            m_fixture.JoinSeat(1);
+        }
 
-        // THE DISCRIMINATOR: ticks 1, 3, and 4 (the vector unchanged from the previous submission) must NOT print;
-        // ticks 0 (rise) and 2 (fall) must, each with its own recorded hash.
-        Assert.Equal(
-            expected: [0, 2],
-            actual: lines.Select(selector: TickOf).ToArray()
-        );
-        Assert.Contains(
-            expectedSubstring: "p1 forward=1",
-            actualString: lines[0]
-        );
-        Assert.Contains(
-            expectedSubstring: "hash=0x0000000000000001",
-            actualString: lines[0]
-        );
-        Assert.Contains(
-            expectedSubstring: "p1 forward=0",
-            actualString: lines[1]
-        );
-        Assert.Contains(
-            expectedSubstring: "hash=0x0000000000000003",
-            actualString: lines[1]
-        );
-    }
-    [Fact]
-    public void DivergenceTick_PrintsEvenWithoutAnEdge() {
-        var lines = Walk(divergedAt: 4);
+        public void Record(bool secondSeat, bool grant = false) {
+            Assert.True(m_tape.TryBeginRecording("input", out var reason), reason);
+            var channels = m_fixture.Server.Population.Channels;
+            for (var index = 0; index < 5; index++) {
+                var tick = m_fixture.Server.NextInputTick;
+                var image = channels.RoleOrdinals.Intent(moveAdvance: index < 2 ? FixedQ4816.One : FixedQ4816.Zero,
+                    moveStrafe: FixedQ4816.Zero);
+                m_transport.SubmitIntent(Fixtures.Input(m_fixture.Server, Principal.Seat(0), 0, image, tick, m_transport));
+                if (secondSeat && index >= 1) {
+                    image = channels.RoleOrdinals.Intent(moveAdvance: FixedQ4816.Zero, moveStrafe: FixedQ4816.FromDouble(-0.5));
+                    m_transport.SubmitIntent(Fixtures.Input(m_fixture.Server, Principal.Seat(1), 1, image, tick, m_transport));
+                }
+                if (grant && index == 3) {
+                    m_transport.SubmitGrant(new(Principal.Seat(1), WorldCapability.Drive, GrantSubject.Body(0), false), Principal.Console);
+                }
+                m_fixture.Step();
+                m_tape.NoteTick();
+            }
+            var stopped = m_tape.StopRecording();
+            Assert.True(stopped.Verdict!.Passing, stopped.Verdict.Describe());
+            m_loaded = WorldReplayInspector.Load(m_tape.PathFor("input"));
+        }
 
-        Assert.Contains(
-            collection: lines,
-            filter: line => ((TickOf(line: line) == 4) && line.Contains(value: "DIVERGED"))
-        );
-        Assert.DoesNotContain(
-            collection: Walk(),
-            filter: line => (TickOf(line: line) == 4)
-        );
-    }
-    [Fact]
-    public void Range_ClampsThePrintedTicksButNotTheEdgeBaseline() {
-        // The walk still starts at tick 0, so the fall at tick 2 is measured against the rise at 0 even though 0 is
-        // outside the printed range; `to` past the tape clamps rather than refusing.
-        var lines = Walk(
-            from: 2,
-            to: 99
-        );
+        public string[] Inspect(bool all = false, int from = 0) {
+            var inspector = new WorldReplayInspector(profiles: m_fixture.Server.Profiles, engines: [],
+                machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
+            return inspector.Inspect("input", m_loaded, from, 99, all, poses: false)
+                .Where(line => line.StartsWith("[replay.inspect: tick ", StringComparison.Ordinal)).ToArray();
+        }
 
-        Assert.Equal(
-            expected: [2],
-            actual: lines.Select(selector: TickOf).ToArray()
-        );
-        Assert.Contains(
-            expectedSubstring: "p1 forward=0",
-            actualString: lines[0]
-        );
+        public void Dispose() { m_fixture.Dispose(); m_directory.Dispose(); }
     }
 }

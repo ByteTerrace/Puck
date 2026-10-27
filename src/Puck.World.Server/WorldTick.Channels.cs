@@ -269,7 +269,7 @@ public sealed partial class WorldTick {
     //     received" shape, not a second refusal channel. An ordinal accepted through the POOLED branch alone marks
     //     m_untrustedAcceptedMask, regardless of the delta's own value — a cancelling pair of contributors must
     //     still read back as "the pool was reached," never as "nothing happened" (body.channels' ceiling report).
-    private void StageContribution(int bodyIndex, Principal principal, in IntentSubmission submission) {
+    private void StageContribution(int bodyIndex, Principal principal, in WorldAcceptedInput submission) {
         if (Host.Body(bodyIndex) is not { } body) { return; }
         var channels = body.Channels;
         var isConsoleOrSeat = (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat);

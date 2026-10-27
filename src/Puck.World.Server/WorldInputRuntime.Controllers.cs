@@ -110,7 +110,8 @@ public sealed partial class WorldInputRuntime {
         producer.Reconcile(input.Revision, input.Epoch, input.Mapping, input.Image, input.Sources);
         var origin = owner.Controller!.Value;
         var activationSequence = origin.ActivationSequence;
-        foreach (var state in input.Sources) {
+        var continuingOnly = input.Epoch > 1 && input.LastSwitch.Tick == tick;
+        foreach (var state in continuingOnly ? ReadOnlySpan<WorldInputSourceState>.Empty : input.Sources) {
             var contract = state.Source;
             var declaration = Catalog.Channels[contract.Channel];
             var raw = !observedChannels.TryGetOrdinal(declaration.Name, out var address) ? 0 :
@@ -121,7 +122,7 @@ public sealed partial class WorldInputRuntime {
         owner.Controller = origin with { ActivationSequence = activationSequence, ObservationTick = tick };
         if (producer.CaptureLost) { Reset(owner.Principal); reason = "input.capacity: synthetic snapshot exceeds the event allowance"; return false; }
         principal = owner.Principal;
-        batch = producer.PublishBorrowed(tick, image.SourceRay);
+        batch = producer.PublishBorrowed(tick, continuingOnly ? input.Image.SourceRay : image.SourceRay);
         reason = string.Empty;
         return true;
     }

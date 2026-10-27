@@ -81,6 +81,7 @@ public sealed class InputOwnerTests {
         WorldInputSource[] sources = [new(0, channel, WorldInputContributionKind.Level, "key:hold")];
         var owner = fixture.Server.Input.Admit(Principal.Seat(0), 0, sources);
         Assert.True(fixture.Server.Input.TrySetSeatState(Principal.Seat(0), "focus", "b", 0, out var reason), reason);
+        fixture.Step();
         var producer = new WorldInputProducer(catalog, owner.Mapping, sources, 128, owner.Revision, owner.Epoch);
         var tick = fixture.Server.Input.Interval.Tick;
         Assert.True(producer.Observe(0, FixedQ4816.One.Value, tick, default, 1));

@@ -72,11 +72,13 @@ public sealed class ReplayArmingLawTests {
         var channels = new ChannelValues();
 
         channels[0] = Puck.Maths.FixedQ4816.One;
-        harness.Transport.SubmitIntent(submission: new IntentSubmission(
-            EntityIndex: -1,
-            Intent: new PlayerIntent(Channels: channels, SourceRay: null),
-            Principal: observation!.Session,
-            Tick: server.NextInputTick
+        harness.Transport.SubmitIntent(submission: Fixtures.Input(
+            server: server,
+            link: harness.Transport,
+            body: -1,
+            image: new PlayerIntent(Channels: channels, SourceRay: null),
+            actor: observation!.Session,
+            tick: server.NextInputTick
         ));
         harness.Steps(count: 3);
         Assert.True(condition: server.IsLiveSession(principal: observation.Session));
@@ -109,15 +111,17 @@ public sealed class ReplayArmingLawTests {
             Row: new WorldStateRow(Kind: CellKind.Int, Name: CellName.Parse(candidate: "armed"))
         ));
         harness.Steps(count: 1);
-        harness.Transport.SubmitIntent(submission: new IntentSubmission(
-            EntityIndex: 0,
-            Intent: harness.Channels.RoleOrdinals.Intent(
+        harness.Transport.SubmitIntent(submission: Fixtures.Input(
+            server: harness.Fixture.Server,
+            link: harness.Transport,
+            body: 0,
+            image: harness.Channels.RoleOrdinals.Intent(
                 moveAdvance: Puck.Maths.FixedQ4816.One,
                 moveStrafe: Puck.Maths.FixedQ4816.Zero,
                 turn: Puck.Maths.FixedQ4816.Zero
             ),
-            Principal: Principal.Seat(slot: 0),
-            Tick: harness.Fixture.Server.NextInputTick
+            actor: Principal.Seat(slot: 0),
+            tick: harness.Fixture.Server.NextInputTick
         ));
         Assert.True(condition: harness.Tape.TryBeginRecording(name: "open-tick", refusal: out var refusal), userMessage: refusal);
         harness.StepWithoutInput();

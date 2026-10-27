@@ -424,19 +424,12 @@ public sealed partial class WorldGrants {
 
         var entry = m_sessions[submission.Principal.Index];
 
-        var image = submission.Intent;
-        WorldInputOwner? owner = null;
-        if (submission.Input is { } batch) {
-            if (!Host.Input.TryAdmit(submission.Principal, batch, out var reason, -1)) {
-                Host.Output.Narrate(channel: "input.refused", text: reason);
-                return false;
-            }
-            _ = Host.Input.TryGet(submission.Principal, out owner);
-            image = owner!.Image;
-        } else if (Host.Input.TryGet(submission.Principal, out _)) {
-            Host.Output.Narrate(channel: "input.refused", text: "input.owner: an admitted session must submit its current epoch and source image");
+        if (!Host.Input.TryAdmit(submission.Principal, submission.Input, out var reason, -1)) {
+            Host.Output.Narrate(channel: "input.refused", text: reason);
             return false;
         }
+        _ = Host.Input.TryGet(submission.Principal, out var owner);
+        var image = owner!.Image;
 
         entry.Input = image;
 
@@ -455,8 +448,8 @@ public sealed partial class WorldGrants {
             entry.PressedRay = image.SourceRay;
         }
 
-        if (owner is not null && submission.Input is { } accepted) {
-            foreach (var inputEvent in accepted.Events.Span) {
+        {
+            foreach (var inputEvent in submission.Input.Events.Span) {
                 if (inputEvent.Kind != WorldInputEventKind.Press) { continue; }
                 var address = owner.Mapping.Address(inputEvent.Channel);
                 if (address < 0) { continue; }

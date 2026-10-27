@@ -103,6 +103,12 @@ public sealed class InputControllerLawTests {
         Assert.True(fixture.Server.Input.TryPublishSnapshot(actor, 0, "guest", second, tick, out var sameSession, out batch, out reason), reason);
         Assert.Equal(session, sameSession);
         Assert.True(fixture.Server.Input.TryAdmit(session, batch, out reason), reason);
+        Assert.False(controller.TryHeld(secondLogical, out _));
+        Assert.Empty(batch.Events.ToArray());
+        fixture.Step();
+        tick = fixture.Server.Input.Interval.Tick;
+        Assert.True(fixture.Server.Input.TryPublishSnapshot(actor, 0, "guest", second, tick, out sameSession, out batch, out reason), reason);
+        Assert.True(fixture.Server.Input.TryAdmit(session, batch, out reason), reason);
         Assert.True(controller.TryHeld(secondLogical, out _));
         Assert.False(controller.TryHeld(firstLogical, out _));
     }

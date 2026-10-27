@@ -209,14 +209,15 @@ public sealed class HandheldAttachLawTests {
     private static long HandheldHeldCell(WorldFixture fixture) => fixture.Row(name: HandheldRow).Cells!.Single().Value.Raw;
     private static void SubmitChannel(WorldFixture fixture, Principal actor, int ordinal, FixedQ4816 value) => fixture.Server.ApplyIntentSubmission(
         body: fixture.Server.Body(index: actor.Index)!,
-        submission: new IntentSubmission(
-            Tick: 0UL,
-            EntityIndex: actor.Index,
-            Intent: default(PlayerIntent).WithChannel(
+        submission: Fixtures.Input(
+            server: fixture.Server,
+            tick: fixture.Server.Input.Interval.Tick,
+            body: actor.Index,
+            image: default(PlayerIntent).WithChannel(
                 ordinal: ordinal,
                 value: value
             ),
-            Principal: actor
+            actor: actor
         )
     );
 

@@ -765,11 +765,12 @@ public sealed partial class FederationTransferLawTests {
             ordinal: 0,
             value: FixedQ4816.One
         );
-        var submission = new IntentSubmission(
-            Tick: 1,
-            EntityIndex: bodyIndex,
-            Intent: heldForward,
-            Principal: principal
+        var submission = Fixtures.Input(
+            server: fixture.Server,
+            tick: fixture.Server.NextInputTick,
+            body: bodyIndex,
+            image: heldForward,
+            actor: principal
         );
 
         // One sparse network update must mean "stick remains held", not "one destination-tick impulse".
@@ -911,6 +912,7 @@ public sealed partial class FederationTransferLawTests {
         );
 
         var submission = new IntentSubmission(
+            Input: default,
             Tick: 1,
             EntityIndex: 0,
             Intent: default(PlayerIntent).WithChannel(
@@ -1023,11 +1025,12 @@ public sealed partial class FederationTransferLawTests {
             Principal: principal,
             Seconds: 1f
         ));
-        var neutral = new IntentSubmission(
-            Tick: 1,
-            EntityIndex: bodyIndex,
-            Intent: default,
-            Principal: principal
+        var neutral = Fixtures.Input(
+            server: fixture.Server,
+            tick: fixture.Server.NextInputTick,
+            body: bodyIndex,
+            image: default,
+            actor: principal
         );
 
         fixture.Server.PublishFederatedIntent(

@@ -62,11 +62,13 @@ public sealed class CrossingReplayTravellerLawTests {
         observeTick: observeTick,
         profiles: live.Profiles
     );
-    private static void Submit(WorldInstance row, int entityIndex) => ((LoopbackTransport)row.Link).SubmitIntent(submission: new IntentSubmission(
-        Tick: row.Server.NextInputTick,
-        EntityIndex: entityIndex,
-        Intent: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One),
-        Principal: Principal.Seat(slot: 0)
+    private static void Submit(WorldInstance row, int entityIndex) => ((LoopbackTransport)row.Link).SubmitIntent(submission: Fixtures.Input(
+        server: row.Server,
+        link: row.Link,
+        tick: row.Server.NextInputTick,
+        body: entityIndex,
+        image: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One),
+        actor: Principal.Seat(slot: 0)
     ));
 
     [Fact]

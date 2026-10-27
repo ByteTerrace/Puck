@@ -82,14 +82,15 @@ public sealed class ChannelWorldRuleFactLawTests {
         // The discriminating write: the seat's own drained submission sets the portal channel to fully-pressed.
         fixture.Server.ApplyIntentSubmission(
             body: body,
-            submission: new IntentSubmission(
-                Tick: 0UL,
-                EntityIndex: actor.Index,
-                Intent: default(PlayerIntent).WithChannel(
+            submission: Fixtures.Input(
+                server: fixture.Server,
+                tick: fixture.Server.Input.Interval.Tick,
+                body: actor.Index,
+                image: default(PlayerIntent).WithChannel(
                     ordinal: portalAddress,
                     value: FixedQ4816.One
                 ),
-                Principal: actor
+                actor: actor
             )
         );
         fixture.Step();

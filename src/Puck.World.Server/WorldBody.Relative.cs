@@ -16,6 +16,20 @@ public sealed partial class WorldBody {
     /// <summary>Reads the step's scalar projection. Relative values round once with conserved fractional residue.</summary>
     public FixedQ4816 ReadChannelScalar(int ordinal) => m_channelReadScalar[ordinal];
 
+    // Several ordered packets may reach one simulation interval. Levels take the latest value; relative
+    // displacement accumulates until Advance consumes it. The later contribution fold replaces this derived sum.
+    internal PlayerIntent MergeSubmittedRelative(PlayerIntent incoming) {
+        if (!m_hasSubmittedIntent) { return incoming; }
+        var remaining = m_channels.RelativeMask;
+        while (remaining != 0) {
+            var ordinal = BitOperations.TrailingZeroCount(remaining);
+            remaining &= remaining - 1;
+            var sum = (Int128)m_submittedIntent.Channels.Relative(ordinal).Value + incoming.Channels.Relative(ordinal).Value;
+            incoming = incoming.WithRelative(ordinal, FixedQ3232.FromRawBits(long.CreateSaturating(sum)));
+        }
+        return incoming;
+    }
+
     private void SetChannelTable(WorldChannelTable? channels) {
         var next = (channels ?? WorldChannelTable.Empty);
 

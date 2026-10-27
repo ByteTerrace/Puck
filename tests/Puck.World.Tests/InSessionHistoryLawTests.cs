@@ -226,11 +226,13 @@ public sealed class InSessionHistoryLawTests {
             var axis = FixedQ4816FromTick(tick: tick);
 
             foreach (var harness in new[] { traveled, direct }) {
-                harness.Transport.SubmitIntent(submission: new IntentSubmission(
-                    EntityIndex: 0,
-                    Intent: harness.Channels.RoleOrdinals.Intent(moveAdvance: axis),
-                    Principal: Principal.Seat(slot: 0),
-                    Tick: harness.Fixture.Server.NextInputTick
+                harness.Transport.SubmitIntent(submission: Fixtures.Input(
+                    server: harness.Fixture.Server,
+                    link: harness.Transport,
+                    body: 0,
+                    image: harness.Channels.RoleOrdinals.Intent(moveAdvance: axis),
+                    actor: Principal.Seat(slot: 0),
+                    tick: harness.Fixture.Server.NextInputTick
                 ));
                 harness.StepWithoutInput();
             }
@@ -506,11 +508,13 @@ public sealed class InSessionHistoryLawTests {
         for (var tick = 0; (tick < 120); tick++) {
             var keyframes = harness.History.Status().Counters.KeyframesCaptured;
 
-            harness.Transport.SubmitIntent(submission: new IntentSubmission(
-                EntityIndex: 0,
-                Intent: harness.Channels.RoleOrdinals.Intent(moveAdvance: FixedQ4816FromTick(tick: tick)),
-                Principal: Principal.Seat(slot: 0),
-                Tick: harness.Fixture.Server.NextInputTick
+            harness.Transport.SubmitIntent(submission: Fixtures.Input(
+                server: harness.Fixture.Server,
+                link: harness.Transport,
+                body: 0,
+                image: harness.Channels.RoleOrdinals.Intent(moveAdvance: FixedQ4816FromTick(tick: tick)),
+                actor: Principal.Seat(slot: 0),
+                tick: harness.Fixture.Server.NextInputTick
             ));
             harness.Fixture.Step();
 

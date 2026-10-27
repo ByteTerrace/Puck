@@ -214,6 +214,16 @@ on exact-identity admission. Remote routes retain endpoint/definition seeds and
 reconnect lazily through QUIC. Empty authorities with outgoing routes are not reaped.
 Explicit destination stop unbinds incoming routes; later admission can rebind them.
 Replacing a local arm releases its held-input lease and forbids further publication.
+Federated input queues packets in order on both sides of the stream. The receiver
+admits their timed batches once, then republishes only accepted held levels;
+relative displacement is consumed once and several packets in one interval sum
+before motion. Sender queues have a 1,024-packet ceiling; receiver queues also
+respect the world's per-step event allowance. Overflow records a capture reset,
+and disconnect cancels rather than manufacturing a scoring release. The accepted
+hold and pending packets share one bounded checkpoint/replay leaf and the input
+hash. Socket lease ids stay local. A validated captured federation continuation
+resumes its body across restore; other remote humans retain ordinary parking.
+New attachments cancel the restored episode before accepting fresh input.
 Traveler observations use `ObserveTraveler` over the original authenticated QUIC
 entry, not the final route's endpoint label. Local destinations need no listener.
 Each hop validates its own source-scoped credential and reduces the shared 64-hop

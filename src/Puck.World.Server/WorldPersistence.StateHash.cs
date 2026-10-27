@@ -11,6 +11,7 @@ public sealed partial class WorldPersistence {
             case WorldStateHashComponent.Input:
                 Host.Input.AppendStateHash(ref hash);
                 Host.Tick.AppendRoutedInputHash(ref hash);
+                Host.Tick.AppendFederatedInputHash(ref hash);
                 break;
             case WorldStateHashComponent.Arena:
                 hash.Add(value: Host.Arena.ComputeHash());

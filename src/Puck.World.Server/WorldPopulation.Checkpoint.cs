@@ -221,15 +221,16 @@ public sealed partial class WorldPopulation {
     /// <see cref="Entry.IsRemoteHuman"/> and not already <see cref="Entry.Parked"/> is parked as of
     /// <paramref name="tick"/>, exactly as <see cref="ApplyPeerDisconnected"/> parks a live disconnect — the
     /// connection that occupied it does not survive a restore (<see cref="WorldOutputHub"/>/<see cref="WorldPeerHost"/>
-    /// state is excluded from the checkpoint), so a captured non-parked remote human is always stale: nothing will
-    /// ever again feed a fresh federated intent into that slot under this process's own tables. Only the BODY parks;
+    /// state is excluded from the checkpoint). A validated captured federation continuation instead preserves its
+    /// logical input episode; its socket lease is not restored, and a new attachment resets that episode. Only the BODY parks;
     /// the generation's grant rows are released by <c>WorldServer.RestoreCheckpoint</c> right after the grant table
     /// restores, on the same argument the disconnect arm applies.</summary>
     /// <param name="checkpoint">The captured state to restore.</param>
     /// <param name="defaults">The player defaults a restored profiled body's identity resolves colors against.</param>
     /// <param name="tick">The restored current tick — the basis a freshly parked <see cref="Entry.ParkedUntilTick"/>
     /// is stamped from.</param>
-    public void Restore(WorldPopulationCheckpoint checkpoint, WorldPlayerDefaults defaults, ulong tick) {
+    /// <param name="continuingFederatedBodies">Validated body indices whose captured federation input resumes.</param>
+    public void Restore(WorldPopulationCheckpoint checkpoint, WorldPlayerDefaults defaults, ulong tick, IReadOnlySet<int>? continuingFederatedBodies = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
@@ -394,7 +395,8 @@ public sealed partial class WorldPopulation {
 
             if (
                 entry.IsRemoteHuman &&
-                !entry.Parked
+                !entry.Parked &&
+                !(continuingFederatedBodies?.Contains(captured.Index) ?? false)
             ) {
                 if (m_reconnectGraceTicks.IsNever) {
                     entry.Parked = true;

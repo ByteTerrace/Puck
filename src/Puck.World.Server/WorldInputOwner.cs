@@ -245,6 +245,19 @@ public sealed partial class WorldInputOwner {
             }
         }
         if (folded != batch.Image) { reason = "input.image: complete source fold differs from final image"; return false; }
+        if (Epoch > 1 && LastSwitch.Tick == admission.Tick) {
+            if (!batch.Events.IsEmpty || batch.Image != Image) {
+                reason = "input.barrier: fresh input for the new epoch starts on the following tick";
+                return false;
+            }
+            for (var index = 0; index < m_sources.Length; index++) {
+                if (m_sourceScratch[index].RawValue != m_sources[index].RawValue ||
+                    m_sourceScratch[index].Activation != m_sources[index].Activation) {
+                    reason = "input.barrier: source continuation cannot change during the switch tick";
+                    return false;
+                }
+            }
+        }
         var eventImage = Image;
         m_holds.CopyTo(m_holdScratch, 0);
         m_crossingHeld.CopyTo(m_crossingScratch, 0);

@@ -25,7 +25,7 @@ public sealed class WorldInputHoldRuntime {
         Reconfigure(settings: settings);
     }
 
-    private bool IsParticipantOwnSubmission(in IntentSubmission submission) =>
+    private bool IsParticipantOwnSubmission(in WorldAcceptedInput submission) =>
         ((submission.EntityIndex >= 0) && (submission.EntityIndex < m_participants.Length) &&
          (((submission.Principal.Kind == PrincipalKind.Seat) && (submission.Principal.Index == submission.EntityIndex)) ||
           ((submission.Principal.Kind == PrincipalKind.Peer) && (submission.Principal.Index == submission.EntityIndex))));
@@ -149,7 +149,7 @@ public sealed class WorldInputHoldRuntime {
 
         return result.ToString();
     }
-    public void ObserveMeasurement(in IntentSubmission submission) {
+    public void ObserveMeasurement(in WorldAcceptedInput submission) {
         if (!IsParticipantOwnSubmission(submission: in submission)) {
             return;
         }

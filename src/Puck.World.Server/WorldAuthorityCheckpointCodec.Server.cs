@@ -434,6 +434,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: WriteIntentSubmission
         );
         writer.WriteArray(items: section.RoutedInputs, writeItem: WriteRoutedInput);
+        writer.WriteArray(section.FederatedInputs, WorldWireLeaves.WriteFederatedInput);
         writer.WriteArray(
             items: section.Pending,
             writeItem: WritePendingOp
@@ -566,6 +567,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
         var routedInputs = reader.ReadArray(field: "server routed input", readItem: ReadRoutedInput, maximum: MaxCollectionCount);
+        var federatedInputs = reader.ReadArray("server federated input", WorldWireLeaves.ReadFederatedInput, WorldBodiesLimits.CapacityCeiling);
         var pending = reader.ReadArray(
             field: "server pending",
             readItem: static (ref WireReader r) => ReadPendingOp(reader: ref r),
@@ -726,6 +728,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             DefinitionJson: definitionJson,
             Intents: intents,
             RoutedInputs: routedInputs,
+            FederatedInputs: federatedInputs,
             InteractionGateHeld: interactionGateHeld,
             Journal: journal,
             LastCompletedEngineTicks: lastCompletedEngineTicks,

@@ -15,15 +15,19 @@ public sealed partial class WorldReplayInspector {
     private static string CaptureInputs(WorldServer server, Dictionary<Principal, InputCursor> cursors) {
         var text = new StringBuilder();
         var catalog = server.Population.InputCatalog;
-        foreach (var publication in server.Input.Publish().Span) {
-            if (!server.Input.TryGet(publication.Owner, out var input)) { continue; }
+        for (var ownerIndex = 0; ownerIndex < server.Input.OwnerCount; ownerIndex++) {
+            var principal = server.Input.OwnerPrincipal(ownerIndex);
+            if (!server.Input.TryGet(principal, out var input)) { continue; }
             var owner = input!;
-            cursors.TryGetValue(publication.Owner, out var cursor);
+            cursors.TryGetValue(principal, out var cursor);
             var changed = cursor.Revision != owner.Revision || cursor.Epoch != owner.Epoch;
             if (changed) {
                 Separate();
-                text.Append("input ").Append(publication.Owner.Describe()).Append(" mode='").Append(owner.Mapping.Name)
+                text.Append("input ").Append(principal.Describe()).Append(" mode='").Append(owner.Mapping.Name)
                     .Append("' revision=").Append(owner.Revision).Append(" epoch=").Append(owner.Epoch);
+                if (server.Input.ControllerOrigin(principal) is { } controller) {
+                    text.Append(" actor='").Append(controller.Actor.Describe()).Append("' source='").Append(controller.Source).Append('\'');
+                }
                 for (var index = 0; index < owner.SwitchCount; index++) {
                     var boundary = owner.SwitchRecord(index);
                     if (cursor.Revision == owner.Revision && boundary.Epoch <= cursor.Epoch) { continue; }
@@ -56,7 +60,7 @@ public sealed partial class WorldReplayInspector {
                 var address = owner.Mapping.Address(channel);
                 if (catalog.Channels[channel].Shape != ChannelShape.Relative || owner.Image.Channels.Relative(address).Value == 0) { continue; }
                 Separate();
-                text.Append(publication.Owner.Describe()).Append(' ').Append(catalog.Channels[channel].Name)
+                text.Append(principal.Describe()).Append(' ').Append(catalog.Channels[channel].Name)
                     .Append(" displacement=").Append(owner.Mapping.Channels.DescribeValue(owner.Image, address));
             }
             // Profile recompilation preserves event identities. A fresh attachment can restart the stream
@@ -66,7 +70,7 @@ public sealed partial class WorldReplayInspector {
                 var record = owner.Record(index);
                 if (record.Id <= lastEvent) { continue; }
                 Separate();
-                text.Append(publication.Owner.Describe()).Append(' ').Append(catalog.Channels[record.Event.Channel].Name)
+                text.Append(principal.Describe()).Append(' ').Append(catalog.Channels[record.Event.Channel].Name)
                     .Append(' ').Append(record.Event.Kind).Append("#").Append(record.Id).Append(" epoch=").Append(record.Epoch)
                     .Append(" capture=").Append(ExactTime(record.Time(WorldInputJudgement.Capture)))
                     .Append(" admittedTick=").Append(record.Admission.Tick).Append(" activation=").Append(record.Event.Activation);
@@ -76,7 +80,7 @@ public sealed partial class WorldReplayInspector {
                 } else { text.Append(" raw=").Append(record.Event.RawValue); }
                 lastEvent = record.Id;
             }
-            cursors[publication.Owner] = new(owner.Revision, owner.Epoch, lastEvent);
+            cursors[principal] = new(owner.Revision, owner.Epoch, lastEvent);
         }
         return text.ToString();
 

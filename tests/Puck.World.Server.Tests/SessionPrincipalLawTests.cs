@@ -253,12 +253,13 @@ public sealed class SessionPrincipalLawTests {
             var channels = new ChannelValues();
 
             channels[0] = FixedQ4816.One;
-            fixture.Server.EnqueueIntent(submission: new IntentSubmission(
-                EntityIndex: body.Index,
-                Intent: new PlayerIntent(Channels: channels),
-                Principal: session,
-                Tick: fixture.Server.NextInputTick
-            ));
+            fixture.Server.EnqueueIntent(submission: Fixtures.Input(
+                server: fixture.Server,
+                body: embody ? body.Index : -1,
+                image: new PlayerIntent(Channels: channels),
+                actor: session,
+                tick: fixture.Server.NextInputTick
+            ) with { EntityIndex = body.Index });
             fixture.Step();
 
             return fixture.Server.Body(index: body.Index)!.EngagedIntent[0];

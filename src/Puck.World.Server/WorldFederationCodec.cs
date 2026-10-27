@@ -642,12 +642,7 @@ public static partial class WorldFederationCodec {
             intent: submission.Intent,
             writer: writer
         );
-        WorldWireCodec.WriteIntent(
-            intent: submission.HeldChannels,
-            writer: writer
-        );
-        writer.WriteBoolean(submission.Input.HasValue);
-        if (submission.Input is { } input && !WorldWireCodec.TryWriteInputBatch(writer, input)) { throw new ArgumentException("invalid timed input batch", nameof(submission)); }
+        if (!WorldWireCodec.TryWriteInputBatch(writer, submission.Input)) { throw new ArgumentException("invalid timed input batch", nameof(submission)); }
 
         return writer.ToArray();
     }
@@ -1230,17 +1225,15 @@ public static partial class WorldFederationCodec {
         var tick = reader.ReadUInt64();
         var measured = reader.ReadInt32();
         var intent = WorldWireCodec.ReadIntent(reader: ref reader);
-        var held = WorldWireCodec.ReadIntent(reader: ref reader);
-        var input = reader.ReadBoolean() ? WorldWireCodec.ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue) : (WorldInputBatch?)null;
+        var input = WorldWireCodec.ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue);
 
         submission = new IntentSubmission(
             tick,
             -1,
             intent,
             Principal.Console,
-            held,
-            measured,
-            input
+            input,
+            measured
         );
 
         return Finish(

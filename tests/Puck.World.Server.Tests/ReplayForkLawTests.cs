@@ -1,5 +1,6 @@
 using Puck.Testing;
 using Puck.Commands;
+using Puck.Networking;
 using Xunit;
 
 using Puck.Maths;
@@ -38,14 +39,16 @@ public sealed class ReplayForkLawTests {
 
     private static readonly WorldChannelTable Channels = WorldChannelTable.Compile(channels: Fixtures.BuildDocument().Channels);
 
-    private static IntentSubmission Forward(ulong tick, FixedQ4816 forward, FixedQ4816 strafe = default) => new(
-        Tick: tick,
-        EntityIndex: 0,
-        Intent: Channels.RoleOrdinals.Intent(
+    private static IntentSubmission Forward(WorldServer server, IServerLink link, ulong tick, FixedQ4816 forward, FixedQ4816 strafe = default) => Fixtures.Input(
+        server: server,
+        link: link,
+        tick: tick,
+        body: 0,
+        image: Channels.RoleOrdinals.Intent(
             moveAdvance: forward,
             moveStrafe: strafe
         ),
-        Principal: Principal.Seat(slot: 0)
+        actor: Principal.Seat(slot: 0)
     );
     private static WorldReplaySnapshot ReadTape(WorldReplayTape tape, string name) {
         using var stream = File.OpenRead(path: tape.PathFor(name: name));
@@ -216,7 +219,7 @@ public sealed class ReplayForkLawTests {
         );
 
         for (var tick = 0UL; (tick < 3UL); tick++) {
-            transport.SubmitIntent(submission: Forward(
+            transport.SubmitIntent(submission: Forward(server: fixture.Server, link: transport,
                 tick: (tick + 1UL),
                 forward: FixedQ4816.One
             ));
@@ -263,7 +266,7 @@ public sealed class ReplayForkLawTests {
 
         // THE CONTROL for the mask: the same live intent the drive dropped now steers the body, so the next tick's hash
         // leaves the parent's trajectory.
-        transport.SubmitIntent(submission: Forward(
+        transport.SubmitIntent(submission: Forward(server: fixture.Server, link: transport,
             tick: 2UL,
             forward: -FixedQ4816.One,
             strafe: FixedQ4816.One
@@ -401,7 +404,7 @@ public sealed class ReplayForkLawTests {
                 );
             }
 
-            transport.SubmitIntent(submission: Forward(
+            transport.SubmitIntent(submission: Forward(server: fixture.Server, link: transport,
                 tick: (tick + 1UL),
                 forward: ((tick < 3UL)
                 ? FixedQ4816.One
@@ -452,7 +455,7 @@ public sealed class ReplayForkLawTests {
         while (tape.Mode == WorldReplayMode.Replaying) {
             // THE MASK: a live seat intent submitted on every driven tick must never fold in — the recorded intents
             // are the only intents, so the live hashes below still equal the parent's.
-            transport.SubmitIntent(submission: Forward(
+            transport.SubmitIntent(submission: Forward(server: fixture.Server, link: transport,
                 tick: ((ulong)(stepped + 1)),
                 forward: -FixedQ4816.One,
                 strafe: FixedQ4816.One
@@ -491,7 +494,7 @@ public sealed class ReplayForkLawTests {
 
         // Two live ticks under the child, steering differently from the parent's tick 2.
         for (var tick = 2UL; (tick < 4UL); tick++) {
-            transport.SubmitIntent(submission: Forward(
+            transport.SubmitIntent(submission: Forward(server: fixture.Server, link: transport,
                 tick: (tick + 1UL),
                 forward: FixedQ4816.Zero,
                 strafe: FixedQ4816.One
@@ -541,10 +544,14 @@ public sealed class ReplayForkLawTests {
                 expected: expected.Authority.Select(selector: static entry => entry.GetType().Name),
                 actual: actual.Authority.Select(selector: static entry => entry.GetType().Name)
             );
-            Assert.Equal(
-                expected: expected.Intents,
-                actual: actual.Intents
-            );
+            Assert.Equal(expected.Intents.Count, actual.Intents.Count);
+            for (var index = 0; index < expected.Intents.Count; index++) {
+                var left = new WireWriter();
+                var right = new WireWriter();
+                Assert.True(WorldWireCodec.TryWriteIntentSubmission(left, expected.Intents[index]));
+                Assert.True(WorldWireCodec.TryWriteIntentSubmission(right, actual.Intents[index]));
+                Assert.Equal(left.ToArray(), right.ToArray());
+            }
             Assert.Equal(
                 expected: parentTape.RecordedHashes[tick],
                 actual: childTape.RecordedHashes[tick]

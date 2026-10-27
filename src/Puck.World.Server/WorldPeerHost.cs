@@ -1653,9 +1653,8 @@ public sealed class WorldPeerHost : IDisposable {
         } finally {
             m_server.ReleaseFederatedIntents(leaseId: leaseId);
 
-            // A stream may now terminate at an older authority in a forwarding chain. Publish an explicit neutral
-            // image through that same chain so the final writer never retains a held stick after its originating
-            // connection vanished.
+            // A stream may now terminate at an older authority in a forwarding chain. Forward capture loss through
+            // that same chain; disconnect cancels the episode and must not fabricate a scoring release.
             foreach (var pair in touched) {
                 if (!forwardRelease) {
                     break;
@@ -1670,7 +1669,10 @@ public sealed class WorldPeerHost : IDisposable {
                     continue;
                 }
 
-                var released = pair.Value.Submission with { Intent = default, HeldChannels = default };
+                var released = pair.Value.Submission with {
+                    Intent = default,
+                    Input = pair.Value.Submission.Input with { CaptureLost = true, Image = default, Contributions = default, Events = default },
+                };
                 var mobility = pair.Key;
 
                 if (!forwarder.TryForwardIntent(

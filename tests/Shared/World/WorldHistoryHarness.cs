@@ -98,15 +98,17 @@ internal sealed class WorldHistoryHarness : IDisposable {
         var next = Fixture.Server.NextInputTick;
 
         for (var slot = 0; (slot < m_seats); slot++) {
-            Transport.SubmitIntent(submission: new IntentSubmission(
-                EntityIndex: slot,
-                Intent: Channels.RoleOrdinals.Intent(
+            Transport.SubmitIntent(submission: Fixtures.Input(
+                server: Fixture.Server,
+                link: Transport,
+                body: slot,
+                image: Channels.RoleOrdinals.Intent(
                     moveAdvance: NextAxis(),
                     moveStrafe: NextAxis(),
                     turn: NextAxis()
                 ),
-                Principal: Principal.Seat(slot: slot),
-                Tick: next
+                actor: Principal.Seat(slot: slot),
+                tick: next
             ));
         }
 

@@ -200,6 +200,13 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
             kind: CellKind.Fixed
         )
     );
+    RuleFact IWorldFacts.Read(WorldInputOperand operand) => Record(
+        operand: nameof(WorldInputOperand),
+        fact: RuleFact.Finite(
+            value: 0L,
+            kind: operand.ValueKind
+        )
+    );
     RuleFact IWorldFacts.Read(PointerOperand operand) => Record(
         operand: nameof(PointerOperand),
         fact: RuleFact.Finite(

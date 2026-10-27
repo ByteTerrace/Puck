@@ -61,14 +61,16 @@ public sealed class CrossingReplayLawTests {
         // One master step: the host's transfer drain, each row's own seat input through its own loopback, the step.
         public void Step(HostRow drivenRow, FixedQ4816 forward) {
             Host.DrainPendingTransfers();
-            ((LoopbackTransport)drivenRow.Instance.Link).SubmitIntent(submission: new IntentSubmission(
-                Tick: drivenRow.Server.NextInputTick,
-                EntityIndex: 0,
-                Intent: Channels.RoleOrdinals.Intent(
+            ((LoopbackTransport)drivenRow.Instance.Link).SubmitIntent(submission: Fixtures.Input(
+                server: drivenRow.Server,
+                link: drivenRow.Instance.Link,
+                tick: drivenRow.Server.NextInputTick,
+                body: 0,
+                image: Channels.RoleOrdinals.Intent(
                     moveAdvance: forward,
                     moveStrafe: FixedQ4816.Zero
                 ),
-                Principal: Principal.Seat(slot: 0)
+                actor: Principal.Seat(slot: 0)
             ));
             Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
         }
@@ -337,6 +339,7 @@ public sealed class CrossingReplayLawTests {
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-crossing-replay-federated-");
         using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 1));
         var server = fixture.Server;
+        var transport = new LoopbackTransport(server);
         var tape = new WorldReplayTape(
             addonHostFactory: static (_, _) => new NullAddonHost(),
             engines: [],
@@ -344,7 +347,7 @@ public sealed class CrossingReplayLawTests {
             machineHostFactory: Fixtures.MachineHostFactory,
             profiles: server.Profiles,
             stateRoot: new WorldStateRoot(path: stateDirectory.RootPath),
-            transport: new LoopbackTransport(server: server)
+            transport: transport
         );
         var name = $"federated-{Guid.NewGuid():N}";
         const int Slot = WorldBodiesLimits.LocalSeatCount;
@@ -420,14 +423,16 @@ public sealed class CrossingReplayLawTests {
         for (var tick = 0; (tick < 10); tick++) {
             server.PublishFederatedIntent(
                 leaseId: 1,
-                submission: new IntentSubmission(
-                    Tick: server.NextInputTick,
-                    EntityIndex: Slot,
-                    Intent: Channels.RoleOrdinals.Intent(
+                submission: Fixtures.Input(
+                    server: server,
+                    link: transport,
+                    tick: server.NextInputTick,
+                    body: Slot,
+                    image: Channels.RoleOrdinals.Intent(
                         moveAdvance: FixedQ4816.One,
                         moveStrafe: FixedQ4816.Zero
                     ),
-                    Principal: principal
+                    actor: principal
                 )
             );
             fixture.Step();

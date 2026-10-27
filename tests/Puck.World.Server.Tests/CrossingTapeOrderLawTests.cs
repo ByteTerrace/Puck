@@ -109,14 +109,16 @@ public sealed partial class CrossingTapeOrderLawTests {
         }
         public void Step() {
             Host.DrainPendingTransfers();
-            ((LoopbackTransport)Source.Instance.Link).SubmitIntent(submission: new IntentSubmission(
-                Tick: Source.Server.NextInputTick,
-                EntityIndex: 1,
-                Intent: Channels.RoleOrdinals.Intent(
+            ((LoopbackTransport)Source.Instance.Link).SubmitIntent(submission: Fixtures.Input(
+                server: Source.Server,
+                link: Source.Instance.Link,
+                tick: Source.Server.NextInputTick,
+                body: 1,
+                image: Channels.RoleOrdinals.Intent(
                     moveAdvance: FixedQ4816.One,
                     moveStrafe: FixedQ4816.Zero
                 ),
-                Principal: Principal.Seat(slot: 1)
+                actor: Principal.Seat(slot: 1)
             ));
             Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
         }

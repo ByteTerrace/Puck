@@ -1,4 +1,3 @@
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -22,7 +21,7 @@ public sealed partial class WorldServer {
     /// federated traveler drives this authority's body with, which reaches it through no loopback. It hears the held
     /// set at the start of every step while any image is held and once more as the set empties, on the stepping thread
     /// under the authority gate. The replay tape attaches here while it records.</summary>
-    public Action<IReadOnlyList<(int Index, IntentSubmission Submission)>>? FederatedIntentTap { get; set; }
+    public Action<IReadOnlyList<WorldFederatedIntentCheckpoint>>? FederatedIntentTap { get; set; }
     /// <summary>Gets the durable crossing log this authority writes ahead through, or <see langword="null"/> when it
     /// keeps no crossing beyond its own process.</summary>
     public IWorldCrossingLog? CrossingLog => m_crossingLog;
@@ -62,7 +61,7 @@ public sealed partial class WorldServer {
     /// recorded step held.</summary>
     /// <param name="held">The images, each with the body index it drives.</param>
     /// <exception cref="ArgumentNullException"><paramref name="held"/> is <see langword="null"/>.</exception>
-    public void ReplaceFederatedIntents(IReadOnlyList<(int Index, IntentSubmission Submission)> held) {
+    public void ReplaceFederatedIntents(IReadOnlyList<WorldFederatedIntentCheckpoint> held) {
         ArgumentNullException.ThrowIfNull(argument: held);
         m_tick.ReplaceFederatedIntents(held: held);
     }

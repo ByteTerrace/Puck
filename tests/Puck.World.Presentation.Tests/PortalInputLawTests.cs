@@ -111,14 +111,15 @@ public sealed partial class PortalInputLawTests {
         var channels = new ChannelValues();
 
         channels[0] = FixedQ4816.FromDouble(value: press);
-        fixture.Server.EnqueueIntent(submission: new IntentSubmission(
-            EntityIndex: -1,
-            Intent: new PlayerIntent(
+        fixture.Server.EnqueueIntent(submission: Fixtures.Input(
+            server: fixture.Server,
+            body: -1,
+            image: new PlayerIntent(
                 Channels: channels,
                 SourceRay: ray
             ),
-            Principal: session,
-            Tick: fixture.Server.NextInputTick
+            actor: session,
+            tick: fixture.Server.NextInputTick
         ));
     }
     private static (long On, FixedQ4816 Press) Read(WorldFixture fixture) => (

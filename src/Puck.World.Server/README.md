@@ -2462,8 +2462,12 @@ ordinary checkpoint capture continues to refuse pumped guests.
 Each authority tapes its own half of a crossing: a source its departure
 (`Transfer`, naming the target authority and the slots that left), a
 destination its arrival (`Arrival`, landed again through the shadow's own
-escrow) and the federated device images its forwarded and federated travelers
-drove it with (`FederatedIntents`). `replay.record` arms a companion tape on
+escrow) and the ordered timed input its forwarded and federated travelers
+drove it with (`FederatedIntents`). That leaf carries queued packets and the
+accepted held baseline; replay never re-executes a packet's events on later held
+ticks. Pending input and holds also participate in the checkpoint and input
+hash. Socket leases are transport-local; replacing an attachment cancels the
+old episode. `replay.record` arms a companion tape on
 every other row of the host (`WorldReplayTape.Companions.cs`,
 `WorldInstanceHost.CrossingTapes.cs`) and writes the set in one file;
 verification re-drives the tape and every companion a crossing involves and

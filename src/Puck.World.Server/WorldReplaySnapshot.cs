@@ -181,7 +181,7 @@ public abstract record WorldReplayEntry {
     /// set empties; a re-drive replaces the shadow's held images with exactly this set at the same position, and the
     /// shadow's own step applies them where the live step did.</summary>
     /// <param name="Held">Each held image with the body index it drives.</param>
-    internal sealed record FederatedIntents(IReadOnlyList<(int Index, IntentSubmission Submission)> Held) : WorldReplayEntry;
+    internal sealed record FederatedIntents(IReadOnlyList<WorldFederatedIntentCheckpoint> Held) : WorldReplayEntry;
     /// <summary>One authored <c>adjacencies</c> row's delivered neighbour refresh, observed on this tick. The one
     /// piece of federation ingress the tape carries: whether a neighbour delivered is decided by the transport, not
     /// by the document or the population, so <c>Server.WorldEventFeed</c>'s link family and the
@@ -917,12 +917,7 @@ public sealed partial class WorldReplaySnapshot {
                 return new WorldReplayEntry.FederatedIntents(Held: reader.ReadArray(
                     field: "federated intents",
                     maximum: WorldBodiesLimits.CapacityCeiling,
-                    readItem: static (ref WireReader r) => {
-                        var index = r.ReadInt32();
-                        var submission = WorldWireCodec.ReadIntentSubmission(reader: ref r);
-
-                        return (index, submission);
-                    }
+                    readItem: WorldWireLeaves.ReadFederatedInput
                 ));
             case 16 or 17 or 18:
                 return ReadSessionEntry(
@@ -1631,15 +1626,7 @@ public sealed partial class WorldReplaySnapshot {
                 writer.WriteByte(value: 20);
                 writer.WriteArray(
                     items: federated.Held,
-                    writeItem: static (w, held) => {
-                        w.WriteInt32(value: held.Index);
-                        if (!WorldWireCodec.TryWriteIntentSubmission(
-                            submission: in held.Submission,
-                            writer: w
-                        )) {
-                            throw new WorldReplayCodecException(message: $"no .puckreplay wire value for {nameof(PrincipalKind)}.{held.Submission.Principal.Kind} — a federated image is driven by a peer principal.");
-                        }
-                    }
+                    writeItem: WorldWireLeaves.WriteFederatedInput
                 );
 
                 break;
