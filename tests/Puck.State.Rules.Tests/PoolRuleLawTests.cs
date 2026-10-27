@@ -5,6 +5,54 @@ namespace Puck.State.Rules.Tests;
 /// <summary>CONTRACT UNDER TEST: pool effects keep lexical handles in distinct registers, use generated typed
 /// field rows in dataflow and pricing, and participate in the enclosing firing's atomic journal scope.</summary>
 public sealed class PoolRuleLawTests {
+    [InlineData("claim")]
+    [InlineData("each")]
+    [InlineData("pair")]
+    [Theory]
+    public void PoolBodiesPreserveStrictRemoveSemantics(string scope) {
+        var section = Section() with {
+            Rows = [
+            new StateRow(Name: Name(value: "counter"), Kind: CellKind.Int,
+                Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 0L))]),
+            new StateRow(Name: Name(value: "bag"), Kind: CellKind.Int, Capacity: 2, Cells: []),
+        ],
+            PairPools = [new StatePairPool(Name: Name(value: "pairs"), Record: Name(value: "piece"),
+            LeftPool: Name(value: "pieces"), RightPool: Name(value: "pieces"), MaxLive: 2)],
+        };
+        var catalog = StateCatalog.Compile(section: section);
+        var arena = new StateArena(catalog: catalog, section: section, time: ArenaTime.Origin);
+        var context = new RuleCompileContext(section: section, catalog: catalog, tables: null, patterns: null,
+            generators: null, simulationRateHz: 60, vocabulary: RuleVocabulary.Core);
+        var body = new ActionEffect[] { new ActionEffect.RemoveStateCell(Key: "missing", State: "bag") };
+        ActionEffect nested = scope switch {
+            "each" => new ActionEffect.ForEachPool(Pool: "pieces", Binding: Name(value: "piece"), Effects: body),
+            "pair" => new ActionEffect.Claim(Pool: "pieces", Binding: Name(value: "left"), Effects: [
+                new ActionEffect.Claim(Pool: "pieces", Binding: Name(value: "right"), Effects: [
+                    new ActionEffect.ClaimPair(Pool: "pairs", Binding: Name(value: "pair"), Left: Name(value: "left"),
+                        Right: Name(value: "right"), Effects: body),
+                ]),
+            ]),
+            _ => new ActionEffect.Claim(Pool: "pieces", Binding: Name(value: "piece"), Effects: body),
+        };
+        var rule = RuleCompiler.Compile(context: context, rule: new Rule(Name: Name(value: "strict"), Effects: [
+            new ActionEffect.Transaction(Effects: [new ActionEffect.SetState(State: "counter", Value: 8L),
+                nested],
+                OnFailure: [new ActionEffect.SetState(State: "counter", Value: 9L)]),
+        ]));
+
+        if (scope == "each") {
+            Assert.True(condition: arena.TryClaim(poolOrdinal: catalog.Pools[0].Ordinal, handle: out _, reason: out _));
+        }
+        var evaluator = new RuleEvaluator(host: new ArenaEffectHost(arena: arena));
+
+        _ = evaluator.Evaluate(rules: [rule], latch: new RuleLatch(), stepTicks: 1UL);
+
+        Assert.Equal(expected: 9L, actual: arena.ToRows().Single(predicate: row => (row.Name == "counter")).Cells![0].Value.Raw);
+        Assert.Equal(expected: ((scope == "each") ? 1 : 0), actual: arena.SnapshotPool(poolOrdinal: catalog.Pools[0].Ordinal).Count);
+        Assert.Empty(collection: arena.SnapshotPool(poolOrdinal: catalog.Pools[1].Ordinal));
+        Assert.Single(collection: evaluator.Diagnostics());
+    }
+
     private static CellName Name(string value) => CellName.Parse(candidate: value);
     private static StateSection Section() => new(
         Spaces: [new StateSpace(name: Name(value: "pose"), model: "test", revision: "1", dimensions: 16)],

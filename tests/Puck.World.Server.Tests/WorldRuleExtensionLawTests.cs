@@ -15,6 +15,46 @@ public sealed class WorldRuleExtensionLawTests {
     // A rule count large enough to saturate the work budget and to exercise per-rule key resolution at scale.
     private const int ManyRules = 128;
 
+    [InlineData("missing")]
+    [InlineData("$cell:pointer:p")]
+    [InlineData("$cell:pointer:absent")]
+    [Theory]
+    public void AStrictAbsentRemoveRewindsEarlierWritesAndRunsOnFailure(string key) {
+        var definition = Document(state: [
+            Slot(name: "counter", value: 0L),
+            Keyed(capacity: 2, cells: [], name: "bag"),
+            new WorldStateRow(Name: Name(value: "pointer"), Kind: CellKind.Text,
+                Cells: [new StateCell(Key: Name(value: "p"), Value: CellValue.Text(value: "uninterned")),
+                    new StateCell(Key: Name(value: "absent"), Value: CellValue.Text(value: string.Empty))]),
+        ], rules: [new WorldRule(Name: Name(value: "remove"), Effects: [new ActionEffect.Transaction(
+            Effects: [new ActionEffect.SetState(State: "counter", Value: 8L), new ActionEffect.RemoveStateCell(Key: key, State: "bag")],
+            OnFailure: [new ActionEffect.SetState(State: "counter", Value: 9L)])])]);
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        fixture.Step();
+
+        Assert.Equal(expected: 9L, actual: Value(fixture: fixture, row: "counter"));
+        Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AStrictUnresolvedWriteRewindsEarlierWrites(bool schedule) {
+        var definition = Document(state: [Slot(name: "counter", value: 0L), Keyed(capacity: 2, cells: [], name: "bag"),
+            new WorldStateRow(Name: Name(value: "pointer"), Kind: CellKind.Text,
+                Cells: [new StateCell(Key: Name(value: "p"), Value: CellValue.Text(value: "uninterned"))])],
+            rules: [new WorldRule(Name: Name(value: "write"), Effects: [new ActionEffect.Transaction(Effects: [
+                new ActionEffect.SetState(State: "counter", Value: 8L),
+                (schedule ? new ActionEffect.ScheduleState(DelaySeconds: 1m, Key: "$cell:pointer:p", State: "bag")
+                    : new ActionEffect.SetState(State: "bag", Key: "$cell:pointer:p", Value: 1L)),
+            ], OnFailure: [new ActionEffect.SetState(State: "counter", Value: 9L)])])]);
+        using var fixture = Fixtures.FreshServer(definition: definition);
+
+        fixture.Step();
+
+        Assert.Equal(expected: 9L, actual: Value(fixture: fixture, row: "counter"));
+        Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]

@@ -1,4 +1,6 @@
 using Puck.Commands;
+using Puck.Assets.Documents;
+using Puck.State.Rules;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -15,6 +17,117 @@ public sealed class WorldVerdictDoorLawTests {
     private const string Flag = "flag";
     private const string Verdict = "answer";
     private const string Witness = "answerSeen";
+
+    [Fact]
+    public void ObserveWitnessWritesStampTheirEvidenceAndFreezeAfterFailure() {
+        var source = new WorldStateRow(Name: CellName.Parse(candidate: "truth"), Kind: CellKind.Bool,
+            Domain: new StateDomain.CellsOf("map"),
+            Cells: [new StateCell(Key: CellName.Parse(candidate: "0"), Value: CellValue.Bool(value: true))]);
+        var definition = new WorldDefinition(StateRaw: new WorldStateSection(
+            Lattices: [new LatticeTopology.Grid("map", new DocumentVector3(x: 0f, y: 0f, z: 0f), 1f, 1, 1)],
+            World: [source, source with { Name = CellName.Parse(candidate: "visible") },
+                source with { Name = CellName.Parse(candidate: Witness),
+                    Cells = [new StateCell(Key: CellName.Parse(candidate: "0"), Value: CellValue.Bool(value: false))],
+                    Knowledge = new StateKnowledge(Source: "truth", Mask: "visible"), Witness = CellName.Parse(candidate: Verdict) },
+                new WorldStateRow(Name: CellName.Parse(candidate: Verdict), Kind: CellKind.Int,
+                    Cells: [new StateCell(Key: CellName.Parse(candidate: "ok"), Value: CellValue.Int(value: 0L))],
+                    Verdict: new WorldVerdictTrait(Gate: "observed truth", Status: CellName.Parse(candidate: "ok"))),
+            ])) with {
+            Rules = [new WorldRule(Name: CellName.Parse(candidate: "observe"),
+                Effects: [new ActionEffect.TransformState(Transform: new StateTransform.Observe(Row: Witness))])],
+        };
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason), userMessage: reason);
+        var arena = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
+        var host = new WorldArenaHost(arena: arena, sites: WorldDrawSites.Of(catalog: arena.Catalog), generators: null,
+            ticksPerSecond: 30, dynamics: null, documentSeed: 0UL, instanceIdentity: "observe",
+            verdicts: WorldVerdictStamp.From(definition: definition, catalog: arena.Catalog));
+        var effects = WorldFactsCompiler.CompileAll(definition: definition)[0].Effects;
+        var evaluator = new RuleEvaluator(host: host);
+
+        Assert.True(condition: arena.Catalog.TryResolve(lane: StateLane.Document, name: CellName.Parse(candidate: Verdict), handle: out var verdict));
+        Assert.True(condition: arena.Catalog.TryResolve(lane: StateLane.Document, name: CellName.Parse(candidate: Witness), handle: out var witness));
+        Assert.True(condition: arena.Catalog.TryResolve(lane: StateLane.Document, name: source.Name, handle: out var truth));
+        host.Advance(engineTick: 1UL, tick: 1UL);
+
+        Assert.Equal(expected: RuleOutcome.Fired, actual: evaluator.FireEffects(applied: out _, effects: effects, ruleName: "observe", stepTicks: 1UL, tick: 1UL));
+        Assert.Equal(expected: 1L, actual: arena.Read(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey)).AsInt);
+        Assert.True(condition: arena.TryWrite(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: CellName.Parse(candidate: "ok")), operand: WorldVerdict.Fail, write: StateWriteKind.Set, reason: out _));
+        Assert.True(condition: arena.TryWriteBoardCell(rowOrdinal: truth.Ordinal, cell: 0, value: 0L, write: StateWriteKind.Set, reason: out _));
+        host.Advance(engineTick: 2UL, tick: 2UL);
+
+        Assert.Equal(expected: RuleOutcome.Fired, actual: evaluator.FireEffects(applied: out _, effects: effects, ruleName: "observe", stepTicks: 1UL, tick: 2UL));
+        Assert.True(condition: arena.TryReadBoardCell(rowOrdinal: witness.Ordinal, cell: 0, value: out var seen));
+        Assert.Equal(actual: seen, expected: 1L);
+        Assert.Equal(expected: 1L, actual: arena.ObservationAt(rowOrdinal: witness.Ordinal, position: 0)?.Tick);
+        Assert.Equal(expected: 1L, actual: arena.Read(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey)).AsInt);
+        Assert.Empty(collection: evaluator.Diagnostics());
+    }
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 2)]
+    [Theory]
+    public void WitnessTransformsStampFreezeAndRewindAsOneFiring(bool liveEnd, int mode) {
+        // mode: ordinary firing, settled failure, stamp refusal after admission.
+        var domain = new StateDomain.KeysOf(Row: CellName.Parse(candidate: "tokens"), Ordered: true);
+        var definition = new WorldDefinition().WithWorldState(rows: [
+            new WorldStateRow(Name: CellName.Parse(candidate: "tokens"), Kind: CellKind.Int,
+                Cells: [new StateCell(Key: CellName.Parse(candidate: "a"), Value: CellValue.Int(value: 1L))]),
+            new WorldStateRow(Name: CellName.Parse(candidate: "from"), Kind: CellKind.Bool, Domain: domain,
+                Cells: [new StateCell(Key: CellName.Parse(candidate: "a"), Value: CellValue.Bool(value: true))]),
+            new WorldStateRow(Name: CellName.Parse(candidate: Witness), Kind: CellKind.Bool, Domain: domain,
+                Capacity: 2, Cells: [], Witness: CellName.Parse(candidate: Verdict)),
+            new WorldStateRow(Name: CellName.Parse(candidate: Verdict), Kind: CellKind.Int, Capacity: 2,
+                Cells: ((mode == 1)
+                    ? [new StateCell(Key: CellName.Parse(candidate: "ok"), Value: CellValue.Int(value: WorldVerdict.Fail)),
+                        new StateCell(Key: WorldVerdict.FiredTickKey, Value: CellValue.Int(value: 1L))]
+                    : [new StateCell(Key: CellName.Parse(candidate: "ok"), Value: CellValue.Int(value: 0L))]),
+                Verdict: new WorldVerdictTrait(Gate: "the token moved", Status: CellName.Parse(candidate: "ok"))),
+        ]) with {
+            Rules = [new WorldRule(Name: CellName.Parse(candidate: "transfer"), Zones: [Witness], Effects: [
+                new ActionEffect.SetState(State: "tokens", Key: "a", Value: 8L),
+                new ActionEffect.TransformState(Transform: new StateTransform.Transfer(From: "from",
+                    To: (liveEnd ? "$zones[(tokens[a] - 8)]" : Witness), Selector: ZoneSelector.First)),
+            ])],
+        };
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: definition, reason: out var reason, neighbours: null), userMessage: reason);
+        var rules = WorldFactsCompiler.CompileAll(definition: definition);
+        var arena = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
+
+        Assert.True(condition: arena.Catalog.TryResolve(lane: StateLane.Document, name: CellName.Parse(candidate: Verdict), handle: out var verdict));
+        if (mode == 2) {
+            Assert.True(condition: arena.TryMint(rowOrdinal: verdict.Ordinal, name: CellName.Parse(candidate: "occupied"),
+                value: CellValue.Int(value: 0L), key: out _, reason: out _));
+        }
+        var host = new WorldArenaHost(arena: arena, sites: WorldDrawSites.Of(catalog: arena.Catalog), generators: null,
+            ticksPerSecond: 30, dynamics: null, documentSeed: 0UL, instanceIdentity: "effect-door",
+            verdicts: WorldVerdictStamp.From(definition: definition, catalog: arena.Catalog));
+
+        host.Advance(engineTick: 5UL, tick: 5UL);
+        var evaluator = new RuleEvaluator(host: host);
+        var before = arena.ComputeHash();
+
+        var outcome = evaluator.FireEffects(effects: rules[0].Effects, ruleName: "transfer", tick: 5UL, stepTicks: 1UL, applied: out var moved);
+
+        Assert.Equal(actual: outcome, expected: ((mode == 2) ? RuleOutcome.Refused : RuleOutcome.Fired));
+        var rows = arena.ToRows();
+
+        Assert.Equal(expected: ((mode == 0) ? 1 : 0), actual: (rows.Single(predicate: row => (row.Name == Witness)).Cells?.Count ?? 0));
+        Assert.Equal(expected: ((mode == 0) ? 0 : 1), actual: (rows.Single(predicate: row => (row.Name == "from")).Cells?.Count ?? 0));
+        Assert.Equal(expected: ((mode == 0) ? 5L : ((mode == 1) ? 1L : (long?)null)),
+            actual: StateRows.FindCell(cells: rows.Single(predicate: row => (row.Name == Verdict)).Cells, key: WorldVerdict.FiredTickKey)?.Value.Raw);
+        if (mode == 2) {
+            Assert.False(condition: moved);
+            Assert.Equal(expected: before, actual: arena.ComputeHash());
+            Assert.Single(collection: evaluator.Diagnostics());
+        } else {
+            Assert.Empty(collection: evaluator.Diagnostics());
+        }
+    }
 
     private static WorldDefinition Document(long passWhen, long failWhen) => (Fixtures.BuildDocument().WithWorldState(rows: [
         new WorldStateRow(
