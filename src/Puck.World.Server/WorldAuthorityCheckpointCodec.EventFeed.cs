@@ -48,6 +48,14 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static byte[] EncodeEventFeed(WorldEventFeedCheckpoint section) {
         var writer = new WireWriter();
 
+        writer.WriteBoolean(value: (section.CollisionPolicy is not null));
+        if (section.CollisionPolicy is { } policy) {
+            writer.WriteInt32(value: policy.CandidateBudget);
+            writer.WriteInt32(value: policy.MaxPairsPerBody);
+            writer.WriteInt32(value: policy.BeginBudget);
+        }
+        writer.WriteArray(items: section.CollisionPending, writeItem: static (w, index) => w.WriteInt32(value: index));
+
         writer.WriteArray(
             items: section.Edges,
             writeItem: WriteEventEdge
@@ -92,6 +100,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     private static bool TryDecodeEventFeed(byte[] bytes, out string reason, out WorldEventFeedCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
+        var policy = (reader.ReadBoolean() ? new WorldCollisionEvents(CandidateBudget: reader.ReadInt32(),
+            MaxPairsPerBody: reader.ReadInt32(), BeginBudget: reader.ReadInt32()) : null);
+        var pending = reader.ReadArray(field: "event feed discovery work", maximum: WorldBodiesLimits.CapacityCeiling,
+            readItem: static (ref WireReader r) => r.ReadInt32());
         var edges = reader.ReadArray(
             field: "event feed edges",
             readItem: static (ref WireReader r) => ReadEventEdge(reader: ref r),
@@ -166,6 +178,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldEventFeedCheckpoint(
+            CollisionPending: pending,
+            CollisionPolicy: policy,
             Edges: edges,
             Links: links,
             Overlapping: overlapping,

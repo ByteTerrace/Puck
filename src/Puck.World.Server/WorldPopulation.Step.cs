@@ -727,9 +727,9 @@ public sealed partial class WorldPopulation {
     // The tick's one gravity solve. Gathered in ENTITY ORDER so the solver's input order is the population's own
     // stable order: an approximate solver's answer depends on the order its tree is built in, so activation history
     // must not reach it.
-    private void SolveGravity() {
+    private bool SolveGravity() {
         if (m_gravityField is not { IsActive: true } gravity) {
-            return;
+            return false;
         }
 
         gravity.RefreshAttachedAreas(population: this);
@@ -755,6 +755,16 @@ public sealed partial class WorldPopulation {
         }
 
         gravity.Solve(targets: m_gravityTargets);
+        var woke = false;
+        // The field's contact revision says nothing about solved acceleration. Reuse its already-required,
+        // entity-ordered target pass; a static/default-gravity world pays no sleeping-body scan.
+        foreach (var target in m_gravityTargets) {
+            if (!m_sleepGravity.TryGetValue(key: target.EntityIndex, value: out var previous)) { continue; }
+            FixedVector3? current = (gravity.TryAcceleration(entityIndex: target.EntityIndex, acceleration: out var acceleration) ? acceleration : null);
+
+            if (current != previous) { WakeBodyIsland(index: target.EntityIndex); woke = true; }
+        }
+        return woke;
     }
     private static void BindCadence(ulong period, int ordinal, int count, ref ulong boundPeriod, ref ulong elapsed, ref ulong remaining) {
         if (boundPeriod == period) {
@@ -825,7 +835,8 @@ public sealed partial class WorldPopulation {
             }
         }
 
-        SolveGravity();
+        // A solved-field change can wake a member after the first snapshot, before integration begins.
+        if (SolveGravity()) { stepBodies = PrepareBodyStep(); }
         FreezeFlockImage();
         m_navigation.BeginStep();
 

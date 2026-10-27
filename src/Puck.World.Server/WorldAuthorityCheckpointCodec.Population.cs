@@ -53,7 +53,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry, bool includeAppearance) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
+        writer.WriteInt32(value: entry.SelectedKit);
+        writer.WriteFixed(value: entry.Scale);
         if (includeAppearance) {
+            writer.WriteInt32(value: entry.SelectedLook);
             writer.WriteVector(value: entry.BodyColor);
             writer.WriteByte(value: entry.CatalogRig);
             // The arrival turn a seat's view carries across crossings: presentation, which the simulation never reads.
@@ -162,6 +165,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static WorldPopulationEntryCheckpoint ReadPopulationEntry(ref WireReader reader) {
         var index = reader.ReadInt32();
         var kitIndex = reader.ReadByte();
+        var selectedKit = reader.ReadInt32();
+        var scale = reader.ReadFixed();
+        var selectedLook = reader.ReadInt32();
         var bodyColor = reader.ReadFiniteVector(field: "population entry body color");
         var catalogRig = reader.ReadByte();
         var travelTurn = WorldWireLeaves.ReadTravelTurn(
@@ -307,6 +313,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             ProducerWeaveFrequency: producerWeaveFrequency,
             Profile: profile,
             Residue: residue,
+            Scale: scale,
+            SelectedKit: selectedKit,
+            SelectedLook: selectedLook,
             SpawnPosition: spawnPosition,
             SpawnYaw: spawnYaw,
             TravelTurn: travelTurn,
@@ -356,6 +365,15 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: section.Entries,
             writeItem: WritePopulationEntry
         );
+        writer.WriteArray(items: section.EventBodies, writeItem: static (w, index) => w.WriteInt32(value: index));
+        writer.WriteArray(items: section.SleepingSupports, writeItem: static (w, edge) => {
+            w.WriteInt32(value: edge.Support);
+            w.WriteInt32(value: edge.Body);
+        });
+        writer.WriteArray(items: section.SleepingGravity, writeItem: static (w, row) => {
+            w.WriteInt32(value: row.Body);
+            w.WriteOptional(value: row.Acceleration, writeValue: static (v, acceleration) => v.WriteFixedVector(value: acceleration));
+        });
 
         return writer.ToArray();
     }
@@ -420,6 +438,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => ReadPopulationEntry(reader: ref r),
             maximum: MaxCollectionCount
         );
+        var eventBodies = reader.ReadArray(field: "population event bodies", maximum: WorldBodiesLimits.CapacityCeiling,
+            readItem: static (ref WireReader r) => r.ReadInt32());
+        var supports = reader.ReadArray(field: "population sleeping supports", maximum: MaxCollectionCount,
+            readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadInt32()));
+        var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.CapacityCeiling,
+            readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -430,11 +454,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldPopulationCheckpoint(
             Entries: entries,
+            EventBodies: eventBodies,
             Generations: generations,
             Revision: revision,
             SeatKit: seatKit,
             SharedNavigation: shared,
-            SimulatedCount: simulatedCount
+            SimulatedCount: simulatedCount,
+            SleepingGravity: gravity,
+            SleepingSupports: supports
         );
         reason = string.Empty;
 

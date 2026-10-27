@@ -1026,7 +1026,7 @@ public sealed partial class WorldPopulation {
                                 left: left,
                                 right: right
                             );
-                            if (left.IsRigid && right.IsRigid) { LinkRigidBodies(left: leftIndex, right: rightIndex); }
+                            LinkRigidBodies(left: leftIndex, right: rightIndex);
                             rigidResolvedThisPass++;
                         } else {
                             var (leftShare, rightShare) = SplitPairCorrection(

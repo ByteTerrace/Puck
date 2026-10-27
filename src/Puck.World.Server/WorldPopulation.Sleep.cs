@@ -4,13 +4,17 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     // Derived work sets. Slot order is the authority order, independent of insertion or wake order. They are
-    // rebuilt by ordinary activation during restore. Only canonical frozen-component membership is checkpointed;
-    // work lists, spatial bounds and adjacency objects are derived.
+    // rebuilt during restore. Canonical frozen-component membership, external support/gravity observations and
+    // pending event eligibility are continuation state; spatial bounds and internal rigid adjacency are derived.
     private readonly BodyWorkSet m_awakeBodies;
     private readonly BodyWorkSet m_sleepingBodies;
     private readonly BodyWorkSet m_eventBodies;
 
     private readonly Dictionary<int, SortedSet<int>> m_rigidNeighbours = [];
+    // Non-rigid supports keep integrating. Their changes wake dependent rigid components without parking the
+    // support itself. These edges, unlike adjacency within one rigid island, cannot be reconstructed from roots.
+    private readonly Dictionary<int, SortedSet<int>> m_nonRigidSupports = [];
+    private readonly Dictionary<int, FixedVector3?> m_sleepGravity = [];
     private readonly List<int> m_island = [];
     private readonly HashSet<int> m_islandVisited = [];
 
@@ -40,7 +44,13 @@ public sealed partial class WorldPopulation {
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); }
     }
     private void WakeBodyIsland(int index) {
-        if (m_wakingIsland || !m_sleepingBodies.Contains(item: index)) { return; }
+        if (m_wakingIsland) { return; }
+        if (!m_sleepingBodies.Contains(item: index)) {
+            if (m_nonRigidSupports.Remove(key: index, value: out var loads)) {
+                foreach (var load in loads) { WakeBodyIsland(index: load); }
+            }
+            return;
+        }
         m_wakingIsland = true;
         m_island.Clear();
         m_islandVisited.Clear();
@@ -58,6 +68,7 @@ public sealed partial class WorldPopulation {
         m_island.Sort();
         foreach (var member in m_island) {
             if (m_sleepingBodies.Remove(item: member)) {
+                m_sleepGravity.Remove(key: member);
                 m_sleepIndexDirty = true;
                 if (m_entries[member] is { Active: true, Body: { } body }) {
                     body.WakeRigidIsland();
@@ -71,6 +82,14 @@ public sealed partial class WorldPopulation {
         m_wakingIsland = false;
     }
     private void LinkRigidBodies(int left, int right) {
+        if (!m_entries[left].Body!.IsRigid || !m_entries[right].Body!.IsRigid) {
+            var support = (m_entries[left].Body!.IsRigid ? right : left);
+            var load = ((support == left) ? right : left);
+
+            if (!m_nonRigidSupports.TryGetValue(key: support, value: out var loads)) { m_nonRigidSupports[support] = loads = []; }
+            loads.Add(item: load);
+            return;
+        }
         if (!m_rigidNeighbours.TryGetValue(key: left, value: out var a)) { m_rigidNeighbours[left] = a = []; }
         if (!m_rigidNeighbours.TryGetValue(key: right, value: out var b)) { m_rigidNeighbours[right] = b = []; }
         a.Add(item: right);
@@ -84,6 +103,9 @@ public sealed partial class WorldPopulation {
         m_awakeBodies.CopyTo(array: m_stepBodies);
         foreach (var index in m_awakeBodies) { m_eventBodies.Add(item: index); }
         foreach (var index in m_awakeBodies) { m_rigidNeighbours.Remove(key: index); }
+        foreach (var loads in m_nonRigidSupports.Values) {
+            foreach (var index in m_awakeBodies) { loads.Remove(item: index); }
+        }
         return m_stepBodies.AsSpan(start: 0, length: m_awakeBodies.Count);
     }
     // Freeze a complete resting contact component together. A supported stack cannot freeze above a body that
@@ -120,14 +142,18 @@ public sealed partial class WorldPopulation {
                 m_entries[member].Body!.ParkRigidIsland(contactFieldVersion: m_sleepFieldVersion, rootPlusOne: rootPlusOne);
                 m_awakeBodies.Remove(item: member);
                 m_sleepingBodies.Add(item: member);
+                m_sleepGravity[member] = (((m_gravityField is { } gravity) && gravity.TryAcceleration(acceleration: out var acceleration, entityIndex: member))
+                    ? acceleration : null);
             }
             m_sleepIndexDirty = true;
         }
     }
-    // Only frozen component membership is continuation state. Rebuild the index and an equivalent star graph
-    // from its canonical roots; adjacency within a frozen component matters only when the whole component wakes.
-    private void RestoreSleepingIslands() {
+    // Rebuild the index and an equivalent star graph from canonical roots; adjacency within a frozen component
+    // matters only when the whole component wakes. External supports and discovery work are retained explicitly.
+    private void RestoreSleepingIslands(WorldPopulationCheckpoint checkpoint) {
         m_rigidNeighbours.Clear();
+        m_nonRigidSupports.Clear();
+        m_sleepGravity.Clear();
         m_sleepFieldVersion = ContactFieldVersion;
         var pendingFieldWake = false;
 
@@ -144,9 +170,44 @@ public sealed partial class WorldPopulation {
             m_sleepingBodies.Add(item: index);
         }
         if (pendingFieldWake) { m_sleepFieldVersion = unchecked((ContactFieldVersion - 1UL)); }
+        foreach (var edge in checkpoint.SleepingSupports) { LinkRigidBodies(left: edge.Support, right: edge.Body); }
+        foreach (var row in checkpoint.SleepingGravity) { m_sleepGravity.Add(key: row.Body, value: row.Acceleration); }
+        // Discovery eligibility affects bounded collision admission. Restore the captured work, rather than
+        // treating reconstructed frozen bodies as new changes and charging them against an arriving body's budget.
+        m_eventBodies.Clear();
+        foreach (var index in checkpoint.EventBodies) { m_eventBodies.Add(item: index); }
         m_sleepIndexDirty = true;
     }
+    private (int Support, int Body)[] CaptureSleepingSupports() => [.. m_nonRigidSupports
+        .OrderBy(keySelector: static pair => pair.Key)
+        .SelectMany(selector: pair => pair.Value.Where(predicate: body => m_sleepingBodies.Contains(item: body))
+            .Select(selector: body => (pair.Key, body)))];
 
+    // This is folded separately from body-entry bytes, which deliberately remain the entry codec's exact image.
+    internal void AppendSleepStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)m_eventBodies.Count));
+        foreach (var index in m_eventBodies) { hash.Add(value: index); }
+        hash.Add(value: ((uint)m_sleepingBodies.Count));
+        foreach (var index in m_sleepingBodies) {
+            hash.Add(value: index);
+            var acceleration = m_sleepGravity[index];
+
+            hash.Add(value: ((byte)(acceleration.HasValue ? 1 : 0)));
+            if (acceleration is { } vector) { hash.Add(value: vector.X.Value); hash.Add(value: vector.Y.Value); hash.Add(value: vector.Z.Value); }
+        }
+        var supportCount = 0;
+
+        foreach (var loads in m_nonRigidSupports.Values) {
+            foreach (var load in loads) { if (m_sleepingBodies.Contains(item: load)) { supportCount++; } }
+        }
+        hash.Add(value: supportCount);
+        foreach (var index in m_awakeBodies) {
+            if (!m_nonRigidSupports.TryGetValue(key: index, value: out var loads)) { continue; }
+            foreach (var load in loads) {
+                if (m_sleepingBodies.Contains(item: load)) { hash.Add(value: index); hash.Add(value: load); }
+            }
+        }
+    }
     internal ReadOnlySpan<int> EventBodies() {
         m_eventBodies.CopyTo(array: m_eventBodyImage);
         return m_eventBodyImage.AsSpan(start: 0, length: m_eventBodies.Count);
@@ -249,6 +310,7 @@ public sealed partial class WorldPopulation {
         internal int Count { get; private set; }
         internal int Min => m_indices[0];
 
+        internal void Clear() { Array.Clear(array: m_present); Count = 0; }
         internal bool Contains(int item) => m_present[item];
         internal bool Add(int item) {
             if (m_present[item]) { return false; }

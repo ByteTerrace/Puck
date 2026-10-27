@@ -781,7 +781,7 @@ every active body's `Scale` from that register once a tick after the world
 rules, and at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
 every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
-`WorldPopulation.Restore` rebuilds every body at the constructed default, a
+`WorldPopulation.Restore` reconstructs each body's captured scale and selected kit before its latches, a
 detached-seat/peer transfer restore, and an escrow landing that has loaded a
 traveller's carried registers), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
@@ -1205,6 +1205,12 @@ only an awake body's nearby sleepers enter a dynamic sweep. Extra passes can dis
 impulse propagates. Region occupancy and overlap events retain unchanged sleeping results and reconsider them
 when a body wakes, a region moves or the collision policy changes. Body register synchronization skips unchanged
 register generations and occupancy/configuration revisions.
+Non-rigid solid supports remain awake and retain explicit wake dependencies on their sleeping loads; moving or
+removing one releases the load. A changed solved gravity vector (including participation in an attached area)
+wakes affected islands before integration, independently of the contact-field revision. Checkpoint version 19
+retains these support dependencies and gravity observations, pending event-body work, the collision discovery
+policy and begin-budget work left over. Those decisions affect bounded admission and must continue identically
+after restore; reconstructed frozen bodies do not count as new discoveries.
 `world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the

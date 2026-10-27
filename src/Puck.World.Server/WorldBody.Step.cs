@@ -199,6 +199,7 @@ public sealed partial class WorldBody {
             generatorInvocations?.RemoveRange(index: generatorInvocationCount, count: (generatorInvocations.Count - generatorInvocationCount));
         }
 
+        if ((m_position != m_previousPosition) || (m_orientation != previousOrientationForSleep)) { NotifyPopulationWake(); }
         return engageEdge;
     }
     internal bool ApplyTargetedEffect(int sourceIndex, CompiledBodyInstruction instruction) {

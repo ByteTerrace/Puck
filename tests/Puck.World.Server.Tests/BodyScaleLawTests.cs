@@ -17,8 +17,9 @@ namespace Puck.World.Server.Tests;
 /// register's value, initial or written, survives the document's serialize/deserialize round trip and a checkpoint
 /// restore into <see cref="Server.WorldBody.Scale"/>.</summary>
 public sealed class BodyScaleLawTests {
-    private const double EnvelopeMin = 0.05d;
     private const double EnvelopeMax = 1d;
+    private const double EnvelopeMin = 0.05d;
+
     private static readonly ulong StepWidth = Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: SimulationRateHz);
 
     // The shipped world's own platform/walker/gravity recipe (see ConstantUpLipContactLawTests.PlatformDocument),
@@ -62,11 +63,12 @@ public sealed class BodyScaleLawTests {
             Document: canonical.Document,
             HashRaw: canonical.Hash
         );
+
         return Fixtures.WithBodyScale(
             initial: cellValue,
             source: source with {
-            Simulation = new WorldSimulationDefaults(RateHz: ((int)SimulationRateHz)),
-            GravityRaw = new WorldGravity(
+                Simulation = new WorldSimulationDefaults(RateHz: ((int)SimulationRateHz)),
+                GravityRaw = new WorldGravity(
             Attractors: [],
             GravitationalConstant: 0f,
             SofteningLength: 0.5f,
@@ -77,19 +79,19 @@ public sealed class BodyScaleLawTests {
                 z: 0f
             )
         ),
-            KitRowsRaw = source.Kits.Select(selector: kit => kit with {
-                Motion = kit.Motion with {
-                    Speed = kit.Motion.Speed with { Value = 4f },
-                    Holds = [
-                        kit.Motion.Holds![0] with { Envelope = new WorldHoldEnvelope(SinkSpeed: 40f), Gravity = new WorldHoldGravity(
+                KitRowsRaw = source.Kits.Select(selector: kit => kit with {
+                    Motion = kit.Motion with {
+                        Speed = kit.Motion.Speed with { Value = 4f },
+                        Holds = [
+                            kit.Motion.Holds![0] with { Envelope = new WorldHoldEnvelope(SinkSpeed: 40f), Gravity = new WorldHoldGravity(
                 Fall: 46f,
                 Rise: 28f
             ) },
                     ],
-                },
-            }).ToArray(),
-            CreationsRaw = [creation],
-            PlacementRowsRaw = [new WorldPlacement(
+                    },
+                }).ToArray(),
+                CreationsRaw = [creation],
+                PlacementRowsRaw = [new WorldPlacement(
                 Id: "platform",
                 PrototypeId: creation.Id,
                 Position: Vector3.Zero,
@@ -97,7 +99,7 @@ public sealed class BodyScaleLawTests {
                 Scale: 1f,
                 Solid: new WorldSolid(Margin: 0f)
             )],
-        },
+            },
             minimum: EnvelopeMin,
             maximum: EnvelopeMax
         );
@@ -156,9 +158,8 @@ public sealed class BodyScaleLawTests {
             actual: body.Scale
         );
     }
-    // RestoreCheckpoint rebuilds every WorldBody at the constructed default (WorldPopulationCheckpoint carries no
-    // Scale field of its own — a body's size is its register, restored with the arena), so this proves the catch-up
-    // resync. The register is written away from its initial value, so a restore that reborn it would read one.
+    // Both the synchronized geometry and its register survive restore. The register is written away from its
+    // initial value, so a restore that rebirthed it would change the body's scale on catch-up.
     [Fact]
     public void ScaleRegister_WrittenValue_SurvivesCheckpointRestoreIntoBodyScale() {
         var authored = FixedQ4816.FromDouble(value: 0.15);

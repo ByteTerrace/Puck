@@ -10,6 +10,9 @@ namespace Puck.World.Server;
 public readonly record struct WorldPopulationEntryCheckpoint(
     int Index,
     byte KitIndex,
+    int SelectedKit,
+    int SelectedLook,
+    FixedQ4816 Scale,
     Vector3 BodyColor,
     byte CatalogRig,
     Puck.Maths.FixedQ4816 TravelTurn,

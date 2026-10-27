@@ -501,7 +501,11 @@ no motion. Dynamic-pair support counts toward the hold after the pair solve. A s
 touching or changing any member wakes the component, so moving a lower body releases the stack.
 Sleeping bodies retain a spatial index and leave the integration, broadphase construction and event work sets.
 An awake neighbour queries that index before its sweep. Canonical island roots are checkpointed; the spatial
-index and wake adjacency are rebuilt from those roots. `puck bench world` reports sleeping bodies and integration,
+index and rigid wake adjacency are rebuilt from those roots. Non-rigid supports keep explicit wake dependencies
+on sleeping loads. Solved gravity changes wake affected components before integration, even without a contact-field
+revision. Checkpoints also retain pending event discovery and its last policy: clearing that history would change
+which edges consume a bounded candidate budget. Reconstruct captured scale and effective kit before restoring
+rest latches, so register catch-up does not spuriously wake an unchanged body. `puck bench world` reports sleeping bodies and integration,
 broadphase and event work counts. See
 [Crowd scale policies](#crowd-scale-policies)
 for the authored `collision.bodyContacts` rigid fields, and the

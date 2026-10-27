@@ -147,6 +147,22 @@ public sealed class WorldEventFeed {
     public int CollisionOverlapTests { get; private set; }
     /// <summary>Body/region containment tests performed by this tick's collection.</summary>
     public int RegionBodyTests { get; private set; }
+
+    internal void AppendDiscoveryHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((byte)((m_collisionPolicy is null) ? 0 : 1)));
+        if (m_collisionPolicy is { } policy) {
+            hash.Add(value: policy.CandidateBudget);
+            hash.Add(value: policy.MaxPairsPerBody);
+            hash.Add(value: policy.BeginBudget);
+        }
+        hash.Add(value: m_collisionPending.Count);
+        if (m_collisionPending.Count > 0) {
+            for (var index = 0; (index < m_bodyChanged.Length); index++) {
+                if (m_collisionPending.Contains(item: index)) { hash.Add(value: index); }
+            }
+        }
+    }
+
     /// <summary>Gets this tick's collected edges, in pinned order (seats, then regions, then collisions, then links,
     /// then routes). Valid only between one <see cref="Collect"/> call and the next.</summary>
     public IReadOnlyList<WorldEventEdge> Edges => m_edges;
@@ -163,12 +179,26 @@ public sealed class WorldEventFeed {
             (checkpoint.SeatOccupied is null) ||
             (checkpoint.Overlapping is null) ||
             (checkpoint.RegionOccupancy is null) ||
-            (checkpoint.Links is null)
+            (checkpoint.Links is null) ||
+            (checkpoint.CollisionPending is null)
         ) {
             throw new InvalidOperationException(message: "event feed checkpoint contains a null collection.");
         }
         if (checkpoint.SeatOccupied.Length != m_seatOccupied.Length) {
             throw new InvalidOperationException(message: $"event feed checkpoint carries {checkpoint.SeatOccupied.Length} seat latches; this world requires {m_seatOccupied.Length}.");
+        }
+        var previousPending = -1;
+
+        if ((checkpoint.CollisionPolicy is { } policy) && ((policy.CandidateBudget < 0) || (policy.CandidateBudget > WorldCollisionEvents.MaximumCandidateBudget) ||
+            (policy.MaxPairsPerBody < 0) || (policy.MaxPairsPerBody > WorldCollisionEvents.MaximumPairsPerBody) ||
+            (policy.BeginBudget < 0) || (policy.BeginBudget > WorldCollisionEvents.MaximumBeginBudget))) {
+            throw new InvalidOperationException(message: "event feed checkpoint carries an invalid collision discovery policy.");
+        }
+        foreach (var index in checkpoint.CollisionPending) {
+            if ((index <= previousPending) || (((uint)index) >= ((uint)m_bodyChanged.Length))) {
+                throw new InvalidOperationException(message: "event feed checkpoint carries invalid collision discovery work.");
+            }
+            previousPending = index;
         }
         if (checkpoint.Overlapping.Count > m_maximumTrackedPairs) {
             throw new InvalidOperationException(message: $"event feed checkpoint carries {checkpoint.Overlapping.Count} overlap pairs; this population admits at most {m_maximumTrackedPairs}.");
@@ -825,6 +855,8 @@ public sealed class WorldEventFeed {
     public WorldEventFeedCheckpoint Capture() => new(
         Edges: [.. m_edges],
         PendingRoutes: [.. m_pendingRoutes],
+        CollisionPolicy: m_collisionPolicy,
+        CollisionPending: [.. m_collisionPending.Order()],
         SeatOccupied: [.. m_seatOccupied],
         Overlapping: [.. m_overlapping.OrderBy(keySelector: static pair => pair.A).ThenBy(keySelector: static pair => pair.B)],
         RegionOccupancy: [.. m_regionOccupancy.Select(selector: static pair => (pair.Key, ((bool[])pair.Value.Clone())))],
@@ -998,8 +1030,9 @@ public sealed class WorldEventFeed {
     public void Restore(WorldEventFeedCheckpoint checkpoint) {
         ValidateCheckpoint(checkpoint: checkpoint);
         m_regionFrames.Clear();
-        m_collisionPolicy = null;
+        m_collisionPolicy = checkpoint.CollisionPolicy;
         m_collisionPending.Clear();
+        foreach (var index in checkpoint.CollisionPending) { m_collisionPending.Add(item: index); }
 
         m_edges.Clear();
         m_edges.AddRange(collection: checkpoint.Edges);

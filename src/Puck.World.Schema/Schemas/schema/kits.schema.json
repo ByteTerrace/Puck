@@ -827,7 +827,7 @@
                 "title": "WorldColliderBox"
               },
               {
-                "description": "The finite primitive bounds emitted by a creation, composed into one compound body collider.",
+                "description": "The finite primitives emitted by a creation, composed into one compound body collider. Spheres and ellipsoids retain their exact surfaces; other primitives currently use their local boxes.",
                 "properties": {
                   "$type": {
                     "const": "fromCreation"
