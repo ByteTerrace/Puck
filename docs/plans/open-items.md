@@ -795,7 +795,18 @@ Every package below carries its own check on the programme page; tick it there a
   - A document admits one physical field topology, so a world holds one body of water.
   - The wire carries at most sixteen drive-reach channels, which cost the arena its auto-attack channel; action combat needs more inputs.
   - Reach consensus (Codex and Antigravity) on the three limits before porting the rules onto them.
-  - [ ] Go on a real 19×19 board with all 361 stones, after the limits work below lets every stone draw as itself. `RuleGroupCapacity.MaxPasses` is removed so area scoring's flood can run as many passes as it needs, and `ResolveDynamicContacts` charges `CandidateBudget` (default 32, max 256) only on full 3D box overlap so stones sharing a tray column's X interval cost nothing when separated in Y or Z.
+  - [ ] Go on a real 19×19 board with all 361 stones. The limits work lets every stone draw as itself, `RuleGroupCapacity.MaxPasses` is removed, and the contact sweep prunes on a fixed-point Y/Z grid. Codex and Antigravity converged on the design:
+    1. Replace the 9×9 table in place at (56.5, 30.6) on level 2 and keep (65, 30.6) free. Pitch 0.08 m; the table keeps its height.
+    2. All 361 stones as rigid bodies (181 black, 180 white) on shared geometry, lens radii 0.036/0.010/0.036 m, in single-layer 10×19 trays either side derived from one tray lattice. Go inhabitants become 362 with the cursor.
+    3. The board face, its 19×19 lines and nine star points are one creation, not 333 tile and star placements, on a flat support surface.
+    4. Stones collide as their lens through the generic convex support (the owner's rounded-collider ruling), extended to admit the lens shape for dynamic bodies, not a box.
+    5. Rules keep the state move door: captures before suicide, no suicide, exact simple ko by predecessor-board comparison, two consecutive passes, 7.5 komi.
+    6. Area scoring keeps the existing flood at one pass a tick with `maxPasses(goPoints + 2)`, and publishes its progress.
+    7. The settled-table reading replaces the 76 ray scans with ordinal `goDiff`/`goGap` rows and max reductions, scoped to this table's stones; a carried stone is never quiescent.
+    8. The opponent is a one-ply negamax job with a tactical and positional evaluation (captures, own atari and eyes, endangered groups, third and fourth lines), bounded by work and node counts (start at 8 nodes a step), aiming at a 1 to 3 s reply and at most 5 s beside the other tables; search admission prices each job by the rows it depends on, and every job is repriced after the change.
+    9. Resting body pairs skip the narrowphase; a bulk reset re-seats stones through a deterministic queue (8 bodies a tick to start).
+    10. The camera keeps the tabletop framing; `go-tests.puck` covers settling, captures, suicide refusal, ko, passes ending the game and area scoring at 19×19.
+    11. The bar is a steady 60 FPS at the highest settings through idle play, drops, captures, every opponent thinking, scoring, reset and tray disturbance.
 
 - [x] Set the limits for the mesh pipeline ([decision](../decisions/rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter)). The interpreter-era scene ceilings are retired.
   - [x] Rigid creations share local geometry and palettes, with a root transform and draw per copy; articulated creations allocate root and independently moving part slots. Shape caps, fixed full/compact pools, per-shape GPU reservations and the boot probe are deleted. Catalog looks emit only for bodies wearing them. The debug world's actual envelope is 2,697 instances, 2,273 materials and 567 transform slots, including 184 rigid copies; a focused 600-copy check retains every body's identity without rebuilding its program.

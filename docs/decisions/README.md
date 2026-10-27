@@ -31,6 +31,7 @@ contracts belong in the subsystem guides; proposed changes belong in
   the hybrid resolve, the persistence boundary, distribution, P6's experiments
   in scope, hardware- and environment-only checks run once at the programme's
   close, [limits that price the mesh pipeline](rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter),
+  [bloom as a camera's scatter](rendering.md#bloom-is-a-cameras-scatter-applied-once-before-tonemapping),
   and
   [how worlds reach the GPU](rendering.md#how-worlds-reach-the-gpu) — the pass
   interface and its generated declarations, one binding contract grouped by

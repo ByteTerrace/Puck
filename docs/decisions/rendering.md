@@ -78,6 +78,41 @@ the lead settled the points where they differed.
   60 FPS at the highest settings and, later, the Steam Deck's 45 FPS floor,
   read on a quiet machine from frame time and the GPU counters.
 
+## Bloom is a camera's scatter, applied once before tonemapping
+
+Codex and Antigravity proposed bloom independently and converged; the lead
+recorded the result.
+
+- **Where it runs.** Bloom is an optional generic camera effect on each optical
+  endpoint (a seat's or a direct camera's output), after the view's HDR
+  composite and exposure and before tonemapping. Glass, resolve, sky, air and
+  volumes keep their order. Its final read fuses into the root's per-view
+  placement after the direct image is sharpened, so sharpening never acts on
+  scattered light. Intermediate transport images never bloom: portals,
+  windows, mirror continuations, sky layers and raw machine or video textures.
+  A camera used both as transport and as a direct output blooms only where it
+  is shown directly. Panes, letterboxes and the overlay never bloom, and an
+  engaged screen's scatter fades by its fidelity, so a fully framed screen
+  shows its exact pixels.
+- **How it filters.** A linear, normalized pyramid with no threshold and no
+  luminance reweighting by default: a 13-fetch downfilter, a 3×3 tent upfilter,
+  FP32 arithmetic and RGBA16F storage, six half-resolution levels at the high
+  tier. Being linear, it commutes with exposure adaptation and needs no history
+  of its own. Its radius is a fraction of the output's shorter side, so dynamic
+  resolution never resizes its look. The combine is `(1 - s) L + s B(L)`; an
+  explicitly authored soft cutoff is the one nonlinear option, and its exposure
+  dependence is documented where it is authored.
+- **Who owns it.** The engine default is off. A world authors `render.bloom`;
+  a camera may override it; the quality tier gates its cost; each player has a
+  scale from 0 to 1, where 0 is the accessibility off switch. Every diagnostic
+  view bypasses it, collider and contact evidence included, and a bloom-only
+  diagnostic view shows the scatter alone.
+- **The `Crt` screen's one-pixel brightness knee is not bloom** and is deleted;
+  the screen's other opted-in treatment stays.
+- **Its bar** is at most 0.3 ms of GPU on the RTX 4070 at 1280×900 high, with
+  both backends matching, read from `world.gpu-timing` and `world.counters gpu`,
+  and judged for flicker in presented bursts, never only in settled stills.
+
 ## A raster pass draws only what it can show
 
 Every raster pass skips the mesh draws it cannot show any of, by a world box per
