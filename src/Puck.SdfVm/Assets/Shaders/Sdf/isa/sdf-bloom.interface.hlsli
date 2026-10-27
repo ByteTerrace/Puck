@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bloom' (sha256/080d45b2ad30ff1b9e12d802239e31b56534ab0b18e3a74d3b1f24cc82c63342). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bloom' (sha256/ae6faf193343be36054c4ccd838e5e0ac73d09751a5922c6410b9387e991d6e2). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BLOOM
 #define PUCK_SHADER_INTERFACE_SDF_BLOOM
 
@@ -19,9 +19,10 @@ struct SdfBloomPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float bloomCutoff;
     [[vk::offset(12)]] float bloomMix;
-    [[vk::offset(16)]] float bloomScatter;
-    [[vk::offset(20)]] uint workCounterRow;
-    [[vk::offset(24)]] uint workCounterRowDetail;
+    [[vk::offset(16)]] float bloomRadius;
+    [[vk::offset(20)]] float bloomScatter;
+    [[vk::offset(24)]] uint workCounterRow;
+    [[vk::offset(28)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfBloomPass> passGroupIsaCDB3024C : register(b0, space3);
 #define passGroup passGroupIsaCDB3024C

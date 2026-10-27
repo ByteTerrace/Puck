@@ -13,6 +13,7 @@ public static partial class SdfWorldPackage {
         Value(name: "bloomMix", type: ShaderValueType.Float),
         Value(name: "bloomCutoff", type: ShaderValueType.Float),
         Value(name: "bloomScatter", type: ShaderValueType.Float),
+        Value(name: "bloomRadius", type: ShaderValueType.Float),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "bloomSource", type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: "bloomFine", type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, name: "bloomSampler"),

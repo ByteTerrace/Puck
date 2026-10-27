@@ -62,6 +62,11 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
         // rather than the internal scene grid, determines support under dynamic resolution.
         var support = (bloom.Radius * Math.Min(val1: output.Width, val2: output.Height));
 
+        // Six half-resolution levels end at one sixty-fourth of the output. Scale tent spacing as well
+        // as octave weights, so support keeps growing with output size instead of saturating at six levels.
+        Write(block: recording.PassBlock, name: "bloomRadius", value: Math.Max(val1: 0.5f,
+            val2: ((bloom.Radius * Math.Min(val1: recording.FrameWidth, val2: recording.FrameHeight)) / 64f)));
+
         Write(block: recording.PassBlock, name: "bloomMix", value: (((m_kernel == SdfKernel.BloomApply) && (m_view.Residency.DebugMode == DebugViewModes.Bloom))
             ? -1f : (0.65f * Math.Clamp(max: 1f, min: 0f, value: (support / 2f)))));
         Write(block: recording.PassBlock, name: "bloomCutoff", value: ((((m_kernel == SdfKernel.BloomDown) && (m_level == 0)) || (m_kernel == SdfKernel.BloomApply)) ? bloom.Cutoff : 0f));

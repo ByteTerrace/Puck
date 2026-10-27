@@ -13,7 +13,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         [unroll] for (int x = -1; x <= 1; x++) {
             float weight = float((2 - abs(x)) * (2 - abs(y))) / 16.0;
             color += weight * bloomSource.SampleLevel(bloomSampler,
-                clamp(uv + float2(x,y) * texel, texel * 0.5, 1.0 - texel * 0.5), 0).rgb;
+                clamp(uv + float2(x,y) * texel * passGroup.bloomRadius, texel * 0.5, 1.0 - texel * 0.5), 0).rgb;
         }
     }
     float3 fine = bloomFine.Load(int3(id.xy, 0)).rgb;

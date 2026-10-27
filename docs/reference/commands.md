@@ -821,8 +821,10 @@ through `SourcePassthroughRouter`. Delivery to a window is Windows-only
 
 ## Camera bloom
 
-`world.bloom` reports the effective scatter, output-relative radius, quality,
-pyramid level count and bypass reason of rendered views. `world.bloom on|off|auto|toggle`
+`world.bloom` reports the last rendered views' effective scatter, output-relative
+radius, cutoff, quality, mip sizes and bypass reasons. A write echoes the requested
+setting immediately; effective values follow on the next rendered frame.
+`world.bloom on|off|auto|toggle`
 sets the session enable override; `auto` restores the authored world/camera choice.
 `world.bloom quality off|low|high|auto [view]` overrides one view, or all views when
 omitted; `auto` returns to the quality preset. `world.bloom scale <0..1> [seat]`
@@ -831,6 +833,7 @@ Zero disables that player's bloom. These are render session levers under the
 acting principal's render grant. `world.debug-view bloom` shows the scatter alone;
 all other diagnostic views bypass it. The [frame handbook](../rendering/sdf/handbook/frame-rendering.md#camera-bloom)
 describes authoring, endpoint eligibility and the exposed-HDR cutoff option.
+
 ## Scene diagnostics
 
 Run `world.debug-view report colliders --json` or

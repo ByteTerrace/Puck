@@ -352,10 +352,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             if (input.Output is { } selected) {
                 var producerPlan = graphs[producer]?.Pipeline.Plan;
 
-                if ((producerPlan is not null) &&
+                if (((producerPlan is null) && (set.Instances[producer].Kind != RenderGraphInstanceKind.Graph)) ||
+                    (input.Optional && (storage.Declaration.Kind != ShaderPipelineResourceKind.Image)) ||
+                    ((producerPlan is not null) &&
                     ((!producerPlan.Outputs.Contains(value: selected) && !input.Optional) ||
                     (producerPlan.Outputs.Contains(value: selected) &&
-                    (producerPlan.FindResource(name: selected)?.Declaration.Kind != storage.Declaration.Kind)))) {
+                    (producerPlan.FindResource(name: selected)?.Declaration.Kind != storage.Declaration.Kind))))) {
                     refusal = Refuse(RenderGraphRuntimeRefusalCode.InputOutput,
                         $"Instance '{instance.Name}' binds '{input.Version}' to '{input.Producer}' output '{selected}', which is not an exported {storage.Declaration.Kind} version.",
                         instance.Name, input.Version!, input.Producer!, selected);

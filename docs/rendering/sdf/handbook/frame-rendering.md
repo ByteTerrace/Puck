@@ -23,7 +23,7 @@ Each optical endpoint filters its complete exposed HDR composite, including glas
 sky and air. High builds six RGBA16F levels from half output resolution; Low builds
 five from quarter; Off allocates no pyramid. Thirteen linear samples downfilter,
 and normalized 3×3 tents upfilter, all with FP32 arithmetic. Radius blends the
-coarse contribution continuously across levels. The output grid fixes support
+coarse contribution continuously across levels and scales tent spacing. The output grid fixes support
 while dynamic resolution changes the scene grid. There is no bloom history.
 
 The view exports `bloom` alongside its direct image. Root `place.bloom` sharpens
@@ -42,6 +42,7 @@ values and bypass reasons; its controls are in the [commands reference](../../..
 `world.counters gpu` exposes their dispatches, storage bytes and written pixels.
 The target is 0.3 ms at 1280×900 High on the RTX 4070, judged on both backends and
 with presented motion bursts as well as settled images.
+
 ## One render pipeline
 
 A world frame has two halves. The scene's shared tables — the program, the

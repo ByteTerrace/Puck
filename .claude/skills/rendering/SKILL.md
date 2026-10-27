@@ -28,8 +28,14 @@ for `place.bloom`; filmed cameras use `bloom-apply`. The renamed direct image
 `BloomDirect` still binds the composite's output member. A named image publication
 must retain its storage through graph replacement and carry its readable layout,
 just as the default image does. Optional absent bloom binds the shared stand-in.
+Keep root placement's optional input stable across enable/disable: a graph still
+rendering while its replacement builds must not lose its per-frame leased binding.
 Never bloom portal/window/mirror transport or raw screen textures. Never sharpen
 the scatter. Every diagnostic except the bloom-only view bypasses optical scatter.
+
+For a motion burst, arm it inside a sustained pan and inspect its reported ticks:
+an eight-tick pan can finish before the first of eight asynchronous captures lands.
+
 ## Mesh pipeline limits
 
 The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
