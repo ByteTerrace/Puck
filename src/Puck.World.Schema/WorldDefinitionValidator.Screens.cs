@@ -1070,8 +1070,8 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // The decal-text source gate: the grid must fit the engine's per-screen decal cell budget, every authored line
-    // must fit the grid (a clipped sign is silent data loss — refused by name instead), the font must resolve
-    // through the declared catalog, and the colors must be #RRGGBB.
+    // must fit after unescaping its literals; dynamic state expansions clip to the bounded grid, even after growth.
+    // Every placeholder names a declared displayable row. The font and colors resolve through their catalogs.
     private static void ValidateTextSource(WorldDefinition definition, WorldScreenSource.Text text, string path, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
         if (!hasTextCatalog) {
             errors.Add(item: $"{path}.text requires the world to declare a text font catalog.");
@@ -1097,10 +1097,29 @@ public static partial class WorldDefinitionValidator {
                 return;
             }
 
+            if (!WorldScreenText.TryParse(error: out var error, line: line, segments: out var segments)) {
+                errors.Add(item: $"{path}.text.lines[{index}] {error}.");
+                continue;
+            }
+
             var runeCount = 0;
 
-            foreach (var _ in line.EnumerateRunes()) {
-                runeCount++;
+            foreach (var segment in segments) {
+                if (!segment.IsPlaceholder) {
+                    foreach (var _ in segment.Text.EnumerateRunes()) {
+                        runeCount++;
+                    }
+                    continue;
+                }
+
+                var binding = StateBinding.Parse(token: segment.Text)!.Value;
+                var row = definition.State.FirstOrDefault(predicate: row => (row.Name.Value == binding.Row));
+
+                if (row is null) {
+                    errors.Add(item: $"{path}.text.lines[{index}] placeholder '{{{segment.Text}}}' names no state row '{binding.Row}'.");
+                } else if (row.Kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool or CellKind.Text)) {
+                    errors.Add(item: $"{path}.text.lines[{index}] placeholder '{{{segment.Text}}}' requires an Int, Fixed, Bool or Text row, not {row.Kind}.");
+                }
             }
 
             widestLine = Math.Max(
@@ -1109,11 +1128,7 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
-        var columns = (text.Columns ?? Math.Max(
-            val1: widestLine,
-            val2: 1
-        ));
-        var rows = (text.Rows ?? lines.Count);
+        var (columns, rows) = WorldScreenText.Grid(text: text, width: widestLine);
 
         if (
             (text.Columns is { } authoredColumns) &&

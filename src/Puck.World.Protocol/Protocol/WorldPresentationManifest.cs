@@ -699,6 +699,27 @@ public sealed class WorldPresentationManifest {
                     AddColor(token: text.Foreground);
                     AddColor(token: text.Background);
 
+                    foreach (var line in (text.Lines ?? [])) {
+                        if (
+                            (line is { Length: > 0 }) &&
+                            WorldScreenText.TryParse(
+                            error: out _,
+                            line: line,
+                            segments: out var segments
+                        )
+                        ) {
+                            foreach (var segment in segments) {
+                                if (!segment.IsPlaceholder) {
+                                    continue;
+                                }
+                                Add(
+                                    binding: StateBinding.Parse(token: segment.Text),
+                                    conversion: WorldStateConversion.Number
+                                );
+                            }
+                        }
+                    }
+
                     return false;
                 case OverlayPredicate.State state:
                     Add(

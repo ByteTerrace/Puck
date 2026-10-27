@@ -20,6 +20,12 @@ Rows whose kinds are only known after basis/import composition still evaluate
 but currently have no witness values; this reporting gap is recorded in
 [open items](../../../../docs/plans/open-items.md#addon-system).
 
+Verdict rows reserve room for `$firedTick` at load but mint it only when a rule
+fires. Do not group expectations to evade a verdict-count cutoff: a stamp must
+not grow and copy the composed arena during the tick. Its write belongs to the
+firing transaction; a refused stamp rejects that transaction rather than
+leaving a passing status without evidence that its rule evaluated.
+
 ## Tick-exact debug capture
 
 **Start with `puck motion`.** It is this procedure as one command: it boots a

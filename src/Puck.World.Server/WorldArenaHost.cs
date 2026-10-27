@@ -69,12 +69,15 @@ public sealed class WorldArenaHost : ArenaEffectHost {
             refusal: out refusal
         );
 
-        if (refusal.Code is null) {
-            _ = WorldVerdictStamp.Stamp(
+        if ((refusal.Code is null) && !WorldVerdictStamp.Stamp(
                 arena: Arena,
                 rowOrdinal: verdictOrdinal,
-                tick: Tick
-            );
+                tick: Tick,
+                reason: out var reason
+            )) {
+            // The caller rewinds the firing on refusal, including the status already written above.
+            refusal = EffectRefusal.Of(code: RuleEffectRefusal.MutationRejected, reason: reason);
+            return false;
         }
 
         return applied;

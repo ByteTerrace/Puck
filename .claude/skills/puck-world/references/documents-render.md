@@ -430,6 +430,24 @@ through the rigid impulse path, so an impulse chain (a rack break, a falling
 domino line) can cross more than one pair-hop within the same tick instead of
 propagating one body-hop per tick.
 
+### Text-screen bindings
+
+`WorldScreenText` owns text-screen parsing and the bounded grid policy shared
+by validation and baking. Lines use HUD brace escaping (`{{`, `}}`) but accept
+only `{state.<row>[.<key>][.$target]}` placeholders over declared Int, Fixed,
+Bool or Text rows, with no `$body` context. Missing live cells display empty.
+Literal widths count unescaped Unicode scalars; dynamic expansions clip to
+explicit columns or inferred columns bounded by the per-screen cell budget,
+even when a later write grows a value. Never size a bake from unrestricted
+expanded width while validating template syntax length.
+
+`WorldKeyedValues.BoundOf` includes text placeholders wherever a source sits
+(screen, magazine or placement face), so projection's existing disclosure
+checks and observations see their dependencies. The protocol manifest and
+`WorldBakedColors` read the same parsed grammar through the mirror. A local
+mirror test alone cannot prove a presentation observer receives the row: test
+compose, hydrate, and resolve too, including a restricted recipient.
+
 ### Render validation and stamp capacity
 
 For multi-body render validation, inhabited placements belong only to the body

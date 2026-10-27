@@ -380,7 +380,7 @@ public record StateRow(
     /// <summary>Gets the initial room reserved by a keyed row: its explicit capacity or its authored cells.
     /// Further growth is admitted and charged by the arena before a mint lands.</summary>
     [JsonIgnore]
-    public int InitialCellCapacity => (Capacity is not null) ? CellCeiling : Math.Min(val1: CellCeiling, val2: Math.Max(val1: (Cells?.Count ?? 0), val2: ReservedCapacity ?? 0));
+    public virtual int InitialCellCapacity => ((Capacity is not null) ? CellCeiling : Math.Min(val1: CellCeiling, val2: Math.Max(val1: (Cells?.Count ?? 0), val2: (ReservedCapacity ?? 0))));
     /// <summary>Gets the admitted runtime room of a growable row. Exports preserve it so a checkpoint resumes
     /// with the same memory and work reservation. Authored rows normally omit it.</summary>
     public int? ReservedCapacity { get; init; }
