@@ -768,7 +768,7 @@ public sealed class WorldTextAuthoringLawTests {
         var source = new WorldScreenSource.Text(Lines: ["{state.discovered}"]);
         var definition = (Fixtures.BuildDocument() with { Text = Catalog(), ScreensRaw = [TextScreen(source: source)] })
             .WithWorldState(rows: [new WorldStateRow(Name: CellName.Parse(candidate: "discovered"), Kind: CellKind.Int,
-                Visibility: (restricted ? new StateVisibility(Readers: ["seat:1"]) : null),
+                Visibility: (restricted ? new StateVisibility(Readers: ["seat1"]) : null),
                 Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 4))])]);
         var arena = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
         // A delivered observation must read the arena, not the document's seed.
