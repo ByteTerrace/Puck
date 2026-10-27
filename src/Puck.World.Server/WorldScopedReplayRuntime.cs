@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 
 /// <summary>A scoped live recording, with an arena image and body continuations instead of a world boot image.
 /// It never loads a world, changes a seat's routes, or suppresses another scope's live input.</summary>
-public sealed class WorldScopedReplayRuntime {
+public sealed partial class WorldScopedReplayRuntime {
     private readonly WorldServer m_server;
     private readonly WorldScopedReplay m_source;
     private readonly HashSet<int> m_bodies;
@@ -23,6 +23,7 @@ public sealed class WorldScopedReplayRuntime {
     private WorldPopulationEntryCheckpoint[] m_startBodies = [];
 
     private ulong m_startHash;
+    private ulong m_startImageHash;
     private int m_cursor;
     private int m_inputCursor;
     private bool m_recording;
@@ -69,6 +70,7 @@ public sealed class WorldScopedReplayRuntime {
         foreach (var row in m_orderedRows) { m_server.Arena.AddRowTo(hash: ref hash, rowOrdinal: row); }
         hash.Add(value: WorldReplaySnapshot.HashState(m_server.Population, m_bodies));
         m_server.Population.AppendContinuationHash(bodies: m_bodies, hash: ref hash);
+        AppendRuleHash(hash: ref hash);
         return hash.Value;
     }
 
@@ -82,13 +84,17 @@ public sealed class WorldScopedReplayRuntime {
         m_start = start;
         m_startBodies = bodies;
         m_startHash = hash;
+        CaptureRules();
+        m_startImageHash = WorldAuthorityCheckpointCodec.HashScopedReplayStart(scope: Checkpoint());
     }
     private void Restore() {
         if (m_start is null) { throw new InvalidOperationException(message: "Capture the scope's fresh starting state first."); }
         foreach (var image in m_startBodies) {
             if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Generation)) { throw new InvalidOperationException(message: "A scoped body was replaced; capture again."); }
         }
+        m_server.Arena.ValidateScope(image: m_start);
         m_server.Arena.RestoreScope(image: m_start);
+        RestoreRules();
         foreach (var image in m_startBodies) {
             var body = m_server.Body(index: image.Index)!;
 
@@ -123,6 +129,7 @@ public sealed class WorldScopedReplayRuntime {
                     m_commandHash = Fnv1aHash.Create(); m_intentHash = Fnv1aHash.Create();
                 }
                 m_recording = false;
+                m_cursor = 0; m_inputCursor = 0; m_diverged = false;
                 Restore();
                 Write(key: "status", value: 0);
                 Write(key: "cursor", value: 0);
@@ -162,7 +169,7 @@ public sealed class WorldScopedReplayRuntime {
     private bool Within(WorldMutation mutation) => mutation switch {
         WorldMutation.UpsertStateCell cell => m_source.Rows.Contains(value: cell.Row),
         WorldMutation.RemoveStateCell cell => m_source.Rows.Contains(value: cell.Row),
-        WorldMutation.Batch batch => ((batch.Mutations.Count > 0) && batch.Mutations.All(predicate: Within)),
+        WorldMutation.Batch batch => ((batch.Mutations.Count > 0) && batch.Mutations.All(predicate: child => ((child.Principal == batch.Principal) && Within(mutation: child)))),
         _ => false,
     };
 
@@ -219,26 +226,22 @@ public sealed class WorldScopedReplayRuntime {
     /// <summary>Folds the replay continuation without serializing the growing tape each tick.</summary>
     public void AppendStateHash(ref Fnv1aHash hash) {
         hash.Add(value: Fnv1aHash.Compute(values: Name.AsSpan())); hash.Add(value: m_startHash);
+        hash.Add(value: m_startImageHash);
         hash.Add(value: m_cursor); hash.Add(value: m_inputCursor); hash.Add(value: (m_recording ? 1 : 0)); hash.Add(value: (m_active ? 1 : 0)); hash.Add(value: (m_diverged ? 1 : 0));
         hash.Add(value: m_inputHash.Value); hash.Add(value: m_recordHash.Value);
         hash.Add(value: m_commandHash.Value); hash.Add(value: m_intentHash.Value);
     }
     /// <summary>Captures the derived tape for a whole-session replay or checkpoint.</summary>
-    public WorldScopedReplayCheckpoint Checkpoint() => new(Name, m_start, m_startBodies, m_startHash,
-        m_inputs.ToArray(), m_hashes.ToArray(), m_cursor, m_inputCursor, m_recording, m_active, m_diverged, m_commands.ToArray(), m_intents.ToArray());
+    public WorldScopedReplayCheckpoint Checkpoint() => WorldAuthorityCheckpointCodec.CopyScopedReplay(scope: new(Name, m_start, m_startBodies, m_startHash,
+        m_inputs.ToArray(), m_hashes.ToArray(), m_cursor, m_inputCursor, m_recording, m_active, m_diverged, m_commands.ToArray(), m_intents.ToArray(),
+        m_startRuleLatch, m_startInteractionLatch, m_startGroups));
     /// <summary>Restores the tape beside an already restored arena and population.</summary>
     public void RestoreCheckpoint(WorldScopedReplayCheckpoint checkpoint) {
-        if ((checkpoint.Name != Name) || (checkpoint.Cursor < 0) || (checkpoint.Cursor > m_source.DurationTicks) ||
-            (checkpoint.InputCursor < 0) || (checkpoint.InputCursor > checkpoint.Inputs.Count) ||
-            (checkpoint.Hashes.Count > m_source.DurationTicks) ||
-            (checkpoint.Active && (checkpoint.Start is null)) ||
-            ((checkpoint.Start is { } start) && !start.Rows.SequenceEqual(other: m_orderedRows)) ||
-            checkpoint.Inputs.Any(predicate: input => ((input.Tick < 0) || (input.Tick >= m_source.DurationTicks) || !Within(mutation: input.Mutation) || !m_source.Seats.Contains(value: input.Mutation.Principal))) ||
-            checkpoint.Commands.Any(predicate: input => (!m_bodies.Contains(item: input.Command.EntityIndex) || !m_source.Seats.Contains(value: input.Command.Principal))) ||
-            checkpoint.Intents.Any(predicate: input => (!m_bodies.Contains(item: input.Intent.EntityIndex) || !m_source.Seats.Contains(value: input.Intent.Principal)))) {
-            throw new InvalidOperationException(message: "Invalid scoped replay continuation.");
-        }
+        checkpoint = WorldAuthorityCheckpointCodec.CopyScopedReplay(scope: checkpoint);
+        ValidateCheckpoint(checkpoint: checkpoint);
         m_start = checkpoint.Start; m_startBodies = checkpoint.Bodies.ToArray(); m_startHash = checkpoint.StartHash;
+        m_startRuleLatch = checkpoint.RuleGateHeld.ToArray(); m_startInteractionLatch = checkpoint.InteractionGateHeld.ToArray(); m_startGroups = checkpoint.RuleGroups.ToArray();
+        m_startImageHash = ((checkpoint.Start is null) ? 0 : WorldAuthorityCheckpointCodec.HashScopedReplayStart(scope: checkpoint));
         m_inputs.Clear(); m_inputs.AddRange(collection: checkpoint.Inputs); m_hashes.Clear(); m_hashes.AddRange(collection: checkpoint.Hashes);
         m_commands.Clear(); m_commands.AddRange(collection: checkpoint.Commands); m_intents.Clear(); m_intents.AddRange(collection: checkpoint.Intents);
         m_cursor = checkpoint.Cursor; m_inputCursor = checkpoint.InputCursor; m_recording = checkpoint.Recording;

@@ -53,8 +53,8 @@ public sealed partial class StateArena {
             selected.Select(selector: row => m_layout[row].CellStart).ToArray(), selected.Select(selector: row => m_layout[row].MaskWordStart).ToArray(),
             numbers.ToArray(), text.ToArray(), visibility.ToArray(), observations.ToArray());
     }
-    /// <summary>Restores a scope into the same arena. Every unrelated column and retained key remains live.</summary>
-    public void RestoreScope(ArenaScopeSnapshot image) {
+    /// <summary>Checks the complete scope image before any live column is changed.</summary>
+    public void ValidateScope(ArenaScopeSnapshot image) {
         if (Journal.Scopes != 0) { throw new InvalidOperationException(message: "Cannot restore an open state transaction."); }
         if ((image.Rows.Length != image.Capacities.Length) || (image.Rows.Length != image.CellStarts.Length) ||
             (image.Rows.Length != image.MaskWordStarts.Length) || (image.Rows.Distinct().Count() != image.Rows.Length)) {
@@ -66,11 +66,34 @@ public sealed partial class StateArena {
             }
         }
         var rows = image.Rows.ToHashSet();
+        var expected = CaptureScope(rows: rows);
+        var numbers = new HashSet<(ArenaColumn Column, int Index)>();
 
-        foreach (var entry in image.Numbers) { ScopePosition(image, entry.Column, entry.Index); }
-        foreach (var entry in image.Text) { ScopePosition(image, ArenaColumn.Text, entry.Index); }
-        foreach (var entry in image.Visibility) { ScopePosition(image, ArenaColumn.Visibility, entry.Index); }
-        foreach (var entry in image.Observations) { ScopePosition(image, ArenaColumn.Observation, entry.Index); }
+        foreach (var entry in image.Numbers) {
+            if ((entry.Column is ArenaColumn.CellCapacity or ArenaColumn.Vector or ArenaColumn.Text or ArenaColumn.Visibility or ArenaColumn.Observation) ||
+                !numbers.Add(item: (entry.Column, ScopePosition(image, entry.Column, entry.Index)))) {
+                throw new InvalidOperationException(message: "Invalid scope numeric column inventory.");
+            }
+        }
+        if (numbers.Count != expected.Numbers.Length) { throw new InvalidOperationException(message: "Incomplete scope numeric column inventory."); }
+        ValidateReferences(indices: image.Text.Select(selector: entry => ScopePosition(image, ArenaColumn.Text, entry.Index)));
+        ValidateReferences(indices: image.Visibility.Select(selector: entry => ScopePosition(image, ArenaColumn.Visibility, entry.Index)));
+        ValidateReferences(indices: image.Observations.Select(selector: entry => ScopePosition(image, ArenaColumn.Observation, entry.Index)));
+    }
+
+    private static void ValidateReferences(IEnumerable<int> indices) {
+        var seen = new HashSet<int>();
+
+        foreach (var index in indices) {
+            if (!seen.Add(item: index)) { throw new InvalidOperationException(message: "Duplicate scope reference column."); }
+        }
+    }
+
+    /// <summary>Restores a scope into the same arena. Every unrelated column and retained key remains live.</summary>
+    public void RestoreScope(ArenaScopeSnapshot image) {
+        ValidateScope(image: image);
+        var rows = image.Rows.ToHashSet();
+
         foreach (var column in new[] { ArenaColumn.Text, ArenaColumn.Visibility, ArenaColumn.Observation }) {
             for (var index = 0; (index < m_layout.Size(column: column)); index++) {
                 if (rows.Contains(item: m_layout.RowOf(column: column, index: index)) && (ReadReferenceRaw(column: column, index: index) is not null)) {

@@ -135,6 +135,11 @@ the accepted inputs. It compares every resulting scope hash with the first
 live recording and shows **SCOPE HASH MATCH** or **SCOPE HASH MISMATCH**, beside
 the historical result. No board positions, expected hashes or binary tapes are
 committed. The rest of the world's clock, bodies, routes and state keep running.
+The scope includes the table rules' edge latches and group progress as well as
+its rows and pieces. Settling reads only the chess pieces' resting facts, so an
+airborne Go stone or Reversi disc cannot change the verdict. Saved starting
+images must contain exactly the declared rows and bodies; forged outside bodies
+and truncated expected hash sequences are refused before playback.
 
 `replay.scope chess-demo` reads progress, the starting hash, the recorded tail
 and the current scope hash. `world.state chessDemo` and `world.state chessTape`

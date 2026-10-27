@@ -428,7 +428,7 @@ public sealed partial class WorldDocument {
             Tick: tick
         ));
         Host.MutationJournalTap?.Invoke(tick, engineTick, mutation);
-        foreach (var scope in Host.ScopedReplays) { scope.Observe(mutation: mutation); }
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(mutation: mutation); }
 
         if (addonPlan is not null) {
             Host.Addons!.Finish(plan: addonPlan);

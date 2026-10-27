@@ -66,8 +66,22 @@ unrelated rows, bodies, routes, keys and the world's clock running.
 ring/draw cursors, in the same arena. It rebinds captured column addresses to
 the selected rows when unrelated row growth moves storage; selected row capacities
 must still agree. Field, vector, timed and pool rows are
-refused. The derived start and tape ride `WorldServerCheckpoint`; their rolling
-input/hash digests and cursors ride the authoritative hash. There is no binary
+refused. Compiled row write sets select rule and interaction latches; a group
+which writes scoped rows contributes all member latches and its progress. Restore
+replaces only those entries and invalidates their scheduling observations. Decision
+continuations, undo groups and groups writing outside the scope are refused.
+Authors must keep the rules' live dependencies local; the chess table uses each
+piece's resting fact through `physics(quiescent, "chess-demo")` rather than the
+population-wide `physics(quiescent)` census.
+
+The derived start and tape ride `WorldServerCheckpoint`; their rolling
+input/hash digests, the actual privately copied starting-image digest, and cursors
+ride the authoritative hash. Admission checks exact row/body inventories and
+complete column images before any scope mutation. It refuses incomplete expected
+hash sequences, inconsistent recording/cursor flags, and unordered, out-of-range
+or out-of-scope cell, command and intent inputs by scope name. Saved latch keys
+must already exist in the retained arena key table; restoring a scope cannot
+intern a forged key into the shared namespace. There is no binary
 scope tape or hash ledger to commit. A rebuild drops the derived tape.
 
 The live example is [the chess table](../../../../worlds/debug/chess.md), with
@@ -75,6 +89,8 @@ positive, cancellation, and deliberately diverged scenarios in `chess-tests.puck
 [WorldScopedReplayTests](../../../../tests/Puck.World.Server.Tests/WorldScopedReplayTests.cs)
 covers row isolation, divergence, body input doors, checkpoint continuation and
 a whole-session tape controlling a scoped replay without doubling its derived inputs.
+The review regressions also cover edge-latch restart/hash coverage, forged starting
+images, truncated tapes, and zero allocated bytes across 1,000 inactive ticks.
 [ArenaScopeSnapshotTests](../../../../tests/Puck.State.Tests/ArenaScopeSnapshotTests.cs)
 covers cursors, text, unsupported continuations and relocation after unrelated row growth.
 

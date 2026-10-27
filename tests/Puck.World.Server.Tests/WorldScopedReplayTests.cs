@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-public sealed class WorldScopedReplayTests {
+public sealed partial class WorldScopedReplayTests {
     [Fact]
     public void AWholeSessionTapeRecordsScopeControlsAndDerivesProgramInputsExactlyOnce() {
         using var harness = new WorldHistoryHarness(definition: Document(), on: false, seats: 1);
@@ -46,6 +46,14 @@ public sealed class WorldScopedReplayTests {
         Assert.Single(collection: tape.Commands);
         Assert.Single(collection: tape.Intents);
         Assert.Equal(Puck.Maths.FixedQ4816.One, tape.Intents[0].Intent.Intent.Channels[0]);
+        var scope = fixture.Server.ScopedReplays[0];
+
+        Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: tape with { Bodies = [] }));
+        Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: tape with { Bodies = [tape.Bodies[0], tape.Bodies[0]] }));
+        Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: tape with { Commands = [(6, tape.Commands[0].Command)] }));
+        Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: tape with { Commands = [(1, tape.Commands[0].Command), (0, tape.Commands[0].Command)] }));
+        Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: tape with { Intents = [(-1, tape.Intents[0].Intent)] }));
+        Assert.Throws<InvalidOperationException>(testCode: () => scope.RestoreCheckpoint(checkpoint: tape with { Intents = [(1, tape.Intents[0].Intent), (0, tape.Intents[0].Intent)] }));
         Request(fixture: fixture, request: 1);
         for (var i = 0; (i < 6); i++) { fixture.Step(); }
         Assert.Equal(4, Read(fixture: fixture, key: "status", row: "control"));

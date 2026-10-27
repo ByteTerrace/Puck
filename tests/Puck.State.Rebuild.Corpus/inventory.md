@@ -224,7 +224,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `TestExpectationNode` | 572 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
 | `TestGivenBlockNode` | 42 | 0 | `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
 | `TestGivenNode` | 148 | 0 | `debug/chess-tests`, `debug/go-tests`, `debug/reversi-tests` |
-| `TestSeatStepNode` | 376 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
+| `TestSeatStepNode` | 377 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
 | `TestTicksStepNode` | 363 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
 | `TestWhenBlockNode` | 123 | 0 | `debug/addon-tools-tests`, `debug/addons-tests`, `debug/chess-tests`, `debug/gallery-inspect-tests`, `debug/go-tests` and 7 more |
 | `TransactionStatementNode` | 1 | 1 | `debug/chess` |

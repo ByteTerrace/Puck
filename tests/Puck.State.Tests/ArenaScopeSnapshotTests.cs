@@ -63,6 +63,19 @@ public sealed class ArenaScopeSnapshotTests {
         Assert.Throws<InvalidOperationException>(testCode: () => arena.RestoreScope(image: outside));
         Assert.Equal(before, arena.ComputeHash());
     }
+    [Fact]
+    public void AnIncompleteOrDuplicateScopeColumnImageIsRefusedWithoutChangingAnyRow() {
+        var (_, arena) = ArenaFixture.Build();
+        var image = arena.CaptureScope(rows: new HashSet<int> { ArenaFixture.Score });
+        var before = arena.ComputeHash();
+
+        Assert.Throws<InvalidOperationException>(testCode: () => arena.RestoreScope(image: image with { Numbers = image.Numbers.Skip(count: 1).ToArray() }));
+        Assert.Throws<InvalidOperationException>(testCode: () => arena.RestoreScope(image: image with { Numbers = [.. image.Numbers, image.Numbers[0]] }));
+        Assert.Throws<InvalidOperationException>(testCode: () => arena.RestoreScope(image: image with {
+            Numbers = [.. image.Numbers, new ArenaNumberImage(Column: ArenaColumn.CellCapacity, Index: ArenaFixture.Score, Value: 999)],
+        }));
+        Assert.Equal(before, arena.ComputeHash());
+    }
     [InlineData(ArenaFixture.Clock)]
     [InlineData(ArenaFixture.Embed)]
     [InlineData(ArenaFixture.Field)]

@@ -9,4 +9,7 @@ public sealed record WorldScopedReplayCheckpoint(string Name, ArenaScopeSnapshot
     IReadOnlyList<(int Tick, WorldMutation Mutation)> Inputs, IReadOnlyList<ulong> Hashes,
     int Cursor, int InputCursor, bool Recording, bool Active, bool Diverged,
     IReadOnlyList<(int Tick, WorldCommand Command)> Commands,
-    IReadOnlyList<(int Tick, IntentSubmission Intent)> Intents);
+    IReadOnlyList<(int Tick, IntentSubmission Intent)> Intents,
+    IReadOnlyList<WorldRuleLatchEntry> RuleGateHeld,
+    IReadOnlyList<WorldRuleLatchEntry> InteractionGateHeld,
+    IReadOnlyList<WorldRuleGroupEntry> RuleGroups);

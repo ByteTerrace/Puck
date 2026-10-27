@@ -10,7 +10,7 @@ public sealed partial class WorldPersistence {
         switch (component) {
             case WorldStateHashComponent.ScopedReplays:
                 hash.Add(value: ((uint)Host.ScopedReplays.Count));
-                foreach (var scope in Host.ScopedReplays) { scope.AppendStateHash(hash: ref hash); }
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AppendStateHash(hash: ref hash); }
                 break;
             case WorldStateHashComponent.Arena:
                 hash.Add(value: Host.Arena.ComputeHash());

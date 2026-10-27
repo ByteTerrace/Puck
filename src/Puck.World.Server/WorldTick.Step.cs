@@ -315,7 +315,7 @@ public sealed partial class WorldTick {
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
         Host.BeginCellWriteTick();
-        foreach (var scope in Host.ScopedReplays) { scope.BeforeTick(); }
+        foreach (var scope in Host.ScopedReplaySpan) { scope.BeforeTick(); }
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
@@ -694,7 +694,7 @@ public sealed partial class WorldTick {
         }
 
         m_driveDenied[submission.EntityIndex] = false;
-        foreach (var scope in Host.ScopedReplays) { scope.Observe(intent: in submission); }
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(intent: in submission); }
         Host.InputHold.ObserveMeasurement(submission: in submission);
 
         var bodyIndex = submission.EntityIndex;
@@ -919,7 +919,7 @@ public sealed partial class WorldTick {
             Host.EnterArenaTick();
             try {
                 StepCore(context: in context);
-                foreach (var scope in Host.ScopedReplays) { scope.AfterTick(); }
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
             } finally { Host.LeaveArenaTick(); }
         }
     }
@@ -940,7 +940,7 @@ public sealed partial class WorldTick {
             Host.EnterArenaTick();
             try {
                 StepCore(context: in context);
-                foreach (var scope in Host.ScopedReplays) { scope.AfterTick(); }
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
             } finally { Host.LeaveArenaTick(); }
         }
     }

@@ -13,7 +13,7 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Laws for the <c>body.impulse</c>/<c>world.rigid</c> command surface: the <see cref="WorldCommand.RigidImpulse"/>
 /// wire leaf, the server-side <c>IsRigid</c> refusal, and the <c>$physics:quiescent</c> rule fact
-/// (<see cref="WorldPopulation.RigidBodiesQuiescent"/>).</summary>
+/// (<see cref="WorldPopulation.RigidBodiesQuiescent()"/>).</summary>
 [Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class WorldRigidCommandLawTests {
     [Fact]
@@ -114,7 +114,7 @@ public sealed class WorldRigidCommandLawTests {
 
     // A flat solid floor plus uniform downward gravity, mirroring WorldRigidDynamicsLawTests' own falling-ball
     // fixture — quiescence needs actual ground contact to reach, never open space.
-    private static WorldDefinition FallingRigidBallDocument() {
+    internal static WorldDefinition FallingRigidBallDocument() {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var shape = new ShapeDocument(
             Id: 0,
@@ -182,6 +182,7 @@ public sealed class WorldRigidCommandLawTests {
             )],
         };
     }
+
     // FallingRigidBallDocument plus an authored bodies.scale register born at the value — the same shape
     // BodyScaleLawTests builds, added onto the falling-ball fixture rather than the bare-locomotion one so the scaled
     // body actually has a rigid facet to advance.

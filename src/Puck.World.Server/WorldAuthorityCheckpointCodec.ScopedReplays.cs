@@ -1,9 +1,38 @@
 using Puck.Networking;
+using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    internal static WorldScopedReplayCheckpoint CopyScopedReplay(WorldScopedReplayCheckpoint scope) {
+        var writer = new WireWriter();
+
+        WriteScopedReplay(scope: scope, writer: writer);
+        var reader = new WireReader(bytes: writer.WrittenSpan);
+        var copy = ReadScopedReplay(reader: ref reader);
+
+        if (!reader.TryFinish(failure: out var failure)) { throw new InvalidOperationException(message: failure.ToString()); }
+        return copy;
+    }
+    // Computed only when a starting image is captured or admitted. The runtime owns the copied image,
+    // so its immutable digest covers the actual stored continuation without serializing it every tick.
+    internal static ulong HashScopedReplayStart(WorldScopedReplayCheckpoint scope) {
+        var writer = new WireWriter();
+
+        writer.WriteOptionalClass(value: scope.Start, writeValue: WriteScopeStart);
+        writer.WriteArray(items: scope.Bodies, writeItem: WritePopulationEntry);
+        WriteScopeRules(scope: scope, writer: writer);
+        return Fnv1aHash.Compute(values: writer.WrittenSpan);
+    }
+
+    private static void WriteScopeRules(WireWriter writer, WorldScopedReplayCheckpoint scope) {
+        writer.WriteArray(items: scope.RuleGateHeld, writeItem: WriteRuleLatchEntry);
+        writer.WriteArray(items: scope.InteractionGateHeld, writeItem: WriteRuleLatchEntry);
+        writer.WriteArray(items: scope.RuleGroups, writeItem: static (w, group) => {
+            w.WriteString(value: group.Group); w.WriteInt32(value: group.Step); w.WriteBoolean(value: group.Running); w.WriteBoolean(value: group.Breached);
+        });
+    }
     private static void WriteScopeStart(WireWriter writer, ArenaScopeSnapshot image) {
         WriteIntArray(writer, image.Rows);
         WriteIntArray(writer, image.CellStarts);
@@ -23,6 +52,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteOptionalClass(value: scope.Start, writeValue: WriteScopeStart);
         writer.WriteArray(items: scope.Bodies, writeItem: WritePopulationEntry);
         writer.WriteUInt64(value: scope.StartHash);
+        WriteScopeRules(scope: scope, writer: writer);
         writer.WriteArray(items: scope.Inputs, writeItem: static (w, input) => {
             w.WriteInt32(value: input.Tick);
             w.WriteBlock(value: EncodeLeafBlock<WorldMutation>(tryEncode: WorldSubmissionCodec.TryEncodeCommittedMutation, value: input.Mutation, what: "scope input"));
@@ -41,6 +71,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var start = reader.ReadOptionalClass(readValue: ReadScopeStart);
         var bodies = reader.ReadArray(field: "scope bodies", maximum: MaxCollectionCount, readItem: ReadPopulationEntry);
         var startHash = reader.ReadUInt64();
+        var ruleLatch = reader.ReadArray(field: "scope rule latches", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => ReadRuleLatchEntry(field: "scope rule latch", reader: ref r));
+        var interactionLatch = reader.ReadArray(field: "scope interaction latches", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => ReadRuleLatchEntry(field: "scope interaction latch", reader: ref r));
+        var groups = reader.ReadArray(field: "scope rule groups", maximum: MaxCollectionCount, readItem: static (ref WireReader r) =>
+            new WorldRuleGroupEntry(r.ReadString(field: "scope rule group", maxBytes: MaxStringBytes), r.ReadInt32(), r.ReadBoolean(), r.ReadBoolean()));
         var inputs = reader.ReadArray(field: "scope inputs", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => {
             var tick = r.ReadInt32();
             var mutation = ReadLeafBlock<WorldMutation>(field: "scope input", reader: ref r, tryDecode: WorldSubmissionCodec.TryDecodeCommittedMutation);
@@ -60,6 +94,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             var tick = r.ReadInt32(); return (tick, WorldWireCodec.ReadIntentSubmission(reader: ref r));
         });
 
-        return new(Active: active, Bodies: bodies, Commands: commands, Cursor: cursor, Diverged: diverged, Hashes: hashes, InputCursor: inputCursor, Inputs: inputs, Intents: intents, Name: name, Recording: recording, Start: start, StartHash: startHash);
+        return new(Active: active, Bodies: bodies, Commands: commands, Cursor: cursor, Diverged: diverged, Hashes: hashes, InputCursor: inputCursor, Inputs: inputs, Intents: intents, InteractionGateHeld: interactionLatch, Name: name, Recording: recording, RuleGateHeld: ruleLatch,
+            RuleGroups: groups, Start: start, StartHash: startHash);
     }
 }

@@ -20,7 +20,7 @@ grants: concat(map(range(8, 32), body => { capability: Drive, grantee: "seat1", 
 
 // The table's placement, its creation's floor 0.5 m under its origin on level 2's floor (y 9.05), and the ticks the
 // physics must stay at rest before an arrangement is judged (0.3 s at the debug world's 30 Hz). The rigid solver's own
-// resting latch has already held each piece still before `physics(quiescent)` reads 1, so the hold only has to outlast
+// resting latch has already held each piece still before its own resting fact reads 1, so the hold only has to outlast
 // a piece that is touched, knocked or dropped beside another settling.
 let chessTable = [56.5, 8.55, 22.6]
 let chessSettleTicks = 9
@@ -394,13 +394,13 @@ prototypes {
 }
 
 rule "tabletop-settle-hold-advance" {
-  when physics(quiescent) == 1 and settleHold < chessSettleTicks
+  when physics(quiescent, "chess-demo") == 1 and settleHold < chessSettleTicks
   mode: Level
   settleHold += 1
 }
 
 rule "tabletop-settle-hold-reset" {
-  when physics(quiescent) != 1
+  when physics(quiescent, "chess-demo") != 1
   mode: Level
   settleHold = 0
 }
@@ -1034,7 +1034,7 @@ rule "chess-ai-revision" {
     previousInCheck[1] << 28
   )
   local pieceState = pieceCell[$each] + 1 | pieceCode[$each] + 6 << 7
-  when settleHold == chessSettleTicks and physics(quiescent) == 1 and (pieceState != aiBefore[$each] or
+  when settleHold == chessSettleTicks and physics(quiescent, "chess-demo") == 1 and (pieceState != aiBefore[$each] or
       metadata != ai.metadata)
   mode: Level
   forEach: pieceCode
@@ -1048,7 +1048,7 @@ rule "chess-ai-enable" {
   aiEnabled = (
     (aiSide == turn) and
     chessDemo.playing == 0 and
-    (physics(quiescent) == 1) and
+    (physics(quiescent, "chess-demo") == 1) and
     (settleHold == chessSettleTicks) and
     (gameStarted == 1) and
     (boardCollisions == 0) and
@@ -1064,7 +1064,7 @@ rule "chess-ai-request" {
     aiBest.token == pieceOrdinal[$each] and
     aiBest.to >= 0 and
     aiBest.to < 64 and
-    physics(quiescent) == 1)
+    physics(quiescent, "chess-demo") == 1)
   mode: Level
   forEach: pieceCode
   ai.from = pieceCell[$each]

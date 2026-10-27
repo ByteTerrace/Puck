@@ -486,8 +486,19 @@ drive derives a tape through the live mutation door; later drives restore only
 its starting rows and bodies, feed the recorded inputs through the same doors,
 and compare every resulting scope hash. State rows include their storage
 continuation, and bodies include the population continuation codec's state.
+Compiled row write sets also select rule and interaction edge latches and the
+progress of groups writing those rows; restoring a table leaves other rules'
+continuations live. A rule group must own its complete write set. Decision
+continuations and undo groups require a wider boundary and are refused.
+The scope's rules must use local facts: `physics(quiescent, "chess-demo")` restricts
+the resting census to that scope's bodies. The population-wide predicate cannot
+prove that one table reproduced independently of another.
 The derived tape is checkpointed and hashed with the authority. No expected
 hashes or binary tapes are authored or committed.
+Starting images are privately copied and their actual contents enter that hash.
+Admission validates the exact declared row/body inventory, complete stored
+columns, tape length, cursors and ordered addressed inputs before installing a
+scoped continuation; an invalid tape is refused by scope name.
 
 `replay.scope [<name> [capture|drive|cancel|reset]]` is operator read-back and
 next-tick control. Its Int control row has `request`, `status`, `cursor`, and

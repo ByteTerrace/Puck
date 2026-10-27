@@ -37,7 +37,8 @@ retarget them, and read the references' mentions of them as prior art
 **Replay one scope while the world lives on.** An authored `replays` row names its
 document rows, stable body ordinals, input principals, control row and timed
 input program. `WorldScopedReplayRuntime` captures its starting arena columns and
-body continuations, records accepted addressed mutations plus body commands and
+body continuations and the rule/interaction latches of compiled writers to those
+rows (plus their rule-group progress), records accepted addressed mutations plus body commands and
 intents, and compares every replayed tick with that live recording. It uses
 `StateArena.CaptureScope`/`RestoreScope` and `AddRowTo`, and the population's
 existing continuation codecs: exporting and reloading cell values alone loses
@@ -45,7 +46,15 @@ ring/draw cursors. Its derived tape belongs to the authority checkpoint and
 authoritative hash. `replay.scope` is operator read-back and next-tick control;
 it never invokes `world.load` or masks other seats. The first completed drive
 derives the tape, later drives verify it. Field, vector, timed and pool rows need
-a wider continuation boundary and are refused. The debug world's idle example
+a wider continuation boundary and are refused, as do decision rules and undo or
+partially owned rule groups. Scope restoration validates the complete row/body
+inventory before mutation; starting images are privately copied and digested.
+Persisted tapes must have a complete expected hash sequence or a consistent
+active recording, with ordered, scoped inputs. Hot scope observers enumerate
+`ScopedReplaySpan`; an inactive scope must allocate zero bytes per steady tick.
+Scope rules must read local facts: `physics(quiescent, "chess-demo")` restricts
+the existing census to that scope's bodies, while the global `physics(quiescent)`
+couples a table to unrelated rigid bodies. The debug world's idle example
 and its game-score citation are in [chess.md](../../../worlds/debug/chess.md).
 See [replay](references/replay.md#scoped-live-replays) for the control cells.
 

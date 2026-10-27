@@ -1720,7 +1720,10 @@ The debug world's scoped replay proof runs with
 `puck test worlds/debug/chess-tests.puck --reproduce --jobs 1`: it derives the
 historical game's tape through the table's real move door, checks subsequent
 scope hashes, loops, cancels on approach/engagement, and detects a deliberately
-changed scope. The other board-room files are `go-tests.puck` and
+changed scope while another table's rigid body moves independently. A scope
+verdict includes its row writers' edge latches and group progress; invalid
+starting inventories and incomplete persisted hash tapes are refused by name.
+The other board-room files are `go-tests.puck` and
 `reversi-tests.puck` beside it; run each file with the same flags. Live scope
 control is [`replay.scope`](state/worlds.md#hashes-checkpoints-and-replay).
 
