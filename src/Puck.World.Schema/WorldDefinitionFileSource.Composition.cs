@@ -96,8 +96,9 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="catalog">The explicit machine catalog used for metadata rewriting, or <see langword="null"/> for structural composition without provider metadata rewriting.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
     /// <param name="origins">Optional authored scalar origins. A flat root returns its tracked tree when supplied;
-    /// composed images are bypassed so every retained scalar can identify the document and value that authored it.</param>
-    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null) {
+    /// reused images must carry origins so every retained scalar identifies the document and value that authored it.</param>
+    /// <param name="retainRoot">Whether to retain the root image after composition. Shared imports and bases are retained either way.</param>
+    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainRoot = true) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         composed = null;
@@ -137,6 +138,7 @@ public static partial class WorldDefinitionFileSource {
             reach: out _,
             reason: out reason,
             resolvedPath: rootResolvedName,
+            retainImage: retainRoot,
             serveHeldImage: true,
             source: source,
             stack: out _,

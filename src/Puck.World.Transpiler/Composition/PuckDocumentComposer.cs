@@ -307,7 +307,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// <param name="rootBytes">The root document's already-read raw bytes (JSON, whether hand-authored or already
     /// lowered from a <c>.puck</c> source).</param>
     /// <param name="origins">Optional authored scalar origins. When supplied, even a flat root returns a composed
-    /// tree, and composition bypasses held images so origins come from the authored documents.</param>
+    /// tree. Reused import images preserve the origins of their authored values.</param>
     /// <param name="composed">The composed tree (basis/imports members stripped) on success.</param>
     /// <param name="chainBytes">The bytes of every file touched composing the root.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
@@ -316,6 +316,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     /// <param name="sourceCompilation">The root's already completed compile, when available. Carrier identity,
     /// output bytes and every input fact are still checked before composition can retain its provenance.</param>
     /// <returns><see langword="true"/> when the graph composed (or the root names neither basis nor imports).</returns>
+    /// <param name="retainRoot">Whether to retain the root image after composition; staging consumes it once and passes false.</param>
     public static bool TryComposeWorldDocument(
         string rootResolvedPath,
         byte[] rootBytes,
@@ -325,10 +326,12 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
         string catalogFingerprint = "",
         IMachineValidationCatalog? catalog = null,
         WorldDocumentOrigins? origins = null,
-        WorldCompiledSource? sourceCompilation = null
+        WorldCompiledSource? sourceCompilation = null,
+        bool retainRoot = true
     ) {
         return WorldDefinitionFileSource.TryComposeChainWithImports(
             origins: origins,
+            retainRoot: retainRoot,
             chainBytes: out chainBytes,
             composed: out composed,
             reason: out reason,
