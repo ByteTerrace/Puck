@@ -23,10 +23,13 @@ public sealed class WorldBakedColors {
     // One resolver a palette entry's layer colors read through, built once rather than per registered palette.
     private Func<string, Vector3>? m_layerColor;
     private int m_checkedColorRevision;
+    private int m_checkedRevision;
     private int m_checkedGeneration;
     private int m_count;
+    private bool m_hasValueBindings;
     private WorldStateMirror? m_mirror;
     private string[] m_tokens = [];
+    private WorldStateConversion[] m_conversions = [];
     private int[] m_changed = [];
 
     /// <summary>Initializes a new instance of the <see cref="WorldBakedColors"/> class over a state mirror.</summary>
@@ -68,7 +71,9 @@ public sealed class WorldBakedColors {
     /// <summary>Starts a build: forgets the colors the previous build baked.</summary>
     public void Begin() {
         m_count = 0;
+        m_hasValueBindings = false;
         m_checkedColorRevision = (m_mirror?.ColorRevision ?? 0);
+        m_checkedRevision = (m_mirror?.Revision ?? 0);
         m_checkedGeneration = (m_mirror?.Generation ?? 0);
     }
     /// <summary>Resolves one authored color for the build under way and remembers a bound one.</summary>
@@ -96,6 +101,7 @@ public sealed class WorldBakedColors {
 
         Remember(
             changed: mirror.Changed(slot: slot),
+            conversion: WorldStateConversion.Color,
             token: value!
         );
 
@@ -111,26 +117,114 @@ public sealed class WorldBakedColors {
             : fallback
         );
     }
-    /// <summary>Returns whether a bound color the last build baked has moved since it was resolved, or has lost or
-    /// gained its slot, answering each move once.</summary>
-    /// <returns><see langword="true"/> when the builder must rebuild to follow a bound color.</returns>
+    /// <summary>Resolves one authored text screen line for the build under way, replacing any
+    /// <c>{state.&lt;row&gt;[.&lt;key&gt;]}</c> placeholders (<see cref="HudTemplate"/>) from the state mirror and
+    /// remembering each bound cell.</summary>
+    /// <param name="line">The authored line.</param>
+    /// <returns>The resolved line.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="line"/> is <see langword="null"/>.</exception>
+    public string ResolveText(string line) {
+        ArgumentNullException.ThrowIfNull(argument: line);
+
+        if (
+            !line.Contains(value: '{') &&
+            !line.Contains(value: '}')
+        ) {
+            return line;
+        }
+
+        if (!HudTemplate.TryParse(
+            error: out _,
+            segments: out var segments,
+            template: line
+        )) {
+            return line;
+        }
+
+        var builder = new System.Text.StringBuilder(capacity: line.Length);
+
+        foreach (var segment in segments) {
+            if (!segment.IsPlaceholder) {
+                builder.Append(value: segment.Text);
+
+                continue;
+            }
+
+            if (!StateBinding.TryParse(
+                binding: out _,
+                token: segment.Text
+            )) {
+                continue;
+            }
+
+            var mirror = Mirror();
+            var slot = mirror.SlotOf(
+                conversion: WorldStateConversion.Number,
+                token: segment.Text
+            );
+
+            m_hasValueBindings = true;
+            Remember(
+                changed: mirror.Changed(slot: slot),
+                conversion: WorldStateConversion.Number,
+                token: segment.Text
+            );
+
+            var value = mirror.Sample(slot: slot).Value;
+
+            if (!value.HasValue) {
+                continue;
+            }
+
+            switch (value.Kind) {
+                case CellKind.Int:
+                    builder.Append(value: value.AsInt.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+
+                    break;
+                case CellKind.Fixed:
+                    builder.Append(value: Puck.Maths.FixedQ4816.FromRawBits(value: value.AsFixed).ToString());
+
+                    break;
+                case CellKind.Bool:
+                    builder.Append(value: (value.AsBool
+                        ? "true"
+                        : "false"
+                    ));
+
+                    break;
+                case CellKind.Text:
+                    builder.Append(value: (value.AsText ?? string.Empty));
+
+                    break;
+            }
+        }
+
+        return builder.ToString();
+    }
+    /// <summary>Returns whether a bound color or text placeholder the last build baked has moved since it was resolved,
+    /// or has lost or gained its slot, answering each move once.</summary>
+    /// <returns><see langword="true"/> when the builder must rebuild to follow a bound value.</returns>
     public bool TryTakeMove() {
         if (
             (m_count == 0) ||
             (m_mirror is not { } mirror) ||
-            ((mirror.ColorRevision == m_checkedColorRevision) && (mirror.Generation == m_checkedGeneration))
+            ((m_hasValueBindings
+                ? (mirror.Revision == m_checkedRevision)
+                : (mirror.ColorRevision == m_checkedColorRevision)) &&
+            (mirror.Generation == m_checkedGeneration))
         ) {
             return false;
         }
 
         m_checkedColorRevision = mirror.ColorRevision;
+        m_checkedRevision = mirror.Revision;
         m_checkedGeneration = mirror.Generation;
 
         var moved = false;
 
         for (var index = 0; (index < m_count); index++) {
             var changed = mirror.Changed(slot: mirror.SlotOf(
-                conversion: WorldStateConversion.Color,
+                conversion: m_conversions[index],
                 token: m_tokens[index]
             ));
 
@@ -158,11 +252,12 @@ public sealed class WorldBakedColors {
         );
         m_mirror = mirror;
         m_checkedColorRevision = mirror.ColorRevision;
+        m_checkedRevision = mirror.Revision;
         m_checkedGeneration = mirror.Generation;
 
         return mirror;
     }
-    private void Remember(string token, int changed) {
+    private void Remember(string token, WorldStateConversion conversion, int changed) {
         if (m_count == m_tokens.Length) {
             var capacity = Math.Max(
                 val1: 8,
@@ -174,12 +269,17 @@ public sealed class WorldBakedColors {
                 newSize: capacity
             );
             Array.Resize(
+                array: ref m_conversions,
+                newSize: capacity
+            );
+            Array.Resize(
                 array: ref m_changed,
                 newSize: capacity
             );
         }
 
         m_tokens[m_count] = token;
+        m_conversions[m_count] = conversion;
         m_changed[m_count] = changed;
         m_count++;
     }

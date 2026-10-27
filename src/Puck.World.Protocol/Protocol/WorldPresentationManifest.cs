@@ -699,6 +699,24 @@ public sealed class WorldPresentationManifest {
                     AddColor(token: text.Foreground);
                     AddColor(token: text.Background);
 
+                    foreach (var line in (text.Lines ?? [])) {
+                        if (
+                            (line is { Length: > 0 }) &&
+                            HudTemplate.TryEnumeratePlaceholders(
+                            error: out _,
+                            placeholders: out var placeholders,
+                            template: line
+                        )
+                        ) {
+                            foreach (var placeholder in placeholders) {
+                                Add(
+                                    binding: StateBinding.Parse(token: placeholder),
+                                    conversion: WorldStateConversion.Number
+                                );
+                            }
+                        }
+                    }
+
                     return false;
                 case OverlayPredicate.State state:
                     Add(

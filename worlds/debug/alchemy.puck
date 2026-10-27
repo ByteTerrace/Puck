@@ -1,0 +1,1015 @@
+import "elements"
+import "inputs"
+import "shapes"
+
+// Physical Alchemy at the board room's north-east table on level 2 (hall.puck): 31 element tokens, four starters (Air,
+// Earth, Fire, Water), a cauldron with two hand wells (left and right), and a lectern recipe-book screen showing
+// discoveries, open hints and the latest mix. The debug world imports this file whole. The table stands east of the Go
+// table, its workbench centred at (65, 9.905, 30.6) on level 2. alchemy.md beside this file says how to play, read the
+// book and reset the table.
+//
+// Each element is an ordinal in the Element enum: Nothing is 0, Air is 1, and House, the last, is 31. A recipe is an
+// unordered pair stored once, smaller element first, in cell minimum(a, b) * 32 + maximum(a, b) of the 32x32 `pairs`
+// grid. Bit `e` of `known` is set when element `e` is discovered. When both hands (`left` and `right`) hold elements,
+// `mix` looks up their pair if both are known (discovering a new result on first sight, or counting a fizzle when the
+// cell holds Nothing), while `refuse-unknown` refuses the pair if either hand holds an undiscovered element. Either
+// way, both hands empty for the next pair.
+//
+// Over the rules lies the tabletop layer (`alchemyGrid`, 8 columns by 5 rows of 0.14 m cells): cells 1 to 31 hold the 31
+// element tokens in ordinal order (starters discovered-face up, undiscovered elements sealed-face up), cell 0 resets a
+// partial hand, and row 4 holds the cauldron between the left hand well (cell 34) and right hand well (cell 37). A
+// seated player moves the cursor across the grid and picks two elements with confirm; a player moving physical tokens
+// drops them into the hand wells, and once the table settles for `alchemySettleTicks` the rules read the wells, run the
+// mix, flip newly discovered tokens face-up on their shelf cells, and return displaced tokens home.
+
+let alchemyTable = [65, 8.55, 30.6]
+let alchemySettleTicks = 9
+let alchemyColumns = 8
+let alchemyRows = 5
+let alchemyCells = (alchemyColumns * alchemyRows)
+let alchemyCellSize = 0.14
+let alchemySurface = 1.355
+let alchemyOriginX = (0 - ((alchemyColumns * alchemyCellSize) / 2))
+let alchemyOriginZ = (0 - ((alchemyRows * alchemyCellSize) / 2))
+let alchemyLeftCell = 34
+let alchemyRightCell = 37
+
+let alchemyWoodColor = "#8A6A45"
+let alchemySlateColor = "#141816"
+let alchemyIronColor = "#24282E"
+let alchemyBrassColor = "#D6A13E"
+let alchemyBrewColor = "#38E08C"
+let alchemyLecternColor = "#3E2B1D"
+let alchemyIvoryColor = "#F7E7B4"
+let alchemyCursorColor = "#3FA9F5"
+let alchemyBookInkColor = "#F4E8C8"
+let alchemyBookPaperColor = "#231A14"
+
+// House is the last Element member.
+let size = (House + 1)
+let totalElements = House
+let starters = [Air, Earth, Fire, Water]
+let starterCount = length(starters)
+let initialKnown = reduce(starters, 0, (mask, e) => (mask | (1 << e)))
+
+// [first, second, makes]. Some results have several recipes, so a stuck player has more than one way on.
+let recipes = [
+  [Fire, Water, Steam]
+  [Earth, Water, Mud]
+  [Earth, Fire, Lava]
+  [Air, Earth, Dust]
+  [Air, Fire, Energy]
+  [Air, Steam, Cloud]
+  [Cloud, Water, Rain]
+  [Water, Water, Sea]
+  [Lava, Water, Stone]
+  [Air, Lava, Stone]
+  [Air, Stone, Sand]
+  [Fire, Sand, Glass]
+  [Lightning, Sand, Glass]
+  [Fire, Stone, Metal]
+  [Earth, Rain, Plant]
+  [Mud, Plant, Swamp]
+  [Energy, Swamp, Life]
+  [Energy, Sea, Life]
+  [Lightning, Swamp, Life]
+  [Cloud, Energy, Lightning]
+  [Earth, Plant, Tree]
+  [Metal, Tree, Wood]
+  [Fire, Plant, Ash]
+  [Fire, Wood, Ash]
+  [Life, Swamp, Bacteria]
+  [Earth, Life, Animal]
+  [Life, Sea, Fish]
+  [Air, Animal, Bird]
+  [Mud, Sand, Clay]
+  [Clay, Life, Human]
+  [Human, Metal, Tool]
+  [Tool, Wood, House]
+]
+
+let elementIds = range(1, totalElements)
+let alchemyTokenHomeColumn = map(elementIds, e => (e % alchemyColumns))
+let alchemyTokenHomeRow = map(elementIds, e => ((e - (e % alchemyColumns)) / alchemyColumns))
+let alchemyOpening = map(range(0, alchemyCells), i => ((i >= 1) and (i <= starterCount)) ? 1 : 0)
+
+// The bodies: debug.puck imports this file ahead of Go and Reversi, so its cursor and 31 element tokens take the top 32
+// slots (`shapes.puck`'s `alchemyBodies`): `alchemyCursor` is `alchemyTop` and `alchemyToken{e}` is `alchemyTop - e`.
+let alchemyTop = ((galleryPopulation + 2 + boardRoomBodies) - 1)
+grants: map(
+  range(0, totalElements),
+  i => { capability: Drive, grantee: "seat1", subject: $"body:{alchemyTop - 1 - i}" }
+)
+
+looks: map(["alchemyToken", "alchemyCursor"], name => {
+  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+  name: name
+  scale: 1
+  source: creation(prototypeId: name)
+})
+
+kits [
+  {
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: box(halfExtents: [0.048, 0.014, 0.048], rotation: [0, 0, 0, 1])
+    motion {
+      facingSnap: true
+      holds [
+        {
+          bond: Free
+          envelope {
+            sinkSpeed: 40
+          }
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          hold: Gravity
+          name: "air"
+        }
+      ]
+      shaping [
+        {
+          along {}
+        }
+      ]
+      speed {
+        value: 0.001
+      }
+      turn {
+        rate: 0.001
+      }
+    }
+    name: "alchemyToken"
+    rigid {
+      angularDamping: 0.05
+      friction: 0.6
+      linearDamping: 0.05
+      mass: 0.04
+      restitution: 0.05
+      rollingFriction: 0.2
+    }
+  }
+]
+
+placements {
+  placement "alchemyTable" {
+    prototype: "alchemyTable"
+    board {
+      occupancy: "alchemyBoard"
+      topology: "alchemyGrid"
+      turn: "alchemyTurn"
+      verdict: "alchemyVerdict"
+      engage {
+        channel: "interact"
+        radius: 2.5
+        pitch: 62
+        margin: 0.12
+        surface: 0.02
+      }
+    }
+    position: alchemyTable
+    solid
+  }
+
+  placement "alchemyShelf" {
+    prototype: "alchemyShelf"
+    parent: "alchemyTable"
+    position [0, 0, 0]
+  }
+
+  placement "alchemyCauldron" {
+    prototype: "alchemyCauldron"
+    parent: "alchemyTable"
+    position [0, 0, 0]
+  }
+
+  placement "alchemyCursor" {
+    prototype: "alchemyCursor"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "boardCursor"
+      look: "alchemyCursor"
+      source: "Idle"
+    }
+    parent: "alchemyTable"
+    position [0, 1.33, 0]
+  }
+
+  // Each element token starts 6 cm over its shelf cell: starters discovered-face up, the rest sealed-face up.
+  for e in elementIds {
+    placement $"alchemyToken{e}" {
+      prototype: "alchemyToken"
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "alchemyToken"
+        look: "alchemyToken"
+        source: "Idle"
+      }
+      parent: "alchemyTable"
+      position [
+        (alchemyOriginX + (alchemyCellSize * (alchemyTokenHomeColumn[(e - 1)] + 0.5))),
+        (alchemySurface + 0.06),
+        (alchemyOriginZ + (alchemyCellSize * (alchemyTokenHomeRow[(e - 1)] + 0.5)))
+      ]
+    }
+  }
+}
+
+// The recipe book on the lectern at the north (+Z) edge of the table, tilted back 30 degrees toward the seated player.
+screens [
+  {
+    index: 7
+    origin [alchemyTable[0], (alchemyTable[1] + 1.592), (alchemyTable[2] + 0.58)]
+    right [-1, 0, 0]
+    up [0, 0.866025, 0.5]
+    halfWidth: 0.35
+    halfHeight: 0.19
+    halfDepth: 0.004
+    round: 0
+    luminance: 180nit
+    source: text(
+      columns: 30,
+      rows: 8,
+      foreground: alchemyBookInkColor,
+      background: alchemyBookPaperColor,
+      lines: [
+        "ALCHEMY RECIPE BOOK"
+        "FOUND   {state.discovered}/31"
+        "HINTS   {state.hints}"
+        "LEFT    {state.left}"
+        "RIGHT   {state.right}"
+        "MADE    {state.made}"
+        "NEWEST  {state.newest}"
+        "DONE    {state.complete}"
+      ]
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+]
+
+spawnPoints [
+  { id: "alchemy", position [alchemyTable[0], galleryFloor[2], (alchemyTable[2] - 1.6)], yawDegrees: 180 }
+]
+
+prototypes {
+  prototype "alchemyTable" {
+    document {
+      name: "alchemyTable"
+      palette [
+        { color: alchemyWoodColor }
+        { color: alchemySlateColor, roughness: 0.7 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top" {
+        material: 0
+        position [0, 1.25, 0]
+        scale [1.75, 0.05, 0.85]
+      }
+      for x in [-1.1, 1.1] {
+        shape Cylinder $"leg-{x}" {
+          material: 0
+          position [x, 0.855, 0]
+          scale [0.08, 0.355, 0.08]
+        }
+        shape Cylinder $"foot-{x}" {
+          material: 0
+          position [x, 0.52, 0]
+          scale [0.35, 0.02, 0.35]
+        }
+      }
+      // The workbench base and rim enclosing the 8x5 `alchemyGrid`.
+      shape Box "base" {
+        material: 1
+        position [0, 1.32, 0]
+        scale [0.6, 0.02, 0.39]
+      }
+      shape Box "rim-north" {
+        material: 1
+        position [0, 1.3275, 0.39]
+        scale [0.64, 0.0275, 0.04]
+      }
+      shape Box "rim-south" {
+        material: 1
+        position [0, 1.3275, -0.39]
+        scale [0.64, 0.0275, 0.04]
+      }
+      shape Box "rim-east" {
+        material: 1
+        position [0.6, 1.3275, 0]
+        scale [0.04, 0.0275, 0.35]
+      }
+      shape Box "rim-west" {
+        material: 1
+        position [-0.6, 1.3275, 0]
+        scale [0.04, 0.0275, 0.35]
+      }
+    }
+  }
+
+  // Row 4's cauldron (cells 35 and 36), its two brass hand wells (cell 34 left and cell 37 right), and the lectern
+  // behind them on the north (+Z) edge holding screen 7. Authored in creation space (x and z negated from world).
+  prototype "alchemyCauldron" {
+    document {
+      name: "alchemyCauldron"
+      palette [
+        { color: alchemyWoodColor }
+        { color: alchemySlateColor, roughness: 0.7 }
+        { color: alchemyIronColor, metal: 0.7, roughness: 0.45, specular: 0.35 }
+        { color: alchemyBrassColor, metal: 0.85, roughness: 0.3, specular: 0.4 }
+        { color: alchemyBrewColor, emissive: 180nit, roughness: 0.2 }
+        { color: alchemyLecternColor, roughness: 0.75, specular: 0.08 }
+      ]
+      schema: "puck.creation.v1"
+      shape Cylinder "hand-left-plinth" {
+        material: 3
+        position [0.21, 1.346, -0.28]
+        scale [0.062, 0.006, 0.062]
+      }
+      shape Cylinder "hand-left-well" {
+        material: 1
+        position [0.21, 1.352, -0.28]
+        scale [0.05, 0.003, 0.05]
+      }
+      shape Cylinder "hand-right-plinth" {
+        material: 3
+        position [-0.21, 1.346, -0.28]
+        scale [0.062, 0.006, 0.062]
+      }
+      shape Cylinder "hand-right-well" {
+        material: 1
+        position [-0.21, 1.352, -0.28]
+        scale [0.05, 0.003, 0.05]
+      }
+      shape Cylinder "cauldron-foot" {
+        material: 2
+        position [0, 1.355, -0.28]
+        scale [0.088, 0.015, 0.088]
+      }
+      shape Ellipsoid "cauldron-belly" {
+        material: 2
+        position [0, 1.405, -0.28]
+        scale [0.115, 0.062, 0.115]
+      }
+      shape Torus "cauldron-rim" {
+        material: 3
+        position [0, 1.448, -0.28]
+        scale [0.098, 0.014, 0.098]
+      }
+      shape Cylinder "cauldron-brew" {
+        material: 4
+        position [0, 1.446, -0.28]
+        scale [0.086, 0.008, 0.086]
+      }
+      shape Box "lectern-foot" {
+        material: 3
+        position [0, 1.312, -0.64]
+        scale [0.16, 0.012, 0.12]
+      }
+      shape Cylinder "lectern-stem" {
+        material: 0
+        position [0, 1.44, -0.64]
+        scale [0.04, 0.14, 0.04]
+      }
+      shape Box "lectern-board" {
+        material: 5
+        position [0, 1.58, -0.6]
+        rotation [-0.258819, 0, 0, 0.965926]
+        scale [0.38, 0.22, 0.018]
+      }
+      shape Box "lectern-lip" {
+        material: 3
+        position [0, 1.47, -0.5]
+        rotation [-0.258819, 0, 0, 0.965926]
+        scale [0.38, 0.015, 0.03]
+      }
+    }
+  }
+
+  // The 32 shelf tiles on the workbench (cell 0 reset + cells 1..31 element homes), using the 32-slot palette from
+  // `elements.puck`.
+  prototype "alchemyShelf" {
+    document {
+      name: "alchemyShelf"
+      palette: map(
+        alchemyElementStyles,
+        style => {
+          color: style.color
+          roughness: style.roughness
+          specular: style.specular
+        }
+      )
+      schema: "puck.creation.v1"
+      shape Box "tile-reset" {
+        material: 0
+        position [
+          (0 - (alchemyOriginX + (alchemyCellSize * 0.5))),
+          (alchemySurface - 0.0075),
+          (0 - (alchemyOriginZ + (alchemyCellSize * 0.5)))
+        ]
+        scale [0.062, 0.0075, 0.062]
+      }
+      for e in elementIds {
+        shape Box $"tile-{e}" {
+          material: e
+          position [
+            (0 - (alchemyOriginX + (alchemyCellSize * (alchemyTokenHomeColumn[(e - 1)] + 0.5)))),
+            (alchemySurface - 0.0075),
+            (0 - (alchemyOriginZ + (alchemyCellSize * (alchemyTokenHomeRow[(e - 1)] + 0.5))))
+          ]
+          scale [0.062, 0.0075, 0.062]
+        }
+      }
+    }
+  }
+
+  // A shared two-faced element token: bright alchemical brass and ivory on its discovered (+Y) face, sealed dark
+  // obsidian on its undiscovered (-Y) face.
+  prototype "alchemyToken" {
+    document {
+      name: "alchemyToken"
+      palette [
+        { color: alchemyBrassColor, metal: 0.8, roughness: 0.3, specular: 0.4 }
+        { color: alchemyIvoryColor, roughness: 0.35, specular: 0.28 }
+        { color: alchemyIronColor, roughness: 0.65, specular: 0.15 }
+      ]
+      schema: "puck.creation.v1"
+      shape Cylinder "known-rim" {
+        material: 0
+        position [0, 0.006, 0]
+        scale [0.052, 0.006, 0.052]
+      }
+      shape Cylinder "known-crest" {
+        material: 1
+        position [0, 0.013, 0]
+        scale [0.036, 0.002, 0.036]
+      }
+      shape Cylinder "sealed-face" {
+        material: 2
+        position [0, -0.006, 0]
+        scale [0.052, 0.006, 0.052]
+      }
+    }
+  }
+
+  prototype "alchemyCursor" {
+    document {
+      name: "alchemyCursor"
+      palette [{ color: alchemyCursorColor, roughness: 0.4, specular: 0.3 }]
+      schema: "puck.creation.v1"
+      shape Box "near" {
+        material: 0
+        position [0, 0.0025, -0.062]
+        scale [0.066, 0.0025, 0.004]
+      }
+      shape Box "far" {
+        material: 0
+        position [0, 0.0025, 0.062]
+        scale [0.066, 0.0025, 0.004]
+      }
+      shape Box "left" {
+        material: 0
+        position [-0.062, 0.0025, 0]
+        scale [0.004, 0.0025, 0.058]
+      }
+      shape Box "right" {
+        material: 0
+        position [0.062, 0.0025, 0]
+        scale [0.004, 0.0025, 0.058]
+      }
+    }
+  }
+}
+
+// ---- Reading the physical table ----------------------------------------------------------------------------------
+// Whenever the physics has rested for `alchemySettleTicks`, the rules read each token's cell and face off the board. A
+// token dropped into the left hand well (cell 34) or right hand well (cell 37) loads that hand and triggers a sync back
+// to its shelf cell; any other displacement or collision is counted as illegal and synced back.
+
+rule "alchemy-settle-hold-advance" {
+  when physics(quiescent) == 1 and alchemyHold < alchemySettleTicks
+  mode: Level
+  alchemyHold += 1
+}
+
+rule "alchemy-settle-hold-reset" {
+  when physics(quiescent) != 1
+  mode: Level
+  alchemyHold = 0
+}
+
+rules "" when alchemyHold == alchemySettleTicks {
+  mode: "Edge"
+  rule "alchemy-read-tokens" {
+    local square = board(cellOf, alchemyBoard, placement, $each)
+    local home = alchemyElement[$each]
+    local face = upright(placement, $each) >= 0 ? 1 : 0
+    forEach: alchemyElement
+    alchemyCell[$each] = square >= 0 ? square : -home
+    alchemyFace[$each] = face
+    alchemyStray[$each] = ((square != home) and (square != alchemyLeftCell) and (square != alchemyRightCell)) ? 1 : 0
+  }
+
+  rule "alchemy-read-board" {
+    alchemyCollisions = count(alchemyCell, atLeast: 0, atMost: 39) - count(alchemySeen, c -> c != 0)
+    alchemyMisplaced = count(alchemyStray, c -> c != 0)
+  }
+
+  rule "alchemy-read-hands" {
+    when alchemyCollisions == 0 and alchemyMisplaced == 0 and (alchemySeen[alchemyLeftCell] > 0 or
+        alchemySeen[alchemyRightCell] > 0)
+    if alchemySeen[alchemyLeftCell] > 0 {
+      left = alchemySeen[alchemyLeftCell]
+    }
+    if alchemySeen[alchemyRightCell] > 0 {
+      right = alchemySeen[alchemyRightCell]
+    }
+    alchemySync = 1
+  }
+
+  rule "alchemy-read-illegal" {
+    when alchemyCollisions > 0 or alchemyMisplaced > 0
+    alchemyIllegal += 1
+    alchemyVerdict = 0
+    alchemySync = 1
+  }
+}
+
+// ---- Seated play at the table ------------------------------------------------------------------------------------
+// Seat 1 sits down with the context button (the board's engage block) and plays with the shared tabletop page
+// (chess.puck): moving the cursor across the 8x5 grid and pressing confirm on two elements in a row loads `left` then
+// `right`. Pressing cancel (or confirm on cell 0) clears a partial hand.
+
+rule "alchemy-seat-presses" {
+  mode: Level
+  if board(engaged, alchemyBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
+    alchemySeat.pickEdge = alchemySeat.pickDown == 0
+    alchemySeat.pickDown = 1
+  } else {
+    alchemySeat.pickEdge = 0
+    alchemySeat.pickDown = 0
+  }
+  if board(engaged, alchemyBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
+    alchemySeat.cancelEdge = alchemySeat.cancelDown == 0
+    alchemySeat.cancelDown = 1
+  } else {
+    alchemySeat.cancelEdge = 0
+    alchemySeat.cancelDown = 0
+  }
+  if board(engaged, alchemyBoard, 1) == 1 and channel(1, forward) >= 0.5 {
+    alchemySeat.aheadEdge = alchemySeat.aheadDown == 0
+    alchemySeat.aheadDown = 1
+  } else {
+    alchemySeat.aheadEdge = 0
+    alchemySeat.aheadDown = 0
+  }
+  if board(engaged, alchemyBoard, 1) == 1 and channel(1, forward) <= -0.5 {
+    alchemySeat.behindEdge = alchemySeat.behindDown == 0
+    alchemySeat.behindDown = 1
+  } else {
+    alchemySeat.behindEdge = 0
+    alchemySeat.behindDown = 0
+  }
+  if board(engaged, alchemyBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
+    alchemySeat.rightEdge = alchemySeat.rightDown == 0
+    alchemySeat.rightDown = 1
+  } else {
+    alchemySeat.rightEdge = 0
+    alchemySeat.rightDown = 0
+  }
+  if board(engaged, alchemyBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
+    alchemySeat.leftEdge = alchemySeat.leftDown == 0
+    alchemySeat.leftDown = 1
+  } else {
+    alchemySeat.leftEdge = 0
+    alchemySeat.leftDown = 0
+  }
+}
+
+rule "alchemy-seat-point" {
+  local pointed = board(pointer, alchemyBoard, 1)
+  when board(engaged, alchemyBoard, 1) == 1
+  mode: Level
+  if pointed >= 0 and pointed != alchemySeat.pointer {
+    alchemySeat.cursor = pointed
+  }
+  alchemySeat.pointer = pointed
+}
+
+rule "alchemy-seat-step" {
+  local seatSide = board(side, alchemyBoard, 1)
+  local cursorColumn = (
+    alchemySeat.cursor % alchemyColumns +
+    (alchemySeat.aheadEdge - alchemySeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    (alchemySeat.rightEdge - alchemySeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  )
+  local cursorRow = (
+    alchemySeat.cursor / alchemyColumns +
+    (alchemySeat.aheadEdge - alchemySeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    (alchemySeat.rightEdge - alchemySeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  )
+  when (alchemySeat.aheadEdge - alchemySeat.behindEdge) or (alchemySeat.rightEdge - alchemySeat.leftEdge)
+  mode: Level
+  alchemySeat.cursor = (
+    clamp(cursorRow, 0, alchemyRows - 1) * alchemyColumns + clamp(cursorColumn, 0, alchemyColumns - 1)
+  )
+}
+
+rule "alchemy-seat-cancel" {
+  when board(engaged, alchemyBoard, 1) == 1 and alchemySeat.cancelEdge == 1
+  mode: Level
+  left = Nothing
+  right = Nothing
+}
+
+rule "alchemy-seat-pick" {
+  when board(engaged, alchemyBoard, 1) == 1 and alchemySeat.pickEdge == 1
+  mode: Level
+  if alchemySeat.cursor == 0 {
+    left = Nothing
+    right = Nothing
+  }
+  if alchemySeat.cursor >= 1 and alchemySeat.cursor <= totalElements and left != Nothing and right == Nothing {
+    right = alchemySeat.cursor
+  }
+  if alchemySeat.cursor >= 1 and alchemySeat.cursor <= totalElements and left == Nothing {
+    left = alchemySeat.cursor
+  }
+}
+
+rule "alchemy-seat-cursor-shown" {
+  when board(engaged, alchemyBoard, 1) == 1
+  mode: Level
+  poseCell(
+    key: `placement:alchemyCursor`,
+    topology: alchemyGrid,
+    expression: alchemySeat.cursor,
+    offset: [0, 0.004, 0]
+  )
+}
+
+rule "alchemy-seat-cursor-parked" {
+  when board(engaged, alchemyBoard, 1) == 0
+  mode: Level
+  poseCell(
+    key: `placement:alchemyCursor`,
+    topology: alchemyGrid,
+    expression: alchemySeat.cursor,
+    offset: [0, -0.035, 0]
+  )
+}
+
+// ---- The rules of Alchemy ----------------------------------------------------------------------------------------
+
+rule "mix" {
+  local result = recipe[minimum(left, right) * size + maximum(left, right)]
+  local isNew = (result != Nothing) * (1 - ((known >> result) & 1))
+  when left != Nothing and right != Nothing and ((known >> left) & (known >> right) & 1) == 1
+  mode: Level
+  if result == Nothing {
+    fizzles += 1
+  } else if isNew == 1 {
+    known = known | (1 << result)
+    newest = result
+    alchemyBoard[result] = 1
+    alchemySync = 1
+  }
+  made = result
+  fresh = isNew
+  mixes += 1
+  alchemyVerdict = (result != Nothing) ? 1 : 0
+  discovered = setBitCount(known)
+  complete = setBitCount(known) == size - 1
+  left = Nothing
+  right = Nothing
+}
+
+rule "refuse-unknown" {
+  when left != Nothing and right != Nothing and ((known >> left) & (known >> right) & 1) == 0
+  mode: Level
+  refused += 1
+  made = Nothing
+  fresh = 0
+  alchemyVerdict = 0
+  left = Nothing
+  right = Nothing
+}
+
+rule "count-hints" {
+  when hintsFor != known
+  mode: Level
+  hints = 0
+  for r in recipes {
+    hints += ((known >> r[0]) & (known >> r[1]) & 1) * (1 - ((known >> r[2]) & 1))
+  }
+  hintsFor = known
+}
+
+// ---- Keeping the table to the book -------------------------------------------------------------------------------
+
+rule "alchemy-reset" {
+  when alchemyReset == 1
+  mode: Level
+  transform boardCombine(row: alchemyBoard, operation: Copy, left: alchemyStart)
+  known = initialKnown
+  discovered = starterCount
+  left = Nothing
+  right = Nothing
+  made = Nothing
+  newest = Nothing
+  fresh = 0
+  hints = 0
+  hintsFor = 0
+  mixes = 0
+  fizzles = 0
+  refused = 0
+  complete = 0
+  alchemyVerdict = 1
+  alchemySync = 1
+  alchemyReset = 0
+}
+
+rule "alchemy-sync-discovered" {
+  when alchemySync == 1 and alchemyBoard[alchemyElement[$each]] == 1 and (alchemyCell[$each] != alchemyElement[$each] or
+      alchemyFace[$each] != 1)
+  mode: Level
+  forEach: alchemyElement
+  poseCell(
+    key: `placement:$each`,
+    topology: alchemyGrid,
+    expression: alchemyElement[$each],
+    offset: [0, 0.05, 0]
+  )
+  alchemyCell[$each] = alchemyElement[$each]
+  alchemyFace[$each] = 1
+}
+
+rule "alchemy-sync-locked" {
+  when alchemySync == 1 and alchemyBoard[alchemyElement[$each]] == 0 and (alchemyCell[$each] != alchemyElement[$each] or
+      alchemyFace[$each])
+  mode: Level
+  forEach: alchemyElement
+  poseCell(
+    key: `placement:$each`,
+    topology: alchemyGrid,
+    expression: alchemyElement[$each],
+    offset: [0, 0.05, 0],
+    rollDegrees: 180
+  )
+  alchemyCell[$each] = alchemyElement[$each]
+  alchemyFace[$each] = 0
+}
+
+rule "alchemy-sync-done" {
+  when alchemySync == 1
+  mode: Level
+  alchemySync = 0
+}
+
+commands [
+  {
+    name: "alchemy.reset"
+    help: "Resets the Alchemy table and recipe book to the four starter elements (Air, Earth, Fire, Water)."
+    lines [
+      "world.state.cell.set alchemyReset $value 1"
+    ]
+  }
+  {
+    name: "alchemy.mix"
+    help: "Places two elements into the Alchemy cauldron's left and right hands so the next tick mixes them."
+    parameters [
+      {
+        name: "first"
+        kind: Choice
+        values: map(elementIds, e => alchemyElementStyles[e].name)
+        default: "Fire"
+      }
+      {
+        name: "second"
+        kind: Choice
+        values: map(elementIds, e => alchemyElementStyles[e].name)
+        default: "Water"
+      }
+    ]
+    lines [
+      "world.state.cell.set left $value {first}"
+      "world.state.cell.set right $value {second}"
+    ]
+  }
+]
+
+state {
+  enum Element {
+    Nothing
+    Air
+    Earth
+    Fire
+    Water
+    Steam
+    Mud
+    Lava
+    Dust
+    Energy
+    Cloud
+    Rain
+    Sea
+    Stone
+    Sand
+    Glass
+    Metal
+    Plant
+    Swamp
+    Life
+    Lightning
+    Tree
+    Wood
+    Ash
+    Bacteria
+    Animal
+    Fish
+    Bird
+    Clay
+    Human
+    Tool
+    House
+  }
+
+  lattices [
+    grid(name: "pairs", origin: [0, 0, 0], cellSize: 1, width: size, depth: size, wrap: None)
+    grid(name: "elements", origin: [0, 0, 0], cellSize: 1, width: size, depth: 1, wrap: None)
+    grid(
+      band: 0.11,
+      cellSize: alchemyCellSize,
+      depth: alchemyRows,
+      width: alchemyColumns,
+      origin: [alchemyOriginX, alchemySurface, alchemyOriginZ],
+      name: "alchemyGrid",
+      wrap: None
+    )
+  ]
+
+  world {
+    row {
+      name: "recipe"
+      kind: "Int"
+      enum: Element
+      domain: cellsOf(topology: pairs)
+      cells: map(
+        recipes,
+        r => {
+          key: $"{minimum(r[0], r[1]) * size + maximum(r[0], r[1])}"
+          value: r[2]
+        }
+      )
+    }
+
+    // 1 for an element no recipe takes as an ingredient: discovering it opens nothing new.
+    row {
+      name: "final"
+      kind: "Int"
+      domain: cellsOf(topology: elements)
+      cells: map(
+        range(1, size - 1),
+        e => {
+          key: $"{e}"
+          value: length(filter(recipes, r => (r[0] == e) + (r[1] == e))) == 0
+        }
+      )
+    }
+
+    slot known = initialKnown
+    slot discovered = starterCount bounds(0..size - 1)
+
+    // The two hands, the last mix's result, and the newest discovery.
+    slot left: Element = Nothing
+    slot right: Element = Nothing
+    slot made: Element = Nothing
+    slot newest: Element = Nothing
+
+    // 1 when the last mix discovered what it made.
+    slot fresh = 0 bounds(0..1)
+
+    // Recipes whose ingredients are known and whose result is not: how many ways forward remain.
+    slot hints = 0 bounds(0..)
+
+    // The `known` the hint count was last taken over.
+    slot hintsFor = 0
+
+    slot mixes = 0 bounds(0..)
+    slot fizzles = 0 bounds(0..)
+    slot refused = 0 bounds(0..)
+    slot complete = 0 bounds(0..1)
+
+    // The tabletop board over `alchemyGrid`: cell `e` (1..31) holds 1 once element `e` is discovered and 0 while it
+    // remains sealed.
+    row {
+      name: "alchemyBoard"
+      kind: "Int"
+      capacity: alchemyCells
+      min: 0
+      max: 1
+      domain: cellsOf(topology: alchemyGrid)
+      cells: map(range(0, alchemyCells), i => { key: $"{i}", value: alchemyOpening[i] })
+    }
+    row {
+      name: "alchemyStart"
+      kind: "Int"
+      capacity: alchemyCells
+      min: 0
+      max: 1
+      domain: cellsOf(topology: alchemyGrid)
+      cells: map(range(0, alchemyCells), i => { key: $"{i}", value: alchemyOpening[i] })
+    }
+    row {
+      name: "alchemySeen"
+      kind: "Int"
+      capacity: alchemyCells
+      min: 0
+      max: totalElements
+      domain: cellsOf(topology: alchemyGrid)
+      inverse {
+        tokens: "alchemyCell"
+        codes: "alchemyElement"
+      }
+    }
+
+    row {
+      name: "alchemyElement"
+      kind: "Int"
+      capacity: totalElements
+      min: 1
+      max: totalElements
+      cells: map(elementIds, e => { key: $"alchemyToken{e}", value: e })
+    }
+    row {
+      name: "alchemyFace"
+      kind: "Int"
+      capacity: totalElements
+      min: 0
+      max: 1
+      cells: map(elementIds, e => { key: $"alchemyToken{e}", value: 1 })
+    }
+    row {
+      name: "alchemyCell"
+      kind: "Int"
+      capacity: totalElements
+      min: (-1 - totalElements)
+      max: (alchemyCells - 1)
+      cells: map(elementIds, e => { key: $"alchemyToken{e}", value: e })
+    }
+    row {
+      name: "alchemyStray"
+      kind: "Int"
+      capacity: totalElements
+      min: 0
+      max: 1
+      cells: map(elementIds, e => { key: $"alchemyToken{e}", value: 0 })
+    }
+
+    slot alchemyTurn = 1 bounds(0..1)
+    slot alchemyVerdict = 1 bounds(0..1)
+    slot alchemyHold = 0 bounds(0..alchemySettleTicks)
+    slot alchemyCollisions = 0 bounds(0..totalElements)
+    slot alchemyMisplaced = 0 bounds(0..totalElements)
+    slot alchemyIllegal = 0 bounds(0..50400)
+    slot alchemySync = 1 bounds(0..1)
+    slot alchemyReset = 0 bounds(0..1)
+
+    table alchemySeat {
+      cursor = 1
+      pointer = -1
+      pickEdge = 0
+      cancelEdge = 0
+      aheadEdge = 0
+      behindEdge = 0
+      rightEdge = 0
+      leftEdge = 0
+      pickDown = 0
+      cancelDown = 0
+      aheadDown = 0
+      behindDown = 0
+      rightDown = 0
+      leftDown = 0
+    }
+  }
+}

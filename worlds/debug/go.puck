@@ -73,10 +73,10 @@ let goHomeRow = map(
 let goHome = map(range(0, goStones), i => (goHomeRow[i] * goTrayColumns) + goHomeColumn[i])
 let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
 
-// The bodies: debug.puck imports this file first, so its cursor and stones take the population's top slots (shapes.puck's
-// goBodies): the cursor is the highest body and stone i the one `1 + i` below it. Seat 1 drives each stone, so a seat's
-// `body.pose` may set one on a point (go.md).
-let goTop = ((galleryPopulation + 2 + boardRoomBodies) - 1)
+// The bodies: debug.puck imports this file after Alchemy, so its cursor and stones take the population's slots under
+// Alchemy's (shapes.puck's alchemyBodies and goBodies): the cursor is the highest body and stone i the one `1 + i`
+// below it. Seat 1 drives each stone, so a seat's `body.pose` may set one on a point (go.md).
+let goTop = (((galleryPopulation + 2 + boardRoomBodies) - 1) - alchemyBodies)
 grants: map(range(0, goStones), i => { capability: Drive, grantee: "seat1", subject: $"body:{goTop - 1 - i}" })
 
 looks: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {

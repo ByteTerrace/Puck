@@ -611,4 +611,80 @@ public sealed class WorldTextAuthoringLawTests {
             userMessage: reason
         );
     }
+    [Fact]
+    public void TextScreenSourceInterpolatesStatePlaceholdersAndRebakesOnMove() {
+        var source = new WorldScreenSource.Text(
+            Lines: ["{state.discovered}"],
+            Columns: 4,
+            Rows: 1
+        );
+        var definition = (Fixtures.BuildDocument() with {
+            Text = Catalog(),
+            ScreensRaw = [TextScreen(source: source)],
+        }).WithWorldState(rows: [new WorldStateRow(
+            Name: CellName.Parse(candidate: "discovered"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Int(value: 4L)
+            )]
+        )]);
+        var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));
+
+        mirror.Install(
+            engineTick: 0UL,
+            tick: 0UL
+        );
+
+        var fonts = FontAtlasCatalogPacker.Pack(
+            defaultFont: "body",
+            fonts: new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "0123456789") }
+        );
+        var decals = new WorldScreenDecals(
+            catalog: () => fonts,
+            colors: new WorldBakedColors(mirror: mirror),
+            textAt: static index => ((index == 0)
+                ? new WorldScreenSource.Text(
+                    Lines: ["{state.discovered}"],
+                    Columns: 4,
+                    Rows: 1
+                )
+                : null)
+        );
+        var before = decals.Providers[0]()!;
+
+        // "4" occupies cell 0 (non-equal UV words) and leaves cell 1 blank (equal UV words).
+        Assert.NotEqual(
+            actual: before.Cells.Span[0],
+            expected: before.Cells.Span[1]
+        );
+        Assert.Equal(
+            actual: before.Cells.Span[4],
+            expected: before.Cells.Span[5]
+        );
+
+        definition = definition.WithWorldState(rows: [new WorldStateRow(
+            Name: CellName.Parse(candidate: "discovered"),
+            Kind: CellKind.Int,
+            Cells: [new StateCell(
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Int(value: 31L)
+            )]
+        )]);
+        mirror.Refresh(stamp: new Puck.World.Protocol.WorldStateStamp(
+            ArenaValues: false,
+            EngineTick: 1UL,
+            Everything: true,
+            MovedRows: default,
+            Tick: 1UL
+        ));
+
+        var after = decals.Providers[0]()!;
+
+        // "31" occupies both cell 0 and cell 1.
+        Assert.NotEqual(
+            actual: after.Cells.Span[4],
+            expected: after.Cells.Span[5]
+        );
+    }
 }
