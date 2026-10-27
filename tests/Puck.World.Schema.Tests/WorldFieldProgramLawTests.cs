@@ -99,7 +99,7 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void AFieldHandleFromAnotherProgramIsRejectedEvenWhenItsOrdinalFits() {
         var state = BuildState();
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
         var catalog = StateCatalog.Compile(section: state);
         var first = WorldFieldProgram.Compile(
             document: fields,
@@ -127,7 +127,7 @@ public sealed class WorldFieldProgramLawTests {
                         Value: 1f
                     )]
             )]);
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var transform = Assert.IsType<WorldFieldNode.Transform>(@object: Assert.Single(collection: WorldFieldProgram.Compile(
             document: fields,
@@ -174,7 +174,7 @@ public sealed class WorldFieldProgramLawTests {
                 ),
                 extra: [tokens]
             );
-            var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+            var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
             var program = WorldFieldProgram.Compile(
                 document: fields,
@@ -201,7 +201,7 @@ public sealed class WorldFieldProgramLawTests {
                 Value: 2f
             ),
             ]);
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var program = WorldFieldProgram.Compile(
             document: fields,
@@ -217,7 +217,7 @@ public sealed class WorldFieldProgramLawTests {
                 Field: "heat",
                 Tag: "burning"
             )]);
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var emit = Assert.IsType<WorldFieldNode.Emit>(@object: Assert.Single(collection: WorldFieldProgram.Compile(
             document: fields,
@@ -236,7 +236,7 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void Compile_LowersOrderedReactionsToTypedNodesAndCanonicalDependencies() {
         var state = BuildState();
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
         var catalog = StateCatalog.Compile(section: state);
 
         var program = WorldFieldProgram.Compile(
@@ -365,7 +365,7 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void Compile_NodeCollectionsAreImmutableAfterDependencyAnalysis() {
         var state = BuildState();
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
         var program = WorldFieldProgram.Compile(
             document: fields,
             state: StateCatalog.Compile(section: state)
@@ -394,7 +394,7 @@ public sealed class WorldFieldProgramLawTests {
                 Field: "heat",
                 Rate: 0.125f
             )]);
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var program = WorldFieldProgram.Compile(
             document: fields,
@@ -415,7 +415,7 @@ public sealed class WorldFieldProgramLawTests {
             Kind: CellKind.Int,
             Domain: StateDomain.Slot.Instance
         ));
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var exception = Assert.Throws<InvalidOperationException>(testCode: () => WorldFieldProgram.Compile(
             document: fields,
@@ -441,7 +441,7 @@ public sealed class WorldFieldProgramLawTests {
                     Rate: new WorldLatticeScalar(Row: "season")
                 )]
         );
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var exception = Assert.Throws<InvalidOperationException>(testCode: () => WorldFieldProgram.Compile(
             document: fields,
@@ -464,7 +464,7 @@ public sealed class WorldFieldProgramLawTests {
                         Value: 1f
                     )]
             )]);
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var transform = Assert.IsType<WorldFieldNode.Transform>(@object: Assert.Single(collection: WorldFieldProgram.Compile(
             document: fields,
@@ -504,7 +504,7 @@ public sealed class WorldFieldProgramLawTests {
             ),
             ],
         };
-        var fields = Assert.IsType<WorldFieldsSection>(@object: WorldFieldsSection.Compile(state: state));
+        var fields = Assert.Single(collection: WorldFieldsSection.Compile(state: state));
 
         var program = WorldFieldProgram.Compile(
             document: fields,
@@ -532,9 +532,9 @@ public sealed class WorldFieldProgramLawTests {
             actual: right,
             expected: left
         );
-        _ = left.Fields;
+        _ = left.FieldRegions;
         _ = left.StateCatalog;
-        _ = left.FieldProgram;
+        _ = left.FieldPrograms;
 
         Assert.Equal(
             expected: expectedHash,
@@ -549,9 +549,9 @@ public sealed class WorldFieldProgramLawTests {
             actual: left.GetHashCode()
         );
 
-        _ = right.Fields;
+        _ = right.FieldRegions;
         _ = right.StateCatalog;
-        _ = right.FieldProgram;
+        _ = right.FieldPrograms;
 
         Assert.Equal(
             actual: right,
@@ -565,15 +565,15 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void WarmCompiledViewReadsAllocateNothing() {
         var definition = new WorldDefinition(StateRaw: BuildState());
-        var fields = Assert.IsType<WorldFieldsSection>(@object: definition.Fields);
+        var fields = Assert.Single(collection: definition.FieldRegions);
         var catalog = definition.StateCatalog;
-        var program = Assert.IsType<WorldFieldProgram>(@object: definition.FieldProgram);
+        var program = Assert.Single(collection: definition.FieldPrograms);
         var allocated = AllocationWindow.Least(window: () => {
             for (var index = 0; (index < 64); index++) {
                 if (
                     !ReferenceEquals(
                     objA: fields,
-                    objB: definition.Fields
+                    objB: definition.FieldRegions[0]
                 ) ||
                     !ReferenceEquals(
                     objA: catalog,
@@ -581,7 +581,7 @@ public sealed class WorldFieldProgramLawTests {
                 ) ||
                     !ReferenceEquals(
                     objA: program,
-                    objB: definition.FieldProgram
+                    objB: definition.FieldPrograms[0]
                 )
                 ) {
                     throw new InvalidOperationException(message: "A warm compatible compiled view changed identity.");
@@ -597,11 +597,11 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void WorldDefinition_FieldProgram_RecompilesWhenAWithExpressionReplacesState() {
         var original = new WorldDefinition(StateRaw: BuildState());
-        var originalFields = Assert.IsType<WorldFieldsSection>(@object: original.Fields);
+        var originalFields = Assert.Single(collection: original.FieldRegions);
 
         Assert.NotNull(@object: originalFields.Reactions);
         var originalReactions = originalFields.Reactions!;
-        var originalProgram = Assert.IsType<WorldFieldProgram>(@object: original.FieldProgram);
+        var originalProgram = Assert.Single(collection: original.FieldPrograms);
         var originalField = Assert.Single(collection: originalProgram.Fields).Handle;
 
         Assert.Equal(
@@ -621,8 +621,8 @@ public sealed class WorldFieldProgramLawTests {
                 )]
         );
         var replaced = original with { StateRaw = replacementState };
-        var replacementFields = Assert.IsType<WorldFieldsSection>(@object: replaced.Fields);
-        var replacementProgram = Assert.IsType<WorldFieldProgram>(@object: replaced.FieldProgram);
+        var replacementFields = Assert.Single(collection: replaced.FieldRegions);
+        var replacementProgram = Assert.Single(collection: replaced.FieldPrograms);
 
         Assert.NotNull(@object: replacementFields.Reactions);
         var replacementReactions = replacementFields.Reactions!;
@@ -652,14 +652,14 @@ public sealed class WorldFieldProgramLawTests {
             )];
         var state = BuildState(reactions: reactions);
         var definition = new WorldDefinition(StateRaw: state);
-        var original = Assert.IsType<WorldFieldProgram>(@object: definition.FieldProgram);
+        var original = Assert.Single(collection: definition.FieldPrograms);
         var originalHandle = Assert.Single(collection: original.Fields).Handle;
 
         reactions[0] = new WorldReaction.Diffuse(
             Field: "heat",
             Rate: 0.5f
         );
-        var refreshed = Assert.IsType<WorldFieldProgram>(@object: definition.FieldProgram);
+        var refreshed = Assert.Single(collection: definition.FieldPrograms);
 
         Assert.NotSame(
             actual: refreshed,
@@ -671,8 +671,8 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void WorldDefinition_PaintAndColorOnlyChangesPreserveProgramButEnvelopeChangesReplaceIt() {
         var original = new WorldDefinition(StateRaw: BuildState());
-        var originalFields = Assert.IsType<WorldFieldsSection>(@object: original.Fields);
-        var originalProgram = Assert.IsType<WorldFieldProgram>(@object: original.FieldProgram);
+        var originalFields = Assert.Single(collection: original.FieldRegions);
+        var originalProgram = Assert.Single(collection: original.FieldPrograms);
         var originalHandle = Assert.Single(collection: originalProgram.Fields).Handle;
         var cosmeticRows = original.StateRaw!.World!.Select(selector: row => (
             string.Equals(
@@ -697,15 +697,15 @@ public sealed class WorldFieldProgramLawTests {
 
         Assert.NotSame(
             expected: originalFields,
-            actual: cosmetic.Fields
+            actual: Assert.Single(collection: cosmetic.FieldRegions)
         );
         Assert.Same(
             expected: originalProgram,
-            actual: cosmetic.FieldProgram
+            actual: Assert.Single(collection: cosmetic.FieldPrograms)
         );
         Assert.Equal(
             expected: "heat",
-            actual: cosmetic.FieldProgram![originalHandle].Name
+            actual: Assert.Single(collection: cosmetic.FieldPrograms)![originalHandle].Name
         );
 
         var envelopeRows = cosmetic.StateRaw!.World!.Select(selector: row => (
@@ -717,7 +717,7 @@ public sealed class WorldFieldProgramLawTests {
             ? row with { Field = row.Field! with { Initial = 2f } }
             : row)).ToArray();
         var envelope = cosmetic.WithWorldState(rows: envelopeRows);
-        var replacementProgram = Assert.IsType<WorldFieldProgram>(@object: envelope.FieldProgram);
+        var replacementProgram = Assert.Single(collection: envelope.FieldPrograms);
 
         Assert.NotSame(
             actual: replacementProgram,
@@ -728,9 +728,9 @@ public sealed class WorldFieldProgramLawTests {
     [Fact]
     public void WorldDefinition_ValueOnlyStateUpdatePreservesCompiledFieldsCatalogProgramAndHandles() {
         var original = new WorldDefinition(StateRaw: BuildState());
-        var fields = Assert.IsType<WorldFieldsSection>(@object: original.Fields);
+        var fields = Assert.Single(collection: original.FieldRegions);
         var catalog = original.StateCatalog;
-        var program = Assert.IsType<WorldFieldProgram>(@object: original.FieldProgram);
+        var program = Assert.Single(collection: original.FieldPrograms);
 
         Assert.True(condition: catalog.TryResolve(
             handle: out var season,
@@ -755,7 +755,7 @@ public sealed class WorldFieldProgramLawTests {
 
         Assert.Same(
             expected: fields,
-            actual: updated.Fields
+            actual: Assert.Single(collection: updated.FieldRegions)
         );
         Assert.Same(
             expected: catalog,
@@ -763,7 +763,7 @@ public sealed class WorldFieldProgramLawTests {
         );
         Assert.Same(
             expected: program,
-            actual: updated.FieldProgram
+            actual: Assert.Single(collection: updated.FieldPrograms)
         );
         Assert.Equal(
             expected: "season",
@@ -774,7 +774,7 @@ public sealed class WorldFieldProgramLawTests {
 
         Assert.Same(
             expected: fields,
-            actual: unrelatedSectionEdit.Fields
+            actual: Assert.Single(collection: unrelatedSectionEdit.FieldRegions)
         );
         Assert.Same(
             expected: catalog,
@@ -782,14 +782,14 @@ public sealed class WorldFieldProgramLawTests {
         );
         Assert.Same(
             expected: program,
-            actual: unrelatedSectionEdit.FieldProgram
+            actual: Assert.Single(collection: unrelatedSectionEdit.FieldPrograms)
         );
 
         var chainedEdit = updated with { DefaultSeatKitRaw = "builder" };
 
         Assert.Same(
             expected: fields,
-            actual: chainedEdit.Fields
+            actual: Assert.Single(collection: chainedEdit.FieldRegions)
         );
         Assert.Same(
             expected: catalog,
@@ -797,7 +797,7 @@ public sealed class WorldFieldProgramLawTests {
         );
         Assert.Same(
             expected: program,
-            actual: chainedEdit.FieldProgram
+            actual: Assert.Single(collection: chainedEdit.FieldPrograms)
         );
     }
 }

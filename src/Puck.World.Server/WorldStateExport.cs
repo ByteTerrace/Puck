@@ -25,28 +25,19 @@ namespace Puck.World.Server;
 /// and search). The <c>pose</c> and <c>authoritative</c> digests are what this document carries for them.</para>
 /// </remarks>
 public static class WorldStateExport {
-    private static JsonArray? Fields(Puck.Physics.Fields.FieldLattice? lattice) {
-        if (lattice is null) {
-            return null;
-        }
-
-        var captured = lattice.Capture();
+    private static JsonArray Fields(IReadOnlyList<WorldFieldRegion> regions) {
         var fields = new JsonArray();
 
-        for (var field = 0; (field < lattice.FieldCount); field++) {
-            var cells = new JsonArray();
-            var raw = captured.Raw[field];
+        foreach (var region in regions) {
+            var lattice = region.Lattice; var captured = lattice.Capture();
 
-            for (var cell = 0; (cell < raw.Length); cell++) {
-                cells.Add(value: raw[cell]);
+            for (var field = 0; (field < lattice.FieldCount); field++) {
+                var cells = new JsonArray();
+
+                foreach (var raw in captured.Raw[field]) { cells.Add(value: raw); }
+                fields.Add(value: new JsonObject { ["region"] = region.Name, ["name"] = lattice.Input.Fields[field].Name, ["cells"] = cells });
             }
-
-            fields.Add(value: new JsonObject {
-                ["name"] = lattice.Input.Fields[field].Name,
-                ["cells"] = cells,
-            });
         }
-
         return fields;
     }
     private static JsonObject Hashes(WorldServer server, ulong tick) {
@@ -175,7 +166,7 @@ public static class WorldStateExport {
                 engineTick: server.CompletedEngineTicks,
                 tick: tick
             ),
-            ["fields"] = Fields(lattice: server.Population.Fields),
+            ["fields"] = Fields(regions: server.Population.FieldRegions),
         };
 
         return CanonicalJsonDocument.Serialize(node: export);

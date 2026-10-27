@@ -1246,6 +1246,7 @@ public sealed class WorldRuleExtensionLawTests {
     [Fact]
     public void PaintFieldWritesClippedSphereAndClampsEveryCell() {
         var fields = new WorldFieldsSection(
+            Name: "world",
             Lattice: new WorldFieldLatticeDefinition(
                 Origin: new DocumentVector3(
                     x: 0f,
@@ -1286,7 +1287,7 @@ public sealed class WorldRuleExtensionLawTests {
 
         fixture.Step();
 
-        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.Fields);
+        var lattice = Assert.IsType<FieldLattice>(@object: fixture.Server.Population.FieldRegions[0].Lattice);
         var painted = 0;
 
         for (var cell = 0; (cell < lattice.CellCount); cell++) {
@@ -1313,6 +1314,7 @@ public sealed class WorldRuleExtensionLawTests {
     [Fact]
     public void NoOpFieldPaintIsASuccessNotAnUnavailableFieldRefusal() {
         var fields = new WorldFieldsSection(
+            Name: "world",
             Lattice: new WorldFieldLatticeDefinition(
                 Origin: new DocumentVector3(
                     x: 0f,

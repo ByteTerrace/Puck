@@ -165,7 +165,8 @@ public sealed partial class PipelineOverrideLawTests {
     /// <see cref="WorldPipelineOverrideRefusal.ParameterUnbound"/> naming the eight elements it presents.</summary>
     [Fact]
     public void AWorldLoadBindsAFieldRowToAnArrayOnlyAsLongAsItsLattice() {
-        var lattice = WorldFieldsSection.ToStateSection(composite: new WorldFieldsSection(
+        var lattice = WorldFieldsSection.ToStateSection(composite: [new WorldFieldsSection(
+            Name: "surface",
             Lattice: new WorldFieldLatticeDefinition(
                 Origin: new Puck.Assets.Documents.DocumentVector3(x: 0f, y: 0f, z: 0f),
                 CellSize: 1f,
@@ -173,7 +174,7 @@ public sealed partial class PipelineOverrideLawTests {
                 Depth: 2
             ),
             Fields: [new WorldFieldRow(Name: "heat", Max: 4f)]
-        ));
+        )]);
 
         // The live field lattice is fixed at boot, so the server boots with it and every candidate keeps it.
         WorldDefinition WithField(WorldDefinition definition) => (definition with {

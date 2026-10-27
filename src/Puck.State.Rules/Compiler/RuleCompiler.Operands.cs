@@ -36,14 +36,15 @@ public static partial class RuleCompiler {
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        return (row.HasCell(key: key) || (
-            (row.EffectiveDomain is StateDomain.CellsOf board) &&
-            (context.FindTopology(name: board.Topology) is { } topology) &&
-            long.TryParse(provider: CultureInfo.InvariantCulture, result: out var ordinal, s: key, style: NumberStyles.None) &&
-            (ordinal < topology.CellCount)
-        ));
+        return context.DeclaresCell(key: key, row: row);
     }
 
+    private static IRuleOperand CreateCellRead(RuleCompileContext context, StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) {
+        var operand = context.CreateCellRead(key: key, keyFrom: keyFrom, row: row, rowOrdinal: rowOrdinal);
+
+        context.Needs.AddFact(fact: operand);
+        return operand;
+    }
     private static bool TryResolveStaticInstanceField(StateChannelRef reference, StateChannelRef? cell, RuleCompileContext context, out StatePoolDescriptor? pool, out StatePoolFieldDescriptor field, out StateInstanceHandle handle) {
         pool = null;
         field = default;
@@ -349,12 +350,7 @@ public static partial class RuleCompiler {
 
             return new ResolvedOperand(
                 describe: describe,
-                operand: new StateCellOperand(
-                    key: default,
-                    keyFrom: dynamicKey,
-                    rowOrdinal: rowOrdinal,
-                    valueKind: row.Kind
-                )
+                operand: CreateCellRead(context: context, key: default, keyFrom: dynamicKey, row: row, rowOrdinal: rowOrdinal)
             );
         }
 
@@ -381,15 +377,7 @@ public static partial class RuleCompiler {
 
         return new ResolvedOperand(
             describe: describe,
-            operand: new StateCellOperand(
-                key: InternKey(
-                    context: context,
-                    name: resolvedKey
-                ),
-                keyFrom: null,
-                rowOrdinal: rowOrdinal,
-                valueKind: row.Kind
-            )
+            operand: CreateCellRead(context: context, row: row, rowOrdinal: rowOrdinal, key: InternKey(context: context, name: resolvedKey), keyFrom: null)
         );
     }
     /// <summary>Parses a <c>$reduce:</c> op token.</summary>

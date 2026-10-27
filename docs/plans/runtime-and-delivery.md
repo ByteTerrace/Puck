@@ -16,6 +16,11 @@ reasoning behind every decision is in
 
 ## Implementation status
 
+The proposed [owned-memory design](memory-pooling.md) is a separate runtime
+foundation: retained owner storage, explicit reclamation, mimalloc, and selective
+shared reuse without GC. Its first memory slice is separated from the later
+State and World runtime ports; packages and status live on that page.
+
 - **Canonical world sources:** `standard`, `pipeline` and `shards/quilt-nw-gap`
   are authored as `.puck`. Five migrations remain unstarted:
   `puck.world.json` and `shards/quilt-ne.world.json`, `quilt-nw.world.json`,

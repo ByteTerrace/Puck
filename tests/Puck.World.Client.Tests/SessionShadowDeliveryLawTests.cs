@@ -47,7 +47,7 @@ public sealed class SessionShadowDeliveryLawTests {
         return reads;
     }
     private static WorldDefinition FieldDefinition() {
-        var definition = Fixtures.WithLattice(Fixtures.BuildDocument(), new WorldFieldsSection(
+        var definition = Fixtures.WithLattice(Fixtures.BuildDocument(), new WorldFieldsSection(Name: "world",
             Lattice: new WorldFieldLatticeDefinition(Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 1, Depth: 1),
             Fields: [new WorldFieldRow(Name: "power", Max: 4f)]));
 
@@ -74,7 +74,7 @@ public sealed class SessionShadowDeliveryLawTests {
         var selection = Selection(definition: definition);
         using var observer = session.ObserveDeliveredState(observer: selection.Advance);
 
-        static FieldCellDelta[] Power(double power) => [new FieldCellDelta(Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: power).Value)];
+        static FieldCellDelta[] Power(double power) => [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: Puck.Maths.FixedQ4816.FromDouble(value: power).Value)];
         session.DeliverDefinition(definition: definition, version: default);
         Deliver(session, definition, 0, Power(power: 2));
         Assert.Equal(new[] { "field" }, Names(selection, 0));
@@ -135,7 +135,7 @@ public sealed class SessionShadowDeliveryLawTests {
 
         session.DeliverState(definition, default, new WorldStateStamp(EngineTick: 11, Everything: true, MovedRows: default, Tick: 11));
         Assert.Equal(actual: callbacks, expected: before);
-        session.DeliverSnapshot(snapshot: Snapshot(11, [new FieldCellDelta(Cell: 0, Field: 0, Raw: (2L * 65536L))]));
+        session.DeliverSnapshot(snapshot: Snapshot(11, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]));
 
         Assert.Equal(actual: callbacks, expected: (before + 1));
         Assert.Equal(new[] { "field" }, Names(selection, 11));
@@ -174,7 +174,7 @@ public sealed class SessionShadowDeliveryLawTests {
         var definition = FieldDefinition();
         var session = new WorldSessionMirror(placeholder: definition);
 
-        Deliver(session, definition, 10, [new FieldCellDelta(Cell: 0, Field: 0, Raw: (2L * 65536L))]);
+        Deliver(session, definition, 10, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]);
         var selection = Selection(definition: definition);
         using var observer = session.ObserveDeliveredState(observer: selection.Advance);
 
@@ -202,7 +202,7 @@ public sealed class SessionShadowDeliveryLawTests {
 
         Assert.Equal(new[] { "steady" }, Names(selection, 10));
         Assert.Equal(new[] { "steady" }, Names(selection, 9));
-        session.DeliverSnapshot(snapshot: Snapshot(10, [new FieldCellDelta(Cell: 0, Field: 0, Raw: (2L * 65536L))]));
+        session.DeliverSnapshot(snapshot: Snapshot(10, [new FieldCellDelta(Region: "world", FieldName: "power", Cell: 0, Field: 0, Raw: (2L * 65536L))]));
         Assert.Equal(new[] { "field" }, Names(selection, 10));
     }
     [Fact]

@@ -347,6 +347,12 @@ element word enters an engine contract.
   fields, sources and blockers, emitters, media, coatings and audio. A storm
   over one region leaves its neighbour clear; sealed regions exchange nothing,
   and open regions exchange in a stable order, once per exchange.
+- **Seed disclosure is the author's policy.** The owner rules that seed data is
+  often a public game feature. A public region row's initial value and paint
+  reach every observer unchanged; a restricted row and its seed data reach only
+  recipients admitted by its live visibility policy. Reactions cross only when
+  all their field and state dependencies are readable. A projection neither
+  leaks forbidden seeds nor replaces permitted seeds with neutral values.
 - **Authority never reads an image.** Accumulation, tracks, melting and
   conversions are fixed-point fields and reactions, persisted through
   snapshots, checkpoints and replay, advancing at their authored cadence

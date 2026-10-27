@@ -9149,8 +9149,8 @@
           "type": "string"
         },
         "gain": {
-          "description": "The feed gain (1 = unity), bounded by MaxLevel \u2014 the one audio gain ceiling the validator enforces everywhere.",
-          "type": "number"
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter."
         }
       },
       "required": [

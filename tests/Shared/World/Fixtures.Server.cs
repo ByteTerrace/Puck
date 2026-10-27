@@ -31,7 +31,6 @@ internal static partial class Fixtures {
             slot: slot
         );
     }
-
     /// <summary>Builds a FRESH, isolated, in-process <see cref="WorldServer"/> over <paramref name="definition"/>
     /// (<see cref="BuildDocument"/>'s own output when omitted) — the same construction shape
     /// <see cref="Puck.World.WorldReplaySnapshot.Drive"/> uses to rehydrate an authoritative world for offline
@@ -217,7 +216,7 @@ internal static partial class Fixtures {
         ulong worldSeed = 0UL,
         IReadOnlyList<WorldStateRow>? state = null
     ) {
-        var section = WorldFieldsSection.ToStateSection(composite: document);
+        var section = WorldFieldsSection.ToStateSection(composite: [document]);
 
         if (state is { Count: > 0 }) {
             section = section with { World = [.. (section.World ?? []), .. state] };

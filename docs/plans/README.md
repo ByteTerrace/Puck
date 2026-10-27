@@ -15,6 +15,10 @@ The state system, its ceilings and costs, the authoring language, and the games 
 
 How a world is composed, compiled, packaged, released, and rolled back, and what a client may observe of it, as one page of packages: asset packages, the ROM ledger, compiled worlds, the presentation view, release pairs, and one evidence package. Forcing artifact: the quilt built as an asset package, shipped as compiled worlds inside it, deployed, rolled back, and restored. Its decisions are in [the register](../decisions/runtime-and-delivery.md).
 
+- [Owned memory for Puck's own host](memory-pooling.md)—retained owner storage,
+  mimalloc, selective shared reuse, and a focused allocation/reclamation slice
+  separated from the later State and World runtime ports.
+
 ## [Machines and cartridges](machines-and-cartridges.md)
 
 Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the arcade's cabinet module used twice, with a retail-scale cartridge in one. Its decisions are in [the register](../decisions/machines-and-cartridges.md).

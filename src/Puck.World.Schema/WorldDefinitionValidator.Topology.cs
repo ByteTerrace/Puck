@@ -557,10 +557,10 @@ public static partial class WorldDefinitionValidator {
     /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring
     /// a <c>Medium</c> hold row requires.</summary>
     private static bool HasMediumField(WorldDefinition definition) {
-        var fields = (definition.Fields?.Fields ?? []);
+        var fields = definition.FieldRegions.SelectMany(selector: static region => region.Fields);
 
-        for (var index = 0; (index < fields.Count); index++) {
-            if (fields[index].Medium) {
+        foreach (var field in fields) {
+            if (field.Medium) {
                 return true;
             }
         }
@@ -572,37 +572,42 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        var physical = WorldTopologyCompilation.FindPhysical(state: definition.StateRaw);
-        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(predicate: t => (t?.Kind == TopologyKind.Field));
+        var topologies = (definition.StateRaw?.Lattices ?? []).OfType<WorldFieldTopology>().ToArray();
 
-        if (physicalCount > 1) {
-            errors.Add(item: "state.lattices admits at most one physical field topology.");
-        }
         foreach (var row in (definition.StateRaw?.World ?? [])) {
-            if (row?.Field is not null) {
-                var topologyName = ((row.EffectiveDomain is StateDomain.CellsOf cellsOf)
-                    ? cellsOf.Topology
-                    : null
-                );
+            if ((row?.Field is not null) &&
+                ((row.EffectiveDomain is not StateDomain.CellsOf cells) || !topologies.Any(predicate: topology => (topology.Name == cells.Topology)))) {
+                errors.Add(item: $"state row '{row.Name}' field domain names no physical topology.");
+            }
+        }
+        foreach (var region in definition.FieldRegions) {
+            ValidateFieldRegion(definition: definition, errors: errors, fields: region);
+        }
+        var snapshotBytes = 0L;
+        var brickBytes = 0L;
 
-                if (
-                    (physical is null) ||
-                    (topologyName != physical.Name)
-                ) {
-                    errors.Add(item: $"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
+        foreach (var region in definition.FieldRegions) {
+            var cells = ((((long)region.Lattice.Width) * region.Lattice.Depth) * region.Lattice.Layers);
+
+            foreach (var field in region.Fields) {
+                // Cell, ordinal, raw value, document row, and two length-prefixed UTF-8 identities.
+                snapshotBytes += (cells * ((25L + System.Text.Encoding.UTF8.GetByteCount(s: region.Name)) +
+                    System.Text.Encoding.UTF8.GetByteCount(s: field.Name)));
+                if (field.HeightScale > 0) {
+                    brickBytes += (((long)Puck.SignedDistance.SdfBrickPoolLayout.VoxelsPerBrick) * sizeof(float));
                 }
             }
         }
-        if (
-            (physical is not null) &&
-            (definition.Fields is { Fields.Count: 0 })
-        ) {
-            errors.Add(item: $"state.lattices '{physical.Name}' is declared but no state row carries a field trait.");
+        if (snapshotBytes > WorldFieldCapacity.MaxSnapshotBytes) {
+            errors.Add(item: $"state.lattices physical primer needs {snapshotBytes} bytes across all regions, exceeding the {WorldFieldCapacity.MaxSnapshotBytes}-byte budget.");
         }
-        if (definition.Fields is not { } fields) {
-            return;
-        }
+        var brickBudget = (((long)Puck.SignedDistance.SdfBrickPoolLayout.TotalVoxels) * sizeof(float));
 
+        if (brickBytes > brickBudget) {
+            errors.Add(item: $"state.lattices sampled surfaces need {brickBytes} resident bytes across all regions, exceeding the {brickBudget}-byte brick buffer budget.");
+        }
+    }
+    private static void ValidateFieldRegion(WorldDefinition definition, WorldFieldsSection fields, List<string> errors) {
         var lattice = fields.Lattice;
 
         if (lattice is null) {
@@ -829,6 +834,17 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        if (fields.TravelResistance is { } resistance) {
+            RequireScalarValue(resistance, $"state.lattices '{fields.Name}'.travelResistance");
+            if ((resistance.Literal is { } literal) && (literal < 0)) {
+                errors.Add(item: $"state.lattices '{fields.Name}'.travelResistance must be nonnegative.");
+            }
+            if ((resistance.Row is { } resistanceRow) &&
+                (WorldDefinitionRows.FindStateRow(rows: definition.State, name: resistanceRow) is { } declared) &&
+                (declared.Min is { } minimum) && (minimum < 0)) {
+                errors.Add(item: $"state.lattices '{fields.Name}'.travelResistance row must have a nonnegative minimum.");
+            }
+        }
         void RequireKeyedIntRow(string? row, string path) {
             if (
                 (row is null) ||

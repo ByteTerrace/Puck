@@ -479,7 +479,7 @@ public sealed class WorldMediumLawTests {
         );
         var compiled = WorldFieldsSection.Compile(state: state)!;
 
-        Assert.True(condition: compiled.Fields[0].Medium);
+        Assert.True(condition: compiled[0].Fields[0].Medium);
 
         var decompiled = WorldFieldsSection.ToStateSection(composite: compiled);
 

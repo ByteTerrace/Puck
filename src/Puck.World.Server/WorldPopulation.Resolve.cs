@@ -122,7 +122,7 @@ public sealed partial class WorldPopulation {
     private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation) {
         m_contactCensus = null;
         m_censusDefinition = definition;
-        var derivedSolids = solids;
+        var derivedSolids = solids?.WithRegions(regions: m_fieldRegions, tuning: FixedWorldCollision.Compile(collision: definition.Collision));
 
         if (
             (derivedSolids is null) &&
@@ -131,8 +131,8 @@ public sealed partial class WorldPopulation {
             if (!WorldSolidField.TryBuild(
                 built: out derivedSolids,
                 definition: definition,
-                lattice: m_fields,
-                reason: out var reason
+                reason: out var reason,
+                regions: m_fieldRegions
             )) {
                 throw new InvalidOperationException(message: $"the target/contact field could not compile the world's solids at boot: {reason}");
             }
@@ -150,9 +150,7 @@ public sealed partial class WorldPopulation {
         m_navigation = new NavigationRuntime(
             domains: CompileNavigationDomains(definition: definition),
             query: derivedSolids?.Query,
-            fields: ((m_fields is null)
-            ? null
-            : new NavigationMediumFieldAdapter(lattice: m_fields)),
+            fields: ((m_fieldRegions.Count == 0) ? null : new NavigationMediumFieldAdapter(regions: m_fieldRegions)),
             capacity: new NavigationCapacity(
                 MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling,
                 MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions,
@@ -177,64 +175,33 @@ public sealed partial class WorldPopulation {
             return true;
         }
 
-        var document = definition.Fields;
-        var program = definition.FieldProgram;
+        if (definition.FieldRegions.Count != definition.FieldPrograms.Count) { reason = "physical regions and compiled programs disagree"; return false; }
+        if (m_fieldRegions.Count != definition.FieldRegions.Count) { reason = "adding or removing regions changes allocation; restart the host"; return false; }
+        for (var index = 0; (index < m_fieldRegions.Count); index++) {
+            var region = m_fieldRegions[index]; var document = definition.FieldRegions[index];
 
-        if ((document is null) != (program is null)) {
-            reason = "the definition's field composite and compiled program disagree";
-
-            return false;
+            if (region.Name != document.Name) { reason = $"region '{region.Name}' changed identity"; return false; }
+            if (!region.Lattice.CanInstallInput(input: CompileFieldLatticeInput(document: document, program: definition.FieldPrograms[index]), reason: out reason)) { return false; }
         }
-
-        if ((m_fields is null) != (document is null)) {
-            reason = "adding or removing the live field lattice changes its allocation; restart the host to load it";
-
-            return false;
-        }
-
-        if (m_fields is null) {
-            reason = null;
-
-            return true;
-        }
-
-        return m_fields.CanInstallInput(
-            input: CompileFieldLatticeInput(
-                document: document!,
-                program: program!
-            ),
-            reason: out reason
-        );
+        reason = null; return true;
     }
-    /// <summary>Installs the candidate's compatible field companion/program pair, preserving live cell state.</summary>
-    /// <param name="definition">The candidate definition.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The candidate changes the live field allocation.</exception>
+    /// <summary>Installs compatible programs preserving independent live cells.</summary>
     public void InstallFields(WorldDefinition definition) {
-        if (!CanInstallFields(
-            definition: definition,
-            reason: out var reason
-        )) {
-            throw new InvalidOperationException(message: reason);
-        }
-
+        if (!CanInstallFields(definition: definition, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
         if (!m_fieldsCompiled) {
-            m_fields = ((definition.Fields is { } document)
-                ? new FieldLattice(
-                    input: CompileFieldLatticeInput(
-                        document: document,
-                        program: (definition.FieldProgram ?? throw new InvalidOperationException(message: "The field composite has no compiled program."))
-                    ),
-                    worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
-                )
-                : null
-            );
+            m_fieldRegions = definition.FieldRegions.Select(selector: (document, index) => new WorldFieldRegion(document.Name,
+                new FieldLattice(input: CompileFieldLatticeInput(document: document, program: definition.FieldPrograms[index]), worldSeed: (definition.Generation?.WorldSeed ?? 0UL)), document.TravelResistance)).ToArray();
             m_fieldsCompiled = true;
-        } else if (m_fields is { } fields) {
-            fields.InstallInput(input: CompileFieldLatticeInput(
-                document: definition.Fields!,
-                program: definition.FieldProgram!
-            ));
+        } else {
+            var updated = new WorldFieldRegion[m_fieldRegions.Count];
+
+            for (var index = 0; (index < updated.Length); index++) {
+                var region = m_fieldRegions[index]; var document = definition.FieldRegions[index];
+
+                region.Lattice.InstallInput(input: CompileFieldLatticeInput(document: document, program: definition.FieldPrograms[index]));
+                updated[index] = region with { TravelResistance = document.TravelResistance };
+            }
+            m_fieldRegions = updated;
         }
     }
     /// <summary>Flattens a compiled field program into the plain input the Physics kernel reads — the same seam

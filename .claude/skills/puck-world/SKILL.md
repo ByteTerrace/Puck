@@ -15,6 +15,12 @@ Creation authoring (shapes, profiles, panels, folds, contact tuning) belongs to
 `sdf-authoring`; the `.puck` language core to `puck-dsl`; the renderer to
 `rendering`.
 
+**Bare-metal hosting.** Puck's own freestanding runtime and platform host are
+the target; do not propose hosting stock .NET as a fallback. Treat missing
+contracts as porting work in that host or the engine
+([owner ruling](../../../docs/decisions/runtime-and-delivery.md#the-runtime)).
+The archived BareMetal experiment remains read-only prior art.
+
 **One live world.** The debug world, the asset package `worlds/debug/` (entry
 `debug.puck`, basis `avatars/moth`), is the only live world, with the
 garden (`garden.puck`) and the night field (`night.puck`) its painting wing's portals open onto

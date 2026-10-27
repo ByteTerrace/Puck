@@ -120,11 +120,12 @@ public sealed record WorldHistoryImage(
 
         var fields = new SortedDictionary<string, long[]>(comparer: StringComparer.Ordinal);
 
-        if (population.Fields is { } lattice) {
+        foreach (var region in population.FieldRegions) {
+            var lattice = region.Lattice;
             var captured = lattice.Capture();
 
             for (var field = 0; (field < lattice.FieldCount); field++) {
-                fields[lattice.Input.Fields[field].Name] = [.. captured.Raw[field]];
+                fields[$"{region.Name}/{lattice.Input.Fields[field].Name}"] = [.. captured.Raw[field]];
             }
         }
 

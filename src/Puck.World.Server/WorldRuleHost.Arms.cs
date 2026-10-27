@@ -32,6 +32,7 @@ public sealed partial class WorldRuleHost {
     public void CommitStateTransaction(int mark) => Host.CommitStateTransaction(mark: mark);
     /// <inheritdoc/>
     public void RewindStateTransaction(int mark) => Host.RewindStateTransaction(mark: mark);
+
     // What one firing's preflights carry from each arm to the next: the document rows it has queued so far, which
     // are the unit its commit installs, and the velocity its impulses would leave each rigid body at. Preflighting
     // clears both.
@@ -432,13 +433,15 @@ public sealed partial class WorldRuleHost {
     private bool FireFieldPaint(WorldPaintFieldEffect effect, bool preflight, out EffectRefusal refusal) {
         var paint = effect.Paint;
 
-        if (Host.Population.Fields is not { } lattice) {
+        if (!Host.Population.TryFieldForRow(paint.Field, out var region, out _)) {
             return Refuse(
                 code: WorldRuleEffectRefusal.FieldUnavailable,
                 reason: "no live field lattice is installed",
                 refusal: out refusal
             );
         }
+        var lattice = region!.Lattice;
+
         if (!lattice.TryFieldIndex(
             field: out _,
             name: paint.Field
