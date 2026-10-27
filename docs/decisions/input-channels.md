@@ -445,7 +445,15 @@ length-delimited and decoded with the existing bounded wire reader.
 | Event count | `uint16`, checked against the document's per-step limit and remaining bytes before any allocation |
 | Each event | `uint16` logical channel id, `byte` kind, `int64` raw value, `uint64` capture simulation tick, `int64` raw Q48.16 sub-tick seconds, `uint32` source sequence, `uint64` activation id |
 
-Wire event kinds are `Press`, `Release`, and `AxisSample`. The server derives
+Wire event kinds are `Press`, `Release`, `AxisSample`, and `Text`. A `Text`
+event's raw value is one Unicode scalar value; typed, pasted and IME-committed
+text arrive as a sequence of them in order, each with its own capture time, and
+editing keys (backspace, submit, cancel) are ordinary buttons on the same
+channel's mode. A text channel is declared like any other, so a world names
+where typed text goes, its per-step event limit bounds a paste, and the same
+history, patterns and clocks judge typing speed and accuracy that judge rhythm.
+The window's text source stays unaddressable to bindings: it reaches a world
+only as these events, inside a mode that declares a text channel. The server derives
 named `AxisCrossing` history records by applying the compiled threshold and
 hysteresis predicates to the ordered samples. Press/release raw values are
 exactly one/zero; axis samples use their declared fixed-point shape.
@@ -772,6 +780,7 @@ These are design checks, not claims of implemented sample games.
 | FPS | Q32.32 relative look, normalized movement, many buttons; weapon modes | Keep held fire through a weapon swap when it remains the same fire request on the same controlled body; switching does not fabricate a new shot edge | Relative displacement is always consumed/discarded at the barrier, never held; keep is invalid for Relative. No frame-rate multiplier; 64 buttons use no numeric slots. |
 | 2D fighting | Direction axes, attack buttons, stance modes | A declared kept charge survives stance change with its original held-since time; changed attack meanings cancel | Epochs reset buffered combos, while per-action continuation preserves charge; facing-relative events retain their admission meaning. |
 | Rhythm | Authored lane buttons/axes; section, play and menu modes | Keep a lane hold through a section transition with original press/time and eventual release; menu entry cancels without scoring a release | Continuation records survive ring eviction; no synthetic press or lost hold duration. Ordered sub-tick events and historical clock segments retain judgement precision. |
+| Typing and chat | A text channel with backspace, submit and cancel buttons; a text-focus mode entered at a station or a chat prompt, leaving movement released | Every character in order with its capture time, several per step; a paste bounded by the per-step event limit; words per minute and per-key accuracy judged from history; a submitted line becomes a chat message or an answer | Text events share the ordered stream with presses, so one replay reproduces every keystroke and its timing; IME composition commits as text events, never a binding |
 | Turn-based board | Shared direction axes, confirm/cancel, global leave | A seated press chooses once; entry press cannot choose a piece; locomotion and auto-actions release on entry and exit | Board dispatch differs even for a shared direction name. Dormant avatar actions use no live budget and cannot revive on leaving. |
 | Menu/UI-only | Seat/session actions without bodies or motion roles | Authors may keep navigation repeat between compatible panels; confirm releases by default and the opener is consumed | No avatar, physics, device, fixed seat count or particular positive rate is required. A rate-zero world uses administrative commands until gameplay steps start. |
 
@@ -810,14 +819,16 @@ The [open items](../plans/open-items.md#input-channels) carry completion status.
 5. **Timed ingress and history.** Add ordered events, exact interval mapping,
    lateness admission, calibration, bounded rings, overflow outcomes, and all
    replay/checkpoint/hash fields. Demonstrate a press and release in one tick,
-   equal-time ordering, ring wrap, and a mid-session replay restore. Extend C4's
+   equal-time ordering, ring wrap, typed and pasted text arriving as ordered
+   `Text` events in a text-focus mode, and a mid-session replay restore. Extend C4's
    held continuation with original event identity/time and cancellation outcomes.
 6. **Rule patterns and clocks.** Extend the existing operand/effect compiler
    with edge iteration, matching, consumption, tick buffers, held predicates,
    and event-time clock judgement. Demonstrate a motion input, simultaneous
    presses, buffered action, and sub-millisecond boundary judgement at two
    different valid simulation rates, plus a kept rhythm hold and fighting charge
-   spanning a mode switch with no fabricated edge. Add no genre-specific engine
+   spanning a mode switch with no fabricated edge, and a typed line judged for
+   words per minute and per-key accuracy. Add no genre-specific engine
    opcode.
 7. **Read-back and cleanup.** Complete current-mode naming across tools and the
    controller bar, remove superseded ordinal surfaces and stale docs, and
