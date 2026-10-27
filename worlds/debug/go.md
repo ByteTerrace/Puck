@@ -4,8 +4,9 @@ The gallery's board room holds a 19×19 Go table at (56.5, 9.905, 30.6), north
 of [chess](chess.md). The 3.50 m by 1.84 m table keeps its original height;
 the flat 1.60 m board has 0.08 m pitch, 19 lines each way and nine star points.
 Its face and painted markings belong to one creation; flush rectangular
-prisms keep the support flat across its material patches. The spot at (65, 30.6)
-remains free. [go.puck](go.puck) authors the table, imported by debug.puck.
+prisms keep the support flat across its material patches. The adjacent
+[Alchemy table](alchemy.md) stands at (65, 30.6).
+[go.puck](go.puck) authors the table, imported by debug.puck.
 
 All 361 stones are rigid bodies: 181 black and 180 white. Each colour shares
 one lens mesh and palette. Contact uses that same ellipsoid, with radii

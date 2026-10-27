@@ -1081,7 +1081,8 @@ rule "chess-input-move" {
     chessInput.from == pieceCell[$each] and
     (pieceCode[$each] * (1 - 2 * turn)) > 0 and
     ai.pending == 0 and
-    settleHold == chessSettleTicks and physics(quiescent, "chess-demo") == 1)
+    settleHold == chessSettleTicks and
+    physics(quiescent, "chess-demo") == 1)
   mode: Level
   forEach: pieceCode
   ai.from = chessInput.from
