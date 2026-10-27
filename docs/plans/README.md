@@ -26,6 +26,10 @@ Hosted machines under screens and the cartridges they run, as one page of packag
 
 The reference game's remaining engineering, its creatures and scale, the finder that admits a party across authorities, and the MCP adapter, as one page of packages. Forcing artifact: the quilt played by a group the finder admitted, with an agent authoring through MCP. Its decisions are in [the register](../decisions/play.md).
 
+## [The valley, the moons and the flight between](valley-and-moons.md)
+
+The gallery in a deep valley under moons reached by flight, as an inventory of what the engine already has and eight phases to the round trip: the valley, one real moon, exact frames, residency, atmosphere and flight, the handoff, and the measured trip.
+
 ## [Rendering](rendering.md)
 
 Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that replaces the SDF engine as the host of rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, and assets derived from SDFs, as one page of packages. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
