@@ -13,15 +13,14 @@ test "the tokens settle on their shelf cells with the four starters face up" {
     ticks 150
   }
   expect {
+    alchemyHold == 9
+    physics(quiescent) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1 and board(cellOf, alchemyBoard, placement, alchemyToken4) == 4 and board(cellOf, alchemyBoard, placement, alchemyToken5) == 5 and board(cellOf, alchemyBoard, placement, alchemyToken31) == 31
+    upright(placement, alchemyToken1) > 0 and upright(placement, alchemyToken2) > 0 and upright(placement, alchemyToken3) > 0 and upright(placement, alchemyToken4) > 0
+    upright(placement, alchemyToken5) < 0 and upright(placement, alchemyToken31) < 0
     alchemyCollisions == 0
     alchemyMisplaced == 0
     alchemyIllegal == 0
-    alchemyCell.alchemyToken1 == 1
-    alchemyCell.alchemyToken31 == 31
-    alchemyFace.alchemyToken1 == 1
-    alchemyFace.alchemyToken4 == 1
-    alchemyFace.alchemyToken5 == 0
-    alchemyFace.alchemyToken31 == 0
     hints == 6
   }
 }
@@ -40,8 +39,30 @@ test "fire and water make steam and turn its token face up on the table" {
     fresh == 1
     discovered == 5
     alchemyBoard[5] == 1
-    alchemyFace.alchemyToken5 == 1
-    alchemyCell.alchemyToken5 == 5
+    alchemyHold == 9
+    physics(quiescent) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
+    upright(placement, alchemyToken5) > 0
+  }
+}
+
+test "overturned tokens on their own shelves return to the book's face" {
+  when {
+    ticks 150
+    seat1: body.pose 64.65 9.97 30.32 0 0 180 223
+    seat1: body.pose 65.21 9.97 30.32 0 0 0 219
+    ticks 150
+  }
+  expect {
+    alchemyHold == 9
+    physics(quiescent) == 1
+    alchemyIllegal == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
+    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
+    upright(placement, alchemyToken1) > 0
+    upright(placement, alchemyToken5) < 0
+    discovered == 4
+    mixes == 0
   }
 }
 

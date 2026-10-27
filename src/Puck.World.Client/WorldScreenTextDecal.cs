@@ -62,14 +62,7 @@ public static class WorldScreenTextDecal {
             );
         }
 
-        var columns = Math.Max(
-            val1: (text.Columns ?? widestLine),
-            val2: 1
-        );
-        var rows = Math.Max(
-            val1: (text.Rows ?? lines.Length),
-            val2: 1
-        );
+        var (columns, rows) = WorldScreenText.Grid(text: text, width: widestLine);
 
         // The validator refuses this at load. Keep the bake independently total for future callers: truncating rows
         // would silently alter authored content, and decrementing a one-row oversized grid would manufacture the

@@ -75,7 +75,7 @@ public static class WorldKeyedValues {
     /// cell wherever it is presented, and, for a presentation scalar in a field the document model declares
     /// (<see cref="WorldValueFields"/>), its scalar form and that field.</summary>
     /// <param name="definition">The document.</param>
-    /// <returns>The bound values.</returns>
+    /// <returns>The bound values, including text-screen placeholders.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<WorldBoundValue> BoundOf(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -126,7 +126,7 @@ public static class WorldKeyedValues {
     });
 
     private static HashSet<Type> ComputeReaching() {
-        var reaching = new HashSet<Type>(collection: Surfaces);
+        var reaching = new HashSet<Type>(collection: [.. Surfaces, typeof(WorldScreenSource.Text)]);
         var grew = true;
 
         while (grew) {
@@ -199,6 +199,22 @@ public static class WorldKeyedValues {
         // dictionary's or a list's element).
         public void Visit(object? value, string path, WorldModelType? declared, WorldValueField? field = null) {
             if ((value is null) || (value is string)) {
+                return;
+            }
+
+            if (value is WorldScreenSource.Text text) {
+                for (var index = 0; (index < text.Lines.Count); index++) {
+                    if ((text.Lines[index] is not { } line) ||
+                        !WorldScreenText.TryParse(error: out _, line: line, segments: out var segments)) {
+                        continue;
+                    }
+                    foreach (var segment in segments) {
+                        if (segment.IsPlaceholder) {
+                            Bound.Add(item: new WorldBoundValue(Path: $"{path}.lines[{index}] placeholder '{{{segment.Text}}}'",
+                                Binding: StateBinding.Parse(token: segment.Text)!.Value, Value: null, Field: null));
+                        }
+                    }
+                }
                 return;
             }
 

@@ -47,7 +47,8 @@ that displays `discovered`, `hints`, `left`, `right`, `made`, `newest` and
 (`alchemySettleTicks`), the rules read each token's cell (`alchemyCell`) and up
 face (`alchemyFace`): a token resting in the left or right hand well loads
 `left` or `right`, newly discovered tokens turn face up on their shelf cells,
-and displaced tokens return to their shelf cells.
+and displaced tokens return to their shelf cells. A token overturned at home is
+also corrected to its book face, whether discovered or still sealed.
 
 ## Playing at the table
 
@@ -98,8 +99,10 @@ into the left hand well.
 
 [`alchemy-tests.puck`](alchemy-tests.puck) holds the table's scenarios, each
 booted in the whole debug world: the 31 tokens settling on their shelf cells
-with the four starters face up, `Fire` + `Water` making `Steam` and turning its
-token face up on the table, hand-order independence, mixing an element with
+with the four starters face up (settled hold, actual board cells and upright
+reads), correcting both discovered and sealed tokens overturned on their own
+shelves, `Fire` + `Water` making `Steam` and physically turning its token face
+up on the table, hand-order independence, mixing an element with
 itself (`Water` + `Water` → `Sea`), a non-recipe pair fizzling, an undiscovered
 ingredient being refused, the starting hint count, an alternate recipe for an
 already-known element leaving `discovered` unchanged, seated cursor play and

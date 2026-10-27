@@ -133,10 +133,10 @@ public sealed class WorldBakedColors {
             return line;
         }
 
-        if (!HudTemplate.TryParse(
+        if (!WorldScreenText.TryParse(
             error: out _,
-            segments: out var segments,
-            template: line
+            line: line,
+            segments: out var segments
         )) {
             return line;
         }

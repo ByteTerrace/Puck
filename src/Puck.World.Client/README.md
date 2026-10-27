@@ -294,6 +294,18 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   and field emitters and the decal cache follow a bound one's move with a
   rebuild. `WorldFieldEmitter` bakes each height field's brick from the
   field row's slot, the same slot a pass's array bound to `state.<field>` reads.
+  Text screens accept `{state.<row>[.<key>][.$target]}` for declared Int, Fixed,
+  Bool and Text rows; `$body` has no screen context and is refused. `{{` and
+  `}}` display literal braces, so `{{state.count}}` displays `{state.count}`.
+  An absent or withheld live cell displays empty; an undeclared row or malformed
+  placeholder is a load error naming the line and token. Values are formatted
+  invariantly, with booleans as `true`/`false`. Each line occupies one row;
+  expanded values clip at the column boundary by Unicode scalar. Explicit
+  columns stay fixed; inferred columns fit the expanded width up to
+  `MaxScreenDecalCells / rows`, including after later growth. Literal runs
+  after unescaping must fit the grid at load. Placeholder dependencies cross
+  presentation projections through the same recipient disclosure checks as
+  other bound values; restricted sources refuse disclosure.
 - `WorldWheelRings.cs` is one seat's drawn radial: each sector's label and icon
   and the hub label, read from the wheel's label and icon rows through the
   seat's routed mirror, and rebuilt only when one of the slots it read changes

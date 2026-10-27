@@ -11498,7 +11498,7 @@ export type WorldScreenSourceSession = {
 export type WorldScreenSourceText = {
   $type?: "text";
   /**
-   * The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell — no kerning or shaping on this tier).
+   * The text rows, top-down; each row maps onto one grid row of cells (row-major, one scalar per cell — no kerning or shaping on this tier). State placeholders follow {state.<row>[.<key>][.$target]}; {{ and }} escape literal braces. Rows must be declared Int, Fixed, Bool or Text; an absent cell displays empty. Expanded lines clip to the grid.
    */
   lines: StringList;
   /**
@@ -11506,7 +11506,7 @@ export type WorldScreenSourceText = {
    */
   font?: string | null;
   /**
-   * The cell grid's column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine's per-screen decal cell budget (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).
+   * The cell grid's column count, or null to fit the widest line. The grid (columns x rows) is capped by the engine's per-screen decal cell budget; inferred columns stop at that budget, including when a live placeholder grows (Puck.SignedDistance.SdfScreenDecalLayout.MaxScreenDecalCells).
    */
   columns?: number | null;
   /**

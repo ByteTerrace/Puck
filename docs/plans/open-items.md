@@ -10,6 +10,8 @@ starting work, and tick or remove an item in the same change that closes it.
 
 ## World authoring diagnostics
 
+- [ ] Explain missing verdict firing stamps in a larger composed-world scenario. An Alchemy settlement scenario with 20 expectations exported passing statuses for all rows but no `$firedTick` on `expect$15` through `expect$20` in both reproduced runs. Replacing redundant mirror checks with nine grouped physical and settlement checks produces nine stamped passes. The cause of the missing stamps is unconfirmed; `puck test` correctly refuses an unstamped pass.
+- [ ] Close the embeddings sample's source round trip: `Puck.State.Rebuild.Corpus.AuthorExpressionTests.SourceCompilesDecompilesAndRecompilesToTheSameDocument` reports that `src/Puck.World.Transpiler/Samples/embeddings.world.puck` changes its first rule's transform `from` operand from `events[ambush]` to `events[(ambush)]` after decompiling and recompiling. The parser, decompiler and sample are unchanged by the Alchemy screen and token fixes; whether those spellings differ in evaluation remains unconfirmed.
 - [x] Make `puck creation stats --world worlds/debug/debug.puck --prototype companion` compose the live world's grant masks (`CliWorldVocabulary` installs `WorldSchemaVocabularyHooks` alongside the local document source, and `CreationCommand` calls `CliWorldVocabulary.EnsureInstalled()`).
 - [ ] Investigate state-rule bindings after a full `world.reload`: a debug World reported `blink-close`'s state transaction refused because the live edit grant refused `state:blink`, then the companion's sensory and glow rows stayed at their reload seeds while the guest continued to fly. Fresh boots and an addon-row replacement worked. The general cause is unconfirmed.
 

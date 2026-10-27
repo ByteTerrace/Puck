@@ -527,7 +527,13 @@ rules "" when alchemyHold == alchemySettleTicks {
     forEach: alchemyElement
     alchemyCell[$each] = square >= 0 ? square : -home
     alchemyFace[$each] = face
-    alchemyStray[$each] = ((square != home) and (square != alchemyLeftCell) and (square != alchemyRightCell)) ? 1 : 0
+    alchemyStray[$each] = (
+      (
+        ((square != home) and (square != alchemyLeftCell) and (square != alchemyRightCell)) or
+        (square == home and face != alchemyBoard[home])
+      ) ? 1 :
+      0
+    )
   }
 
   rule "alchemy-read-board" {

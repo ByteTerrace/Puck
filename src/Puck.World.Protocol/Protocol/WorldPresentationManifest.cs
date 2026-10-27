@@ -702,15 +702,18 @@ public sealed class WorldPresentationManifest {
                     foreach (var line in (text.Lines ?? [])) {
                         if (
                             (line is { Length: > 0 }) &&
-                            HudTemplate.TryEnumeratePlaceholders(
+                            WorldScreenText.TryParse(
                             error: out _,
-                            placeholders: out var placeholders,
-                            template: line
+                            line: line,
+                            segments: out var segments
                         )
                         ) {
-                            foreach (var placeholder in placeholders) {
+                            foreach (var segment in segments) {
+                                if (!segment.IsPlaceholder) {
+                                    continue;
+                                }
                                 Add(
-                                    binding: StateBinding.Parse(token: placeholder),
+                                    binding: StateBinding.Parse(token: segment.Text),
                                     conversion: WorldStateConversion.Number
                                 );
                             }
