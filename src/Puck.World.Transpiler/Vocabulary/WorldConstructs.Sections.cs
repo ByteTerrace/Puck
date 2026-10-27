@@ -21,6 +21,15 @@ public static partial class WorldConstructs {
     );
     private static IReadOnlyList<WorldConstruct> Sections() => [
         new(
+            DocumentMember: "replays",
+            Grammar: "replays [ { name: … rows [ … ] bodies [ … ] seats [ … ] control: … durationTicks: … inputs [ … ] } ]",
+            Keyword: "replays",
+            RootArm: WorldRootArm.Field,
+            Shape: WorldConstructShape.Section,
+            Sugar: new(Fallback: "the generic value path", Open: true),
+            Summary: "Scoped input programs whose first live drive records a starting state and per-tick scope hashes; later drives restore and verify only that scope."
+        ),
+        new(
             DocumentMember: "host",
             Grammar: "host { presentation: … width: … height: … fullscreen: … }",
             Keyword: "host",

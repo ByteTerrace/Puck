@@ -19,7 +19,7 @@ public static partial class WorldFactsVocabulary {
         public override IReadOnlyList<string> Spellings { get; } = [
             WorldRuleFacts.Population,
             WorldRuleFacts.PhysicsQuiescent,
-            $"{WorldRuleFacts.PhysicsQuiescent}:<placementRow>",
+            $"{WorldRuleFacts.PhysicsQuiescent}:<placementRow|scope>",
             $"{WorldRuleFacts.RegionPrefix}<placementId>",
             $"{WorldRuleFacts.InfluencePrefix}<channel>:<placementId>",
             $"{WorldRuleFacts.MachinePrefix}<screen>:<address>",
@@ -303,10 +303,20 @@ public static partial class WorldFactsVocabulary {
 
                 var tokens = call!.Texts();
                 var row = ((tokens.Length == 2) ? world.FindRow(name: tokens[1]) : null);
+                var scope = ((tokens.Length == 2) ? world.Definition.ReplaysRaw?.FirstOrDefault(predicate: scope => (scope.Name == tokens[1])) : null);
+
+                if ((row is not null) && (scope is not null)) {
+                    throw new RuleException(detail: $"'{name}' is ambiguous: '{tokens[1]}' names both a state row and a replay scope", refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName);
+                }
+                if (scope is not null) {
+                    fact = new WorldPhysicsQuiescentOperand(bodies: scope.Bodies);
+
+                    return true;
+                }
 
                 if ((row is null) || !row.IsKeyed) {
                     throw new RuleException(
-                        detail: $"'{name}' requires physics(quiescent, <keyed placement roster row>)",
+                        detail: $"'{name}' requires physics(quiescent, <keyed placement roster row or replay scope>)",
                         refusal: WorldRuleRefusal.SpatialChannelMalformed,
                         ruleName: ruleName
                     );
@@ -323,7 +333,7 @@ public static partial class WorldFactsVocabulary {
                     );
                 }
 
-                var operand = new PhysicsQuiescentOperand(placementOrdinals: ordinals);
+                var operand = PhysicsQuiescentOperand.ForPlacements(placementOrdinals: ordinals);
 
                 fact = BodyFact(
                     bodyA: default,

@@ -409,6 +409,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteInt32(value: section.BaseOrigin.Depth);
         WriteArena(writer: writer, arena: section.Arena);
+        writer.WriteArray(items: (section.ScopedReplays ?? []), writeItem: WriteScopedReplay);
         writer.WriteOptionalClass(
             value: section.Undo,
             writeValue: WriteUndoHistory
@@ -536,6 +537,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         var baseOrigin = ReadBaseOrigin(reader: ref reader);
         var arena = ReadArena(reader: ref reader);
+        var scopedReplays = reader.ReadArray(field: "scoped replays", maximum: MaxCollectionCount, readItem: ReadScopedReplay);
         var undo = reader.ReadOptionalClass(
             readValue: ReadUndoHistory
         );
@@ -739,6 +741,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Pending: pending,
             RuleGateHeld: ruleGateHeld,
             RuleGroups: ruleGroups,
+            ScopedReplays: scopedReplays,
             SolidRevision: solidRevision,
             Undo: undo
         );

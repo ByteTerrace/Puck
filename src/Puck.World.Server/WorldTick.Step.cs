@@ -315,6 +315,7 @@ public sealed partial class WorldTick {
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
         Host.BeginCellWriteTick();
+        foreach (var scope in Host.ScopedReplaySpan) { scope.BeforeTick(); }
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
@@ -694,6 +695,7 @@ public sealed partial class WorldTick {
         }
 
         m_driveDenied[submission.EntityIndex] = false;
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(intent: in submission); }
         Host.InputHold.ObserveMeasurement(submission: in submission);
 
         var bodyIndex = submission.EntityIndex;
@@ -916,7 +918,10 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return; }
             Host.EnterArenaTick();
-            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
+            try {
+                StepCore(context: in context);
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
@@ -934,7 +939,10 @@ public sealed partial class WorldTick {
             );
 
             Host.EnterArenaTick();
-            try { StepCore(context: in context); } finally { Host.LeaveArenaTick(); }
+            try {
+                StepCore(context: in context);
+                foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
+            } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind

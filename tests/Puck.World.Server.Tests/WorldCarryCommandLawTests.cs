@@ -317,6 +317,7 @@ public sealed class WorldCarryCommandLawTests : IDisposable {
             actual: ball.CarriedBy
         );
         Assert.False(condition: fixture.Server.Population.RigidBodiesQuiescent());
+        Assert.False(condition: fixture.Server.Population.RigidBodiesQuiescent(bodies: [BallIndex]));
         Assert.False(condition: fixture.Server.Population.RigidPlacementsQuiescent(placementOrdinals: [0]));
         Assert.True(condition: fixture.Server.Population.RigidPlacementsQuiescent(placementOrdinals: []));
 

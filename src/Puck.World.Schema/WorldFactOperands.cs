@@ -51,21 +51,27 @@ public sealed class WorldPopulationOperand : WorldFactOperand {
         return facet.Read(operand: PopulationOperand.Instance);
     }
 }
-/// <summary>Whether every active rigid body rests uncarried (<see cref="WorldRuleFacts.PhysicsQuiescent"/>);
-/// the global read scans every population slot, so it is priced at capacity.</summary>
+/// <summary>Whether every selected rigid body rests uncarried (<see cref="WorldRuleFacts.PhysicsQuiescent"/>).
+/// The work is priced at the selected scope's body count, or population capacity for the global census.</summary>
 public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
     /// <summary>The shared instance.</summary>
     public static readonly WorldPhysicsQuiescentOperand Instance = new();
 
-    private WorldPhysicsQuiescentOperand() : base(valueKind: CellKind.Bool) { }
+    private readonly PhysicsQuiescentOperand m_operand;
+
+    /// <summary>Creates a census over the selected bodies, or the population when omitted.</summary>
+    /// <param name="bodies">Stable body ordinals, or null for the whole population.</param>
+    public WorldPhysicsQuiescentOperand(IReadOnlyList<int>? bodies = null) : base(valueKind: CellKind.Bool) => m_operand = ((bodies is null)
+        ? PhysicsQuiescentOperand.Instance
+        : PhysicsQuiescentOperand.ForBodies(bodies: bodies));
 
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => PopulationCapacity(context: context);
+    public override RuleWork Cost(IRuleCostContext context) => ((m_operand.Bodies is { } bodies) ? bodies.Count : PopulationCapacity(context: context));
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);
 
-        return facet.Read(operand: PhysicsQuiescentOperand.Instance);
+        return facet.Read(operand: m_operand);
     }
 }
 /// <summary>The music clock's phase error (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>

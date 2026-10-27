@@ -1994,12 +1994,14 @@ public sealed partial class WorldReplaySnapshot {
     /// <param name="population">The entity table to hash.</param>
     /// <returns>The state hash.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="population"/> is <see langword="null"/>.</exception>
-    public static ulong HashState(WorldPopulation population) {
+    /// <param name="bodies">A selected body set, or null for every active body.</param>
+    public static ulong HashState(WorldPopulation population, IReadOnlySet<int>? bodies = null) {
         ArgumentNullException.ThrowIfNull(argument: population);
 
         var hash = Fnv1aHash.Create();
 
         for (var index = 0; (index < population.Capacity); index++) {
+            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
             if (
                 !population.IsActive(index: index) ||
                 (population.EntryBody(index: index) is not { } body)

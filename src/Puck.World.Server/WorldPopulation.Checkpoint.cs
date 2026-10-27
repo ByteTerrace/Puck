@@ -15,14 +15,16 @@ public sealed partial class WorldPopulation {
     /// <see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> folds for the entries <see cref="Capture"/>
     /// returns.</summary>
     /// <param name="hash">The hash to fold into.</param>
+    /// <param name="bodies">Selected slots, or null for every active slot.</param>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
-    public void AppendContinuationHash(ref Fnv1aHash hash) {
+    public void AppendContinuationHash(ref Fnv1aHash hash, IReadOnlySet<int>? bodies = null) {
         RequireCapturePoint();
 
         var writer = (m_continuationWriter ??= new WireWriter());
         var count = 0;
 
         for (var index = 0; (index < Capacity); index++) {
+            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
             if (m_entries[index] is { Active: true, Body: not null }) {
                 count++;
             }
@@ -32,6 +34,7 @@ public sealed partial class WorldPopulation {
         writer.WriteArrayCount(count: count);
 
         for (var index = 0; (index < Capacity); index++) {
+            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
             var entry = m_entries[index];
 
             if (entry is { Active: true, Body: { } body }) {

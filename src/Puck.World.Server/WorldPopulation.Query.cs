@@ -154,8 +154,12 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Returns whether every active rigid body rests on its own support. A carried rigid body is never
     /// quiescent: its carrier still controls its pose. Vacuously true when no rigid body is active.</summary>
-    public bool RigidBodiesQuiescent() {
-        for (var index = 0; (index < m_entries.Length); index++) {
+    public bool RigidBodiesQuiescent() => RigidBodiesQuiescent(bodies: null);
+    /// <summary>Reads the resting census of only the selected body ordinals, or all slots when null.</summary>
+    public bool RigidBodiesQuiescent(IReadOnlyList<int>? bodies) {
+        for (var slot = 0; (slot < (bodies?.Count ?? m_entries.Length)); slot++) {
+            var index = ((bodies is null) ? slot : bodies[slot]);
+
             if (!RigidBodyQuiescent(index: index)) {
                 return false;
             }

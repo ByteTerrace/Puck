@@ -160,7 +160,8 @@ public static class WorldRuleFacts {
     /// authors no rigid body, so a turn-waiting rule composes without a special case for a world that never wired one
     /// in. A carried rigid body is never quiescent. The optional second argument in
     /// <c>physics(quiescent, placementRow)</c> scopes the read to that keyed row's authored placement keys, compiled
-    /// to ordinals; its cell values do not filter membership.</summary>
+    /// to ordinals; its cell values do not filter membership. A replay scope name selects its stable body ordinals.
+    /// A name shared by a state row and a replay scope is ambiguous and refused.</summary>
     public const string PhysicsQuiescent = "$physics:quiescent";
     /// <summary>The prefix; <c>$pointer:&lt;seat&gt;:&lt;screenIndex&gt;:x|y|on</c> reads the 1-based local seat's pointer
     /// ray, carried in its intent this tick, mapped through the declared screen's row in fixed point — the row's face

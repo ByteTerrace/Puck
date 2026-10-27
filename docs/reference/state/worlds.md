@@ -145,7 +145,7 @@ Puck.World extends the rule compiler the way any host does (see
 - **`WorldFactsVocabulary.Instance`** is the `RuleVocabulary` every world
   compile shares. Its operand family answers the reserved world channels:
   `$population`, `$physics:quiescent` (optionally scoped to a keyed placement
-  roster), `$region:`, `$influence:`, `$machine:`,
+  roster or a replay scope's stable bodies), `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
   `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,
@@ -482,6 +482,40 @@ scripting it through stdin.
 
 ## Hashes, checkpoints, and replay
 
+An authored `replays` row records and replays a selected scope while the rest of
+the world continues. It names document rows, stable bodies and input principals,
+its control row, duration, and a timed numeric input program. The first completed
+drive derives a tape through the live mutation door; later drives restore only
+its starting rows and bodies, feed the recorded inputs through the same doors,
+and compare every resulting scope hash. State rows include their storage
+continuation, and bodies include the population continuation codec's state.
+Compiled row write sets and body-effect targets also select rule and interaction
+edge latches and the progress of groups writing those rows or bodies; restoring
+a table leaves other rules' continuations live. Body ownership includes nested
+arms, literal body keys and compiled placement domains. Shared or unbounded live
+body targets in a selected continuation are refused. A standalone level rule
+carries no edge latch. A rule group must own its complete write set. Decision
+continuations and undo groups require a wider boundary and are refused.
+The scope's rules must use local facts: `physics(quiescent, "chess-demo")` restricts
+the resting census to that scope's bodies. The population-wide predicate cannot
+prove that one table reproduced independently of another.
+The derived tape is checkpointed and hashed with the authority. No expected
+hashes or binary tapes are authored or committed.
+Starting images are privately copied and their actual contents enter that hash.
+Admission validates the exact declared row/body inventory, complete stored
+columns, tape length, cursors and ordered addressed inputs before installing a
+scoped continuation; an invalid tape is refused by scope name.
+
+`replay.scope [<name> [capture|drive|cancel|reset]]` is operator read-back and
+next-tick control. Its Int control row has `request`, `status`, `cursor`, and
+`completed`: requests 4 capture once, 1 drive, and 2/3 cancel and restore; statuses
+0 idle, 1 recording, 2 replaying, 3 recorded, 4 MATCH, and -1 MISMATCH/refused.
+The first mismatch names its relative tick and both hashes, without replacing
+the original expectation. Idle detection and loop timing remain ordinary world
+rules. [The debug chess demonstration](../../../worlds/debug/chess.md) is the
+authored example. Field, vector, timed and pool rows require a wider continuation
+boundary and are refused by this initial scope implementation.
+
 `world.state.hash` reads one of four scopes:
 
 | Scope | Covers |
@@ -489,7 +523,7 @@ scripting it through stdin.
 | `capture` (default) | The population digest, then every authored `state.world` cell's live value and clock. It matches the hash in capture manifests. |
 | `pose` | Every active body's pose, rigid residue, and carry relationship. |
 | `world` | The arena's contents, the host-owned rows, the state declaration, and the topologies. |
-| `authoritative` | Everything in `world` and `pose`, plus the rule and interaction latches, rule-group progress, decisions, board enforcement, body and identity action state, every body's simulation continuation (the checkpoint's field codecs: velocities, integration remainders, channel timers, carried input; rendered color and rig are excluded), navigation, flock perception, and search progress. |
+| `authoritative` | Everything in `world` and `pose`, plus the rule and interaction latches, rule-group progress, decisions, board enforcement, body and identity action state, every body's simulation continuation (the checkpoint's field codecs: velocities, integration remainders, channel timers, carried input; rendered color and rig are excluded), navigation, flock perception, search progress, and scoped replay continuations. |
 
 The authoritative scope is built from a fixed, ordered list of named components
 (`WorldStateHashComposition`), so what a hash covers changes only by a

@@ -1634,6 +1634,7 @@ public sealed partial class WorldDocument {
             return;
         }
 
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(command: command); }
         switch (command) {
             case WorldCommand.SnapPose snap:
                 switch (snap.Mode) {

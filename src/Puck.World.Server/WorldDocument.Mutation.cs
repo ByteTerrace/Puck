@@ -16,9 +16,12 @@ public sealed partial class WorldDocument {
     /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
     /// <returns>Whether the mutation applied.</returns>
     internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
-        if (IsStateCommand(mutation: mutation)) { return TryApplyStateCommand(mutation: mutation, tick: tick, engineTick: engineTick,
-            connectionId: connectionId, correlationId: correlationId, preMetered: preMetered); }
+        if (IsStateCommand(mutation: mutation)) {
+            return TryApplyStateCommand(connectionId: connectionId, correlationId: correlationId, engineTick: engineTick,
+            mutation: mutation, preMetered: preMetered, tick: tick);
+        }
         var current = Host.MaterializeArena();
+
         m_lastMutationFailureDetail = null;
 
         if (!TryPrepareMutation(
@@ -107,7 +110,7 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        candidate = WorldContributionState.Declare(candidate);
+        candidate = WorldContributionState.Declare(definition: candidate);
         var installsArena = (RequiresFullInstall(
             candidate: candidate,
             mutation: mutation,
@@ -417,7 +420,6 @@ public sealed partial class WorldDocument {
     private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation) =>
         RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
             correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan);
-
     private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,
         CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null) {
         m_journal.Add(item: new WorldJournalEntry(
@@ -426,6 +428,7 @@ public sealed partial class WorldDocument {
             Tick: tick
         ));
         Host.MutationJournalTap?.Invoke(tick, engineTick, mutation);
+        foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(mutation: mutation); }
 
         if (addonPlan is not null) {
             Host.Addons!.Finish(plan: addonPlan);

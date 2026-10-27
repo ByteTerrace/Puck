@@ -2837,6 +2837,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
 | `timeline.clocks[].name` | Clock | Declares |  | `WorldClock.Name` |
 | `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
+| `replays[].rows` | State | Names | Read | `WorldScopedReplay.Rows` |
+| `replays[].control` | State | Names | Action | `WorldScopedReplay.Control` |
+| `replays[].inputs[].cells[].row` | State | Names | Action | `WorldScopedReplayCell.Row` |
+| `replays[].inputs[].cells[].key` | State | Key | Read | `WorldScopedReplayCell.Key` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -3301,3 +3305,4 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
 | `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
 | `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |
+| `replays[].name` | `WorldScopedReplay.Name` | a replay scope identity, local to the replays section |

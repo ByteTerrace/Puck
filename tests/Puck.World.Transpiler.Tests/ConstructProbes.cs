@@ -90,6 +90,7 @@ internal static class ConstructProbes {
 
     /// <summary>Gets the probes for each described construct, keyed by its keyword.</summary>
     public static IReadOnlyDictionary<string, IReadOnlyList<ConstructProbe>> Sources { get; } = new Dictionary<string, IReadOnlyList<ConstructProbe>>(comparer: StringComparer.Ordinal) {
+        ["replays"] = [new ConstructProbe(Source: Doc(body: "replays []"), Pointer: "/replays")],
         ["host"] = [new(
             Pointer: "/host",
             Source: Doc(body: "host {\n}")

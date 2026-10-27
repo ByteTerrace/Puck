@@ -465,9 +465,11 @@ impulse needed at all—pair a resting-height pose with a negligible
 without relying on drop height. Wake a piece along its own up axis where
 the kit's rigid friction is high—a horizontal wake couples into spin under
 Coulomb/rolling friction and can drift the piece across a cell boundary
-before the census re-quiesces. The quiescent census is population-wide: an
-unrelated rigid body still settling elsewhere holds every board's derive at
-bay too.
+before the census re-quiesces. `physics(quiescent)` is population-wide.
+`physics(quiescent, "chess-demo")` restricts the same census to the bodies of
+that authored replay scope: active, uncarried rigid bodies must be resting;
+other bodies contribute nothing. The chess table uses this local fact, so a
+settling body at another table cannot delay its judge or contaminate its replay.
 
 The shipped chess module uses `$board:mask` to locate a candidate's source and
 destination. Four lossless bit planes encode the cell alphabet; their before/after

@@ -210,6 +210,9 @@
     "commands": {
       "$ref": "./schema/commands.schema.json"
     },
+    "replays": {
+      "$ref": "./schema/replays.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

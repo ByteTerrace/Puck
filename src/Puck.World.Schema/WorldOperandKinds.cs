@@ -19,21 +19,29 @@ public sealed class PopulationOperand : WorldOperandFact {
 
     private PopulationOperand() : base(CellKind.Int) { }
 }
-/// <summary>Whether every active rigid body in the world or an authored placement roster rests uncarried.</summary>
+/// <summary>Whether every active rigid body in the world, a replay body scope or a placement roster rests uncarried.</summary>
 public sealed class PhysicsQuiescentOperand : WorldOperandFact {
     public static readonly PhysicsQuiescentOperand Instance = new();
 
     private PhysicsQuiescentOperand() : base(CellKind.Bool) { }
 
-    /// <summary>Initializes a read scoped to the compiled placement roster.</summary>
-    public PhysicsQuiescentOperand(IReadOnlyList<int> placementOrdinals) : base(CellKind.Bool) {
+    /// <summary>Creates a census over stable body ordinals.</summary>
+    public static PhysicsQuiescentOperand ForBodies(IReadOnlyList<int> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+
+        return new PhysicsQuiescentOperand { Bodies = bodies };
+    }
+    /// <summary>Creates a census over the inhabitants of compiled placement ordinals.</summary>
+    public static PhysicsQuiescentOperand ForPlacements(IReadOnlyList<int> placementOrdinals) {
         ArgumentNullException.ThrowIfNull(argument: placementOrdinals);
 
-        PlacementOrdinals = placementOrdinals;
+        return new PhysicsQuiescentOperand { PlacementOrdinals = placementOrdinals };
     }
 
-    /// <summary>The compiled placement ordinals, or null for every population slot.</summary>
-    public IReadOnlyList<int>? PlacementOrdinals { get; }
+    /// <summary>Gets the selected stable body ordinals, or null for a placement or population census.</summary>
+    public IReadOnlyList<int>? Bodies { get; private init; }
+    /// <summary>Gets the selected placement ordinals, or null for a body or population census.</summary>
+    public IReadOnlyList<int>? PlacementOrdinals { get; private init; }
 }
 /// <summary>The music clock's phase error (<see cref="WorldRuleFacts.ClockPrefix"/>).</summary>
 public sealed class ClockOperand : WorldOperandFact {

@@ -411,14 +411,14 @@ public sealed partial class WorldPersistence {
             );
         }
     }
-
     // A key-bound latch entry's LatchKey.Left is an ordinal this arena interned, so it travels as the key's name
     // and is interned again on the way back in. An unnamed entry's Left is a participant index, which the arena
     // knows nothing about and which travels as itself.
-    private WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named) {
+    internal WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named, IReadOnlySet<string>? rules = null) {
         var flattened = new List<(string Rule, LatchKey Binding, bool Held)>(capacity: latch.Count);
 
         latch.Flatten(into: flattened);
+        if (rules is not null) { flattened.RemoveAll(match: entry => !rules.Contains(item: entry.Rule)); }
 
         var keys = Host.Arena.Keys;
         var entries = new WorldRuleLatchEntry[flattened.Count];
@@ -450,10 +450,13 @@ public sealed partial class WorldPersistence {
 
         return entries;
     }
-    private void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries) {
+    internal void RestoreLatch(RuleLatch latch, IReadOnlyList<WorldRuleLatchEntry> entries, IReadOnlySet<string>? rules = null) {
         var keys = Host.Arena.Keys;
 
-        latch.Clear();
+        if (rules is null) { latch.Clear(); } else {
+            foreach (var rule in rules) { latch.Bindings(name: rule).Clear(); }
+            latch.InvalidateScheduler();
+        }
         foreach (var entry in entries) {
             var left = entry.Left;
 
@@ -481,6 +484,7 @@ public sealed partial class WorldPersistence {
             );
         }
     }
+
     /// <summary>Whether this server's live state is outside what a checkpoint can capture: a pumped addon guest, or a
     /// stepped machine on a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <param name="restartingAddons">Whether a prepared restart replaces the guests at this recording boundary.</param>
@@ -688,6 +692,7 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
+                ScopedReplays: Host.ScopedReplays.Select(selector: scope => scope.Checkpoint()).ToArray(),
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 Arena: Host.Arena.CaptureSnapshot(),
                 DefinitionJson: definitionJson,
@@ -908,6 +913,12 @@ public sealed partial class WorldPersistence {
         // Restore reconstructs captured geometry before its latches. Catch up only register writes that were still
         // pending at capture; an already synchronized sleeping body must retain its exact continuation.
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
+        foreach (var scope in (server.ScopedReplays ?? [])) {
+            var runtime = (Host.ScopedReplays.SingleOrDefault(predicate: runtime => (runtime.Name == scope.Name))
+                ?? throw new InvalidOperationException(message: "Checkpoint names an undeclared replay scope."));
+
+            runtime.RestoreCheckpoint(checkpoint: scope);
+        }
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership

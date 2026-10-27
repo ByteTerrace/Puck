@@ -1716,6 +1716,17 @@ builds nothing and boots no World. Exit codes: 0 deletions accounted for;
 
 ## `puck test`—test worlds
 
+The debug world's scoped replay proof runs with
+`puck test worlds/debug/chess-tests.puck --reproduce --jobs 1`: it derives the
+historical game's tape through the table's real move door, checks subsequent
+scope hashes, loops, cancels on approach/engagement, and detects a deliberately
+changed scope while another table's rigid body moves independently. A scope
+verdict includes its row and body writers' edge latches and group progress; invalid
+starting inventories and incomplete persisted hash tapes are refused by name.
+The other board-room files are `go-tests.puck` and
+`reversi-tests.puck` beside it; run each file with the same flags. Live scope
+control is [`replay.scope`](state/worlds.md#hashes-checkpoints-and-replay).
+
 While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 A test world carries its own test. Its `schedule` section says what command to

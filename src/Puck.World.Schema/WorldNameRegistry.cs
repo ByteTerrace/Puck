@@ -148,6 +148,10 @@ public static partial class WorldNameRegistry {
             WorldNameKind.State,
             WorldNameRole.Declares
         ),
+        new(typeof(WorldScopedReplay), nameof(WorldScopedReplay.Rows), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldScopedReplay), nameof(WorldScopedReplay.Control), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(WorldScopedReplayCell), nameof(WorldScopedReplayCell.Row), WorldNameKind.State, WorldNameRole.Names, WorldExportFacet.Action),
+        new(typeof(WorldScopedReplayCell), nameof(WorldScopedReplayCell.Key), WorldNameKind.State, WorldNameRole.Key),
         new(
             typeof(Rule),
             nameof(Rule.Name),
@@ -1324,6 +1328,7 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(typeof(WorldScopedReplay), nameof(WorldScopedReplay.Name), "a replay scope identity, local to the replays section"),
         new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
         new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),

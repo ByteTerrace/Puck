@@ -1,4 +1,5 @@
 using Puck.State.Rules;
+using Puck.Commands;
 using Xunit;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 
@@ -7,6 +8,34 @@ namespace Puck.World.Schema.Tests;
 /// <summary>A world operand answers in the encoding its host answers in, and a live child key reaches the host as the
 /// key it resolved to.</summary>
 public sealed class WorldFactOperandLawTests {
+    [InlineData("roster", "roster", false)]
+    [InlineData("roster", "scope", false)]
+    [InlineData("scope", "scope", true)]
+    [Theory]
+    public void QuiescenceAdmitsBothScopeDomainsAndRefusesAnAmbiguousName(string rowName, string selection, bool ambiguous) {
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(Name: CellName.Parse(candidate: rowName), Kind: CellKind.Int, Capacity: 1, Cells: []),
+                StateFixtures.IntSlot("witness"),
+                new WorldStateRow(Name: CellName.Parse(candidate: "control"), Kind: CellKind.Int,
+                    Cells: [StateFixtures.Cell("request", 0), StateFixtures.Cell("status", 0),
+                        StateFixtures.Cell("cursor", 0), StateFixtures.Cell("completed", 0)]),
+            ]),
+            ReplaysRaw = [new WorldScopedReplay("scope", ["witness"], [0], [Principal.Console], "control", 1, [])],
+            Rules = [new WorldRule(CellName.Parse(candidate: "quiet"), [new ActionEffect.SetState("witness", 1m)],
+                Gate: new ActionPredicate.CompareState(((WorldRuleFacts.PhysicsQuiescent + ":") + selection), ExpressionOp.Equal, 1m),
+                Mode: ActionTriggerMode.Level)],
+        };
+
+        if (ambiguous) {
+            var refusal = Assert.Throws<RuleException>(testCode: () => WorldFactsCompiler.CompileAll(definition: definition));
+
+            Assert.Contains(expectedSubstring: "ambiguous", actualString: refusal.Message);
+        } else {
+            Assert.Single(collection: WorldFactsCompiler.CompileAll(definition: definition));
+        }
+    }
+
     private const string Channel = "water";
     private const string ChildKey = "3";
     private const string PlacementId = "granaryStores";
@@ -76,7 +105,7 @@ public sealed class WorldFactOperandLawTests {
         if (kind is TopologyKind.Graph or TopologyKind.Tiling) {
             Assert.True(condition: (Price(size: 3) > Price(size: 1)));
         } else {
-            Assert.Equal(Price(size: 1), Price(size: (kind == TopologyKind.Box) ? 7 : 19));
+            Assert.Equal(Price(size: 1), Price(size: ((kind == TopologyKind.Box) ? 7 : 19)));
         }
     }
     [Fact]

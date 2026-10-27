@@ -102,7 +102,12 @@ public sealed partial class WorldServer {
             ? m_arena.TryWriteText(row.Ordinal, key, text, out _)
             : m_arena.TryWriteLive(row.Ordinal, key, operand, ((StateWriteKind)write), DeliveryTime, out _));
 
-        if (applied && TryCommitStateTransaction(mark: mark, principal: principal, reason: out _)) { return WorldCellWriteVerdict.Applied; }
+        if (applied && TryCommitStateTransaction(mark: mark, principal: principal, reason: out _)) {
+            foreach (var scope in ScopedReplaySpan) {
+                scope.Observe(mutation: new WorldMutation.UpsertStateCell(principal, descriptor.Name, m_arena.Keys[key].Value, operand, write, text));
+            }
+            return WorldCellWriteVerdict.Applied;
+        }
         if (!applied) { RewindStateTransaction(mark: mark); }
         return WorldCellWriteVerdict.Rejected;
     }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions.Machines;
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -61,12 +62,20 @@ public readonly record struct WorldReplayStopResult(string Path, WorldReplaySetV
 /// the pin an author wrote, and the tape needs the identity of what actually loaded under it.</para>
 /// <para>Single-threaded on the launcher's window-pump thread: the <c>replay.*</c> verbs are Immediate (they run inline
 /// during the command pump's drain) and the taps + <see cref="NoteTick"/> run inside the fixed-step
-/// <c>Puck.World.WorldSimulation.Step</c> — both on that one thread, so no locking is needed. The <c>replay.*</c> verbs are
-/// not folded into the captured stream (they never reach the loopback), so a recording never records the recording
-/// verbs themselves; physical device input, the <c>world.grant</c>/<c>world.revoke</c> verbs, and Simulation-routed
-/// world verbs do reach the loopback and are captured.</para>
+/// <c>Puck.World.WorldSimulation.Step</c> — both on that one thread, so no locking is needed. Recording and drive
+/// controls are not folded into the captured stream, so a recording never records the recording verbs themselves.
+/// Scoped replay controls submit ordinary mutations through the loopback and are captured, as are physical device
+/// input, the <c>world.grant</c>/<c>world.revoke</c> verbs, and Simulation-routed world verbs.</para>
 /// </remarks>
 public sealed partial class WorldReplayTape {
+    /// <summary>Gets the live world's authored scoped replay boundaries.</summary>
+    public IReadOnlyList<WorldScopedReplayRuntime> Scopes => m_liveServer.ScopedReplays;
+
+    /// <summary>Submits an operator's scoped control through the ordinary transport, so a whole-session tape
+    /// records it. Authored scoped inputs use the internal queue because the world re-derives them.</summary>
+    public void RequestScope(WorldScopedReplayRuntime scope, int request, Principal principal) =>
+        m_transport.SubmitWorldMutation(mutation: scope.CreateRequest(principal: principal, request: request));
+
     private const string Extension = ".puckreplay";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
@@ -663,9 +672,11 @@ public sealed partial class WorldReplayTape {
     /// <returns><see langword="true"/> when recording armed.</returns>
     public bool TryBeginRecording(string name, out string refusal) {
         var result = m_liveServer.ExecuteAuthorityOperation(operation: () => {
-            var armed = TryBeginRecordingUnderAuthority(name, out var reason);
+            var armed = TryBeginRecordingUnderAuthority(name: name, refusal: out var reason);
+
             return (Armed: armed, Reason: reason);
         });
+
         refusal = result.Reason;
         return result.Armed;
     }
@@ -733,6 +744,7 @@ public sealed partial class WorldReplayTape {
 
         return true;
     }
+
     /// <summary>Loads a saved recording, rehydrates a fresh world from it, re-drives the recorded server-input stream,
     /// and compares the replayed tail hash against the recorded one — the offline verification, run synchronously so the
     /// verdict is readable the instant it returns. Never touches the live session.</summary>
