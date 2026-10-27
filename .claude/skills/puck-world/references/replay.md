@@ -72,6 +72,11 @@ scope tape or hash ledger to commit. A rebuild drops the derived tape.
 
 The live example is [the chess table](../../../../worlds/debug/chess.md), with
 positive, cancellation, and deliberately diverged scenarios in `chess-tests.puck`.
+[WorldScopedReplayTests](../../../../tests/Puck.World.Server.Tests/WorldScopedReplayTests.cs)
+covers row isolation, divergence, body input doors, checkpoint continuation and
+a whole-session tape controlling a scoped replay without doubling its derived inputs.
+[ArenaScopeSnapshotTests](../../../../tests/Puck.State.Tests/ArenaScopeSnapshotTests.cs)
+covers cursors, text, unsupported continuations and relocation after unrelated row growth.
 
 ## Whole-session format and development version
 

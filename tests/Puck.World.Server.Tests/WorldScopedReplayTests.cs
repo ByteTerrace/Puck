@@ -35,13 +35,17 @@ public sealed class WorldScopedReplayTests {
         Request(fixture: fixture, request: 4);
         Request(fixture: fixture, request: 1);
         fixture.Server.ApplyCommand(new WorldCommand.SnapPose(Principal.Seat(slot: 0), 0, new Vector3(x: 2, y: 10, z: 3), 0, 0, 0, SnapPoseMode.Pose));
+        var channels = new ChannelValues();
+
+        channels[0] = Puck.Maths.FixedQ4816.One;
         fixture.Server.EnqueueIntent(submission: new IntentSubmission(Principal: Principal.Seat(slot: 0), EntityIndex: 0,
-            Tick: fixture.Server.NextInputTick, Intent: default));
+            Tick: fixture.Server.NextInputTick, Intent: new PlayerIntent(Channels: channels, SourceRay: null)));
         for (var i = 0; (i < 6); i++) { fixture.Step(); }
         var tape = fixture.Server.ScopedReplays[0].Checkpoint();
 
         Assert.Single(collection: tape.Commands);
         Assert.Single(collection: tape.Intents);
+        Assert.Equal(Puck.Maths.FixedQ4816.One, tape.Intents[0].Intent.Intent.Channels[0]);
         Request(fixture: fixture, request: 1);
         for (var i = 0; (i < 6); i++) { fixture.Step(); }
         Assert.Equal(4, Read(fixture: fixture, key: "status", row: "control"));
