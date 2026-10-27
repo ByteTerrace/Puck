@@ -27,7 +27,8 @@ public sealed class WorldVerdictDoorLawTests {
             Lattices: [new LatticeTopology.Grid("map", new DocumentVector3(x: 0f, y: 0f, z: 0f), 1f, 1, 1)],
             World: [source, source with { Name = CellName.Parse(candidate: "visible") },
                 source with { Name = CellName.Parse(candidate: Witness),
-                    Cells = [new StateCell(Key: CellName.Parse(candidate: "0"), Value: CellValue.Bool(value: false))],
+                    Cells = [new StateCell(Key: CellName.Parse(candidate: "0"), Value: CellValue.Bool(value: false), Observation: new StateObservation(Tick: 0L, Visible: false))],
+                    Visibility = new StateVisibility(),
                     Knowledge = new StateKnowledge(Source: "truth", Mask: "visible"), Witness = CellName.Parse(candidate: Verdict) },
                 new WorldStateRow(Name: CellName.Parse(candidate: Verdict), Kind: CellKind.Int,
                     Cells: [new StateCell(Key: CellName.Parse(candidate: "ok"), Value: CellValue.Int(value: 0L))],
@@ -51,7 +52,7 @@ public sealed class WorldVerdictDoorLawTests {
         host.Advance(engineTick: 1UL, tick: 1UL);
 
         Assert.Equal(expected: RuleOutcome.Fired, actual: evaluator.FireEffects(applied: out _, effects: effects, ruleName: "observe", stepTicks: 1UL, tick: 1UL));
-        Assert.Equal(expected: 1L, actual: arena.Read(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey)).AsInt);
+        Assert.Equal(expected: 1L, actual: arena.Read(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey))?.AsInt);
         Assert.True(condition: arena.TryWrite(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: CellName.Parse(candidate: "ok")), operand: WorldVerdict.Fail, write: StateWriteKind.Set, reason: out _));
         Assert.True(condition: arena.TryWriteBoardCell(rowOrdinal: truth.Ordinal, cell: 0, value: 0L, write: StateWriteKind.Set, reason: out _));
         host.Advance(engineTick: 2UL, tick: 2UL);
@@ -60,7 +61,7 @@ public sealed class WorldVerdictDoorLawTests {
         Assert.True(condition: arena.TryReadBoardCell(rowOrdinal: witness.Ordinal, cell: 0, value: out var seen));
         Assert.Equal(actual: seen, expected: 1L);
         Assert.Equal(expected: 1L, actual: arena.ObservationAt(rowOrdinal: witness.Ordinal, position: 0)?.Tick);
-        Assert.Equal(expected: 1L, actual: arena.Read(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey)).AsInt);
+        Assert.Equal(expected: 1L, actual: arena.Read(rowOrdinal: verdict.Ordinal, key: arena.Keys.Intern(name: WorldVerdict.FiredTickKey))?.AsInt);
         Assert.Empty(collection: evaluator.Diagnostics());
     }
     [InlineData(false, 0)]
