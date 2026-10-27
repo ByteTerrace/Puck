@@ -29,7 +29,8 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         ArgumentNullException.ThrowIfNull(argument: host);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
-        m_evaluator = new RuleEvaluator(host: host);
+        // Each candidate resets the latch and runs once. There is no prior evaluation to memoize.
+        m_evaluator = new RuleEvaluator(host: host) { SchedulingEnabled = false };
         m_host = host;
         m_rules = rules;
         m_score = score;

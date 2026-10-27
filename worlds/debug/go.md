@@ -22,13 +22,15 @@ Area is stones plus empty points reached by only one colour, with 7.5 komi
 to White. Play out disputed dead groups before passing; shared regions are
 neutral. Filling the board or using a tray's last stone does not end play.
 
-The physical table is read after its own stones rest for nine ticks (0.3 s).
+The physical table is read across nine quiet ticks (0.3 s), at most 41 stones
+per tick. Motion restarts the scan; a verdict requires the whole quiet window.
 Other tables do not delay it, and a carried stone always prevents settlement.
 `goCell` records stone locations and `goSeen` their colours at points.
 `goDiff` and `goGap` mark changed and missing points; ordinal max reductions
 select a point without ray scans. A single new stone of the side to move is
 a move request. Other arrangements increment `goIllegal` and are reconciled.
-Stacked stones are reported as collisions and require a hand to separate them.
+Stacked stones settle too. A collision retains the first stone of the accepted
+colour and returns every stray or duplicate, even when the projected board is unchanged.
 
 Returns and resets use an ascending deterministic queue, at most eight stones
 per tick. `goReseat` exposes that busy state; seated play and the opponent wait
@@ -81,12 +83,15 @@ The beginner opponent plays White by default. Its one-ply Negamax job judges
 at most eight candidates per scheduled step, bounded by the shared work
 allowance. Captures dominate; self-atari and eye filling are penalized,
 endangered enemy groups add pressure, and third/fourth-line positions get
-small opening weights. It passes when no positive-scoring move remains.
+small opening weights. Only the active colour's judge floods its groups, and
+each candidate evaluates once without a scheduling memo. It passes when no positive-scoring move remains.
+Table reading, the accepted move's group report and search startup occupy
+separate ticks to bound the work on the frame thread.
 Search jobs take turns when other tables are thinking. Their admission prices
 their own dependency rows and reserves every job's input-stamp upkeep.
 
 [go-tests.puck](go-tests.puck) covers all-stone settlement, seated play,
 captures before suicide, group captures, ko and its release, illegal table
-arrangements, the far corner, reset, passes and area scoring, including a
+arrangements (including an occupied-point stack), the far corner, reset, passes and area scoring, including a
 serpentine flood longer than 128 ticks. Run
 `puck test worlds/debug/go-tests.puck --reproduce --jobs 1`.

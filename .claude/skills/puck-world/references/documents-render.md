@@ -486,9 +486,9 @@ domino line) crosses more than one pair-hop within one tick instead of one
 body per tick; a box-vs-box pair depenetrates by the complete fifteen-axis
 separating-axis test (`Puck.Physics.FixedOrientedBox.TrySeparation`), not the
 coarser world-bounds approximation a capsule-vs-box pair still uses. Once the resting latch
-closes, `AdvanceRigid` stops integrating that body entirely until something
+closes over static support, `AdvanceRigid` stops integrating that body entirely until something
 wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
-teleport, or a live solid edit replacing the contact field it rested
+teleport, glide, reconciliation, changed scale/collider/rigid facet, or a live solid edit replacing the contact field it rested
 against) — this is what makes `Resting`/`$physics:quiescent` mean the body
 is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
 `physics(quiescent)` rule operand are the console/rule surface. A carried rigid
@@ -497,7 +497,9 @@ authored keys of a keyed state row, each naming one count-1 inhabited placement;
 the compiler resolves those names to placement ordinals, so each read costs one
 lookup per listed placement rather than a population scan per member. Cell
 values do not filter membership, and uninhabited or inactive bodies contribute
-no motion. Resting body pairs skip the dynamic narrowphase until a body wakes;
+no motion. Dynamic-pair support counts toward the hold after the pair solve;
+these sleepers recheck support next tick so moving the lower body releases a stack.
+Resting pairs skip the dynamic narrowphase only when both integrations froze their poses this tick;
 awake neighbours still collide with resting bodies normally. See
 [Crowd scale policies](#crowd-scale-policies)
 for the authored `collision.bodyContacts` rigid fields, and the

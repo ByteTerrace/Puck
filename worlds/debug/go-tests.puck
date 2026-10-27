@@ -299,6 +299,80 @@ test "an arrangement that is not one stone of the side to move is illegal and pu
   }
 }
 
+// The higher-ordinal White token wins the inverse-board projection, so dropping Black onto it changes no visible
+// point. The physical collision still has to settle, be refused, and return Black to its tray.
+test "a stone stacked on an occupied point is returned even when the board projection is unchanged" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 2
+    goStoneCount[2] = 1
+  }
+  when {
+    ticks 300
+    seat1: world.state.cell.set goIllegal $value 0
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 470
+    ticks 400
+  }
+  expect {
+    goIllegal == 1
+    goMoves == 0
+    goBoard[180] == 2
+    goSeen[180] == 2
+    goCell.goStone0 == -1
+    goCollisions == 0
+    goHold == 9
+  }
+}
+
+test "two stones of the accepted colour keep one point and return the duplicate" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 1
+    goStoneCount[1] = 1
+  }
+  when {
+    ticks 300
+    seat1: world.state.cell.set goIllegal $value 0
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 469
+    ticks 400
+  }
+  expect {
+    goIllegal == 1
+    goMoves == 0
+    goBoard[180] == 1
+    goSeen[180] == 1
+    goCell.goStone0 == 180
+    goCell.goStone1 == -2
+    goCollisions == 0
+    goHold == 9
+  }
+}
+
+test "a higher-ordinal wrong-colour stone does not replace or duplicate the accepted stone beneath it" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 1
+    goStoneCount[1] = 1
+  }
+  when {
+    ticks 300
+    seat1: world.state.cell.set goIllegal $value 0
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 289
+    ticks 400
+  }
+  expect {
+    goIllegal == 1
+    goMoves == 0
+    goBoard[180] == 1
+    goSeen[180] == 1
+    goCell.goStone0 == 180
+    goCell.goStone181 == -182
+    goCell.goStone1 == -2
+    goCollisions == 0
+    goHold == 9
+  }
+}
+
 // The computer plays Black on an empty board: the search judges every point, grows its tree over several ticks within
 // each tick's work allowance, and puts its stone down on the table as a player's is.
 test "the computer plays one move" {

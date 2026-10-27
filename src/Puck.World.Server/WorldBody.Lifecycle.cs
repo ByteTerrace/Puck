@@ -276,13 +276,15 @@ public sealed partial class WorldBody {
             rollRadians: FixedQ4816.FromDouble(value: rollRadians)
         );
     }
-    /// <summary>Moves the body to <paramref name="position"/> as continuous motion: its attitude, velocity, contact state
-    /// and previous-pose anchor stay, so a client interpolates from where it was, where <see cref="Pose(FixedVector3,
+    /// <summary>Moves the body to <paramref name="position"/> as continuous motion: its attitude, velocity
+    /// and previous-pose anchor stay. A changed rigid pose invalidates its rest and contact latches. A client interpolates from where it was, where <see cref="Pose(FixedVector3,
     /// FixedQ4816, FixedQ4816, FixedQ4816)"/> snaps. For a body a rule moves a short step every tick (the debug world's
     /// lift car); a long move glided this way streaks across the gap for one tick.</summary>
     /// <param name="position">The new world position.</param>
     public void Glide(FixedVector3 position) {
+        if (m_position == position) { return; }
         WakeUp();
+        InvalidateRigidRest();
         m_position = position;
     }
     /// <summary>Teleports to a full pose already expressed in deterministic numerics.</summary>
@@ -498,6 +500,8 @@ public sealed partial class WorldBody {
 
         var hadRigidFacet = (m_rigid is not null);
 
+        if (colliderChanged || (m_rigid != rigid)) { InvalidateRigidRest(); }
+
         m_rigid = rigid;
 
         if (colliderChanged) {
@@ -601,7 +605,10 @@ public sealed partial class WorldBody {
         );
 
         m_bodyMotionPrograms = programs;
+        var previousOrientation = m_orientation;
+
         SetBodyMotionProgram(program: program);
+        if (m_orientation != previousOrientation) { InvalidateRigidRest(); }
     }
     /// <summary>Applies a server correction: the sim pose snaps to the target instantly (an end-state identical to
     /// <see cref="Pose(float, float, float, float, float, float)"/>), and the tick's snapshot carries
@@ -617,6 +624,7 @@ public sealed partial class WorldBody {
     /// <returns>The continuity kind published for the correction.</returns>
     public EntityContinuityKind Reconcile(float x, float z, float yawRadians, float seconds) {
         var oldPosition = m_position;
+        var oldOrientation = m_orientation;
 
         // Snap the sim pose immediately — the same end-state a Warp+Face would land (a planar, levelled correction).
         // The tape and any timed press are untouched: a correction is authority over the pose, not over what the
@@ -634,6 +642,7 @@ public sealed partial class WorldBody {
             angle: fixedYaw,
             axis: FixedVector3.UnitY
         );
+        if ((m_position != oldPosition) || (m_orientation != oldOrientation)) { InvalidateRigidRest(); }
         CommitTeleport();
 
         // Over the ceiling the correction pops (a respawn/teleporter-scale jump would streak if eased); within it the

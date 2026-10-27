@@ -15,6 +15,98 @@ namespace Puck.World.Server.Tests;
 /// <summary>Laws for the rigid-dynamics facet (<see cref="WorldRigid"/>): pair-contact momentum conservation and
 /// checkpoint/restore bit-exactness across a rigid body's own state.</summary>
 public sealed class WorldRigidDynamicsLawTests {
+    private static WorldDefinition LensOnFloorDocument() {
+        var source = FallingRigidBallDocument();
+        var creation = CreationCanonicalizer.Canonicalize(document: new CreationDocument(
+            Schema: CreationDocument.CurrentSchema, Name: "lens", Palette: null, Frames: null,
+            Shapes: [new ShapeDocument(Id: 0, Name: "lens", Type: SdfSolidPrimitive.Ellipsoid,
+                Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: new Vector3(x: 0.036f, y: 0.010f, z: 0.036f),
+                Material: 0, Blend: SdfBlendOp.Union, Smooth: 0, Group: 0)]), source: "lens");
+
+        return source with {
+            CreationsRaw = [.. source.Creations, new WorldPrototype(Id: "lens", Document: creation.Document, HashRaw: creation.Hash)],
+            KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with {
+                Collider = new WorldCollider.FromCreation(PrototypeId: "lens"),
+                Rigid = kit.Rigid! with { Mass = 0.05f, Restitution = 0.05f, Friction = 0.6f, RollingFriction = 0.2f },
+            })],
+        };
+    }
+
+    [Fact]
+    public void ATiltedLensTipsBeforeItRests() {
+        using var fixture = Fixtures.FreshServer(definition: LensOnFloorDocument());
+        var lens = fixture.JoinSeat();
+
+        lens.Pose(pitchRadians: 0.5f, rollRadians: 0, x: 0, y: 0.12f, yawRadians: 0, z: 0);
+        var initial = lens.FixedOrientation;
+
+        for (var tick = 0; ((tick < 2400) && !lens.Resting); tick++) { fixture.Step(); }
+        Assert.True(condition: lens.Resting, userMessage: $"position={lens.FixedPosition} velocity={lens.RigidVelocity} angular={lens.RigidAngularVelocity}");
+        Assert.NotEqual(initial, lens.FixedOrientation);
+        Assert.True(condition: (lens.FixedPosition.Y < FixedQ4816.FromDouble(value: 0.135)));
+    }
+    [Fact]
+    public void AStackedLensRestsAndFallsWhenItsSupportMovesAway() {
+        using var fixture = TwoJoinedSeats(definition: LensOnFloorDocument());
+        var lower = fixture.Server.Body(index: 0)!;
+        var upper = fixture.Server.Body(index: 1)!;
+
+        upper.Pose(pitchRadians: 0, rollRadians: 0, x: 2, y: 0.20f, yawRadians: 0, z: 0);
+        lower.Pose(pitchRadians: 0, rollRadians: 0, x: 0, y: 0.13f, yawRadians: 0, z: 0);
+        for (var tick = 0; (tick < 150); tick++) { fixture.Step(); }
+        upper.Pose(pitchRadians: 0, rollRadians: 0, x: 0, y: 0.20f, yawRadians: 0, z: 0);
+        for (var tick = 0; ((tick < 2400) && !(lower.Resting && upper.Resting)); tick++) { fixture.Step(); }
+        Assert.True(condition: (lower.Resting && upper.Resting), userMessage: $"lower={lower.FixedPosition} v={lower.RigidVelocity} hold={lower.RigidRestingHoldTicks}; upper={upper.FixedPosition} v={upper.RigidVelocity} hold={upper.RigidRestingHoldTicks}");
+        Assert.True(condition: (upper.FixedPosition.Y > (lower.FixedPosition.Y + FixedQ4816.FromDouble(value: 0.015))), userMessage: $"lower={lower.FixedPosition}; upper={upper.FixedPosition}");
+        for (var tick = 0; (tick < 30); tick++) {
+            fixture.Step();
+            Assert.True(condition: (lower.Resting && upper.Resting), userMessage: $"stack woke at {tick}: lower v={lower.RigidVelocity}, upper v={upper.RigidVelocity}");
+            Assert.True(condition: (upper.FixedPosition.Y > (lower.FixedPosition.Y + FixedQ4816.FromDouble(value: 0.015))));
+        }
+        var supportedHeight = upper.FixedPosition.Y;
+
+        lower.Glide(position: (lower.FixedPosition + FixedVector3.UnitX));
+        for (var tick = 0; (tick < 120); tick++) { fixture.Step(); }
+        Assert.True(condition: (upper.FixedPosition.Y < (supportedHeight - FixedQ4816.FromDouble(value: 0.005))));
+    }
+    [InlineData("glide")]
+    [InlineData("reconcile")]
+    [InlineData("scale")]
+    [InlineData("collider")]
+    [InlineData("program")]
+    [Theory]
+    public void GeometryChangesInvalidateRigidRest(string mutation) {
+        var definition = Fixtures.WithBodyScale(initial: FixedQ4816.One, source: FallingRigidBallDocument());
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var body = fixture.JoinSeat();
+
+        body.Pose(pitchRadians: ((mutation == "program") ? 0.5f : 0), rollRadians: 0, x: 0, y: 0.5f, yawRadians: 0, z: 0);
+        for (var tick = 0; ((tick < 2400) && !body.Resting); tick++) { fixture.Step(); }
+        Assert.True(condition: body.Resting);
+        switch (mutation) {
+            case "glide": body.Glide(position: (body.FixedPosition + FixedVector3.UnitY)); break;
+            case "reconcile": body.Reconcile(seconds: 0, x: 1, yawRadians: 0, z: 0); break;
+            case "scale":
+                Fixtures.WriteBodyScale(body: 0, server: fixture.Server, value: FixedQ4816.FromDouble(value: 0.5));
+                fixture.Step();
+                break;
+            case "collider":
+            case "program":
+                var program = CompiledBodyMotionProgram.Compile(kind: BodyProgramKind.Motion, name: "rest-law",
+                    operations: ((mutation == "program") ? [BodyMotionOp.ResolveYawAttitudeAndPlanarFrame, BodyMotionOp.CommitPose] : [BodyMotionOp.CommitPose]), version: CompiledBodyMotionProgram.SupportedVersion);
+                var collider = FixedWorldCollider.Compile(collider: new WorldCollider.Sphere(Radius: ((mutation == "collider") ? 0.2f : 0.4f)), creations: []);
+                body.RecompileKit(tuning: default(FixedMotionTuning) with { Shaping = [], ShapingRecencyFacts = [], ShapingRecencyWindows = [] },
+                    actions: null, actionThresholds: null, actionShapes: null, roleMask: null, roleOrdinals: default, actionState: null,
+                    program: program, programs: new Dictionary<string, CompiledBodyMotionProgram> { [program.Name] = program },
+                    collider: collider, maxSmoothError: FixedQ4816.Zero,
+                    rigid: FixedWorldRigid.Compile(rigid: definition.Kits[0].Rigid!, collider: collider!.Value));
+                break;
+        }
+        Assert.False(condition: body.Resting);
+        Assert.Equal(0UL, body.RigidRestingHoldTicks);
+        fixture.Step();
+        Assert.False(condition: body.Resting);
+    }
     [InlineData(0.05f)]
     [InlineData(0.06f)]
     [InlineData(0.15f)]

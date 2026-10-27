@@ -1106,9 +1106,11 @@ sequential-impulse passes distribute the normal impulse across every
 manifold point still closing, then friction clamps per point to THAT point's
 own accumulated normal impulse—never the manifold's total—which is what
 keeps an upright body's centre of mass over its support polygon without an
-artificial extra damping term; a standing capsule or any other single-point
-volume falls back to the ordinary witness-point path, which already carries
-the same torque over the one point that actually touches. The world is
+artificial extra damping term. An ellipsoid uses the same pre-sweep manifold
+response over its one off-centre witness, so gravity tips it. The two-body kernel
+applies inverse inertia to the geometric lever before multiplying the impulse
+magnitude, preserving small contact torques that Q16 torque rounding would erase.
+The world is
 modeled as an infinite-mass static phantom (`WorldBody.GroundPhantomHandle`),
 so linear and angular motion stay coupled exactly as inertia dictates and a
 spinning ball can genuinely start rolling (or a rolling one stop spinning)
@@ -1175,10 +1177,10 @@ published by `WorldBody.FactHolds`) after its linear and angular speed stay
 below threshold for a short hold window while grounded—the LINEAR threshold
 scales with the body's own live `Scale` (a spatial rate, like a hold's own
 travel speed), the ANGULAR one does not (no length dimension). Once the latch
-closes, `WorldBody.AdvanceRigid` stops integrating that body entirely—position,
+closes over static support, `WorldBody.AdvanceRigid` stops integrating that body entirely—position,
 orientation, and both contact latches hold bit-identical every tick—until
 something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`,
-`ApplyRigidPositionalCorrection`, a `Pose` teleport, or `SetContactField`
+`ApplyRigidPositionalCorrection`, `Pose`, `Glide`, `Reconcile`, a changed scale or collider/rigid facet, or `SetContactField`
 handing it a different field reference—a live solid edit that moved or
 removed the floor it rested against—each of which clears the latch
 itself): this
@@ -1195,7 +1197,9 @@ rests uncarried, vacuously 1 for a world authoring none. The scoped expression
 `physics(quiescent, roster)` checks only the count-1 inhabitants named by a keyed
 row's authored keys (`WorldPopulation.RigidPlacementsQuiescent`); its compiled
 placement ordinals make a read one lookup per member. A carried member keeps
-the read false. Resting pairs skip the dynamic narrowphase until one body wakes.
+the read false. A body's final resting hold includes dynamic-pair support and the post-pair velocity.
+Bodies supported by other bodies recheck gravity and contact each tick, so moving a support releases its stack.
+Resting pairs skip the dynamic narrowphase only when both integrations actually froze their poses this tick.
 `world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the

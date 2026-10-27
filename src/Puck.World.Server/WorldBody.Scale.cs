@@ -34,6 +34,7 @@ public sealed partial class WorldBody {
     /// <param name="radius">The authored engage radius, in metres.</param>
     /// <returns>The reach, in metres.</returns>
     public FixedQ4816 EngageReach(double radius) => (FixedQ4816.FromDouble(value: radius) * m_scale);
+
     /// <summary>Sets this body's live scale multiplier — called only by <c>WorldPopulation.SyncBodyScale</c>'s
     /// resync. A non-positive candidate is refused in favor of <see cref="FixedQ4816.One"/> rather than admitting a
     /// degenerate or inverted body: the register's envelope is enforced at write time, so this floor is a last-resort
@@ -50,6 +51,7 @@ public sealed partial class WorldBody {
         }
 
         m_scale = scale;
+        InvalidateRigidRest();
         RescaleColliderVolumes();
     }
 

@@ -813,7 +813,7 @@ public sealed partial class WorldPopulation {
     /// <summary>
     /// Resolves active local body pairs after every body has integrated. Pair order is deterministic sweep order with
     /// population index as the complete tie-breaker; each body's own authority remains its sole pose writer and an
-    /// overlap is shared equally between the pair. The FIRST pass's own resolved rigid-pair count derives how many
+    /// overlap is shared equally unless static support blocks one rigid body's share. The FIRST pass's own resolved rigid-pair count derives how many
     /// EXTRA full sweeps run (<see cref="RigidPairPassesThisTick"/>, <see cref="WorldBodyContactPolicy.RigidPairIterationCeiling"/>):
     /// every pass re-runs broadphase and narrowphase from scratch, over the SAME bodies' now-current positions and
     /// velocities, so a pair a strike's own positional correction newly brings into contact (the next ball down a
@@ -970,7 +970,7 @@ public sealed partial class WorldPopulation {
                     }
                     // Both poses are unchanged until a body wakes. An awake neighbour still visits a resting
                     // body normally, so an arriving impulse can wake an entire contact chain in this sweep.
-                    if (left.Resting && right.Resting) {
+                    if (left.Resting && right.Resting && (left.RigidStaticSubstepsThisTick == 0) && (right.RigidStaticSubstepsThisTick == 0)) {
                         continue;
                     }
 
@@ -1046,6 +1046,9 @@ public sealed partial class WorldPopulation {
             if (thisPassRigidResolved <= 0) {
                 break;
             }
+        }
+        for (var ordinal = 0; (ordinal < count); ordinal++) {
+            m_entries[contacts[ordinal].Index].Body!.FinishRigidContacts(policy: m_rigidContactPolicy);
         }
     }
 
