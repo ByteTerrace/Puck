@@ -112,8 +112,9 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
   (15 GB private) within a minute of boot. On a 32 GB machine, while one runs,
   only a couple of building lanes fit beside it. Keep windowed capture batches short (boot,
   capture, stop), and tune on a headless World. A lane that runs scenario files
-  (`puck test <file>`) names the files and passes `--jobs 1`: each job is a
-  pair of headless Worlds near 1 GB each, and a review lane's `--jobs 4` run
+  (`puck test <file>`) names the files and passes `--jobs 1`: this serializes
+  headless worker processes, including reproduce replicas, with one independent
+  native host live at a time. A review lane's earlier `--jobs 4` run
   beside the lead's replay once took free memory from 20 GB to 3 GB and killed
   the replay. Every brief, a read-only review's included, says so.
 - **The integration lane** is one long-running lane. It takes finished branches
