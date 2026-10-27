@@ -110,6 +110,10 @@ outside this contract and takes the references as written.
 
 ## Review discipline
 
+- A capturing local function can allocate its display class at method entry,
+  before a cache check returns. Keep a hot cache-check method separate from its
+  closure-bearing slow rebuild. Scoped replay's active hash regression measures
+  1,000 warmed calls; an inactive-tick test alone cannot see this allocation.
 - Start with a profile, benchmark, allocation trace or demonstrated hot path. A
   suspected hot path is not one; ask for the evidence, and keep the clearer
   form (LINQ, `foreach`, an interface call) when it does not show a win.

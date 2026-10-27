@@ -66,8 +66,12 @@ unrelated rows, bodies, routes, keys and the world's clock running.
 ring/draw cursors, in the same arena. It rebinds captured column addresses to
 the selected rows when unrelated row growth moves storage; selected row capacities
 must still agree. Field, vector, timed and pool rows are
-refused. Compiled row write sets select rule and interaction latches; a group
-which writes scoped rows contributes all member latches and its progress. Restore
+refused. Compiled row write sets and body-effect targets select rule and interaction
+latches; a group which writes scoped rows or bodies contributes all member latches
+and its progress. Body targets include nested effect arms, decision options,
+literal keys and compiled placement domains. A selected continuation with shared
+or unbounded live body targets is refused rather than rewinding outside bindings.
+Standalone level rules carry no edge latch. Restore
 replaces only those entries and invalidates their scheduling observations. Decision
 continuations, undo groups and groups writing outside the scope are refused.
 Authors must keep the rules' live dependencies local; the chess table uses each
@@ -90,7 +94,10 @@ positive, cancellation, and deliberately diverged scenarios in `chess-tests.puck
 covers row isolation, divergence, body input doors, checkpoint continuation and
 a whole-session tape controlling a scoped replay without doubling its derived inputs.
 The review regressions also cover edge-latch restart/hash coverage, forged starting
-images, truncated tapes, and zero allocated bytes across 1,000 inactive ticks.
+images, truncated tapes, body-only edge rules and groups, outside-body latch
+isolation, and zero allocated bytes across 1,000 inactive ticks or warmed active
+hash computations. The cached rule-binding method must contain no capturing
+local functions or lambdas; their display class can allocate before an early return.
 [ArenaScopeSnapshotTests](../../../../tests/Puck.State.Tests/ArenaScopeSnapshotTests.cs)
 covers cursors, text, unsupported continuations and relocation after unrelated row growth.
 

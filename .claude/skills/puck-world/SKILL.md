@@ -44,7 +44,7 @@ retarget them, and read the references' mentions of them as prior art
 document rows, stable body ordinals, input principals, control row and timed
 input program. `WorldScopedReplayRuntime` captures its starting arena columns and
 body continuations and the rule/interaction latches of compiled writers to those
-rows (plus their rule-group progress), records accepted addressed mutations plus body commands and
+rows or bodies (plus their rule-group progress), records accepted addressed mutations plus body commands and
 intents, and compares every replayed tick with that live recording. It uses
 `StateArena.CaptureScope`/`RestoreScope` and `AddRowTo`, and the population's
 existing continuation codecs: exporting and reloading cell values alone loses
@@ -53,11 +53,16 @@ authoritative hash. `replay.scope` is operator read-back and next-tick control;
 it never invokes `world.load` or masks other seats. The first completed drive
 derives the tape, later drives verify it. Field, vector, timed and pool rows need
 a wider continuation boundary and are refused, as do decision rules and undo or
-partially owned rule groups. Scope restoration validates the complete row/body
+partially owned rule groups. Body-effect ownership walks nested arms, literal body
+keys and compiled placement domains. Shared or unbounded live body targets in a
+selected continuation are refused; a standalone level rule carries no edge latch.
+Scope restoration validates the complete row/body
 inventory before mutation; starting images are privately copied and digested.
 Persisted tapes must have a complete expected hash sequence or a consistent
 active recording, with ordered, scoped inputs. Hot scope observers enumerate
-`ScopedReplaySpan`; an inactive scope must allocate zero bytes per steady tick.
+`ScopedReplaySpan`; an inactive scope must allocate zero bytes per steady tick,
+and a warmed active scope hash must allocate zero bytes. Keep closure-bearing
+rebinding in the slow method after the compiled-array identity check.
 Scope rules must read local facts: `physics(quiescent, "chess-demo")` restricts
 the existing census to that scope's bodies, while the global `physics(quiescent)`
 couples a table to unrelated rigid bodies. The debug world's idle example

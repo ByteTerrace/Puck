@@ -1,9 +1,103 @@
 using Puck.Maths;
 using Xunit;
+using RuleGroupDeclaration = Puck.State.Rules.RuleGroupDeclaration;
+using RuleGroupShape = Puck.State.Rules.RuleGroupShape;
+using RuleGroupStep = Puck.State.Rules.RuleGroupStep;
 
 namespace Puck.World.Server.Tests;
 
 public sealed partial class WorldScopedReplayTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ABodyOnlyEdgeRuleRestartsWithItsScopeIncludingGroupedContinuation(bool grouped) {
+        var definition = Document();
+        var source = definition.ReplaysRaw![0];
+
+        definition = definition with {
+            ReplaysRaw = [source with { Bodies = [0], Inputs = [source.Inputs[0] with { Tick = 0 }] }],
+            Rules = [new WorldRule(CellName.Parse(candidate: "body-edge"),
+                [new WorldEffect.Pose(Key: "0", Position: new System.Numerics.Vector3(x: 91, y: 10, z: 0))],
+                Gate: new ActionPredicate.CompareState("counter", ExpressionOp.GreaterOrEqual, 1m), Mode: ActionTriggerMode.Edge),
+                new WorldRule(CellName.Parse(candidate: "outside-body-edge"),
+                    [new WorldEffect.Pose(Key: "1", Position: new System.Numerics.Vector3(x: 92, y: 10, z: 0))],
+                    Gate: new ActionPredicate.CompareState("counter", ExpressionOp.GreaterOrEqual, 1m), Mode: ActionTriggerMode.Edge)],
+            RuleGroupsRaw = (grouped ? [new RuleGroupDeclaration(CellName.Parse(candidate: "body-group"), RuleGroupShape.Staged,
+                [new RuleGroupStep(CellName.Parse(candidate: "body-edge"))], Trigger: new ActionPredicate.CompareState("counter", ExpressionOp.GreaterOrEqual, 1m))] : null),
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+
+        fixture.JoinSeat();
+        fixture.JoinSeat(slot: 1);
+        Request(fixture: fixture, request: 4); Request(fixture: fixture, request: 1);
+        for (var i = 0; (i < 8); i++) { fixture.Step(); }
+        var scope = fixture.Server.ScopedReplays[0];
+
+        Assert.Equal(FixedQ4816.FromInteger(value: 91), fixture.Server.Body(index: 0)!.FixedPosition.X);
+        if (!grouped) { Assert.Single(collection: scope.Checkpoint().RuleGateHeld); }
+        Assert.Equal((grouped ? 1 : 0), scope.Checkpoint().RuleGroups.Count);
+        Request(fixture: fixture, request: 1);
+        for (var i = 0; (i < 8); i++) { fixture.Step(); }
+        Assert.Equal(4, Read(fixture: fixture, key: "status", row: "control"));
+        Assert.Equal(FixedQ4816.FromInteger(value: 91), fixture.Server.Body(index: 0)!.FixedPosition.X);
+        var hash = scope.Hash();
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), userMessage: reason);
+        fixture.Server.RestoreCheckpoint(checkpoint: checkpoint! with {
+            Server = checkpoint.Server with {
+                RuleGateHeld = checkpoint.Server.RuleGateHeld.Select(selector: entry => ((entry.Rule == "outside-body-edge") ? entry with { Held = false } : entry)).ToArray(),
+            },
+        });
+        Assert.Equal(hash, fixture.Server.ScopedReplays[0].Hash());
+        fixture.Server.RestoreCheckpoint(checkpoint: checkpoint! with {
+            Server = checkpoint.Server with {
+                RuleGateHeld = checkpoint.Server.RuleGateHeld.Select(selector: entry => ((entry.Rule == "body-edge") ? entry with { Held = false } : entry)).ToArray(),
+            },
+        });
+        Assert.NotEqual(hash, fixture.Server.ScopedReplays[0].Hash());
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void SharedBodyContinuationIsRefusedBeforeCapture(bool dynamic) {
+        var definition = Document();
+
+        definition = definition with {
+            ReplaysRaw = [definition.ReplaysRaw![0] with { Bodies = [0] }],
+            Rules = [new WorldRule(CellName.Parse(candidate: "shared-body"), (dynamic
+                ? [new WorldEffect.Pose(Key: "$each", Position: new System.Numerics.Vector3(x: 91, y: 10, z: 0))]
+                : [new WorldEffect.Pose(Key: "0", Position: new System.Numerics.Vector3(x: 91, y: 10, z: 0)),
+                    new WorldEffect.Pose(Key: "1", Position: new System.Numerics.Vector3(x: 92, y: 10, z: 0))]),
+                Gate: new ActionPredicate.CompareState("counter", ExpressionOp.GreaterOrEqual, 1m),
+                Mode: ActionTriggerMode.Edge, ForEach: (dynamic ? (StateChannelRef)"$bodies" : null))],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+
+        fixture.JoinSeat();
+        fixture.JoinSeat(slot: 1);
+        Request(fixture: fixture, request: 4);
+        Assert.Equal(-1, Read(fixture: fixture, key: "status", row: "control"));
+        Assert.Null(@object: fixture.Server.ScopedReplays[0].Checkpoint().Start);
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => fixture.Server.ScopedReplays[0].Hash());
+
+        Assert.Contains("scope", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("shared-body", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("cannot isolate body continuation", refusal.Message, StringComparison.Ordinal);
+    }
+    [Fact]
+    public void AnActiveScopeHashAllocatesNothingAfterBinding() {
+        using var fixture = Fixtures.FreshServer(Document());
+
+        Request(fixture: fixture, request: 4); Request(fixture: fixture, request: 1);
+        var scope = fixture.Server.ScopedReplays[0];
+
+        Assert.True(condition: scope.Checkpoint().Active);
+        for (var i = 0; (i < 2000); i++) { scope.Hash(); }
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var i = 0; (i < 1000); i++) { scope.Hash(); }
+        Assert.Equal(0, (GC.GetAllocatedBytesForCurrentThread() - before));
+    }
     [Fact]
     public void AnotherScopesFallingRigidBodyCannotChangeTheLocalSettlingFactOrReplayVerdict() {
         var scoped = Document();

@@ -138,7 +138,8 @@ committed. The rest of the world's clock, bodies, routes and state keep running.
 For screen captures, the title is screen 12; the result and verdict lines are
 screens 8–11. Screen 7 belongs to the Alchemy recipe book.
 The scope includes the table rules' edge latches and group progress as well as
-its rows and pieces. Settling reads only the chess pieces' resting facts, so an
+its rows and pieces, including rules whose only effect moves an owned piece.
+Settling reads only the chess pieces' resting facts, so an
 airborne Go stone or Reversi disc cannot change the verdict. Saved starting
 images must contain exactly the declared rows and bodies; forged outside bodies
 and truncated expected hash sequences are refused before playback.

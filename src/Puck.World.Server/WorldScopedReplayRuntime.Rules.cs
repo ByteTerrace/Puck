@@ -15,21 +15,28 @@ public sealed partial class WorldScopedReplayRuntime {
     private WorldRuleLatchEntry[] m_startInteractionLatch = [];
     private WorldRuleGroupEntry[] m_startGroups = [];
 
-    // The compiler already collects the conservative write set, including nested effect arms.
-    // A rule which can change a scoped row owns continuation in that scope too.
+    // Keep the cached path free of closures: this runs on every active scope hash.
     private void BindRules() {
         var host = m_server.RuleHost;
 
         if (ReferenceEquals(objA: m_allRules, objB: host.Rules) && ReferenceEquals(objA: m_allInteractions, objB: host.Interactions) && ReferenceEquals(objA: m_allGroups, objB: host.Groups)) { return; }
+        RebindRules(host: host);
+    }
+    private void RebindRules(WorldRuleHost host) {
         var writes = new List<CellAccess>();
+        var bodies = new HashSet<int>();
 
-        bool WritesScope(CompiledRule rule) {
+        bool WritesScope(CompiledRule rule, bool grouped = false) {
             writes.Clear(); rule.CollectWrites(into: writes);
-            return writes.Any(predicate: cell => m_rows.Contains(item: cell.RowOrdinal));
+            bodies.Clear(); CollectBodyWrites(into: bodies, rule: rule);
+            // Standalone level rules carry no latch. A group's progress still owns their effects.
+            return (writes.Any(predicate: cell => m_rows.Contains(item: cell.RowOrdinal)) ||
+                ((grouped || (rule.Mode == ActionTriggerMode.Edge) || (rule is CompiledWorldFactsRule { Decision: not null })) &&
+                    bodies.Any(predicate: body => (m_bodies.Contains(item: body) || ((body < 0) && (m_bodies.Count > 0))))));
         }
-        m_groups = host.Groups.Where(predicate: group => group.WriteRows.Any(predicate: m_rows.Contains)).ToArray();
+        m_groups = host.Groups.Where(predicate: group => group.Members.Any(predicate: member => WritesScope(rule: host.Rules[member], grouped: true))).ToArray();
         m_rules = host.Rules.Where(predicate: (rule, index) => (WritesScope(rule: rule) || m_groups.Any(predicate: group => group.Members.Contains(value: index)))).ToArray();
-        m_interactions = host.Interactions.Where(predicate: WritesScope).ToArray();
+        m_interactions = host.Interactions.Where(predicate: rule => WritesScope(rule: rule)).ToArray();
         m_ruleNames = m_rules.Select(selector: rule => rule.Name).ToHashSet(comparer: StringComparer.Ordinal);
         m_interactionNames = m_interactions.Select(selector: rule => rule.Name).ToHashSet(comparer: StringComparer.Ordinal);
         foreach (var group in m_groups) {
@@ -39,6 +46,12 @@ public sealed partial class WorldScopedReplayRuntime {
         }
         if (m_rules.Concat(second: m_interactions).Any(predicate: rule => (rule is CompiledWorldFactsRule { Decision: not null }))) {
             throw new InvalidOperationException(message: $"Scope '{Name}' does not support decision continuation.");
+        }
+        foreach (var rule in m_rules.Concat(second: m_interactions)) {
+            bodies.Clear(); CollectBodyWrites(into: bodies, rule: rule);
+            if (bodies.Any(predicate: body => ((body < 0) || !m_bodies.Contains(item: body)))) {
+                throw new InvalidOperationException(message: $"Scope '{Name}' cannot isolate body continuation of rule '{rule.Name}'.");
+            }
         }
         m_allRules = host.Rules; m_allInteractions = host.Interactions; m_allGroups = host.Groups;
     }
