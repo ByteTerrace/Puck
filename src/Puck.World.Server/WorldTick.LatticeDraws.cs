@@ -22,15 +22,17 @@ public sealed partial class WorldTick {
 
     private void PaintLatticeDraw(WorldDefinition definition, WorldStateRow row) {
         if (
-            (Host.Population.Fields is not { } lattice) ||
+            !Host.Population.TryFieldForRow(row.Name.Value, out var region, out _) ||
             (WorldLatticeFill.FindDraw(trait: row.Field) is not { } fill) ||
-            !lattice.TryFieldIndex(
+            !region!.Lattice.TryFieldIndex(
             field: out var field,
             name: row.Name.Value
         )
         ) {
             return;
         }
+
+        var lattice = region!.Lattice;
 
         if (!GeneratorEngine.TryResolveSource(
             generators: definition.Generators,

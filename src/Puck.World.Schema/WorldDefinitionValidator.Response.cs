@@ -25,7 +25,7 @@ public static partial class WorldDefinitionValidator {
 
         var fieldNames = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var field in (definition.Fields?.Fields ?? [])) {
+        foreach (var field in definition.FieldRegions.SelectMany(selector: static region => region.Fields)) {
             fieldNames.Add(item: field.Name);
         }
 

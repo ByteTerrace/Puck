@@ -8,24 +8,27 @@ namespace Puck.World.Server;
 public sealed partial class WorldTick : IFieldLatticeHost {
     /// <summary>Describes the field lattice for a console read-back.</summary>
     /// <returns>One line, or a none line when the world declares no <c>fields</c> section.</returns>
-    internal string DescribeFields() => ((Host.Population.Fields is { } lattice)
-        ? $"[world.fields: {lattice.Describe()}]"
-        : "[world.fields: none]"
-    );
+    internal string DescribeFields() => ((Host.Population.FieldRegions.Count == 0) ? "[world.fields: none]"
+        : $"[world.fields: {string.Join(separator: "; ", values: Host.Population.FieldRegions.Select(selector: region => $"{region.Name}: {region.Lattice.Describe()}"))}]");
 
-    // Runs after the rules so a tag a rule wrote this tick is what an emit reads, and before the snapshot so the
-    // step's cell writes ride this tick's delivery. `this` is the host — the lattice reaches bodies and state-row
-    // cells through the interface below, never a per-tick delegate.
     private void StepFields(ulong tick) {
-        if (Host.Population.Fields is not { } lattice) {
-            return;
-        }
+        foreach (var region in Host.Population.FieldRegions) { region.Lattice.Step(bodyCount: Host.Population.Capacity, host: this, tick: tick); }
+    }
+    private void SampleTravelResistance(ulong tick) {
+        if (Host.Population.FieldRegions.Count == 0) { return; }
+        for (var index = 0; (index < Host.Population.Capacity); index++) {
+            if (Host.Body(index: index) is not { } body) { continue; }
+            var resistance = FixedQ4816.Zero;
 
-        lattice.Step(
-            bodyCount: Host.Population.Capacity,
-            host: this,
-            tick: tick
-        );
+            foreach (var region in Host.Population.FieldRegions) {
+                if (!region.Lattice.TryCellOf(body.FixedPosition, out _)) { continue; }
+                if (region.TravelResistance is { } scalar) {
+                    resistance = ((scalar.Row is { } row) ? ReadScalarSlot(row: row, tick: tick) : FixedQ4816.FromDouble(value: (scalar.Literal ?? 0f)));
+                }
+                break;
+            }
+            body.SetTravelResistance(resistance: resistance);
+        }
     }
 
     FixedVector3? IFieldLatticeHost.BodyPosition(int body) => Host.Body(index: body)?.FixedPosition;

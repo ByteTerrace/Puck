@@ -1,0 +1,167 @@
+// Two bounded physical regions in one authority. No edge has a spill row, so both are sealed.
+schema: "puck.world.definition.v1"
+documentId: "physical-regions"
+
+simulation {
+  rateHz: 30
+}
+
+// The scenario seat may operate its authored controls.
+grants: concat(
+  [{ grantee: "seat1", capability: Mutate, subject: "section:state", exclusive: false }],
+  map(["westEnabled", "westIntensity", "westReset", "eastEnabled", "eastIntensity", "eastReset"], row => {
+    grantee: "seat1", capability: Edit, subject: $"state:{row}", exclusive: false
+  })
+)
+
+state {
+  lattices [
+    {
+      $type: "field"
+      name: "west"
+      origin [0, 0, 0]
+      cellSize: 1
+      width: 2
+      depth: 2
+      layers: 2
+      stepEveryTicks: 2
+      travelResistance { row: westResistance }
+      reactions [
+        { $type: "transform", when [], then [{ field: westLevel, op: Add, value { row: westFlux } }] }
+        { $type: "diffuse", field: westLevel, rate: 0.25 }
+      ]
+    }
+    {
+      $type: "field"
+      name: "east"
+      origin [10, 0, 0]
+      cellSize: 2
+      width: 3
+      depth: 1
+      stepEveryTicks: 3
+      reactions [
+        { $type: "transform", when [], then [{ field: eastLevel, op: Add, value { row: eastFlux } }] }
+        { $type: "flow", field: eastLevel, rate: 0.5 }
+      ]
+    }
+  ]
+  world {
+    row {
+      name: "westLevel"
+      kind: Fixed
+      domain {
+        $type: "cellsOf"
+        topology: west
+      }
+      field {
+        min: 0
+        max: 100
+      }
+    }
+    row {
+      name: "eastLevel"
+      kind: Fixed
+      domain {
+        $type: "cellsOf"
+        topology: east
+      }
+      field {
+        min: 0
+        max: 100
+      }
+    }
+    // Controls are ordinary state; presentation bindings read these same rows.
+    slot westEnabled = 1 bounds(0..1)
+    slot eastEnabled = 1 bounds(0..1)
+    slot westIntensity = 1.0 bounds(0..4)
+    slot eastIntensity = 2.0 bounds(0..4)
+    slot westFlux = 1.0 bounds(0..4)
+    slot eastFlux = 2.0 bounds(0..4)
+    slot westResistance = 0.0 bounds(0..4)
+    slot westReset = 0 bounds(0..1)
+    slot eastReset = 0 bounds(0..1)
+  }
+}
+rule "west-input" {
+  mode: Level
+  westFlux = (westEnabled == 1) ? westIntensity : 0.0
+}
+rule "east-input" {
+  mode: Level
+  eastFlux = (eastEnabled == 1) ? eastIntensity : 0.0
+}
+rule "west-reset" {
+  when westReset == 1
+  paintField(field: westLevel, x: 0, y: 0, z: 0, radius: 4, value: 0, operation: Set)
+  westReset = 0
+}
+rule "east-reset" {
+  when eastReset == 1
+  paintField(field: eastLevel, x: 0, y: 0, z: 0, radius: 4, value: 0, operation: Set)
+  eastReset = 0
+}
+
+// A presentation consumer uses the same regional control as the source reaction.
+speakers [
+  {$type: "bed", name: "west-bed", center [1, 1, 1], radius: 3, innerRadius: 1,
+    feed { source { $type: "none" }, channel: "mix", gain: "state.westFlux" }
+  }
+  {$type: "bed", name: "east-bed", center [13, 1, 1], radius: 4, innerRadius: 1,
+    feed { source { $type: "none" }, channel: "mix", gain: "state.eastFlux" }
+  }
+]
+
+commands [
+  {
+    name: "region.start"
+    help: "Starts this region's authored source."
+    parameters [{ name: "region", kind: Choice, values ["west", "east"] }]
+    lines ["world.state.cell.set {region}Enabled $value 1"]
+  }
+  {
+    name: "region.stop"
+    help: "Stops new input; retained regional values remain."
+    parameters [{ name: "region", kind: Choice, values ["west", "east"] }]
+    lines ["world.state.cell.set {region}Enabled $value 0"]
+  }
+  {
+    name: "region.intensity"
+    help: "Sets this region's authored source intensity in 0..4."
+    parameters [{ name: "region", kind: Choice, values ["west", "east"] }, { name: "value", kind: Number }]
+    lines ["world.state.cell.set {region}Intensity $value {value}"]
+  }
+  {
+    name: "region.reset"
+    help: "Clears this region through its authored rule. Stop first to leave it empty."
+    parameters [{ name: "region", kind: Choice, values ["west", "east"] }]
+    lines ["world.state.cell.set {region}Reset $value 1"]
+  }
+]
+
+test "independent cadence and cells" {
+  when {
+    ticks 12
+  }
+  expect {
+    westLevel["0"] == 6
+    westLevel["7"] == 6
+    eastLevel["0"] == 8
+    eastLevel["2"] == 8
+  }
+}
+
+test "stopping and resetting west leaves east running" {
+  when {
+    ticks 6
+    seat1: world.state.cell.set westEnabled $value 0
+    ticks 6
+    seat1: world.state.cell.set westReset $value 1
+    ticks 6
+  }
+  expect {
+    westLevel["0"] == 0
+    westLevel["7"] == 0
+    eastLevel["0"] >= 12
+    eastLevel["2"] == eastLevel["0"]
+  }
+}

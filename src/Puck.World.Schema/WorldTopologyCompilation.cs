@@ -104,14 +104,15 @@ public static class WorldTopologyCompilation {
 
         return null;
     }
-    /// <summary>Finds the physical topology, if any. Discrete boards never allocate a fluid field.</summary>
+    /// <summary>Finds a named physical topology, if any. Discrete boards never allocate a fluid field.</summary>
     /// <param name="state">The state section.</param>
-    /// <returns>The first physical topology or null.</returns>
-    public static WorldFieldTopology? FindPhysical(IStateSection? state) {
+    /// <param name="name">The region identity.</param>
+    /// <returns>The named physical topology or null.</returns>
+    public static WorldFieldTopology? FindPhysical(IStateSection? state, string name) {
         var topologies = state?.Lattices;
 
         for (var index = 0; (index < (topologies?.Count ?? 0)); index++) {
-            if (topologies![index] is WorldFieldTopology field) {
+            if ((topologies![index] is WorldFieldTopology field) && (field.Name == name)) {
                 return field;
             }
         }

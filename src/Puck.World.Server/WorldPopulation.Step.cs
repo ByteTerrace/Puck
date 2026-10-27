@@ -650,10 +650,6 @@ public sealed partial class WorldPopulation {
     /// tick's surface rather than a stale one. A no-op world without a <c>fields</c> section costs one null
     /// check.</summary>
     public void SampleMediumSurfaces() {
-        if (m_fields is not { } fields) {
-            return;
-        }
-
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -664,7 +660,12 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            body.SetMediumSurface(surface: fields.MediumSurface(position: body.FixedPosition));
+            Puck.Physics.Fields.FixedFieldSurface? surface = null;
+
+            foreach (var region in m_fieldRegions) {
+                if (region.Lattice.MediumSurface(position: body.FixedPosition) is { } candidate) { surface = candidate; break; }
+            }
+            body.SetMediumSurface(surface: surface);
         }
     }
     /// <summary>Advances every active seat body by one exact simulation tick: a producer-sourced seat gets this tick's

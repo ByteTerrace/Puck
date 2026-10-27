@@ -29,7 +29,7 @@ public sealed class WorldFieldRowLawTests {
     private const long One = 65536L;
     private const int Width = 4;
 
-    private static WorldFieldsSection Fields() => new(
+    private static WorldFieldsSection Fields() => new(Name: "world",
         Lattice: new WorldFieldLatticeDefinition(
             Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
             CellSize: 1f,
@@ -115,7 +115,7 @@ public sealed class WorldFieldRowLawTests {
         var bumpRevision = mirror.Changed(slot: bump);
         var before = Reads(mirror: mirror);
         var count = view.ApplyFieldCells(
-            deltas: [new FieldCellDelta(Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Cell: 2, Field: 1, Raw: (One / 2L))],
+            deltas: [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 2, Field: 1, Raw: (One / 2L))],
             moved: moved
         );
 
@@ -132,7 +132,7 @@ public sealed class WorldFieldRowLawTests {
         Assert.Equal(
             expected: 0,
             actual: view.ApplyFieldCells(
-                deltas: [new FieldCellDelta(Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Cell: (Width * Depth), Field: 1, Raw: One), new FieldCellDelta(Cell: 0, Field: 7, Raw: One)],
+                deltas: [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "bump", Cell: (Width * Depth), Field: 1, Raw: One), new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 7, Raw: One)],
                 moved: moved
             )
         );
@@ -140,7 +140,7 @@ public sealed class WorldFieldRowLawTests {
         // A snapshot moving the other field re-reads only its slot.
         bumpRevision = mirror.Changed(slot: bump);
         count = view.ApplyFieldCells(
-            deltas: [new FieldCellDelta(Cell: 0, Field: 0, Raw: (3L * One))],
+            deltas: [new FieldCellDelta(Region: "world", FieldName: "heat", Cell: 0, Field: 0, Raw: (3L * One))],
             moved: moved
         );
         mirror.RefreshRows(ordinals: moved.AsSpan(length: count, start: 0));
@@ -150,8 +150,8 @@ public sealed class WorldFieldRowLawTests {
         Assert.Equal(expected: 3d, actual: mirror.RowValues(slot: heat)[0]);
 
         FieldCellDelta[][] writes = [
-            [new FieldCellDelta(Cell: 1, Field: 1, Raw: One)],
-            [new FieldCellDelta(Cell: 1, Field: 1, Raw: 0L)],
+            [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 1, Field: 1, Raw: One)],
+            [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 1, Field: 1, Raw: 0L)],
         ];
         var allocated = GC.GetAllocatedBytesForCurrentThread();
 
@@ -164,6 +164,54 @@ public sealed class WorldFieldRowLawTests {
         }
 
         Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - allocated));
+    }
+    [Fact]
+    public void RegionalRowsKeepTheirOwnCellsAndBrickExtentsAcrossAnUnrelatedReshape() {
+        var first = new WorldFieldsSection(Name: "first",
+            Lattice: new WorldFieldLatticeDefinition(Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f), CellSize: 1f, Width: 2, Depth: 1),
+            Fields: [new WorldFieldRow(Name: "first-level", Max: 1f, HeightScale: 1f, Color: "#204060")]);
+        var second = new WorldFieldsSection(Name: "second",
+            Lattice: new WorldFieldLatticeDefinition(Origin: new DocumentVector3(x: 12f, y: 3f, z: 0f), CellSize: 0.5f, Width: 3, Depth: 2),
+            Fields: [new WorldFieldRow(Name: "second-level", Max: 1f, HeightScale: 1f, Color: "#604020")]);
+        var definition = Fixtures.BuildDocument() with { StateRaw = WorldFieldsSection.ToStateSection(composite: [first, second]) };
+        var view = new WorldDocumentStateView(definition: () => definition);
+        var mirror = new WorldStateMirror(view: view);
+
+        mirror.Install(engineTick: 0UL, tick: 0UL);
+        var firstSlot = mirror.SlotOf(binding: Whole(row: "first-level"), conversion: WorldStateConversion.Row);
+        var secondSlot = mirror.SlotOf(binding: Whole(row: "second-level"), conversion: WorldStateConversion.Row);
+        var writes = new[] {
+            new FieldCellDelta(Region: "first", FieldName: "first-level", Cell: 1, Field: 0, Raw: One),
+            new FieldCellDelta(Region: "second", FieldName: "second-level", Cell: 5, Field: 0, Raw: (One / 2)),
+        };
+        var moved = new int[StateCapacity.MaxRows];
+        var count = view.ApplyFieldCells(deltas: writes, moved: moved);
+
+        mirror.RefreshRows(ordinals: moved.AsSpan(length: count, start: 0));
+        Assert.Equal(actual: count, expected: 2);
+        Assert.Equal(expected: [0d, 1d], actual: mirror.RowValues(slot: firstSlot).ToArray());
+        Assert.Equal(expected: [0d, 0d, 0d, 0d, 0d, 0.5d], actual: mirror.RowValues(slot: secondSlot).ToArray());
+        // A valid local ordinal with the other region's row identity must never address that region's cells.
+        Assert.Equal(expected: 0, actual: view.ApplyFieldCells(deltas: [
+            new FieldCellDelta(Region: "first", FieldName: "second-level", Cell: 1, Field: 0, Raw: One),
+        ], moved: moved));
+
+        var client = ClientFixtures.Client(definition: definition);
+
+        client.DeliverDefinition(definition: definition, version: default);
+        client.DeliverSnapshot(snapshot: new WorldSnapshot(Tick: 0UL, Revision: 0, StepTicks: 1UL,
+            Entries: ReadOnlyMemory<EntitySnapshot>.Empty, FieldCells: writes));
+        var bakes = new RecordingBrickBakes();
+        var emitter = new WorldFieldEmitter(client: client);
+
+        for (var step = 0; (step < 4); step++) { emitter.AdvanceBricks(bakes: bakes); }
+        Assert.Equal(expected: new[] { (4, 4, 3), (5, 5, 4) }, actual: bakes.Dimensions);
+
+        first = first with { Lattice = first.Lattice with { Width = 4 } };
+        definition = definition with { StateRaw = WorldFieldsSection.ToStateSection(composite: [first, second]) };
+        mirror.Install(engineTick: 1UL, tick: 1UL);
+        secondSlot = mirror.SlotOf(binding: Whole(row: "second-level"), conversion: WorldStateConversion.Row);
+        Assert.Equal(expected: [0d, 0d, 0d, 0d, 0d, 0.5d], actual: mirror.RowValues(slot: secondSlot).ToArray());
     }
     /// <summary>A field row reaches a pass through the region path: the row slot's values, written as a float array's
     /// elements (<see cref="ShaderPipelineParameterLayout.WriteArray"/>) into a region under each residency policy, read
@@ -213,7 +261,7 @@ public sealed class WorldFieldRowLawTests {
                     raw = ((raw + 24_577L) % One);
 
                     var count = view.ApplyFieldCells(
-                        deltas: [new FieldCellDelta(Cell: 6, Field: 1, Raw: raw)],
+                        deltas: [new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 6, Field: 1, Raw: raw)],
                         moved: moved
                     );
 
@@ -286,7 +334,7 @@ public sealed class WorldFieldRowLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
-            FieldCells: new[] { new FieldCellDelta(Cell: 5, Field: 1, Raw: One) }
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
         ));
         emitter.AdvanceBricks(bakes: bakes);
 
@@ -302,7 +350,7 @@ public sealed class WorldFieldRowLawTests {
             Revision: 0,
             StepTicks: 1UL,
             Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
-            FieldCells: new[] { new FieldCellDelta(Cell: 5, Field: 1, Raw: One) }
+            FieldCells: new[] { new FieldCellDelta(Region: "world", FieldName: "bump", Cell: 5, Field: 1, Raw: One) }
         ));
         emitter.AdvanceBricks(bakes: bakes);
         emitter.AdvanceBricks(bakes: bakes);
@@ -450,7 +498,7 @@ public sealed class WorldFieldRowLawTests {
         const int MaxWidth = WorldFieldCapacity.MaxExtent;
         const int MaxDepth = (WorldFieldCapacity.MaxCells / WorldFieldCapacity.MaxExtent);
         var definition = Fixtures.WithLattice(
-            composite: new WorldFieldsSection(
+            composite: new WorldFieldsSection(Name: "world",
                 Lattice: new WorldFieldLatticeDefinition(
                     Origin: new DocumentVector3(x: 0f, y: 0f, z: 0f),
                     CellSize: 1f,
@@ -469,8 +517,8 @@ public sealed class WorldFieldRowLawTests {
         var slot = mirror.Bind(binding: Whole(row: "heat"), conversion: WorldStateConversion.Row);
         var moved = new int[WorldFieldCapacity.MaxFields];
         FieldCellDelta[][] writes = [
-            [new FieldCellDelta(Cell: (WorldFieldCapacity.MaxCells - 1), Field: 0, Raw: One)],
-            [new FieldCellDelta(Cell: (WorldFieldCapacity.MaxCells - 1), Field: 0, Raw: 0L)],
+            [new FieldCellDelta(Region: "world", FieldName: "heat", Cell: (WorldFieldCapacity.MaxCells - 1), Field: 0, Raw: One)],
+            [new FieldCellDelta(Region: "world", FieldName: "heat", Cell: (WorldFieldCapacity.MaxCells - 1), Field: 0, Raw: 0L)],
         ];
 
         void Step(int step) {
@@ -534,6 +582,7 @@ public sealed class WorldFieldRowLawTests {
         private readonly ulong[] m_serials = new ulong[SdfBrickPoolLayout.MaxBricks];
 
         public List<float[]> Uploads { get; } = [];
+        public List<(int X, int Y, int Z)> Dimensions { get; } = [];
 
         public bool BrickBakeAvailable => true;
 
@@ -546,6 +595,7 @@ public sealed class WorldFieldRowLawTests {
         public void RequestBrickBake(int slot, BrickBakeRequest request) => throw new InvalidOperationException(message: "A field brick is uploaded, never requested.");
         public void UploadBrick(int slot, int dimX, int dimY, int dimZ, ReadOnlySpan<float> voxels) {
             Uploads.Add(item: voxels.ToArray());
+            Dimensions.Add(item: (dimX, dimY, dimZ));
             m_serials[slot]++;
         }
     }

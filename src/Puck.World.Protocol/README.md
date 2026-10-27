@@ -157,8 +157,14 @@ presentation view: the narrow reader, one cell by row ordinal, that the state
 mirror reads every presentation read of state through. `WorldStateMirror.cs` is
 that mirror, a flat slot table refreshed from each delivery's stamp, and
 `WorldDocumentStateView.cs` the view over a delivered definition and the field
-cells its snapshots carry, which a field row reads (`ApplyFieldCells` names the
-rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them). A
+cells its snapshots carry, which a field row reads. A lattice `FieldCellDelta`
+names its region topology, its globally unique field row and its region-local
+field ordinal; the receiver validates all three before applying it. Each region
+keeps its own cell count and lattice shape, so reshaping one preserves the
+delivered cells of every other region. Presentation projections carry the same
+`FieldRegions` declarations and reconstruct their separate state topologies.
+`ApplyFieldCells` names the
+rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them. A
 `WorldSessionMirror` keeps the rows its state deliveries moved until
 `FollowState` takes them, so a session view or a seat routed to that authority
 (through `WorldAuthorityEndpoint.FollowState`) reads only moved slots. It applies

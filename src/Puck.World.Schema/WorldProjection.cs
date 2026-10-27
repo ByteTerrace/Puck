@@ -94,7 +94,7 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Dynamics">The named second-order "personality" rows every look/camera/kit follower reference
 /// resolves against.</param>
 /// <param name="Hud">The HUD section.</param>
-/// <param name="Fields">The field lattice declaration — a presentation peer renders field geometry from the snapshot's
+/// <param name="FieldRegions">The named physical region declarations — a presentation peer renders field geometry from the snapshot's
 /// cell deltas and needs the lattice footprint, height scales, and colours to do it.</param>
 /// <param name="Simulation">The authored simulation rate, when the world authors one.</param>
 /// <param name="Interactions">The interaction table — carried for its distance reach alone (see the type remarks).</param>
@@ -138,7 +138,7 @@ public sealed record WorldProjectionDocument(
     WorldRowAssignment LookAssignment,
     IReadOnlyList<DynamicsRow> Dynamics,
     WorldHudSection Hud,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFieldsSection? Fields = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldFieldsSection>? FieldRegions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInteractionsSection? Interactions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
@@ -216,10 +216,10 @@ public static class WorldProjection {
 
         if (!WorldStateDocumentValues.TryFlatten(
             arena: arena,
-            time: time,
             graph: copy,
             reason: out var flattenReason,
-            source: definition
+            source: definition,
+            time: time
         )) {
             throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
         }
@@ -333,6 +333,7 @@ public static class WorldProjection {
             LookAssignment: definition.LookAssignment,
             Dynamics: definition.Dynamics,
             Hud: definition.Hud,
+            FieldRegions: definition.FieldRegions,
             Simulation: definition.Simulation,
             Interactions: definition.Interactions,
             References: definition.References,
@@ -345,8 +346,8 @@ public static class WorldProjection {
                 )
             : null),
             Timeline: CarriedClocks(
-                arena: arena,
                 anchors: anchors,
+                arena: arena,
                 definition: definition,
                 keyed: keyed,
                 time: in time
@@ -380,9 +381,9 @@ public static class WorldProjection {
         };
         return Flatten(
             arena: arena,
-            time: in time,
             definition: definition,
-            projection: projection
+            projection: projection,
+            time: in time
         );
     }
 
@@ -744,7 +745,7 @@ public static class WorldProjection {
             fetch: fetch, prototypes: out var prototypes, reason: out reason)) {
             return false;
         }
-        var state = WorldFieldsSection.ToStateSection(composite: projection.Fields);
+        var state = WorldFieldsSection.ToStateSection(composite: (projection.FieldRegions ?? []));
 
         if (projection.Observations is { Count: > 0 } observations) {
             var rows = new List<WorldStateRow>(collection: (state.World ?? []));

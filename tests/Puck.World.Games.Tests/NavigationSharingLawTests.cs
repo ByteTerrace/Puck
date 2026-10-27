@@ -620,7 +620,7 @@ public sealed partial class NavigationLawTests {
             SharedGoal()
         );
         fixture.Step(); fixture.Step();
-        var fields = fixture.Server.Population.Fields!;
+        var fields = fixture.Server.Population.FieldRegions[0].Lattice;
 
         fields.Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [new long[fields.CellCount]]));
         Assert.All(
@@ -756,7 +756,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             1,
-            fixture.Server.Population.Fields!.PaintSphere(
+            fixture.Server.Population.FieldRegions[0].Lattice.PaintSphere(
                 "heat",
                 0,
                 0,

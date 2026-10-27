@@ -2666,3 +2666,12 @@ for topology addressing, phases, private draws, knowledge refresh, and limits.
 ## Documentation
 
 📚 [Worlds and federation](../../docs/architecture/worlds.md) · 🛠️ [Contributing to Puck](../../docs/development/contributing.md)
+
+Named physical regions are exposed as `WorldPopulation.FieldRegions`; each owns
+one `FieldLattice`, with named physical-cell deltas and checkpoint field identities.
+Every consumer (solids, navigation, medium sampling, rules and responses) resolves
+the row's owning region. A full physical primer includes all regions together.
+Checkpoint restore reinstalls compatible field programs against the restored
+`StateCatalog` before restoring cells: handles from the old catalog cannot execute
+a continuation. The region's live `travelResistance` scalar is sampled before
+body integration; see the schema README's fields section for bounds and overlap.

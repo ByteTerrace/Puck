@@ -114,6 +114,12 @@ On Windows, refresh the private CLI only after any lease command hosted by that 
 process itself keeps its loaded DLLs locked while the child build runs. Copy after lease completion, or host
 the build lease from another CLI copy.
 
+When `puck schema` reports missing XML documentation, do not accept the resulting
+removal of schema descriptions. On the restricted Windows harness, the XML files
+were present and parseable but the generator's XML reader could not load them;
+the same lane CLI under normal file access generated the descriptions correctly.
+Check the files beside the CLI and rerun with that access before checking in output.
+
 ## Boot every World with `--devices none`
 
 A World you boot to verify a change passes `--devices none`: the stdin recipe,
@@ -161,6 +167,12 @@ once started, the snapshot no longer locks the checkout's output.
   prove neither. `puck laws prove
   <law> --fix <revision>` proves a law against its fix in its own clone and
   never touches your tree.
+
+A custom test traversal outside `tests/` must pass `-p:PuckShaderSpirvEnabled=true`
+explicitly. It does not inherit `tests/Directory.Build.rsp`; a Windows project
+build otherwise removes SPIR-V outputs. CPU shader tests use a fake device but
+still read the compiled bytecode, so missing fixtures cause failures and can leave
+asynchronous package tests waiting. Building both bytecode formats uses no GPU.
 
 ## Writing a test
 

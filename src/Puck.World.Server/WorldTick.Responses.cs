@@ -68,7 +68,6 @@ public sealed partial class WorldTick {
     // holding moved this tick lands in one selection install (WorldDocument.InstallResponseSelection), so a switch
     // that flips several rows replaces the live rows once and delivers them once.
     private void SweepPlacementResponses(ulong tick) {
-        var lattice = Host.Population.Fields;
         // Declared once and reused every iteration below — a stackalloc inside the loop body would not release its
         // frame slot between iterations, growing with the placement count instead of staying constant.
         Span<long> values = stackalloc long[(WorldResponseCapacity.MaxEntries * 2)];
@@ -108,7 +107,6 @@ public sealed partial class WorldTick {
             }
 
             var holding = ResolveHolding(
-                lattice: lattice,
                 placement: placement,
                 responses: responses,
                 tick: tick
@@ -179,38 +177,20 @@ public sealed partial class WorldTick {
     }
     // One bit per authored entry whose condition holds, bit i for entry i. A Field condition resolves the placement's
     // coupled cell once; a State condition needs no cell at all.
-    private int ResolveHolding(FieldLattice? lattice, WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
-        var cell = 0;
-        var hasCell = ((lattice is not null) && lattice.TryBodyCellOf(
-            position: FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(
-                definition: Host.Document.Definition,
-                placement: placement
-            )),
-            cell: out cell
-        ));
+    private int ResolveHolding(WorldPlacement placement, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
+        var position = FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: Host.Document.Definition, placement: placement));
         var holding = 0;
 
         for (var index = 0; (index < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); index++) {
-            var holds = (responses[index].When switch {
-                WorldPlacementResponseCondition.FieldCondition field => (hasCell && FieldConditionHolds(
-                cell: cell,
-                condition: field,
-                lattice: lattice!,
-                tick: tick
-            )),
-                WorldPlacementResponseCondition.StateCondition state => state.Holds(arena: Host.Arena,
-                definition: Host.Document.Definition,
-                tick: tick,
-                engineTick: CompletedEngineTicks
-            ),
+            var holds = responses[index].When switch {
+                WorldPlacementResponseCondition.FieldCondition field => (Host.Population.TryFieldForRow(field.Field, out var region, out _) &&
+                    region!.Lattice.TryBodyCellOf(cell: out var cell, position: position) && FieldConditionHolds(field, region.Lattice, cell, tick)),
+                WorldPlacementResponseCondition.StateCondition state => state.Holds(arena: Host.Arena, definition: Host.Document.Definition, tick: tick, engineTick: CompletedEngineTicks),
                 _ => false,
-            });
+            };
 
-            if (holds) {
-                holding |= (1 << index);
-            }
+            if (holds) { holding |= (1 << index); }
         }
-
         return holding;
     }
     private bool FieldConditionHolds(WorldPlacementResponseCondition.FieldCondition condition, FieldLattice lattice, int cell, ulong tick) {

@@ -5502,6 +5502,10 @@ export type WorldFieldTopology = {
    */
   reactions?: (WorldReaction | null)[] | null;
   /**
+   * A nonnegative scalar body motion reads within the bounded region. Zero leaves motion unchanged.
+   */
+  travelResistance?: WorldLatticeScalar | null;
+  /**
    * The topology's name — what a row's cellsOf domain references.
    */
   name: string;
@@ -12108,9 +12112,9 @@ export type WorldSpeakerFeed = {
    */
   channel: string;
   /**
-   * The feed gain (1 = unity), bounded by MaxLevel — the one audio gain ceiling the validator enforces everywhere.
+   * The feed gain (1 = unity), as a literal, state binding or keys on a clock, bounded by MaxLevel. Publication resolves the live value without restarting the emitter.
    */
-  gain: number;
+  gain: BindableScalar;
 };
 
 export type WorldSpeakerFixed = {
