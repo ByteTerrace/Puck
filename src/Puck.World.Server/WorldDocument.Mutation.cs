@@ -465,7 +465,10 @@ public sealed partial class WorldDocument {
             message = $"{message} (evicted '{evicted}')";
         }
 
-        if (Host.Output.HasNarrationSink) {
+        // A scoped replay's applied input acts as the seat that recorded it, though no seat typed it; the scope's
+        // read-back (`replay.scope`) is where its progress is read, so the transcript and the console mirror of it
+        // carry no line per tape input.
+        if (Host.Output.HasNarrationSink && (connectionId != SubmissionEnvelope.ScopedReplayConnectionId)) {
             Host.Output.Narrate(channel: "world.mutation", text: $"[world.mutation: {message}]");
         }
         if (!HasSubmitter(mutation: mutation)) {

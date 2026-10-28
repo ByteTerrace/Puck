@@ -162,6 +162,14 @@ public static class WorldStaging {
             return false;
         }
 
+        if (!TryStageUnrelatableContentFolders(
+            directory: directory,
+            document: document,
+            reason: out reason
+        )) {
+            return false;
+        }
+
         ContentAddressedStore? assets = null;
 
         foreach (var row in ((document["text"]?["fonts"] as JsonArray) ?? []).OfType<JsonObject>()) {
@@ -194,6 +202,64 @@ public static class WorldStaging {
             bytes: CanonicalJsonDocument.Serialize(node: document),
             path: path
         );
+
+        return true;
+    }
+
+    // A machine's content folder that relocation could only spell rooted (a staging directory on another volume than
+    // the source) would fail the validator's relative-folder rule. Its files are copied under the staging directory
+    // instead, as `content/<machine>-<folder>`, keeping the folder's position in the list because the first folder
+    // naming a default decides it. A folder that is absent stays absent there too: a device's local folders may be.
+    private static bool TryStageUnrelatableContentFolders(JsonObject document, string directory, out string reason) {
+        reason = string.Empty;
+
+        if (document["machines"] is not JsonArray machines) {
+            return true;
+        }
+
+        for (var machineIndex = 0; (machineIndex < machines.Count); machineIndex++) {
+            if (machines[machineIndex]?["contentFolders"] is not JsonArray folders) {
+                continue;
+            }
+
+            for (var folderIndex = 0; (folderIndex < folders.Count); folderIndex++) {
+                if (
+                    (folders[folderIndex] is not JsonValue value) ||
+                    !value.TryGetValue<string>(value: out var folder) ||
+                    !Path.IsPathRooted(path: folder)
+                ) {
+                    continue;
+                }
+
+                var staged = $"content/{machineIndex}-{folderIndex}";
+
+                try {
+                    if (Directory.Exists(path: folder)) {
+                        var target = Directory.CreateDirectory(path: Path.Combine(
+                            path1: directory,
+                            path2: staged
+                        )).FullName;
+
+                        foreach (var file in Directory.EnumerateFiles(path: folder)) {
+                            File.Copy(
+                                destFileName: Path.Combine(
+                                    path1: target,
+                                    path2: Path.GetFileName(path: file)
+                                ),
+                                overwrite: true,
+                                sourceFileName: file
+                            );
+                        }
+                    }
+                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                    reason = $"content folder '{folder}' could not be staged: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+                    return false;
+                }
+
+                folders[folderIndex] = staged;
+            }
+        }
 
         return true;
     }

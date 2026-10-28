@@ -39,4 +39,8 @@ public readonly record struct SubmissionEnvelope(
     public const int LocalConnectionId = 0;
     /// <summary>The host-only recorded-extension ingress. Remote transports never mint negative connection ids.</summary>
     public const int RecordedExtensionConnectionId = -1;
+    /// <summary>The host-only ingress of a scoped replay's timed input program and recorded tape: a mutation it
+    /// submits acts as the seat that recorded it, but no seat typed it, so an applied one narrates on the transcript
+    /// and reaches no toast, console echo or cue.</summary>
+    public const int ScopedReplayConnectionId = -2;
 }

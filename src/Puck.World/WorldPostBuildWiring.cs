@@ -346,9 +346,15 @@ public static class WorldPostBuildWiring {
                 !echo.Rejected &&
                 (echo.Mutation?.Principal.Kind == PrincipalKind.Addon)
             );
+            // A scoped replay's input acts as the seat that recorded it while no seat typed it: an applied one is
+            // not narrated by the server and reaches no toast, console row or cue. Its refusals still do.
+            var scopedApplied = (
+                !echo.Rejected &&
+                (echo.ConnectionId == SubmissionEnvelope.ScopedReplayConnectionId)
+            );
 
             // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
-            if (!addonApplied) {
+            if (!addonApplied && !scopedApplied) {
                 toasts?.Publish(
                     message: echo.Message,
                     isError: echo.Rejected
@@ -356,10 +362,12 @@ public static class WorldPostBuildWiring {
             }
             // The chip wraps but is still bounded; the panel row is the FULL text (up to its 120-column width), so a
             // capacity reason too long for the toast stays readable where the operator is already looking.
-            consoleSessions.RecordAdministrativeEcho(
-                message: echo.Message,
-                refused: echo.Rejected
-            );
+            if (!scopedApplied) {
+                consoleSessions.RecordAdministrativeEcho(
+                    message: echo.Message,
+                    refused: echo.Rejected
+                );
+            }
 
             // THE EDIT-ECHO CUE LANE: the same outcome fires its cue token — capability
             // denials as grant.denied, other rejections as mutation.rejected, applied edits as mutation.applied AT
@@ -373,7 +381,8 @@ public static class WorldPostBuildWiring {
                 );
             } else if (
                 (echo.Kind != WorldEditEchoKind.GrantTable) &&
-                !addonApplied
+                !addonApplied &&
+                !scopedApplied
             ) {
                 audioDirector.SubmitCue(
                     eventToken: (echo.Rejected
