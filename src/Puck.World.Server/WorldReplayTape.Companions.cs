@@ -40,17 +40,7 @@ public sealed partial class WorldReplayTape {
         }
 
         var owned = (row.Tape is null);
-        var companion = (row.Tape ?? new WorldReplayTape(
-            addonHostFactory: m_addonHostFactory,
-            engines: m_engines,
-            liveServer: row.Server,
-            machineHostFactory: m_machineHostFactory,
-            profiles: row.Server.Profiles,
-            stateRoot: m_stateRoot,
-            transport: transport
-        ) {
-            m_documentPath = row.SourcePath,
-        });
+        var companion = CompanionTape(row: row, transport: transport);
 
         if (!companion.TryBeginRecording(
             name: name,
@@ -64,6 +54,15 @@ public sealed partial class WorldReplayTape {
         return true;
     }
 
+    private WorldReplayTape CompanionTape(WorldInstance row, LoopbackTransport transport) => (row.Tape ?? new WorldReplayTape(
+        addonHostFactory: m_addonHostFactory,
+        engines: m_engines,
+        liveServer: row.Server,
+        machineHostFactory: m_machineHostFactory,
+        profiles: row.Server.Profiles,
+        stateRoot: m_stateRoot,
+        transport: transport
+    ) { m_documentPath = row.SourcePath });
     private void CancelCompanions() {
         foreach (var (row, companion, owned) in m_companions) {
             if (companion.Mode == WorldReplayMode.Recording) {

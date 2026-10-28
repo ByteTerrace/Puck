@@ -67,9 +67,10 @@ its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` boots once per worker, restores its boot authority cohort before each
+`puck test` retains one native host per worker while consecutive boot shapes match, restores its boot authority cohort before each
 compatible scenario, and installs its schedule. Compatibility includes the entire
-boot state and rules; a different world needs its own boot checkpoint. The reset
+boot state and rules of the root and every staged companion; a different world
+starts a fresh native host in the worker. Generated expectation rules count as a difference. The reset
 cancels live tape drives as well as recordings. Session epochs reset only in this
 isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,

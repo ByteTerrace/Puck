@@ -113,9 +113,8 @@ public static partial class TestCommand {
         );
 
         var batches = Enumerable.Range(0, worlds.Count)
-            .GroupBy(keySelector: index => Puck.World.Server.WorldPersistence.ScenarioBootShape(json: File.ReadAllBytes(path: worlds[index].Path)))
-            .SelectMany(selector: group => group.Select(selector: (index, ordinal) => (index, ordinal))
-                .GroupBy(keySelector: item => (item.ordinal % parallelism)).Select(selector: chunk => chunk.Select(selector: item => item.index).ToArray())).ToArray();
+            .GroupBy(keySelector: index => (index % parallelism))
+            .Select(selector: chunk => chunk.ToArray()).ToArray();
         var batchPassed = new bool[batches.Length];
 
         Parallel.For(fromInclusive: 0, toExclusive: batches.Length,
@@ -183,7 +182,8 @@ public static partial class TestCommand {
             var proof = Path.Combine(path1: leg, path2: "reproduction.json");
 
             if (!File.Exists(path: proof) || (JsonNode.Parse(File.ReadAllText(path: proof)) is not JsonArray { Count: > 0 } rows) ||
-                rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1))) {
+                rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1)) ||
+                reading.Worlds.Any(predicate: world => !rows.Any(predicate: row => (row?["world"]?.GetValue<string>() == world.World)))) {
                 error.WriteLine(value: "  REFUSED: missing or divergent checkpoint reproduction.");
                 return 2;
             }

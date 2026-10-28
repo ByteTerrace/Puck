@@ -887,6 +887,12 @@ unverified when no device run exists.
   fails within seconds with `windows sandbox failed: helper_unknown_error`, and
   the sandbox log under `~/.codex/.sandbox/` names the folder. Move it aside,
   recreate it as the user, and copy its contents back.
+- The Windows sandbox can also refuse the .NET SDK's telemetry registry read
+  before MSBuild starts (`Microsoft.DotNet.Cli.Program` type initialization,
+  `DeviceIdGetter.GetCachedDeviceId`, `SecurityException`). A formatter that
+  invokes SDK evaluation can hit the same refusal even while the built CLI
+  runs. Use an authorized environment with the required access; this is not a
+  source compilation failure.
 - A workspace-only sandbox cannot write the per-user `Puck` caches just because
   it can build the checkout. Shader builds accept the
   `PuckShaderCacheDirectory` MSBuild override.

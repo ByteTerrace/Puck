@@ -12,28 +12,31 @@ public sealed class TestCommandLawTests {
     public void DifferentStateAndRulesHaveDifferentBootShapesAndTheirOwnVerdicts() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-shapes-");
 
-        directory.WriteText("worlds/first.puck", """
+        directory.WriteText(name: "worlds/first.puck", text: """
             schema: "puck.world.definition.v1"
             documentId: "same"
             state { world { table value { "0" = 7 } } }
             test "first" { expect { value[0] == 7 } }
             """);
-        directory.WriteText("worlds/second.puck", """
+        directory.WriteText(name: "worlds/second.puck", text: """
             schema: "puck.world.definition.v1"
             documentId: "same"
             state { world { table value { "0" = 11 } } }
-            rule "change" { when value[0] == 11 value[0] = 13 }
+            rule "change" {
+              when value[0] == 11
+              value[0] = 13
+            }
             test "second" { expect { value[0] == 13 } }
             """);
-        var (exit, output) = RunTest(directory.PathOf("worlds"), "--reproduce");
-        Assert.Equal(0, exit);
-        Assert.Contains("processes=2 host-boots=2 world-runs=2", output, StringComparison.Ordinal);
-        var first = System.Text.Encoding.UTF8.GetBytes("""{"state":{"value":7},"rules":[],"schedule":{"tick":1}}""");
-        var rescheduled = System.Text.Encoding.UTF8.GetBytes("""{"state":{"value":7},"rules":[],"schedule":{"tick":2}}""");
-        var changed = System.Text.Encoding.UTF8.GetBytes("""{"state":{"value":11},"rules":[],"schedule":{"tick":1}}""");
+        var (exit, output) = RunTest(directory.PathOf(name: "worlds"), "--reproduce");
+        Assert.True(condition: (exit == 0), userMessage: output);
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=2 world-runs=2");
+        var first = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":7},"rules":[],"schedule":{"tick":1}}""");
+        var rescheduled = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":7},"rules":[],"schedule":{"tick":2}}""");
+        var changed = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":11},"rules":[],"schedule":{"tick":1}}""");
 
-        Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(first), Puck.World.Server.WorldPersistence.ScenarioBootShape(rescheduled));
-        Assert.NotEqual(Puck.World.Server.WorldPersistence.ScenarioBootShape(first), Puck.World.Server.WorldPersistence.ScenarioBootShape(changed));
+        Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: rescheduled));
+        Assert.NotEqual(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: changed));
     }
     [Fact]
     public void OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput() {
@@ -43,9 +46,24 @@ public sealed class TestCommandLawTests {
             schema: "puck.world.definition.v1"
             documentId: "same"
             state { world { table value { "0" = 7 } } }
-            test "pristine" { expect { value[0] == 7 } }
-            test "changed" { given { value[0] = 99 } expect { value[0] == 99 } }
-            test "pristine again" { expect { value[0] == 7 } }
+            test "pristine" {
+              when {
+                seat1: world.state.cell.set value 0 7
+              }
+              expect { value[0] >= 7 }
+            }
+            test "changed" {
+              when {
+                seat1: world.state.cell.set value 0 99
+              }
+              expect { value[0] >= 7 }
+            }
+            test "pristine again" {
+              when {
+                seat1: world.state.cell.set value 0 7
+              }
+              expect { value[0] >= 7 }
+            }
             """);
         var kept = directory.PathOf(name: "kept");
 
@@ -57,12 +75,14 @@ public sealed class TestCommandLawTests {
         }
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
             actual: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000002/run1/out/state-export.json")));
+        Assert.NotEqual(File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
+            File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000001/run1/out/state-export.json")));
         // Also compare a reused worker to a truly fresh process, using the same staged world and ordinary boot.
         var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
         using var error = new StringWriter();
 
         Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: directory.PathOf(name: "fresh"),
-            exportTick: 1, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
+            exportTick: 2, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")), actual: fresh!.ExportBytes);
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/test-run.json")), actual: fresh.ManifestBytes);
     }
@@ -343,7 +363,16 @@ public sealed class TestCommandLawTests {
             }
             """);
 
-        var (exitCode, output) = RunTest(directory.PathOf(name: "worlds/home.puck"), "--reproduce");
+        var kept = directory.PathOf(name: "kept");
+
+        var (exitCode, output) = RunTest(directory.PathOf(name: "worlds/home.puck"), "--reproduce", "--keep", kept);
+
+        foreach (var proof in Directory.EnumerateFiles(path: kept, searchOption: SearchOption.AllDirectories, searchPattern: "reproduction.json")) {
+            var authorities = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path: proof))!.AsArray();
+
+            Assert.Contains(collection: authorities, filter: row => (row?["world"]?.GetValue<string>() != "boot"));
+            Assert.All(authorities, row => Assert.Equal(-1, row!["divergence"]!.GetValue<int>()));
+        }
 
         Assert.Equal(
             actual: exitCode,

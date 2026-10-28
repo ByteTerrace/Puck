@@ -404,10 +404,10 @@ Decompilation keeps those authored row names and sections. Generated
 | 1 | a verdict failed, or a step's recorded outcome was not the one it declared |
 | 2 | usage: a source that does not compile, a source with neither tests nor a scheduled verdict document, a `--reproduce` mismatch, a build or boot refusal |
 
-Each worker boots one native World host. Scenarios sharing its boot configuration
+Each worker retains a native World host. Scenarios sharing its boot configuration
 restore the complete boot checkpoint, install their schedule, and run in
 authored order. State and rules belong to the boot configuration; a difference
-gets another worker. A boot that cannot be checkpointed runs each scenario in
+starts a fresh native host in the worker. A boot that cannot be checkpointed runs each scenario in
 its own native host. `--reproduce`
 captures each authority's input, restores its starting checkpoint in place, and
 replays that input without another boot. It requires matching per-tick authority

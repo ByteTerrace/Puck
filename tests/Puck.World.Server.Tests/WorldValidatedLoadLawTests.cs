@@ -16,16 +16,18 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
     public void AScenarioRestoreReusesTheAdmissionItsLegAlreadyPaidFor() {
         using var fixture = Fixtures.FreshServer();
 
-        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), reason);
-        using var attribution = WorldBootWork.Attribute(m_work);
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), userMessage: reason);
+        using var attribution = WorldBootWork.Attribute(work: m_work);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             utf8Json: boot!.Server.DefinitionJson,
             machines: fixture.Server.Machines.ValidationCatalog);
         var admitted = Counts();
-        var scenario = fixture.Server.Persistence.ScenarioCheckpoint(boot, admission);
+        var scenario = fixture.Server.Persistence.ScenarioCheckpoint(admission: admission, boot: boot);
 
-        fixture.Server.Persistence.RestoreScenario(scenario);
         Assert.Equal(admitted, Counts());
+        fixture.Server.Persistence.RestoreScenario(checkpoint: scenario);
+        // Owned documents are separate admissions; the authority itself reuses the leg's admission.
+        Assert.Equal(((admitted.Validations + boot.OwnedWorlds.Documents.Count), admitted.Compilations), Counts());
     }
 
     private readonly WorldBootWork m_work = new();

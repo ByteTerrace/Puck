@@ -34,7 +34,7 @@ public sealed partial class WorldPersistence {
 
     private sealed record BootShape(string Value);
 
-    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(ScenarioBootShape(bytes))).Value;
+    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(Value: ScenarioBootShape(json: bytes))).Value;
 
     /// <summary>Reuses a complete boot checkpoint only for an identical world with a different schedule.</summary>
     public WorldAuthorityCheckpoint ScenarioCheckpoint(WorldAuthorityCheckpoint boot, WorldDefinitionAdmission admission) {
@@ -48,8 +48,8 @@ public sealed partial class WorldPersistence {
 
             throw new InvalidOperationException(message: $"Scenario changes boot configuration ({string.Join(separator: ", ", values: changed)}); it requires its own worker.");
         }
-        m_checkpointAdmissions.Add(json, admission);
-        _ = m_definitionShapes.GetValue(admission.Definition, _ => new BootShape(CachedBootShape(json)));
+        m_checkpointAdmissions.Add(key: json, value: admission);
+        _ = m_definitionShapes.GetValue(admission.Definition, _ => new BootShape(Value: CachedBootShape(json: json)));
         return boot with {
             Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json },
         };
@@ -62,14 +62,14 @@ public sealed partial class WorldPersistence {
             // A scenario may edit a kit, screen, input policy or collision row. Restore the derived products
             // before validating and loading their checkpointed continuation into the same authority.
             var currentShape = m_definitionShapes.GetValue(Host.Configuration,
-                current => new BootShape(ScenarioBootShape(WorldDefinitionSerialization.Serialize(current)))).Value;
+                current => new BootShape(Value: ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: current)))).Value;
 
-            if (currentShape != CachedBootShape(checkpoint.Server.DefinitionJson)) {
+            if (currentShape != CachedBootShape(json: checkpoint.Server.DefinitionJson)) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
-                Host.Document.Install(definition, rebuildPopulation: true);
+                Host.Document.Install(definition, rebuildPopulation: true, compilation: admission.Compilation);
             }
             IWorldAddonPreparedPlan? plan = null;
 

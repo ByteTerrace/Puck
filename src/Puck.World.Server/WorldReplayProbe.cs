@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -31,7 +32,7 @@ public sealed class WorldReplayProbe : IDisposable {
     }
 
     internal void NoteTick(WorldReplayTickInput input, ulong hash) {
-        m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority.Skip(m_skipAuthority)], Intents: [.. input.Intents.Skip(m_skipIntents)]));
+        m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority.Skip(count: m_skipAuthority)], Intents: [.. input.Intents.Skip(count: m_skipIntents)]));
         m_skipAuthority = 0;
         m_skipIntents = 0;
         m_hashes.Add(item: hash);
@@ -90,6 +91,15 @@ public sealed partial class WorldReplayTape {
         m_probes.Add(item: probe);
         RefreshCapture();
         return probe;
+    }
+    /// <summary>Observes another local authority through the same tape construction used for companion recordings.</summary>
+    public WorldReplayProbe ObserveReplay(WorldInstance instance) {
+        if (ReferenceEquals(objA: instance.Server, objB: m_liveServer)) { return ObserveReplay(); }
+        if (instance.Link is not LoopbackTransport transport) {
+            throw new InvalidOperationException(message: $"Authority '{instance.Name}' has no local replay input stream.");
+        }
+        instance.Tape ??= CompanionTape(row: instance, transport: transport);
+        return instance.Tape.ObserveReplay();
     }
 
     internal void DetachProbe(WorldReplayProbe probe) { m_probes.Remove(item: probe); RefreshCapture(); }

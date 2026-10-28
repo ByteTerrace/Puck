@@ -58,10 +58,11 @@ public sealed partial class WorldGrants {
             Revision: m_revision
         );
     }
-    /// <summary>Restores every table this class owns from a previously captured checkpoint — a wholesale replace,
-    /// never a merge onto whatever the boot-seed constructor already installed. The sessions it admits afterwards are
-    /// the checkpoint's, each as it stood, with the retired epochs kept; a live session the checkpoint does not hold
-    /// ends here, and its screen admits a new one.</summary>
+    /// <summary>Replaces grants and sessions from a checkpoint. Live restoration retains the greatest retired
+    /// epoch for every ordinal, so a principal minted after the save cannot be reissued. An isolated scenario reset
+    /// also replaces the epoch allocator after discarding its observers and timeline.</summary>
+    /// <param name="checkpoint">The grants and sessions to restore.</param>
+    /// <param name="resetSessionEpochs">Whether the caller discarded the entire isolated scenario timeline.</param>
     public void Restore(WorldGrantsCheckpoint checkpoint, bool resetSessionEpochs = false) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
@@ -174,7 +175,7 @@ public sealed partial class WorldGrants {
             m_sessionOrdinalBound = 0;
         }
         foreach (var (ordinal, epoch) in checkpoint.SessionEpochs) {
-            m_sessionEpochs[ordinal] = Math.Max(epoch, m_sessionEpochs.GetValueOrDefault(ordinal));
+            m_sessionEpochs[ordinal] = Math.Max(val1: epoch, val2: m_sessionEpochs.GetValueOrDefault(key: ordinal));
         }
 
         RestoreSessions(sessions: checkpoint.Sessions);

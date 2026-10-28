@@ -23,16 +23,16 @@ public sealed class SessionPrincipalLawTests {
     public void LiveRestoreKeepsSessionsRetiredAfterTheSaveRetired() {
         using var fixture = Fixtures.FreshServer(definition: Document());
 
-        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
-        var first = AdmitSession(fixture);
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), userMessage: reason);
+        var first = AdmitSession(fixture: fixture);
 
-        Assert.True(fixture.Server.EndSession(first, out reason), reason);
+        Assert.True(condition: fixture.Server.EndSession(refusal: out reason, session: first), userMessage: reason);
         fixture.Server.Persistence.RestoreCheckpoint(checkpoint!);
-        var next = AdmitSession(fixture);
+        var next = AdmitSession(fixture: fixture);
 
         Assert.Equal(first.Index, next.Index);
-        Assert.True((next.Generation > first.Generation));
-        Assert.False(fixture.Server.IsLiveSession(first));
+        Assert.True(condition: (next.Generation > first.Generation));
+        Assert.False(condition: fixture.Server.IsLiveSession(principal: first));
     }
     [Fact]
     public void RestoringACheckpointRestoresTheNextSessionIdentity() {

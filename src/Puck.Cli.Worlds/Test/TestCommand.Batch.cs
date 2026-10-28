@@ -1,12 +1,25 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace Puck.Cli.Test;
 
 public static partial class TestCommand {
+    // A boot owns a cohort, not just its root document. Include every staged companion and asset copied
+    // into the worker, so two scenarios cannot share a companion's state or rules from another package.
+    private static string BatchShape(TestWorld world) => ((Path.GetFileName(path: world.Path) + "\n") + string.Join(separator: "\n",
+        values: Directory.EnumerateFiles(path: Path.GetDirectoryName(path: world.Path)!).Order(comparer: StringComparer.Ordinal).Select(selector: path => {
+            var bytes = File.ReadAllBytes(path: path);
+            var shape = (((path == world.Path) || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".world.json"))
+                ? Puck.World.Server.WorldPersistence.ScenarioBootShape(json: bytes)
+                : Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
+            var name = Path.GetFileName(path: path);
+
+            return $"{name.Length}:{name}:{shape}";
+        })));
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
-    // A worker owns one native boot configuration and restores its scenarios' checkpoints between runs.
+    // A worker retains its process across boots, and restores checkpoints only while the complete boot shape matches.
     private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce) {
         var legs = new List<object>();
 
@@ -24,6 +37,7 @@ public static partial class TestCommand {
             }
             legs.Add(item: new {
                 World = world.Path,
+                BootShape = BatchShape(world: world),
                 Reproduce = reproduce,
                 Directory = legDirectory,
                 ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule!.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),

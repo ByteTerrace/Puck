@@ -1909,10 +1909,11 @@ The work summary reports source compiles, compositions and shared images, worker
 processes, container host boots, world runs, and exported authority ticks (excluding
 the extra shutdown ticks). Executable build reuse is reported separately.
 
-Each worker boots once through the normal World composition root and restores
+Each worker boots through the normal World composition root and restores
 the complete boot checkpoint before each compatible scenario. Only its schedule
-is replaced; differences in state, rules or other boot configuration receive
-another worker. An uncapturable boot runs each scenario in its own native host;
+is replaced; differences in state, rules or other boot configuration, including
+staged companions and assets, start a fresh native host in that worker.
+An uncapturable boot runs each scenario in its own native host;
 reproduction still requires a capturable starting checkpoint.
 Native dependency validation, singleton identity in child scopes and caller ownership
 of supplied singleton instances are preserved. Container reuse by rewriting lifetimes

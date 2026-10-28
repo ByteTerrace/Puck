@@ -753,12 +753,12 @@ public sealed partial class WorldPersistence {
     }
 
     /// <summary>Restores this server's own fields and every subsystem it owns from a previously captured
-    /// checkpoint. Called immediately after construction and before the first <see cref="WorldTick.Step"/> — the definition
-    /// this restore installs is the checkpoint's own, never re-composed by replaying the journal.</summary>
+    /// checkpoint at a settled tick boundary. The definition this restore installs is the checkpoint's own, never
+    /// re-composed by replaying the journal. Retired live session epochs remain retired.</summary>
     /// <param name="checkpoint">The captured image to restore.</param>
     /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A live replay's
     /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
-    internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
+    public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);

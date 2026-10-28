@@ -76,7 +76,7 @@ public sealed partial class WorldInstanceHost {
             if (!source.AsSpan().SequenceEqual(other: cached.Source)) {
                 if (!WorldDefinitionLoader.TryLoadFileForAdmission(row.SourcePath, out var admission, out _, out var reason,
                     instanceIdentity: name, catalog: row.Server.Machines.ValidationCatalog)) { throw new InvalidOperationException(message: reason); }
-                cached = (source, row.Server.Persistence.ScenarioCheckpoint(boot: initial, admission: admission!));
+                cached = (source, row.Server.Persistence.ScenarioCheckpoint(admission: admission!, boot: initial));
                 m_scenarioImages[name] = cached;
             }
             var image = cached.Image;
