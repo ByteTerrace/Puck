@@ -308,9 +308,10 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
         );
     }
     // The hold every form but the tick count arms: polls `done` each drain (a delegate read that allocates nothing)
-    // until it comes true or the seconds pass. As the hold ends it reports once on stderr whether `done` came true, the
-    // seconds passed or the session's answer deadline passed first, naming `reason` when one is given; a session that
-    // settles results answers the arming line with that report, a refusal unless `done` came true.
+    // until it comes true or the seconds pass. As the hold ends it reports whether `done` came true, the seconds passed
+    // or the session's answer deadline passed first, naming `reason` when one is given. Success prints on stderr here; a
+    // refusal is left to the session, which answers the arming line with it (a session that settles results) or
+    // publishes it through its result callback, so it never prints twice.
     private CommandResult ArmUntil(CommandContext context, WireArgs args, Func<bool> done, string what, Func<ulong, string> readyLine, Func<string, string> releasedLine, Func<string>? reason) {
         if (
             !args.TryUnsignedDigits(
@@ -355,7 +356,9 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                         : (((released + ": ") + reason()) + "]")));
                 }
 
-                Console.Error.WriteLine(value: report.Output);
+                if (!report.IsError) {
+                    Console.Error.WriteLine(value: report.Output);
+                }
 
                 return report;
             }

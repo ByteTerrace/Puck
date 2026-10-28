@@ -70,6 +70,55 @@ public sealed class WorldStagingMachineLawTests {
         Assert.Equal(expected: ((mode == "alias") ? "exhibit$cabinet" : "cabinet"), actual: machine["name"]!.GetValue<string>());
         Assert.Equal(expected: "root decoy", actual: File.ReadAllText(path: files.PathOf(name: $"source/{Authored}")));
     }
+    // THE LAW: a content folder relocation can only spell rooted (the staging directory is on another volume than the
+    // source) is staged as a relative folder holding the same files, in the same list position; an absent one stays
+    // absent. The red leg is the rooted spelling, which the validator refuses.
+    [Fact]
+    public void A_rooted_content_folder_is_staged_as_a_relative_copy() {
+        using var files = new TemporaryDirectory(prefix: "puck-staging-content-folders-");
+
+        files.WriteText(name: "elsewhere/cartridges/one.cgb", text: "one");
+        files.WriteText(name: "elsewhere/cartridges/two.cgb", text: "two");
+        var present = files.PathOf(name: "elsewhere/cartridges").Replace(oldChar: '\\', newChar: '/');
+        var absent = files.PathOf(name: "elsewhere/absent").Replace(oldChar: '\\', newChar: '/');
+        var world = ((JsonObject)JsonNode.Parse(json: $$"""
+            {
+              "schema": "{{WorldDefinition.SchemaVersion}}",
+              "machines": [
+                {
+                  "name": "cabinet",
+                  "engine": "gaming-brick",
+                  "contentFolders": ["{{absent}}", "{{present}}"],
+                  "configuration": {
+                    "schema": "puck.gaming-brick.configuration.v1",
+                    "model": "cgb",
+                    "boot": "fast"
+                  }
+                }
+              ]
+            }
+            """)!);
+
+        Assert.True(
+            condition: WorldStaging.TryWrite(
+                catalog: CliWorldVocabulary.EnsureInstalled(),
+                directory: files.PathOf(name: "staged"),
+                name: "gallery",
+                path: out var staged,
+                reason: out var reason,
+                sourceDirectory: files.PathOf(name: "source"),
+                world: world
+            ),
+            userMessage: reason
+        );
+
+        var folders = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: staged))!["machines"]![0]!["contentFolders"]!.AsArray();
+        var stagedDirectory = Path.GetDirectoryName(path: staged)!;
+
+        Assert.Equal(expected: ["content/0-0", "content/0-1"], actual: folders.Select(selector: static folder => folder!.GetValue<string>()));
+        Assert.False(condition: Directory.Exists(path: Path.Combine(path1: stagedDirectory, path2: "content/0-0")));
+        Assert.Equal(expected: "two", actual: File.ReadAllText(path: Path.Combine(path1: stagedDirectory, path2: "content/0-1/two.cgb")));
+    }
     // THE LAW: a cabinet's content path resolves beside the staged document to the file it named beside its source. The
     // red leg is the path as authored, which names nothing beside the staged document.
     [Fact]
