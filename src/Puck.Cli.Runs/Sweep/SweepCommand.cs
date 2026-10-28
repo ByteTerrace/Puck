@@ -156,7 +156,7 @@ public static partial class SweepCommand {
                 var logs = Path.Combine(path1: directory, path2: SweepLegs.Headless);
 
                 if (!SweepWorld.TryBoot(
-                    arguments: Arguments(deadline: deadline, extra: ["--headless", "true", "--unpaced", "true"], state: Path.Combine(path1: logs, path2: "state"), world: world),
+                    arguments: Arguments(deadline: deadline, extra: ["--headless", "true", "--unpaced", "true", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world),
                     artifact: entry!,
                     bootTimeout: TimeSpan.FromMinutes(value: 5),
                     budget: budget,
@@ -204,7 +204,7 @@ public static partial class SweepCommand {
                             root: CliLease.RootAsync(cancellationToken: budget.Token, checkout: repositoryRoot).GetAwaiter().GetResult(),
                             wait: budget.Bound(wait: TimeSpan.FromMinutes(value: 20))
                         ).GetAwaiter().GetResult();
-                    } catch (Exception exception) when (exception is TimeoutException or OperationCanceledException) {
+                    } catch (Exception exception) when ((exception is TimeoutException or OperationCanceledException)) {
                         signals.Add(item: WindowedNotRun(reason: $"the GPU lease was not acquired: {exception.Message}"));
                     }
 
@@ -273,10 +273,8 @@ public static partial class SweepCommand {
         // Red, and whatever the sweep could not measure, fails the run: a run that read nothing is not a clean one.
         return (report.Failed ? CliExit.Failed : CliExit.Success);
     }
-
     private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
     private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
-
     private static List<string> Arguments(string world, string state, TimeSpan deadline, IReadOnlyList<string> extra) => [
         "--world", world,
         .. WorldDevices.NoneArguments,
@@ -304,7 +302,7 @@ public static partial class SweepCommand {
             WorkingDirectory = repositoryRoot,
         };
 
-        startInfo.ArgumentList.Add(item: typeof(SweepCommand).Assembly.Location.Replace(oldValue: "Puck.Cli.Runs.dll", newValue: "Puck.Cli.dll"));
+        startInfo.ArgumentList.Add(item: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll"));
         startInfo.ArgumentList.Add(item: "test");
 
         foreach (var file in files) {
@@ -375,7 +373,6 @@ public static partial class SweepCommand {
 
         return new SweepScenarioResult(Command: command, Reasons: reasons, Status: status, Worlds: worlds);
     }
-
     [GeneratedRegex(pattern: @"^test (?<name>[^:]+):", options: RegexOptions.CultureInvariant)]
     private static partial Regex TestNamePattern();
     [GeneratedRegex(pattern: @"^\s+(?<passed>\d+)/(?<total>\d+) verdict\(s\) passed", options: RegexOptions.CultureInvariant)]

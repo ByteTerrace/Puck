@@ -173,8 +173,7 @@ public sealed record SweepSignal(
 /// <summary>The capture tour.</summary>
 /// <param name="Prelude">Lines run once before the first stop.</param>
 /// <param name="Reset">Lines run before every stop.</param>
-/// <param name="Frame">Lines run after every stop's own lines, before its settle wait: what brings the camera to bear
-/// on the posed body.</param>
+/// <param name="Frame">Lines pinned to every stop's start tick after its bakes settle: camera framing and animation reseeding.</param>
 /// <param name="Settle">The ticks a stop waits before its capture unless it names its own.</param>
 /// <param name="LevelTolerance">The channel difference beyond which a pixel counts as changed against the baseline.</param>
 /// <param name="AmberFraction">The changed-pixel fraction beyond which a still is amber against the baseline.</param>

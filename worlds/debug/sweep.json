@@ -1,5 +1,5 @@
 {
-  "note": "The debug world's sweep (puck sweep): the tools it runs for a bounded span, the signals it reads, and the capture tour. Rules name a metric, an operator and a value; a red rule makes the signal red, an amber rule amber, and a rule whose metric the answer lacks leaves the signal unmeasured, which fails the run like red. compare says how a metric is judged against a previous report: exact (any change is named), relative:<fraction> (a change beyond that fraction of the old value is named) or none. The headless leg steps its World only inside waits (paused between calls), so ticks and tick-counted metrics repeat; the wall-clock metrics (host.frames, host.memory) and the compile-cache counters (world.boot.*, which depend on how warm the cache is) are not compared exactly. A signal marked recheck is read again after the tour.",
+  "note": "The debug world's sweep (puck sweep): the tools it runs for a bounded span, the signals it reads, and the capture tour. Rules name a metric, an operator and a value; a red rule makes the signal red, an amber rule amber, and a rule whose metric the answer lacks leaves the signal unmeasured, which fails the run like red. compare says how a metric is judged against a previous report: exact (any change is named), relative:<fraction> (a change beyond that fraction of the old value is named) or none. The headless leg boots paused before its first tick and steps only inside waits, so ticks and tick-counted metrics repeat; only wall-clock metrics (host.frames, host.memory) are not compared exactly. Every world.boot count, including cache work, is compared exactly. A signal marked recheck is read again after the tour.",
   "tools": [
     {
       "name": "chess-scope",
@@ -63,7 +63,7 @@
       "compare": { "placements": "exact", "state.rows": "exact", "rules": "exact", "rules.worst": "relative:0.25", "rules.work": "relative:0.25", "rigid": "exact" }
     },
     { "name": "counters-state", "line": "world.counters state", "parse": "counters", "compare": { "*": "exact" } },
-    { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "*": "none" } },
+    { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "*": "exact" } },
     { "name": "counters-physics", "line": "world.counters physics", "parse": "counters", "compare": { "*": "exact" } },
     { "name": "addons", "line": "world.addons", "parse": "text", "recheck": true, "metrics": { "watchdog.fuel": "watchdog ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "companion.fuel": "companion ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "dropped": "answers-dropped-total:(?<sum>\\d+)" }, "red": ["dropped > 0", "text ~ FAULTED", "text ~ DISABLED", "watchdog.fuel < 1"], "compare": { "watchdog.fuel": "relative:0.25", "companion.fuel": "relative:0.25" } },
     { "name": "frames", "line": "host.frames 300", "parse": "frames", "leg": "headless", "compare": { "simulate.p50": "none" } },
@@ -78,10 +78,10 @@
     { "name": "memory-windowed", "line": "host.memory", "parse": "pairs", "leg": "windowed", "compare": { "ws": "relative:0.25", "private": "relative:0.25" } }
   ],
   "tour": {
-    "note": "Each stop starts from the reset lines, runs its own, waits for the bakes, and takes a settled capture pinned to a named tick: a start tick a fixed lead after the bakes settled, plus the stop's settle ticks. A stop's steps are console lines pinned to ticks after the start tick (world.at), so a motion still shows the same tick whatever the bakes cost. Images are compared with the baseline's by changed pixels: a pixel changes when any channel differs by more than the level tolerance, and a still whose changed fraction exceeds the amber fraction is amber.",
-    "prelude": ["world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
+    "note": "Each stop starts from the reset lines, runs its own, waits for the bakes, and takes a settled capture pinned to a named tick: a start tick a fixed lead after the bakes settled, plus the stop's settle ticks. The frame lines (camera recenter and animation reseed) run at the start tick, and a stop's steps are pinned after it (world.at). Lockstep presentation follows those ticks, so a motion still shows the same tick whatever the bakes cost. Images are compared with the baseline's by changed pixels: a pixel changes when any channel differs by more than the level tolerance, and a still whose changed fraction exceeds the amber fraction is amber.",
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
     "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
-    "frame": ["player.look.recenter"],
+    "frame": ["player.look.recenter", "view.reseed 0"],
     "settle": 45,
     "levelTolerance": 16,
     "amberFraction": 0.02,
