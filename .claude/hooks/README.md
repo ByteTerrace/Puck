@@ -92,6 +92,20 @@ messages and a cherry-pick's source messages. It refuses a message on stdin and
 an absent message file, since it cannot read them before the command runs: write
 the message file with the edit tool first.
 
+## Rules only prose holds
+
+No hook enforces these; AGENTS.md and the skills state them, and the lead checks
+them when it merges a lane:
+
+- The final commit of an assignment ends with `Brief: <id> done` or
+  `Brief: <id> blocked: <question>`, and no other commit carries a `Brief:`
+  trailer.
+- Commit subjects are lowercase `area: sentence`.
+- Staging names explicit paths, and the whole index is inspected before a commit.
+- No per-lane, per-review or per-batch remote branch is created.
+- A feature is shown by running it, and a scenario is added only for an invariant
+  running cannot show.
+
 ## Tests
 
 From the checkout root:

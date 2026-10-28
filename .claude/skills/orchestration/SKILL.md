@@ -113,12 +113,17 @@ status, and count the commits behind with
 commits reachable from the right side and not the left; an empty range does not
 establish ancestry.
 
-The assignment's last commit carries one of these trailers:
+Only the assignment's last commit carries one of these trailers, as the last
+line of its message:
 
 ```text
 Brief: <id> done
 Brief: <id> blocked: <question>
 ```
+
+Progress and WIP commits carry no `Brief:` trailer, and no other value follows
+`Brief: <id>`. The lead checks the final commit's trailer and subject format
+before merging a lane.
 
 The lead's ledger and plan files that a delegate never writes are the lead's
 own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. The repository's documents,
