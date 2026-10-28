@@ -61,8 +61,8 @@ public sealed partial class WorldGrants {
             // standing intent rather than a mistake.
             if (Host.Addons?.DescribeUndeclaredGrantedChannels(
                 principal: grant.Grantee.Principal,
-                reach: grant.Reach?.Project(ChannelsFor(grant.Subject)),
-                channels: Host.Population.Channels
+                reach: grant.Reach?.Project(table: ChannelsFor(subject: grant.Subject)),
+                channels: ChannelsFor(subject: grant.Subject)
             ) is { } undeclared) {
                 if (Host.Output.HasNarrationSink) {
                     Host.Output.Narrate(

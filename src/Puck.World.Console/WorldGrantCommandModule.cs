@@ -805,15 +805,15 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                     separator: ','
                 )) {
                     if (!channels.TryGetLogicalId(
-                        name: name,
-                        logical: out _
+                        logical: out _,
+                        name: name
                     )) {
                         error = CommandResult.Error(output: $"[{verb}: channels:<> names '{name}', which names no declared channel]");
 
                         return false;
                     }
 
-                    names.Add(name);
+                    names.Add(item: name);
                 }
 
                 namedChannels = new(names);
@@ -965,8 +965,8 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
             return false;
         }
 
-        var reach = (((ceiling is null) && (namedChannels is not null || namedRegisters is not null))
-            ? new WorldChannelSelection(namedChannels?.Channels ?? [], namedRegisters ?? 0UL)
+        var reach = (((ceiling is null) && ((namedChannels is not null) || (namedRegisters is not null)))
+            ? new WorldChannelSelection(channels: (namedChannels?.Channels ?? []), registers: (namedRegisters ?? 0UL))
             : (WorldChannelSelection?)null
         );
         var consent = (((ceiling is not null) && (namedChannels is { } consented))

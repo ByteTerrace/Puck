@@ -545,11 +545,12 @@ public sealed class ReplayForkLawTests {
                 actual: actual.Authority.Select(selector: static entry => entry.GetType().Name)
             );
             Assert.Equal(expected.Intents.Count, actual.Intents.Count);
-            for (var index = 0; index < expected.Intents.Count; index++) {
+            for (var index = 0; (index < expected.Intents.Count); index++) {
                 var left = new WireWriter();
                 var right = new WireWriter();
-                Assert.True(WorldWireCodec.TryWriteIntentSubmission(left, expected.Intents[index]));
-                Assert.True(WorldWireCodec.TryWriteIntentSubmission(right, actual.Intents[index]));
+
+                Assert.True(condition: WorldWireCodec.TryWriteIntentSubmission(left, expected.Intents[index]));
+                Assert.True(condition: WorldWireCodec.TryWriteIntentSubmission(right, actual.Intents[index]));
                 Assert.Equal(left.ToArray(), right.ToArray());
             }
             Assert.Equal(

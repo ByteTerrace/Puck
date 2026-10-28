@@ -12,15 +12,17 @@ typed packed values, shared action names, composable simulation modes, authored
 continuity across mode switches, and deterministic input history with sub-tick
 timing. The representation and algorithms below refine that direction.
 
-**Implementation status:** C1 and C2 are implemented: 32 numeric slots (Q48.16
+**Implementation status:** C1 through C6 are implemented: 32 numeric slots (Q48.16
 levels or Q32.32 relative displacement), 64 packed buttons, independent target-register
 reach, and shared debug declarations with separate `confirm` and `cancel`.
 Relative input has authored units, sensitivity and bounds, consumes once, and
-conserves fractional scalar conversion residue. Body-derived edges and
-presentation binding contexts remain; C3–C7 describe the target contract. The
-[implementation steps](#implementation-steps) track the remaining work;
-examples using `inputModes`, `inputHistory`, or `inputPatterns` below describe
-new vocabulary, not syntax an existing build accepts.
+conserves fractional scalar conversion residue. Authoritative finite modes allocate
+live storage and govern continuity; Q48.16 timed events, Unicode text, bounded
+history, patterns and historical clocks share one required ingress batch across
+local, remote and federated producers. Checkpoints and replay retain admitted
+history and source state. The [implementation steps](#implementation-steps) and
+[open items](../plans/open-items.md#input-channels) track C7's remaining combined
+inspection and authoring work.
 
 ## Semantic names and typed values
 
@@ -717,8 +719,7 @@ continuity as a held source. A page change alone leaves their latches intact.
 
 ### Debug-world transition policy
 
-The following is the C3/C4 migration contract, not a claim that the current
-sixteen-slot runtime implements epochs. Declare finite authoritative form,
+The debug world declares finite authoritative form,
 flight and engagement selections; an active kit alone cannot distinguish a
 suited Moth walking from the same kit flying. Flight eligibility follows the
 existing flight-fuel register through the selector's zero/positive partition,
@@ -881,8 +882,8 @@ The implementation extends these owners rather than introducing parallel paths:
 - [Physical binding sequences](../../src/Puck.Commands/BindingActivatorDefinition.cs)
   and [the existing rule operand representation](../../src/Puck.State/Operands/StateChannelRef.cs).
 
-The source search finds no authoritative input-history or sub-tick input-event
-type in the live or experimental C# trees; physics substeps are unrelated.
+Before implementation, the source search found no authoritative input-history
+or sub-tick input-event type in the live or experimental C# trees; physics substeps are unrelated.
 Existing binding sequences and session/world replay history supply reusable
 mechanisms, but neither exposes a seat's semantic event history to simulation
-rules. That is the named gap the history steps address.
+rules. C5 and C6 close that gap through the shared timed input runtime.

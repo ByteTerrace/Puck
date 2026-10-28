@@ -13,17 +13,19 @@ public sealed class EngagementTranslationLawTests {
     [Fact]
     public void ReusedAxisSlotTranslatesThroughTheActiveLogicalMapping() {
         using var fixture = Fixtures.FreshServer(definition: BuildPadKitDocument());
-        var catalog = WorldInputCatalog.Compile([
+        var catalog = WorldInputCatalog.Compile(declarations: [
             new("forward", ChannelShape.Bipolar), new("turn", ChannelShape.Bipolar)
-        ], new([], [new("focus", new(WorldInputModeSelectorKind.SeatState, "focus"), "advance", [
+        ], modes: new([], [new("focus", new(Kind: WorldInputModeSelectorKind.SeatState, Name: "focus"), "advance", [
             new("advance", ["forward"]), new("rotate", ["turn"])
         ])]));
-        var advance = Assert.Single(catalog.Mappings.ToArray(), mapping => mapping.Name == "focus=advance");
-        var rotate = Assert.Single(catalog.Mappings.ToArray(), mapping => mapping.Name == "focus=rotate");
-        Assert.Equal(advance.Address(0), rotate.Address(1));
-        var image = default(PlayerIntent).WithChannel(advance.Address(0), FixedQ4816.One);
+        var advance = Assert.Single(collection: catalog.Mappings.ToArray(), predicate: mapping => (mapping.Name == "focus=advance"));
+        var rotate = Assert.Single(collection: catalog.Mappings.ToArray(), predicate: mapping => (mapping.Name == "focus=rotate"));
+
+        Assert.Equal(advance.Address(logicalId: 0), rotate.Address(logicalId: 1));
+        var image = default(PlayerIntent).WithChannel(ordinal: advance.Address(logicalId: 0), value: FixedQ4816.One);
         var first = fixture.Server.Engagement.Translate(image, PadKitName, advance.Channels);
         var second = fixture.Server.Engagement.Translate(image, PadKitName, rotate.Channels);
+
         Assert.Equal(1f, first.LeftTrigger);
         Assert.Equal(0f, first.RightTrigger);
         Assert.Equal(0f, second.LeftTrigger);

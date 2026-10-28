@@ -42,7 +42,7 @@ public sealed partial class WorldAddonRuntime {
     // no occupying-seat ceiling to consult, unlike a genuinely untrusted (pooled) contributor. Recomputed here rather
     // than read back from the fold, because ApplyIntentSubmission's verdict answers Drive authority only.
     private bool ContributionAccepted(int bodyIndex, Principal principal, in ChannelValues values) {
-        if (m_server.Body(bodyIndex) is not { } body) { return false; }
+        if (m_server.Body(index: bodyIndex) is not { } body) { return false; }
         if (!m_server.Grants.TryGetChannelReach(
             channels: body.Channels,
             principal: principal,
@@ -85,7 +85,7 @@ public sealed partial class WorldAddonRuntime {
         // The Rust guest is the one that must emit the correctly-signed value (see wasm/puck-addon-default) — the
         // old raw-stick negation lived here only because that guest used to speak raw stick space, not the intent's.
         if (act.Shape == AddonChannelValueShape.Relative) {
-            contribution.Values.SetRelative(ordinal: address, value: channels.ClampRelative(address, act.Value));
+            contribution.Values.SetRelative(ordinal: address, value: channels.ClampRelative(ordinal: address, raw: act.Value));
         } else {
             contribution.Values[address] = channels.Quantize(ordinal: address, value: FixedQ4816.FromRawBits(value: act.Value));
         }
@@ -210,7 +210,8 @@ public sealed partial class WorldAddonRuntime {
                 }
 
                 var bodyIndex = subject.Value;
-                if (m_server.Body(bodyIndex) is not { } target || !target.Channels.TryGetOrdinal(act.ChannelName, out var address)) {
+
+                if ((m_server.Body(index: bodyIndex) is not { } target) || !target.Channels.TryGetOrdinal(name: act.ChannelName, ordinal: out var address)) {
                     QueueAnswer(addon: addon, ordinal: act.Ordinal, verdict: AddonVerdict.AttenuatedToEmpty);
                     continue;
                 }
@@ -463,7 +464,7 @@ public sealed partial class WorldAddonRuntime {
         if (!m_server.Input.TryPublishSnapshot(addon.Principal, bodyIndex, "addon", new PlayerIntent(contribution.Values), tick,
             out var inputOwner, out var input, out var inputReason)) {
             contribution.Outcome = AddonVerdict.MalformedPayload;
-            Console.Error.WriteLine($"[input.refused: {inputReason}]");
+            Console.Error.WriteLine(value: $"[input.refused: {inputReason}]");
             return;
         }
         var submission = new IntentSubmission(
@@ -481,7 +482,7 @@ public sealed partial class WorldAddonRuntime {
         );
 
         if (!verdict.IsAccepted) {
-            contribution.Outcome = verdict.InputRefusal is not null ? AddonVerdict.MalformedPayload : WorldAddonWire.FromRule(rule: verdict.Permission.Rule);
+            contribution.Outcome = ((verdict.InputRefusal is not null) ? AddonVerdict.MalformedPayload : WorldAddonWire.FromRule(rule: verdict.Permission.Rule));
 
             return;
         }
@@ -537,7 +538,7 @@ public sealed partial class WorldAddonRuntime {
             var addon = m_mounted[index];
 
             if (addon.Instance.State != AddonState.Enabled) {
-                m_server.Input.CancelSnapshots(addon.Principal, "addon");
+                m_server.Input.CancelSnapshots(actor: addon.Principal, source: "addon");
                 // FoldActs did not run this tick, so its own bottom-of-method latch reset did not run either — clear
                 // it here so a guest disabled or faulted between an exhaustion and its next FoldActs call does not
                 // carry an armed-but-orphaned latch into a later enable and swallow the next real exhaustion.
@@ -551,7 +552,7 @@ public sealed partial class WorldAddonRuntime {
                 addon: addon,
                 tick: tick
             );
-            m_server.Input.CompleteSnapshots(addon.Principal, "addon", tick);
+            m_server.Input.CompleteSnapshots(actor: addon.Principal, source: "addon", tick: tick);
         }
     }
     /// <summary>Resolves each guest's disclosures, world-event pushes, and queued asks/pose queries — pump point 3,

@@ -625,8 +625,8 @@ public static partial class WorldFederationCodec {
     /// <param name="submission">The intent image.</param>
     /// <returns>The encoded leaf.</returns>
     public static byte[] EncodeIntent(string sourceAuthority, in WorldMobilityIdentity mobility, in IntentSubmission submission) {
-        if (submission.InputOwner is { } owner && owner != submission.Principal) {
-            throw new ArgumentException("a local controller session cannot cross an authority; admit its producer at the destination", nameof(submission));
+        if ((submission.InputOwner is { } owner) && (owner != submission.Principal)) {
+            throw new ArgumentException(message: "a local controller session cannot cross an authority; admit its producer at the destination", paramName: nameof(submission));
         }
         var writer = new WireWriter(capacity: 1024);
 
@@ -642,7 +642,7 @@ public static partial class WorldFederationCodec {
             intent: submission.Intent,
             writer: writer
         );
-        if (!WorldWireCodec.TryWriteInputBatch(writer, submission.Input)) { throw new ArgumentException("invalid timed input batch", nameof(submission)); }
+        if (!WorldWireCodec.TryWriteInputBatch(writer, submission.Input)) { throw new ArgumentException(message: "invalid timed input batch", paramName: nameof(submission)); }
 
         return writer.ToArray();
     }
@@ -858,7 +858,7 @@ public static partial class WorldFederationCodec {
         }
 
         writer.WriteUInt64(value: snapshot.EngineTick);
-        if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException("snapshot input publication exceeds wire bounds", nameof(snapshot)); }
+        if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException(message: "snapshot input publication exceeds wire bounds", paramName: nameof(snapshot)); }
 
         return writer.ToArray();
     }
@@ -1227,7 +1227,7 @@ public static partial class WorldFederationCodec {
         var tick = reader.ReadUInt64();
         var measured = reader.ReadInt32();
         var intent = WorldWireCodec.ReadIntent(reader: ref reader);
-        var input = WorldWireCodec.ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue);
+        var input = WorldWireCodec.ReadInputBatch(maximumEvents: ushort.MaxValue, maximumSources: WorldInputCatalog.MaximumSources, reader: ref reader);
 
         submission = new IntentSubmission(
             tick,
@@ -1606,15 +1606,15 @@ public static partial class WorldFederationCodec {
         }
 
         var engineTick = reader.ReadUInt64();
-        var inputs = WorldWireCodec.ReadInputPublications(ref reader);
+        var inputs = WorldWireCodec.ReadInputPublications(reader: ref reader);
 
         snapshot = new WorldSnapshot(
             Authority: authority,
             EngineTick: engineTick,
-            Inputs: inputs,
             Entries: entries,
             FieldCells: deltas,
             FieldsFull: fieldsFull,
+            Inputs: inputs,
             Revision: revision,
             StepTicks: stepTicks,
             Tick: tick

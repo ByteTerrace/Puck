@@ -399,7 +399,7 @@ public sealed partial class WorldPopulation {
             if (
                 entry.IsRemoteHuman &&
                 !entry.Parked &&
-                !(continuingFederatedBodies?.Contains(captured.Index) ?? false)
+                !(continuingFederatedBodies?.Contains(item: captured.Index) ?? false)
             ) {
                 if (m_reconnectGraceTicks.IsNever) {
                     entry.Parked = true;

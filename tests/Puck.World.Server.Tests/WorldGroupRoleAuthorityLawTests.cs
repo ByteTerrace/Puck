@@ -229,7 +229,7 @@ public sealed class WorldGroupRoleAuthorityLawTests {
             expected: ((ushort)9)
         );
         Assert.True(condition: grants.TryGetChannelReach(
-            channels: WorldChannelTable.Compile([new("forward", ChannelShape.Bipolar)]),
+            channels: WorldChannelTable.Compile(channels: [new("forward", ChannelShape.Bipolar)]),
             mask: out var reach,
             principal: seat0,
             subject: body

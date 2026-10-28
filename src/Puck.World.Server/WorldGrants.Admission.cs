@@ -636,7 +636,7 @@ public sealed partial class WorldGrants {
                     );
                 }
 
-                Host.Input.Reset(Principal.Seat(leave.Slot));
+                Host.Input.Reset(Principal.Seat(slot: leave.Slot));
                 Host.Population.DeactivateSeat(
                     slot: leave.Slot,
                     tick: Host.NextInputTick

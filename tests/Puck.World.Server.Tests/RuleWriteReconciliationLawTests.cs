@@ -66,7 +66,7 @@ public sealed class RuleWriteReconciliationLawTests {
 
     [Fact]
     public void ADriveGateRuleCancelsHeldInputAtItsCommit() {
-        var basis = Document([Write("stunned", 1m) with {
+        var basis = Document(rules: [Write(row: "stunned", value: 1m) with {
             Gate = new ActionPredicate.CompareState("$inputMatch:1:gateChord", ExpressionOp.Equal, 1m),
         }]);
         var definition = basis with {
@@ -75,27 +75,29 @@ public sealed class RuleWriteReconciliationLawTests {
             InputHistory = new(EventCapacity: 16, MaximumEventsPerStep: 16),
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
-        Join(fixture);
+
+        Join(fixture: fixture);
         fixture.Step();
         var catalog = fixture.Server.Population.InputCatalog;
-        Assert.True(catalog.TryGetLogicalId("gateHold", out var channel));
-        Assert.True(catalog.TryGetLogicalId("gateOther", out var other));
+
+        Assert.True(condition: catalog.TryGetLogicalId(id: out var channel, name: "gateHold"));
+        Assert.True(condition: catalog.TryGetLogicalId(id: out var other, name: "gateOther"));
         WorldInputSource[] sources = [new(0, channel, WorldInputContributionKind.Level, "key:held"), new(1, other, WorldInputContributionKind.Level, "key:other")];
-        var owner = fixture.Server.Input.Admit(Principal.Seat(0), 0, sources);
+        var owner = fixture.Server.Input.Admit(Principal.Seat(slot: 0), 0, sources);
         var producer = new WorldInputProducer(catalog, owner.Mapping, sources, 128, owner.Revision, owner.Epoch);
         var tick = fixture.Server.Input.Interval.Tick;
-        Assert.True(producer.Observe(0, FixedQ4816.One.Value, tick, default, 1));
-        Assert.True(producer.Observe(1, FixedQ4816.One.Value, tick, FixedQ4816.FromRawBits(1), 2));
-        Assert.True(fixture.Server.Input.TryAdmit(Principal.Seat(0), producer.Publish(tick), out var reason), reason);
-        Assert.True(owner.TryHeld(channel, out var origin));
+
+        Assert.True(condition: producer.Observe(0, FixedQ4816.One.Value, tick, default, 1));
+        Assert.True(condition: producer.Observe(1, FixedQ4816.One.Value, tick, FixedQ4816.FromRawBits(value: 1), 2));
+        Assert.True(condition: fixture.Server.Input.TryAdmit(Principal.Seat(slot: 0), producer.Publish(tick), out var reason), userMessage: reason);
+        Assert.True(condition: owner.TryHeld(channel: channel, hold: out var origin));
         fixture.Step();
-        Assert.True(fixture.Server.Grants.TryGetDriveGate(0, out _));
-        Assert.False(owner.TryHeld(channel, out _));
-        Assert.True(owner.TryEvent(channel, WorldInputEventKind.Cancel, 0, out var cancelled));
+        Assert.True(condition: fixture.Server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
+        Assert.False(condition: owner.TryHeld(channel: channel, hold: out _));
+        Assert.True(condition: owner.TryEvent(channel: channel, kind: WorldInputEventKind.Cancel, occurrence: 0, record: out var cancelled));
         Assert.Equal(origin.Press, cancelled.HoldPress);
         Assert.Equal(new ulong[] { 1, 2 }, owner.LastSwitch.ConsumedActivations.ToArray());
     }
-
     // What a publication costs follows what was written: a row no rule moved is carried across as the instance the
     // installed document already held, and only the row that moved is read back out of the arena.
     [InlineData(false)]

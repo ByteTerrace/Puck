@@ -1148,6 +1148,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             throw new IOException(message: "Federation authentication requires a certificate-bound peer stream.");
         }
         var pinnedTransport = (m_security is IRemoteIdentityVerifier { HasRemoteIdentityPin: true });
+
         if (pinnedTransport && !((IRemoteIdentityVerifier)m_security).AcceptsRemoteIdentity(keyHash: peer.Link.RemoteId.KeyHash)) {
             throw new IOException(message: "The remote transport identity does not match this connection's credential policy.");
         }
@@ -1197,7 +1198,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
             kind: WorldFederationRequest.Authenticate,
-            body: WorldFederationCodec.EncodeAuthentication(proof: proof, challenge: clientChallenge),
+            body: WorldFederationCodec.EncodeAuthentication(challenge: clientChallenge, proof: proof),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
         var verdict = await WorldFederationCodec.ReadResponseAsync(
@@ -1388,7 +1389,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         private int m_unavailable;
 
         private readonly ConcurrentDictionary<IntentKey, ConcurrentQueue<IntentSubmission>> m_pending = new();
-        private bool HasPending => m_pending.Values.Any(static queue => !queue.IsEmpty);
+
+        private bool HasPending => m_pending.Values.Any(predicate: static queue => !queue.IsEmpty);
+
         private readonly ConcurrentDictionary<IntentKey, AcknowledgedIntent> m_acknowledged = new();
         private readonly SemaphoreSlim m_signal = new(
             initialCount: 0,
@@ -1552,7 +1555,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                 }
 
                 foreach (var pair in m_pending.ToArray()) {
-                    if (!pair.Value.TryPeek(out var sent)) { continue; }
+                    if (!pair.Value.TryPeek(result: out var sent)) { continue; }
                     if (!string.Equals(
                         a: connectedEndpoint,
                         b: m_owner.Endpoint,
@@ -1605,9 +1608,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                     }
 
                     lock (pair.Value) {
-                        if (pair.Value.TryPeek(out var current) && current == sent) {
-                            m_acknowledged[pair.Key] = new AcknowledgedIntent(sent, m_owner.m_clock.GetTimestamp());
-                            _ = pair.Value.TryDequeue(out _);
+                        if (pair.Value.TryPeek(result: out var current) && (current == sent)) {
+                            m_acknowledged[pair.Key] = new AcknowledgedIntent(Submission: sent, Timestamp: m_owner.m_clock.GetTimestamp());
+                            _ = pair.Value.TryDequeue(result: out _);
                         }
                     }
 
@@ -1618,7 +1621,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                         b: m_owner.Endpoint,
                         comparisonType: StringComparison.Ordinal
                     )) {
-                        lock (pair.Value) { if (pair.Value.IsEmpty) { pair.Value.Enqueue(sent); } }
+                        lock (pair.Value) { if (pair.Value.IsEmpty) { pair.Value.Enqueue(item: sent); } }
                         _ = m_acknowledged.TryRemove(
                             key: pair.Key,
                             value: out _
@@ -1646,8 +1649,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                 key: key,
                 value: out var acknowledged
             )) {
-                var queue = m_pending.GetOrAdd(key, static _ => new());
-                lock (queue) { if (queue.IsEmpty) { queue.Enqueue(acknowledged.Submission); } }
+                var queue = m_pending.GetOrAdd(key: key, valueFactory: static _ => new());
+
+                lock (queue) { if (queue.IsEmpty) { queue.Enqueue(item: acknowledged.Submission); } }
             }
             try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
         }
@@ -1664,13 +1668,16 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             ) {
                 return;
             }
-            var pending = m_pending.GetOrAdd(key, static _ => new());
+            var pending = m_pending.GetOrAdd(key: key, valueFactory: static _ => new());
+
             lock (pending) {
                 if (pending.Count >= 1024) {
                     pending.Clear();
-                    pending.Enqueue(submission with { Intent = default,
-                        Input = submission.Input with { CaptureLost = true, Image = default, Events = default, Contributions = default } });
-                } else { pending.Enqueue(submission); }
+                    pending.Enqueue(item: submission with {
+                        Intent = default,
+                        Input = submission.Input with { CaptureLost = true, Image = default, Events = default, Contributions = default },
+                    });
+                } else { pending.Enqueue(item: submission); }
             }
             try {
                 _ = m_signal.Release();

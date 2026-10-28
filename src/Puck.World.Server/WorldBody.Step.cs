@@ -70,8 +70,9 @@ public sealed partial class WorldBody {
         // Producer observations enter history before motion, just like external input. A refused sweep does not
         // erase an accepted observation or turn the same held sample into another press on the following tick.
         var inputRuntime = m_stateLane?.Input;
-        if (m_hasProducerIntent && SourceNamesProducer(m_source) && inputRuntime is not null) {
-            m_producerIntent = inputRuntime.AdmitProgramSnapshot(entityIndex, m_producerIntent, tick);
+
+        if (m_hasProducerIntent && SourceNamesProducer(source: m_source) && (inputRuntime is not null)) {
+            m_producerIntent = inputRuntime.AdmitProgramSnapshot(body: entityIndex, image: m_producerIntent, tick: tick);
         }
 
         // A refused sweep is a full block: everything this step writes from here on is undone when its contact phase
@@ -92,7 +93,7 @@ public sealed partial class WorldBody {
         // stages an intent for every body every tick, including a kit with no producer at all (it stages the inert
         // default) — so "had incoming intent" for the sleep floor below reads the resolved vector after this call,
         // not the raw pre-resolve flags, which would read true for a body nothing is actually driving.
-        var intent = NextIntent(stepTicks: stepTicks, tick: tick, body: entityIndex);
+        var intent = NextIntent(body: entityIndex, stepTicks: stepTicks, tick: tick);
         var hadIncomingIntentForSleep = (intent != default);
 
         // Captured EVERY Advance, regardless of the latch — a mirrored application set needs this body's resolved
@@ -232,8 +233,9 @@ public sealed partial class WorldBody {
         // A deferred delivery is checked against the state preceding that delivery as well as the firing's
         // earlier proposal. Another body's intervening firing may have changed the allowed tuple.
         var local = instruction with { Target = ActionTarget.Self, StateSlot = slot };
-        if (!validatedFiring && m_stateLane?.Input is { } input && !input.TryValidateEffects(m_stateOrdinal,
-            new ReadOnlySpan<CompiledBodyInstruction>(in local), default, out _)) { return false; }
+
+        if (!validatedFiring && (m_stateLane?.Input is { } input) && !input.TryValidateEffects(m_stateOrdinal,
+            new ReadOnlySpan<CompiledBodyInstruction>(reference: in local), default, out _)) { return false; }
         // Only an admitted consequence wakes its target.
         WakeUp();
         var applied = true;
@@ -292,7 +294,7 @@ public sealed partial class WorldBody {
         }
         if (applied) {
             m_affectingSubject = sourceIndex;
-            if (!validatedFiring && instruction.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer) {
+            if (!validatedFiring && (instruction.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer)) {
                 m_stateLane?.Input?.CommitKitEffects(m_stateOrdinal);
             }
         }
@@ -331,14 +333,15 @@ public sealed partial class WorldBody {
     }
 
     private bool ApplyEffects(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch, int logicalChannel = -1) {
-        if (m_stateLane?.Input is { } input && !input.TryValidateEffects(scratch.EntityIndex, effects, scratch.EffectTargets, out _)) {
+        if ((m_stateLane?.Input is { } input) && !input.TryValidateEffects(body: scratch.EntityIndex, effects: effects, reason: out _, targets: scratch.EffectTargets)) {
             return false;
         }
         var epoch = InputEpoch;
         var writesState = false;
+
         foreach (var effect in effects) {
             if (effect.Target == ActionTarget.Self) {
-                writesState |= effect.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer;
+                writesState |= (effect.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer);
                 ExecuteOperation(
                     instruction: in effect,
                     scratch: ref scratch
@@ -348,9 +351,9 @@ public sealed partial class WorldBody {
 
             var target = scratch.EffectTargets.Resolve(target: effect.Target);
 
-            if (target >= 0 && m_stateLane?.Input is { } runtime &&
-                effect.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer) {
-                runtime.ApplyKitForeignState(scratch.EntityIndex, target, effect);
+            if ((target >= 0) && (m_stateLane?.Input is { } runtime) &&
+                (effect.Operation is BodyMotionOp.SetState or BodyMotionOp.AddState or BodyMotionOp.StartTimer)) {
+                runtime.ApplyKitForeignState(instruction: effect, sourceIndex: scratch.EntityIndex, targetIndex: target);
                 writesState = true;
                 continue;
             }
@@ -366,7 +369,7 @@ public sealed partial class WorldBody {
                 ));
             }
         }
-        if (writesState) { m_stateLane?.Input?.CommitKitEffects(scratch.EntityIndex, logicalChannel); }
+        if (writesState) { m_stateLane?.Input?.CommitKitEffects(body: scratch.EntityIndex, logicalChannel: logicalChannel); }
         if (InputEpoch != epoch) { scratch.Intent = m_engagedIntent; }
         return true;
     }
@@ -878,7 +881,8 @@ public sealed partial class WorldBody {
             }
         }
 
-        var acceptedScript = AdmitScriptInput(movement, tapeActor, tick, body);
+        var acceptedScript = AdmitScriptInput(body: body, tape: movement, tapeActor: tapeActor, tick: tick);
+
         if (resolved) { movement = acceptedScript; }
         if (!resolved) {
             movement = ((!m_source.IsIdle && m_hasSubmittedIntent)
@@ -915,9 +919,9 @@ public sealed partial class WorldBody {
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (m_channelShapes[ordinal] == ChannelShape.Relative) { continue; }
             if (m_laneTimers[ordinal] > 0) {
-                channels[ordinal] = m_stateLane?.Input is not null ? m_scriptAccepted[ordinal] : ((m_channelShapes[ordinal] == ChannelShape.Binary)
+                channels[ordinal] = ((m_stateLane?.Input is not null) ? m_scriptAccepted[ordinal] : ((m_channelShapes[ordinal] == ChannelShape.Binary)
                     ? ((m_channelTimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
-                    : m_channelTimerValues[ordinal]);
+                    : m_channelTimerValues[ordinal]));
             } else if (
                 m_source.IsLive &&
                 !m_roleChannels[ordinal]

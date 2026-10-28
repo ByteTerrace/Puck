@@ -41,7 +41,7 @@ public readonly record struct CommandLane {
             // Scan backward because repeated entries are ordered events and the final one is the command state a
             // polling projection should observe after the tick is applied.
             for (var index = (Entries.Length - 1); (index >= 0); index--) {
-                if (Entries[index].CommittedText is null && Entries[index].CommandId == commandId) {
+                if ((Entries[index].CommittedText is null) && (Entries[index].CommandId == commandId)) {
                     entry = Entries[index];
 
                     return true;

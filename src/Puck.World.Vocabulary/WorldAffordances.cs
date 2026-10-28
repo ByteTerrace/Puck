@@ -39,7 +39,6 @@ public static class WorldAffordances {
     /// catalog lacks to the registry: true in a host that re-validates its documents once its registry exists (the
     /// World), false where the catalog is the last word (<c>puck compile --validate</c>, the silo).</summary>
     public static bool DeferUnknownVerbsToRegistry { get; set; }
-
     /// <summary>Whether the command vocabulary has been installed — validators skip the command half (never the
     /// structural half, never the channel half) while this is <see langword="false"/>.</summary>
     public static bool Installed => (Registry is not null);
@@ -143,7 +142,6 @@ public static class WorldAffordances {
             }
         }
     }
-
     // A document's own authored commands answer for it; with them supplied, the live world's authored names answer
     // nothing, so a document that drops a command is judged without it. A verb the registry lacks is judged by the
     // catalog's facts (every verb any boot shape registers), so the document validates the same in every shape.
@@ -158,9 +156,9 @@ public static class WorldAffordances {
             }
         }
 
-        return (registry is null)
+        return ((registry is null)
             ? WorldConsoleVerbCatalog.Lookup(name: name)
-            : registry.MetadataForDocument(name: name);
+            : registry.MetadataForDocument(name: name));
     }
 
     /// <summary>Runs the registry half of <c>commands</c> validation over a document's authored set against the
@@ -271,12 +269,12 @@ public static class WorldAffordances {
         errors.AddRange(collection: BindingVocabularyCheck.Validate(
             document: document,
             lookups: new BindingVocabularyLookups(
-                Command: ((registry is null) && DeferUnknownVerbsToRegistry
+                Command: (((registry is null) && DeferUnknownVerbsToRegistry)
             ? null
             : name => Lookup(commands: commands, name: name, registry: registry)),
                 SourceKind: SourceKind,
-                Channel: reference => channels.TryGetShape(reference, out var shape) && shape != ChannelShape.Text,
-                ChannelBinary: reference => channels.TryGetShape(reference, out var shape) && shape == ChannelShape.Binary,
+                Channel: reference => (channels.TryGetShape(reference: reference, shape: out var shape) && (shape != ChannelShape.Text)),
+                ChannelBinary: reference => (channels.TryGetShape(reference: reference, shape: out var shape) && (shape == ChannelShape.Binary)),
                 SourceAddressable: source => !InputSourceVocabulary.IsExplicitlyUnaddressable(sourceId: source)
             )
         ).Errors);

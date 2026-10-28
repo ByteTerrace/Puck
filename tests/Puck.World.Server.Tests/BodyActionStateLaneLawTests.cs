@@ -18,9 +18,9 @@ public sealed class BodyActionStateLaneLawTests {
     private const string AmmoSlot = "ammo";
     private const string CooldownSlot = "cooldown";
     private const string FreshSlot = "fresh";
-    private const string StashSlot = "stash";
     private const string RangedSlot = "ranged";
     private const string SettedSlot = "setted";
+    private const string StashSlot = "stash";
 
     private static readonly FixedQ4816 AuthoredAmmo = FixedQ4816.FromInteger(value: 3);
     private static readonly FixedQ4816 CarriedAmmo = FixedQ4816.FromDouble(value: 7.5);
@@ -673,6 +673,7 @@ public sealed class BodyActionStateLaneLawTests {
     // Document's slots, each copied into a world row every tick by a rule reading it through bodyState.
     private static WorldDefinition ReadingDocument(string slot) {
         var document = Document();
+
         static WorldRule Copy(string row, string channel) => new(
             Name: CellName.Parse(candidate: $"{row}-copy"),
             Effects: [new ActionEffect.SetState(
@@ -691,9 +692,9 @@ public sealed class BodyActionStateLaneLawTests {
                 ],
             },
             Rules = [
-                Copy(row: "ammoRead", channel: $"{WorldRuleFacts.BodyStatePrefix}body:0:{slot}"),
-                Copy(row: "cooldownRead", channel: $"{WorldRuleFacts.BodyStatePrefix}body:0:{CooldownSlot}"),
-                Copy(row: "absentRead", channel: $"{WorldRuleFacts.BodyStatePrefix}body:3:{AmmoSlot}"),
+                Copy(channel: $"{WorldRuleFacts.BodyStatePrefix}body:0:{slot}", row: "ammoRead"),
+                Copy(channel: $"{WorldRuleFacts.BodyStatePrefix}body:0:{CooldownSlot}", row: "cooldownRead"),
+                Copy(channel: $"{WorldRuleFacts.BodyStatePrefix}body:3:{AmmoSlot}", row: "absentRead"),
             ],
         };
     }

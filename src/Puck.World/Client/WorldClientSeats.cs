@@ -14,9 +14,9 @@ internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, 
     public void AdvanceSeatViews(float deltaSeconds) => client.AdvanceSeatViews(deltaSeconds: deltaSeconds);
     /// <inheritdoc/>
     public void ClearAnalog() {
-        for (var slot = 0; slot < WorldSeatBindings.SeatCount; slot++) {
-            bindings.SyncRoute(slot, seatRouter, client);
-            roster.Seat(slot)?.Channels = bindings.Channels(slot);
+        for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
+            bindings.SyncRoute(client: client, routes: seatRouter, slot: slot);
+            roster.Seat(slot: slot)?.Channels = bindings.Channels(slot: slot);
         }
         roster.ClearAnalog();
     }

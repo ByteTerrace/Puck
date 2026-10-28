@@ -31,7 +31,7 @@ public static partial class WorldDefinitionValidator {
                 var stateRows = definition.State.ToDictionary(row => row.Name.Value, StringComparer.Ordinal);
 
                 ValidateBindingOverlays(definition, definition.BindingOverlays,
-                    WorldChannelTable.For(definition), stateRows,
+                    WorldChannelTable.For(definition: definition), stateRows,
                     definition.SeatModes, iconNames, iconsAuthored, errors);
             }
             ValidateCommands(definition: definition, errors: errors);

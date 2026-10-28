@@ -258,7 +258,7 @@ public static partial class RuleWorkBudget {
     public static RuleWork ForEachSetup(CompiledRule rule, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && rule.Iteration is null)
+        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.Iteration is null))
             ? RuleWork.Zero
             : RuleWork.Known(units: ForEachCount(
                 context: context,
@@ -274,8 +274,8 @@ public static partial class RuleWorkBudget {
     /// <returns>The pins, in cell order.</returns>
     public static IReadOnlyList<RulePinnedCell> PinnedCells(GateToken[] gate, out bool contradictory) {
         ArgumentNullException.ThrowIfNull(argument: gate);
-        if (Array.Exists(gate, static token => token.Op == GateOp.ShortCircuit)) {
-            gate = Array.FindAll(gate, static token => token.Op != GateOp.ShortCircuit);
+        if (Array.Exists(array: gate, match: static token => (token.Op == GateOp.ShortCircuit))) {
+            gate = Array.FindAll(array: gate, match: static token => (token.Op != GateOp.ShortCircuit));
         }
 
         contradictory = false;

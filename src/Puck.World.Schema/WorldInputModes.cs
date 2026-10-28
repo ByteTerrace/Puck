@@ -13,7 +13,6 @@ public sealed record WorldInputModes(
     IReadOnlyList<WorldInputModeFamily> Families,
     IReadOnlyList<IReadOnlyDictionary<string, string>>? Combinations = null
 );
-
 /// <summary>One selected state and directed continuation policy.</summary>
 /// <param name="Name">Family name.</param>
 /// <param name="Selector">Authoritative source of the selection.</param>
@@ -30,13 +29,11 @@ public sealed record WorldInputModeFamily(
     IReadOnlyList<WorldInputModeSuppression>? SuspendedBy = null,
     IReadOnlyList<WorldInputModeTransition>? Transitions = null
 );
-
 /// <summary>An authoritative selector; never a binding page or a presentation predicate.</summary>
 /// <param name="Kind">The state owner.</param>
 /// <param name="Name">Body register or seat state family, when required by the kind.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModeSelector(WorldInputModeSelectorKind Kind, string? Name = null);
-
 /// <summary>Sources whose finite envelopes can be proved when a document is admitted.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldInputModeSelectorKind>))]
 public enum WorldInputModeSelectorKind : byte {
@@ -49,7 +46,6 @@ public enum WorldInputModeSelectorKind : byte {
     /// <summary>A finite authoritative seat/session state family.</summary>
     SeatState,
 }
-
 /// <summary>One state admits either discrete selector values or disjoint fixed-point ranges.</summary>
 /// <param name="Name">Stable state name.</param>
 /// <param name="Channels">Eligible logical action names.</param>
@@ -62,19 +58,16 @@ public sealed record WorldInputModeState(
     IReadOnlyList<string>? Values = null,
     IReadOnlyList<WorldInputModeRange>? Ranges = null
 );
-
 /// <summary>An inclusive, exactly quantized selector interval.</summary>
 /// <param name="Minimum">Lower endpoint in the register's units.</param>
 /// <param name="Maximum">Upper endpoint in the register's units.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModeRange(decimal Minimum, decimal Maximum);
-
 /// <summary>Suppresses channels by another family's selection, independently of its suppression.</summary>
 /// <param name="Family">Other family.</param>
 /// <param name="States">Selections which suppress this family's channels.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModeSuppression(string Family, IReadOnlyList<string> States);
-
 /// <summary>Directed continuity, intersected across every changed family.</summary>
 /// <param name="From">Old state.</param>
 /// <param name="To">New state.</param>
@@ -83,7 +76,6 @@ public sealed record WorldInputModeSuppression(string Family, IReadOnlyList<stri
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputModeTransition(string From, string To, IReadOnlyList<string> Keep,
     IReadOnlyList<WorldInputConditionalKeep>? ConditionalKeep = null);
-
 /// <summary>Adds continuity for named actions under finite source and destination tuple conditions.</summary>
 /// <param name="Keep">Additional same-meaning actions.</param>
 /// <param name="From">Required selections in the old tuple; omitted families are unconstrained.</param>

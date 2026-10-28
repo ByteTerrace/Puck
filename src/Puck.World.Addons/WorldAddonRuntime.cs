@@ -79,7 +79,7 @@ public sealed partial class WorldAddonRuntime : IWorldAddonHost {
 
     private WorldAddonRuntime(WorldDefinition definition, WorldServer server) {
         m_server = server;
-        m_channels = WorldInputCatalog.For(definition);
+        m_channels = WorldInputCatalog.For(definition: definition);
         m_channelsSource = definition.Channels;
     }
 

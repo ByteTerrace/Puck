@@ -12,7 +12,6 @@ namespace Puck.World.Server;
 /// <param name="Pending">Ordered, owned packets awaiting the next authoritative interval.</param>
 public readonly record struct WorldFederatedIntentState(long LeaseId, Principal Principal, IntentSubmission? Submission, bool Active,
     ReadOnlyMemory<IntentSubmission> Pending = default);
-
 /// <summary>Replay/checkpoint state for one federated owner. Socket lease identities remain transport-local.</summary>
 public readonly record struct WorldFederatedIntentCheckpoint(int Index, Principal Principal, IntentSubmission? Submission,
     ReadOnlyMemory<IntentSubmission> Pending);

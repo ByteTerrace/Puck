@@ -227,8 +227,8 @@ public sealed class CurveFollowLawTests {
 
         return (document with {
             // Continuous steering changes several axes per tick; retain their full two-second sample path.
-            InputHistory = new(EventCapacity: Math.Max(128, (2 * rateHz + 2) * document.Channels.Count(channel =>
-                channel.Shape is ChannelShape.Bipolar or ChannelShape.Unipolar))),
+            InputHistory = new(EventCapacity: Math.Max(val1: 128, val2: (((2 * rateHz) + 2) * document.Channels.Count(predicate: channel =>
+                (channel.Shape is ChannelShape.Bipolar or ChannelShape.Unipolar))))),
             BodyMotionProgramsRaw = [.. document.BodyMotionPrograms, followProgram],
             KitRowsRaw = [kit with {
                 ProducersRaw = new Dictionary<string, BodyProgramParameters>(collection: kit.Producers) {

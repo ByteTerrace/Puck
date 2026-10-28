@@ -354,7 +354,7 @@ public sealed class WorldAgentBridge {
 
                 if (!channels.TryGetOrdinal(
                     name: channel,
-                    ordinal: out var ordinal
+                    ordinal: out _
                 )) {
                     throw new ArgumentException(
                         message: $"The live world declares no channel named '{channel}'.",
@@ -365,7 +365,7 @@ public sealed class WorldAgentBridge {
                 return Submit(
                     action: $"press:{channel}",
                     command: new WorldCommand.PressChannel(
-                        ChannelOrdinal: ordinal,
+                        Channel: channel,
                         EntityIndex: BodyIndex,
                         HoldSeconds: duration,
                         Principal: Principal,

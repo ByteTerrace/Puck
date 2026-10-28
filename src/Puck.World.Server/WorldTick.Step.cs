@@ -302,8 +302,8 @@ public sealed partial class WorldTick {
         }
     }
     private void StepCore(in FixedStepContext context) {
-        Host.Input.BeginInterval(new WorldInputInterval(context.Tick + 1, context.ElapsedTicks - context.StepTicks, context.StepTicks,
-            m_musicClock is { } capturedClock ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId) : null));
+        Host.Input.BeginInterval(interval: new WorldInputInterval((context.Tick + 1), (context.ElapsedTicks - context.StepTicks), context.StepTicks,
+            ((m_musicClock is { } capturedClock) ? new(capturedClock.ElapsedTicks, capturedClock.TicksPerBeat, m_musicDirector!.CurrentSegmentId) : null)));
         TapFederatedIntents();
         // Settled here, before anything below can compose or rebase a mutation: context.ElapsedTicks is this whole
         // step's own engine-time coordinate (the exact engine tick the step completes at), so every write and read
@@ -384,11 +384,12 @@ public sealed partial class WorldTick {
         );
         Span<ulong> engageEpochs = stackalloc ulong[Host.Population.LocalSeatCount];
         Span<int> engageChannels = stackalloc int[Host.Population.LocalSeatCount];
-        for (var slot = 0; slot < engageEpochs.Length; slot++) {
-            engageEpochs[slot] = Host.Input.TryGet(Principal.Seat(slot), out var owner) ? owner!.Epoch : 0;
+
+        for (var slot = 0; (slot < engageEpochs.Length); slot++) {
+            engageEpochs[slot] = (Host.Input.TryGet(Principal.Seat(slot: slot), out var owner) ? owner!.Epoch : 0);
             engageChannels[slot] = -1;
-            if (engageProbeOrdinals[slot] >= 0 && Host.Body(slot)?.Channels.Name(engageProbeOrdinals[slot]) is { } name &&
-                Host.Population.InputCatalog.TryGetLogicalId(name, out var logical)) { engageChannels[slot] = logical; }
+            if ((engageProbeOrdinals[slot] >= 0) && (Host.Body(index: slot)?.Channels.Name(ordinal: engageProbeOrdinals[slot]) is { } name) &&
+                Host.Population.InputCatalog.TryGetLogicalId(id: out var logical, name: name)) { engageChannels[slot] = logical; }
         }
 
         var tick = (context.Tick + 1UL);
@@ -427,7 +428,7 @@ public sealed partial class WorldTick {
         Host.Population.CompleteStep(tick: tick);
         // Kit effects have settled their authoritative cells. Install their input barrier before world rules
         // can observe a released action and accidentally use it to enter the old mode again.
-        if (!Host.Input.TrySynchronize(0, out var inputModeReason)) { throw new InvalidOperationException(inputModeReason); }
+        if (!Host.Input.TrySynchronize(activation: 0, reason: out var inputModeReason)) { throw new InvalidOperationException(message: inputModeReason); }
         foreach (var designation in Host.Population.DesignationOutputs) {
             _ = Host.Document.ApplyDesignationCore(
                 designation: designation,
@@ -485,11 +486,13 @@ public sealed partial class WorldTick {
             }
 
             var principal = Principal.Seat(slot: slot);
-            if (Host.Input.TryGet(principal, out var probeOwner) && probeOwner!.Epoch != engageEpochs[slot]) { continue; }
+
+            if (Host.Input.TryGet(input: out var probeOwner, principal: principal) && (probeOwner!.Epoch != engageEpochs[slot])) { continue; }
             var target = engageProbeTargets[slot];
+
             Host.Input.BeginActivationScope();
             try {
-                if (engageChannels[slot] >= 0) { Host.Input.ObserveHeld(principal, (ushort)engageChannels[slot]); }
+                if (engageChannels[slot] >= 0) { Host.Input.ObserveHeld(principal, ((ushort)engageChannels[slot])); }
                 if (engageProbeLeaving[slot]) {
                     if (
                         (Host.Engagement.Dissolve(
@@ -628,7 +631,7 @@ public sealed partial class WorldTick {
         // it in. This is derived output, not a second admission of the owner's events. Replay re-derives it;
         // checkpoints retain the pending fold and the exact source lifetime/mapping it belongs to.
         foreach (var contribution in Host.Engagement.BodyContributions) {
-            QueueRoutedInput(contribution);
+            QueueRoutedInput(contribution: contribution);
         }
         Host.Engagement.CompleteBodyRouting();
 
@@ -713,41 +716,44 @@ public sealed partial class WorldTick {
         }
 
         m_driveDenied[submission.EntityIndex] = false;
-        var inputOwner = submission.InputOwner ?? submission.Principal;
-        if (inputOwner != submission.Principal && !Host.Input.IsController(inputOwner, submission.Principal, submission.EntityIndex)) {
-            return new(verdict, "input.owner: this actor does not own the submitted controller session and route");
+        var inputOwner = (submission.InputOwner ?? submission.Principal);
+
+        if ((inputOwner != submission.Principal) && !Host.Input.IsController(inputOwner, submission.Principal, submission.EntityIndex)) {
+            return new(InputRefusal: "input.owner: this actor does not own the submitted controller session and route", Permission: verdict);
         }
-        var sourceTable = Host.Input.TryGet(inputOwner, out var admittedOwner)
-            ? admittedOwner!.Mapping.Channels : body.Channels;
-        if (Host.GrantTable.TryGetInputReach(submission.Principal, GrantSubject.Body(submission.EntityIndex), out var reach)) {
-            for (var ordinal = 0; ordinal < ChannelLimits.MaxChannels; ordinal++) {
-                if (sourceTable.IsDeclared(ordinal) &&
-                    (submission.Intent[ordinal] != FixedQ4816.Zero || submission.Input.Image[ordinal] != FixedQ4816.Zero) &&
-                    !reach.Contains(sourceTable.Name(ordinal)!)) {
-                    return new(verdict, $"input.permission: Drive reach excludes '{sourceTable.Name(ordinal)}'");
+        var sourceTable = (Host.Input.TryGet(input: out var admittedOwner, principal: inputOwner)
+            ? admittedOwner!.Mapping.Channels : body.Channels);
+
+        if (Host.GrantTable.TryGetInputReach(submission.Principal, GrantSubject.Body(index: submission.EntityIndex), out var reach)) {
+            for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+                if (sourceTable.IsDeclared(ordinal: ordinal) &&
+                    ((submission.Intent[ordinal] != FixedQ4816.Zero) || (submission.Input.Image[ordinal] != FixedQ4816.Zero)) &&
+                    !reach.Contains(name: sourceTable.Name(ordinal: ordinal)!)) {
+                    return new(verdict, $"input.permission: Drive reach excludes '{sourceTable.Name(ordinal: ordinal)}'");
                 }
             }
         }
         var input = submission.Input;
+
         if (!Host.Input.TryAdmit(inputOwner, input, out var reason, submission.EntityIndex)) {
-            Host.Input.RejectControllerBatch(inputOwner);
+            Host.Input.RejectControllerBatch(principal: inputOwner);
             Host.Output.Narrate(channel: "input.refused", text: reason);
-            return new(verdict, reason);
+            return new(InputRefusal: reason, Permission: verdict);
         }
         var table = Host.Population.InputCatalog.Mappings[input.Mapping].Channels;
         var target = body.Channels;
         var movement = input.Image with { Channels = default };
         var held = default(PlayerIntent);
-        for (var ordinal = 0; ordinal < ChannelLimits.MaxChannels; ordinal++) {
-            if (!table.IsDeclared(ordinal) || !target.TryGetOrdinal(table.Name(ordinal)!, out var destination)) { continue; }
-            if (table.Shape(ordinal) == ChannelShape.Relative) { movement = movement.WithRelative(destination, input.Image.Channels.Relative(ordinal)); }
-            else if (table.IsRole(ordinal)) { movement = movement.WithChannel(destination, target.Quantize(destination, submission.Intent[ordinal])); }
-            else { held = held.WithChannel(destination, input.Image[ordinal]); }
+
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            if (!table.IsDeclared(ordinal: ordinal) || !target.TryGetOrdinal(name: table.Name(ordinal: ordinal)!, ordinal: out var destination)) { continue; }
+            if (table.Shape(ordinal: ordinal) == ChannelShape.Relative) { movement = movement.WithRelative(ordinal: destination, value: input.Image.Channels.Relative(ordinal: ordinal)); } else if (table.IsRole(ordinal: ordinal)) { movement = movement.WithChannel(ordinal: destination, value: target.Quantize(ordinal: destination, value: submission.Intent[ordinal])); } else { held = held.WithChannel(ordinal: destination, value: input.Image[ordinal]); }
         }
         var applied = new WorldAcceptedInput(submission.Tick, submission.EntityIndex, movement, submission.Principal,
             held, submission.MeasuredHoldTicks);
+
         foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(intent: in submission); }
-        ApplyAcceptedBodyInput(body, in applied);
+        ApplyAcceptedBodyInput(applied: in applied, body: body);
         return new(verdict);
     }
 
@@ -767,7 +773,8 @@ public sealed partial class WorldTick {
                 entityIndex: bodyIndex,
                 principal: applied.Principal
             );
-            var submitted = body.MergeSubmittedRelative(applied.Intent);
+            var submitted = body.MergeSubmittedRelative(incoming: applied.Intent);
+
             body.SubmitIntent(intent: submitted);
             body.SetHeldChannels(channels: applied.HeldChannels);
 
@@ -785,8 +792,8 @@ public sealed partial class WorldTick {
                 // contribution actually landed. Reset rather than left stale, so a body contended two ticks ago and
                 // quiet since does not keep reporting a pool that no longer exists.
                 RecordDirectChannelRead(
-                    seat: bodyIndex,
-                    intent: submitted
+                    intent: submitted,
+                    seat: bodyIndex
                 );
             }
         } else {
@@ -798,6 +805,7 @@ public sealed partial class WorldTick {
         }
 
     }
+
     /// <summary>Re-applies a server-authored event through the population and grant doors. Replay calls this same
     /// method; there is no state-install bypass.</summary>
     /// <param name="serverEvent">The ordered event.</param>

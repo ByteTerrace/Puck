@@ -72,7 +72,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             subject: application.Target
         );
         writer.WriteString(value: (application.Kit ?? string.Empty));
-        writer.WriteOptional(value: application.Reach, writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(w, value));
+        writer.WriteOptional(value: application.Reach, writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(selection: value, writer: w));
     }
     private static ControlApplication ReadControlApplication(ref WireReader reader) {
         var target = WorldWireCodec.ReadSubject(reader: ref reader);
@@ -80,7 +80,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "control application kit",
             maxBytes: MaxStringBytes
         );
-        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelSelection(ref r));
+        var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelSelection(reader: ref r));
 
         return new ControlApplication(
             Kit: ((kit.Length == 0)

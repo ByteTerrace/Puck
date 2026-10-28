@@ -100,7 +100,6 @@ public sealed partial class WorldBody {
         m_position = motion.Position;
         m_yaw = motion.Yaw;
     }
-
     /// <summary>Takes the transition this body's sweep refusal made since the population last reported it, marking it
     /// reported: the refusal it now holds, or <see cref="ContactRefusal.None"/> for a recovery.</summary>
     /// <param name="refusal">The refusal now held, <see cref="ContactRefusal.None"/> once recovered.</param>

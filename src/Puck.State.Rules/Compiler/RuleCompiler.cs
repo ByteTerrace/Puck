@@ -68,7 +68,7 @@ public static partial class RuleCompiler {
             if (
                 (rule.ForEach is { } forEachName) &&
                 !forEachZones &&
-                !forEachBodies && context.Iteration is null
+                !forEachBodies && (context.Iteration is null)
             ) {
                 forEachOrdinal = ResolveRowOrdinal(
                     context: context,
@@ -90,6 +90,7 @@ public static partial class RuleCompiler {
             );
 
             var controls = new List<CellAccess>();
+
             RuleDataflow.CollectGate(gate: gate, into: controls);
             foreach (var local in compiledLocals) {
                 RuleDataflow.CollectExpression(
@@ -176,9 +177,9 @@ public static partial class RuleCompiler {
         );
 
         if (rule.ForEach is { } forEach) {
-            context.Iteration = context.CompileIteration(forEach, rule.Name.Value);
+            context.Iteration = context.CompileIteration(reference: forEach, ruleName: rule.Name.Value);
             if (context.Iteration is { } iteration) {
-                for (var index = 0; index < iteration.Capacity; index++) { _ = InternKey(context, IndexKeyCache.Get(index)); }
+                for (var index = 0; (index < iteration.Capacity); index++) { _ = InternKey(context: context, name: IndexKeyCache.Get(index: index)); }
             } else if (IteratesZones(forEach: forEach)) {
                 if (zones is null) {
                     throw new RuleException(
@@ -334,14 +335,15 @@ public static partial class RuleCompiler {
             !instructions.Any(predicate: static instruction => (instruction.Payload is InstructionPayload.State)) &&
             instructions.Any(predicate: static instruction => (
                 (instruction.Payload is InstructionPayload.Constant constant) &&
-                HasFixedSpelling(constant.Value)
+                HasFixedSpelling(value: constant.Value)
             ))
         );
     }
     private static bool HasFixedSpelling(decimal value) {
         Span<int> bits = stackalloc int[4];
-        _ = decimal.GetBits(value, bits);
-        return (bits[3] & 0x00FF0000) != 0;
+
+        _ = decimal.GetBits(d: value, destination: bits);
+        return ((bits[3] & 0x00FF0000) != 0);
     }
     private static void CompileLocal(List<CompiledRuleLocal> compiled, RuleCompileContext context, RuleLocal? local, Rule rule) {
         var name = (local?.Name.Value ?? string.Empty);

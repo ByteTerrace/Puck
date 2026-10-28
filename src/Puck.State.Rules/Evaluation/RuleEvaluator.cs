@@ -256,7 +256,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private void EachKeys(CompiledRule rule) {
         m_eachKeyScratch.Clear();
 
-        if (rule.Iteration is { } iteration) { iteration.Collect(m_host, m_eachKeyScratch); return; }
+        if (rule.Iteration is { } iteration) { iteration.Collect(host: m_host, into: m_eachKeyScratch); return; }
 
         if (rule.ForEachZones) {
             if (rule.Zones is { } zones) {
@@ -383,7 +383,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         var bindings = latch.Bindings(name: rule.Name);
 
-        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && rule.Iteration is null) {
+        if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && (rule.Iteration is null)) {
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,
@@ -437,7 +437,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 binding: new LatchKey(
                     Left: key.Ordinal,
                     Right: -1,
-                    LeftGeneration: rule.Iteration?.Generation(m_host, key) ?? 0
+                    LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
                 ),
                 bindings: bindings,
                 latch: latch,
@@ -474,8 +474,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <returns>What the evaluation did.</returns>
     public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong stepTicks, out bool applied) {
         m_host.BeginRuleEvaluation();
-        try { return EvaluateOnceCore(rule, latch, bindings, binding, stepTicks, out applied); }
-        finally { m_host.EndRuleEvaluation(); }
+        try { return EvaluateOnceCore(applied: out applied, binding: binding, bindings: bindings, latch: latch, rule: rule, stepTicks: stepTicks); } finally { m_host.EndRuleEvaluation(); }
     }
 
     private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong stepTicks, out bool applied) {
@@ -612,6 +611,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return outcome;
     }
+
     /// <summary>Evaluates a compiled gate for the evaluation in flight, reporting whether it faulted — a conjunct's
     /// expression overflowed, left a function's domain, or read a fact with no number or no cell. An <c>if</c>
     /// effect's condition uses this to distinguish a genuinely false condition from one that could not evaluate,

@@ -42,6 +42,7 @@ public sealed class BodySweepRefusalLawTests {
             )
         );
     }
+
     // The body's state a refused step must leave unchanged: the population's pose hash, its grounded fact, and its
     // velocity, which the pose hash does not cover for a walking body.
     private static (ulong Pose, bool Grounded, FixedVector3 Velocity) State(WorldFixture fixture, WorldBody body) =>

@@ -310,7 +310,7 @@ public sealed class FixedStepPump {
         var commands = m_inputRouter.SnapshotForTick(
             tick: tick,
             windowEndTick: windowEndTick,
-            windowStartTick: windowEndTick - stepTicks
+            windowStartTick: (windowEndTick - stepTicks)
         );
 
         m_registry.ApplySnapshot(snapshot: in commands);

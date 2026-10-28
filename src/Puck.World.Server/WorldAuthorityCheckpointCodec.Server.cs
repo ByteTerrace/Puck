@@ -429,13 +429,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt64(value: section.LastCompletedTick);
         writer.WriteUInt64(value: section.LastCompletedEngineTicks);
         writer.WriteUInt64(value: section.LastStepTicks);
-        WriteInputRuntime(writer, section.Input ?? WorldInputRuntimeCheckpoint.Empty);
+        WriteInputRuntime(writer, (section.Input ?? WorldInputRuntimeCheckpoint.Empty));
         writer.WriteArray(
             items: section.Intents,
             writeItem: WriteIntentSubmission
         );
         writer.WriteArray(items: section.RoutedInputs, writeItem: WriteRoutedInput);
-        writer.WriteArray(section.FederatedInputs, WorldWireLeaves.WriteFederatedInput);
+        writer.WriteArray(items: section.FederatedInputs, writeItem: WorldWireLeaves.WriteFederatedInput);
         writer.WriteArray(
             items: section.Pending,
             writeItem: WritePendingOp
@@ -562,14 +562,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         var lastCompletedTick = reader.ReadUInt64();
         var lastCompletedEngineTicks = reader.ReadUInt64();
         var lastStepTicks = reader.ReadUInt64();
-        var inputRuntime = ReadInputRuntime(ref reader);
+        var inputRuntime = ReadInputRuntime(reader: ref reader);
         var intents = reader.ReadArray(
             field: "server intents",
             readItem: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r),
             maximum: MaxCollectionCount
         );
-        var routedInputs = reader.ReadArray(field: "server routed input", readItem: ReadRoutedInput, maximum: MaxCollectionCount);
-        var federatedInputs = reader.ReadArray("server federated input", WorldWireLeaves.ReadFederatedInput, WorldBodiesLimits.CapacityCeiling);
+        var routedInputs = reader.ReadArray(field: "server routed input", maximum: MaxCollectionCount, readItem: ReadRoutedInput);
+        var federatedInputs = reader.ReadArray(field: "server federated input", maximum: WorldBodiesLimits.CapacityCeiling, readItem: WorldWireLeaves.ReadFederatedInput);
         var pending = reader.ReadArray(
             field: "server pending",
             readItem: static (ref WireReader r) => ReadPendingOp(reader: ref r),
@@ -722,15 +722,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldServerCheckpoint(
-            Input: inputRuntime,
             Arena: arena,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,
             DefinitionJson: definitionJson,
-            Intents: intents,
-            RoutedInputs: routedInputs,
             FederatedInputs: federatedInputs,
+            Input: inputRuntime,
+            Intents: intents,
             InteractionGateHeld: interactionGateHeld,
             Journal: journal,
             LastCompletedEngineTicks: lastCompletedEngineTicks,
@@ -748,6 +747,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             MusicDirectorLastTransitionToSegmentId: musicDirectorLastTransitionToSegmentId,
             MusicDirectorTransitionCount: musicDirectorTransitionCount,
             Pending: pending,
+            RoutedInputs: routedInputs,
             RuleGateHeld: ruleGateHeld,
             RuleGroups: ruleGroups,
             ScopedReplays: scopedReplays,
@@ -761,9 +761,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     // ---- population section ----
 
     private static void WriteTransferState(WireWriter writer, WorldBodyTransferState state) {
-        writer.WriteArray(state.ScriptActors.Timers, WriteScriptActor);
-        writer.WriteArray(state.ScriptActors.Pending, WriteScriptActor);
-        writer.WriteArray(state.ScriptActors.Tape, WriteScriptActor);
+        writer.WriteArray(items: state.ScriptActors.Timers, writeItem: WriteScriptActor);
+        writer.WriteArray(items: state.ScriptActors.Pending, writeItem: WriteScriptActor);
+        writer.WriteArray(items: state.ScriptActors.Tape, writeItem: WriteScriptActor);
         writer.WriteFixedVector(value: state.PlanarVelocity);
         writer.WriteFixed(value: state.VerticalVelocity);
         writer.WriteFixedQuaternion(value: state.Orientation);
@@ -881,9 +881,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldBodyTransferState ReadTransferState(ref WireReader reader) {
-        var scriptTimers = reader.ReadArray("script timer actors", ReadScriptActor, ChannelLimits.MaxChannels);
-        var scriptPending = reader.ReadArray("script pending actors", ReadScriptActor, ChannelLimits.MaxChannels);
-        var scriptTape = reader.ReadArray("script tape actors", ReadScriptActor, MaxCollectionCount);
+        var scriptTimers = reader.ReadArray(field: "script timer actors", maximum: ChannelLimits.MaxChannels, readItem: ReadScriptActor);
+        var scriptPending = reader.ReadArray(field: "script pending actors", maximum: ChannelLimits.MaxChannels, readItem: ReadScriptActor);
+        var scriptTape = reader.ReadArray(field: "script tape actors", maximum: MaxCollectionCount, readItem: ReadScriptActor);
         var planarVelocity = reader.ReadFixedVector();
         var verticalVelocity = reader.ReadFixed();
         var orientation = reader.ReadFixedQuaternion();
@@ -1011,27 +1011,28 @@ public static partial class WorldAuthorityCheckpointCodec {
         var pendingContinuum = reader.ReadOptional(
             readValue: static (ref WireReader r) => WorldWireLeaves.ReadContinuum(reader: ref r)
         );
-        if (scriptTimers.Length != channelTimerTicks.Length || scriptPending.Length != pendingDefaultChannelPress.Length ||
-            scriptTape.Length != tapeIntents.Length || scriptTape.Length != tapeRemainingTicks.Length) {
-            reader.Fail(WireRefusal.PayloadMalformed, "script actor counts must match their duration stores");
+
+        if ((scriptTimers.Length != channelTimerTicks.Length) || (scriptPending.Length != pendingDefaultChannelPress.Length) ||
+            (scriptTape.Length != tapeIntents.Length) || (scriptTape.Length != tapeRemainingTicks.Length)) {
+            reader.Fail(detail: "script actor counts must match their duration stores", refusal: WireRefusal.PayloadMalformed);
         } else {
-            for (var index = 0; index < scriptTimers.Length; index++) {
-                if (channelTimerTicks[index] > 0 && scriptTimers[index] == default) {
-                    reader.Fail(WireRefusal.PayloadMalformed, "live scripted timer has no actor");
+            for (var index = 0; (index < scriptTimers.Length); index++) {
+                if ((channelTimerTicks[index] > 0) && (scriptTimers[index] == default)) {
+                    reader.Fail(detail: "live scripted timer has no actor", refusal: WireRefusal.PayloadMalformed);
                 }
             }
-            for (var index = 0; index < scriptPending.Length; index++) {
-                if (pendingDefaultChannelPress[index] && scriptPending[index] == default) {
-                    reader.Fail(WireRefusal.PayloadMalformed, "pending scripted press has no actor");
+            for (var index = 0; (index < scriptPending.Length); index++) {
+                if (pendingDefaultChannelPress[index] && (scriptPending[index] == default)) {
+                    reader.Fail(detail: "pending scripted press has no actor", refusal: WireRefusal.PayloadMalformed);
                 }
             }
             foreach (var actor in scriptTape) {
-                if (actor == default) { reader.Fail(WireRefusal.PayloadMalformed, "scripted tape segment has no actor"); }
+                if (actor == default) { reader.Fail(detail: "scripted tape segment has no actor", refusal: WireRefusal.PayloadMalformed); }
             }
         }
 
         return new WorldBodyTransferState(
-            ScriptActors: new(scriptTimers, scriptPending, scriptTape),
+            ScriptActors: new(Pending: scriptPending, Tape: scriptTape, Timers: scriptTimers),
             ActionState: actionState,
             ActionStateDirty: actionStateDirty,
             ActionStateDirtyKind: actionStateDirtyKind,
@@ -1189,7 +1190,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var grounded = reader.ReadBoolean();
         var engaged = reader.ReadBoolean();
         var engagedIntent = WorldWireCodec.ReadIntent(reader: ref reader);
-        var input = ReadBodyInputState(ref reader);
+        var input = ReadBodyInputState(reader: ref reader);
         var ordinaryAdvanceAdmitted = reader.ReadBoolean();
         var continuumConsumedThroughEngineTick = reader.ReadOptional(
             readValue: static (ref WireReader r) => r.ReadUInt64()
@@ -1237,7 +1238,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             ContinuumConsumedThroughEngineTick: continuumConsumedThroughEngineTick,
             Engaged: engaged,
             EngagedIntent: engagedIntent,
-            Input: input,
             FieldUpTurnRemainder: fieldUpTurnRemainder,
             Frame: frame,
             Grounded: grounded,
@@ -1246,6 +1246,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             HoldNormal: holdNormal,
             HoldSpendRemainder: holdSpendRemainder,
             Home: home,
+            Input: input,
             LastContactFieldVersion: (contactFieldObservationCurrent ? 0UL : 1UL),
             OrdinaryAdvanceAdmitted: ordinaryAdvanceAdmitted,
             PlanarFollowerSeeded: planarFollowerSeeded,

@@ -83,7 +83,7 @@ public sealed class SubmissionPrincipalCensusLawTests {
             Principal: named
         )));
         yield return ("WorldCommand.SelectInputState.Owner", new WorldSubmissionPayload.Command(Value:
-            new WorldCommand.SelectInputState(Seat, 0, named, "focus", "text", 0)));
+            new WorldCommand.SelectInputState(Activation: 0, EntityIndex: 0, Family: "focus", Owner: named, Principal: Seat, State: "text")));
         yield return ("WorldCommand.ComposeControl.TargetPrincipal", new WorldSubmissionPayload.Command(Value: new WorldCommand.ComposeControl(
             EntityIndex: 0,
             Exclusive: false,

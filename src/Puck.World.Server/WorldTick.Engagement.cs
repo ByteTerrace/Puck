@@ -416,7 +416,7 @@ public sealed partial class WorldTick {
     private bool ResolveLeaveProbe(Principal principal, out int ordinal, out GrantSubject target) {
         target = default;
         ordinal = -1;
-        if (Host.Body(principal.Index) is not { } body) { return false; }
+        if (Host.Body(index: principal.Index) is not { } body) { return false; }
 
         foreach (var application in Host.GrantTable.Applications(principal: principal)) {
             if (

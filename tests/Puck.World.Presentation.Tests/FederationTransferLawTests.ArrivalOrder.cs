@@ -346,7 +346,7 @@ public sealed partial class FederationTransferLawTests {
         if (fault == "shape") {
             var bytes = WorldReplaySnapshot.Encode(recording: recorded);
 
-            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: sizeof(uint)), value: 7u);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes.AsSpan(start: sizeof(uint)), value: uint.MaxValue);
             using var stream = new MemoryStream(buffer: bytes);
             var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.Read(stream: stream));
 

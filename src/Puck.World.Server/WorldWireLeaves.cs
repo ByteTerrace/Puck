@@ -17,21 +17,21 @@ namespace Puck.World.Server;
 public static class WorldWireLeaves {
     /// <summary>Writes a federation owner's accepted hold and pending ordered ingress through the shared input leaf.</summary>
     public static void WriteFederatedInput(WireWriter writer, WorldFederatedIntentCheckpoint input) {
-        writer.WriteInt32(input.Index);
-        if (!WorldWireCodec.TryWritePrincipal(writer, input.Principal)) { throw new ArgumentException("invalid federated input principal"); }
-        writer.WriteOptional(input.Submission, static (w, submission) => {
-            if (!WorldWireCodec.TryWriteIntentSubmission(w, submission)) { throw new ArgumentException("invalid federated held input"); }
+        writer.WriteInt32(value: input.Index);
+        if (!WorldWireCodec.TryWritePrincipal(writer, input.Principal)) { throw new ArgumentException(message: "invalid federated input principal"); }
+        writer.WriteOptional(value: input.Submission, writeValue: static (w, submission) => {
+            if (!WorldWireCodec.TryWriteIntentSubmission(submission: submission, writer: w)) { throw new ArgumentException(message: "invalid federated held input"); }
         });
-        writer.WriteArrayCount(input.Pending.Length);
+        writer.WriteArrayCount(count: input.Pending.Length);
         foreach (var submission in input.Pending.Span) {
-            if (!WorldWireCodec.TryWriteIntentSubmission(writer, submission)) { throw new ArgumentException("invalid pending federated input"); }
+            if (!WorldWireCodec.TryWriteIntentSubmission(submission: submission, writer: writer)) { throw new ArgumentException(message: "invalid pending federated input"); }
         }
     }
     /// <summary>Reads one bounded federation input continuation.</summary>
     public static WorldFederatedIntentCheckpoint ReadFederatedInput(ref WireReader reader) => new(
         reader.ReadInt32(), WorldWireCodec.ReadPrincipal(ref reader),
-        reader.ReadOptional(static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(ref r)),
-        reader.ReadArray("pending federated input", static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(ref r), 1024));
+        reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r)),
+        reader.ReadArray("pending federated input", static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r), 1024));
     /// <summary>Reads a <see cref="WorldEntityAddress"/>, refusing a blank authority.</summary>
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
         Authority: reader.ReadRequiredString(field: "entity address authority"),

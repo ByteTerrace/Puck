@@ -22,6 +22,7 @@ public readonly record struct CommandEntry {
     public string? CommittedText { get; internal init; }
     /// <summary>Explicit next-interval offset from a scripted signal, otherwise the host maps its capture clock.</summary>
     public Puck.Maths.FixedQ4816? SimulationOffset { get; internal init; }
+
     /// <summary>Initializes a new instance of the <see cref="CommandEntry"/> struct.</summary>
     /// <param name="commandId">The interned command id (<see cref="CommandRegistry.TryGetId"/>).</param>
     /// <param name="value">The command's value for this tick.</param>
@@ -115,7 +116,7 @@ public readonly record struct CommandEntry {
             (CaptureTick == other.CaptureTick) &&
             (Activation == other.Activation) &&
             (SimulationOffset == other.SimulationOffset) &&
-            string.Equals(CommittedText, other.CommittedText, StringComparison.Ordinal) &&
+            string.Equals(a: CommittedText, b: other.CommittedText, comparisonType: StringComparison.Ordinal) &&
             (CommandId == other.CommandId) &&
             (Dispatch == other.Dispatch) &&
             (Origin == other.Origin) &&
@@ -141,7 +142,7 @@ public readonly record struct CommandEntry {
         hash.Add(value: AssignedSlot);
         hash.Add(value: CaptureTick);
         hash.Add(value: Activation);
-        hash.Add(SimulationOffset);
+        hash.Add(value: SimulationOffset);
         hash.Add(CommittedText, StringComparer.Ordinal);
         hash.Add(value: CommandId);
         hash.Add(value: Dispatch);

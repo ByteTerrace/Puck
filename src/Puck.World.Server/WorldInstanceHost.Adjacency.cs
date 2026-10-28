@@ -98,7 +98,7 @@ public sealed partial class WorldInstanceHost {
 
         if (
             (onUnavailable is { } channel) &&
-            instance.Server.Population.Channels.TryGetOrdinal(
+            body.Channels.TryGetOrdinal(
             name: channel,
             ordinal: out var ordinal
         )

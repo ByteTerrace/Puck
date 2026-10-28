@@ -5,7 +5,7 @@ namespace Puck.Commands;
 // that toggles the same destination addresses the same input-side latch and the same downstream contribution.
 internal static class BindingSourceIdentity {
     internal static string ForCommand(string command, BindingEntryMode mode) => string.Concat(
-        str0: mode == BindingEntryMode.Toggle ? "$toggle:" : "$binding:",
+        str0: ((mode == BindingEntryMode.Toggle) ? "$toggle:" : "$binding:"),
         str1: command
     );
 }

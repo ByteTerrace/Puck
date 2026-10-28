@@ -199,12 +199,12 @@ public static partial class WorldSubmissionCodec {
                     );
                 }
             case 2: {
-                    var channelOrdinal = reader.ReadInt32();
+                    var channel = reader.ReadString(field: "PressChannel.Channel");
                     var value = reader.ReadFixed();
                     var holdSeconds = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadSingle());
 
                     return new WorldCommand.PressChannel(
-                        ChannelOrdinal: channelOrdinal,
+                        Channel: channel,
                         EntityIndex: entity,
                         HoldSeconds: holdSeconds,
                         Principal: principal,
@@ -290,7 +290,7 @@ public static partial class WorldSubmissionCodec {
                     field: "AdmitInput.Sources", maximum: WorldInputCatalog.MaximumSources,
                     readItem: WorldWireCodec.ReadInputSource), reader.ReadBoolean());
             case 14:
-                return new WorldCommand.SelectInputState(principal, entity, ReadPrincipal(ref reader),
+                return new WorldCommand.SelectInputState(principal, entity, ReadPrincipal(reader: ref reader),
                     reader.ReadRequiredString("SelectInputState.Family"), reader.ReadRequiredString("SelectInputState.State"), reader.ReadUInt64());
             case 15:
                 return new WorldCommand.CalibrateInput(principal, entity, reader.ReadFixed());
@@ -972,7 +972,7 @@ public static partial class WorldSubmissionCodec {
                 break;
             case WorldCommand.PressChannel value:
                 writer.WriteByte(value: 2);
-                writer.WriteInt32(value: value.ChannelOrdinal);
+                writer.WriteString(value: value.Channel);
                 writer.WriteFixed(value: value.Value);
                 writer.WriteOptional(
                     value: value.HoldSeconds,
@@ -1060,24 +1060,24 @@ public static partial class WorldSubmissionCodec {
                 writer.WriteByte(value: 12);
                 break;
             case WorldCommand.AdmitInput value:
-                writer.WriteByte(13);
+                writer.WriteByte(value: 13);
                 if (value.Sources.Count > WorldInputCatalog.MaximumSources) { throw new LeafCodecException(failure: Fail(detail: $"input source profile exceeds {WorldInputCatalog.MaximumSources}", refusal: WorldCodecRefusal.PayloadTooLarge)); }
-                writer.WriteInt32(value.Sources.Count);
+                writer.WriteInt32(value: value.Sources.Count);
                 foreach (var source in value.Sources) {
-                    WorldWireCodec.WriteInputSource(writer, source);
+                    WorldWireCodec.WriteInputSource(source: source, writer: writer);
                 }
-                writer.WriteBoolean(value.FreshAttachment);
+                writer.WriteBoolean(value: value.FreshAttachment);
                 break;
             case WorldCommand.SelectInputState value:
-                writer.WriteByte(14);
+                writer.WriteByte(value: 14);
                 WritePrincipal(writer, value.Owner);
-                writer.WriteString(value.Family);
-                writer.WriteString(value.State);
-                writer.WriteUInt64(value.Activation);
+                writer.WriteString(value: value.Family);
+                writer.WriteString(value: value.State);
+                writer.WriteUInt64(value: value.Activation);
                 break;
             case WorldCommand.CalibrateInput value:
-                writer.WriteByte(15);
-                writer.WriteFixed(value.Offset);
+                writer.WriteByte(value: 15);
+                writer.WriteFixed(value: value.Offset);
                 break;
             default:
                 throw UnknownLeaf(value: command);
@@ -1119,7 +1119,7 @@ public static partial class WorldSubmissionCodec {
         );
         writer.WriteOptional(
             value: grant.Consent,
-            writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(writer: w, selection: value)
+            writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(selection: value, writer: w)
         );
         writer.WriteOptional(
             value: grant.Ceiling,

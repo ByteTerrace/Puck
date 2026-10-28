@@ -7,37 +7,40 @@ public sealed partial class WorldPopulation {
     /// <summary>Reads a counter from the open authoritative state transaction for input selector preflight.</summary>
     public bool TryCandidateInputState(int bodyIndex, WorldDefinition definition, string name, out FixedQ4816 value) {
         value = default;
-        if (!WorldBodyStateReads.TryResolveSlot(definition, name, out var slot, out var kind) || kind != ActionStateKind.Counter) { return false; }
-        value = FixedQ4816.FromRawBits(m_actionStateLane.Read(slot: slot, ordinal: bodyIndex));
+        if (!WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out var kind, name: name, slot: out var slot) || (kind != ActionStateKind.Counter)) { return false; }
+        value = FixedQ4816.FromRawBits(value: m_actionStateLane.Read(ordinal: bodyIndex, slot: slot));
         return true;
     }
     /// <summary>Reads the kit selected by the open arena transaction without changing the installed body kit.</summary>
     public string CandidateKitName(int bodyIndex, WorldDefinition definition) {
         var selected = SelectRow(definition, definition.Assignment.Select, true, bodyIndex);
-        return m_kitRows[selected >= 0 ? selected : bodyIndex < LocalSeatCount ? m_seatKit : m_entries[bodyIndex].KitIndex].Name;
+
+        return m_kitRows[((selected >= 0) ? selected : ((bodyIndex < LocalSeatCount) ? m_seatKit : m_entries[bodyIndex].KitIndex))].Name;
     }
     /// <summary>Resolves a replacement definition's kit against staged named register values before installing it.</summary>
     public string PreviewKitName(int bodyIndex, WorldDefinition definition, Func<string, FixedQ4816?> counter) {
-        if (definition.Assignment.Select is { } selector && counter(selector.BodyState) is { } value &&
-            (value.Value & ((1L << FixedQ4816.FractionBitCount) - 1)) == 0) {
+        if ((definition.Assignment.Select is { } selector) && (counter(selector.BodyState) is { } value) &&
+            ((value.Value & ((1L << FixedQ4816.FractionBitCount) - 1)) == 0)) {
             foreach (var row in selector.Cases) {
-                if (row.Value == value.Value >> FixedQ4816.FractionBitCount) { return row.Row; }
+                if (row.Value == (value.Value >> FixedQ4816.FractionBitCount)) { return row.Row; }
             }
         }
         if (bodyIndex < definition.Population.LocalSeats) { return definition.DefaultSeatKit; }
-        var rows = ResolveRows(definition.Assignment, name => checked((byte)definition.Kits.ToList().FindIndex(kit => kit.Name == name)));
+        var rows = ResolveRows(assignment: definition.Assignment, resolve: name => checked((byte)definition.Kits.ToList().FindIndex(match: kit => (kit.Name == name))));
+
         return definition.Kits[SelectRow(bodyIndex, definition.Assignment, rows, definition.Kits.Count)].Name;
     }
     /// <summary>Rebinds a checkpoint's bank to the exact captured mapping without creating a transition.</summary>
     public void RestoreInputMapping(int bodyIndex, WorldInputOwner owner) {
         if (m_entries[bodyIndex].Body is not { } body) { return; }
-        body.RestoreInputMapping(owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(bodyIndex)], owner.Epoch);
+        body.RestoreInputMapping(owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(index: bodyIndex)], owner.Epoch);
     }
     /// <summary>Installs an owner's admitted mapping on the body's consumers using precompiled kit bindings.</summary>
     public void InstallInputMapping(int bodyIndex, WorldInputMapping previous, WorldInputOwner owner, bool reset, bool recompiled = false) {
         if (m_entries[bodyIndex] is not { Active: true, Body: { } body }) { return; }
-        body.InstallInputMapping(InputCatalog, previous, owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(bodyIndex)], owner.Image, owner.Epoch, reset, owner.LastSwitch.Decisions.Span, recompiled);
+        body.InstallInputMapping(InputCatalog, previous, owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(index: bodyIndex)], owner.Image, owner.Epoch, reset, owner.LastSwitch.Decisions.Span, recompiled);
     }
+
     // The effective kit and look each body held before a resync, so only a body whose own selection moved recompiles,
     // and the selections a resync resolves before they are compared against the entries'.
     private byte[]? m_priorKits;
@@ -57,11 +60,13 @@ public sealed partial class WorldPopulation {
         SyncBodyScale(definition: definition);
         SyncBodySelections(definition: definition);
     }
+
     /// <summary>Reconciles a refused kit step after its body registers have rewound, including the publication revision.</summary>
     internal void RestoreInputEffectSelections(WorldDefinition definition, int revision) {
-        SyncBodyCells(definition);
+        SyncBodyCells(definition: definition);
         m_revision = revision;
     }
+
     /// <summary>Resyncs every body's kit and look from the kit and look assignments' selectors
     /// (<see cref="WorldRowAssignment.Select"/>), which read each body's own <c>state.body</c> register. Called once a
     /// tick after the world rules, the last writer of a register in a tick; from every choke point
@@ -127,7 +132,7 @@ public sealed partial class WorldPopulation {
     private void RecompileBodyKit(WorldBody body, byte kitIndex) {
         // A definition replacement installs its owner barrier immediately after the kit rebuild. Its old
         // mapping id may no longer exist; no simulation consumer runs in this preparation interval.
-        var mapping = body.InputMappingId < m_inputKits.Length ? body.InputMappingId : InputCatalog.DefaultMapping.Id;
+        var mapping = ((body.InputMappingId < m_inputKits.Length) ? body.InputMappingId : InputCatalog.DefaultMapping.Id);
         var kit = m_inputKits[mapping][kitIndex];
 
         body.RecompileKit(
@@ -185,8 +190,8 @@ public sealed partial class WorldPopulation {
     // validator admits only a state.body Counter and a case value is a whole number, so a register holding a fraction
     // selects nothing.
     private void SelectRows(WorldDefinition definition, WorldRowSelector? select, bool kits, int[] selected) {
-        for (var bodyIndex = 0; bodyIndex < selected.Length; bodyIndex++) {
-            selected[bodyIndex] = SelectRow(definition, select, kits, bodyIndex);
+        for (var bodyIndex = 0; (bodyIndex < selected.Length); bodyIndex++) {
+            selected[bodyIndex] = SelectRow(bodyIndex: bodyIndex, definition: definition, kits: kits, select: select);
         }
     }
     private int SelectRow(WorldDefinition definition, WorldRowSelector? select, bool kits, int bodyIndex) {
@@ -206,30 +211,30 @@ public sealed partial class WorldPopulation {
 
         const long Fraction = ((1L << FixedQ4816.FractionBitCount) - 1L);
 
-            var raw = m_actionStateLane.Read(
-                ordinal: bodyIndex,
-                slot: slot
-            );
+        var raw = m_actionStateLane.Read(
+            ordinal: bodyIndex,
+            slot: slot
+        );
 
-            if ((raw & Fraction) != 0L) {
-                return -1;
+        if ((raw & Fraction) != 0L) {
+            return -1;
+        }
+
+        var value = (raw >> FixedQ4816.FractionBitCount);
+
+        var cases = select.Cases;
+
+        for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
+            var selectCase = cases[caseIndex];
+
+            if (selectCase.Value != value) {
+                continue;
             }
 
-            var value = (raw >> FixedQ4816.FractionBitCount);
-
-            var cases = select.Cases;
-
-            for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
-                var selectCase = cases[caseIndex];
-
-                if (selectCase.Value != value) {
-                    continue;
-                }
-
-                return ((kits
-                    ? ResolveKitOrNull(name: selectCase.Row)
-                    : ResolveLookOrNull(name: selectCase.Row)
-                ) ?? -1);
+            return ((kits
+                ? ResolveKitOrNull(name: selectCase.Row)
+                : ResolveLookOrNull(name: selectCase.Row)
+            ) ?? -1);
 
         }
         return -1;

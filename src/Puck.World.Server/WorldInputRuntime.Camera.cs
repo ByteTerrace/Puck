@@ -8,32 +8,35 @@ public sealed partial class WorldInputRuntime {
     // Dissolve validate before writing; their single route barrier publishes that state and route together.
     private bool TrySetCameraRoute(Owner owner, Principal actor, bool camera, ulong activation, out string reason) {
         reason = "input.mode: actor cannot compose this local seat's camera application";
-        if (owner.Principal.Kind != PrincipalKind.Seat || owner.Body != owner.Principal.Index ||
-            owner.Body < 0 || owner.Body >= m_host.Population.LocalSeatCount ||
-            !m_host.GrantTable.Allows(actor, WorldCapability.Drive, GrantSubject.Body(owner.Body)).IsAllowed) {
+        if ((owner.Principal.Kind != PrincipalKind.Seat) || (owner.Body != owner.Principal.Index) ||
+            (owner.Body < 0) || (owner.Body >= m_host.Population.LocalSeatCount) ||
+            !m_host.GrantTable.Allows(actor, WorldCapability.Drive, GrantSubject.Body(index: owner.Body)).IsAllowed) {
             return false;
         }
         var openedScope = !m_observingEvaluation;
+
         if (openedScope) { BeginActivationScope(); }
-        ObserveActivation(owner.Principal, activation);
+        ObserveActivation(activation: activation, principal: owner.Principal);
         try {
             if (!camera) {
-                if (m_host.Engagement.Dissolve(owner.Body, actor, owner.Principal) == ControlOutcome.Denied) { return false; }
+                if (m_host.Engagement.Dissolve(actingPrincipal: actor, entityIndex: owner.Body, targetPrincipal: owner.Principal) == ControlOutcome.Denied) { return false; }
                 reason = string.Empty;
                 return true;
             }
             var placement = $"{WorldSeatModeState.CameraPlacementIdPrefix}{owner.Principal.Index}";
             var cameraBody = -1;
-            for (var index = 0; index < m_host.Population.Capacity; index++) {
-                if (m_host.Population.InhabitantPlacementId(index) == placement && m_host.Body(index) is not null) {
+
+            for (var index = 0; (index < m_host.Population.Capacity); index++) {
+                if ((m_host.Population.InhabitantPlacementId(index: index) == placement) && (m_host.Body(index: index) is not null)) {
                     cameraBody = index;
                     break;
                 }
             }
             if (cameraBody < 0) { reason = $"input.mode: no live camera body at '{placement}'"; return false; }
-            var target = GrantSubject.Body(cameraBody);
-            if (!m_host.CheckEngagePolicy(owner.Body, target, out reason) ||
-                !m_host.Engagement.Compose(owner.Body, target, true, actor, owner.Principal)) {
+            var target = GrantSubject.Body(index: cameraBody);
+
+            if (!m_host.CheckEngagePolicy(entityIndex: owner.Body, reason: out reason, target: target) ||
+                !m_host.Engagement.Compose(actingPrincipal: actor, entityIndex: owner.Body, exclusive: true, target: target, targetPrincipal: owner.Principal)) {
                 if (reason.Length == 0) { reason = "input.mode: camera application or resulting tuple refused"; }
                 return false;
             }

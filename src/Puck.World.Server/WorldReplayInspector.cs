@@ -118,7 +118,7 @@ public sealed partial class WorldReplayInspector {
     private static void AppendHeader(List<string> lines, string name, in WorldReplayLoad loaded) {
         var recording = loaded.Recording;
 
-        lines.Add(item: $"{Prefix}tape '{name}' file={Path.GetFileName(loaded.Path)}]");
+        lines.Add(item: $"{Prefix}tape '{name}' file={Path.GetFileName(path: loaded.Path)}]");
         lines.Add(item: $"{Prefix}shape magic=0x{loaded.Magic:X8} token={loaded.ShapeToken}]");
         lines.Add(item: $"{Prefix}rate {recording.SimulationRate} Hz | ticks {recording.TickCount} | tail hash 0x{recording.RecordedTailHash:X16}]");
 
@@ -266,7 +266,7 @@ public sealed partial class WorldReplayInspector {
                         }
 
                         if (includePoses) { poses[index] = CapturePoses(population: population); }
-                        inputs[index] = CaptureInputs(server, inputCursors);
+                        inputs[index] = CaptureInputs(cursors: inputCursors, server: server);
                         observed[index] = WorldReplaySnapshot.HashState(population: population);
                         observedCount = Math.Max(
                             val1: observedCount,
@@ -333,7 +333,7 @@ public sealed partial class WorldReplayInspector {
             var input = ticks[tick];
 
             edges.Clear();
-            if (acceptedInputs is not null && tick < acceptedInputs.Count) { edges.Append(acceptedInputs[tick]); }
+            if ((acceptedInputs is not null) && (tick < acceptedInputs.Count)) { edges.Append(value: acceptedInputs[tick]); }
 
             if (tick < from) {
                 continue;
@@ -433,11 +433,12 @@ public sealed partial class WorldReplayInspector {
             ? "on"
             : "off")}]");
 
-        var channels = WorldChannelTable.For(WorldDefinitionSerialization.Deserialize(
+        var channels = WorldChannelTable.For(definition: WorldDefinitionSerialization.Deserialize(
             documentDirectory: recording.DocumentDirectory,
             utf8Json: recording.DefinitionJson
         ));
-        var (drivenPoses, acceptedInputs, trace) = DriveObservations(recording, poses);
+
+        var (drivenPoses, acceptedInputs, trace) = DriveObservations(includePoses: poses, recording: recording);
         var divergedAt = HashTrace.FirstDivergence(left: recording.RecordedHashes, right: trace);
 
         AppendTicks(
@@ -447,13 +448,13 @@ public sealed partial class WorldReplayInspector {
             from: from,
             hashes: recording.RecordedHashes,
             lines: lines,
-            poses: poses ? drivenPoses : null,
+            poses: (poses ? drivenPoses : null),
             acceptedInputs: acceptedInputs,
             ticks: recording.Ticks,
             to: last
         );
 
-        if (poses || divergedAt >= 0) {
+        if (poses || (divergedAt >= 0)) {
             AppendDriveVerdict(
                 divergedAt: divergedAt,
                 lines: lines,

@@ -60,9 +60,9 @@ internal static class WorldBenchmarks {
 
         rows.Add(item: ("world: arena storage", $"{server.Arena.Bytes:N0} bytes"));
         if (!server.TryCaptureCheckpoint(Puck.World.Server.WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var checkpointReason)) {
-            throw new InvalidOperationException(checkpointReason);
+            throw new InvalidOperationException(message: checkpointReason);
         }
-        rows.Add(item: ("world: authority checkpoint", $"{Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(checkpoint!).Length:N0} bytes (before guests and machines step)"));
+        rows.Add(item: ("world: authority checkpoint", $"{Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!).Length:N0} bytes (before guests and machines step)"));
         var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition!.SimulationRateHz));
 
         for (var tick = 0; (tick < WarmupTicks); tick++) {
@@ -155,7 +155,7 @@ internal static class WorldBenchmarks {
             for (var tick = 0; (tick < samples.Length); tick++) {
                 Pace();
                 if (!server.Input.TryPublishSnapshot(Puck.Commands.Principal.Console, 0, "bench-walk", intent, server.NextInputTick,
-                    out var inputOwner, out var input, out var reason)) { throw new InvalidOperationException(reason); }
+                    out var inputOwner, out var input, out var reason)) { throw new InvalidOperationException(message: reason); }
                 // A queued publication owns its arrays; local snapshot producers otherwise return borrowed scratch.
                 input = input with { Contributions = input.Contributions.ToArray(), Events = input.Events.ToArray() };
                 server.EnqueueIntent(submission: new Puck.World.Protocol.IntentSubmission(server.NextInputTick, 0, intent,
@@ -303,7 +303,7 @@ internal static class WorldBenchmarks {
             animator: new Puck.World.Client.WorldCreationInstances(),
             audio: inert,
             client: client,
-            continuum: new Puck.World.Client.WorldContinuum(client, routes, inert),
+            continuum: new Puck.World.Client.WorldContinuum(adjacencies: inert, client: client, routes: routes),
             text: new Puck.World.Client.WorldTextCatalog(source: new WorldDefinitionSource(Definition: server.Definition, SourcePath: path))
         );
         var context = new Puck.SdfVm.SdfEmitContext(Probe: false, Time: 0f, RenderOrigin: System.Numerics.Vector3.Zero, ParkPosition: System.Numerics.Vector3.Zero, SlotBase: 0, InterpolationAlpha: 1f);
@@ -328,10 +328,10 @@ internal static class WorldBenchmarks {
 
         emitter.Tick(deltaSeconds: 0f);
         for (var warm = 0; (warm < 4); warm++) {
-            Emit(times: steady, bytes: steadyBytes, sample: 0);
+            Emit(bytes: steadyBytes, sample: 0, times: steady);
         }
         for (var sample = 0; (sample < Samples); sample++) {
-            Emit(times: steady, bytes: steadyBytes, sample: sample);
+            Emit(bytes: steadyBytes, sample: sample, times: steady);
         }
         for (var change = 0; (change < (Samples + 4)); change++) {
             foreach (var cell in cells) {

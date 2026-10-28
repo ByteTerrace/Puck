@@ -14,17 +14,19 @@ public sealed partial class WorldTick {
 
     internal void AppendFederatedInputHash(ref Fnv1aHash hash) {
         var writer = m_federatedHashWriter ??= new();
+
         writer.Reset();
         var count = 0;
+
         foreach (var state in m_federatedIntents) { if (state.Active) { count++; } }
-        writer.WriteArrayCount(count);
-        for (var index = 0; index < m_federatedIntents.Length; index++) {
+        writer.WriteArrayCount(count: count);
+        for (var index = 0; (index < m_federatedIntents.Length); index++) {
             var state = m_federatedIntents[index];
+
             if (state.Active) { WorldWireLeaves.WriteFederatedInput(writer, new(index, state.Principal, state.Submission, state.Pending)); }
         }
-        hash.Add(writer.WrittenSpan);
+        hash.Add(values: writer.WrittenSpan);
     }
-
     /// <summary>Installs the hosting boundary before admission. The predicate admits only authorities restored
     /// together with this world. It cannot be replaced during an activation.</summary>
     internal void ConstrainTransferAuthorities(Func<string, bool> allowed) {
@@ -50,35 +52,51 @@ public sealed partial class WorldTick {
             }
 
             var admitted = false;
+
             foreach (var packet in state.Pending.Span) {
-                var submission = packet with { Tick = Host.Input.Interval.Tick, EntityIndex = index, Principal = state.Principal,
-                    Input = packet.Input with { Tick = Host.Input.Interval.Tick } };
-                if (!ApplyIntentSubmission(body, submission).IsAccepted) { continue; }
+                var submission = packet with {
+                    Tick = Host.Input.Interval.Tick,
+                    EntityIndex = index,
+                    Principal = state.Principal,
+                    Input = packet.Input with { Tick = Host.Input.Interval.Tick },
+                };
+
+                if (!ApplyIntentSubmission(body: body, submission: submission).IsAccepted) { continue; }
                 admitted = true;
                 var held = submission.Input.Image;
                 var projected = submission.Intent;
                 var mapping = Host.Population.InputCatalog.Mappings[submission.Input.Mapping];
+
                 foreach (var logical in mapping.Live) {
                     if (Host.Population.InputCatalog.Channels[logical].Shape != ChannelShape.Relative) { continue; }
-                    var address = mapping.Address(logical);
-                    held = held.WithRelative(address, default);
-                    projected = projected.WithRelative(address, default);
+                    var address = mapping.Address(logicalId: logical);
+
+                    held = held.WithRelative(ordinal: address, value: default);
+                    projected = projected.WithRelative(ordinal: address, value: default);
                 }
                 var contributions = submission.Input.Contributions.ToArray();
-                for (var source = 0; source < contributions.Length; source++) {
+
+                for (var source = 0; (source < contributions.Length); source++) {
                     if (contributions[source].Kind == WorldInputContributionKind.Relative) {
                         contributions[source] = contributions[source] with { RawValue = 0 };
                     }
                 }
-                state = state with { Submission = submission with { Intent = projected,
-                    Input = submission.Input with { Image = held, Events = default, Contributions = contributions } } };
+                state = state with {
+                    Submission = submission with {
+                        Intent = projected,
+                        Input = submission.Input with { Image = held, Events = default, Contributions = contributions },
+                    },
+                };
             }
             state = state with { Pending = default };
             if (admitted) { continue; }
             if (state.Submission is not { } current) { continue; }
-            var repeated = current with { Tick = Host.Input.Interval.Tick,
-                Input = current.Input with { Tick = Host.Input.Interval.Tick } };
-            _ = ApplyIntentSubmission(body, repeated);
+            var repeated = current with {
+                Tick = Host.Input.Interval.Tick,
+                Input = current.Input with { Tick = Host.Input.Interval.Tick },
+            };
+
+            _ = ApplyIntentSubmission(body: body, submission: repeated);
         }
     }
     // Hands the tape the federated device images this step is about to apply — a forwarded or federated traveler's
@@ -107,13 +125,15 @@ public sealed partial class WorldTick {
     /// recorded step held. A replayed image belongs to no stream, so no stream can release it.</summary>
     internal void ReplaceFederatedIntents(IReadOnlyList<WorldFederatedIntentCheckpoint> held, bool resetRemoved = true) {
         lock (Host.AuthorityGate) {
-            for (var index = 0; resetRemoved && index < m_federatedIntents.Length; index++) {
+            for (var index = 0; (resetRemoved && (index < m_federatedIntents.Length)); index++) {
                 var prior = m_federatedIntents[index];
-                if (prior.Active && !held.Any(item => item.Index == index && item.Principal == prior.Principal)) { Host.Input.Reset(prior.Principal); }
+
+                if (prior.Active && !held.Any(predicate: item => ((item.Index == index) && (item.Principal == prior.Principal)))) { Host.Input.Reset(prior.Principal); }
             }
             Array.Clear(array: m_federatedIntents);
             foreach (var item in held) {
                 var index = item.Index;
+
                 if (((uint)index) < ((uint)m_federatedIntents.Length)) {
                     m_federatedIntents[index] = new WorldFederatedIntentState(
                         Active: true,
@@ -128,25 +148,28 @@ public sealed partial class WorldTick {
     }
     internal static void ValidateFederatedInputs(IReadOnlyList<WorldFederatedIntentCheckpoint> inputs, int capacity) {
         var indices = new HashSet<int>();
+
         foreach (var input in inputs) {
-            if ((uint)input.Index >= (uint)capacity || !indices.Add(input.Index) || input.Principal.Kind != PrincipalKind.Peer ||
-                input.Principal.Index != input.Index || !input.Principal.IsStamped || input.Pending.Length > 1024) {
-                throw new ArgumentException("federated input checkpoint has an invalid owner, target or queue");
+            if ((((uint)input.Index) >= ((uint)capacity)) || !indices.Add(item: input.Index) || (input.Principal.Kind != PrincipalKind.Peer) ||
+                (input.Principal.Index != input.Index) || !input.Principal.IsStamped || (input.Pending.Length > 1024)) {
+                throw new ArgumentException(message: "federated input checkpoint has an invalid owner, target or queue");
             }
-            if (input.Submission is { } held) { Validate(held); }
-            foreach (var pending in input.Pending.Span) { Validate(pending); }
+            if (input.Submission is { } held) { Validate(submission: held); }
+            foreach (var pending in input.Pending.Span) { Validate(submission: pending); }
             void Validate(IntentSubmission submission) {
-                if (submission.Principal != input.Principal || submission.EntityIndex != input.Index || submission.InputOwner is not null) {
-                    throw new ArgumentException("federated input checkpoint has a foreign actor or local controller");
+                if ((submission.Principal != input.Principal) || (submission.EntityIndex != input.Index) || (submission.InputOwner is not null)) {
+                    throw new ArgumentException(message: "federated input checkpoint has a foreign actor or local controller");
                 }
             }
         }
     }
     internal IReadOnlyList<WorldFederatedIntentCheckpoint> CaptureFederatedIntents() {
         var held = new List<WorldFederatedIntentCheckpoint>();
-        for (var index = 0; index < m_federatedIntents.Length; index++) {
+
+        for (var index = 0; (index < m_federatedIntents.Length); index++) {
             ref readonly var state = ref m_federatedIntents[index];
-            if (state.Active) { held.Add(new(index, state.Principal, state.Submission, state.Pending)); }
+
+            if (state.Active) { held.Add(item: new(index, state.Principal, state.Submission, state.Pending)); }
         }
         return held;
     }
@@ -224,19 +247,23 @@ public sealed partial class WorldTick {
         Host.ExecuteAuthorityOperation(operation: () => {
             ref var state = ref m_federatedIntents[published.EntityIndex];
 
-            if (!state.Active || state.LeaseId != leaseId || state.Principal != published.Principal) {
+            if (!state.Active || (state.LeaseId != leaseId) || (state.Principal != published.Principal)) {
                 if (state.Active) { Host.Input.Reset(state.Principal); }
                 state = new(leaseId, published.Principal, default, true);
             }
-            var maximum = Math.Min(1024, (Host.Definition.InputHistory?.MaximumEventsPerStep ?? 128) + 1);
+            var maximum = Math.Min(val1: 1024, val2: ((Host.Definition.InputHistory?.MaximumEventsPerStep ?? 128) + 1));
+
             if (state.Pending.Length >= maximum) {
                 // Overflow cancels the episode; it never silently drops an unobserved edge.
-                published = published with { Intent = default,
-                    Input = published.Input with { Image = default, Contributions = default, Events = default, CaptureLost = true } };
+                published = published with {
+                    Intent = default,
+                    Input = published.Input with { Image = default, Contributions = default, Events = default, CaptureLost = true },
+                };
                 state = state with { Pending = new[] { published } };
             } else {
-                var pending = new IntentSubmission[state.Pending.Length + 1];
-                state.Pending.Span.CopyTo(pending);
+                var pending = new IntentSubmission[(state.Pending.Length + 1)];
+
+                state.Pending.Span.CopyTo(destination: pending);
                 pending[^1] = published;
                 state = state with { Pending = pending };
             }

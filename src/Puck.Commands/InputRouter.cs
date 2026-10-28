@@ -350,7 +350,7 @@ public sealed partial class InputRouter : IDisposable {
                 text: edge.Text
             ),
             value: value
-        ) { CaptureTick = m_captureTick, Activation = m_activation, SimulationOffset = m_simulationOffset };
+        ) { Activation = m_activation, CaptureTick = m_captureTick, SimulationOffset = m_simulationOffset };
 
         WorkingFor(
             slot: slot,
@@ -438,10 +438,10 @@ public sealed partial class InputRouter : IDisposable {
             text: injection.Text,
             value: injection.Value
         ) {
-            Session = injection.Session,
-            CaptureTick = m_captureTick,
-            SimulationOffset = m_simulationOffset,
             Activation = m_activation,
+            CaptureTick = m_captureTick,
+            Session = injection.Session,
+            SimulationOffset = m_simulationOffset,
         });
     }
     private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick, bool focusExemptOnly) {
@@ -482,10 +482,13 @@ public sealed partial class InputRouter : IDisposable {
         }
         var modality = ModalityFor(slot: slot);
 
-        if (signal.Text is { Length: > 0 } committed && !focusExemptOnly) {
-            WorkingFor(workingBySlot, slot).Add(new CommandEntry(0, default, CommandPhase.Started, CommandOrigin.Binding,
+        if ((signal.Text is { Length: > 0 } committed) && !focusExemptOnly) {
+            WorkingFor(slot: slot, workingBySlot: workingBySlot).Add(item: new CommandEntry(0, default, CommandPhase.Started, CommandOrigin.Binding,
                 device: signal.DeviceId, source: signal.Source) {
-                CommittedText = committed, CaptureTick = m_captureTick, Activation = m_activation, SimulationOffset = m_simulationOffset,
+                Activation = m_activation,
+                CaptureTick = m_captureTick,
+                CommittedText = committed,
+                SimulationOffset = m_simulationOffset,
             });
         }
 
@@ -835,7 +838,7 @@ public sealed partial class InputRouter : IDisposable {
                 ),
                 value: value,
                 assignedSlot: assignedSlot
-            ) { CaptureTick = m_captureTick, Activation = m_activation, SimulationOffset = m_simulationOffset };
+            ) { Activation = m_activation, CaptureTick = m_captureTick, SimulationOffset = m_simulationOffset };
 
             working.Add(item: entry);
 
@@ -1889,21 +1892,21 @@ public sealed partial class InputRouter : IDisposable {
 
         return clearedLatches;
     }
-
     /// <summary>Applies an authoritative cancellation of one destination-owned toggle. Physical first-down
     /// tracking remains intact, so an OS repeat cannot turn the cancelled latch back on.</summary>
     public void ClearToggle(int slot, string command) {
-        if (!m_registry.TryGetId(command, out var id)) { return; }
-        _ = m_toggleLatches.Remove((slot, id));
-        if (!m_heldBySlot.TryGetValue(slot, out var held) || !held.TryGetValue(id, out var state)) { return; }
-        var source = BindingSourceIdentity.ForCommand(command, BindingEntryMode.Toggle);
+        if (!m_registry.TryGetId(id: out var id, name: command)) { return; }
+        _ = m_toggleLatches.Remove(key: (slot, id));
+        if (!m_heldBySlot.TryGetValue(key: slot, value: out var held) || !held.TryGetValue(key: id, value: out var state)) { return; }
+        var source = BindingSourceIdentity.ForCommand(command: command, mode: BindingEntryMode.Toggle);
+
         if (state.Contributions is { } contributions) {
-            for (var index = contributions.Count - 1; index >= 0; index--) {
-                if (contributions[index].Entry.Source == source) { contributions.RemoveAt(index); }
+            for (var index = (contributions.Count - 1); (index >= 0); index--) {
+                if (contributions[index].Entry.Source == source) { contributions.RemoveAt(index: index); }
             }
         }
-        if (state.HasEntry && state.Entry.Source == source) { state.HasEntry = false; }
-        if (state.IsEmpty) { DropHold(slot, id); }
+        if (state.HasEntry && (state.Entry.Source == source)) { state.HasEntry = false; }
+        if (state.IsEmpty) { DropHold(commandId: id, slot: slot); }
     }
     /// <summary>Detaches this router from the collaborators it subscribed to at construction — the binding
     /// resolver's <see cref="IInputBindingsReloadSource.Reloading"/> edge and the slot resolver's
@@ -2265,6 +2268,7 @@ public sealed partial class InputRouter : IDisposable {
                 )
             ) {
                 ref readonly var captured = ref dueSignals[signalIndex++];
+
                 m_captureTick = captured.CaptureTick;
                 m_activation = captured.Sequence;
                 m_simulationOffset = captured.Signal.SimulationOffset;
@@ -2277,6 +2281,7 @@ public sealed partial class InputRouter : IDisposable {
                 );
             } else {
                 ref readonly var captured = ref dueInjections[injectionIndex++];
+
                 m_captureTick = captured.CaptureTick;
                 m_activation = captured.Sequence;
                 m_simulationOffset = null;

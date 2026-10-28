@@ -25,7 +25,7 @@ public static class WorldReplayEntryDescriber {
         ),
             WorldCommand.PressChannel press => string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"press {entity} {(channels.Name(ordinal: press.ChannelOrdinal) ?? $"ch{press.ChannelOrdinal}")}={WorldReplayInspector.DescribeValue(value: press.Value)}{((press.HoldSeconds is { } hold)
+            handler: $"press {entity} {press.Channel}={WorldReplayInspector.DescribeValue(value: press.Value)}{((press.HoldSeconds is { } hold)
             ? $" hold={hold:0.##}s"
             : "")}"
         ),

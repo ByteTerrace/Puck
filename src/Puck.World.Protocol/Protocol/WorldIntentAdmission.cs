@@ -5,5 +5,5 @@ namespace Puck.World.Protocol;
 /// <param name="InputRefusal">The semantic refusal after permission succeeded, or null when ingress was admitted.</param>
 public readonly record struct WorldIntentAdmission(GrantVerdict Permission, string? InputRefusal = null) {
     /// <summary>Whether both the permission and semantic input checks succeeded.</summary>
-    public bool IsAccepted => Permission.IsAllowed && InputRefusal is null;
+    public bool IsAccepted => (Permission.IsAllowed && (InputRefusal is null));
 }

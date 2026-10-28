@@ -65,8 +65,10 @@ public class RuleCompileContext : IRuleCostContext {
     public string? ForEachRow { get; set; }
     /// <summary>The bounded extension selected for the rule currently being compiled.</summary>
     public RuleIteration? Iteration { get; set; }
+
     /// <summary>Resolves a document-owned each source; null leaves resolution to the core row and body vocabulary.</summary>
     public virtual RuleIteration? CompileIteration(StateChannelRef reference, string ruleName) => null;
+
     /// <summary>Gets the section's generator rows.</summary>
     public IReadOnlyList<GeneratorRow>? Generators { get; }
     /// <summary>Gets the section's lattice topologies.</summary>

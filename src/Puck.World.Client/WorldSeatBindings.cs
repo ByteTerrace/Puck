@@ -557,7 +557,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // built, against this seat's currently routed table; the resulting command lives in the fixed ordinal vocabulary
     // PlayerCommandModule registers in full. A late-mounted or remote world therefore needs no command-registry
     // mutation, while a malformed/undeclared name still refuses loudly at the same composition boundary.
-    private static bool IsRelative(WorldChannelTable channels, ChannelRef reference) => channels.TryGetShape(reference, out var shape) && shape == ChannelShape.Relative;
+    private static bool IsRelative(WorldChannelTable channels, ChannelRef reference) => (channels.TryGetShape(reference: reference, shape: out var shape) && (shape == ChannelShape.Relative));
     private static string RoutedChannelCommandName(WorldChannelTable channels, ChannelRef channel) {
         if (
             (channel is ChannelRef.Name name) &&
@@ -940,7 +940,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private static bool TryDescribeUnavailableChannel(WorldChannelTable channels, ChannelRef reference, float? scale, out string finding) {
         var description = DescribeChannel(reference: reference);
 
-        if (!channels.TryGetShape(reference, out var shape) || shape == ChannelShape.Text) {
+        if (!channels.TryGetShape(reference: reference, shape: out var shape) || (shape == ChannelShape.Text)) {
             finding = $"{description} is not declared in this composition";
 
             return true;
@@ -1489,7 +1489,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         if (bindingsChanged) {
             m_overlays[slot] = (overlays ?? []);
             m_channelSource[slot] = channels;
-            m_channels[slot] = WorldChannelTable.For(definition);
+            m_channels[slot] = WorldChannelTable.For(definition: definition);
             RecomposeSeat(slot: slot);
 
             return;
@@ -1524,15 +1524,16 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             entityIndex: route.EntityIndex,
             nextInputTick: route.Endpoint.NextInputTick
         );
-        client.SynchronizeInput(slot, Sources(slot));
-        if (client.Roster.Seat(slot)?.Input is { Admitted: true } input) { m_channels[slot] = input.Channels; }
-        if (route.Endpoint.Mirror.TryInput(client.Roster.PrincipalOf(slot), out var publication)) {
+        client.SynchronizeInput(slot: slot, sources: Sources(slot: slot));
+        if (client.Roster.Seat(slot: slot)?.Input is { Admitted: true } input) { m_channels[slot] = input.Channels; }
+        if (route.Endpoint.Mirror.TryInput(owner: client.Roster.PrincipalOf(slot: slot), publication: out var publication)) {
             foreach (var cell in publication.SeatStates.Span) {
                 // Presentation-only families remain local; selector cells are published by the authority.
                 if (route.Endpoint.Definition.InputModes is { } modes) {
-                    for (var familyIndex = 0; familyIndex < modes.Families.Count; familyIndex++) {
+                    for (var familyIndex = 0; (familyIndex < modes.Families.Count); familyIndex++) {
                         var selector = modes.Families[familyIndex].Selector;
-                        if (selector.Kind == WorldInputModeSelectorKind.SeatState && selector.Name == cell.Family) {
+
+                        if ((selector.Kind == WorldInputModeSelectorKind.SeatState) && (selector.Name == cell.Family)) {
                             SetContextState(slot, cell.Family, cell.State);
                             break;
                         }
@@ -1798,7 +1799,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         // every seat seeds from the SAME boot overlays/channels here — SyncSeat is what lets them diverge later.
         var bootOverlays = (definition.BindingOverlays ?? []);
         var bootChannels = definition.Channels;
-        var bootTable = WorldChannelTable.For(definition);
+        var bootTable = WorldChannelTable.For(definition: definition);
 
         var bootGateSignature = OverlayGateSignature(
             definition: definition,

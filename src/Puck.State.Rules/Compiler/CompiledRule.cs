@@ -87,6 +87,7 @@ public sealed record CompiledRuleLocal(string Name, CellKind Kind, CompiledExpre
 public record CompiledRule(string Name, ActionTriggerMode Mode, GateToken[] Gate, IRuleEffect[] Effects, RuleNeeds Needs, int ForEachOrdinal = -1, bool ForEachZones = false, CompiledRuleLocal[]? Locals = null, ZoneTable? Zones = null, string Describe = "", StatePoolDescriptor? PoolForEach = null, int PoolBindingSlot = -1, bool ForEachBodies = false) {
     /// <summary>A bounded document-owned source sharing the normal each sweep.</summary>
     public RuleIteration? Iteration { get; init; }
+
     /// <summary>Appends every state cell one evaluation reads: the gate, the locals, and the effects. A document
     /// project's rule appends the branches it alone carries.</summary>
     /// <param name="into">The read set being collected.</param>

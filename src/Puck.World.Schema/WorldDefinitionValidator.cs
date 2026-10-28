@@ -1115,16 +1115,16 @@ public static partial class WorldDefinitionValidator {
         );
 
         var channelErrorStart = errors.Count;
+
         var (allChannelNames, compositionChannelNames) = ValidateChannels(
             definition: definition,
             errors: errors,
             programs: programs
         );
         WorldInputCatalog? compiledInputCatalog = null;
+
         if (errors.Count == channelErrorStart) {
-            try { compiledInputCatalog = WorldInputCatalog.For(definition); }
-            catch (ArgumentException error) { errors.Add(error.Message); }
-            catch (OverflowException error) { errors.Add($"inputModes selector exceeds its fixed-point envelope: {error.Message}"); }
+            try { compiledInputCatalog = WorldInputCatalog.For(definition: definition); } catch (ArgumentException error) { errors.Add(item: error.Message); } catch (OverflowException error) { errors.Add(item: $"inputModes selector exceeds its fixed-point envelope: {error.Message}"); }
         }
         if (definition.TargetRegisters.Count > WorldTargetRegisterTable.MaxRegisters) {
             errors.Add(item: $"targetRegisters declares {definition.TargetRegisters.Count} rows; the maximum is {WorldTargetRegisterTable.MaxRegisters}.");

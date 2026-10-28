@@ -103,12 +103,14 @@ public sealed partial class WorldScopedReplayRuntime {
             body.ApplyIntegrationResidue(image.Residue, m_server.Population.ContactFieldVersion);
         }
         if (Hash() != m_startHash) { throw new InvalidOperationException(message: "Scope starting hash MISMATCH after restore."); }
+        StopInput();
     }
 
     /// <summary>Runs at the input boundary, before the normal mutation drain.</summary>
     public void BeforeTick() {
         try { BeforeTickCore(); } catch (InvalidOperationException exception) {
             m_active = false;
+            StopInput();
             Write(key: "status", value: -1);
             m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} refused — {exception.Message}]");
         }
@@ -155,9 +157,27 @@ public sealed partial class WorldScopedReplayRuntime {
             }
             foreach (var input in m_commands) { if (input.Tick == m_cursor) { m_server.ApplyCommand(input.Command); } }
             foreach (var input in m_intents) {
-                if (input.Tick == m_cursor) { m_server.EnqueueIntent(submission: input.Intent with { Tick = m_server.NextInputTick }); }
+                if (input.Tick != m_cursor) { continue; }
+                var recorded = input.Intent;
+                var tick = m_server.NextInputTick;
+
+                if (!m_server.Input.TryPublishSnapshot(recorded.Principal, recorded.EntityIndex, InputSource, recorded.Input.Image, tick,
+                    out var owner, out var batch, out var reason, recorded.Input.Events.Span)) { throw new InvalidOperationException(message: reason); }
+                // The scope is an authored producer on this timeline; queued batches own their observations.
+                batch = batch with { Events = batch.Events.ToArray(), Contributions = batch.Contributions.ToArray() };
+                if (m_server.Input.TryGet(recorded.Principal, out var primary)) {
+                    m_server.Population.RestoreInputMapping(bodyIndex: recorded.EntityIndex, owner: primary!);
+                }
+                m_server.EnqueueIntent(submission: new(tick, recorded.EntityIndex, recorded.Intent, recorded.Principal, batch,
+                    recorded.MeasuredHoldTicks, owner));
             }
         }
+    }
+
+    private string InputSource => ("$replay:" + Name);
+
+    private void StopInput() {
+        foreach (var actor in m_source.Seats) { m_server.Input.CancelSnapshots(actor: actor, source: InputSource); }
     }
 
     /// <summary>Records accepted player-door mutations, never their derived rule effects or a copy of the source.</summary>
@@ -200,6 +220,7 @@ public sealed partial class WorldScopedReplayRuntime {
         Write(key: "cursor", value: ++m_cursor);
         if (m_cursor < m_source.DurationTicks) { return; }
         m_active = false;
+        StopInput();
         Write(key: "status", value: (m_recording ? 3 : (m_diverged ? -1 : 4)));
         Write(key: "completed", value: (Read(key: "completed") + 1));
         m_server.Output.Narrate("replay.scope", $"[replay.scope: {m_source.Name} {(m_recording ? "RECORDED" : (m_diverged ? "MISMATCH" : "MATCH"))} {m_cursor} ticks scope {actual:x16} inputs {m_inputs.Count}]");

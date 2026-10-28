@@ -292,7 +292,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
+
     private WorldInputPublication[] m_inputDisclosure = [];
+
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (!Discloses()) {
             return;

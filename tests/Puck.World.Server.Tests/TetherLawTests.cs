@@ -14,12 +14,14 @@ namespace Puck.World.Server.Tests;
 /// <summary>Law coverage for a kit's tether facet: intent-to-attach determinism, the tether pipeline, checkpoint
 /// continuation, and the validator's channel/grip-composition refusals.</summary>
 public sealed class TetherLawTests {
-    private static readonly Lazy<WorldChannelTable> InputTable = new(() => WorldChannelTable.Compile(BuildTetherDocument().Channels));
-    private static int InputAddress(string name) => InputTable.Value.TryGetOrdinal(name, out var address) ? address : throw new InvalidOperationException(name);
-    private static int AttachOrdinal => InputAddress("attach");
-    private static int DetachOrdinal => InputAddress("detach");
-    private static int ForwardOrdinal => InputAddress("forward");
-    private static int ReelOrdinal => InputAddress("reel");
+    private static readonly Lazy<WorldChannelTable> InputTable = new(valueFactory: () => WorldChannelTable.Compile(channels: BuildTetherDocument().Channels));
+
+    private static int InputAddress(string name) => (InputTable.Value.TryGetOrdinal(name: name, ordinal: out var address) ? address : throw new InvalidOperationException(message: name));
+
+    private static int AttachOrdinal => InputAddress(name: "attach");
+    private static int DetachOrdinal => InputAddress(name: "detach");
+    private static int ForwardOrdinal => InputAddress(name: "forward");
+    private static int ReelOrdinal => InputAddress(name: "reel");
 
     private sealed class RestoredCheckpoint(WorldServer server, WorldMachineHost machines, TemporaryDirectory stateDirectory) : IDisposable {
         public WorldServer Server { get; } = server;

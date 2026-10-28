@@ -17,8 +17,8 @@ public sealed record WorldParticipantType(string Type, Func<WorldParticipantCont
 public sealed class WorldParticipantContext {
     /// <summary>Gets the 0-based body the participant controls.</summary>
     public required int BodyIndex { get; init; }
-    /// <summary>Gets the live world's compiled channel table. Call it only from <see cref="IWorldParticipant.Pump"/>'s
-    /// thread; it reflects the current definition after a reload.</summary>
+    /// <summary>Gets the controlled body's active channel mapping. Call it only from <see cref="IWorldParticipant.Pump"/>'s
+    /// thread; it reflects mode switches and reloads and is empty while the body is absent.</summary>
     public required Func<WorldChannelTable> Channels { get; init; }
     /// <summary>Gets the host clock a participant paces its own work on. Simulation never reads it.</summary>
     public required TimeProvider Clock { get; init; }

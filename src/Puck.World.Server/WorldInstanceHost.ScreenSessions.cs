@@ -479,8 +479,8 @@ public sealed partial class WorldInstanceHost {
                         (forward.ScreenIndex == physical.Index) &&
                         TryMapForward(
                         destination: destination.Server.Configuration,
-                        targetChannels: destination.Server.Input.TryGet(observation.Session, out var inputOwner)
-                            ? inputOwner!.Mapping.Channels : destination.Server.Population.InputCatalog.DefaultMapping.Channels,
+                        targetChannels: (destination.Server.Input.TryGet(observation.Session, out var inputOwner)
+                            ? inputOwner!.Mapping.Channels : destination.Server.Population.InputCatalog.DefaultMapping.Channels),
                         face: in face,
                         forward: in forward,
                         mapped: out mapped
@@ -502,10 +502,10 @@ public sealed partial class WorldInstanceHost {
             }
 
             if (found) {
-                session.Input ??= new WorldPortalInputProducer(destination, observation.Session);
+                session.Input ??= new WorldPortalInputProducer(destination: destination, session: observation.Session);
                 _ = session.Input.Forward(destination, owner.Server, in selected, mapped);
             } else {
-                session.Input?.Stop(destination);
+                session.Input?.Stop(destination: destination);
             }
             session.WasForwarding = found;
         }

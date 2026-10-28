@@ -20,10 +20,11 @@ public sealed partial class WorldGrants {
     /// records the actual actor, whose current grants are checked at every submission.</summary>
     internal Principal AdmitInputControllerSession() {
         var ordinal = 0;
-        while (m_sessions.ContainsKey(ordinal)) { ordinal++; }
-        var session = Principal.Session(ordinal, checked(m_sessionEpochs.GetValueOrDefault(ordinal) + 1));
+
+        while (m_sessions.ContainsKey(key: ordinal)) { ordinal++; }
+        var session = Principal.Session(ordinal, checked((m_sessionEpochs.GetValueOrDefault(key: ordinal) + 1)));
         // Derived from an already recorded producer/command, so replay derives this admission again as well.
-        ApplySessionAdmitted(new(session, [], []));
+        ApplySessionAdmitted(admitted: new(MintedGrants: [], Session: session, Templates: []));
         return session;
     }
 
@@ -351,7 +352,7 @@ public sealed partial class WorldGrants {
     internal void ApplySessionEmbodied(WorldServerEvent.SessionEmbodied embodied) {
         var entry = m_sessions[embodied.Session.Index];
 
-        if (entry.BodyIndex != embodied.BodyIndex || entry.BodyGeneration != embodied.BodyGeneration) { Host.Input.Reset(embodied.Session); }
+        if ((entry.BodyIndex != embodied.BodyIndex) || (entry.BodyGeneration != embodied.BodyGeneration)) { Host.Input.Reset(embodied.Session); }
 
         entry.BodyIndex = embodied.BodyIndex;
         entry.BodyGeneration = embodied.BodyGeneration;
@@ -451,7 +452,8 @@ public sealed partial class WorldGrants {
         {
             foreach (var inputEvent in submission.Input.Events.Span) {
                 if (inputEvent.Kind != WorldInputEventKind.Press) { continue; }
-                var address = owner.Mapping.Address(inputEvent.Channel);
+                var address = owner.Mapping.Address(logicalId: inputEvent.Channel);
+
                 if (address < 0) { continue; }
                 entry.PressedSince[address] = FixedQ4816.One;
                 entry.PressedRay = image.SourceRay;
@@ -462,8 +464,9 @@ public sealed partial class WorldGrants {
     }
     /// <summary>Installs an epoch barrier in the session pointer readers as well as its timed input owner.</summary>
     internal void InstallSessionInputBarrier(Principal principal, PlayerIntent image) {
-        if (!IsLiveSession(principal)) { return; }
+        if (!IsLiveSession(principal: principal)) { return; }
         var entry = m_sessions[principal.Index];
+
         entry.Input = image;
         entry.PressedSince = default;
         entry.PressedRay = null;
@@ -513,12 +516,13 @@ public sealed partial class WorldGrants {
             return FixedQ4816.Zero;
         }
 
-        var mapping = Host.Input.TryGet(entry.Principal, out var input)
-            ? input!.Mapping : Host.Population.InputCatalog.DefaultMapping;
-        var address = mapping.Address(channel);
+        var mapping = (Host.Input.TryGet(entry.Principal, out var input)
+            ? input!.Mapping : Host.Population.InputCatalog.DefaultMapping);
+        var address = mapping.Address(logicalId: channel);
+
         if (address < 0) { return FixedQ4816.Zero; }
-        Host.Input.ObserveHeld(entry.Principal, (ushort)channel);
-        var current = input is null ? entry.Input[address] : input.Image[address];
+        Host.Input.ObserveHeld(entry.Principal, ((ushort)channel));
+        var current = ((input is null) ? entry.Input[address] : input.Image[address]);
         var pressed = entry.PressedSince[address];
 
         return ((FixedQ4816.Abs(value: pressed) > FixedQ4816.Abs(value: current))

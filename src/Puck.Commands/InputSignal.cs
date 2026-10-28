@@ -51,6 +51,7 @@ public readonly record struct InputSignal(
 ) {
     /// <summary>Explicit Q48.16 offset for scripted input in its next simulation interval; physical capture leaves it null.</summary>
     public Puck.Maths.FixedQ4816? SimulationOffset { get; init; }
+
     /// <summary>The <see cref="Slot"/> value meaning "resolve the lane from the device".</summary>
     public const int UnresolvedSlot = -1;
 

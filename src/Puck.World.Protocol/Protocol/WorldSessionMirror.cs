@@ -50,10 +50,12 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly Lock m_stampGate = new();
     private readonly Lock m_followGate = new();
     private readonly Dictionary<Principal, WorldInputPublication> m_inputs = [];
+
     /// <summary>Reads an authority-issued input epoch and its immutable source decisions.</summary>
     public bool TryInput(Principal owner, out WorldInputPublication publication) {
-        lock (m_snapshotWriteGate) { return m_inputs.TryGetValue(owner, out publication); }
+        lock (m_snapshotWriteGate) { return m_inputs.TryGetValue(key: owner, value: out publication); }
     }
+
     private int[] m_pendingRows = [];
     private bool[] m_pendingNoted = [];
 

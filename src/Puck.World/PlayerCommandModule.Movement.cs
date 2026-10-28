@@ -65,10 +65,7 @@ internal sealed partial class PlayerCommandModule {
                 return CommandResult.Error(output: "[body.fly: <seconds> must be greater than 0]");
             }
 
-            // The instance's OWN channel table — a spawned instance's document may declare channels differently from
-            // the boot world's, so this is compiled from ITS definition, never
-            // the boot instance's channel table.
-            var instanceChannels = WorldChannelTable.For(instance.Server.Definition);
+            var instanceChannels = instancePlayer.Channels;
 
             instance.Server.ApplyCommand(command: new WorldCommand.EnqueueSegment(
                 Principal: context.Principal,
@@ -136,7 +133,7 @@ internal sealed partial class PlayerCommandModule {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                var routedChannels = WorldChannelTable.For(m_instances.ResolveRoutedDefinition(slot: rosterSlot));
+                var routedChannels = m_seatBindings.Channels(slot: rosterSlot);
 
                 location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.EnqueueSegment(
                     Principal: context.Principal,
@@ -185,7 +182,7 @@ internal sealed partial class PlayerCommandModule {
         m_link.SubmitCommand(command: new WorldCommand.EnqueueSegment(
             Principal: context.Principal,
             EntityIndex: resolvedIndex,
-            Intent: Channels.RoleOrdinals.Intent(
+            Intent: player.Channels.RoleOrdinals.Intent(
                 moveAdvance: FixedQ4816.FromDouble(value: forward),
                 moveStrafe: FixedQ4816.FromDouble(value: strafe),
                 turn: FixedQ4816.FromDouble(value: yaw),

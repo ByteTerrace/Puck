@@ -243,7 +243,7 @@ public sealed partial class WorldServer {
                 values: applications.Select(selector: application => m_engagement.Live(application: application).Describe())
             ))}";
 
-        var channels = m_population.Channels;
+        var channels = body.Channels;
         var h = m_tick.ChannelReadBase[bodyIndex];
         var folded = m_tick.ChannelReadFolded[bodyIndex];
         var held = body.ChannelReadHeld;

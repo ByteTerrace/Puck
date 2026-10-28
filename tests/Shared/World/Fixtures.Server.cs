@@ -20,48 +20,58 @@ internal static partial class Fixtures {
         public uint AcceptedSequence;
         public ulong Activation;
     }
+
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldServer, Dictionary<Principal, InputFixtureState>> InputFixtures = new();
+
     /// <summary>Builds one current-format observation from the authority's accepted source state. When recording,
     /// pass that tape's link so profile admission is recorded through the same door as its input.</summary>
     public static IntentSubmission Input(WorldServer server, Principal actor, int body, PlayerIntent image, ulong tick, IServerLink? link = null) {
         // The mask law deliberately submits an unadmitted live packet while a replay owns the authority.
         if (link is LoopbackTransport { InputMasked: true }) { return new(tick, body, image, actor, default); }
         var catalog = server.Population.InputCatalog;
-        if (!server.Input.TryGet(actor, out var owner)) {
+
+        if (!server.Input.TryGet(input: out var owner, principal: actor)) {
             var profile = new List<WorldInputSource>();
-            for (var index = 0; index < catalog.Channels.Length; index++) {
+
+            for (var index = 0; (index < catalog.Channels.Length); index++) {
                 var channel = catalog.Channels[index];
+
                 if (channel.Shape == ChannelShape.Text) { continue; }
-                profile.Add(new((ushort)index, (ushort)index,
-                    channel.Shape == ChannelShape.Relative ? WorldInputContributionKind.Relative : WorldInputContributionKind.Level,
-                    "$test:" + channel.Name));
+                profile.Add(item: new(((ushort)index), ((ushort)index),
+                    ((channel.Shape == ChannelShape.Relative) ? WorldInputContributionKind.Relative : WorldInputContributionKind.Level),
+                    ("$test:" + channel.Name)));
             }
             var command = new WorldCommand.AdmitInput(actor, body, profile);
-            if (link is null) { server.ApplyCommand(command); }
-            else { link.SubmitCommand(command); }
-            Assert.True(server.Input.TryGet(actor, out owner), "test input profile was refused");
+
+            if (link is null) { server.ApplyCommand(command); } else { link.SubmitCommand(command: command); }
+            Assert.True(condition: server.Input.TryGet(input: out owner, principal: actor), userMessage: "test input profile was refused");
         }
-        var owners = InputFixtures.GetOrCreateValue(server);
-        if (!owners.TryGetValue(actor, out var fixture) || !ReferenceEquals(fixture.Owner, owner) || fixture.Tick != tick ||
-            fixture.AcceptedSequence != owner!.Sequence || fixture.Producer.Revision != owner.Revision || fixture.Producer.Epoch != owner.Epoch) {
+        var owners = InputFixtures.GetOrCreateValue(key: server);
+
+        if (!owners.TryGetValue(key: actor, value: out var fixture) || !ReferenceEquals(objA: fixture.Owner, objB: owner) || (fixture.Tick != tick) ||
+            (fixture.AcceptedSequence != owner!.Sequence) || (fixture.Producer.Revision != owner.Revision) || (fixture.Producer.Epoch != owner.Epoch)) {
             fixture = new() {
-                Owner = owner!, Tick = tick, AcceptedSequence = owner!.Sequence, Activation = owner.Capture().EventId,
+                Owner = owner!,
+                Tick = tick,
+                AcceptedSequence = owner!.Sequence,
+                Activation = owner.Capture().EventId,
                 Producer = WorldInputProducer.FromAccepted(catalog, owner.Mapping, owner.Sources,
-                    server.Definition.InputHistory?.MaximumEventsPerStep ?? 128, owner.Revision, owner.Epoch, owner.Sequence, owner.Image),
+                    (server.Definition.InputHistory?.MaximumEventsPerStep ?? 128), owner.Revision, owner.Epoch, owner.Sequence, owner.Image),
             };
-            foreach (var source in owner.Sources) { fixture.Activation = Math.Max(fixture.Activation, source.Activation); }
+            foreach (var source in owner.Sources) { fixture.Activation = Math.Max(val1: fixture.Activation, val2: source.Activation); }
             owners[actor] = fixture;
         }
         var producer = fixture.Producer;
+
         foreach (var source in owner.Sources) {
-            var address = owner.Mapping.Address(source.Source.Channel);
-            var raw = address < 0 ? 0 : catalog.Channels[source.Source.Channel].Shape == ChannelShape.Relative
-                ? image.Channels.Relative(address).Value : image[address].Value;
+            var address = owner.Mapping.Address(logicalId: source.Source.Channel);
+            var raw = ((address < 0) ? 0 : ((catalog.Channels[source.Source.Channel].Shape == ChannelShape.Relative)
+                ? image.Channels.Relative(ordinal: address).Value : image[address].Value));
+
             _ = producer.ObserveSnapshot(source.Source.Handle, raw, tick, ref fixture.Activation);
         }
         return new(tick, body, image, actor, producer.Publish(tick, image.SourceRay));
     }
-
     /// <summary>Writes one body's <see cref="BodyScaleRegister"/> register directly into its arena lane; the next
     /// simulation step resyncs the body's live scale from it.</summary>
     /// <param name="server">The server whose body is written.</param>

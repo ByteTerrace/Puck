@@ -112,8 +112,7 @@ public sealed partial class WorldBody {
         }
 
         // This is the input-hold runtime replaying its selected historical image, not a new writer publication.
-        // Do not clear the authority-handoff bridge here: only ApplyIntentSubmission's SetHeldChannels call proves
-        // the destination stream has actually supplied a replacement image (neutral included).
+        // Keep restored fold residue until SetHeldChannels supplies a replacement image (neutral included).
         m_heldChannels = input.HeldChannels;
     }
     internal void TakeDurableStateOutputs(ulong tick, int entityIndex, List<DurableStateOutput> outputs) {
@@ -147,6 +146,7 @@ public sealed partial class WorldBody {
             m_actionStateDirty[slot] = false;
         }
     }
+
     public WorldSubmittedInput TakeSubmittedInput() {
         var input = new WorldSubmittedInput(
             HasIntent: m_hasSubmittedIntent,
@@ -160,6 +160,7 @@ public sealed partial class WorldBody {
 
         return input;
     }
+
     /// <summary>Reads one effective durable counter for a visited-world decision.</summary>
     internal bool TryReadDurableCounter(string name, out FixedQ4816 value) {
         var slot = FindActionState(name: name);
@@ -251,9 +252,10 @@ public sealed partial class WorldBody {
                 (definition.ResetFact is { } reset) &&
                 FactHolds(fact: reset)
             ) {
-                var initial = InitialRaw(in definition);
-                if (definition.Kind == ActionStateKind.Counter && m_stateLane?.Input is { } input &&
-                    !input.TryValidateReset(m_stateOrdinal, slot, initial, out var reason)) {
+                var initial = InitialRaw(definition: in definition);
+
+                if ((definition.Kind == ActionStateKind.Counter) && (m_stateLane?.Input is { } input) &&
+                    !input.TryValidateReset(body: m_stateOrdinal, raw: initial, reason: out var reason, slot: slot)) {
                     m_actionStateRequested[slot] = initial;
                     m_actionStateLastWriter[slot] = "kit-reset";
                     m_actionStateLastReason[slot] = reason;
@@ -313,6 +315,7 @@ public sealed partial class WorldBody {
         Array.Clear(array: m_durableInputPresent);
         m_durableInputTick = 0;
     }
+
     /// <summary>Writes one register a world rule's <c>setBodyState</c> addresses, settled through the register's
     /// envelope as a kit action's write is. The lane write joins the firing's journal scope, so a rewound firing
     /// rewinds it.</summary>
@@ -335,6 +338,7 @@ public sealed partial class WorldBody {
         slot: slot,
         writer: "crossing"
     );
+
     private void ApplyRawState(int slot, long requested, string writer, string reason) {
         var definition = m_actionStateDefinitions[slot];
         var effective = (definition.Envelope?.Clamp(
@@ -729,6 +733,7 @@ public sealed partial class WorldBody {
     // attitude/planar integration and before gravity/vertical resolution, so effects shape the same tick.
     private void ProcessLaneActions(ref BodyMotionScratch scratch) {
         var inputEpoch = InputEpoch;
+
         AdvanceActionState(stepTicks: scratch.StepTicks);
         if (InputEpoch != inputEpoch) { scratch.Intent = m_engagedIntent; return; }
 
@@ -738,8 +743,8 @@ public sealed partial class WorldBody {
             }
 
             ref var state = ref m_laneActions[ordinal];
-            var logicalChannel = m_stateLane?.Input is { } inputRuntime && m_channels.IsDeclared(ordinal) &&
-                inputRuntime.Catalog.TryGetLogicalId(m_channels.Name(ordinal)!, out var channel) ? channel : -1;
+            var logicalChannel = (((m_stateLane?.Input is { } inputRuntime) && m_channels.IsDeclared(ordinal: ordinal) &&
+                inputRuntime.Catalog.TryGetLogicalId(m_channels.Name(ordinal: ordinal)!, out var channel)) ? channel : -1);
             var bit = (scratch.Intent[ordinal] >= m_channelThresholds[ordinal]);
             var pressed = (bit && !m_previousChannelBit[ordinal]);
             var released = (!bit && m_previousChannelBit[ordinal]);

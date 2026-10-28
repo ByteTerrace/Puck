@@ -180,13 +180,13 @@ public sealed partial class WorldGrants {
     }
 
     private static IReadOnlyList<(string Channel, long Ceiling)> CaptureCeilings(Dictionary<string, long> ceilings) =>
-        ceilings.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(static pair => (pair.Key, pair.Value)).ToArray();
-
+        ceilings.OrderBy(static pair => pair.Key, StringComparer.Ordinal).Select(selector: static pair => (pair.Key, pair.Value)).ToArray();
     private static Dictionary<string, long> RestoreCeilings(IReadOnlyList<(string Channel, long Ceiling)> rows) {
-        var ceilings = new Dictionary<string, long>(StringComparer.Ordinal);
+        var ceilings = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+
         foreach (var row in rows) {
-            if (string.IsNullOrWhiteSpace(row.Channel) || row.Ceiling <= 0 || !ceilings.TryAdd(row.Channel, row.Ceiling)) {
-                throw new ArgumentException("checkpoint contains an invalid or duplicate named channel ceiling", nameof(rows));
+            if (string.IsNullOrWhiteSpace(value: row.Channel) || (row.Ceiling <= 0) || !ceilings.TryAdd(key: row.Channel, value: row.Ceiling)) {
+                throw new ArgumentException(message: "checkpoint contains an invalid or duplicate named channel ceiling", paramName: nameof(rows));
             }
         }
         return ceilings;

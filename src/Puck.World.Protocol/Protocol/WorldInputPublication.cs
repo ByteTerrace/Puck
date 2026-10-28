@@ -4,7 +4,6 @@ namespace Puck.World.Protocol;
 
 /// <summary>One authoritative finite seat/session state cell.</summary>
 public readonly record struct WorldInputSeatState(string Family, string State);
-
 /// <summary>The authority's source decisions at an input epoch boundary. Source memory is immutable.</summary>
 public readonly record struct WorldInputPublication(Principal Owner, int Body, int Generation, uint Revision, ulong Epoch,
     ushort Mapping, PlayerIntent Baseline, ReadOnlyMemory<WorldInputSourceState> Sources, WorldInputSwitch Boundary,
@@ -16,7 +15,7 @@ public readonly record struct WorldInputPublication(Principal Owner, int Body, i
             if (publication.Owner != owner) { continue; }
             if (scratch.Length == 0) { scratch = new WorldInputPublication[1]; }
             scratch[0] = publication;
-            return scratch.AsMemory(0, 1);
+            return scratch.AsMemory(length: 1, start: 0);
         }
         return ReadOnlyMemory<WorldInputPublication>.Empty;
     }

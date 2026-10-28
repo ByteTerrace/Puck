@@ -9,9 +9,9 @@ using Puck.World.Server;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
-    /// <summary>The runtime command name a seat binding lowers one validated channel ordinal to. Every possible
-    /// ordinal is registered at boot, so destination discovery never mutates the command registry or its replay ids.</summary>
-    /// <param name="ordinal">The channel ordinal.</param>
+    /// <summary>The runtime command name for a logical action. Every possible logical handle is registered at boot,
+    /// so destination discovery never mutates the command registry or its replay ids.</summary>
+    /// <param name="ordinal">The logical action handle, independent of its current storage address.</param>
     internal static string RoutedChannelCommandName(int ordinal) => Puck.World.Client.PlayerCommandNames.RoutedChannelCommandName(ordinal: ordinal);
 
     // A channel-generic movement/composition verb targeting whichever player owns the binding's device. Press/
@@ -40,7 +40,7 @@ internal sealed partial class PlayerCommandModule {
                 // Checked against the DISPATCHING SEAT's own CURRENTLY ROUTED table. A release always runs even if
                 // the route changed since the press: it frees whatever this physical control last actually held.
                 var seatTable = m_seatBindings.Channels(slot: slot);
-                var declared = seatTable.TryGetAddress(logical, out var ordinal);
+                var declared = seatTable.TryGetAddress(address: out var ordinal, logical: logical);
                 var scale = FixedQ4816.FromDouble(value: context.Value.AsAxis1D);
 
                 // The roster owns the pending-vs-locomotion decision: while the slot is pending it consumes a Turn-role
@@ -70,7 +70,7 @@ internal sealed partial class PlayerCommandModule {
                     if (seat.Source != IntentSource.Live) {
                         return CommandResult.None;
                     }
-                    if (seat.Input is { } input && !input.Observe(logical, context, seatRouter.Route(slot).Endpoint.NextInputTick)) {
+                    if ((seat.Input is { } input) && !input.Observe(channel: logical, context: context, tick: seatRouter.Route(slot: slot).Endpoint.NextInputTick)) {
                         return CommandResult.None;
                     }
 
@@ -103,12 +103,10 @@ internal sealed partial class PlayerCommandModule {
             }
         );
     }
-    // One command per fixed channel ORDINAL, not per authored name. WorldSeatBindings validates a name against the
-    // firing seat's currently routed table and lowers it to this stable vocabulary while compiling that seat's
-    // profile. This is complete for every legal world because ChannelLimits.MaxChannels is the document ceiling; it
-    // does not crawl references, assume a target exists at boot, or change the command-id table when one appears.
+    // WorldSeatBindings lowers authored names to logical handles; dispatch resolves each handle in the seat's
+    // active mapping. Register the bounded logical vocabulary once, independently of reusable storage addresses.
     private IEnumerable<CommandDefinition> ChannelVerbs() {
-        for (var logical = 0; logical < WorldInputCatalog.MaximumLogicalChannels; logical++) {
+        for (var logical = 0; (logical < WorldInputCatalog.MaximumLogicalChannels); logical++) {
             yield return ChannelVerb(logical: logical);
         }
     }
@@ -266,7 +264,7 @@ internal sealed partial class PlayerCommandModule {
             behavior: behavior,
             actingPrincipal: context.Principal
         );
-        if (m_roster.Seat(context.Slot)?.Input is { } input && seatRouter.TryRoute(context.Slot) is { } route) {
+        if ((m_roster.Seat(slot: context.Slot)?.Input is { } input) && (seatRouter.TryRoute(slot: context.Slot) is { } route)) {
             input.ObserveMove(value, context, route.Endpoint.NextInputTick);
         }
 
@@ -437,7 +435,7 @@ internal sealed partial class PlayerCommandModule {
         routed = false;
 
         WorldAuthorityRoute? routedLocation = null;
-        var targetChannels = Channels;
+        var targetChannels = (m_population.EntryBody(index: index)?.Channels ?? Channels);
 
         if (IsSeat(index: index)) {
             var rosterSlot = index;
@@ -452,7 +450,7 @@ internal sealed partial class PlayerCommandModule {
             )
             ) {
                 routedLocation = location;
-                targetChannels = WorldChannelTable.For(m_instances.ResolveRoutedDefinition(slot: rosterSlot));
+                targetChannels = m_seatBindings.Channels(slot: rosterSlot);
             }
         }
 
@@ -503,7 +501,7 @@ internal sealed partial class PlayerCommandModule {
             route.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.PressChannel(
                 Principal: context.Principal,
                 EntityIndex: route.EntityIndex,
-                ChannelOrdinal: ordinal,
+                Channel: channelName,
                 Value: value,
                 HoldSeconds: holdSeconds
             ));
@@ -529,7 +527,7 @@ internal sealed partial class PlayerCommandModule {
         m_link.SubmitCommand(command: new WorldCommand.PressChannel(
             Principal: context.Principal,
             EntityIndex: index,
-            ChannelOrdinal: ordinal,
+            Channel: channelName,
             Value: value,
             HoldSeconds: holdSeconds
         ));

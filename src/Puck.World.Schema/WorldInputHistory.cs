@@ -24,20 +24,19 @@ public sealed record WorldInputHistory(
 ) {
     /// <summary>Refuses unsafe retention/work bounds before allocating any owner state.</summary>
     public void Validate() {
-        if (EventCapacity is < 1 or > ushort.MaxValue || MaximumEventsPerStep is < 1 or > ushort.MaxValue ||
-            MaximumEventsPerStep > EventCapacity || RetentionSeconds <= 0 || MaximumLatenessSeconds < 0 ||
-            MaximumLatenessSeconds > RetentionSeconds || CalibrationLimitSeconds < 0 || !Enum.IsDefined(Judgement) ||
-            (Crossings?.Count ?? 0) > WorldInputCatalog.MaximumLogicalChannels) {
-            throw new ArgumentException("inputHistory has invalid event, crossing, retention, lateness or calibration bounds");
+        if ((EventCapacity is < 1 or > ushort.MaxValue) || (MaximumEventsPerStep is < 1 or > ushort.MaxValue) ||
+            (MaximumEventsPerStep > EventCapacity) || (RetentionSeconds <= 0) || (MaximumLatenessSeconds < 0) ||
+            (MaximumLatenessSeconds > RetentionSeconds) || (CalibrationLimitSeconds < 0) || !Enum.IsDefined(value: Judgement) ||
+            ((Crossings?.Count ?? 0) > WorldInputCatalog.MaximumLogicalChannels)) {
+            throw new ArgumentException(message: "inputHistory has invalid event, crossing, retention, lateness or calibration bounds");
         }
-        _ = FixedQ4816.Parse(RetentionSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
-        _ = FixedQ4816.Parse(CalibrationLimitSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
-        if (FixedTickConversion.DurationEngineTicks(MaximumLatenessSeconds) > 999_998) {
-            throw new ArgumentException("inputHistory lateness requires more than 1,000,000 retained engine intervals");
+        _ = FixedQ4816.Parse(RetentionSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
+        _ = FixedQ4816.Parse(CalibrationLimitSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
+        if (FixedTickConversion.DurationEngineTicks(seconds: MaximumLatenessSeconds) > 999_998) {
+            throw new ArgumentException(message: "inputHistory lateness requires more than 1,000,000 retained engine intervals");
         }
     }
 }
-
 /// <summary>The recorded clock coordinate used for judgement.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldInputJudgement>))]
 public enum WorldInputJudgement : byte {
@@ -46,7 +45,6 @@ public enum WorldInputJudgement : byte {
     /// <summary>Processing interval start.</summary>
     Admission,
 }
-
 /// <summary>A hysteretic semantic crossing, derived only from accepted ordered axis samples.</summary>
 /// <param name="Name">Pattern-visible crossing name.</param>
 /// <param name="Channel">Declared normalized axis.</param>
@@ -58,7 +56,6 @@ public enum WorldInputJudgement : byte {
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldInputCrossing(string Name, string Channel, decimal Press, decimal Release, int Direction = 1,
     string? FacingState = null);
-
 /// <summary>A captured gameplay interval. Rate changes retain these exact engine coordinates.</summary>
 /// <param name="Tick">Assigned simulation tick.</param>
 /// <param name="EngineStart">Exact interval start on the engine clock.</param>
@@ -67,63 +64,63 @@ public sealed record WorldInputCrossing(string Name, string Channel, decimal Pre
 public readonly record struct WorldInputInterval(ulong Tick, ulong EngineStart, ulong EngineDuration, WorldInputMusicSegment? Music = null) {
     /// <summary>Folds the exact interval and its historical music coordinates.</summary>
     public void AppendStateHash(ref Fnv1aHash hash) {
-        hash.Add(Tick); hash.Add(EngineStart); hash.Add(EngineDuration); hash.Add((byte)(Music.HasValue ? 1 : 0));
-        if (Music is { } music) { hash.Add(music.ElapsedTicks); hash.Add(music.TicksPerBeat); hash.Add(music.Segment); }
+        hash.Add(value: Tick); hash.Add(value: EngineStart); hash.Add(value: EngineDuration); hash.Add(value: ((byte)(Music.HasValue ? 1 : 0)));
+        if (Music is { } music) { hash.Add(value: music.ElapsedTicks); hash.Add(value: music.TicksPerBeat); hash.Add(value: music.Segment); }
     }
     /// <summary>Tests the half-open interval before admitting a fixed sub-tick timestamp.</summary>
-    public bool Contains(FixedQ4816 offset) => offset.Value >= 0 &&
-        (UInt128)(ulong)offset.Value * FixedTickConversion.TicksPerSecond < (UInt128)EngineDuration << FixedQ4816.FractionBitCount;
-
+    public bool Contains(FixedQ4816 offset) => ((offset.Value >= 0) &&
+        ((((UInt128)((ulong)offset.Value)) * FixedTickConversion.TicksPerSecond) < (((UInt128)EngineDuration) << FixedQ4816.FractionBitCount)));
     /// <summary>Combines the exact engine origin, offset and calibration in one widened, ties-to-even rounding.</summary>
     public FixedQ4816 Time(FixedQ4816 offset, FixedQ4816 calibration = default) {
-        var numerator = ((Int128)EngineStart << FixedQ4816.FractionBitCount) +
-            ((Int128)offset.Value + calibration.Value) * FixedTickConversion.TicksPerSecond;
-        var negative = numerator < 0;
-        var magnitude = (UInt128)(negative ? -numerator : numerator);
-        var denominator = (UInt128)FixedTickConversion.TicksPerSecond;
-        var quotient = magnitude / denominator;
-        var remainder = magnitude % denominator;
-        var rounded = FixedPointRounding.RoundToNearestTiesToEven(quotient, remainder, denominator - remainder);
-        var signed = negative ? -(Int128)rounded : (Int128)rounded;
-        return FixedQ4816.FromRawBits(checked((long)signed));
-    }
+        var numerator = ((((Int128)EngineStart) << FixedQ4816.FractionBitCount) +
+            ((((Int128)offset.Value) + calibration.Value) * FixedTickConversion.TicksPerSecond));
+        var negative = (numerator < 0);
+        var magnitude = ((UInt128)(negative ? -numerator : numerator));
+        var denominator = ((UInt128)FixedTickConversion.TicksPerSecond);
+        var quotient = (magnitude / denominator);
+        var remainder = (magnitude % denominator);
+        var rounded = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (denominator - remainder), distanceToTruncated: remainder, truncated: quotient);
+        var signed = (negative ? -((Int128)rounded) : (Int128)rounded);
 
+        return FixedQ4816.FromRawBits(value: checked((long)signed));
+    }
     /// <summary>Quantizes a rational captured offset once, carrying a rounded endpoint into the next interval.</summary>
     public (ulong Tick, FixedQ4816 Offset) Quantize(ulong numerator, ulong denominator) {
         ArgumentOutOfRangeException.ThrowIfZero(denominator);
-        if ((UInt128)numerator * FixedTickConversion.TicksPerSecond >= (UInt128)EngineDuration * denominator) {
+        if ((((UInt128)numerator) * FixedTickConversion.TicksPerSecond) >= (((UInt128)EngineDuration) * denominator)) {
             throw new ArgumentOutOfRangeException(nameof(numerator), "Capture lies outside its assigned interval.");
         }
-        var raw = (UInt128)numerator << FixedQ4816.FractionBitCount;
-        var quotient = raw / denominator;
-        var remainder = raw % denominator;
-        var offset = FixedQ4816.FromRawBits(checked((long)FixedPointRounding.RoundToNearestTiesToEven(quotient, remainder, (UInt128)denominator - remainder)));
-        if (Contains(offset)) { return (Tick, offset); }
+        var raw = (((UInt128)numerator) << FixedQ4816.FractionBitCount);
+        var quotient = (raw / denominator);
+        var remainder = (raw % denominator);
+        var offset = FixedQ4816.FromRawBits(value: checked((long)FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (((UInt128)denominator) - remainder), distanceToTruncated: remainder, truncated: quotient)));
+
+        if (Contains(offset: offset)) { return (Tick, offset); }
         // This entry point quantizes an observation already assigned to this exact
         // interval; only rounding onto its endpoint is allowed to carry.
-        return (checked(Tick + 1), FixedQ4816.Zero);
+        return (checked((Tick + 1)), FixedQ4816.Zero);
     }
 }
-
 /// <summary>The existing music clock at capture-interval start, preserved through tempo/segment changes.</summary>
 public readonly record struct WorldInputMusicSegment(ulong ElapsedTicks, long TicksPerBeat, string Segment) {
     /// <summary>Signed nearest-beat error in Q48.16 seconds, with one widened ties-to-even rounding.</summary>
     public FixedQ4816 PhaseError(FixedQ4816 offset, FixedQ4816 calibration) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(TicksPerBeat);
-        var period = (Int128)TicksPerBeat << FixedQ4816.FractionBitCount;
-        var position = ((Int128)ElapsedTicks << FixedQ4816.FractionBitCount) +
-            ((Int128)offset.Value + calibration.Value) * FixedTickConversion.TicksPerSecond;
-        var phase = position % period;
+        var period = (((Int128)TicksPerBeat) << FixedQ4816.FractionBitCount);
+        var position = ((((Int128)ElapsedTicks) << FixedQ4816.FractionBitCount) +
+            ((((Int128)offset.Value) + calibration.Value) * FixedTickConversion.TicksPerSecond));
+        var phase = (position % period);
+
         if (phase < 0) { phase += period; }
-        if (phase > period / 2) { phase -= period; }
-        var magnitude = (UInt128)(phase < 0 ? -phase : phase);
-        var divisor = (UInt128)FixedTickConversion.TicksPerSecond;
-        var remainder = magnitude % divisor;
-        var raw = FixedPointRounding.RoundToNearestTiesToEven(magnitude / divisor, remainder, divisor - remainder);
-        return FixedQ4816.FromRawBits(checked((long)(phase < 0 ? -(Int128)raw : (Int128)raw)));
+        if (phase > (period / 2)) { phase -= period; }
+        var magnitude = ((UInt128)((phase < 0) ? -phase : phase));
+        var divisor = ((UInt128)FixedTickConversion.TicksPerSecond);
+        var remainder = (magnitude % divisor);
+        var raw = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (divisor - remainder), distanceToTruncated: remainder, truncated: (magnitude / divisor));
+
+        return FixedQ4816.FromRawBits(value: checked((long)((phase < 0) ? -((Int128)raw) : (Int128)raw)));
     }
 }
-
 /// <summary>Semantic wire events. Crossings and cancellation outcomes are authority-derived history records.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldInputEventKind>))]
 public enum WorldInputEventKind : byte {
@@ -140,7 +137,6 @@ public enum WorldInputEventKind : byte {
     /// <summary>A reset ends a hold without a gameplay release.</summary>
     Cancel,
 }
-
 /// <summary>The shared bounded event leaf; names resolve through the captured logical catalog.</summary>
 /// <param name="Channel">Logical channel id.</param>
 /// <param name="Kind">Semantic event kind.</param>
@@ -151,7 +147,6 @@ public enum WorldInputEventKind : byte {
 /// <param name="Activation">Shared identity of sibling outputs of one physical activation.</param>
 public readonly record struct WorldInputEvent(ushort Channel, WorldInputEventKind Kind, long RawValue,
     ulong CaptureTick, FixedQ4816 Offset, uint Sequence, ulong Activation);
-
 /// <summary>An admitted event with immutable capture and processing coordinates.</summary>
 /// <param name="Id">Owner-local identity, never reused across epochs.</param>
 /// <param name="Epoch">The input epoch which admitted this record.</param>
@@ -165,8 +160,9 @@ public readonly record struct WorldInputRecord(ulong Id, ulong Epoch, WorldInput
     WorldInputInterval Capture, WorldInputInterval Admission, ulong HoldPress = 0, int Crossing = -1,
     FixedQ4816 Calibration = default) {
     /// <summary>Whether processing happened after the capture interval.</summary>
-    public bool Late => Capture.Tick < Admission.Tick;
+    public bool Late => (Capture.Tick < Admission.Tick);
+
     /// <summary>The selected deterministic judgement time.</summary>
-    public FixedQ4816 Time(WorldInputJudgement policy) => policy == WorldInputJudgement.Capture
-        ? Capture.Time(Event.Offset, Calibration) : Admission.Time(default);
+    public FixedQ4816 Time(WorldInputJudgement policy) => ((policy == WorldInputJudgement.Capture)
+        ? Capture.Time(Event.Offset, Calibration) : Admission.Time(default));
 }

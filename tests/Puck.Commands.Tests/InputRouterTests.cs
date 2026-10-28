@@ -13,19 +13,21 @@ public sealed class InputRouterTests {
         var registry = new CommandRegistry(modules: []);
         using var router = new InputRouter(registry, new EmptyBindings(), new ConsolePrincipal());
         var received = new List<CommittedTextInput>();
+
         registry.TextCommitted += received.Add;
-        router.Capture(InputSignal.Typed("keyboard.text", "a", captureTick: 10));
-        router.Capture(InputSignal.Typed("keyboard.text", "delete everything 🙂", captureTick: 11));
-        var snapshot = router.SnapshotForTick(1, 20, 5);
-        registry.ApplySnapshot(snapshot);
-        Assert.Equal(new[] { "a", "delete everything 🙂" }, received.Select(row => row.Text));
+        router.Capture(signal: InputSignal.Typed("keyboard.text", "a", captureTick: 10));
+        router.Capture(signal: InputSignal.Typed("keyboard.text", "delete everything 🙂", captureTick: 11));
+        var snapshot = router.SnapshotForTick(tick: 1, windowEndTick: 20, windowStartTick: 5);
+
+        registry.ApplySnapshot(snapshot: snapshot);
+        Assert.Equal(new[] { "a", "delete everything 🙂" }, received.Select(selector: row => row.Text));
         Assert.All(received, row => {
             Assert.Equal(Principal.Console, row.Principal);
             Assert.Equal(5UL, row.WindowStart);
             Assert.Equal(20UL, row.WindowEnd);
         });
-        Assert.True(received[0].Activation < received[1].Activation);
-        Assert.Empty(router.SnapshotForTick(2, 30, 20).Lanes);
+        Assert.True(condition: (received[0].Activation < received[1].Activation));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 2, windowEndTick: 30, windowStartTick: 20).Lanes);
     }
 
     private const string Command = "test.move";
@@ -278,7 +280,7 @@ public sealed class InputRouterTests {
             actual: Assert.Single(collection: Assert.Single(collection: overtyped.SnapshotForTick(
                 tick: 1UL,
                 windowEndTick: ulong.MaxValue
-            ).Lanes).Entries, predicate: entry => entry.CommittedText is null).Text,
+            ).Lanes).Entries, predicate: entry => (entry.CommittedText is null)).Text,
             expected: $"{Command} 8"
         );
 
@@ -295,7 +297,7 @@ public sealed class InputRouterTests {
         var character = Assert.Single(collection: Assert.Single(collection: typed.SnapshotForTick(
             tick: 1UL,
             windowEndTick: ulong.MaxValue
-        ).Lanes).Entries, predicate: entry => entry.CommittedText is null);
+        ).Lanes).Entries, predicate: entry => (entry.CommittedText is null));
 
         Assert.Null(@object: character.Text);
         Assert.Equal(

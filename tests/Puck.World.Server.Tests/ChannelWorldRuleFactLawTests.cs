@@ -70,7 +70,8 @@ public sealed class ChannelWorldRuleFactLawTests {
         )).Accepted);
 
         var body = fixture.Server.Body(index: actor.Index)!;
-        Assert.True(body.Channels.TryGetOrdinal(PortalChannel, out var portalAddress));
+
+        Assert.True(condition: body.Channels.TryGetOrdinal(name: PortalChannel, ordinal: out var portalAddress));
 
         // Control half: an ordinary tick with no channel submission never crosses the gate.
         fixture.Step();

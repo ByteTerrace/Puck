@@ -49,18 +49,21 @@ public readonly record struct SeatLookSample(FixedVector2 Value, SeatLookBehavio
 public sealed class SeatController {
     /// <summary>The ordered producer for this seat's current authority and compiled source registry.</summary>
     public WorldSeatInput? Input { get; set; }
+
     /// <summary>Installs only the authority's continuing source levels after a barrier.</summary>
     public void InstallInputSources(WorldChannelTable channels, ReadOnlySpan<WorldInputSourceState> sources, IReadOnlyList<string> names) {
         m_heldControls.Clear();
-        Array.Clear(m_relative);
+        Array.Clear(array: m_relative);
         Channels = channels;
-        for (var index = 0; index < sources.Length; index++) {
+        for (var index = 0; (index < sources.Length); index++) {
             var source = sources[index];
-            if (source.RawValue == 0 || source.Source.Kind == WorldInputContributionKind.Relative ||
-                names[index].StartsWith("$motion:", StringComparison.Ordinal) || !channels.TryGetAddress(source.Source.Channel, out var address)) { continue; }
-            m_heldControls.Add((names[index], address), FixedQ4816.FromRawBits(source.RawValue));
+
+            if ((source.RawValue == 0) || (source.Source.Kind == WorldInputContributionKind.Relative) ||
+                names[index].StartsWith(comparisonType: StringComparison.Ordinal, value: "$motion:") || !channels.TryGetAddress(source.Source.Channel, out var address)) { continue; }
+            m_heldControls.Add(key: (names[index], address), value: FixedQ4816.FromRawBits(value: source.RawValue));
         }
     }
+
     private static readonly FixedQ4816 NegativeOne = -FixedQ4816.One;
 
     private SeatLookSample m_look;

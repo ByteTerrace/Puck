@@ -11,7 +11,8 @@ namespace Puck.World;
 
 public static partial class WorldFactsVocabulary {
     /// <summary>Resolves the same admitted owner spelling for event reads and sweeps.</summary>
-    public static WorldInputOwnerReference CompileInputOwner(string text, WorldFactsCompileContext world, string ruleName) => WorldFactsOperandFamily.CompileInputOwner(text, world, ruleName);
+    public static WorldInputOwnerReference CompileInputOwner(string text, WorldFactsCompileContext world, string ruleName) => WorldFactsOperandFamily.CompileInputOwner(ruleName: ruleName, text: text, world: world);
+
     private sealed class WorldFactsOperandFamily : OperandFamily {
         private const string BoardCellOfPrefix = "$board:cellOf:";
         private const string BoardEngagedPrefix = "$board:engaged:";
@@ -283,7 +284,6 @@ public static partial class WorldFactsVocabulary {
             rowOrdinal: rowOrdinal,
             valueKind: valueKind
         );
-
         private static WorldInputOperand CompileInput(ChannelCall call, WorldFactsCompileContext world, string ruleName) {
             var facet = call.Channel switch {
                 "inputEdge" => WorldInputFacet.Edge,
@@ -301,49 +301,57 @@ public static partial class WorldFactsVocabulary {
                 "inputMatchLastTick" => WorldInputFacet.MatchLastTick,
                 _ => WorldInputFacet.HeldPress,
             };
-            var matching = facet >= WorldInputFacet.Match;
-            var held = matching || facet is WorldInputFacet.HeldSince or WorldInputFacet.HeldPress;
+            var matching = (facet >= WorldInputFacet.Match);
+            var held = (matching || (facet is WorldInputFacet.HeldSince or WorldInputFacet.HeldPress));
+
             RuleException Invalid(string detail) => new(detail: $"{call.Channel}: {detail}", refusal: WorldRuleRefusal.ChannelMalformed, ruleName: ruleName);
-            var ownerArguments = call.Count - (held ? 1 : 3);
-            if (ownerArguments < 1) { throw Invalid(held ? "expected owner and channel" : "expected owner, channel, event kind and occurrence"); }
-            var owner = CompileInputOwner(string.Join(':', call.Arguments.Take(ownerArguments).Select(static argument => argument.Spelling)), world, ruleName);
-            if (matching) { return new(owner, 0, facet, default, 0, CompileInputPattern(call.Text(ownerArguments), world, ruleName)); }
-            var catalog = WorldInputCatalog.For(world.Definition);
-            if (!catalog.TryGetLogicalId(call.Text(ownerArguments), out var logical)) { throw Invalid($"unknown channel '{call.Text(ownerArguments)}'"); }
+            var ownerArguments = (call.Count - (held ? 1 : 3));
+
+            if (ownerArguments < 1) { throw Invalid(detail: (held ? "expected owner and channel" : "expected owner, channel, event kind and occurrence")); }
+            var owner = CompileInputOwner(string.Join(separator: ':', values: call.Arguments.Take(count: ownerArguments).Select(selector: static argument => argument.Spelling)), world, ruleName);
+
+            if (matching) { return new(owner, 0, facet, default, 0, CompileInputPattern(call.Text(index: ownerArguments), world, ruleName)); }
+            var catalog = WorldInputCatalog.For(definition: world.Definition);
+
+            if (!catalog.TryGetLogicalId(call.Text(index: ownerArguments), out var logical)) { throw Invalid(detail: $"unknown channel '{call.Text(index: ownerArguments)}'"); }
             var kind = WorldInputEventKind.Press;
             var occurrence = 0;
+
             if (!held) {
-                if (!Enum.TryParse(call.Text(ownerArguments + 1), false, out kind) || !Enum.IsDefined(kind)) { throw Invalid("unknown event kind"); }
-                if (call.Text(ownerArguments + 2) is "each" or "$each") {
-                    if (world.Iteration is not WorldInputIteration iteration || iteration.Owner != owner) { throw Invalid("each requires inputEvents of the same owner"); }
+                if (!Enum.TryParse(call.Text(index: (ownerArguments + 1)), false, out kind) || !Enum.IsDefined(value: kind)) { throw Invalid(detail: "unknown event kind"); }
+                if (call.Text(index: (ownerArguments + 2)) is "each" or "$each") {
+                    if ((world.Iteration is not WorldInputIteration iteration) || (iteration.Owner != owner)) { throw Invalid(detail: "each requires inputEvents of the same owner"); }
                     occurrence = -1;
-                } else if (!int.TryParse(call.Text(ownerArguments + 2), NumberStyles.None, CultureInfo.InvariantCulture, out occurrence) || occurrence < 0 ||
-                    occurrence >= WorldInputCatalog.For(world.Definition).HistoryCapacity(world.Definition.InputHistory?.EventCapacity ?? 256)) { throw Invalid("occurrence outside retained capacity"); }
+                } else if (!int.TryParse(call.Text(index: (ownerArguments + 2)), NumberStyles.None, CultureInfo.InvariantCulture, out occurrence) || (occurrence < 0) ||
+                    (occurrence >= WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory?.EventCapacity ?? 256)))) { throw Invalid(detail: "occurrence outside retained capacity"); }
             }
             var shape = catalog.Channels[logical].Shape;
-            if ((held || kind is WorldInputEventKind.Press or WorldInputEventKind.Release) && shape != Protocol.ChannelShape.Binary ||
-                kind == WorldInputEventKind.Text && shape != Protocol.ChannelShape.Text) { throw Invalid($"event kind does not match channel '{call.Text(ownerArguments)}' shape {shape}"); }
-            return new(owner, logical, facet, kind, occurrence, fixedValue: facet == WorldInputFacet.Value && shape is Protocol.ChannelShape.Bipolar or Protocol.ChannelShape.Unipolar);
+
+            if (((held || (kind is WorldInputEventKind.Press or WorldInputEventKind.Release)) && (shape != Protocol.ChannelShape.Binary)) ||
+                ((kind == WorldInputEventKind.Text) && (shape != Protocol.ChannelShape.Text))) { throw Invalid(detail: $"event kind does not match channel '{call.Text(index: ownerArguments)}' shape {shape}"); }
+            return new(owner, logical, facet, kind, occurrence, fixedValue: ((facet == WorldInputFacet.Value) && (shape is Protocol.ChannelShape.Bipolar or Protocol.ChannelShape.Unipolar)));
         }
 
         public static WorldInputOwnerReference CompileInputOwner(string text, WorldFactsCompileContext world, string ruleName) {
-            if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var seat) && seat >= 1 && seat <= world.Definition.Population.LocalSeats) { return new(Principal.Seat(seat - 1)); }
+            if (int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var seat) && (seat >= 1) && (seat <= world.Definition.Population.LocalSeats)) { return new(Principal.Seat(slot: (seat - 1))); }
             var identity = text.Split(':');
-            if (identity.Length == 3 && identity[0] == "session" &&
+
+            if ((identity.Length == 3) && (identity[0] == "session") &&
                 int.TryParse(identity[1], NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) &&
-                int.TryParse(identity[2], NumberStyles.None, CultureInfo.InvariantCulture, out var epoch) && ordinal >= 0 && epoch > 0) {
-                return new(Principal.Session(ordinal, epoch));
+                int.TryParse(identity[2], NumberStyles.None, CultureInfo.InvariantCulture, out var epoch) && (ordinal >= 0) && (epoch > 0)) {
+                return new(Principal.Session(epoch: epoch, ordinal: ordinal));
             }
             var count = identity[0] switch { "cell" => 3, "body" or "argmax" or "argmin" or "placement" => 2, _ => 1 };
+
             if (identity.Length != count) { throw new RuleException(WorldRuleRefusal.ChannelMalformed, ruleName, "input owner has an invalid typed reference"); }
-            return new(default, world.ResolveBodyRef(identity, 0, ruleName, "input owner"));
+            return new(default, world.ResolveBodyRef(channel: "input owner", ruleName: ruleName, start: 0, tokens: identity));
         }
         public static int CompileInputPattern(string name, WorldFactsCompileContext world, string ruleName) {
-            var rows = world.Definition.InputPatterns ?? [];
-            for (var index = 0; index < rows.Count; index++) { if (rows[index].Name == name) { return index; } }
+            var rows = (world.Definition.InputPatterns ?? []);
+
+            for (var index = 0; (index < rows.Count); index++) { if (rows[index].Name == name) { return index; } }
             throw new RuleException(WorldRuleRefusal.ChannelMalformed, ruleName, $"unknown input pattern '{name}'");
         }
-
         public override bool TryCompile(StateChannelRef reference, StateChannelRef? cell, in OperandSite site, RuleCompileContext context, out IRuleOperand? fact) {
             ArgumentNullException.ThrowIfNull(argument: reference);
 
@@ -355,13 +363,16 @@ public static partial class WorldFactsVocabulary {
             var name = reference.Spelling;
 
             fact = null;
-            if (call is { Channel: "inputEdge" or "inputTime" or "inputAge" or "inputValue" or "inputTick" or "inputHeldSince" or "inputHeldPress" or
-                "inputMatch" or "inputMatchFirst" or "inputMatchLast" or "inputMatchFirstTime" or "inputMatchLastTime" or "inputMatchFirstTick" or "inputMatchLastTick" }) {
+            if (call is {
+                Channel: "inputEdge" or "inputTime" or "inputAge" or "inputValue" or "inputTick" or "inputHeldSince" or "inputHeldPress" or
+                "inputMatch" or "inputMatchFirst" or "inputMatchLast" or "inputMatchFirstTime" or "inputMatchLastTime" or "inputMatchFirstTick" or "inputMatchLastTick"
+            }) {
                 RuleCompiler.RefuseKeyOnReservedChannel(cell, site.KeyFieldLabel, name, ruleName);
-                var input = CompileInput(call, world, ruleName);
-                var capacity = world.Definition.InputHistory?.EventCapacity ?? 256;
-                fact = BodyFact(input.ValueKind, world, input.Owner.Body ?? default, default, -1,
-                    input.Pattern < 0 ? WorldInputCatalog.For(world.Definition).HistoryCapacity(capacity) : WorldInputCatalog.For(world.Definition).PatternWork(input.Pattern, capacity), facet => facet.Read(input), name);
+                var input = CompileInput(call: call, ruleName: ruleName, world: world);
+                var capacity = (world.Definition.InputHistory?.EventCapacity ?? 256);
+
+                fact = BodyFact(input.ValueKind, world, (input.Owner.Body ?? default), default, -1,
+                    ((input.Pattern < 0) ? WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: capacity) : WorldInputCatalog.For(definition: world.Definition).PatternWork(input.Pattern, capacity)), facet => facet.Read(operand: input), name);
                 return true;
             }
             if (string.Equals(
@@ -1220,7 +1231,7 @@ public static partial class WorldFactsVocabulary {
                 var tokens = call!.Tokens();
 
                 if (
-                    !((tokens.Length == 3 && tokens[2] == "phaseError") || (tokens.Length >= 7 && tokens[2] == "phaseErrorAt"))
+                    !(((tokens.Length == 3) && (tokens[2] == "phaseError")) || ((tokens.Length >= 7) && (tokens[2] == "phaseErrorAt")))
                 ) {
                     throw new RuleException(
                         detail: "clock read requires $clock:<music>:phaseError",
@@ -1247,10 +1258,11 @@ public static partial class WorldFactsVocabulary {
                 }
 
                 if (tokens.Length >= 7) {
-                    var input = CompileInput(new ChannelCall("inputTime", call.Arguments.Skip(2).ToArray()), world, ruleName);
-                    var clock = new ClockOperand(input);
-                    fact = BodyFact(CellKind.Fixed, world, input.Owner.Body ?? default, default, -1, WorldInputCatalog.For(world.Definition).HistoryCapacity(world.Definition.InputHistory?.EventCapacity ?? 256),
-                        facet => facet.Read(clock), name);
+                    var input = CompileInput(new ChannelCall("inputTime", call.Arguments.Skip(count: 2).ToArray()), world, ruleName);
+                    var clock = new ClockOperand(input: input);
+
+                    fact = BodyFact(CellKind.Fixed, world, (input.Owner.Body ?? default), default, -1, WorldInputCatalog.For(definition: world.Definition).HistoryCapacity(ingressCapacity: (world.Definition.InputHistory?.EventCapacity ?? 256)),
+                        facet => facet.Read(operand: clock), name);
                 } else { fact = WorldClockOperand.Instance; }
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,

@@ -211,7 +211,7 @@ public readonly record struct FixedWorldKit(
         foreach (var role in Enum.GetValues<ChannelRole>()) {
             if (
                 program.RequiresRole(role: role) &&
-                !channels.DeclaresRole(role)
+                !channels.DeclaresRole(role: role)
             ) {
                 throw new InvalidOperationException(message: $"Kit '{kitName}' body motion program '{program.Name}' requires channel role '{role}', but no declared channel claims it.");
             }

@@ -9,9 +9,9 @@ public sealed partial class WorldPersistence {
     internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick) {
         switch (component) {
             case WorldStateHashComponent.Input:
-                Host.Input.AppendStateHash(ref hash);
-                Host.Tick.AppendRoutedInputHash(ref hash);
-                Host.Tick.AppendFederatedInputHash(ref hash);
+                Host.Input.AppendStateHash(hash: ref hash);
+                Host.Tick.AppendRoutedInputHash(hash: ref hash);
+                Host.Tick.AppendFederatedInputHash(hash: ref hash);
                 break;
             case WorldStateHashComponent.ScopedReplays:
                 hash.Add(value: ((uint)Host.ScopedReplays.Count));

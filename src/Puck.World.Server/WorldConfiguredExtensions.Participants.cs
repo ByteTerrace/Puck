@@ -36,7 +36,7 @@ public sealed partial class WorldConfiguredExtensions {
             m_participants.Add(item: (row.Name, type.Create(
                 arg1: new WorldParticipantContext {
                     BodyIndex = row.Body,
-                    Channels = () => server.Population.Channels,
+                    Channels = () => (server.Body(index: row.Body)?.Channels ?? WorldChannelTable.Empty),
                     Clock = m_clock,
                     Extensions = extensions,
                     Link = link,

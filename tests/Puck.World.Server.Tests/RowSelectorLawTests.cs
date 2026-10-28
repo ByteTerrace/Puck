@@ -14,11 +14,11 @@ namespace Puck.World.Server.Tests;
 /// selects by it before the body first advances there, and the validator and rule compiler refuse what the document does
 /// not declare, by name.</summary>
 public sealed class RowSelectorLawTests {
-    private const string SlowKit = "slow";
-    private const string SuitedLook = "suited";
-    private const string PilotLook = "pilot";
-    private const string Suit = "suit";
     private const string Fuel = "fuel";
+    private const string PilotLook = "pilot";
+    private const string SlowKit = "slow";
+    private const string Suit = "suit";
+    private const string SuitedLook = "suited";
     // The suit's initial value, which no case names: every body holds it until something writes it.
     private const float BornSuit = 5f;
 
@@ -26,12 +26,12 @@ public sealed class RowSelectorLawTests {
         BodyState: Suit,
         Cases: [
             new WorldRowSelectorCase(
-                Value: 1L,
-                Row: first
+                Row: first,
+                Value: 1L
             ),
             new WorldRowSelectorCase(
-                Value: 0L,
-                Row: second
+                Row: second,
+                Value: 0L
             ),
         ]
     );
@@ -135,6 +135,7 @@ public sealed class RowSelectorLawTests {
             KitsRaw = (selected.KitsRaw! with { Assignment = selected.Assignment with { Select = null } }),
         }));
         using var fixture = Fixtures.FreshServer(definition: selected);
+
         unselected.JoinSeat();
         var body = fixture.JoinSeat();
 
@@ -506,7 +507,7 @@ public sealed class RowSelectorLawTests {
     public void TheValidatorRefusesACaseNamingTheRegistersInitialValue() {
         var atInitial = new WorldRowSelector(
             BodyState: Suit,
-            Cases: [new WorldRowSelectorCase(Value: 5L, Row: PilotLook)]
+            Cases: [new WorldRowSelectorCase(Row: PilotLook, Value: 5L)]
         );
 
         Assert.Contains(
@@ -515,7 +516,7 @@ public sealed class RowSelectorLawTests {
         );
         Assert.Contains(
             expectedSubstring: "kits.assignment.select.cases[0] value 5 is register 'suit' initial value",
-            actualString: Refusal(definition: Document(kitSelect: (atInitial with { Cases = [new WorldRowSelectorCase(Value: 5L, Row: SlowKit)] })))
+            actualString: Refusal(definition: Document(kitSelect: (atInitial with { Cases = [new WorldRowSelectorCase(Row: SlowKit, Value: 5L)] })))
         );
     }
     [Fact]
@@ -523,8 +524,8 @@ public sealed class RowSelectorLawTests {
         var repeated = new WorldRowSelector(
             BodyState: Suit,
             Cases: [
-                new WorldRowSelectorCase(Value: 1L, Row: SuitedLook),
-                new WorldRowSelectorCase(Value: 1L, Row: PilotLook),
+                new WorldRowSelectorCase(Row: SuitedLook, Value: 1L),
+                new WorldRowSelectorCase(Row: PilotLook, Value: 1L),
             ]
         );
 

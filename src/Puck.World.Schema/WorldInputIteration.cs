@@ -9,7 +9,6 @@ public interface IWorldInputEvents : IFacet {
     /// <summary>Returns the event identity occupying one retained-history position.</summary>
     long InputEventGeneration(WorldInputOwnerReference owner, CellKey key);
 }
-
 /// <summary>Compiled inputEvents(owner) iteration over the existing rule sweep.</summary>
 public sealed record WorldInputIteration(WorldInputOwnerReference Owner, int EventCapacity) : RuleIteration(EventCapacity) {
     /// <inheritdoc/>

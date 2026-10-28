@@ -77,23 +77,26 @@ public sealed class WorldFrameProducerLawTests {
             expected: start,
             actual: body.FixedHome
         );
-        var participant = Assert.Single(fixture.Server.Input.Capture().Owners);
+        var participant = Assert.Single(collection: fixture.Server.Input.Capture().Owners);
+
         Assert.Equal(Principal.World, participant.Controller!.Value.Actor);
         Assert.Equal("roam", participant.Controller.Value.Source);
         Assert.Equal(PrincipalKind.Session, participant.Principal.Kind);
-        Assert.Contains(participant.Input.History, record => record.Event.Kind == WorldInputEventKind.AxisSample);
-        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
-        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(WorldAuthorityCheckpointCodec.Encode(checkpoint!), out var decoded, out reason), reason);
+        Assert.Contains(collection: participant.Input.History, filter: record => (record.Event.Kind == WorldInputEventKind.AxisSample));
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), userMessage: reason);
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint!), out var decoded, out reason), userMessage: reason);
         using var restored = Fixtures.FreshServer(definition);
-        restored.Server.RestoreCheckpoint(decoded!);
+
+        restored.Server.RestoreCheckpoint(checkpoint: decoded!);
         fixture.Step();
         restored.Step();
         var sampledTick = fixture.Server.Input.Interval.Tick;
-        Assert.Equal(WorldStateHashComposition.HashAuthoritative(fixture.Server, sampledTick),
-            WorldStateHashComposition.HashAuthoritative(restored.Server, sampledTick));
-        body.SetIntentSource(IntentSource.Idle);
+
+        Assert.Equal(WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: sampledTick),
+            WorldStateHashComposition.HashAuthoritative(server: restored.Server, tick: sampledTick));
+        body.SetIntentSource(source: IntentSource.Idle);
         fixture.Step();
-        Assert.True(fixture.Server.Input.TryGet(participant.Principal, out var input));
+        Assert.True(condition: fixture.Server.Input.TryGet(participant.Principal, out var input));
         Assert.Equal(default, input!.Image);
     }
 }

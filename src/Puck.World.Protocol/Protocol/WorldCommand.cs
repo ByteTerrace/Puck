@@ -46,11 +46,11 @@ public abstract record WorldCommand(Principal Principal, int EntityIndex) {
     /// movement tape, reaching any declared channel (movement roles included).</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
-    /// <param name="ChannelOrdinal">The channel ordinal to hold.</param>
+    /// <param name="Channel">The semantic channel name, resolved against the target's active mapping at admission.</param>
     /// <param name="Value">The raw fixed-point value to hold the channel at.</param>
     /// <param name="HoldSeconds">How long (sim seconds) the channel reads held before auto-releasing, or
     /// <see langword="null"/> for the default host-step-derived tap.</param>
-    public sealed record PressChannel(Principal Principal, int EntityIndex, int ChannelOrdinal, FixedQ4816 Value, float? HoldSeconds) : WorldCommand(
+    public sealed record PressChannel(Principal Principal, int EntityIndex, string Channel, FixedQ4816 Value, float? HoldSeconds) : WorldCommand(
         Principal,
         EntityIndex
     );

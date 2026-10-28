@@ -6,7 +6,7 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateAdjacencies(WorldDefinition definition, HashSet<string> destinationNames, IWorldNeighbourResolver? neighbours, bool proveNeighbours, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var resolutions = new Dictionary<string, WorldNeighbourResolution>(comparer: StringComparer.Ordinal);
-        var channels = WorldChannelTable.For(definition);
+        var channels = WorldChannelTable.For(definition: definition);
 
         foreach (var adjacency in (definition.Adjacencies ?? [])) {
             if (adjacency is null) {

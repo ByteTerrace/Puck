@@ -83,10 +83,11 @@ internal static class DeepEqual {
 
             return false;
         }
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>)) {
+        if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(ReadOnlyMemory<>))) {
             // Span cannot be boxed by reflection. Compare the public memory contents instead.
-            var materialize = type.GetMethod(nameof(ReadOnlyMemory<byte>.ToArray))!;
-            return Compare(materialize.Invoke(a, null), materialize.Invoke(b, null), path);
+            var materialize = type.GetMethod(name: nameof(ReadOnlyMemory<byte>.ToArray))!;
+
+            return Compare(a: materialize.Invoke(obj: a, parameters: null), b: materialize.Invoke(obj: b, parameters: null), path: path);
         }
         if (
             type.IsPrimitive ||

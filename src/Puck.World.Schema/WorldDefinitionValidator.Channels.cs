@@ -654,7 +654,7 @@ public static partial class WorldDefinitionValidator {
         var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
 
         try {
-            var compiled = BindingProfile.Compile(document: composed, channelIsRelative: reference => ((channels is { } table) && table.TryGetShape(reference, out var shape) && shape == ChannelShape.Relative));
+            var compiled = BindingProfile.Compile(document: composed, channelIsRelative: reference => ((channels is { } table) && table.TryGetShape(reference: reference, shape: out var shape) && (shape == ChannelShape.Relative)));
 
             if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
                 errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling.");
@@ -694,10 +694,10 @@ public static partial class WorldDefinitionValidator {
         var axes = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape is not (ChannelShape.Binary or ChannelShape.Text)))).ToArray();
         var buttons = channels.Where(predicate: channel => ((channel is not null) && (channel.Shape == ChannelShape.Binary))).ToArray();
 
-        if (definition.InputModes is null && axes.Length > ChannelLimits.MaxAxes) {
+        if ((definition.InputModes is null) && (axes.Length > ChannelLimits.MaxAxes)) {
             errors.Add(item: $"channels numeric bank requires {axes.Length} slots; the maximum is {ChannelLimits.MaxAxes}: {string.Join(separator: ", ", values: axes.Select(selector: channel => channel.Name))}.");
         }
-        if (definition.InputModes is null && buttons.Length > ChannelLimits.MaxButtons) {
+        if ((definition.InputModes is null) && (buttons.Length > ChannelLimits.MaxButtons)) {
             errors.Add(item: $"channels button bank requires {buttons.Length} slots; the maximum is {ChannelLimits.MaxButtons}: {string.Join(separator: ", ", values: buttons.Select(selector: channel => channel.Name))}.");
         }
 
@@ -735,7 +735,7 @@ public static partial class WorldDefinitionValidator {
                 } else if (!roleClaims.TryAdd(
                     key: role,
                     value: (channel.Name ?? path)
-                ) && definition.InputModes is null) {
+                ) && (definition.InputModes is null)) {
                     errors.Add(item: $"{path}.role '{role}' is already claimed by channel '{roleClaims[role]}'.");
                 }
 

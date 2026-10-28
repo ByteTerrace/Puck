@@ -67,8 +67,9 @@ public static class WorldPostBuildWiring {
         }
 
         var consoleRegistry = services.GetRequiredService<CommandRegistry>();
+
         consoleRegistry.TextCommitted += services.GetRequiredService<WorldClient>().ObserveText;
-        services.GetRequiredService<WorldClient>().UseInputRouter(services.GetRequiredService<InputRouter>());
+        services.GetRequiredService<WorldClient>().UseInputRouter(router: services.GetRequiredService<InputRouter>());
 
         try {
             services.GetRequiredService<WorldServiceExtensions>().Initialize();
@@ -429,13 +430,13 @@ public static class WorldPostBuildWiring {
 
                 if (target.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
                     if (!WorldSourceSave.TrySave(
+                        bytesWritten: out var sourceBytes,
+                        catalog: machineCatalog,
+                        catalogFingerprint: machineCatalogFingerprint,
                         definition: snapshot,
                         path: target,
-                        bytesWritten: out var sourceBytes,
-                        written: out var sources,
                         reason: out var sourceReason,
-                        catalogFingerprint: machineCatalogFingerprint,
-                        catalog: machineCatalog
+                        written: out var sources
                     )) {
                         Console.Error.WriteLine(value: $"[world.rule: save effect refused — {sourceReason}; nothing written]");
                         return;

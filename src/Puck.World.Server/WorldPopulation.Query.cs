@@ -716,7 +716,7 @@ public sealed partial class WorldPopulation {
     /// <returns>The slot's assigned kit's motion tuning.</returns>
     public WorldMotion KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
     /// <summary>The selected kit's semantic name for authoritative input selectors.</summary>
-    public string KitName(int index) => m_kitRows[ResolveKitIndex(index)].Name;
+    public string KitName(int index) => m_kitRows[ResolveKitIndex(index: index)].Name;
     /// <summary>The most recent timed <c>body.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
     /// outcome when none has been made (or the last attempt was refused — see <see cref="PressRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>

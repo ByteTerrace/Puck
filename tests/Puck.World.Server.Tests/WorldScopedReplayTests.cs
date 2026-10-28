@@ -38,7 +38,7 @@ public sealed partial class WorldScopedReplayTests {
         var channels = new ChannelValues();
 
         channels[0] = Puck.Maths.FixedQ4816.One;
-        fixture.Server.EnqueueIntent(submission: Fixtures.Input(fixture.Server, Principal.Seat(0), 0,
+        fixture.Server.EnqueueIntent(submission: Fixtures.Input(fixture.Server, Principal.Seat(slot: 0), 0,
             new PlayerIntent(Channels: channels, SourceRay: null), fixture.Server.NextInputTick));
         for (var i = 0; (i < 6); i++) { fixture.Step(); }
         var tape = fixture.Server.ScopedReplays[0].Checkpoint();

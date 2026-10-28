@@ -119,7 +119,7 @@ public sealed class WorldActionStateLane {
     public void Rebirth(int ordinal, IReadOnlyList<CompiledActionStateSlot> previous, bool keepsIdentity, bool keepsParticipant = false) {
         for (var slot = 0; (slot < m_definitions.Length); slot++) {
             if (
-                !(m_definitions[slot].Lifetime == ActionStateLifetime.Durable ? keepsIdentity : keepsParticipant) ||
+                !((m_definitions[slot].Lifetime == ActionStateLifetime.Durable) ? keepsIdentity : keepsParticipant) ||
                 !Declares(
                     definition: in m_definitions[slot],
                     file: previous
@@ -133,6 +133,7 @@ public sealed class WorldActionStateLane {
             }
         }
     }
+
     // Whether a register file declares a durable slot of the same name and kind.
     private static bool Declares(in CompiledActionStateSlot definition, IReadOnlyList<CompiledActionStateSlot> file) {
         for (var index = 0; (index < file.Count); index++) {
@@ -151,6 +152,7 @@ public sealed class WorldActionStateLane {
 
         return false;
     }
+
     /// <summary>Reads one register slot's stored raw value.</summary>
     /// <param name="slot">The register-file slot.</param>
     /// <param name="ordinal">The entity index.</param>

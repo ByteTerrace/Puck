@@ -143,18 +143,18 @@ public sealed partial class WorldRuleHost {
     public bool Fire(ICompiledFact effect, in EffectFiring firing, out EffectRefusal refusal) {
         switch (effect) {
             case WorldInputConsumeEffect consume:
-                if (!TryInputOwner(consume.Owner, out var inputPrincipal, out var input)) { return Refuse(RuleEffectRefusal.MutationRejected, "input owner is not admitted", out refusal); }
+                if (!TryInputOwner(consume.Owner, out var inputPrincipal, out var input)) { return Refuse(code: RuleEffectRefusal.MutationRejected, reason: "input owner is not admitted", refusal: out refusal); }
                 if (firing.Preflight) {
-                    if (!input!.TryMatch(consume.Pattern, Host.Input.Interval, out var match)) { return Refuse(RuleEffectRefusal.MutationRejected, "input pattern has no unconsumed match", out refusal); }
+                    if (!input!.TryMatch(consume.Pattern, Host.Input.Interval, out var match)) { return Refuse(code: RuleEffectRefusal.MutationRejected, reason: "input pattern has no unconsumed match", refusal: out refusal); }
                     foreach (var (preparedEffect, preparedMatch) in m_preflightInput) {
-                        if (preparedMatch.Owner == inputPrincipal && input.SharesConsumption(preparedEffect.Pattern, consume.Pattern) &&
-                            match.First <= preparedMatch.Match.Last && preparedMatch.Match.First <= match.Last) {
-                            return Refuse(RuleEffectRefusal.MutationRejected, "input range is already claimed by this firing", out refusal);
+                        if ((preparedMatch.Owner == inputPrincipal) && input.SharesConsumption(first: preparedEffect.Pattern, second: consume.Pattern) &&
+                            (match.First <= preparedMatch.Match.Last) && (preparedMatch.Match.First <= match.Last)) {
+                            return Refuse(code: RuleEffectRefusal.MutationRejected, reason: "input range is already claimed by this firing", refusal: out refusal);
                         }
                     }
                     m_preflightInput[consume] = (inputPrincipal, match);
-                } else if (m_preflightInput.TryGetValue(consume, out var prepared)) {
-                    if (inputPrincipal != prepared.Owner) { return Refuse(RuleEffectRefusal.MutationRejected, "input owner changed during the firing", out refusal); }
+                } else if (m_preflightInput.TryGetValue(key: consume, value: out var prepared)) {
+                    if (inputPrincipal != prepared.Owner) { return Refuse(code: RuleEffectRefusal.MutationRejected, reason: "input owner changed during the firing", refusal: out refusal); }
                     _ = input!.Consume(consume.Pattern, prepared.Match);
                 }
                 refusal = EffectRefusal.None;

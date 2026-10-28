@@ -220,15 +220,15 @@ public sealed class WorldInputHoldRuntime {
     }
     /// <summary>Discards delayed samples from the old epoch and seeds only the authority's continuing baseline.</summary>
     public void InstallBarrier(int bodyIndex, PlayerIntent accepted, WorldChannelTable channels) {
-        if ((uint)bodyIndex >= (uint)m_participants.Length || !m_participants[bodyIndex].Active) { return; }
+        if ((((uint)bodyIndex) >= ((uint)m_participants.Length)) || !m_participants[bodyIndex].Active) { return; }
         var movement = accepted with { Channels = default };
         var held = default(PlayerIntent);
-        for (var address = 0; address < ChannelLimits.MaxChannels; address++) {
-            if (!channels.IsDeclared(address) || channels.Shape(address) == ChannelShape.Relative) { continue; }
-            if (channels.IsRole(address)) { movement = movement.WithChannel(address, accepted[address]); }
-            else { held = held.WithChannel(address, accepted[address]); }
+
+        for (var address = 0; (address < ChannelLimits.MaxChannels); address++) {
+            if (!channels.IsDeclared(ordinal: address) || (channels.Shape(ordinal: address) == ChannelShape.Relative)) { continue; }
+            if (channels.IsRole(ordinal: address)) { movement = movement.WithChannel(ordinal: address, value: accepted[address]); } else { held = held.WithChannel(ordinal: address, value: accepted[address]); }
         }
-        m_participants[bodyIndex].InstallBaseline(new(true, movement, held), m_settings.CeilingTicks);
+        m_participants[bodyIndex].InstallBaseline(baseline: new(HasIntent: true, HeldChannels: held, Intent: movement), ceilingTicks: m_settings.CeilingTicks);
     }
     /// <summary>Restores every participant slot's live hold state from a previously captured checkpoint.</summary>
     public void Restore(WorldInputHoldCheckpoint checkpoint) {
@@ -341,8 +341,8 @@ public sealed class WorldInputHoldRuntime {
         public void InstallBaseline(WorldSubmittedInput baseline, int ceilingTicks) {
             m_history.Clear();
             m_historyStart = 0;
-            m_history.EnsureCapacity(checked(ceilingTicks + 1));
-            for (var index = 0; index <= ceilingTicks; index++) { m_history.Add(baseline); }
+            m_history.EnsureCapacity(capacity: checked((ceilingTicks + 1)));
+            for (var index = 0; (index <= ceilingTicks); index++) { m_history.Add(item: baseline); }
         }
         public void Restore(WorldInputHoldParticipantCheckpoint checkpoint) {
             Active = checkpoint.Active;

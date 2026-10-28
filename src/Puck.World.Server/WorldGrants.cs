@@ -732,7 +732,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             WorldCapability.Mutate => ((subject.Kind is GrantSubjectKind.Section or GrantSubjectKind.State or GrantSubjectKind.Creation or GrantSubjectKind.Placement) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             WorldCapability.Edit => ((subject.Kind == GrantSubjectKind.State) ||
-                ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || principal.Kind == PrincipalKind.World))),
+                ((subject.Kind == GrantSubjectKind.All) && (trustedWildcard || (principal.Kind == PrincipalKind.World)))),
             _ => false,
         };
     }
@@ -1162,7 +1162,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         _ = m_applications.Remove(key: principal);
 
-        m_host?.Input.ResetRoute(principal);
+        m_host?.Input.ResetRoute(principal: principal);
 
         foreach (var dissolved in composed) {
             NotifyApplicationTransition(
@@ -1272,7 +1272,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     key: (pair.Key, capability, subject),
                     value: out var reach
                 )) {
-                    _ = builder.Append(value: " channels:").AppendJoin(',', reach.Channels).Append(value: $" registers:{reach.Registers:x}");
+                    _ = builder.Append(value: " channels:").AppendJoin(separator: ',', values: reach.Channels).Append(value: $" registers:{reach.Registers:x}");
                 }
 
                 // NAMES, never a hex lane: a read-back an operator cannot decode by eye is a read-back that does
@@ -1487,14 +1487,16 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <inheritdoc/>
     public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) {
         var projected = default(ChannelCeilings);
+
         if (m_poolCeilings.TryGetValue(
             key: (seat, WorldCapability.Drive, subject),
             value: out var ceilings
         )) {
-            var table = ChannelsFor(subject);
+            var table = ChannelsFor(subject: subject);
+
             foreach (var (name, ceiling) in ceilings) {
-                if (table.TryGetOrdinal(name, out var ordinal)) {
-                    projected = projected.WithCeiling(new(default(ChannelMask).With(ordinal)), ceiling);
+                if (table.TryGetOrdinal(name: name, ordinal: out var ordinal)) {
+                    projected = projected.WithCeiling(new(Bits: default(ChannelMask).With(ordinal: ordinal)), ceiling);
                 }
             }
         }
@@ -1502,7 +1504,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
 
     private WorldChannelTable ChannelsFor(GrantSubject subject) =>
-        subject.Kind == GrantSubjectKind.Body && Host.Body(subject.Value) is { } body ? body.Channels : Host.Population.Channels;
+        (((subject.Kind == GrantSubjectKind.Body) && (Host.Body(index: subject.Value) is { } body)) ? body.Channels : Host.Population.Channels);
+
     /// <inheritdoc/>
     /// <remarks>
     /// Sorted by (<see cref="GrantSubjectKind"/>, value, id) rather than returned in <see cref="HashSet{T}"/>
@@ -1615,8 +1618,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_ownedGroups.Clear();
         m_ownedGroupRoleReach.Clear();
 
-        foreach (var principal in droppedApplications.Select(static row => row.Principal).Distinct()) {
-            m_host?.Input.ResetRoute(principal);
+        foreach (var principal in droppedApplications.Select(selector: static row => row.Principal).Distinct()) {
+            m_host?.Input.ResetRoute(principal: principal);
         }
         foreach (var (principal, target) in droppedApplications) {
             NotifyApplicationTransition(
@@ -1719,7 +1722,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // WorldHandleTable's own remarks on why a cleared slot is what the projection BECOMES, never an
             // independent edit made here.
             m_revision++;
-            if (capability == WorldCapability.Drive) { m_host?.Input.RevokeDrive(grantee, subject); }
+            if (capability == WorldCapability.Drive) { m_host?.Input.RevokeDrive(grantee: grantee, subject: subject); }
 
             // Revoking Control re-tests every application this principal stands on: the authority to apply and the
             // application are separate storage, so nothing else would ever drop one whose authority has been
@@ -1737,7 +1740,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
     /// <inheritdoc/>
     public bool TryValidateApplications(Principal principal, IReadOnlyList<ControlApplication> applications, out string reason) {
-        if (m_host is not null && !m_host.Input.TryValidateApplications(principal, applications, out reason)) {
+        if ((m_host is not null) && !m_host.Input.TryValidateApplications(applications: applications, principal: principal, reason: out reason)) {
             m_host.Output.Narrate(channel: "input.refused", text: reason);
             return false;
         }
@@ -1762,7 +1765,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             m_applications[principal] = composed;
         }
 
-        if (!SameApplications(previous, composed)) { m_host?.Input.ResetRoute(principal); }
+        if (!SameApplications(first: previous, second: composed)) { m_host?.Input.ResetRoute(principal: principal); }
 
         foreach (var dropped in previous) {
             if (!Holds(
@@ -1829,19 +1832,22 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="definition">The live document.</param>
     /// <param name="arena">The live arena; declaration seeds are used only at cold boundaries.</param>
     internal void SyncState(WorldDefinition definition, StateArena? arena = null) {
-        arena ??= WorldStateReader.Seed(definition);
+        arena ??= WorldStateReader.Seed(definition: definition);
         m_driveGates.Clear();
         var time = ArenaTime.Origin;
-        for (var ordinal = 0; ordinal < arena.Rows.Count; ordinal++) {
+
+        for (var ordinal = 0; (ordinal < arena.Rows.Count); ordinal++) {
             if (arena.Rows[ordinal] is not WorldStateRow { GatesDrive: true } row) { continue; }
             var cursor = 0;
-            while (arena.TryNextCell(rowOrdinal: ordinal, cursor: ref cursor, key: out var key)) {
+
+            while (arena.TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: ordinal)) {
                 if (!int.TryParse(arena.Keys[key].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var body) ||
-                    (body < 0) || m_driveGates.ContainsKey(body)) { continue; }
-                if (arena.TryReadLiveNumber(rowOrdinal: ordinal, key: key, time: in time, value: out var raw) && raw != 0L) { m_driveGates[body] = row.Name; }
+                    (body < 0) || m_driveGates.ContainsKey(key: body)) { continue; }
+                if (arena.TryReadLiveNumber(key: key, rowOrdinal: ordinal, time: in time, value: out var raw) && (raw != 0L)) { m_driveGates[body] = row.Name; }
             }
         }
     }
+
     /// <inheritdoc/>
     public bool TryGetBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
         TryGetGrantValue(
@@ -1853,8 +1859,9 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         );
     /// <inheritdoc/>
     public bool TryGetChannelReach(Principal principal, GrantSubject subject, WorldChannelTable channels, out ChannelReachMask mask) {
-        var found = TryGetInputReach(principal, subject, out var selection);
-        mask = found ? selection.Project(channels) : default;
+        var found = TryGetInputReach(principal: principal, selection: out var selection, subject: subject);
+
+        mask = (found ? selection.Project(table: channels) : default);
         return found;
     }
     /// <summary>Reads semantic Drive reach before storage projection, so text/history admission obeys the same grant.</summary>
@@ -1964,11 +1971,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public bool TryGrant(WorldGrant grant, out string reason) {
         if (grant.Consent is { Registers: not 0 }) { reason = "pool consent cannot name target registers"; return false; }
         if (m_host is not null) {
-            foreach (var name in grant.Reach?.Channels ?? []) {
-                if (!Host.Population.Channels.TryGetLogicalId(name, out _)) { reason = $"reach names undeclared channel '{name}'"; return false; }
+            foreach (var name in (grant.Reach?.Channels ?? [])) {
+                if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"reach names undeclared channel '{name}'"; return false; }
             }
-            foreach (var name in grant.Consent?.Channels ?? []) {
-                if (!Host.Population.Channels.TryGetLogicalId(name, out _)) { reason = $"consent names undeclared channel '{name}'"; return false; }
+            foreach (var name in (grant.Consent?.Channels ?? [])) {
+                if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"consent names undeclared channel '{name}'"; return false; }
             }
         }
         if (Conflicts(
@@ -2016,7 +2023,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 key: key
             );
 
-            ceilings ??= new(StringComparer.Ordinal);
+            ceilings ??= new(comparer: StringComparer.Ordinal);
             foreach (var name in consent.Channels) { ceilings[name] = authoredCeiling; }
         } else if (grant.Reach is { } reach) {
             // A contributor's REACH, last-write-wins exactly like a budget re-grant: a re-grant naming a different

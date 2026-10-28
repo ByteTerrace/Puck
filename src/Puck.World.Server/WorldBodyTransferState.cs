@@ -257,6 +257,5 @@ public readonly record struct WorldBodyTransferState(
     IReadOnlyList<ulong> TapeRemainingTicks,
     WorldContinuumTrajectory? PendingContinuum,
     WorldBodyScriptActors ScriptActors);
-
 /// <summary>Actor provenance parallel to the body's existing duration stores; no input duration is duplicated.</summary>
 public readonly record struct WorldBodyScriptActors(Principal[] Timers, Principal[] Pending, IReadOnlyList<Principal> Tape);

@@ -60,7 +60,7 @@ public sealed partial class WorldBody {
         );
 
         return new(
-            ScriptActors: new(Own(alias, buffers, m_scriptActors), Own(alias, buffers, m_pendingScriptActors), tapeActors),
+            ScriptActors: new(Own(alias: alias, buffers: buffers, live: m_scriptActors), Own(alias: alias, buffers: buffers, live: m_pendingScriptActors), tapeActors),
             PlanarVelocity: m_planarVelocity,
             VerticalVelocity: m_verticalVelocity,
             Orientation: m_orientation,
@@ -153,7 +153,7 @@ public sealed partial class WorldBody {
 
                 viewIntents.Add(item: segment.Intent);
                 viewRemainingTicks.Add(item: segment.RemainingTicks);
-                viewActors.Add(segment.Actor);
+                viewActors.Add(item: segment.Actor);
             }
 
             return (viewIntents, viewRemainingTicks, viewActors);

@@ -384,7 +384,7 @@ public sealed partial class WorldAddonRuntime {
         // for Finish, which the caller runs only after ITS OWN publication (document install, journal write) is
         // itself durable.
         foreach (var previous in m_mounted) {
-            if (!install.Mounted.Contains(previous)) { m_server.Input.CancelSnapshots(previous.Principal, "addon"); }
+            if (!install.Mounted.Contains(item: previous)) { m_server.Input.CancelSnapshots(actor: previous.Principal, source: "addon"); }
         }
         m_host = install.Host;
         // Null exactly when no row has ever enabled (an addon-free world, or every row disabled) — the Wasmtime
@@ -452,7 +452,7 @@ public sealed partial class WorldAddonRuntime {
         // SequenceEqual's cost only on those rare calls, never on an ordinary UpsertAddon/RemoveAddon.
         var channelsChanged = !m_channelsSource.SequenceEqual(second: candidate.Channels);
         var stagedChannels = (channelsChanged
-            ? WorldInputCatalog.For(candidate)
+            ? WorldInputCatalog.For(definition: candidate)
             : m_channels
         );
 
@@ -954,7 +954,7 @@ public sealed partial class WorldAddonRuntime {
         var declared = default(ChannelDeclaredMask);
 
         foreach (var binding in m_mounted[index].Instance.ChannelBindings) {
-            if (binding.Resolved && channels.TryGetOrdinal(binding.Name, out var address)) {
+            if (binding.Resolved && channels.TryGetOrdinal(name: binding.Name, ordinal: out var address)) {
                 declared = declared.With(ordinal: address);
             }
         }

@@ -21,11 +21,14 @@ public sealed partial class WorldBody {
     internal PlayerIntent MergeSubmittedRelative(PlayerIntent incoming) {
         if (!m_hasSubmittedIntent) { return incoming; }
         var remaining = m_channels.RelativeMask;
+
         while (remaining != 0) {
-            var ordinal = BitOperations.TrailingZeroCount(remaining);
-            remaining &= remaining - 1;
-            var sum = (Int128)m_submittedIntent.Channels.Relative(ordinal).Value + incoming.Channels.Relative(ordinal).Value;
-            incoming = incoming.WithRelative(ordinal, FixedQ3232.FromRawBits(long.CreateSaturating(sum)));
+            var ordinal = BitOperations.TrailingZeroCount(value: remaining);
+
+            remaining &= (remaining - 1);
+            var sum = (((Int128)m_submittedIntent.Channels.Relative(ordinal: ordinal).Value) + incoming.Channels.Relative(ordinal: ordinal).Value);
+
+            incoming = incoming.WithRelative(ordinal: ordinal, value: FixedQ3232.FromRawBits(value: long.CreateSaturating(value: sum)));
         }
         return incoming;
     }

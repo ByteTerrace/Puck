@@ -523,7 +523,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         RowType: typeof(WorldInputModes),
         Upsert: Upsert(
             info: WorldJsonContext.Default.WorldInputModes,
-            toMutation: static (principal, modes) => new WorldMutation.SetInputModes(principal, modes)
+            toMutation: static (principal, modes) => new WorldMutation.SetInputModes(Modes: modes, Principal: principal)
         ),
         Remove: null,
         Read: ReadRow(
@@ -1674,10 +1674,11 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
     private static Func<WorldDefinition, string, RowReadOutcome> ReadRow<T>(JsonTypeInfo<T> info, Func<WorldDefinition, T?> select) {
         return (definition, _) => {
             var row = select(definition);
-            return ToReadOutcome(node: row is null ? null : JsonSerializer.SerializeToNode(
-                value: row,
-                jsonTypeInfo: info
-            ));
+
+            return ToReadOutcome(node: ((row is null) ? null : JsonSerializer.SerializeToNode(
+                jsonTypeInfo: info,
+                value: row
+            )));
         };
     }
     // The one section (screens) keyed by its own array POSITION rather than a stable name.

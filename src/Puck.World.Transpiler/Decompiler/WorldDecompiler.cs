@@ -1509,7 +1509,10 @@ public static partial class WorldDecompiler {
             switch (form) {
                 case WorldArgumentForm.Name:
                     return DocumentLowering.BareSpelling(form: DocumentValueForm.Name, written: written);
-                case WorldArgumentForm.Expression or WorldArgumentForm.Choice:
+                case WorldArgumentForm.Expression:
+                    return ((ExpressionSpelling.TryParse(error: out _, program: out var expression, text: written) &&
+                        ExpressionSpelling.TryPrintSource(program: expression, text: out var source)) ? source : written);
+                case WorldArgumentForm.Choice:
                     return written;
                 case WorldArgumentForm.Key:
                     return DocumentLowering.BareSpelling(form: DocumentValueForm.Key, written: written);

@@ -15,78 +15,86 @@ public sealed partial class WorldReplayInspector {
     private static string CaptureInputs(WorldServer server, Dictionary<Principal, InputCursor> cursors) {
         var text = new StringBuilder();
         var catalog = server.Population.InputCatalog;
-        for (var ownerIndex = 0; ownerIndex < server.Input.OwnerCount; ownerIndex++) {
-            var principal = server.Input.OwnerPrincipal(ownerIndex);
-            if (!server.Input.TryGet(principal, out var input)) { continue; }
+
+        for (var ownerIndex = 0; (ownerIndex < server.Input.OwnerCount); ownerIndex++) {
+            var principal = server.Input.OwnerPrincipal(index: ownerIndex);
+
+            if (!server.Input.TryGet(input: out var input, principal: principal)) { continue; }
             var owner = input!;
-            cursors.TryGetValue(principal, out var cursor);
-            var changed = cursor.Revision != owner.Revision || cursor.Epoch != owner.Epoch;
+
+            cursors.TryGetValue(key: principal, value: out var cursor);
+            var changed = ((cursor.Revision != owner.Revision) || (cursor.Epoch != owner.Epoch));
+
             if (changed) {
                 Separate();
-                text.Append("input ").Append(principal.Describe()).Append(" mode='").Append(owner.Mapping.Name)
-                    .Append("' revision=").Append(owner.Revision).Append(" epoch=").Append(owner.Epoch);
-                if (server.Input.ControllerOrigin(principal) is { } controller) {
-                    text.Append(" actor='").Append(controller.Actor.Describe()).Append("' source='").Append(controller.Source).Append('\'');
+                text.Append(value: "input ").Append(value: principal.Describe()).Append(value: " mode='").Append(value: owner.Mapping.Name)
+                    .Append(value: "' revision=").Append(value: owner.Revision).Append(value: " epoch=").Append(value: owner.Epoch);
+                if (server.Input.ControllerOrigin(principal: principal) is { } controller) {
+                    text.Append(value: " actor='").Append(value: controller.Actor.Describe()).Append(value: "' source='").Append(value: controller.Source).Append(value: '\'');
                 }
-                for (var index = 0; index < owner.SwitchCount; index++) {
-                    var boundary = owner.SwitchRecord(index);
-                    if (cursor.Revision == owner.Revision && boundary.Epoch <= cursor.Epoch) { continue; }
-                    text.Append(" switch(tick=").Append(boundary.Tick).Append(" epoch=").Append(boundary.Epoch)
-                        .Append(" from='").Append(catalog.Mappings[boundary.From].Name).Append("' to='")
-                        .Append(catalog.Mappings[boundary.To].Name).Append("' reset=").Append(boundary.Reset ? "true" : "false")
-                        .Append(" consumed=[");
+                for (var index = 0; (index < owner.SwitchCount); index++) {
+                    var boundary = owner.SwitchRecord(index: index);
+
+                    if ((cursor.Revision == owner.Revision) && (boundary.Epoch <= cursor.Epoch)) { continue; }
+                    text.Append(value: " switch(tick=").Append(value: boundary.Tick).Append(value: " epoch=").Append(value: boundary.Epoch)
+                        .Append(value: " from='").Append(value: catalog.Mappings[boundary.From].Name).Append(value: "' to='")
+                        .Append(value: catalog.Mappings[boundary.To].Name).Append(value: "' reset=").Append(value: (boundary.Reset ? "true" : "false"))
+                        .Append(value: " consumed=[");
                     var separator = false;
+
                     foreach (var activation in boundary.ConsumedActivations.Span) {
-                        if (separator) { text.Append(','); }
-                        text.Append(activation);
+                        if (separator) { text.Append(value: ','); }
+                        text.Append(value: activation);
                         separator = true;
                     }
-                    text.Append("])");
+                    text.Append(value: "])");
                     foreach (var decision in boundary.Decisions.Span) {
-                        text.Append(' ').Append(catalog.Channels[decision.Channel].Name).Append('=')
-                            .Append(decision.Reason == WorldInputContinuationReason.Kept ? "kept" : "cancelled")
-                            .Append('(').Append(decision.Reason).Append(" hold=").Append(decision.HoldPress)
-                            .Append(" since=").Append(ExactTime(decision.HeldSince)).Append(')');
+                        text.Append(value: ' ').Append(value: catalog.Channels[decision.Channel].Name).Append(value: '=')
+                            .Append(value: ((decision.Reason == WorldInputContinuationReason.Kept) ? "kept" : "cancelled"))
+                            .Append(value: '(').Append(value: decision.Reason).Append(value: " hold=").Append(value: decision.HoldPress)
+                            .Append(value: " since=").Append(value: ExactTime(value: decision.HeldSince)).Append(value: ')');
                     }
                 }
                 foreach (var channel in owner.Mapping.Live) {
-                    if (!owner.TryHeld(channel, out var held)) { continue; }
-                    text.Append(" held.").Append(catalog.Channels[channel].Name).Append("(press=").Append(held.Press)
-                        .Append(" since=").Append(ExactTime(held.Origin.Time(WorldInputJudgement.Capture)))
-                        .Append(" consumed=").Append(held.Consumed ? "true" : "false").Append(')');
+                    if (!owner.TryHeld(channel: channel, hold: out var held)) { continue; }
+                    text.Append(value: " held.").Append(value: catalog.Channels[channel].Name).Append(value: "(press=").Append(value: held.Press)
+                        .Append(value: " since=").Append(value: ExactTime(value: held.Origin.Time(policy: WorldInputJudgement.Capture)))
+                        .Append(value: " consumed=").Append(value: (held.Consumed ? "true" : "false")).Append(value: ')');
                 }
             }
             foreach (var channel in owner.Mapping.Live) {
-                var address = owner.Mapping.Address(channel);
-                if (catalog.Channels[channel].Shape != ChannelShape.Relative || owner.Image.Channels.Relative(address).Value == 0) { continue; }
+                var address = owner.Mapping.Address(logicalId: channel);
+
+                if ((catalog.Channels[channel].Shape != ChannelShape.Relative) || (owner.Image.Channels.Relative(ordinal: address).Value == 0)) { continue; }
                 Separate();
-                text.Append(principal.Describe()).Append(' ').Append(catalog.Channels[channel].Name)
-                    .Append(" displacement=").Append(owner.Mapping.Channels.DescribeValue(owner.Image, address));
+                text.Append(value: principal.Describe()).Append(value: ' ').Append(value: catalog.Channels[channel].Name)
+                    .Append(value: " displacement=").Append(value: owner.Mapping.Channels.DescribeValue(intent: owner.Image, ordinal: address));
             }
             // Profile recompilation preserves event identities. A fresh attachment can restart the stream
             // at a lower epoch; retain no cursor from that previous attachment.
-            var lastEvent = cursor.Revision != owner.Revision && owner.Epoch <= cursor.Epoch ? 0 : cursor.Event;
-            for (var index = 0; index < owner.Count; index++) {
-                var record = owner.Record(index);
+            var lastEvent = (((cursor.Revision != owner.Revision) && (owner.Epoch <= cursor.Epoch)) ? 0 : cursor.Event);
+
+            for (var index = 0; (index < owner.Count); index++) {
+                var record = owner.Record(index: index);
+
                 if (record.Id <= lastEvent) { continue; }
                 Separate();
-                text.Append(principal.Describe()).Append(' ').Append(catalog.Channels[record.Event.Channel].Name)
-                    .Append(' ').Append(record.Event.Kind).Append("#").Append(record.Id).Append(" epoch=").Append(record.Epoch)
-                    .Append(" capture=").Append(ExactTime(record.Time(WorldInputJudgement.Capture)))
-                    .Append(" admittedTick=").Append(record.Admission.Tick).Append(" activation=").Append(record.Event.Activation);
-                if (record.HoldPress != 0) { text.Append(" hold=").Append(record.HoldPress); }
+                text.Append(value: principal.Describe()).Append(value: ' ').Append(value: catalog.Channels[record.Event.Channel].Name)
+                    .Append(value: ' ').Append(value: record.Event.Kind).Append(value: "#").Append(value: record.Id).Append(value: " epoch=").Append(value: record.Epoch)
+                    .Append(value: " capture=").Append(value: ExactTime(value: record.Time(policy: WorldInputJudgement.Capture)))
+                    .Append(value: " admittedTick=").Append(value: record.Admission.Tick).Append(value: " activation=").Append(value: record.Event.Activation);
+                if (record.HoldPress != 0) { text.Append(value: " hold=").Append(value: record.HoldPress); }
                 if (record.Event.Kind == WorldInputEventKind.Text) {
-                    text.Append(" scalar=U+").Append(record.Event.RawValue.ToString("X4", CultureInfo.InvariantCulture));
-                } else { text.Append(" raw=").Append(record.Event.RawValue); }
+                    text.Append(value: " scalar=U+").Append(value: record.Event.RawValue.ToString(format: "X4", provider: CultureInfo.InvariantCulture));
+                } else { text.Append(value: " raw=").Append(value: record.Event.RawValue); }
                 lastEvent = record.Id;
             }
             cursors[principal] = new(owner.Revision, owner.Epoch, lastEvent);
         }
         return text.ToString();
 
-        void Separate() { if (text.Length != 0) { text.Append("; "); } }
+        void Separate() { if (text.Length != 0) { text.Append(value: "; "); } }
     }
-
     private static string ExactTime(FixedQ4816 value) =>
-        ((decimal)value.Value / FixedQ4816.One.Value).ToString(CultureInfo.InvariantCulture) + "s";
+        ((((decimal)value.Value) / FixedQ4816.One.Value).ToString(provider: CultureInfo.InvariantCulture) + "s");
 }

@@ -61,7 +61,9 @@ public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState
 /// </remarks>
 public sealed partial class WorldEngagement {
     private readonly Dictionary<WorldChannelTable, WorldPadElement?[]> m_defaultPads = [];
+
     private WorldInputCatalog? m_padCatalog;
+
     private readonly Func<WorldDefinition> m_definition;
     private readonly IWorldGrantsView m_grants;
     private readonly WorldPopulation m_population;
@@ -146,6 +148,7 @@ public sealed partial class WorldEngagement {
         var table = new WorldPadElement?[ChannelLimits.MaxChannels];
 
         var roles = channels.RoleOrdinals;
+
         if (roles.MoveStrafe >= 0) { table[roles.MoveStrafe] = WorldPadElement.LeftStickX; }
         if (roles.MoveAdvance >= 0) { table[roles.MoveAdvance] = WorldPadElement.LeftStickY; }
 
@@ -405,7 +408,7 @@ public sealed partial class WorldEngagement {
             Target: target
         ));
 
-        if (!m_grants.TryValidateApplications(targetPrincipal, m_composeScratch, out _)) {
+        if (!m_grants.TryValidateApplications(applications: m_composeScratch, principal: targetPrincipal, reason: out _)) {
             return false;
         }
 
@@ -610,7 +613,7 @@ public sealed partial class WorldEngagement {
 
                     var masked = ApplyMask(
                         intent: body.EngagedIntent,
-                        mask: policy.Reach?.Project(body.Channels) ?? ChannelReachMask.All
+                        mask: (policy.Reach?.Project(table: body.Channels) ?? ChannelReachMask.All)
                     );
                     var pad = (Translate(
                         intent: masked,
@@ -640,7 +643,7 @@ public sealed partial class WorldEngagement {
                         Principal: principal,
                         Intent: ApplyMask(
                             intent: body.EngagedIntent,
-                            mask: application.Reach?.Project(body.Channels) ?? ChannelReachMask.All
+                            mask: (application.Reach?.Project(table: body.Channels) ?? ChannelReachMask.All)
                         )
                     ));
                 }
@@ -774,7 +777,7 @@ public sealed partial class WorldEngagement {
     /// <param name="channels">The source owner's current input mapping.</param>
     /// <returns>The controller image the intent presses.</returns>
     public MachinePadState Translate(PlayerIntent intent, string? kit, WorldChannelTable channels) {
-        var table = PadOf(kit: kit, channels: channels);
+        var table = PadOf(channels: channels, kit: kit);
         var buttons = MachineButtons.None;
         var leftStick = Vector2.Zero;
         var rightStick = Vector2.Zero;
@@ -930,7 +933,7 @@ public sealed partial class WorldEngagement {
                 : null
             ),
             Kit: screen.Route.Kit,
-            Reach: screen.Route.Channels is { Count: > 0 } names ? new WorldChannelSelection(names) : null
+            Reach: ((screen.Route.Channels is { Count: > 0 } names) ? new WorldChannelSelection(names) : null)
         );
 
         m_screenPolicies[screenIndex] = (screen, policy);
@@ -940,13 +943,13 @@ public sealed partial class WorldEngagement {
     // A kit's compiled pad map from the live definition's row of that name, compiled once per row object; the engine's
     // baked default table for no kit, a kit the definition does not declare, or a kit that declares no pad.
     private WorldPadElement?[] PadOf(string? kit, WorldChannelTable channels) {
-        if (!ReferenceEquals(m_padCatalog, m_population.InputCatalog)) {
+        if (!ReferenceEquals(objA: m_padCatalog, objB: m_population.InputCatalog)) {
             m_padCatalog = m_population.InputCatalog;
             m_defaultPads.Clear();
             m_kitPads.Clear();
         }
         if (kit is not { Length: > 0 } name) {
-            return DefaultPad(channels);
+            return DefaultPad(channels: channels);
         }
 
         IndexRows();
@@ -958,7 +961,7 @@ public sealed partial class WorldEngagement {
             ) ||
             (row.PadRaw is not { Count: > 0 })
         ) {
-            return DefaultPad(channels);
+            return DefaultPad(channels: channels);
         }
 
         if (
@@ -984,7 +987,7 @@ public sealed partial class WorldEngagement {
         return pad;
     }
     private WorldPadElement?[] DefaultPad(WorldChannelTable channels) {
-        if (!m_defaultPads.TryGetValue(channels, out var pad)) { m_defaultPads.Add(channels, pad = CompileDefaultPad(channels)); }
+        if (!m_defaultPads.TryGetValue(key: channels, value: out var pad)) { m_defaultPads.Add(key: channels, value: pad = CompileDefaultPad(channels: channels)); }
         return pad;
     }
 
@@ -994,6 +997,7 @@ public sealed partial class WorldEngagement {
     /// co-driving seat or addon contribution passes through — possession is Drive-over-body plus this application,
     /// never a second authority path.</summary>
     public IReadOnlyList<BodyRouteContribution> BodyContributions => m_bodyContributions;
+
     /// <summary>Releases derived scratch after the tick has queued every target fold.</summary>
     internal void CompleteBodyRouting() => m_bodyContributions.Clear();
 }

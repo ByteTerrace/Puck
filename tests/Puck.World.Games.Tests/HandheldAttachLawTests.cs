@@ -30,10 +30,8 @@ namespace Puck.World.Games.Tests;
 /// <see cref="Puck.State.RuleCapacity.MaxWorkUnitsPerTick"/>.
 /// </summary>
 public sealed class HandheldAttachLawTests {
-    private const int ForwardOrdinal = 0;
     private const string HandheldRow = "handheldHeld";
     private const string JumpChannel = "jump";
-    private const int JumpOrdinal = 3;
     private const string StandRegion = "handheldStand";
 
     private static readonly Vector3 HandOffset = new(
@@ -207,11 +205,12 @@ public sealed class HandheldAttachLawTests {
     private static WorldPlacement Handheld(WorldFixture fixture) =>
         fixture.Server.Definition.Placements.Single(predicate: static placement => (placement.Id == "handheld"));
     private static long HandheldHeldCell(WorldFixture fixture) => fixture.Row(name: HandheldRow).Cells!.Single().Value.Raw;
-    private static void SubmitChannel(WorldFixture fixture, Principal actor, int ordinal, FixedQ4816 value) => fixture.Server.ApplyIntentSubmission(
-        body: fixture.Server.Body(index: actor.Index)!,
+    private static void SubmitChannel(WorldFixture fixture, Principal actor, string channel, FixedQ4816 value) {
+        Assert.True(condition: fixture.Server.Body(index: actor.Index)!.Channels.TryGetOrdinal(name: channel, ordinal: out var ordinal));
+        fixture.Server.EnqueueIntent(
         submission: Fixtures.Input(
             server: fixture.Server,
-            tick: fixture.Server.Input.Interval.Tick,
+            tick: fixture.Server.NextInputTick,
             body: actor.Index,
             image: default(PlayerIntent).WithChannel(
                 ordinal: ordinal,
@@ -219,7 +218,8 @@ public sealed class HandheldAttachLawTests {
             ),
             actor: actor
         )
-    );
+        );
+    }
 
     [Fact]
     public void APressedChannelInsideTheStandsRegionAttachesTheHandheldToTheBody_WalkingOutReturnsItToTheStand() {
@@ -245,7 +245,7 @@ public sealed class HandheldAttachLawTests {
         SubmitChannel(
             fixture: fixture,
             actor: actor,
-            ordinal: JumpOrdinal,
+            channel: JumpChannel,
             value: FixedQ4816.One
         );
         fixture.Step();
@@ -297,7 +297,7 @@ public sealed class HandheldAttachLawTests {
             SubmitChannel(
                 fixture: fixture,
                 actor: actor,
-                ordinal: ForwardOrdinal,
+                channel: "forward",
                 value: FixedQ4816.One
             );
             fixture.Step();
@@ -334,7 +334,7 @@ public sealed class HandheldAttachLawTests {
         SubmitChannel(
             fixture: fixture,
             actor: actor,
-            ordinal: JumpOrdinal,
+            channel: JumpChannel,
             value: FixedQ4816.One
         );
         fixture.Step();

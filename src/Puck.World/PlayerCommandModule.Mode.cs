@@ -175,10 +175,11 @@ internal sealed partial class PlayerCommandModule {
     // player.camera reaches it by resolving the family/state pair itself, so both compose the identical application.
     private CommandResult ApplyMode(CommandContext context, WorldSeatModeFamily modeFamily, WorldSeatModeState targetState, int slot, string verb) {
         var family = modeFamily.Name;
-        if (seatRouter.TryRoute(slot) is { } inputRoute && inputRoute.Endpoint.Definition.InputModes?.Families.Any(row =>
-            row.Selector.Kind == WorldInputModeSelectorKind.SeatState && row.Selector.Name == family) == true) {
-            inputRoute.Endpoint.Submissions.SubmitCommand(new WorldCommand.SelectInputState(context.Principal,
-                inputRoute.EntityIndex, m_roster.PrincipalOf(slot), family, targetState.Name, context.Activation));
+
+        if ((seatRouter.TryRoute(slot: slot) is { } inputRoute) && (inputRoute.Endpoint.Definition.InputModes?.Families.Any(predicate: row =>
+            ((row.Selector.Kind == WorldInputModeSelectorKind.SeatState) && (row.Selector.Name == family))) == true)) {
+            inputRoute.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SelectInputState(context.Principal,
+                inputRoute.EntityIndex, m_roster.PrincipalOf(slot: slot), family, targetState.Name, context.Activation));
             return SeatCommandArgs.Echo(detail: $"'{family}' requested '{targetState.Name}'", slot: slot, verb: verb);
         }
         var previousStateName = m_seatBindings.ModeState(

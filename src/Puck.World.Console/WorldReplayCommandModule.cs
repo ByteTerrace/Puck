@@ -137,7 +137,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
 
         try {
             var result = m_tape.StopRecording();
-            var saved = $"Replays/{Path.GetFileName(result.Path)}";
+            var saved = $"Replays/{Path.GetFileName(path: result.Path)}";
 
             if (result.VerifyFault is { } fault) {
                 // The tape is already on disk at result.Path — this is the LIVE TREE having moved past this

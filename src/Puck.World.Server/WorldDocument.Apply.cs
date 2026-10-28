@@ -715,7 +715,7 @@ public sealed partial class WorldDocument {
                 installed = settledCandidate;
             }
 
-            if (!Host.Input.TryValidateDefinition(installed, rebuildArena, out var inputModeReason, fresh: request.Kind != WorldRebuildKind.Reload)) {
+            if (!Host.Input.TryValidateDefinition(installed, rebuildArena, out var inputModeReason, fresh: (request.Kind != WorldRebuildKind.Reload))) {
                 RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: inputModeReason, verb: verb);
                 return false;
             }
@@ -725,6 +725,7 @@ public sealed partial class WorldDocument {
             // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
             // a draw fill repaints only where the loaded document names a different pass than the one on the field.
             var rebuiltFrom = m_definition;
+
             Install(
                 arena: rebuildArena,
                 compilation: compilation,
@@ -776,60 +777,61 @@ public sealed partial class WorldDocument {
         // inside its reconnect grace — WorldPopulation.IsAdmittedPeer stays true through that window) is excluded
         // outright: it has no live session to act through, so it is re-authorized (and, if still trusted, reminted)
         // only on an actual reconnect, never on a rebuild that happens to land during its grace window.
-        var keepAuthority = request.Kind == WorldRebuildKind.Reload && priorDefinition.Grants.SequenceEqual(candidate.Grants) &&
-            System.Text.Json.JsonSerializer.Serialize(priorDefinition.Admission,
-                WorldJsonContext.Default.Options.GetTypeInfo(typeof(IReadOnlyList<WorldAdmissionEntry>))) ==
+        var keepAuthority = ((request.Kind == WorldRebuildKind.Reload) && priorDefinition.Grants.SequenceEqual(second: candidate.Grants) &&
+            (System.Text.Json.JsonSerializer.Serialize(priorDefinition.Admission,
+                WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>))) ==
             System.Text.Json.JsonSerializer.Serialize(candidate.Admission,
-                WorldJsonContext.Default.Options.GetTypeInfo(typeof(IReadOnlyList<WorldAdmissionEntry>)));
+                WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>)))));
+
         if (!keepAuthority) {
-        var preRebuildPeerRows = new Dictionary<int, IReadOnlyList<WorldGrant>>();
+            var preRebuildPeerRows = new Dictionary<int, IReadOnlyList<WorldGrant>>();
 
-        for (var peerIndex = Host.Population.LocalSeatCount; (peerIndex < Host.Population.Capacity); peerIndex++) {
-            if (
-                !Host.Population.IsAdmittedPeer(bodyIndex: peerIndex) ||
-                Host.Population.IsParked(index: peerIndex)
-            ) {
-                continue;
+            for (var peerIndex = Host.Population.LocalSeatCount; (peerIndex < Host.Population.Capacity); peerIndex++) {
+                if (
+                    !Host.Population.IsAdmittedPeer(bodyIndex: peerIndex) ||
+                    Host.Population.IsParked(index: peerIndex)
+                ) {
+                    continue;
+                }
+
+                preRebuildPeerRows[peerIndex] = Host.GrantTable.Rows(principal: Host.Population.PeerPrincipal(index: peerIndex));
             }
 
-            preRebuildPeerRows[peerIndex] = Host.GrantTable.Rows(principal: Host.Population.PeerPrincipal(index: peerIndex));
-        }
+            // THE GRANT-TABLE HALF: runtime grants drop; document grants re-apply as at boot.
+            // A world.grant/world.revoke acquisition is RUNTIME state — orthogonal to the document
+            // and never touched by Install/Rebuild on its own — so a rebuild that left it standing would silently keep
+            // whatever authority the PRE-rebuild session had accumulated, including grants a fresh boot of this exact
+            // document would never have seeded. Reset silently to the SAME permissive local-play defaults the
+            // constructor seeds (WorldGrants.Reset — never the loud Grant door, exactly like the constructor's own
+            // seed), THEN replay the NEW candidate's own document-authored Grants section under Console through the
+            // IDENTICAL loud accept/reject path the constructor and world.grant both use — same consent-withholding
+            // (WithoutAuthoredConsent), same narration.
+            Host.GrantTable.Reset(seatCount: Host.Population.LocalSeatCount);
 
-        // THE GRANT-TABLE HALF: runtime grants drop; document grants re-apply as at boot.
-        // A world.grant/world.revoke acquisition is RUNTIME state — orthogonal to the document
-        // and never touched by Install/Rebuild on its own — so a rebuild that left it standing would silently keep
-        // whatever authority the PRE-rebuild session had accumulated, including grants a fresh boot of this exact
-        // document would never have seeded. Reset silently to the SAME permissive local-play defaults the
-        // constructor seeds (WorldGrants.Reset — never the loud Grant door, exactly like the constructor's own
-        // seed), THEN replay the NEW candidate's own document-authored Grants section under Console through the
-        // IDENTICAL loud accept/reject path the constructor and world.grant both use — same consent-withholding
-        // (WithoutAuthoredConsent), same narration.
-        Host.GrantTable.Reset(seatCount: Host.Population.LocalSeatCount);
+            foreach (var grant in candidate.Grants) {
+                if (WorldTick.IsDocumentChannelRow(grant: grant)) {
+                    continue;
+                }
 
-        foreach (var grant in candidate.Grants) {
-            if (WorldTick.IsDocumentChannelRow(grant: grant)) {
-                continue;
+                Host.Grant(
+                    grant: Host.GrantTable.WithoutAuthoredConsent(grant: grant),
+                    actor: Principal.Console,
+                    connectionId: connectionId,
+                    correlationId: correlationId
+                );
             }
 
-            Host.Grant(
-                grant: Host.GrantTable.WithoutAuthoredConsent(grant: grant),
-                actor: Principal.Console,
-                connectionId: connectionId,
-                correlationId: correlationId
+            // Admitted PEER CONNECTIONS are the one exception: "admitted peers survive"
+            // means their CONNECTION stays (WorldPopulation never dropped them — Install/Rebuild's own Install call
+            // above left every admitted peer body active), but the reset above just wiped their admission grant along
+            // with everything else, because a peer is not a boot-time seat and not a document row either. RE-AUTHORIZE
+            // (never blindly re-mint) each one against the CANDIDATE's own current admission policy.
+            Host.GrantTable.RemintPeerAdmissionGrants(
+                candidate: candidate,
+                preRebuildPeerRows: preRebuildPeerRows
             );
-        }
-
-        // Admitted PEER CONNECTIONS are the one exception: "admitted peers survive"
-        // means their CONNECTION stays (WorldPopulation never dropped them — Install/Rebuild's own Install call
-        // above left every admitted peer body active), but the reset above just wiped their admission grant along
-        // with everything else, because a peer is not a boot-time seat and not a document row either. RE-AUTHORIZE
-        // (never blindly re-mint) each one against the CANDIDATE's own current admission policy.
-        Host.GrantTable.RemintPeerAdmissionGrants(
-            candidate: candidate,
-            preRebuildPeerRows: preRebuildPeerRows
-        );
-        // A live SESSION ends: the reset wiped its rows, and a screen observing through it re-admits under the candidate.
-        Host.GrantTable.EndSessionsForRebuild();
+            // A live SESSION ends: the reset wiped its rows, and a screen observing through it re-admits under the candidate.
+            Host.GrantTable.EndSessionsForRebuild();
         }
 
         // Finish runs here, AFTER the candidate's own grants have installed, never earlier: its capability
@@ -1053,7 +1055,8 @@ public sealed partial class WorldDocument {
     // document-only.
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null,
         WorldRebuildKind? rebuildKind = null) {
-        var previousActionState = rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null;
+        var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);
+
         MarkDefinitionDeliveryPending();
         AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
@@ -1097,14 +1100,14 @@ public sealed partial class WorldDocument {
         }
 
         if (previousActionState is not null) {
-            Host.Population.RebirthActionState(previousActionState, keepsParticipant: rebuildKind == WorldRebuildKind.Reload);
+            Host.Population.RebirthActionState(previousActionState, keepsParticipant: (rebuildKind == WorldRebuildKind.Reload));
         }
 
         // AFTER the population branch above: a rebuild replaces every WorldBody, so resyncing scale before it would
         // read the registers into instances Rebuild is about to discard, leaving the fresh ones at their constructed
         // default until the next Install happens to touch state again.
         Host.Population.SyncBodyCells(definition: definition);
-        if (rebuildPopulation) { Host.Input.Reconfigure(definition); }
+        if (rebuildPopulation) { Host.Input.Reconfigure(definition: definition); }
     }
 
     // Rebuilds the population's compiled tables and live bodies against a definition, then reconciles the inhabited
@@ -1570,28 +1573,28 @@ public sealed partial class WorldDocument {
         switch (command) {
             case WorldCommand.CalibrateInput calibration:
                 var calibrationReason = "input.calibration: owner route is not admitted";
-                if (!Host.Input.TryGetBody(calibration.Principal, out var calibrationBody) || calibrationBody != calibration.EntityIndex ||
-                    calibration.Principal.Kind == PrincipalKind.Session && !Host.GrantTable.IsLiveSession(calibration.Principal) ||
+                if (!Host.Input.TryGetBody(calibration.Principal, out var calibrationBody) || (calibrationBody != calibration.EntityIndex) ||
+                    ((calibration.Principal.Kind == PrincipalKind.Session) && !Host.GrantTable.IsLiveSession(principal: calibration.Principal)) ||
                     !Host.Input.TryCalibrate(calibration.Principal, calibration.Offset, out calibrationReason)) {
                     Host.Output.Narrate(channel: "input.refused", text: calibrationReason);
                 }
                 return;
             case WorldCommand.SelectInputState selection:
-                var ownsSelection = selection.Principal == selection.Owner || selection.Principal == Principal.Console;
+                var ownsSelection = ((selection.Principal == selection.Owner) || (selection.Principal == Principal.Console));
                 var hasSelectionOwner = Host.Input.TryGetBody(selection.Owner, out var selectionBody);
-                if (!ownsSelection && hasSelectionOwner && selectionBody >= 0) {
+                if (!ownsSelection && hasSelectionOwner && (selectionBody >= 0)) {
                     ownsSelection = Host.GrantTable.Allows(selection.Principal, WorldCapability.Drive,
-                        GrantSubject.Body(selectionBody)).IsAllowed;
+                        GrantSubject.Body(index: selectionBody)).IsAllowed;
                 }
-                ownsSelection &= hasSelectionOwner && selection.EntityIndex == selectionBody;
-                if (selection.Owner.Kind == PrincipalKind.Session && !Host.GrantTable.IsLiveSession(selection.Owner)) { ownsSelection = false; }
+                ownsSelection &= (hasSelectionOwner && (selection.EntityIndex == selectionBody));
+                if ((selection.Owner.Kind == PrincipalKind.Session) && !Host.GrantTable.IsLiveSession(principal: selection.Owner)) { ownsSelection = false; }
                 var selectionReason = "input.mode: actor cannot select this owner's state";
                 if (!ownsSelection || !Host.Input.TrySetSeatState(selection.Owner, selection.Family, selection.State, selection.Activation, out selectionReason, selection.Principal)) {
                     Host.Output.Narrate(channel: "input.refused", text: selectionReason);
                 }
                 return;
-            case WorldCommand.AdmitInput admission when admission.EntityIndex == -1:
-                if (Host.GrantTable.IsLiveSession(admission.Principal)) {
+            case WorldCommand.AdmitInput admission when (admission.EntityIndex == -1):
+                if (Host.GrantTable.IsLiveSession(principal: admission.Principal)) {
                     if (!Host.Input.TryAdmitProfile(admission.Principal, -1, admission.Sources, out var inputReason, admission.FreshAttachment)) {
                         Host.Output.Narrate(channel: "input.refused", text: inputReason);
                     }
@@ -1782,6 +1785,13 @@ public sealed partial class WorldDocument {
 
                 break;
             case WorldCommand.PressChannel press:
+                if (!body.Channels.TryGetOrdinal(name: press.Channel, ordinal: out var pressOrdinal)) {
+                    var reason = $"input.channel: '{press.Channel}' is not active for body:{press.EntityIndex}";
+
+                    Host.Population.NotePressRefusal(bodyIndex: press.EntityIndex, reason: reason);
+                    Host.Output.Narrate(channel: "body.press denied", text: reason);
+                    break;
+                }
                 if (press.HoldSeconds is { } holdSeconds) {
                     var holdCeiling = FixedQ4816.FromRawBits(value: Host.GrantTable.HoldCeiling(
                         grantee: press.Principal,
@@ -1789,7 +1799,7 @@ public sealed partial class WorldDocument {
                     ));
                     var outcome = body.PressChannel(
                         actor: press.Principal,
-                        ordinal: press.ChannelOrdinal,
+                        ordinal: pressOrdinal,
                         value: press.Value,
                         holdSeconds: holdSeconds,
                         authoredMaximum: holdCeiling
@@ -1806,7 +1816,7 @@ public sealed partial class WorldDocument {
                 } else {
                     body.PressChannel(
                         actor: press.Principal,
-                        ordinal: press.ChannelOrdinal,
+                        ordinal: pressOrdinal,
                         value: press.Value
                     );
                     Host.Population.NotePressSuccess(bodyIndex: press.EntityIndex);

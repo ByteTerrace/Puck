@@ -52,7 +52,7 @@ public static partial class WorldWireCodec {
     /// <param name="reader">The reader.</param>
     /// <returns>The decoded intent; every lane reads zero, and the ray absent, once a refusal has latched. An undeclared
     /// flag byte latches <see cref="WireRefusal.EnumValueUnknown"/>.</returns>
-    public static PlayerIntent ReadIntent(ref WireReader reader) => ReadInputImage(ref reader, ChannelLimits.MaxAxes);
+    public static PlayerIntent ReadIntent(ref WireReader reader) => ReadInputImage(numericCount: ChannelLimits.MaxAxes, reader: ref reader);
 
     private static PlayerIntent ReadInputImage(ref WireReader reader, int numericCount) {
         var channels = default(ChannelValues);
@@ -97,6 +97,7 @@ public static partial class WorldWireCodec {
             )
         );
     }
+
     /// <summary>Reads the two independent channel support banks.</summary>
     public static ChannelMask ReadChannelMask(ref WireReader reader) => new(Axes: reader.ReadUInt32(), Buttons: reader.ReadUInt64());
     /// <summary>Writes the two independent channel support banks.</summary>
@@ -153,14 +154,14 @@ public static partial class WorldWireCodec {
         var principal = ReadPrincipal(reader: ref reader);
         var inputOwner = ReadPrincipal(reader: ref reader);
         var measuredHoldTicks = reader.ReadInt32();
-        var input = ReadInputBatch(ref reader, WorldInputCatalog.MaximumSources, ushort.MaxValue);
+        var input = ReadInputBatch(maximumEvents: ushort.MaxValue, maximumSources: WorldInputCatalog.MaximumSources, reader: ref reader);
 
         return new IntentSubmission(
             EntityIndex: entityIndex,
+            Input: input,
+            InputOwner: ((inputOwner == principal) ? null : inputOwner),
             Intent: intent,
             MeasuredHoldTicks: measuredHoldTicks,
-            Input: input,
-            InputOwner: inputOwner == principal ? null : inputOwner,
             Principal: principal,
             Tick: tick
         );
@@ -399,7 +400,7 @@ public static partial class WorldWireCodec {
         )) {
             return false;
         }
-        if (!TryWritePrincipal(writer, submission.InputOwner ?? submission.Principal)) { return false; }
+        if (!TryWritePrincipal(writer, (submission.InputOwner ?? submission.Principal))) { return false; }
 
         writer.WriteInt32(value: submission.MeasuredHoldTicks);
         if (!TryWriteInputBatch(writer, submission.Input)) { return false; }
@@ -513,7 +514,7 @@ public static partial class WorldWireCodec {
     /// <param name="writer">The writer.</param>
     /// <param name="intent">The intent to write.</param>
     /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
-    public static void WriteIntent(WireWriter writer, PlayerIntent intent) => WriteInputImage(writer, intent, ChannelLimits.MaxAxes);
+    public static void WriteIntent(WireWriter writer, PlayerIntent intent) => WriteInputImage(intent: intent, numericCount: ChannelLimits.MaxAxes, writer: writer);
 
     private static void WriteInputImage(WireWriter writer, PlayerIntent intent, int numericCount) {
         ArgumentNullException.ThrowIfNull(argument: writer);

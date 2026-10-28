@@ -190,9 +190,8 @@ public sealed partial class WorldBody {
     private PlayerIntent m_submittedIntent;
     private int m_tapeCount;
     private int m_tapeHead;
-    // A committed authority handoff can precede the new input stream's first publication by one or more destination
-    // ticks. Preserve the source writer's last admitted composition image through that gap; SetHeldChannels is the
-    // single replacement door and clears this bridge on the first genuine destination input, including neutral.
+    // A full body restore retains its last admitted fold until the next input publication, including neutral.
+    // Cross-authority arrival explicitly clears this residue and starts a new input episode.
     private PlayerIntent m_transferHeldChannels;
     // The compiled locomotion feel. A seated player reads its live
     // profile's move/turn speed instead (that is what makes identity.motion real-time); a profileless stand-in falls back

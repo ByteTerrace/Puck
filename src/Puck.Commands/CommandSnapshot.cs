@@ -21,6 +21,7 @@ public readonly record struct CommandSnapshot {
     public ulong CaptureWindowStart { get; internal init; }
     /// <summary>Exclusive capture-clock end of this host interval.</summary>
     public ulong CaptureWindowEnd { get; internal init; }
+
     /// <summary>Initializes a new instance of the <see cref="CommandSnapshot"/> struct.</summary>
     /// <param name="tick">The fixed-step tick this snapshot is the input for.</param>
     /// <param name="lanes">The per-slot command lanes, ordered by <see cref="CommandLane.Slot"/>.</param>

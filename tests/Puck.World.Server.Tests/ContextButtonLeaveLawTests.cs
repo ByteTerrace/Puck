@@ -101,35 +101,39 @@ public sealed class ContextButtonLeaveLawTests {
         var basis = Document();
         var definition = basis with {
             SeatModesRaw = [new("focus", [new("none"), new("panel")], "panel")],
-            InputModes = new(basis.Channels.Where(row => row.Name != Interact).Select(row => row.Name).ToArray(), [
-                new("focus", new(WorldInputModeSelectorKind.SeatState, "focus"), "none", [
+            InputModes = new(basis.Channels.Where(predicate: row => (row.Name != Interact)).Select(selector: row => row.Name).ToArray(), [
+                new("focus", new(Kind: WorldInputModeSelectorKind.SeatState, Name: "focus"), "none", [
                     new("none", [], ["none"]), new("panel", [Interact], ["panel"]),
                 ]),
             ]),
         };
         using var fixture = Fixtures.FreshServer(definition);
+
         fixture.JoinSeat();
         fixture.Step();
-        var principal = Principal.Seat(0);
-        Assert.True(fixture.Server.Engagement.Compose(0, GrantSubject.Screen(definition.Screens[0].Index), true, principal, principal));
+        var principal = Principal.Seat(slot: 0);
+
+        Assert.True(condition: fixture.Server.Engagement.Compose(0, GrantSubject.Screen(index: definition.Screens[0].Index), true, principal, principal));
         var catalog = fixture.Server.Population.InputCatalog;
-        Assert.True(catalog.TryGetLogicalId(Interact, out var logical));
+
+        Assert.True(condition: catalog.TryGetLogicalId(id: out var logical, name: Interact));
         WorldInputSource[] sources = [new(0, logical, WorldInputContributionKind.Level, "key:context")];
-        var owner = fixture.Server.Input.Admit(principal, 0, sources);
-        Assert.False(fixture.Server.Population.Channels.TryGetOrdinal(Interact, out _));
-        Assert.True(fixture.Server.Body(0)!.Channels.TryGetOrdinal(Interact, out _));
+        var owner = fixture.Server.Input.Admit(bodyIndex: 0, principal: principal, sources: sources);
+
+        Assert.False(condition: fixture.Server.Population.Channels.TryGetOrdinal(name: Interact, ordinal: out _));
+        Assert.True(condition: fixture.Server.Body(index: 0)!.Channels.TryGetOrdinal(name: Interact, ordinal: out _));
         var producer = new WorldInputProducer(catalog, owner.Mapping, sources, 128, owner.Revision, owner.Epoch);
         var tick = fixture.Server.NextInputTick;
-        Assert.True(producer.Observe(0, Full.Value, tick, default, 71));
-        fixture.Server.EnqueueIntent(new(tick, 0, default, principal, Input: producer.Publish(tick)));
+
+        Assert.True(condition: producer.Observe(0, Full.Value, tick, default, 71));
+        fixture.Server.EnqueueIntent(submission: new(tick, 0, default, principal, Input: producer.Publish(tick)));
         fixture.Step();
-        Assert.False(fixture.Server.Body(0)!.Engaged);
+        Assert.False(condition: fixture.Server.Body(index: 0)!.Engaged);
         Assert.Contains(71UL, owner.LastSwitch.ConsumedActivations.ToArray());
-        Assert.False(owner.TryHeld(logical, out _));
-        Assert.True(owner.TryEvent(logical, WorldInputEventKind.Cancel, 0, out var cancelled));
+        Assert.False(condition: owner.TryHeld(channel: logical, hold: out _));
+        Assert.True(condition: owner.TryEvent(channel: logical, kind: WorldInputEventKind.Cancel, occurrence: 0, record: out var cancelled));
         Assert.Equal(71UL, cancelled.Event.Activation);
     }
-
     [Fact]
     public void AnEngageChannelTheRoutesKitPlaysAsAPadButtonIsRefusedByName() {
         Assert.True(condition: WorldDefinitionValidator.TryValidate(

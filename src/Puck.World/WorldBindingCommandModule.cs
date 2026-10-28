@@ -641,11 +641,12 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
     private CommandResult SignalHandler(CommandContext context, WireArgs args) {
         var count = args.Count;
         FixedQ4816? offset = null;
-        if (count > 2 && args[count - 1].StartsWith("at:", StringComparison.Ordinal)) {
-            if (!decimal.TryParse(args[count - 1][3..], NumberStyles.Number, CultureInfo.InvariantCulture, out var seconds) || seconds < 0 || seconds > 1) {
-                return CommandResult.Error("[player.signal: at:<seconds> requires a nonnegative sub-tick offset no greater than one second]");
+
+        if ((count > 2) && args[(count - 1)].StartsWith(comparisonType: StringComparison.Ordinal, value: "at:")) {
+            if (!decimal.TryParse(args[(count - 1)][3..], NumberStyles.Number, CultureInfo.InvariantCulture, out var seconds) || (seconds < 0) || (seconds > 1)) {
+                return CommandResult.Error(output: "[player.signal: at:<seconds> requires a nonnegative sub-tick offset no greater than one second]");
             }
-            offset = FixedQ4816.Parse(seconds.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
+            offset = FixedQ4816.Parse(seconds.ToString(provider: CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
             count--;
         }
         if (count is not (2 or 3)) {
@@ -659,11 +660,12 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         }
 
         if (source == InputSources.Keyboard.Text) {
-            if (count != 2) { return CommandResult.Error("[player.signal: keyboard.text takes one quoted committed text payload and optional at:<seconds>]"); }
-            m_router().Capture(InputSignal.Typed(source, args[1].ToString(), captureTick: InputRouter.EarliestCaptureTick) with {
-                Slot = context.Slot, SimulationOffset = offset,
+            if (count != 2) { return CommandResult.Error(output: "[player.signal: keyboard.text takes one quoted committed text payload and optional at:<seconds>]"); }
+            m_router().Capture(signal: InputSignal.Typed(source, args[1].ToString(), captureTick: InputRouter.EarliestCaptureTick) with {
+                Slot = context.Slot,
+                SimulationOffset = offset,
             });
-            return new CommandResult(Output: $"[player.signal: p{PlayerRoster.DisplayNumber(context.Slot)} {source} committed]");
+            return new CommandResult(Output: $"[player.signal: p{PlayerRoster.DisplayNumber(slot: context.Slot)} {source} committed]");
         }
 
         // No binding can name an unknown source (the document validator refuses one), so a signal on it would echo as

@@ -34,40 +34,41 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // The authority claim is the sole source for both the entity an input drives and the endpoint that accepts it.
     // There is no boot/away distinction in this client.
     private readonly WorldSeatAuthorityRouter m_seatRouter;
+
     private readonly IReadOnlyList<BindingSourceContract>?[] m_inputProfiles = new IReadOnlyList<BindingSourceContract>?[PlayerRoster.MaxSlots];
     private readonly WorldAuthorityRoute?[] m_inputRoutes = new WorldAuthorityRoute?[PlayerRoster.MaxSlots];
     private readonly WorldDefinition?[] m_inputDefinitions = new WorldDefinition?[PlayerRoster.MaxSlots];
     private readonly WorldAuthorityRoute?[] m_submissionRoutes = new WorldAuthorityRoute?[PlayerRoster.MaxSlots];
+
     private InputRouter? m_inputRouter;
 
     /// <summary>Attaches the host router once, for authority-published destination latch cancellations.</summary>
     public void UseInputRouter(InputRouter router) => m_inputRouter = router;
-
     /// <summary>Admits a changed routed binding profile and applies the authority's published source decisions.</summary>
     public void SynchronizeInput(int slot, IReadOnlyList<BindingSourceContract> sources) {
-        if (m_roster.IsPending(slot) || m_roster.Seat(slot) is not { } seat || m_seatRouter.TryRoute(slot) is not { } route) { return; }
-        var principal = m_roster.PrincipalOf(slot);
-        if (seat.Input is null || !ReferenceEquals(m_inputProfiles[slot], sources) || !ReferenceEquals(m_inputRoutes[slot], route) ||
-            !ReferenceEquals(m_inputDefinitions[slot], route.Endpoint.Definition)) {
-            var freshAttachment = seat.Input is null || !ReferenceEquals(m_inputRoutes[slot], route);
-            var sameProfile = m_inputProfiles[slot] is { } previous && previous.SequenceEqual(sources);
-            var sameContract = m_inputDefinitions[slot] is { } definition && WorldInputCatalog.SameContract(definition, route.Endpoint.Definition);
-            var replace = freshAttachment || !sameProfile || !sameContract;
-            if (replace) { seat.Input = new WorldSeatInput(route.Endpoint.Definition, sources, freshAttachment ? null : seat.Input); }
+        if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || (m_seatRouter.TryRoute(slot: slot) is not { } route)) { return; }
+        var principal = m_roster.PrincipalOf(slot: slot);
+
+        if ((seat.Input is null) || !ReferenceEquals(objA: m_inputProfiles[slot], objB: sources) || !ReferenceEquals(objA: m_inputRoutes[slot], objB: route) ||
+            !ReferenceEquals(objA: m_inputDefinitions[slot], objB: route.Endpoint.Definition)) {
+            var freshAttachment = ((seat.Input is null) || !ReferenceEquals(objA: m_inputRoutes[slot], objB: route));
+            var sameProfile = ((m_inputProfiles[slot] is { } previous) && previous.SequenceEqual(second: sources));
+            var sameContract = ((m_inputDefinitions[slot] is { } definition) && WorldInputCatalog.SameContract(left: definition, right: route.Endpoint.Definition));
+            var replace = (freshAttachment || !sameProfile || !sameContract);
+
+            if (replace) { seat.Input = new WorldSeatInput(route.Endpoint.Definition, sources, (freshAttachment ? null : seat.Input)); }
             m_inputProfiles[slot] = sources;
             m_inputRoutes[slot] = route;
             m_inputDefinitions[slot] = route.Endpoint.Definition;
             if (replace) { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment); }
         }
-        if (route.Endpoint.Mirror.TryInput(principal, out var publication)) { _ = seat.Input!.Reconcile(publication, seat, m_inputRouter, slot); }
-        else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
+        if (route.Endpoint.Mirror.TryInput(owner: principal, publication: out var publication)) { _ = seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot); } else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
     }
-
     /// <summary>Delivers committed text to the admitted input owner at its authority's next input tick.</summary>
     public void ObserveText(CommittedTextInput input) {
-        if (m_roster.PrincipalOf(input.Slot) != input.Principal || m_roster.IsPending(input.Slot) ||
-            m_roster.Seat(input.Slot)?.Input is not { } producer || m_seatRouter.TryRoute(input.Slot) is not { } route) { return; }
-        _ = producer.ObserveText(input, route.Endpoint.NextInputTick);
+        if ((m_roster.PrincipalOf(slot: input.Slot) != input.Principal) || m_roster.IsPending(slot: input.Slot) ||
+            (m_roster.Seat(slot: input.Slot)?.Input is not { } producer) || (m_seatRouter.TryRoute(slot: input.Slot) is not { } route)) { return; }
+        _ = producer.ObserveText(input: input, tick: route.Endpoint.NextInputTick);
     }
 
     private int m_activePeerCount;
@@ -208,7 +209,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_roster = roster;
         m_seatRouter = seatRouter;
         m_definition = definition;
-        m_channels = WorldChannelTable.For(definition);
+        m_channels = WorldChannelTable.For(definition: definition);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters
         );
@@ -856,7 +857,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
         BeginVersion(version: version);
-        m_channels = WorldChannelTable.For(definition);
+        m_channels = WorldChannelTable.For(definition: definition);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters
         );
@@ -1142,7 +1143,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         Span<bool> live = stackalloc bool[PlayerRoster.MaxSlots];
         Span<int> targets = stackalloc int[PlayerRoster.MaxSlots];
         var routes = m_submissionRoutes;
-        Array.Clear(routes);
+
+        Array.Clear(array: routes);
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (
@@ -1210,7 +1212,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             }
 
             if (seat.Input is not { Admitted: true } input) { continue; }
-            endpoint.Submissions.SubmitIntent(input.Publish(m_roster.PrincipalOf(slot), targets[slot], tick, seat, intent));
+            endpoint.Submissions.SubmitIntent(submission: input.Publish(m_roster.PrincipalOf(slot: slot), targets[slot], tick, seat, intent));
             m_lastSubmissionEpoch[slot] = routes[slot]!.Epoch;
             m_lastSubmissionTick[slot] = tick;
         }

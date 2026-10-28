@@ -135,17 +135,19 @@ public sealed class MappedArrivalApplicationLawTests {
         ));
         fixture.Step();
         var runtime = fixture.Server.Input;
-        var held = default(PlayerIntent).WithChannel(ordinal, FixedQ4816.One);
-        Assert.True(runtime.TryPublishSnapshot(actor, actor.Index, "arrival", held, runtime.Interval.Tick,
-            out var session, out var press, out var reason), reason);
-        Assert.True(fixture.Server.ApplyIntentSubmission(body,
-            new(runtime.Interval.Tick, actor.Index, held, actor, Input: press, InputOwner: session)).IsAccepted);
-        Assert.True(runtime.TryGet(session, out var owner));
-        Assert.True(fixture.Server.Population.InputCatalog.TryGetLogicalId("jump", out var logical));
+        var held = default(PlayerIntent).WithChannel(ordinal: ordinal, value: FixedQ4816.One);
+
+        Assert.True(condition: runtime.TryPublishSnapshot(actor, actor.Index, "arrival", held, runtime.Interval.Tick,
+            out var session, out var press, out var reason), userMessage: reason);
+        Assert.True(condition: fixture.Server.ApplyIntentSubmission(body: body,
+            submission: new(runtime.Interval.Tick, actor.Index, held, actor, Input: press, InputOwner: session)).IsAccepted);
+        Assert.True(condition: runtime.TryGet(input: out var owner, principal: session));
+        Assert.True(condition: fixture.Server.Population.InputCatalog.TryGetLogicalId(id: out var logical, name: "jump"));
         var epoch = owner!.Epoch;
-        Assert.True(owner.TryHeld(logical, out _));
-        body.PressChannel(ordinal, FixedQ4816.One, 2f, FixedQ4816.FromInteger(2));
-        body.EnqueueRun(held, 2f);
+
+        Assert.True(condition: owner.TryHeld(channel: logical, hold: out _));
+        body.PressChannel(ordinal, FixedQ4816.One, 2f, FixedQ4816.FromInteger(value: 2));
+        body.EnqueueRun(intent: held, seconds: 2f);
 
         Assert.True(condition: fixture.Server.Population.ApplyMappedArrival(
             slot: actor.Index,
@@ -160,10 +162,10 @@ public sealed class MappedArrivalApplicationLawTests {
             )
         ));
 
-        Assert.Equal(epoch + 1, owner.Epoch);
-        Assert.False(owner.TryHeld(logical, out _));
-        Assert.True(owner.TryEvent(logical, WorldInputEventKind.Cancel, 0, out _));
-        Assert.False(owner.TryEvent(logical, WorldInputEventKind.Release, 0, out _));
+        Assert.Equal((epoch + 1), owner.Epoch);
+        Assert.False(condition: owner.TryHeld(channel: logical, hold: out _));
+        Assert.True(condition: owner.TryEvent(channel: logical, kind: WorldInputEventKind.Cancel, occurrence: 0, record: out _));
+        Assert.False(condition: owner.TryEvent(channel: logical, kind: WorldInputEventKind.Release, occurrence: 0, record: out _));
         fixture.Step();
         Assert.Equal(
             expected: FixedQ4816.Zero,

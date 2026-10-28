@@ -45,7 +45,7 @@ public sealed partial class WorldPopulation {
             );
         }
         m_bodyMotionPrograms = programs;
-        InputCatalog = WorldInputCatalog.For(definition);
+        InputCatalog = WorldInputCatalog.For(definition: definition);
         m_channels = InputCatalog.DefaultMapping.Channels;
         m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
         m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
@@ -64,13 +64,15 @@ public sealed partial class WorldPopulation {
         m_navigationTable = WorldNavigationDomainTable.Compile(domains: definition.Navigation.Rows);
         m_inputKits = new FixedWorldKit[InputCatalog.Mappings.Length][];
         var mappedKits = new Dictionary<WorldChannelTable, FixedWorldKit[]>();
+
         foreach (var mapping in InputCatalog.Mappings) {
-            if (mappedKits.TryGetValue(mapping.Channels, out var existing)) {
+            if (mappedKits.TryGetValue(key: mapping.Channels, value: out var existing)) {
                 m_inputKits[mapping.Id] = existing;
                 continue;
             }
             var kits = new FixedWorldKit[definition.Kits.Count];
-            for (var kit = 0; kit < kits.Length; kit++) {
+
+            for (var kit = 0; (kit < kits.Length); kit++) {
                 kits[kit] = FixedWorldKit.Compile(
                 kit: definition.Kits[kit],
                 channels: mapping.Channels,
@@ -86,7 +88,7 @@ public sealed partial class WorldPopulation {
                 simulationRateHz: definition.SimulationRateHz
             );
             }
-            mappedKits.Add(mapping.Channels, kits);
+            mappedKits.Add(key: mapping.Channels, value: kits);
             m_inputKits[mapping.Id] = kits;
         }
         m_kits = m_inputKits[InputCatalog.DefaultMapping.Id];

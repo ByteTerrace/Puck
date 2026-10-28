@@ -131,11 +131,21 @@ never an alternative transport ingress. Bodyless sessions use the same timed
 admission. A switch-tick batch can repeat its retained baseline or acknowledge
 neutral, but fresh events, levels and source activations start on the following
 tick. Local snapshot producers publish that baseline during the barrier tick.
+Scoped body playback re-observes recorded semantic events through a local
+producer under the original actor, in the current interval. It queues owned
+buffers, preserves event order and offsets, and cancels its episode when the
+scope stops; an old transport epoch or assigned tick is never replayed as live
+ingress.
 
 Local snapshot producers use `WorldInputRuntime.TryPublishSnapshot`: each
 actor/body/source has a generation-bearing session for its history, while the
 original actor still supplies Drive and contribution consent. Do not authorize
 an addon by substituting a seat or minting grants for its history session.
+An occupied body's engagement selects from its occupant's applications even
+before a physical input profile exists; a controller's private history session
+owns no engagement route. An unoccupied target follows the authorizing actor.
+Proposed route and document changes validate against that same routing subject;
+Drive and contribution authorization still belongs to the original actor.
 `IntentSubmission.InputOwner` names that separate session. Addon omissions
 publish neutral through `CompleteSnapshots`; detach, disable and replacement
 cancel through `CancelSnapshots`. A body reference resolves the primary admitted
@@ -152,6 +162,11 @@ the owning `Publish` result instead.
 
 Scripted `body.press` and movement tapes keep their durations in the existing
 body timer/tape stores and retain the command's actual actor alongside them.
+The press command carries its semantic channel name through wire, checkpoint
+and replay; the authority resolves it in the target's active mapping and refuses
+an inactive name. A delayed command cannot press the new occupant of a reused
+slot. Console, participant and adjacency producers read the target body's
+active mapping, never the world's default tuple.
 Each step admits that actor's current script image before the body consumes it;
 the accepted image controls motion and actions, and expiry publishes a normal
 release. Revocation and authority crossings cancel. Actor arrays and queued

@@ -23,6 +23,7 @@ public readonly record struct CommandContext {
     public ulong CaptureWindowStart { get; internal init; }
     /// <summary>The host interval's exclusive capture-clock end.</summary>
     public ulong CaptureWindowEnd { get; internal init; }
+
     /// <summary>Initializes a new instance of the <see cref="CommandContext"/> struct.</summary>
     /// <param name="value">The command value for this invocation.</param>
     /// <param name="phase">The transition this invocation represents.</param>
@@ -79,10 +80,12 @@ public readonly record struct CommandContext {
     /// handlers use this deterministic bit to distinguish a first-seat gesture from an ordinary action; it remains
     /// valid during replay even though <see cref="DeviceId"/> is local-only.</summary>
     public bool AssignedSlot { get; internal init; }
+
     /// <summary>The verb policy of the session the invocation came through, or <see langword="null"/> when that
     /// session bounds no verbs. An authored command checks each line it submits against it, so expanding a command
     /// never reaches a verb the session could not have submitted itself.</summary>
     internal Func<CommandMetadata, bool>? Authorize { get; init; }
+
     /// <summary>The device that produced the activation (for source-driven input), letting a handler target the
     /// specific device — e.g. rumbling the controller that pressed the button. <see langword="default"/> for the
     /// text path.</summary>

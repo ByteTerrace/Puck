@@ -57,36 +57,37 @@ not started.
 The [input channel decision](../decisions/input-channels.md) owns the model,
 migration inventory, genre checks, and each step's completion criteria. The
 runtime has 32 numeric slots and 64 packed buttons with shared debug inputs,
-including Q32.32 relative displacement. Authoritative modes, timed history
-(with typed text) and rule patterns remain open.
+including Q32.32 relative displacement. Authoritative modes, Q48.16 timed
+history (with typed and pasted text), rule patterns and event-time clocks are
+implemented through one required input batch, including raw and federated ingress.
 
 - [x] C1 typed storage and shared semantics: 32 numeric slots and 64 packed
   buttons, separate target-register reach, all consumers and codecs migrated,
   shared debug declarations, and chess `confirm`/`cancel` without Select coupling.
 - [x] C2 relative input: Q32.32 displacement in the numeric bank, authored
   units/sensitivity/bounds, single consumption, and no tick-rate scaling.
-- [ ] C3 authoritative modes: finite state selectors, composed live sets,
+- [x] C3 authoritative modes: finite state selectors, composed live sets,
   per-combination allocation and permissions, directed family-transition keep
   sets, named capacity/continuity refusals, and the debug form/flight/engagement
   migration policy. Deliver with C4 before enabling slot reuse.
-- [ ] C4 switch barrier and continuity: input epochs, release by default,
+- [x] C4 switch barrier and continuity: input epochs, release by default,
   authored same-meaning held/toggle carry, consumed transition activations,
   cancellation and neutral rearming for released/rebound sources,
   reload/disconnect/route handling, bounded source provenance and
   taped/checkpointed contributions, toggle, rearm and hold
   continuity. Show run/autorun surviving compatible forms, autofly starting
   flight and clearing on flight exit, and neutral board/screen entry and exit.
-- [ ] C5 timed ingress and history: sub-tick events, lateness admission,
+- [x] C5 timed ingress and history: sub-tick events, lateness admission,
   calibration, bounded rings and overflow outcomes, held-origin continuation
   across epochs, replay and hash coverage, and `Text` events (one Unicode scalar
   each, typed, pasted or IME-committed) in a text-focus mode.
-- [ ] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
+- [x] C6 rule patterns and clocks: event iteration, motion/simultaneous/held
   patterns, consumption, tick buffers, event-time beat judgement, and held-note
   and charge continuity across a declared mode transition without a new press.
 - [ ] C7 read-back and cleanup: current-mode action names in `body.rig`,
   `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
   ordinal surfaces removed, and executable checks of the genre table.
-- [ ] C3 to C6 land together as one engine lane after 19×19 Go (the owner's
+- [x] C3 to C6 land together as one engine lane after 19×19 Go (the owner's
   ruling): they unblock rhythm, the combat yard's buffered actions and dodge,
   chat typed in the world and the typing game at once.
 - [ ] A typing tutor in the gallery (the owner's request), on C5 and C6: a
@@ -864,7 +865,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] An elements-and-combat yard in the gallery, toward MMO action combat (the owner's direction), built on the engine pieces the [combat decision](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input) settles. The quarantined island's arena district (`experimental/src/Puck.World/Assets/worlds/modules/arena.puck`) is the rules' prior art: targeting (auto, nearest, target of target, names), manual and auto attack, fire and frost strikes, burn, freeze, thaw and quench, regeneration, death and respawn, and a fire pit and pool acting through region interactions.
   - [ ] Spatially scoped pair queries on `WorldInteraction.Distance` over `FixedSpatialNeighborhood`, replacing the Cartesian scan; targeting and area effects reuse the same compiled query.
   - [x] Several named physical field regions in one world (pools, lakes, lava, ice), each with its own lattice, cadence and reactions, through snapshots, checkpoints, hashes, replay and the bake (weather slice 1; CPU bake coverage and headless replay).
-  - [ ] Action input on the landed 32-axis, 64-button, 64-register wire: finish the ordered-event and input-history steps of the [input-channels decision](../decisions/input-channels.md) (C3 to C6), an eight-slot hotbar with pad and keyboard parity, dodge and target lock/cycle/clear through authoritative queries. Audit `AddonAbi.MaxChannels` (eight protocol descriptors) before widening it.
+  - [ ] Action input on the landed 32-axis, 64-button, 64-register wire: use the ordered events, input history and patterns from the [input-channels decision](../decisions/input-channels.md) (C3 to C6) for an eight-slot hotbar with pad and keyboard parity, dodge and target lock/cycle/clear through authoritative queries. Audit `AddonAbi.MaxChannels` (eight protocol descriptors) before widening it.
   - [ ] The yard: `worlds/debug/combat.puck` beside the hall (the provisional site is the north courtyard at x 24 to 50, z 40 to 66 through a level-0 doorway; the lane verifies the footprint is free), with a target-and-strike station, an elements-and-spread station (brazier, basin, frost source) and terrain hazards; world-authored statuses and looks; a combat-only HUD (status, target, target of target, cooldowns, refusal reasons); the faerie reacting from outside the combat set; `debug.go combat`. Targets are gallery training automata and the Moth casts through gauntlets, not visible weapons (the owner's ruling).
   - [ ] Multiplayer: two clients on one authority first, with input acknowledgements and speculative local movement and action timing replayed on correction (hits and statuses stay authoritative), and indexed entity and field subscriptions for interest management; crowds after that.
 

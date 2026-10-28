@@ -1010,7 +1010,7 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        m_actionStateLane.Input?.ResetBody(slot);
+        m_actionStateLane.Input?.ResetBody(body: slot);
         body.ResetArrivalInput();
         body.Pose(
             position: position,

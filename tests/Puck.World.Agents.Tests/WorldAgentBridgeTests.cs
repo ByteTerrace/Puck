@@ -607,11 +607,10 @@ public sealed class WorldAgentBridgeTests {
         var payload = Assert.IsType<WorldSubmissionPayload.Command>(@object: link.LastPayload);
         var command = Assert.IsType<WorldCommand.PressChannel>(@object: payload.Value);
 
-        // A binary channel is addressed in the packed button bank, after the numeric bank's axes, so the first
-        // binary channel declared is the first button slot whatever its document index.
+        // The authority resolves the name at admission; a mode switch cannot reinterpret an in-flight slot.
         Assert.Equal(
-            expected: ChannelLimits.MaxAxes,
-            actual: command.ChannelOrdinal
+            expected: "jump",
+            actual: command.Channel
         );
         _ = await Assert.ThrowsAsync<ArgumentException>(testCode: async () =>
             await bridge.PressAsync(

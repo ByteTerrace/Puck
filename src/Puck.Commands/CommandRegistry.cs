@@ -470,9 +470,11 @@ public sealed partial class CommandRegistry {
             text: null,
             value: entry.Value
         ) {
-            CaptureTick = entry.CaptureTick, Activation = entry.Activation,
+            Activation = entry.Activation,
+            CaptureTick = entry.CaptureTick,
+            CaptureWindowEnd = snapshot.CaptureWindowEnd,
+            CaptureWindowStart = snapshot.CaptureWindowStart,
             SimulationOffset = entry.SimulationOffset,
-            CaptureWindowStart = snapshot.CaptureWindowStart, CaptureWindowEnd = snapshot.CaptureWindowEnd,
         };
 
         // One entry's handler must not decide whether the REST of the tick runs: Dispatch converts an escaped
@@ -1605,8 +1607,10 @@ public sealed partial class CommandRegistry {
             }
         }
     }
+
     /// <summary>Ordered committed text, after router provenance validation and before the next captured entry.</summary>
     public event Action<CommittedTextInput>? TextCommitted;
+
     /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
     /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
     /// never disagree about where a command sits.</summary>

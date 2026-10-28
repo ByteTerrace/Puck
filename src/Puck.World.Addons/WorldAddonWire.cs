@@ -130,7 +130,7 @@ internal sealed class WorldAddonChannelResolver(WorldInputCatalog channels) : IA
 
     /// <inheritdoc/>
     public bool TryResolve(string name, out int ordinal, out AddonChannelValueShape shape) {
-        if (!m_channels.TryGetLogicalId(name, out var logical) || m_channels.Channels[logical].Shape == ChannelShape.Text) {
+        if (!m_channels.TryGetLogicalId(id: out var logical, name: name) || (m_channels.Channels[logical].Shape == ChannelShape.Text)) {
             // The sentinel is restated rather than left as TryGetValue's default 0, which is a REAL ordinal (the
             // first movement role) — a caller reading the out value without the return would otherwise silently
             // drive it.

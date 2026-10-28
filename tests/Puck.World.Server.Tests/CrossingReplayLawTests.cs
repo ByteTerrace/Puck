@@ -339,7 +339,7 @@ public sealed class CrossingReplayLawTests {
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-crossing-replay-federated-");
         using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 1));
         var server = fixture.Server;
-        var transport = new LoopbackTransport(server);
+        var transport = new LoopbackTransport(server: server);
         var tape = new WorldReplayTape(
             addonHostFactory: static (_, _) => new NullAddonHost(),
             engines: [],

@@ -95,7 +95,7 @@ public readonly record struct RoleChannelOrdinals(int MoveAdvance, int MoveStraf
 /// and per-address role mask.</summary>
 public sealed class WorldChannelTable {
     /// <summary>Gets the document's compiled default tuple. Live consumers use their published owner mapping.</summary>
-    public static WorldChannelTable For(WorldDefinition definition) => WorldInputCatalog.For(definition).DefaultMapping.Channels;
+    public static WorldChannelTable For(WorldDefinition definition) => WorldInputCatalog.For(definition: definition).DefaultMapping.Channels;
 
     /// <summary>The default binary threshold — <c>One/2</c>, the one threshold at which the flip bound
     /// <c>c ≤ min(T − 1, One − T)</c> collapses to the symmetric <c>c &lt; ½</c> (see
@@ -137,8 +137,10 @@ public sealed class WorldChannelTable {
     public uint RelativeMask { get; private set; }
     /// <summary>Gets the declared channel count.</summary>
     public int ChannelCount { get; private init; }
+
     /// <summary>Whether a logical declaration owns a role, including roles inactive in this mapping.</summary>
-    public bool DeclaresRole(ChannelRole role) => (uint)role < (uint)m_declaredRoles.Length && m_declaredRoles[(int)role];
+    public bool DeclaresRole(ChannelRole role) => ((((uint)role) < ((uint)m_declaredRoles.Length)) && m_declaredRoles[((int)role)]);
+
     /// <summary>Gets the frame the MoveAdvance/MoveStrafe pair is authored in — the two declare the same frame by
     /// validator rule, so this reads either; <see cref="ChannelFrame.World"/> when neither role is claimed.</summary>
     public ChannelFrame MoveFrame => ((RoleOrdinals.MoveAdvance >= 0)
@@ -170,36 +172,39 @@ public sealed class WorldChannelTable {
         var addresses = new int[channels.Count];
         var axis = 0;
         var button = 0;
-        for (var index = 0; index < channels.Count; index++) {
-            addresses[index] = channels[index].Shape == ChannelShape.Text ? -2 : channels[index].Shape == ChannelShape.Binary ? ChannelLimits.MaxAxes + button++ : axis++;
+
+        for (var index = 0; (index < channels.Count); index++) {
+            addresses[index] = ((channels[index].Shape == ChannelShape.Text) ? -2 : ((channels[index].Shape == ChannelShape.Binary) ? (ChannelLimits.MaxAxes + button++) : axis++));
         }
         if ((axis > ChannelLimits.MaxAxes) || (button > ChannelLimits.MaxButtons)) {
-            throw new ArgumentException("The live input mapping exceeds its numeric or button bank.", nameof(channels));
+            throw new ArgumentException(message: "The live input mapping exceeds its numeric or button bank.", paramName: nameof(channels));
         }
-        return CompileMapping(channels, addresses);
+        return CompileMapping(addresses: addresses, channels: channels);
     }
     /// <summary>Compiles one allowed tuple's storage. Negative addresses are inactive logical declarations.</summary>
     public static WorldChannelTable CompileMapping(IReadOnlyList<WorldChannel> channels, IReadOnlyList<int> addresses) {
         ArgumentNullException.ThrowIfNull(channels);
         ArgumentNullException.ThrowIfNull(addresses);
-        if (channels.Count != addresses.Count) { throw new ArgumentException("Every logical declaration needs an address or an inactive marker.", nameof(addresses)); }
+        if (channels.Count != addresses.Count) { throw new ArgumentException(message: "Every logical declaration needs an address or an inactive marker.", paramName: nameof(addresses)); }
         var table = new WorldChannelTable(ordinals: OrdinalTable.Build(
             names: channels.Select(selector: static channel => channel.Name).ToArray(),
             comparer: StringComparer.Ordinal
         )) {
-            ChannelCount = addresses.Count(static address => address >= 0),
+            ChannelCount = addresses.Count(predicate: static address => (address >= 0)),
             m_addresses = addresses.ToArray(),
-            m_logicalShapes = channels.Select(static channel => channel.Shape).ToArray(),
+            m_logicalShapes = channels.Select(selector: static channel => channel.Shape).ToArray(),
         };
 
         for (var index = 0; (index < channels.Count); index++) {
             var channel = channels[index];
-            if (channel.Role is { } declaredRole) { table.m_declaredRoles[(int)declaredRole] = true; }
+
+            if (channel.Role is { } declaredRole) { table.m_declaredRoles[((int)declaredRole)] = true; }
             var ordinal = addresses[index];
+
             if (ordinal < 0) { continue; }
             if ((ordinal >= ChannelLimits.MaxChannels) || table.m_declared[ordinal] ||
                 ((channel.Shape == ChannelShape.Binary) != (ordinal >= ChannelLimits.MaxAxes))) {
-                throw new ArgumentException($"Channel '{channel.Name}' has an invalid or occupied bank address {ordinal}.", nameof(addresses));
+                throw new ArgumentException(message: $"Channel '{channel.Name}' has an invalid or occupied bank address {ordinal}.", paramName: nameof(addresses));
             }
 
             table.m_shapes[ordinal] = channel.Shape;
@@ -327,23 +332,23 @@ public sealed class WorldChannelTable {
     public bool TryGetOrdinal(string name, out int ordinal) {
         if (m_ordinals.TryGetOrdinal(name: name, ordinal: out var index)) {
             ordinal = m_addresses[index];
-            return ordinal >= 0;
+            return (ordinal >= 0);
         }
         ordinal = -1;
         return false;
     }
     /// <summary>Resolves a semantic name even when its action is inactive in this mapping.</summary>
-    public bool TryGetLogicalId(string name, out int logical) => m_ordinals.TryGetOrdinal(name, out logical);
+    public bool TryGetLogicalId(string name, out int logical) => m_ordinals.TryGetOrdinal(name: name, ordinal: out logical);
     /// <summary>Gets the active storage address of a logical id, refusing dormant and event-only actions.</summary>
     public bool TryGetAddress(int logical, out int address) {
-        address = (uint)logical < (uint)m_addresses.Length ? m_addresses[logical] : -1;
-        return address >= 0;
+        address = ((((uint)logical) < ((uint)m_addresses.Length)) ? m_addresses[logical] : -1);
+        return (address >= 0);
     }
     /// <summary>Gets the compiled address of a logical declaration in ordinal name order.</summary>
     public int Address(int declaration) => m_addresses[declaration];
     /// <summary>Resolves declared vocabulary independently of eligibility in this mapping.</summary>
     public bool TryGetShape(ChannelRef reference, out ChannelShape shape) {
-        if (reference is ChannelRef.Name name && m_ordinals.TryGetOrdinal(name.Value, out var logical)) {
+        if ((reference is ChannelRef.Name name) && m_ordinals.TryGetOrdinal(name: name.Value, ordinal: out var logical)) {
             shape = m_logicalShapes[logical];
             return true;
         }
