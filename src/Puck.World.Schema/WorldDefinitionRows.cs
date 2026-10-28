@@ -7,7 +7,8 @@ public static class WorldDefinitionRows {
     // The one linear scan every Find* below composes: allocation-free (selector is a static, capture-free lambda, so
     // the compiler caches ONE delegate instance rather than allocating one per call) and null-tolerant, so a
     // section's own nullability is never a second thing a caller must guard before resolving a name against it.
-    private static T? Find<T>(IReadOnlyList<T>? rows, string name, Func<T, string> selector) {
+    // Reference rows only: for a struct row, T? is T and a miss would return a default row instead of null.
+    private static T? Find<T>(IReadOnlyList<T>? rows, string name, Func<T, string> selector) where T : class {
         if (rows is null) {
             return default;
         }
@@ -354,11 +355,23 @@ public static class WorldDefinitionRows {
     /// <param name="spawnPoints">The section's spawn points.</param>
     /// <param name="id">The spawn point id to find.</param>
     /// <returns>The spawn point, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldSpawnPoint? FindSpawnPoint(IReadOnlyList<WorldSpawnPoint>? spawnPoints, string id) => Find(
-        rows: spawnPoints,
-        name: id,
-        selector: static point => point.Id
-    );
+    public static WorldSpawnPoint? FindSpawnPoint(IReadOnlyList<WorldSpawnPoint>? spawnPoints, string id) {
+        if (spawnPoints is null) {
+            return null;
+        }
+
+        for (var index = 0; (index < spawnPoints.Count); index++) {
+            if (string.Equals(
+                a: spawnPoints[index].Id,
+                b: id,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return spawnPoints[index];
+            }
+        }
+
+        return null;
+    }
     /// <summary>Finds a state row by stable name — the ONE row-find every reader of the <c>state</c> section shares
     /// (the rule compiler's operand walk, the mutation compose arms, the console read-backs, the HUD binding
     /// resolver, and an owned identity document's own durable slots).</summary>
