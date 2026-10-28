@@ -14,10 +14,11 @@ namespace Puck.Mcp;
 /// <summary>Official-SDK stdio adapter for an explicitly trusted local Operator; the session owns Worlds it starts.</summary>
 public static class OperatorMcpServer {
     internal const string Instructions = "Trusted local Operator. Activated builds take effect on the next call; started Worlds and pending starts stay owned by this session across updates. Name your World in every call and inspect state after an unknown outcome before retrying.";
-    internal const string StatusMeanings = "status is completed (returned output or data), submitted (accepted with no output; not an authoritative mutation receipt), refused (error), or unknown (attachment closed or deadline expired after dispatch; inspect state before retrying). truncated marks output cut at the 1048576-character limit. Native JSON returns in data instead of output.";
+    internal const string StatusMeanings = "status is completed (returned output or data), submitted (accepted with no output; not an authoritative mutation receipt), refused (error), or unknown (attachment closed or deadline expired after dispatch; inspect state before retrying). truncated marks output cut at the 1048576-character limit. Native JSON returns in data instead of output. A script's commands carry each line by its one-based source line number (the command text is not echoed), and the result names the World (world) only when the call named none.";
     internal const string TimeoutMsProperty = """{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Deadline in milliseconds; expiry closes the attachment and reports status unknown."}""";
 
     private const string WorldProperty = """{"type":"object","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"},"document":{"type":"string"},"startedUtc":{"type":"string"}},"required":["attachmentId","processId","startedUtc"],"additionalProperties":false}""";
+    private const string WorldRefProperty = """{"type":"object","description":"The World the call reached; present only when the call named none.","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"}},"required":["attachmentId","processId"],"additionalProperties":false}""";
 
     private static readonly JsonElement EmptyInput = JsonElement.Parse("""{"type":"object","properties":{},"additionalProperties":false}""");
     private static readonly JsonElement ExecInput = JsonElement.Parse($$$$$"""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"Console line or newline-separated script (at most 64 nonblank, noncomment lines)."},"timeoutMs":{{{{{TimeoutMsProperty}}}}}},"required":["command"],"additionalProperties":false}""");
@@ -25,11 +26,11 @@ public static class OperatorMcpServer {
     private static readonly JsonElement WorldsOutput = JsonElement.Parse("""{"type":"object","properties":{"worlds":{"type":"array","items":{"type":"object","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"},"document":{"type":"string"},"startedUtc":{"type":"string"},"current":{"type":"boolean","default":false},"started":{"type":"boolean","default":false}},"required":["attachmentId","processId","startedUtc"],"additionalProperties":false}}},"required":["worlds"],"additionalProperties":false}""");
     private static readonly JsonElement StartInput = JsonElement.Parse("""{"type":"object","properties":{"document":{"type":"string","minLength":1,"default":"worlds/debug","description":"World package, .puck source, or JSON under the checkout's worlds/ directory."},"checkout":{"type":"string","minLength":1,"description":"Absolute path to the adapter's checkout (default) or a worktree of its repository."},"backend":{"type":"string","enum":["directx","vulkan"],"description":"Graphics backend (--backend); vulkan builds SPIR-V."},"windowed":{"type":"boolean","default":false,"description":"Boot windowed under the GPU lease instead of headless."},"ownerPlay":{"type":"boolean","default":false,"description":"Open physical input devices (--devices all) when the owner asked to play."},"holder":{"type":"string","minLength":1,"default":"puck-mcp","description":"GPU lease holder name when windowed."},"timeoutSeconds":{"type":"integer","minimum":1,"maximum":1800,"default":900,"description":"Deadline in seconds covering build, GPU lease, and attachment."}},"additionalProperties":false}""");
     private static readonly JsonElement StopInput = JsonElement.Parse("""{"type":"object","properties":{"world":{"type":"string","minLength":1,"description":"The started World's processId or attachmentId."},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Grace period in milliseconds before killing the process tree."}},"required":["world"],"additionalProperties":false}""");
-    private static readonly JsonElement RunOutput = JsonElement.Parse($$$$$"""{"type":"object","properties":{"startId":{"type":"string"},"status":{"type":"string","enum":["pending","started","stopped","refused"]},"output":{"type":"string"},"isError":{"type":"boolean","default":false},"world":{{{{{WorldProperty}}}}},"processId":{"type":"integer"},"checkout":{"type":"string"},"build":{"type":"string"},"stateDirectory":{"type":"string"},"stdoutLog":{"type":"string"},"stderrLog":{"type":"string"},"exitCode":{"type":"integer"},"killed":{"type":"boolean","default":false},"leaseReleased":{"type":"boolean","default":false}},"required":["status"],"additionalProperties":false}""");
+    private static readonly JsonElement RunOutput = JsonElement.Parse($$$$$"""{"type":"object","properties":{"startId":{"type":"string"},"status":{"type":"string","enum":["pending","started","stopped","refused"]},"output":{"type":"string"},"isError":{"type":"boolean","default":false},"world":{{{{{WorldProperty}}}}},"processId":{"type":"integer"},"stage":{"type":"string","description":"While pending: building (resolving the World build of the checkout's sources), gpu-lease or booting."},"elapsedSeconds":{"type":"integer","description":"While pending: seconds since the start was admitted."},"checkout":{"type":"string"},"build":{"type":"string"},"stateDirectory":{"type":"string"},"stdoutLog":{"type":"string"},"stderrLog":{"type":"string"},"exitCode":{"type":"integer"},"killed":{"type":"boolean","default":false},"leaseReleased":{"type":"boolean","default":false}},"required":["status"],"additionalProperties":false}""");
 
     /// <summary>The output schema every console-backed tool's structured result satisfies: <c>puck_exec</c>,
     /// <c>puck_capture_frame</c>, and <c>puck_state_vector_write</c>, locally and over HTTP.</summary>
-    internal static readonly JsonElement ResultSchema = JsonElement.Parse($$$$$"""{"type":"object","properties":{"requestId":{"type":"string"},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean","default":false},"clearTranscript":{"type":"boolean","default":false},"truncated":{"type":"boolean","default":false},"world":{{{{{WorldProperty}}}}},"data":{"type":["object","array"]},"commands":{"type":"array","items":{"type":"object","properties":{"line":{"type":"integer"},"command":{"type":"string"},"status":{"type":"string","enum":["completed","submitted","refused"]},"output":{"type":"string"},"isError":{"type":"boolean","default":false},"clearTranscript":{"type":"boolean","default":false},"truncated":{"type":"boolean","default":false},"data":{"type":["object","array"]}},"required":["line","command","status"],"additionalProperties":false}}},"required":["status"],"additionalProperties":false}""");
+    internal static readonly JsonElement ResultSchema = JsonElement.Parse($$$$$"""{"type":"object","properties":{"requestId":{"type":"string"},"status":{"type":"string","enum":["completed","submitted","refused","unknown"]},"output":{"type":"string"},"isError":{"type":"boolean","default":false},"clearTranscript":{"type":"boolean","default":false},"truncated":{"type":"boolean","default":false},"world":{{{{{WorldRefProperty}}}}},"data":{"type":["object","array"]},"commands":{"type":"array","items":{"type":"object","properties":{"line":{"type":"integer","description":"One-based line of the submitted script."},"status":{"type":"string","enum":["completed","submitted","refused"]},"output":{"type":"string"},"clearTranscript":{"type":"boolean","default":false},"truncated":{"type":"boolean","default":false},"data":{"type":["object","array"]}},"required":["line","status"],"additionalProperties":false}}},"required":["status"],"additionalProperties":false}""");
 
     /// <summary>Runs one tool call on an attachment.</summary>
     /// <param name="client">The attachment the call runs on.</param>
@@ -37,11 +38,11 @@ public static class OperatorMcpServer {
     /// <param name="clock">Drives the call's deadline.</param>
     /// <param name="token">Cancels the call.</param>
     /// <param name="requestId">The control request id for this attachment's next request.</param>
-    /// <param name="world">The World the attachment reaches, reported in the result; <see langword="null"/> for an
-    /// attachment that has none to name.</param>
+    /// <param name="world">The World the attachment reaches, reported in the result when the call did not name it;
+    /// <see langword="null"/> for an attachment that has none to name and for a call that named its World.</param>
     /// <param name="selectsWorld">Whether the call may carry the <c>world</c> selector, which the caller has already
     /// resolved to <paramref name="client"/>; a remote call may not.</param>
-    internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, TimeProvider clock, CancellationToken token, long requestId = 1, OperatorMcpWorld? world = null, bool selectsWorld = false) {
+    internal static async ValueTask<CallToolResult> CallAsync(IControlSession client, CallToolRequestParams? parameters, TimeProvider clock, CancellationToken token, long requestId = 1, OperatorMcpWorldRef? world = null, bool selectsWorld = false) {
         CallToolResult Fail(string message, bool unknown = true) => Error(message: message, unknown: unknown, world: world);
 
         if (
@@ -222,6 +223,13 @@ public static class OperatorMcpServer {
         ProcessId: info.ProcessId,
         StartedUtc: info.StartedUtc
     );
+    /// <summary>Names a World's attachment file by the two ids a call can address it with.</summary>
+    /// <param name="info">What the World published.</param>
+    /// <returns>The World as a console-backed result's <c>world</c> member carries it.</returns>
+    internal static OperatorMcpWorldRef Reference(LocalEndpointInfo info) => new(
+        AttachmentId: info.Id,
+        ProcessId: info.ProcessId
+    );
     internal static Tool WorldsTool() => new() {
         Name = "puck_worlds",
         Description = "List running Worlds that accept an Operator attachment: attachmentId, processId, document, startedUtc, current (default target when world is omitted) and started (owned by this adapter and stoppable with puck_world_stop).",
@@ -238,8 +246,8 @@ public static class OperatorMcpServer {
     };
     internal static Tool StartWaitTool() => new() {
         Name = "puck_world_start_wait",
-        Description = "Wait up to 20 seconds for a pending start in this session (up to 64 retained). Poll the same startId while pending; cancel stops an unfinished start and any World it launched.",
-        InputSchema = JsonElement.Parse("""{"type":"object","properties":{"startId":{"type":"string","minLength":1},"timeoutMs":{"type":"integer","minimum":1,"maximum":20000,"default":20000},"cancel":{"type":"boolean","default":false}},"required":["startId"],"additionalProperties":false}"""),
+        Description = "Wait for a pending start in this session (up to 64 retained): 20 seconds by default, at most 120000 ms in one call. A pending answer names the stage (building the World, waiting for the GPU lease, or booting with the World's last stderr line) and the seconds elapsed; poll the same startId while pending. cancel stops an unfinished start and any World it launched.",
+        InputSchema = JsonElement.Parse("""{"type":"object","properties":{"startId":{"type":"string","minLength":1},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000,"default":20000},"cancel":{"type":"boolean","default":false}},"required":["startId"],"additionalProperties":false}"""),
         OutputSchema = RunOutput,
         Annotations = new() { DestructiveHint = true, IdempotentHint = true, OpenWorldHint = false, ReadOnlyHint = false },
     };
@@ -292,7 +300,7 @@ public static class OperatorMcpServer {
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = false, IdempotentHint = false, OpenWorldHint = false, ReadOnlyHint = true },
     };
-    internal static CallToolResult Error(string message, bool unknown = true, OperatorMcpWorld? world = null) => Result(
+    internal static CallToolResult Error(string message, bool unknown = true, OperatorMcpWorldRef? world = null) => Result(
         clearTranscript: false,
         isError: true,
         output: message,
@@ -365,7 +373,32 @@ public static class OperatorMcpServer {
             return json.RootElement.Clone();
         } catch (JsonException) { return null; }
     }
-    private static CallToolResult Result(string? requestId, string status, string output, bool isError, bool clearTranscript, byte[]? png, bool truncated, OperatorMcpWorld? world = null, ControlCommandResult[]? commands = null) {
+    // The longest refused line's output a script's status text quotes.
+    private const int RefusalQuoteCharacters = 160;
+    // The most refused lines a script's status text quotes.
+    private const int RefusalQuoteLines = 5;
+
+    // What a client that shows only the text of a result reads: the status, and for a script that ran, which lines were
+    // refused and why, since the per-line answers travel in the structured content.
+    private static string ScriptText(string status, ControlCommandResult[] commands) {
+        var refused = commands.Where(predicate: static line => (line.Status == "refused")).ToArray();
+
+        if (refused.Length == 0) {
+            return $"{status} {commands.Length} lines";
+        }
+
+        var quoted = string.Join(
+            separator: "; ",
+            values: refused.Take(count: RefusalQuoteLines).Select(selector: static line => {
+                var output = line.Output.ReplaceLineEndings(replacementText: " ");
+
+                return $"line {line.Line}: {((output.Length > RefusalQuoteCharacters) ? output[..RefusalQuoteCharacters] + "..." : output)}";
+            })
+        );
+
+        return $"{status} {commands.Length} lines, {refused.Length} refused ({quoted}{((refused.Length > RefusalQuoteLines) ? "; ..." : string.Empty)}); every line's answer is in the structured commands";
+    }
+    private static CallToolResult Result(string? requestId, string status, string output, bool isError, bool clearTranscript, byte[]? png, bool truncated, OperatorMcpWorldRef? world = null, ControlCommandResult[]? commands = null) {
         var single = (commands is null);
         var data = (single ? DataOf(output: output, truncated: truncated) : null);
         var metadata = JsonSerializer.SerializeToElement(
@@ -383,10 +416,8 @@ public static class OperatorMcpServer {
 
                     return new OperatorMcpCommandResult(
                         line.Line,
-                        line.Command,
                         line.Status,
                         (((lineData is null) && !string.IsNullOrEmpty(value: line.Output)) ? line.Output : null),
-                        line.IsError,
                         line.ClearTranscript,
                         line.Truncated,
                         lineData
@@ -395,7 +426,14 @@ public static class OperatorMcpServer {
             ),
             OperatorMcpJson.Default.OperatorMcpResultMetadata
         );
-        List<ContentBlock> content = [new TextContentBlock { Text = ((isError && !string.IsNullOrEmpty(value: output)) ? output : status) }];
+        // A script that ran is a completed call whose lines carry their own verdicts: flagging the call as an error
+        // would make a client show only the text and drop every line's answer.
+        var failed = (isError && single);
+        List<ContentBlock> content = [new TextContentBlock {
+            Text = (single
+                ? ((isError && !string.IsNullOrEmpty(value: output)) ? output : status)
+                : ScriptText(status: status, commands: commands!)),
+        }];
 
         if (
             !isError &&
@@ -406,7 +444,7 @@ public static class OperatorMcpServer {
             mimeType: "image/png"
         ));
         }
-        return new() { Content = content, IsError = isError, StructuredContent = metadata };
+        return new() { Content = content, IsError = failed, StructuredContent = metadata };
     }
 
     /// <summary>Serves the tools until EOF or cancellation, independent of any World's lifetime. Each call runs on the
@@ -511,7 +549,7 @@ public static class OperatorMcpServer {
                                 context.Params,
                                 clock,
                                 callToken,
-                                world: Describe(info: client.Endpoint),
+                                world: ((selector is null) ? Reference(info: client.Endpoint) : null),
                                 selectsWorld: true
                             ).AsTask(),
                             refuse: refusal => Error(

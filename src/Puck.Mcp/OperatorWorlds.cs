@@ -41,14 +41,24 @@ public sealed record OperatorWorldBuild(string? Path, IDisposable? Lease, string
 /// </summary>
 internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider clock) : IDisposable {
     internal const int MaxStartSeconds = 1800;
+    /// <summary>The longest single wait on a pending start, in milliseconds; the same ceiling a console call has.</summary>
+    internal const int MaxWaitMilliseconds = 120_000;
 
     private static readonly TimeSpan AttachPoll = TimeSpan.FromMilliseconds(milliseconds: 250);
     private static readonly TimeSpan DisposeGrace = TimeSpan.FromSeconds(seconds: 10);
     private readonly ConcurrentDictionary<int, Started> m_started = new();
-    private readonly ConcurrentDictionary<string, (CancellationTokenSource Stop, Task<CallToolResult> Work)> m_starts = new();
+    private readonly ConcurrentDictionary<string, (CancellationTokenSource Stop, Task<CallToolResult> Work, StartProgress Progress)> m_starts = new();
     private readonly CancellationTokenSource m_shutdown = new();
 
     private int m_runs;
+
+    // Where an admitted start is, for the poll that finds it unfinished: the stage it is in, when it was admitted, and the
+    // log of the process it launched once there is one.
+    private sealed class StartProgress(long begun) {
+        public readonly long Begun = begun;
+        public volatile string Stage = "building";
+        public volatile string? StderrLog;
+    }
 
     private sealed class Started(Process process, string document, string checkout, string build, string runDirectory, IDisposable? lease, IDisposable? buildLease) {
         public string? AttachmentId;
@@ -161,13 +171,14 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             }
             if (m_starts.Count >= 64) { return Refuse("This session already has 64 active starts; wait or cancel one before starting another."); }
             var stop = CancellationTokenSource.CreateLinkedTokenSource(token: m_shutdown.Token);
+            var progress = new StartProgress(begun: clock.GetTimestamp());
 
             m_starts[id] = (stop, Task.Run(function: async () => {
                 await using var deadline = clock.CreateTimer(_ => stop.Cancel(), null, TimeSpan.FromSeconds(seconds: seconds), Timeout.InfiniteTimeSpan);
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, holder, windowed, ownerPlay, seconds, attachment, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, holder, windowed, ownerPlay, seconds, attachment, progress, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
@@ -178,29 +189,38 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 data["startId"] = id;
                 result.StructuredContent = JsonElement.Parse(data.ToJsonString());
                 return result;
-            }));
+            }), progress);
         }
-        return Pending(id: id);
+        return Pending(id: id, progress: m_starts[id].Progress);
     }
-    /// <summary>Waits up to 20 seconds for an admitted start, or explicitly cancels it. A request cancellation only ends the poll.</summary>
+    /// <summary>Waits up to <see cref="MaxWaitMilliseconds"/> for an admitted start, or explicitly cancels it. A request cancellation only ends the poll.</summary>
     public async Task<CallToolResult> WaitStartAsync(IDictionary<string, JsonElement>? arguments, CancellationToken cancellationToken) {
         string? id = null;
         var milliseconds = 20_000;
         var cancel = false;
 
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
-            if ((key == "startId") && (value.ValueKind == JsonValueKind.String)) { id = value.GetString(); } else if ((key == "timeoutMs") && (value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= 20000)) { milliseconds = parsed; } else if ((key == "cancel") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) { cancel = value.GetBoolean(); } else { return Refuse($"Invalid argument: {key}."); }
+            if ((key == "startId") && (value.ValueKind == JsonValueKind.String)) { id = value.GetString(); } else if ((key == "timeoutMs") && (value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= MaxWaitMilliseconds)) { milliseconds = parsed; } else if ((key == "cancel") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) { cancel = value.GetBoolean(); } else { return Refuse($"Invalid argument: {key}."); }
         }
         if ((id is null) || !m_starts.TryGetValue(key: id, value: out var start)) { return Refuse("Unknown startId in this session; inspect puck_worlds before starting again."); }
         if (cancel && !start.Work.IsCompleted) {
             try { start.Stop.Cancel(); } catch (ObjectDisposedException) when (start.Work.IsCompleted) { }
         }
-        try { return await start.Work.WaitAsync(TimeSpan.FromMilliseconds(milliseconds: milliseconds), clock, cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (TimeoutException) { return Pending(id: id); }
+        try { return await start.Work.WaitAsync(TimeSpan.FromMilliseconds(milliseconds: milliseconds), clock, cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (TimeoutException) { return Pending(id: id, progress: start.Progress); }
     }
 
-    private static CallToolResult Pending(string id) => Result(metadata: Metadata(output: null, started: null, status: "pending", startId: id));
+    // A pending start's answer: where the start is, how long it has run and, once its World process exists, the last
+    // line that process wrote to standard error.
+    private CallToolResult Pending(string id, StartProgress progress) {
+        var elapsed = ((int)clock.GetElapsedTime(startingTimestamp: progress.Begun).TotalSeconds);
+        var stage = progress.Stage;
+        var last = ((progress.StderrLog is { } log) ? LastLine(path: log) : null);
+        var metadata = Metadata(output: ((last is null) ? null : $"last stderr line: {last}"), started: null, status: "pending", startId: id) with { Stage = stage, ElapsedSeconds = elapsed };
+
+        return Result(metadata: metadata);
+    }
     private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string holder,
-        bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, CancellationToken cancellationToken) {
+        bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         // The build comes before the GPU lease, so a long build never holds the machine's GPU.
         var resolved = await launch!.ResolveBuild(checkout, (backend == "vulkan"), budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
@@ -215,6 +235,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         IDisposable? lease = null;
 
         if (windowed) {
+            progress.Stage = "gpu-lease";
+
             try {
                 lease = await launch!.AcquireGpuLease(holder, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (TimeoutException error) {
@@ -237,6 +259,9 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
             return Refuse(output: $"Refused: the World could not be launched ({error.Message}).");
         }
+
+        progress.StderrLog = started.StderrLog;
+        progress.Stage = "booting";
 
         try {
             while (true) {
@@ -330,24 +355,26 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         return new(
             Build: (failed ? started?.Build : null),
             Checkout: (failed ? started?.Checkout : null),
+            ElapsedSeconds: null,
             ExitCode: stop?.ExitCode,
             IsError: failed,
             Killed: (stop?.Killed ?? false),
             LeaseReleased: (stop?.LeaseReleased ?? false),
             Output: output,
             ProcessId: started?.Process.Id,
+            Stage: null,
+            StartId: startId,
             StateDirectory: (failed ? started?.StateDirectory : null),
             Status: status,
             StderrLog: started?.StderrLog,
             StdoutLog: started?.StdoutLog,
-            World: world,
-            StartId: startId
+            World: world
         );
     }
     private static CallToolResult Result(OperatorMcpWorldRun metadata) {
         var element = JsonSerializer.SerializeToElement(value: metadata, jsonTypeInfo: OperatorMcpJson.Default.OperatorMcpWorldRun);
         var text = metadata.Status switch {
-            "pending" => $"pending {metadata.StartId}",
+            "pending" => $"pending {metadata.StartId} {metadata.Stage} {metadata.ElapsedSeconds}s",
             "started" => $"started {metadata.ProcessId} {metadata.World?.AttachmentId}",
             "stopped" => $"stopped {metadata.ProcessId} exit={metadata.ExitCode}",
             _ => (metadata.Output ?? metadata.Status),
@@ -358,6 +385,17 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             IsError = metadata.IsError,
             StructuredContent = element,
         };
+    }
+    // The last nonblank line a World wrote to standard error, or null while it has written none or its log cannot be read.
+    private static string? LastLine(string path) {
+        try {
+            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream: stream, encoding: Encoding.UTF8);
+
+            return reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n').LastOrDefault();
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+            return null;
+        }
     }
     // The last lines a World wrote to standard error, for a refusal that says why it never attached.
     private static string Tail(string path) {

@@ -260,6 +260,14 @@ start. Keep the output in a lane-named log. A resumed Codex session retains its 
 sandbox; after changing permissions, start a fresh continuation instead of
 `--resume-last`. Companion restrictions are specific to `task`, not native exec.
 
+A Codex lane that needs the `puck` World tools launches without `--sandbox` (the
+project's `puck` permission profile) or with `--sandbox workspace-write`. Under
+`--sandbox read-only` the same prompt that lists all eight `mcp__puck__*` tools
+in those two launches lists none of them, though the project registration is
+enabled (`codex mcp list`), the launcher runs (it installs the worktree's
+`.claude/mcp-install`) and other servers stay visible (probed with codex-cli
+0.164). A read-only review lane therefore reads sources and cannot drive a World.
+
 An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
 its worktree, without `--mode`: headless flag validation rejects `--mode auto`
 before sign-in, while the user-level `agentMode: "auto"` applies afterwards.
@@ -277,6 +285,13 @@ lead watches the lane's worktree for file writes and applies [no bad
 loops](#no-bad-loops). The home policy is the block contributing
 records; login and trust material stay local. The workspace plugin exposes the MCP
 configuration because a bare `.agents/mcp_config.json` is not a discovery root.
+
+Antigravity lists the `puck_operator` tool names in its context and loads their
+input schemas lazily, from `<appDataDir>/mcp/puck_operator/<toolName>.json`; it calls
+them through `call_mcp_tool`. A brief for an Antigravity lane that drives a World
+says to read the schema file of each `puck_operator` tool before its first call,
+to pass the `world` argument on every call, and to wait for a start with
+`puck_world_start_wait` `timeoutMs` 60000 or more, so a cold build costs few polls.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
