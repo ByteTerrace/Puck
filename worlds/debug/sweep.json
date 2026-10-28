@@ -2,14 +2,6 @@
   "note": "The debug world's sweep (puck sweep): the tools it runs for a bounded span, the signals it reads, and the capture tour. Rules name a metric, an operator and a value; a red rule makes the signal red, an amber rule amber. compare says how a metric is judged against a previous report: exact (any change is named), relative:<fraction> (a change beyond that fraction of the old value is named) or none.",
   "tools": [
     {
-      "name": "chess-scope",
-      "note": "The chess table's idle demonstration: the first cycle records its scope tape, the second replays and compares it. It runs first because the fuzzer's and traversal bot's runs leave the scope refusing its start (Scope starting hash MISMATCH after restore).",
-      "lines": [],
-      "until": { "line": "replay.scope chess-demo", "metric": "status", "in": ["4", "-1"], "red": ["-1"] },
-      "everyTicks": 300,
-      "maxTicks": 12000
-    },
-    {
       "name": "fuzzer",
       "note": "300 seeded steps of body 44 in the studio bounds, under the watchdog.",
       "lines": ["world.state.cell.set fuzzer seed 12345", "world.state.cell.set fuzzer limit 300", "world.state.cell.set fuzzer enabled 1"],
@@ -32,6 +24,14 @@
       "until": { "line": "world.state traversal", "metric": "run", "in": ["0"] },
       "everyTicks": 150,
       "maxTicks": 6000
+    },
+    {
+      "name": "chess-scope",
+      "note": "The chess table's idle demonstration: the first cycle records its scope tape, the second replays and compares it. It runs after the fuzzer and the traversal bot, whose lift rides recompile the solid consumers, so the sweep shows the scope's restore validating exactly its own rows and bodies.",
+      "lines": [],
+      "until": { "line": "replay.scope chess-demo", "metric": "status", "in": ["4", "-1"], "red": ["-1"] },
+      "everyTicks": 300,
+      "maxTicks": 12000
     }
   ],
   "signals": [
@@ -119,7 +119,7 @@
       { "name": "portal-link", "group": "indoor", "lines": ["debug.go portal-link"] },
       { "name": "portal-fall", "group": "indoor", "lines": ["debug.go portal-fall"] },
       { "name": "garden-painting", "group": "indoor", "lines": ["debug.go portal-garden"] },
-      { "name": "night-painting", "group": "indoor", "note": "The night field through its painting: a body.fly tape that crosses a door can crash the World (WorldInputRuntime.CompleteBodyScripts), so the tour crosses once, into the garden, last.", "lines": ["debug.go portal-night"] },
+      { "name": "night-painting", "group": "indoor", "note": "The night field through its painting, seen from the gallery.", "lines": ["debug.go portal-night"] },
       { "name": "studio", "group": "outdoor", "lines": ["debug.go hero"] },
       { "name": "traversal-course", "group": "outdoor", "lines": ["body.pose 60 0.05 -28 0 0 0"] },
       { "name": "rate-range", "group": "outdoor", "lines": ["debug.go range"] },
@@ -129,7 +129,7 @@
       { "name": "jump", "group": "motion", "lines": ["debug.go stage", "world.wait 30", "body.press jump 1 0.6"], "settle": 9 },
       { "name": "flight", "group": "motion", "lines": ["debug.go stage", "world.wait 30", "body.press flight 1 0.2", "world.wait 10", "body.fly 0 0 1 0 0 0 1.5"], "settle": 50, "after": ["body.press flight 1 0.2", "world.wait 120"] },
       { "name": "noclip", "group": "motion", "lines": ["debug.go stage", "world.wait 30", "body.press noclip 1 0.2 0", "world.wait 10", "body.press rise 1 1 0"], "settle": 25, "after": ["body.press noclip 1 0.2 0", "world.wait 60"] },
-      { "name": "garden", "group": "outdoor", "note": "Through the garden painting, last: a stop after a crossing poses a body in another instance, and the first such pose has thrown a NullReferenceException.", "lines": ["debug.go portal-garden", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] }
+      { "name": "garden", "group": "outdoor", "note": "Through the garden painting, last: once she stands in the garden, debug.go's places are the debug world's and the garden refuses them by name, so no later stop could pose her.", "lines": ["debug.go portal-garden", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] }
     ]
   }
 }
