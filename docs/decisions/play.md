@@ -229,12 +229,12 @@ the owning seam.
 ## Tabletop
 
 **Both document ceilings are structural, so a collision widens them.** The
-tabletop, rigid-fidelity, and cards lanes each landed under `MaxRows` and
-`MaxWorkUnitsPerTick` alone and summed past both when merged; the fix was to
-widen (`MaxRows` 128 → 256, `MaxWorkUnitsPerTick` 1,000,000 → 2,000,000)
-rather than cut a lane. The work-unit count is now a priced allowance the
-[state and language](state-and-language.md#capacities) decisions own; this
-records what the collision proved, not what the constant should be.
+tabletop, rigid-fidelity, and cards lanes each fit under `StateCapacity.MaxRows`
+and `RuleCapacity.MaxWorkUnitsPerTick` alone and sum past both when merged; the
+answer is to widen the ceilings rather than cut a lane. The work-unit count is a
+priced allowance the [state and language](state-and-language.md#capacities)
+decisions own, and the code owns the constants; this records what the collision
+proves, not what a constant should be.
 
 **A deliberate, already-recorded content change may move a replay hash.** Four
 independently correct changes combined moved the garden and frozen replay

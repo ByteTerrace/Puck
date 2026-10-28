@@ -89,7 +89,7 @@ export and play always validate.
   `import` a `.puck` module; its templates and constants come in
   (`CartridgeDocumentEmitter.LowerSource`, which `puck compile`, the language
   server and the round-trip test use), never rows. The game lives once as a
-  template in `cartridges/shared/` (`tetromino.puck`), and each target's source
+  template in `worlds/debug/cartridges/shared/` (`tetromino.puck`), and each target's source
   imports it, declares `target` and `palettes`, and calls it. A module contributes no standalone document.
 - **A Color-only image cannot run on the DMG.** The cgb image arms the speed
   switch and executes STOP, which parks a monochrome processor until a key is

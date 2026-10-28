@@ -401,8 +401,11 @@ live in `WorldHudCommandModule`, unbindable.
   elements included — the cross-row transaction boundary).
 - `world.row.remove hud.panels <id>` → `RemoveHudPanel`.
 - `world.row.set hud.defaults <json>` → `SetHudDefaults`.
-- There is NO per-element verb: elements ride their panel row, so a panel upsert
-  is the whole edit.
+- There is no per-element console verb: `world.row.*` takes whole panel rows, so
+  a console edit is a panel upsert. The per-element mutations
+  `WorldMutation.UpsertHudElement` and `RemoveHudElement` (a read-modify-write of
+  one element in an already-declared panel) are carried by addon guests
+  (`WorldAddonMutationDecoder`) and the wire.
 - `world.hud [seat:<n>]` — the `Immediate` read-back. No argument: `[world.hud:
   enabled <b> panels N/4]` plus per-panel and per-element lines. `seat:<n>`
   (1..4): that LOCAL seat's PRIVATE player-scope panel instead (or a refusal

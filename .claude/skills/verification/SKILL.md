@@ -178,10 +178,11 @@ Drive a verification World with scripted input only (`player.signal`, `body.*`,
 schedule rows); a stderr naming a `[gamepad]` or `[gameinput]` device means the
 flag was missed.
 
-`puck_world_start` builds in the checkout's ordinary `bin/obj` before copying its run snapshot.
+`puck_world_start` builds into the [World build store](../../../docs/reference/cli.md#where-the-world-artifact-is-built),
+not the checkout's `bin`, but compiles incrementally through the checkout's `obj` directories.
 Do not overlap that start with another build of projects sharing its dependencies: the compiler can
 refuse a locked intermediate DLL (CS2012). Wait for `started` or `refused` before building again;
-once started, the snapshot no longer locks the checkout's output.
+once started, the World runs from the store and no longer locks the checkout.
 
 ## Build before you test
 

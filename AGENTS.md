@@ -190,7 +190,7 @@ settles a question, decide by that principle and say why.
    Harness settings that a tool reads from the project are versioned:
    `.claude/settings.json`, `.claude/launch.json`, `.claude/agents/`,
    `.claude/hooks/`, `.mcp.json`, `.codex/config.toml`, `.codex/hooks.json`,
-   `.codex/rules/` and `.agents/*.json`. Necessary non-secret policy a harness
+   `.codex/rules/`, `.agents/*.json` and `.agents/plugins/`. Necessary non-secret policy a harness
    reads only from home belongs in [machine setup](docs/development/contributing.md#setting-up-a-machine);
    a machine keeps no extra policy beyond that list. Login and hook-trust state
    remain local and are never copied into the repository.

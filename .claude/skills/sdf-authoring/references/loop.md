@@ -121,10 +121,10 @@ puck compile <file>.puck --validate
 puck lint <file>.puck --strict
 ```
 
-`compile --validate` runs document-level validation: the stamp-budget count
-and the panel/trim/cells creation-scope refusal both fire here (they walk
-every `prototypes[]` row unconditionally, whether or not a placement uses
-it). It does **not** run emission or contact construction — `Morph` and
+`compile --validate` runs document-level validation: the panel/trim/cells
+creation-scope refusal fires here (it walks every `prototypes[]` row
+unconditionally, whether or not a placement uses it). No shape-count ceiling
+exists: `CreationDocument.StampShapeCount` only reports bake work. It does **not** run emission or contact construction — `Morph` and
 similar PopField-only blends validate here and only fail at the next step;
 a Path prism profile under a `solid` placement, and a residual
 nonuniform `Scale`, likewise surface only there.

@@ -542,9 +542,10 @@ boots each scenario of
 [the determinism manifest](../../experimental/tests/Puck.Determinism/determinism.json)
 headless in-process and records every tick's per-system state hashes and the
 world's document-level hashes. `puck determinism compare` names the first tick
-and system, or document hash, where two recordings differ. CI records the
-manifest on Windows and on Linux and fails on any divergence. Locally, record it
-twice, or before and after a change, and compare the two streams. A deliberate
+and system, or document hash, where two recordings differ. While the debug world
+is the one live world, CI runs no cross-host determinism leg
+([CI](ci.md#build-and-validate)), so record the manifest twice locally, or before
+and after a change, and compare the two streams. A deliberate
 correction to simulation math or logic moves the hashes on both hosts alike, so
 the cross-host compare still agrees and needs no re-recording. A host-dependent
 difference, such as a writer whose line breaks follow the operating system, is

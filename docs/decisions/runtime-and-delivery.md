@@ -92,9 +92,10 @@ Reversi, Hearts or Snake, keeps it. A citation of a real product as prior art,
 such as an emulator reference or a game named for its feel, is not a shipped
 name.
 
-**Every house cartridge has a `.puck` source.** Each sits beside its compiled
-document under the package's `cartridges/<target>`, one folder per forge target,
-and `puck compile` reproduces the document byte for byte.
+**Every house cartridge has a `.puck` source.** Each source sits under the
+package's `cartridges/<target>`, one folder per forge target. The compiled
+document is a cache that `puck compile` derives from it when needed and is never
+committed ([a derived product is a cache](engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
 
 **Licensed images stay usable as evidence, recorded by hash only.** Their bytes
 never enter the repository; the ledger records id and SHA-256, and the battery

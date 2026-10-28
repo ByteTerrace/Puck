@@ -155,6 +155,8 @@ leaves your `bin/Release` free to rebuild
 
 Codex discovers these tools through the session's tool inventory (search for
 `puck`); its repository MCP configuration uses the same launcher as Claude.
+Antigravity names the same server `puck_operator` (its workspace plugin `puck`
+registers the server `operator`), so its tools appear as `puck_operator/*`.
 Use the tools directly before writing a stdin process wrapper. The headless
 start, named `puck_exec`, `world.wait`, headless capture refusal and stop were
 exercised from a Codex lane's actual MCP tools.

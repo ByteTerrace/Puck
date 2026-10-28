@@ -235,9 +235,10 @@ Test lines submit at the authority tick-complete hook, before this host step
 advances sibling worlds and takes the export; operator lines run in the next
 console drain. Sharing the queue must preserve that boundary, or a sibling's
 input lands one host step later.
-It is test-run bookkeeping, not a second scheduler or replay. The native video
-recording boot path and capture verbs have been removed; probes and probe tracks
-remain independent.
+It is test-run bookkeeping, not a second scheduler or replay. Native video
+recording (the windowed `capture.start/status/stop` verbs and `--recording`) is a
+separate product capability, as are probes and probe tracks
+([recording](../../../../docs/reference/recording.md)).
 
 A world may author a `schedule` section, the command-side sibling of
 `captures`: rows of `(tick, principal, command)` submitted at that

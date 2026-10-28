@@ -217,7 +217,7 @@ is not proof a command succeeded. Record runtime probes in the landing commit.
 | Native `codex exec` | Configured on | Own-branch commits; checkout and common Git directory granted by profile | Refused for a lane | Lead grant and lease | Project `puck` registration | Current definitions trusted through `/hooks` | `.agents/skills` link |
 | Codex companion `task --write` | Sandbox has no network | `workspace-write` excludes Git; lead commits | Refused | No sandbox GPU; lead verifies | Project `puck` registration | Same per-user trust, on supported tool paths | Same link |
 | Claude worktree agent | Harness permissions | Own-branch commits; own-tree isolation | Refused | Lead grant and lease | Shared `puck` server | Project registration | `.claude/skills` |
-| Antigravity `agy -p` | Terminal sandbox has no network | Own-branch commits | Refused by git-safety | No sandbox GPU; lead verifies | Workspace plugin registration | `.agents/hooks.json`; hooks start in `.agents/` | `.agents/skills.json` |
+| Antigravity `agy -p` | Terminal sandbox has no network | Own-branch commits | Refused by git-safety | No sandbox GPU; lead verifies | Workspace plugin registration (server `puck_operator`) | `.agents/hooks.json`; hooks start in `.agents/` | `.agents/skills.json` |
 
 A native Codex lane commits directly; git-safety and git.rules guard shared
 state. Linked worktrees need a grant to their separate common Git directory
@@ -227,10 +227,13 @@ review and trust each current definition and re-review changed definitions.
 Hooks cover supported activated tool paths, not every possible execution path.
 See [machine setup](../../../docs/development/contributing.md#setting-up-a-machine).
 
-Every tool resolves its hooks from the worktree it runs in, so a branch older than
-the current `.claude/hooks/` has none, and Codex runs a command whose hook fails.
-Before handing an old branch to any lane, the lead merges the integration tip into
-it, leaving any conflicts for the lane to resolve. A worktree another agent
+Codex and Antigravity resolve their hooks from the worktree they run in, so a
+branch older than the current `.claude/hooks/` has none, and Codex runs a command
+whose hook fails. Claude Code runs the main session's
+`${CLAUDE_PROJECT_DIR}/.claude/hooks` for every worktree agent, whatever the
+agent's branch holds. Before handing an old branch to any lane (its skills and
+rules come from the branch too), the lead merges the integration tip into it,
+leaving any conflicts for the lane to resolve. A worktree another agent
 created can deny a Codex lane its `.git/worktrees/<name>` writes; give the lane a
 worktree the lead creates.
 
@@ -248,9 +251,11 @@ its worktree, without `--mode`: headless flag validation rejects `--mode auto`
 before sign-in, while the user-level `agentMode: "auto"` applies afterwards.
 Auto mode ignores the ask list; git-safety refuses pushes and shared-state Git
 operations. A headless run executes only commands its user-level allow list
-names (`git`, `dotnet`, `pwsh`, `node`); any other command, such as `rm` or
-`Remove-Item`, is auto-denied and ends the run with no output, so a brief that
-deletes files says to use `git rm`. A headless run also ends when the agent
+names. The owner-approved list allows every command
+([contributing](../../../docs/development/contributing.md#antigravity-user-settings));
+a machine whose list names only `git`, `dotnet`, `pwsh` and `node` auto-denies any
+other command, such as `rm` or `Remove-Item`, and the run ends with no output, so
+a brief that deletes files says to use `git rm`. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
