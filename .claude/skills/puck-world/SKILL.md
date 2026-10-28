@@ -112,6 +112,11 @@ for capture names and current coverage boundaries.
 
 ## The live World is shared
 
+The `puck` MCP server is the agents' own debugging instrument (the owner's
+ruling): agents fix and improve it as ordinary work, without asking first,
+within reason, keeping it lean in what it returns and complete in what it
+reports.
+
 The World the owner pairs in runs the main
 checkout's build and sources, not a worktree's. Reach it through the `puck` MCP
 tools (in Claude, ToolSearch `select:mcp__puck__puck_adapter,mcp__puck__puck_worlds,mcp__puck__puck_world_start,mcp__puck__puck_world_start_wait,mcp__puck__puck_world_stop,mcp__puck__puck_exec,mcp__puck__puck_capture_frame,mcp__puck__puck_state_vector_write`):
