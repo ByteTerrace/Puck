@@ -10,10 +10,26 @@ namespace Puck.SdfVm.Tests;
 /// THE LAW: the irradiance volume keeps a static point light to the room it hangs in. Traced over two rooms stacked on a
 /// slab, with one static point light in the upper room and nothing else, a probe in the upper room sees the light (its
 /// visibility bit set) and holds the light the slab's top sends back, while a probe in the lower room sees neither; a
-/// probe's depth cube reaches the slab along the axis toward it, so a read on the slab's far side takes nothing from it;
+/// probe's blocking plane toward the slab is the slab's face, so a read on the slab's far side takes nothing from it;
 /// and the meter reads the upper room lit and the lower room dark.
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
+    private static readonly int PlusX = NeighbourIndex(x: 1, y: 0, z: 0);
+    private static readonly int PlusY = NeighbourIndex(x: 0, y: 1, z: 0);
+    private static readonly int MinusY = NeighbourIndex(x: 0, y: -1, z: 0);
+
+    // The neighbour mask's order (SdfMeshIrradianceProbe.NeighboursWord).
+    private static int NeighbourIndex(int x, int y, int z) {
+        var index = (((9 * (x + 1)) + (3 * (y + 1))) + (z + 1));
+
+        return ((index > 13) ? (index - 1) : index);
+    }
+    private static Vector4 Plane(ReadOnlySpan<uint> probe, int index) {
+        var first = probe[(SdfMeshIrradianceProbe.PlanesWord + (2 * index))];
+        var second = probe[((SdfMeshIrradianceProbe.PlanesWord + (2 * index)) + 1)];
+
+        return new Vector4(x: Half(high: false, word: first), y: Half(high: true, word: first), z: Half(high: false, word: second), w: Half(high: true, word: second));
+    }
     [Fact]
     public void RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements() {
         var volume = new SdfMeshIrradiance();
@@ -38,14 +54,44 @@ public sealed class SdfMeshIrradianceLawTests {
         _ = volume.Stage(frame: empty, tier: SdfIndirectTier.Medium, bakePending: false, write: _ => throw new InvalidOperationException(message: "A steady empty scene rewrote its probes."));
         Assert.False(condition: volume.Settling);
     }
+    /// <summary>A blocker one of a probe's 26 rays meets hides only the points in that ray's direction, and fades over the
+    /// directions between it and the rays that reached open space, while a wall every ray toward it meets hides every
+    /// point past its plane whichever way the point lies.</summary>
     [Fact]
-    public void AHalfwayDepthDirectionSelectsTheDiagonalOnEitherSideOfZero() {
-        foreach (var sign in new[] { -1, 1 }) {
-            Assert.Equal(expected: ((sign < 0) ? 19 : 23),
-                actual: SdfMeshIrradiance.NearestPlane(direction: new Vector3(x: 1f, y: (sign * 0.5f), z: (-sign * 0.5f))));
-            Assert.Equal(expected: 21,
-                actual: SdfMeshIrradiance.NearestPlane(direction: new Vector3(x: 1f, y: (sign * MathF.BitDecrement(x: 0.5f)), z: (-sign * MathF.BitDecrement(x: 0.5f)))));
+    public void ABlockerHidesThePointsInItsRaysDirectionAndAWallEveryPointPastItsPlane() {
+        var planes = new Vector4[26];
+
+        // A face 1 m along +X, hit by the +X ray alone.
+        planes[PlusX] = new Vector4(x: 1f, y: 0f, z: 0f, w: 1f);
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 0f, z: 0f)));
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0.9f, y: 0f, z: 0f)));
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 1.5f, z: 0f)));
+        Assert.Equal(expected: 0.5f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 0.75f, z: 0f)), precision: 5);
+        Assert.Equal(expected: 0.75f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 0.75f, z: -0.75f)), precision: 5);
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0f, y: 2f, z: 0f)));
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: Vector3.Zero));
+
+        // A ray that met the point's own surface saw it; one that went on past it, or reached open space, admits it only
+        // for want of a hit.
+        _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out var seen, toward: new Vector3(x: 0.95f, y: 0f, z: 0f));
+        _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out var open, toward: new Vector3(x: 0f, y: 2f, z: 0f));
+        planes[PlusX] = new Vector4(x: 1f, y: 0f, z: 0f, w: 3f);
+        _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out var passed, toward: new Vector3(x: 0.95f, y: 0f, z: 0f));
+        Assert.Equal(expected: 0f, actual: seen);
+        Assert.Equal(expected: 1f, actual: open);
+        Assert.Equal(expected: 1f, actual: passed);
+        planes[PlusX] = new Vector4(x: 1f, y: 0f, z: 0f, w: 1f);
+
+        // The same face met by every ray toward +X: a point past it is hidden from every direction on that side.
+        foreach (var y in new[] { -1, 0, 1 }) {
+            foreach (var z in new[] { -1, 0, 1 }) {
+                planes[NeighbourIndex(x: 1, y: y, z: z)] = new Vector4(x: 1f, y: 0f, z: 0f, w: 1f);
+            }
         }
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.1f, y: 0.75f, z: -0.75f)));
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 1.5f, z: 0f)));
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0.95f, y: 1.5f, z: 0f)));
+        Assert.Equal(expected: 0.5f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.02f, y: 0.1f, z: 0f)), precision: 4);
     }
 
     // A box between two corners, its faces wound outward, as the bake winds them.
@@ -265,16 +311,24 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.True(condition: (upperLuminance > 0f));
         Assert.True(condition: (Luminance(face: 3, probe: lower) < (0.01f * upperLuminance)));
-        // The lower probe's depth is the exact distance along each axis to the slab's underside 2.5 m up and the floor
-        // 1.5 m down, and the upper probe's to the ceiling 2.8 m up, to the half precision it is stored at, so a point
-        // on the slab's top, 0.3 m past the lower probe's depth, takes nothing from it.
-        var lowerUp = Half(high: false, word: lower[(SdfMeshIrradianceProbe.DepthWord + 1)]);
-        var lowerDown = Half(high: true, word: lower[(SdfMeshIrradianceProbe.DepthWord + 1)]);
-        var upperUp = Half(high: false, word: upper[(SdfMeshIrradianceProbe.DepthWord + 1)]);
+        // The lower probe's planes toward +Y and -Y are the slab's underside 2.5 m up and the floor 1.5 m down, and the
+        // upper probe's toward +Y the ceiling 2.8 m up, to the half precision they are stored at, so a point on the
+        // slab's top, 0.3 m past the lower probe's plane, takes nothing from it.
+        var lowerUp = Plane(index: PlusY, probe: lower);
+        var lowerDown = Plane(index: MinusY, probe: lower);
+        var upperUp = Plane(index: PlusY, probe: upper);
 
-        Assert.InRange(actual: lowerUp, high: 2.51f, low: 2.49f);
-        Assert.InRange(actual: lowerDown, high: 1.51f, low: 1.49f);
-        Assert.InRange(actual: upperUp, high: 2.81f, low: 2.79f);
+        Assert.Equal(expected: Vector3.UnitY, actual: new Vector3(x: lowerUp.X, y: lowerUp.Y, z: lowerUp.Z));
+        Assert.InRange(actual: lowerUp.W, high: 2.51f, low: 2.49f);
+        Assert.Equal(expected: -Vector3.UnitY, actual: new Vector3(x: lowerDown.X, y: lowerDown.Y, z: lowerDown.Z));
+        Assert.InRange(actual: lowerDown.W, high: 1.51f, low: 1.49f);
+        Assert.InRange(actual: upperUp.W, high: 2.81f, low: 2.79f);
+
+        var lowerPlanes = new Vector4[26];
+
+        for (var index = 0; (index < 26); index++) { lowerPlanes[index] = Plane(index: index, probe: lower); }
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: lowerPlanes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0.3f, y: 2.8f, z: -0.2f)));
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: lowerPlanes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0.3f, y: 2.4f, z: -0.2f)));
         // The meter reads the lit room lit and the dark room dark.
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var lit, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), skyVisibility: out _, source: out _));
         Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var dark, position: new Vector3(x: 0.5f, y: 1.5f, z: 0.5f), skyVisibility: out _, source: out _));
@@ -365,7 +419,9 @@ public sealed class SdfMeshIrradianceLawTests {
 
         var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
         var probe = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
+        var plane = Plane(index: PlusX, probe: probe);
 
-        Assert.InRange(actual: Half(high: false, word: probe[SdfMeshIrradianceProbe.DepthWord]), low: 0.499f, high: 0.501f);
+        Assert.Equal(expected: Vector3.UnitX, actual: new Vector3(x: plane.X, y: plane.Y, z: plane.Z));
+        Assert.InRange(actual: plane.W, low: 0.499f, high: 0.501f);
     }
 }

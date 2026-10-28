@@ -69,6 +69,9 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         if (!held.Ok) {
             Notes.Add(item: $"the World was not paused before the tools: {string.Join(separator: "; ", values: held.Refusals)}");
+            if (Stopped() is null) {
+                results.Add(item: new SweepToolResult(Name: "pause", Status: SweepStatus.Red, Ticks: 0, Reasons: held.Refusals));
+            }
         }
 
         foreach (var tool in plan.Tools) {
@@ -167,7 +170,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         foreach (var stop in tour.Stops.Where(predicate: stop => ((names.Count == 0) || names.Contains(value: stop.Name)))) {
             var reasons = new List<string>(collection: prelude);
-            var status = ((prelude.Count == 0) ? SweepStatus.Clean : SweepStatus.Amber);
+            var status = ((prelude.Count == 0) ? SweepStatus.Clean : SweepStatus.Red);
 
             if (Stopped() is { } stopped) {
                 stills.Add(item: new SweepStillResult(Capture: string.Empty, ChangedFraction: null, File: null, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: [$"not taken: {stopped}"], Status: SweepStatus.Unknown));
@@ -175,7 +178,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 continue;
             }
 
-            foreach (var line in (tour.Reset ?? []).Concat(second: (stop.Lines ?? [])).Concat(second: (tour.Frame ?? []))) {
+            foreach (var line in (tour.Reset ?? []).Concat(second: (stop.Lines ?? []))) {
                 var answer = world.Run(script: line, timeoutSeconds: 120);
 
                 if (!answer.Ok) {
@@ -190,10 +193,10 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
             if (!bakes.Ok) {
                 reasons.Add(item: $"captured with bakes unsettled: {bakes.Output}");
-                status = SweepStatus.Worse(left: status, right: SweepStatus.Amber);
+                status = SweepStatus.Worse(left: status, right: SweepStatus.Red);
             }
 
-            var pinned = Pin(captureTick: out var captureTick, reasons: reasons, stop: stop, tour: tour);
+            var pinned = Pin(captureTick: out var captureTick, expected: out var expected, reasons: reasons, stop: stop, tour: tour);
 
             if (!pinned) {
                 status = SweepStatus.Red;
@@ -232,12 +235,21 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 }
             }
 
+            if (pinned) {
+                var evidence = SweepEvidence.Scheduled(world.Run("world.at --json"), expected);
+
+                if (!evidence.Ok) {
+                    reasons.AddRange(collection: evidence.Refusals);
+                    status = SweepStatus.Red;
+                }
+            }
+
             foreach (var line in (stop.After ?? [])) {
                 var answer = world.Run(script: line, timeoutSeconds: 120);
 
                 if (!answer.Ok) {
                     reasons.Add(item: $"after the capture: {string.Join(separator: "; ", values: answer.Refusals)}");
-                    status = SweepStatus.Worse(left: status, right: SweepStatus.Amber);
+                    status = SweepStatus.Worse(left: status, right: SweepStatus.Red);
                 }
             }
 
@@ -255,8 +267,9 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
     // Arms the stop's pinned steps from a start tick a lead after the World's completed tick, and names the tick the
     // capture is pinned to. False, with the reason added, when the World's tick could not be read or the steps were refused.
-    private bool Pin(SweepStop stop, SweepTour tour, List<string> reasons, out ulong captureTick) {
+    private bool Pin(SweepStop stop, SweepTour tour, List<string> reasons, out ulong captureTick, out IReadOnlyList<(ulong Tick, string Command)> expected) {
         captureTick = 0UL;
+        expected = [];
 
         var read = world.Run(script: "world.at --json");
         ulong completed;
@@ -277,7 +290,10 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         var start = (completed + LeadTicks);
 
-        if ((stop.Steps is { Count: > 0 } steps)) {
+        var steps = (tour.Frame ?? []).Select(selector: line => new SweepStep(At: 0, Run: line)).Concat(second: (stop.Steps ?? [])).ToArray();
+
+        expected = steps.Select(selector: step => ((start + ((ulong)step.At)), step.Run)).ToArray();
+        if (steps.Length > 0) {
             var script = JsonSerializer.Serialize(value: new { start, steps = steps.Select(selector: static step => new { at = step.At, run = step.Run }) });
             var armed = world.Run(script: $"world.at {script}");
 
@@ -315,26 +331,10 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
             File.WriteAllText(contents: answer.Output, path: file);
 
-            var metrics = SweepSignals.Read(extra: signal.Metrics, output: answer.Output, parse: signal.Parse);
-            var reasons = new List<string>();
-            var status = (answer.Ok ? SweepStatus.Clean : SweepStatus.Red);
-
-            reasons.AddRange(collection: answer.Refusals);
-
-            if (metrics.TryGetValue(key: "error", value: out var error)) {
-                reasons.Add(item: error);
-                status = SweepStatus.Red;
-            }
-            if (answer.Ok && (signal.Parse != "text") && (metrics.Count == 1)) {
-                reasons.Add(item: $"unmeasured: the answer held no {signal.Parse} metric");
-                status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
-            }
-
-            status = Judge(metrics: metrics, reasons: reasons, rules: signal.AmberRules, status: status, when: SweepStatus.Amber);
-            status = Judge(metrics: metrics, reasons: reasons, rules: signal.RedRules, status: status, when: SweepStatus.Red);
+            var (status, reasons, metrics) = SweepEvidence.Check(answer: answer, signal: signal);
 
             // The answer's file keeps the whole text; the report keeps it only as a short text signal's value.
-            if ((signal.Parse != "text") || (metrics["text"].Length > MaximumTextMetric)) {
+            if ((signal.Parse != "text") || ((metrics.GetValueOrDefault(key: "text")?.Length ?? 0) > MaximumTextMetric)) {
                 _ = metrics.Remove(key: "text");
             }
 
@@ -355,7 +355,6 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         return results;
     }
-
     // One sheet per group, and with a baseline one comparison sheet per group: the baseline's still above the current.
     // The baseline's images are the ones read before this run wrote its own.
     private Dictionary<string, string> Sheets(string folder, IReadOnlyDictionary<string, MotionImage> images, IReadOnlyDictionary<string, MotionImage> previous, IReadOnlyList<SweepStillResult> stills, SweepTour tour) {
@@ -418,31 +417,5 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
         }
 
         return (changed / ((double)pixels));
-    }
-    // A rule that holds colours the signal; a rule whose metric the answer lacks cannot be judged, which is
-    // unmeasured, never clean.
-    private static string Judge(IReadOnlyDictionary<string, string> metrics, List<string> reasons, IReadOnlyList<string> rules, string status, string when) {
-        foreach (var text in rules) {
-            if (!SweepRule.TryParse(rule: out var rule, text: text)) {
-                continue;
-            }
-
-            switch (rule.Holds(metrics: metrics)) {
-                case true:
-                    var value = metrics.GetValueOrDefault(key: rule.Metric, defaultValue: string.Empty);
-
-                    reasons.Add(item: $"{when}: {rule} ({rule.Metric}={((value.Length > 80) ? value[..80] : value)})");
-                    status = SweepStatus.Worse(left: status, right: when);
-
-                    break;
-                case null:
-                    reasons.Add(item: $"unmeasured: {when} rule '{rule}' reads {rule.Metric}, which the answer does not give");
-                    status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
-
-                    break;
-            }
-        }
-
-        return status;
     }
 }
