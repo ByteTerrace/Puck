@@ -394,6 +394,7 @@ and none is run until the owner calls for qualification.
 
 ## Cross-plan maintenance
 
+- [ ] The agent-policy hook does not cover Claude Code's `Monitor` tool: `.claude/settings.json` matches `Bash|PowerShell` for it, while permission rules written as `Bash(...)` also gate Monitor. Claude Code's hook reference documents `tool_input.command` for Bash and PowerShell only and lists no Monitor payload, so whether `Monitor` carries its command there is unverified. Log a Monitor call's PreToolUse payload (a `*` matcher writing it to a file), and if it carries `command`, change the matcher to `Bash|PowerShell|Monitor`.
 - [ ] Quiet-machine findings on the RTX 4070 after the limits redesign (both backends hold 60 FPS settled, world view about 5 ms of GPU per frame):
   - A cold bake of the debug world takes 314 s on Direct3D 12 and 333 s on Vulkan (2,022 groups, 1.09 billion samples), and each backend keeps its own store, so a machine's first boot on each backend pays it. A warm boot settles in about 14 s.
   - The bake identity hashes `SdfMeshInstance` (a draw record, not a bake input): the teleport fix, which changed only its motion identity, sent the next Vulkan boot into a full 333 s rebake. Hash only what the bake reads, or edit-to-running pays a cold bake for draw-side edits.
