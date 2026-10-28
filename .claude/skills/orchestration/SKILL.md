@@ -94,8 +94,14 @@ A lane lands as soon as it meets the
 integration head into it, builds what the merge touched, and fast-forwards the
 integration branch. "What the merge touched" includes what consumes it:
 - a change to a shader, interface or generated header builds `Puck.slnx`, test projects included;
-- a change to a world document runs every `worlds/debug/*-tests.puck` with `--reproduce`, plus the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`);
+- a change to a world document runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`, plus the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`);
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
+
+The full debug-world replay (every test world, about 45 minutes) never blocks a
+landing (the owner's ruling: "The whole idea was to be EFFICIENT"). It runs in
+the background on the integration head after landing, beside other work, and
+what it finds is ordinary work for the next lane. Never wait on one lane's
+landing checks to start the next lane's.
 
 ### Coding lanes and the integration lane
 
