@@ -35,11 +35,10 @@ dotnet <lane>-cli/Puck.Cli.dll <verb> <arguments>
 ```
 
 If that build is absent, build it (`dotnet build src/Puck.Cli -c Release
--nodeReuse:false`) or run the tracked project directly:
-
-```text
-dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- <verb> <arguments>
-```
+-nodeReuse:false`) and copy it
+([verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy));
+`dotnet run` on the project runs the build in place and locks its output, so it
+is not a substitute for the copy.
 
 `references` loads the whole solution. A fresh worktree is unrestored, and the
 load then fails with exit 2 and a message counting the projects that carry no

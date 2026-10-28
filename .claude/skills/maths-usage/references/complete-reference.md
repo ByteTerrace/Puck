@@ -286,12 +286,12 @@ binds each id to the code that runs it. Member coverage is declared in those row
 `src/Puck.Maths` working, whichever wing it touched:
 
 ```text
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
+dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReuse:false
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 ```
 
 (`dotnet test` forwards switches it does not know, `-nodeReuse:false` included,
-to the test host, which exits 5. Build first with `-nodeReuse:false`, then run
-this with `--no-build`.) That is the Default tier, the ordinary run. It is
+to the test host, which exits 5, so the build is its own command.) That is the Default tier, the ordinary run. It is
 where structural completeness and evidence declarations are checked directly,
 without any recorded artifact.
 

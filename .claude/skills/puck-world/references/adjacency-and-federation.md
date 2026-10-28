@@ -582,11 +582,14 @@ idempotent status.
 The focused laws for frames, handoff continuity, hysteresis, contact sweeping,
 and crossing durability:
 
+Build each test project first (`dotnet build <project> -c Release --no-restore
+-nodeReuse:false`), then run it with `--no-build`:
+
 ```text
-dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests"
-dotnet test tests/Puck.World.Presentation.Tests/Puck.World.Presentation.Tests.csproj -c Release --no-restore --filter-class "*FederationTransferLawTests"
-dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release --no-restore --filter-class "*WorldSiloCrossingRecoveryLawTests"
-dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
+dotnet test tests/Puck.World.Server.Tests/Puck.World.Server.Tests.csproj -c Release --no-build --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests"
+dotnet test tests/Puck.World.Presentation.Tests/Puck.World.Presentation.Tests.csproj -c Release --no-build --filter-class "*FederationTransferLawTests"
+dotnet test tests/Puck.World.Silo.Tests/Puck.World.Silo.Tests.csproj -c Release --no-build --filter-class "*WorldSiloCrossingRecoveryLawTests"
+dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-build --filter-class "*WorldFrameIsometryLawTests"
 ```
 
 No live canary exercises a crossing: the canary manifests and quilt worlds are

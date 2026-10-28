@@ -148,7 +148,7 @@ with `--verify`, which compares without writing.
   `Cartridge*Tests` run cartridges on both real emulators),
   `tests/Puck.GamingBricks.Transpiler.Tests` (the round trip) and
   `tests/Puck.HumbleGamingBrick.Forge.Tests` (boot ROM and bundle container).
-  Run them when they reach the change: `dotnet test <project> -c Release`.
+  Run them when they reach the change: `dotnet build <project> -c Release -nodeReuse:false`, then `dotnet test <project> -c Release --no-build`.
 - **Settle out of OAM DMA before reading the bus.** A fixed stepping boundary
   can land inside OAM DMA, where WRAM reads 0xFF. Every SM83 verifier calls
   `VerifyMachineSettle.SettleOutOfOamDma` after stepping frames; use

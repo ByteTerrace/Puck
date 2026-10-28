@@ -8,7 +8,7 @@ explains the pipeline; this page holds what an edit must respect.
 ## Building
 
 ```bash
-dotnet build src/Puck.SdfVm -c Release          # dxc on PATH, or /p:DxcCommand=<path>
+dotnet build src/Puck.SdfVm -c Release -nodeReuse:false   # dxc on PATH, or /p:DxcCommand=<path>
 ```
 
 The shader build is `build/Shaders.targets`, imported into every project by

@@ -187,7 +187,7 @@ Prefer the cheapest correct tool:
    inventories—parse-only, no build.
 3. `puck references` for cross-project symbol questions: references,
    implementers, overrides, derived types, dead-code candidacy.
-4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
+4. `dotnet build Puck.slnx -c Release -nodeReuse:false` after a refactor or documentation edit
    that changes `cref` values.
 
 ## File paths
@@ -326,7 +326,7 @@ so never derive a runtime path from one.
 Compile it without executing its operational code:
 
 ```sh
-dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
+dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release -nodeReuse:false
 ```
 
 Use `puck format --file-list files.json` from the repository root, with a JSON array
@@ -692,9 +692,10 @@ compile in the steps below fails with libc header collisions that have
 nothing to do with the change under test.
 
 ```powershell
-dotnet build src/Puck.World.Browser -c Release
-dotnet test tests/Puck.World.Browser.Tests -c Release
-dotnet publish src/Puck.World.Browser -c Release
+dotnet build src/Puck.World.Browser -c Release -nodeReuse:false
+dotnet build tests/Puck.World.Browser.Tests -c Release -nodeReuse:false
+dotnet test tests/Puck.World.Browser.Tests -c Release --no-build
+dotnet publish src/Puck.World.Browser -c Release -nodeReuse:false
 ```
 
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
@@ -706,7 +707,7 @@ the `verify` job in `.github/workflows/browser.yml` pins (`node-version`). Use
 the system install, not a version manager:
 
 ```powershell
-dotnet publish src/Puck.World.Browser -c Release
+dotnet publish src/Puck.World.Browser -c Release -nodeReuse:false
 cd src/Puck.Dashboard/src/portal
 node --test tests/engine-wasm.test.cjs
 ```

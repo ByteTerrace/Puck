@@ -19,7 +19,7 @@ not code. `Puck.World.AgentHarness` contributes the `agent.harness`
 participant type and `Puck.World.AgentHarness.Azure` the `azure.openai`
 `ChatClientProvider` (an Azure OpenAI or Foundry chat deployment). Neither base
 host references them: publish both beside each host that runs one
-(`dotnet publish src/Puck.World.AgentHarness -c Release -o extensions/Puck.World.AgentHarness`,
+(`dotnet publish src/Puck.World.AgentHarness -c Release -nodeReuse:false -o extensions/Puck.World.AgentHarness`,
 the same for `.Azure`), and `world.extensions.catalog` then lists them.
 
 The participant is a `participants` row of a `puck.world.extensions.v1`

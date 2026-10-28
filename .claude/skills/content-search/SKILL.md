@@ -25,13 +25,12 @@ dotnet <lane>-cli/Puck.Cli.dll search <pattern> [path] [options]
 ```
 
 If that build is absent, build it (`dotnet build src/Puck.Cli -c Release
--nodeReuse:false`) or run the tracked project directly:
+-nodeReuse:false`) and copy it
+([verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)); `dotnet
+run` on the project runs the build in place and locks its output, so it is not a
+substitute for the copy.
 
-```text
-dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- search <pattern> [path] [options]
-```
-
-If neither command can run, fall back to the host's literal or regex search.
+If the copy cannot run, fall back to the host's literal or regex search.
 Say in the result that it came from a degraded fallback, keep the requested
 path, glob and case semantics, and never claim Puck-only intersection,
 complement or lookaround behavior for it. A "contains A but not B" condition

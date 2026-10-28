@@ -677,8 +677,8 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   `world.rate pause` also stops tick waits: several timing reads separated by
   `world.wait` then repeat the same completed GPU window. Use separate control
   requests spaced in wall time when measuring a paused scene.
-- Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release`
-  (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. Cross-backend
+- Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release --no-build`
+  after a `-nodeReuse:false` build (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. Cross-backend
   parity (`puck parity --world <file>`) needs a parity world with its contract
   beside it, and none exists while the debug world is the one live world; until
   one does, compare the two backends' captures and counts yourself.

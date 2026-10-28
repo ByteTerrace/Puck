@@ -18,11 +18,7 @@ invoked from the repository root, through a copy of the checkout's own
 dotnet <scratch-copy>/Puck.Cli.dll <verb>
 ```
 
-If that build is absent, bootstrap from the tracked project:
-
-```text
-dotnet run --project src/Puck.Cli/Puck.Cli.csproj -c Release -- <verb>
-```
+If that build is absent, build and copy it as `SKILL.md` describes.
 
 Every command below writes just `puck <verb>` for short. Re-copy the build after
 tool changes. `puck <verb> -h` prints that verb's usage and exits 0; `puck` with no verb,
