@@ -24,7 +24,9 @@ overrides this skill and is written into it in that session.
 - The review runs while the author implements its next item and never blocks
   the landing or pauses the author. The brief gives the reviewer the diff and the
   author's claim, not the author's reasoning, and asks it to break the change.
-- Findings go to the shared pile ranked by severity, each with one owner; a high
+- Findings go to the shared pile
+  ([review findings](../../../docs/plans/open-items.md#review-findings)) ranked
+  by severity, each with one owner; a high
   finding is scheduled into the next integration batch. The pass's fixes are a
   follow-up branch of their own in that batch, never edits to the author's
   branch.

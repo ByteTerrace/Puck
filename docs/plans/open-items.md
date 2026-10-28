@@ -17,6 +17,10 @@ The debug world is the engine's instrument ([decision](../decisions/engine-desig
 - [ ] `puck test --keep <dir>` outside the repository writes the debug world's machine `contentFolders` as absolute paths into each generated world, and the validator refuses every one ("must be a relative folder"); the same file passes without `--keep`.
 - [ ] Prune scenarios. The count grew from 22 to 166 in a week because lane briefs asked for every demonstration as a scenario. Keep a scenario only for an invariant running cannot show (AGENTS.md), fold duplicates, and stop briefs asking for scenarios by default; the input branch's seven new files are first.
 
+## Review findings
+
+The shared pile a cross-family review's findings go to ([orchestration](../../.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)). One checkbox per finding: `[high|medium|low] <finding> (owner: <lane or role>; from: <branch>)`. A high finding is scheduled into the next integration batch, and every high finding a milestone landed is resolved or deferred by the owner before `main` is pushed.
+
 ## Debug world walkthrough findings
 
 Flagged by the owner while playing the debug world and reproduced by the lead. Poses are `body.pose <x> <y> <z> <yaw> 0 0`; overlays are `world.debug-view <mode>`.

@@ -49,8 +49,10 @@ what the machine can verify. The owner's direction:
   spot-check.
   - The author starts its next item when it hands back and is never paused; the
     change lands in its batch whether or not the review has finished.
-  - Findings go to the shared pile ranked by severity, each with one owner. A
-    high finding is scheduled into the next integration batch.
+  - Findings go to the shared pile, the
+    [review findings](../../../docs/plans/open-items.md#review-findings) in the
+    open items, ranked by severity, each with one owner. A high finding is
+    scheduled into the next integration batch.
   - The reviewer's fixes are a follow-up branch of their own in that batch
     (review-and-fix, [`review-passes`](../review-passes/SKILL.md)), never edits
     to the author's branch.
