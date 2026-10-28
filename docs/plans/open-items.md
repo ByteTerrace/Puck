@@ -8,7 +8,6 @@ starting work, and tick or remove an item in the same change that closes it.
 
 - [ ] Boot once. `puck test` boots the whole debug world afresh for every scenario and again for `--reproduce` (166 scenarios, about 330 boots, about 45 minutes). Boot it once, checkpoint, restore the checkpoint before each scenario, and prove reproduction by replaying the recorded input rather than a second boot.
 - [ ] Prune scenarios. The count grew from 22 to 166 in a week because lane briefs asked for every demonstration as a scenario. Keep a scenario only for an invariant running cannot show (AGENTS.md), fold duplicates, and stop briefs asking for scenarios by default; the input branch's seven new files are first.
-- [ ] `WorldRigidSleepContinuationLawTests.OrdinarySupportMotionContinuesIdenticallyAfterRestore` fails on the integration head after the input merge (rigid sleep plus the input checkpoint fields).
 
 ## Awaiting the owner's review
 
