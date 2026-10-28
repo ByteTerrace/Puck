@@ -207,29 +207,28 @@ void sdfMeshProbeMutualShares(inout SdfMeshProbes probes) {
     }
 }
 
-// Only an answering probe with stronger surface evidence can separate a suspect admission. The strict confidence
-// order prevents mutually separated probes from vetoing each other. PlaneSeparation bounds each blocker's footprint;
-// compute every share before changing any weight, and retain the original gather if no weight would survive.
+// Only answering probes surviving the original separation can separate another admission. PlaneSeparation bounds
+// each blocker's footprint; compute both passes from unchanged weights so mutual vetoes do not empty the gather.
 // Every index is a constant once the loops unroll. KEEP IN SYNC with SdfMeshIrradiance.Separate.
 void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 first, float spacing, float3 pushed) {
     uint neighbours[8];
     float shares[8];
+    float separated[8];
+    float support[64];
     float kept = 0.0;
 
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         neighbours[corner] = (sdfMeshProbeAnswers(probes, corner) ? sdfMeshIrradiance[probes.address[corner] + SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD] : 0u);
     }
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        shares[corner] = 1.0;
-        if (!sdfMeshProbeAnswers(probes, corner)) {
-            continue;
-        }
-
         int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
-        float separated = 0.0;
+        separated[corner] = 0.0;
 
         [unroll] for (uint other = 0u; (other < 8u); other++) {
-            if ((other == corner) || !sdfMeshProbeAnswers(probes, other) || (suspect[other] >= suspect[corner])) {
+            uint pair = ((8u * corner) + other);
+
+            support[pair] = 0.0;
+            if (!sdfMeshProbeAnswers(probes, corner) || (suspect[corner] <= 0.0) || (other == corner) || !sdfMeshProbeAnswers(probes, other)) {
                 continue;
             }
 
@@ -242,11 +241,26 @@ void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 fir
 
             float3 otherPoint = (((float3)(first + otherOffset) + 0.5) * spacing);
 
-            float support = sdfMeshProbePlaneSeparation(probes.address[other], d, spacing, (pushed - otherPoint));
+            support[pair] = sdfMeshProbePlaneSeparation(probes.address[other], d, spacing, (pushed - otherPoint));
 
-            separated = max(separated, ((suspect[corner] - suspect[other]) * support));
+            separated[corner] = max(separated[corner], (suspect[corner] * support[pair]));
         }
-        shares[corner] = (1.0 - separated);
+    }
+    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
+        shares[corner] = 1.0;
+        if (!sdfMeshProbeAnswers(probes, corner)) {
+            continue;
+        }
+
+        float veto = 0.0;
+
+        [unroll] for (uint other = 0u; (other < 8u); other++) {
+            if ((other == corner) || !sdfMeshProbeAnswers(probes, other)) {
+                continue;
+            }
+            veto = max(veto, ((suspect[corner] * support[(8u * corner) + other]) * (1.0 - separated[other])));
+        }
+        shares[corner] = (1.0 - veto);
         kept += (probes.weight[corner] * shares[corner]);
     }
     if (kept > 0.0) {

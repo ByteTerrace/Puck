@@ -276,9 +276,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   direction blended (`sdfMeshProbePlaneVisibility`): a leak through a wall
   none of those rays meets, or a storey the 2 m lattice straddles, is the
   lattice's coarseness, and a soft dark patch beside a finite blocker is the
-  cone of the rays that hit it. A probe another gathered probe cannot see gives
-  way on the near side of that probe's plane toward it
-  (`sdfMeshProbeSeparate`): without it a probe just above a roof or beside a
+  cone of the rays that hit it. Only an answering probe that survives the original
+  separation can separate a suspect admission (`sdfMeshProbeSeparate`), with four-plane support at the
+  receiver-to-probe crossing rather than an infinite neighbour half-space.
+  Suspect share uses perpendicular plane distance, and eligibility and two simultaneous passes
+  prevent non-answering probes and mutual vetoes. See [mesh GI](references/mesh-gi.md).
+  Without separation a probe just above a roof or beside a
   doorway lights the room's upper walls in jagged patches through the rays
   that cleared the edge. Never test a half-space (an axis depth), which
   rejects every receiver beyond a plinth, and never push the receiver by a

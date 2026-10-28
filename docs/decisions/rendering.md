@@ -1063,15 +1063,18 @@ Outside the camera's window the lookup clamps to boundary probes, while their
 plane tests use the actual receiver position. This extends their light only
 as far as their visibility supports, without a transition to unoccluded sky.
 Each ray retains its first hit. Separation closes admissions through rays that
-clear a roof edge or a doorway: a stronger answering probe's blocked neighbour
+clear a roof edge or a doorway: an answering probe's blocked neighbour
 ray locates a potential separating plane, and the four rays around the
 receiver-to-probe crossing bound that blocker's footprint. Tangent rays say
-nothing about a wall's extent. Only the difference in the probes' suspect shares
-can suppress an admission; those shares use perpendicular distance to the hit
+nothing about a wall's extent. An initial pass measures each probe's separation;
+the final pass weights a separator's veto by its survival of that original pass
+and the candidate's suspect share. Those shares use perpendicular distance to the hit
 plane, so a ray meeting the receiver's own surface supplies evidence even at
 grazing angles. Front eligibility precedes separation, all shares read unchanged
 weights, and a gather retains its original weights if separation would empty it.
-The strict confidence order prevents mutual vetoes. The CPU exposure meter traces visibility from the camera
+Both passes use unchanged weights, so mutually separated probes cannot veto each
+other. Equal surface confidence does not disable a room-side separator: every
+probe may be uncertain about a moving body's untraced surface. The CPU exposure meter traces visibility from the camera
 to each probe so a thin partition cannot import another room's meter reading.
 A probe also gives way to the other probes about a point in
 proportion to how few of them it sees, by the neighbour sight lines the trace

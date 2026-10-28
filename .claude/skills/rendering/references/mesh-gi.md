@@ -69,10 +69,13 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   around that crossing must support the blocker there (`PlaneSeparation` /
   `sdfMeshProbePlaneSeparation`), rather than extending one sample's half-space.
   Rays tangent to or pointing away from that plane do not contradict its extent:
-  otherwise a continuous wall reopens beside a tangent ray. Only A's stronger
-  evidence of the receiver's surface may suppress B, by the difference in their
-  suspect shares. Equal-confidence mutually blocked probes cannot veto each
-  other. Compute shares from unchanged weights, and keep the original gather if
+  otherwise a continuous wall reopens beside a tangent ray. Compute the original
+  separation scores first, then weight A's veto by how much of A survives that
+  pass, and by B's suspect share. Fully separated probes cannot veto each other.
+  Equal surface confidence alone must not disable separation: a dynamic body has
+  no trace surface, so every probe may be uncertain and a room-side probe must
+  still reject sky light from across the wall. Compute both passes from unchanged
+  weights, and keep the original gather if
   none would survive. `PlaneVisibility`'s `suspect` blends open rays and the
   perpendicular gap from receiver to hit plane, fading from a quarter to three
   quarters of the spacing. Never subtract Euclidean receiver distance from a

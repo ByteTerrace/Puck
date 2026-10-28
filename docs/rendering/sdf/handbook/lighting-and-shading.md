@@ -201,8 +201,8 @@ in the frame.
   plane locates the receiver-to-probe crossing. The four planes about that
   crossing bound the blocker's footprint; an isolated hit is never an infinite
   separator, and tangent rays do not contradict a continuous wall. Only a probe
-  with stronger evidence of the receiver's surface may separate it, by the
-  difference in their suspect shares. A share uses perpendicular plane distance:
+  surviving an initial separation pass may separate another, weighted by that
+  survival and the candidate's suspect share. A share uses perpendicular plane distance:
   a hit on the receiver's own surface is evidence at every angle, while open
   space or a plane far beyond it is suspect. Front eligibility precedes
   separation; shares read unchanged weights and never empty the gather

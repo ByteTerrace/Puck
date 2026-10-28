@@ -1241,9 +1241,8 @@ public sealed class SdfMeshIrradiance {
 
         return ((skyIrradiance * (sky / total)) + (bounce / total));
     }
-    // Only an answering probe with stronger surface evidence can separate a suspect admission. The strict confidence
-    // order prevents mutually separated probes from vetoing each other. PlaneSeparation bounds each blocker's footprint;
-    // compute every share before changing any weight, and retain the original gather if no weight would survive.
+    // Only answering probes surviving the original separation can separate another admission. PlaneSeparation bounds
+    // each blocker's footprint; compute both passes from unchanged weights so mutual vetoes do not empty the gather.
     // KEEP IN SYNC with sdfMeshProbeSeparate.
     private static void Separate(in Corners probes, ReadOnlySpan<uint> neighbours, ReadOnlySpan<float> suspect, Span<float> weights, Vector3 first, float spacing, Vector3 pushed) {
         Span<float> support = stackalloc float[64];
@@ -1253,7 +1252,7 @@ public sealed class SdfMeshIrradiance {
                 var pair = ((8 * corner) + other);
 
                 support[pair] = 0f;
-                if ((weights[corner] <= 0f) || (other == corner) || (weights[other] <= 0f) || (suspect[other] >= suspect[corner])) { continue; }
+                if ((weights[corner] <= 0f) || (suspect[corner] <= 0f) || (other == corner) || (weights[other] <= 0f)) { continue; }
 
                 var x = ((corner & 1) - (other & 1));
                 var y = (((corner >> 1) & 1) - ((other >> 1) & 1));
@@ -1270,27 +1269,37 @@ public sealed class SdfMeshIrradiance {
         Separate(support: support, suspect: suspect, weights: weights);
     }
 
-    /// <summary>Applies supported separation simultaneously to the eight answering probe weights. A probe with
-    /// stronger surface evidence alone may veto a suspect admission; zero weights never separate, and equal-confidence
-    /// mutually blocked probes retain their weights. KEEP IN SYNC with <c>sdfMeshProbeSeparate</c>.</summary>
+    /// <summary>Applies supported separation simultaneously to the eight answering probe weights. A separator is
+    /// weighted by its survival of the original separation; zero weights and fully separated probes never veto another
+    /// answer. KEEP IN SYNC with <c>sdfMeshProbeSeparate</c>.</summary>
     /// <param name="support">The 8×8 directional separation scores, receiver probe first, separator second.</param>
     /// <param name="suspect">Each probe's suspect share from <see cref="PlaneVisibility"/>.</param>
     /// <param name="weights">The eight weights after front eligibility; zero for each non-answering probe.</param>
     public static void Separate(ReadOnlySpan<float> support, ReadOnlySpan<float> suspect, Span<float> weights) {
         Span<float> shares = stackalloc float[8];
+        Span<float> separated = stackalloc float[8];
         var kept = 0f;
 
+        for (var corner = 0; (corner < 8); corner++) {
+            separated[corner] = 0f;
+            if (weights[corner] <= 0f) { continue; }
+
+            for (var other = 0; (other < 8); other++) {
+                if ((other == corner) || (weights[other] <= 0f)) { continue; }
+                separated[corner] = MathF.Max(x: separated[corner], y: (suspect[corner] * support[((8 * corner) + other)]));
+            }
+        }
         for (var corner = 0; (corner < 8); corner++) {
             shares[corner] = 1f;
             if (weights[corner] <= 0f) { continue; }
 
-            var separated = 0f;
+            var veto = 0f;
 
             for (var other = 0; (other < 8); other++) {
-                if ((other == corner) || (weights[other] <= 0f) || (suspect[other] >= suspect[corner])) { continue; }
-                separated = MathF.Max(x: separated, y: ((suspect[corner] - suspect[other]) * support[((8 * corner) + other)]));
+                if ((other == corner) || (weights[other] <= 0f)) { continue; }
+                veto = MathF.Max(x: veto, y: ((suspect[corner] * support[((8 * corner) + other)]) * (1f - separated[other])));
             }
-            shares[corner] = (1f - separated);
+            shares[corner] = (1f - veto);
             kept += (weights[corner] * shares[corner]);
         }
         if (kept > 0f) {

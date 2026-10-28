@@ -149,7 +149,16 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.Equal(expected: 0.6f, actual: weights[0]);
         Assert.Equal(expected: 0.4f, actual: weights[1]);
 
-        // A stronger answering probe can suppress the weaker one, while remaining an answer itself.
+        // A room-side probe can suppress a far-side probe even when both are equally uncertain about a dynamic
+        // receiver's surface. Demanding stronger surface evidence here reopens sky light on the Moth beside a wall.
+        support[8] = 0f;
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.Equal(expected: 0f, actual: weights[0]);
+        Assert.Equal(expected: 0.4f, actual: weights[1]);
+
+        // A probe whose own rays met the receiver also remains an answer itself.
+        support[8] = 1f;
+        weights[0] = 0.6f;
         suspect[1] = 0f;
         SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
         Assert.Equal(expected: 0f, actual: weights[0]);
