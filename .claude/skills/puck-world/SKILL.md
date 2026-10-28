@@ -552,6 +552,9 @@ check the flag: the owner may be holding the pad.
   ([references/replay.md](references/replay.md)).
 - `puck test <source>` boots each `.puck` `test` block headless and prints one
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).
+  A scenario is for an invariant that running cannot show; a feature is shown by
+  running it, and the debug world's sweep is its signal
+  ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
 
 Verify game behavior by running the game (`AGENTS.md` rule 3). Write a test only
 where running cannot show the behavior. Standalone runners, record directories

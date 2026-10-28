@@ -814,7 +814,7 @@ The [open items](../plans/open-items.md#input-channels) carry completion status.
    Keep all declared channels live in the single mapping at this stage.
 2. **Relative input.** Add the `Relative` shape and Q32.32 accessors in the
    numeric bank, ordered host accumulation and authored units/sensitivity/bounds.
-   Demonstrate displacement conservation, single consumption, and no tick-rate
+   Show displacement conservation, single consumption, and no tick-rate
    scaling; keep stick-rate behavior unchanged.
 3. **Authoritative modes and allocation.** Add finite selectors, composed tuples,
    validation, compiled mappings, projected permissions and directed per-family
@@ -829,20 +829,20 @@ The [open items](../plans/open-items.md#input-channels) carry completion status.
    Keep held/toggle levels and continuation without a neutral tick or repeated
    edge; admit bounded source provenance and tape/checkpoint accepted
    contributions, toggle and rearm state. Cover reload/disconnect/routing resets
-   and checkpoint/hash continuity. Demonstrate
+   and checkpoint/hash continuity. Show
    kept run/autorun, autofly starting flight without cancelling itself, cleared
    autofly on flight exit, and neutral board/screen entry and exit. Steps 3 and 4
    are delivered together if enabling modal slot reuse would otherwise expose
    old input; there is no intermediate release where reusable slots lack the barrier.
 5. **Timed ingress and history.** Add ordered events, exact interval mapping,
    lateness admission, calibration, bounded rings, overflow outcomes, and all
-   replay/checkpoint/hash fields. Demonstrate a press and release in one tick,
+   replay/checkpoint/hash fields. Show a press and release in one tick,
    equal-time ordering, ring wrap, typed and pasted text arriving as ordered
    `Text` events in a text-focus mode, and a mid-session replay restore. Extend C4's
    held continuation with original event identity/time and cancellation outcomes.
 6. **Rule patterns and clocks.** Extend the existing operand/effect compiler
    with edge iteration, matching, consumption, tick buffers, held predicates,
-   and event-time clock judgement. Demonstrate a motion input, simultaneous
+   and event-time clock judgement. Show a motion input, simultaneous
    presses, buffered action, and sub-millisecond boundary judgement at two
    different valid simulation rates, plus a kept rhythm hold and fighting charge
    spanning a mode switch with no fabricated edge, and a typed line judged for
@@ -854,19 +854,21 @@ The [open items](../plans/open-items.md#input-channels) carry completion status.
    updates the read-backs and docs it directly changes; this step closes the
    combined inspection and authoring experience.
 
-For each implementation step, build the whole solution without warnings;
-regenerate affected schema, vocabulary, and verb artifacts through the private
-candidate CLI; run the touched `worlds/debug/*-tests.puck` files, including every
-demonstration named above, with `puck test --reproduce`, and the Transpiler,
-Cli.Worlds, Schema, Server, and Client CPU suites. The full debug-world replay
-runs on the integration head after landing, following the
+Each step builds the projects it touches without warnings, regenerates affected
+schema, vocabulary and verb artifacts through the private candidate CLI, runs the
+focused tests for what it changed (the Transpiler, Cli.Worlds, Schema, Server and
+Client CPU suites where it reaches them), and shows its behavior by running the
+real World with `--devices none`, using the GPU/heavy-suite leases where needed.
+A scenario file is added only for an invariant that running cannot show
+([AGENTS.md](../../AGENTS.md#puck-is-pre-release)); the demonstrations named
+above are shown by running and are not kept as scenarios. The integration lane
+builds the whole solution, runs the batch's sweep and, after landing, the full
+debug-world replay, following the
 [landing procedure](../../.claude/skills/orchestration/SKILL.md#land-in-batches).
-Verify
-world behavior by running the real World with `--devices none`, using the
-GPU/heavy-suite leases where needed. Re-record affected tapes through verbs.
-Measure steady-tick allocation and counts for held input, event bursts, and
-history matching. Runtime capacity, releases, replay identity, and exact fixed
-results deserve checks; internal array shapes do not become compatibility gates.
+Re-record affected tapes through verbs. Measure steady-tick allocation and counts
+for held input, event bursts, and history matching. Runtime capacity, releases,
+replay identity, and exact fixed results deserve checks; internal array shapes do
+not become compatibility gates.
 
 ## Existing foundations
 
