@@ -90,8 +90,9 @@ internal sealed partial class WorldCursorFeed : IDisposable {
         if ((picker is not null) && !continuous && !m_explain.Holds(picker: picker)) { picker = null; }
         PickInstance = (((picker is not null) || HoldsCapturedView) ? m_pointerInstance : null);
         if (!ReferenceEquals(objA: m_hoverPicker, objB: picker)) {
-            // The explanation settled its own cancellation. A superseding consumer owns any newer request.
-            if (!explaining) { m_hoverPicker?.Clear(); }
+            // The explanation settled its own cancellation, and a console pick still waiting on its frame keeps its
+            // request. A superseding consumer owns any newer request.
+            if (!explaining && (m_hoverPicker is { Reserved: false } released)) { released.Clear(); }
             m_hoverPicker = picker;
         }
         if (picker is not null) {

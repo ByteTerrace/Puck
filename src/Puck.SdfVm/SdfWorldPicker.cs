@@ -15,6 +15,9 @@ public sealed class SdfWorldPicker {
     // that coordinate.
     private long m_request;
     private long m_floor;
+    // The identity of the explicit request a caller waits on: a hover's Demand leaves it standing until it is answered,
+    // cleared or replaced by another explicit request.
+    private long m_reserved;
     // Whether the latest request has no answer yet, and whether it still needs a copy recorded.
     private bool m_awaiting;
     private bool m_queued;
@@ -41,6 +44,12 @@ public sealed class SdfWorldPicker {
     /// <summary>Gets whether the latest request has no answer yet, whether its copy is still to be recorded or already in
     /// flight. It turns false when the request is answered, cleared or discarded with the followed view.</summary>
     public bool Awaiting => m_awaiting;
+    /// <summary>Gets whether a recorder follows this picker, so a request can ever be answered: false for a view that is
+    /// registered but not rendering.</summary>
+    public bool Attached => (m_readbacks.Count > 0);
+    /// <summary>Gets whether an unanswered explicit <see cref="Request"/> stands, which <see cref="Demand"/> and a hover's
+    /// release leave alone.</summary>
+    public bool Reserved => (m_awaiting && (m_reserved == m_request));
     /// <summary>Gets whether a copy is in flight.</summary>
     public bool InFlight => (m_flight is not null);
     /// <summary>Gets the current request identity. A shared one-shot consumer cancels only while this still names
@@ -49,7 +58,8 @@ public sealed class SdfWorldPicker {
 
     /// <summary>Requests the pixel at normalized coordinates, with the origin at the view's top left. Each coordinate
     /// must be finite and in [0, 1). Calling again supersedes every earlier result, and an answer to an earlier
-    /// request is never published.</summary>
+    /// request is never published. The request stays the latest until it is answered, cleared or replaced by another
+    /// request: a <see cref="Demand"/> meanwhile reuses it whatever its coordinates.</summary>
     /// <param name="x">The horizontal coordinate.</param>
     /// <param name="y">The vertical coordinate.</param>
     /// <param name="surface">Whether to copy the packed surface normal and capture the rendered camera.</param>
@@ -59,20 +69,22 @@ public sealed class SdfWorldPicker {
         var request = Issue(surface: surface, x: x, y: y);
 
         m_floor = (request - 1);
+        m_reserved = request;
         Result = null;
         return request;
     }
     /// <summary>Demands a live hover pixel. While the latest request is unanswered, equal coordinates reuse it; after
     /// its answer, demand samples the next rendered frame, including camera and geometry motion beneath a stationary
     /// pointer. A moved coordinate replaces the latest request, and an answer still in flight for an earlier one is
-    /// published labelled with its own pixel. The last published answer stays visible until its replacement arrives.</summary>
+    /// published labelled with its own pixel. An unanswered explicit <see cref="Request"/> is never replaced. The last
+    /// published answer stays visible until its replacement arrives.</summary>
     /// <param name="x">The normalized horizontal coordinate.</param>
     /// <param name="y">The normalized vertical coordinate.</param>
     /// <param name="surface">Whether this consumer needs the surface normal and captured camera.</param>
     /// <returns>The request identity.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A coordinate is outside [0, 1) or nonfinite.</exception>
     public long Demand(float x, float y, bool surface = false) {
-        if (m_awaiting && (m_x == x) && (m_y == y) && (m_surface == surface)) {
+        if (Reserved || (m_awaiting && (m_x == x) && (m_y == y) && (m_surface == surface))) {
             return m_request;
         }
 

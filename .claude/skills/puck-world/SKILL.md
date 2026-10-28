@@ -212,7 +212,9 @@ Keep reads lean: `world.view.camera` answers a compact line (`full` for every
 field, a key list for chosen ones), `help <prefix>` answers one synopsis line per
 verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
 one script rather than one call per sample. `world.view.pick <view> <x> <y>`
-holds its call until a rendered frame answers, a paused World included.
+holds its call until a rendered frame answers, a paused World included; a view that
+renders no frame is refused as unanswered when the call's deadline passes (10 seconds in a piped
+session), and hover never replaces a waiting pick.
 
 ## The model
 

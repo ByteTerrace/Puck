@@ -7,6 +7,9 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldViewCommandModule {
+    // How long a pick holds a session that carries no call deadline before it refuses as unanswered.
+    private static readonly TimeSpan UnboundedPickWait = TimeSpan.FromSeconds(value: 10);
+
     private CommandResult Pointer(CommandContext context, WireArgs args) {
         if (args.Count == 0) {
             return DescribePointer();
@@ -68,12 +71,32 @@ internal sealed partial class WorldViewCommandModule {
             }
 
             // The answer needs a rendered frame, not a simulation tick, so the call that asked holds until the frame
-            // lands, a paused World included; the deadline of the call ends the hold with the pending line.
+            // lands, a paused World included. The hold is bounded by the call's deadline, or by a fixed one in a
+            // session that has none (a piped script), so a view that never renders cannot stall later commands.
+            var bounded = (session.AnswerDeadline is null);
+            SdfPickResult? answer = null;
+
+            if (bounded) {
+                session.AnswerDeadline = new TextAnswerDeadline(budget: UnboundedPickWait, clock: TimeProvider.System);
+            }
             session.HoldWhile(
-                hold: () => ((picker.RequestIdentity == request) && picker.Awaiting),
-                released: deadlinePassed => ((picker.Result is { } landed && (landed.Request == request))
-                    ? new CommandResult(Output: Answer(instance: instance, result: landed))
-                    : CommandResult.Error(output: $"[world.view.pick: instance={instance} request={request} unanswered{(deadlinePassed ? " before this call's answer was due; the view rendered no frame in time" : "; the request was superseded or the view changed")}]")));
+                hold: () => {
+                    // The answer is taken as soon as it lands, before a later hover request can replace the result.
+                    if ((answer is null) && (picker.Result is { } landed) && (landed.Request == request)) { answer = landed; }
+
+                    return ((answer is null) && (picker.RequestIdentity == request) && picker.Awaiting);
+                },
+                released: deadlinePassed => {
+                    if (answer is { } landed) {
+                        return new CommandResult(Output: Answer(instance: instance, result: landed));
+                    }
+                    if (picker.RequestIdentity == request) { picker.Clear(); }
+
+                    return CommandResult.Error(output: $"[world.view.pick: instance={instance} request={request} unanswered{(deadlinePassed ? $" before this call's answer was due; {(picker.Attached ? "the view rendered no frame in time" : "the view is not rendering")}" : "; the request was superseded or the view changed")}]");
+                });
+            if (bounded) {
+                session.AnswerDeadline = null;
+            }
 
             return new CommandResult(Output: pending);
         }

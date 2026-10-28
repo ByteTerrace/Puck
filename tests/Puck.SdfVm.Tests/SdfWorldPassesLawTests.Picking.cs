@@ -89,6 +89,38 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: (picker.Demand(x: 0.25f, y: 0.75f) > lost));
         Assert.Null(@object: picker.Result);
     }
+    // An explicit request is reserved against hover: a Demand at other coordinates reuses it, the copy is of the requested
+    // pixel, and hover resumes once it is answered.
+    [Fact]
+    public void AnExplicitRequestIsNotSupersededByHoverDemand() {
+        var gpu = new FakeGpuDevice(holdFences: true);
+        var pipelines = SdfTestPipelines.Cache();
+        var current = Frame();
+        using var view = new SdfTestView(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
+            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
+                frameSource: new CapturingFrameSource(capture: () => current), height: Extent,
+                kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: Extent));
+        var context = ContextOf(gpu: gpu);
+
+        TestLiveness.Until(step: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
+        var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
+
+        Assert.True(condition: picker.Attached);
+        var request = picker.Request(x: 0.25f, y: 0.75f);
+
+        Assert.True(condition: picker.Reserved);
+        Assert.Equal(expected: request, actual: picker.Demand(x: 0.75f, y: 0.25f));
+        _ = view.Produce(context: in context);
+        ((FakeGpuDevice.Fence)gpu.LastSubmittedFence!).Completed = true;
+        _ = view.Produce(context: in context);
+        Assert.Equal(expected: request, actual: picker.Result!.Value.Request);
+        Assert.Equal(expected: ((uint)(0.25f * Extent)), actual: picker.Result.Value.X);
+        Assert.False(condition: picker.Reserved);
+        Assert.True(condition: (picker.Demand(x: 0.75f, y: 0.25f) > request));
+        picker.Clear();
+        Assert.False(condition: picker.Reserved);
+    }
     [Fact]
     public void InspectorCapturesSurfaceWithItsCameraAndDiscardsCuts() {
         var gpu = new FakeGpuDevice(holdFences: true);
