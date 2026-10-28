@@ -21,8 +21,9 @@ so the integration lane's sweep reads them
 ([orchestration](../orchestration/SKILL.md#land-in-batches)).
 
 1. A zero-warning, zero-error Release build of what the change touched
-   (`dotnet build <project> -c Release -nodeReuse:false`, or `Puck.slnx` when it
-   reaches shared projects), on the lane's head with the integration branch's
+   (`dotnet build <project> -c Release -nodeReuse:false`; a coding lane never
+   builds `Puck.slnx`, and the integration lane builds it when the merge reaches
+   shared projects), on the lane's head with the integration branch's
    current tip merged in. A build or check that passed before the integration
    branch moved says nothing about the merged head: merge the tip, then build
    and run again.

@@ -1,6 +1,6 @@
 ---
 name: sdf-authoring
-description: "Authors Puck creations: shape rows, primitives, blends, folds, palettes, paints, render lanes, rigs, bake work and bytes, creation stats. Use to sculpt a part. Grammar: puck-dsl; GPU: rendering."
+description: "Authors creations: shape rows, primitives, blends, folds, palettes, paints, render lanes, rigs, bake work and bytes, creation stats. Use to sculpt or fix a part. Grammar: puck-dsl; GPU: rendering."
 ---
 
 # Authoring a Puck creation

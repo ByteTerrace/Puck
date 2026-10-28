@@ -272,8 +272,10 @@ existing hand-authored or generator-produced JSON world. None of the three
 verbs touch a running `Puck.World`. Grammar, flags, and diagnostics beyond
 this are [`puck-dsl`](../../puck-dsl/SKILL.md)'s.
 
-**Then the engine.** No engine gate. Build (`dotnet build Puck.slnx -c
-Release -nodeReuse:false` — architecture lanes + XML-doc diagnostics) and RUN `Puck.World`,
+**Then the engine.** No engine gate. Build the projects the change
+touched (`dotnet build <project> -c Release -nodeReuse:false`; the integration
+lane builds `Puck.slnx`, which carries the architecture lanes and XML-doc
+diagnostics) and run `Puck.World`,
 round-tripping the affected document over stdin (`world.status`, `world.save`,
 `world.load`). Proven in-process by
 `tests/Puck.World.Schema.Tests/StrictParseLawTests.cs`. Validate HUD document changes
