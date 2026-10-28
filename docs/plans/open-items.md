@@ -6,7 +6,9 @@ starting work, and tick or remove an item in the same change that closes it.
 
 ## The debug world is the test world
 
-- [ ] Boot once. `puck test` boots the whole debug world afresh for every scenario and again for `--reproduce` (166 scenarios, about 330 boots, about 45 minutes). Boot it once, checkpoint, restore the checkpoint before each scenario, and prove reproduction by replaying the recorded input rather than a second boot.
+- [ ] Boot once. `puck test` boots the whole debug world afresh for every scenario and again for `--reproduce` (166 scenarios, about 330 boots, about 45 minutes). Boot it once, checkpoint, restore the checkpoint before each scenario, and prove reproduction by replaying the recorded input rather than a second boot. Measured on the lead machine: a fresh headless debug-world boot reaches console-ready in 4.98 s (`puck bench startup --headless`, three samples within 5 ms), each scenario costs about 2 s more in its process and export, and the scenarios simulate almost nothing (the gallery file's three exported 43 ticks between them), so boots are nearly the whole bill. Compiling a test source costs 3 to 8.5 s a file whatever its scenario count. Checkpoint restore must first reproduce exactly: a mid-session recording currently mismatches at tick 0 (below).
+- [ ] Profile the 4.98 s headless boot. A per-line timing of one boot put about 3 s in composing `debug.puck`, unconfirmed because that measurement's own overhead was large. The boot is every scenario's, every MCP start's and the edit-to-running loop's.
+- [ ] `puck test --keep <dir>` outside the repository writes the debug world's machine `contentFolders` as absolute paths into each generated world, and the validator refuses every one ("must be a relative folder"); the same file passes without `--keep`.
 - [ ] Prune scenarios. The count grew from 22 to 166 in a week because lane briefs asked for every demonstration as a scenario. Keep a scenario only for an invariant running cannot show (AGENTS.md), fold duplicates, and stop briefs asking for scenarios by default; the input branch's seven new files are first.
 
 ## Debug world walkthrough findings
