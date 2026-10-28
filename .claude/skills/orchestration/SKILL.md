@@ -61,8 +61,9 @@ what the machine can verify. The owner's direction:
   - The only blocking review gate is before the owner pushes `main`: every high
     finding from the milestone is resolved or explicitly deferred by the owner.
 - **One integration lane, fed in batches.** It is the only heavy job on the
-  machine. It takes ready branches, batches them by risk (low-risk work
-  together, determinism and renderer work alone or in pairs), merges them,
+  machine. It takes ready branches and batches unrelated changes together on
+  purpose; it isolates a change only for a benchmark against a baseline, a
+  determinism or fixed-point change, or a regression hunt. It merges the batch,
   builds what the merge touched, runs the batch's sweep, bisects a red batch, and
   hands the lead the green head to fast-forward
   ([land in batches](#land-in-batches)).
@@ -75,7 +76,7 @@ picks its next work from its track or a shared ready queue and announces it. The
 lead keeps cross-track conflicts, merges, owner-level calls, and scope and
 order. Every brief ends with the partner's own next one or two items, and the
 partner works its queue without waiting for the lead between items. A wait (a
-GPU leg, a review slot, a landing) blocks the lane, never the partner: the
+GPU leg, the next batch) blocks the lane, never the partner: the
 partner takes its next item from its track or the ready queue and announces
 it. A queue the
 partners cannot read is no queue: keep the lead's queue where partners can reach
@@ -151,7 +152,8 @@ head. "What the merge touched" includes what consumes it:
 - a change to simulation state, maths or determinism also runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
 
-The sweep is the batch's proof ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+The sweep is the batch's proof: the whole debug world, every signal compared with
+the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
 The full debug-world replay (every test world, about 45 minutes) is the
 integration lane's next heavy job after a batch lands, never beside another heavy
 job and never a condition of a landing (the owner's ruling: "The whole idea was
@@ -184,13 +186,19 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
   continuation note. A second reap of the same lane stops it; it goes to the pile
   with what was running, and the owner decides.
 - **The integration lane** is one long-running lane. It takes ready branches in
-  the order the lead names, batches them by risk, merges each batch onto its own
-  staging branch, and resolves generated-file conflicts by running their
-  generators. Then it runs, once on the merged result, the builds and suites
-  that [the merge touched](#land-in-batches) and the batch's sweep: the
-  debug-world scenarios the batch declares it affects and, under a granted GPU
-  leg, the windowed frame-time and patrol readings
-  ([landing bar](../verification/SKILL.md#the-landing-bar)). It reports green or
+  the order the lead names, batches unrelated changes together on purpose,
+  merges each batch onto its own staging branch, and resolves generated-file
+  conflicts by running their generators. It builds `Puck.slnx` when the merge
+  reaches shared projects. Then it runs, once on the merged result, the builds
+  and suites that [the merge touched](#land-in-batches) and the batch's sweep:
+  the whole debug world as the
+  [instrument decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)
+  defines it, every signal it produces compared with the previous sweep, plus
+  the workloads the batch's changes declare. Under a granted GPU leg it reads the
+  windowed frame-time and patrol readings
+  ([landing bar](../verification/SKILL.md#the-landing-bar)); the lead first
+  clears the machine of other lanes' builds, suites and World runs for the quiet
+  frame-time reading. It reports green or
   red per batch and splits a red batch to find the culprit. It also lists each
   branch's deleted files (`git diff --diff-filter=D` against the integration tip)
   and compares them with what the brief allowed. A deletion the brief didn't name
@@ -465,10 +473,11 @@ Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
 
-The lead rules on what a review raises: a scoped fix, a recorded open item, or a
-dismissal with its reason. Every finding gets a destination before it is set
-aside: a lane, or a named deferral where scope is tracked. A finding called out
-of scope without a destination is not set aside. There is no second round.
+Every finding goes to the
+[review findings pile](../../../docs/plans/open-items.md#review-findings) with a
+severity and one owner. The lead rules on what a review raises: a scoped fix, a
+recorded open item, or a dismissal with its reason; a finding called out of
+scope still sits on the pile with its owner. There is no second round.
 
 Route reviews by where the work lives. A pushed branch can be reviewed in any
 machine's Codex slot; a local-only lane needs the lead's own slots. When the

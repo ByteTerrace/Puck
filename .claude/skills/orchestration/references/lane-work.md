@@ -12,10 +12,13 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
   what you ran to show it working in the body. Commits carry no `Co-Authored-By` trailer.
 - A delegated session has exactly one long-lived working branch, and every
   brief it receives lands there. A brief starts by merging the integration
-  branch's current tip into it: merge, never rebase. A local lane never pushes;
-  the lead handles any push once the landing bar holds on that merged head.
+  branch's current tip into it: merge, never rebase. A local lane never pushes.
+  A ready lane (its own focused checks hold on that merged head) joins the
+  integration lane's next batch, and the lead handles any push
+  ([land in batches](../SKILL.md#land-in-batches)).
 - Create no per-lane, per-review or per-batch remote branch. A review pass runs
-  in a worktree of the author's own branch and its fixes land there as commits
+  in its own worktree detached at the lane's head, and its fixes become a
+  follow-up branch for the next batch, never commits on the author's branch
   ([`review-passes`](../../../../.claude/skills/review-passes/SKILL.md)). A local
   subagent's branch stays local and is never pushed.
 - Worktrees live under the checkout's git-ignored `.claude/worktrees/<name>`,

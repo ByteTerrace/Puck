@@ -162,19 +162,19 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    checks written after reading it inherit its blind spots.
 6. **Evidence gathered.** What the lane already ran and measured, so the pass
    reads instead of re-running it.
-7. **Rules block,** verbatim. The repository's rules live in `AGENTS.md` and the
-   owning skills, which the pass reads itself; the block restates none of them,
+7. **Rules block,** verbatim. The repository's rules live in `AGENTS.md`,
+   contributing, documentation and the owning skills, which the pass reads itself; the block restates none of them,
    and the rest of the brief adds only scope, authority, exceptions and the
    finish line:
 
    ```text
-   Repo rules: read AGENTS.md at the worktree root and the skills that own the areas the diff touches, and follow them. This brief adds scope, authority, exceptions and the finish line.
+   Repo rules: read AGENTS.md at the worktree root, docs/development/contributing.md, docs/development/documentation.md for docs, and the skills that own the areas the diff touches. This brief adds scope, authority, exceptions and the finish line.
    ```
 
 8. **Instructions block,** verbatim:
 
    ```text
-   Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear; add a test only where running cannot show the fix and the test will outlive the next rewrite. Otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Follow the Tree paragraph's launch-specific commit instruction. End with a list, one line per finding: <id> file:line - fixed (files) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
+   Hunt for problems that break the contract; landing proceeds independently of this review. For each give file:line, why it's wrong, a concrete failing scenario and a severity (high, medium or low). Fix it in the tree when the fix is local and clear; add a test only where running cannot show the fix and the test will outlive the next rewrite. Otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Follow the Tree paragraph's launch-specific commit instruction. End with a list, one line per finding: <id> file:line severity - fixed (files) | open (why) | dismissed (why). If you find nothing, say so plainly.
    ```
 
    For a documentation-only pass, append: "Edit only Markdown, eval case files,
@@ -206,9 +206,9 @@ no brief, so it raises compatibility findings and tries to run tests.
    finding is reported, and its fix, if any, is verified the same way; neither
    ever opens another review, and findings never go back and forth between the
    reviewer and the author. If the
-   pass changes nothing, skip steps 2 to 4: report remaining blockers to the
-   lead, or go straight to step 5 when it reports none. Never create an empty
-   WIP.
+   pass changes nothing, it has no follow-up branch: skip steps 2 to 5, put its
+   findings on the shared pile with their severity and owners, and end. Never
+   create an empty WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt in that worktree
    (`review: <lane> pass, unverified`), so the output is never lost and its
@@ -232,7 +232,8 @@ no brief, so it raises compatibility findings and tries to run tests.
    merges both. Each message names the findings fixed and how each fix was shown
    working, or the documentation checks for doc-only fixes. No
    `Co-Authored-By` trailer.
-5. **Hand over.** Merge the integration branch's current tip into the follow-up
+5. **Hand over.** Only a pass that changed files reaches this step. Merge the
+   integration branch's current tip into the follow-up
    branch and rebuild what it touched. It is then an ordinary ready lane for the
    integration lane's next batch ([land in
    batches](../orchestration/SKILL.md#land-in-batches)); a high finding it fixes
