@@ -612,7 +612,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   routed tick; rules read a Q48.16 projection with authoritative fractional
   residue. Binding compilation must receive the routed channel shapes.
   [Input channels](../../../docs/decisions/input-channels.md) owns this model
-  and the remaining authoritative-mode, release and timed-history steps.
+  and its authoritative modes, release barrier and timed history.
   Switching modes releases by default; declared same-meaning holds and toggles
   may continue, while changed meanings and transition edges never cross the
   epoch barrier.

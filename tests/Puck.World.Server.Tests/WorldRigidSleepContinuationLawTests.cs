@@ -64,10 +64,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         feed.Collect(definition: definition, population: population);
         feed.Collect(definition: definition, population: population);
         var captured = RoundTrip(definition: definition, feed: feed, population: population);
-        var values = new ChannelValues();
-
-        values[0] = FixedQ4816.One;
-        var intent = new PlayerIntent(values);
+        var intent = population.EntryBody(index: 0)!.Channels.RoleOrdinals.Intent(moveStrafe: FixedQ4816.One);
         var live = new byte[30][];
 
         for (var step = 0; (step < live.Length); step++) { live[step] = Continue(step: step); }

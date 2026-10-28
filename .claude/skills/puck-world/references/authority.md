@@ -335,6 +335,10 @@ the installed server definition after boot, never the boot source snapshot.
 synchronous observer fanout independently of the pre-admission handshake cap;
 a full host refuses with the existing `LaneUnavailable` response.
 
+Tests that drive `DrainPending` check connection retirement and the parked body
+before awaiting `WaitForPendingWorkAsync`. An earlier drain can already have
+applied the disconnect; stream closure does not promise another queued item.
+
 The `admission` section therefore governs transfers too. A row in
 `WorldAdmissionTrustMode.FederatedAuthority` mode carries no key: its `domain`
 is the authenticated source-authority namespace, or

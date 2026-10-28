@@ -101,8 +101,12 @@ public sealed class CredentialEvictionLawTests {
         }
 
         Assert.True(condition: await closed.WaitAsync(cancellationToken: TestToken));
-        await host.WaitForPendingWorkAsync(cancellationToken: TestToken);
-        host.DrainPending();
+        // The removal branch may already have drained the disconnect while closing the stream.
+        // Wait only while its observable retirement is still outstanding.
+        while ((host.Connections.Count != 0) || !fixture.Server.Population.IsParked(index: admitted.PeerIndex)) {
+            await host.WaitForPendingWorkAsync(cancellationToken: TestToken);
+            host.DrainPending();
+        }
         fixture.Step();
         Assert.Empty(collection: host.Connections);
         Assert.False(condition: fixture.Server.Grants.Allows(capability: WorldCapability.Observe, principal: principal, subject: body).IsAllowed,

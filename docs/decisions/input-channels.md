@@ -856,8 +856,12 @@ The [open items](../plans/open-items.md#input-channels) carry completion status.
 
 For each implementation step, build the whole solution without warnings;
 regenerate affected schema, vocabulary, and verb artifacts through the private
-candidate CLI; run every `worlds/debug/*-tests.puck` with `puck test --reproduce`
-and the Transpiler, Cli.Worlds, Schema, Server, and Client CPU suites. Verify
+candidate CLI; run the touched `worlds/debug/*-tests.puck` files, including every
+demonstration named above, with `puck test --reproduce`, and the Transpiler,
+Cli.Worlds, Schema, Server, and Client CPU suites. The full debug-world replay
+runs on the integration head after landing, following the
+[landing procedure](../../.claude/skills/orchestration/SKILL.md#land-each-lane-on-its-own).
+Verify
 world behavior by running the real World with `--devices none`, using the
 GPU/heavy-suite leases where needed. Re-record affected tapes through verbs.
 Measure steady-tick allocation and counts for held input, event bursts, and
