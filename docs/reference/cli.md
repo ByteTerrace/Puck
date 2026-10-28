@@ -2413,11 +2413,12 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   report (`world.debug-view report contacts`, read from its text header, since
   its JSON form is far past the attachment's answer limit), `world.budget`,
   narrowed `world.counters`, `world.addons`, `host.frames` and
-  `host.memory collect`. The World is paused between calls and stepped only
+  `host.memory collect`. The World boots with `--paused` before its first
+  simulation tick, stays paused between calls and is stepped only
   inside the calls that wait for ticks, so a plan takes the same ticks however
   long the coordinator takes; the signals then read one frozen tick. The
-  wall-clock metrics (`host.frames`, `host.memory`) and the compile-cache
-  counters (`world.boot.*`) are not compared exactly.
+  wall-clock metrics (`host.frames`, `host.memory`) are not compared exactly;
+  every `world.boot` count is, including cache work.
 - **The windowed leg** (`--tour`) boots a windowed World under the GPU lease,
   or drives the running World `--attach` names (a process id, attachment id or
   attachment file; a World `puck_world_start` started, say). It waits for the
@@ -2425,7 +2426,8 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   counters, `world.indirect`, GPU counters, `host.frames` standing and walking,
   memory), then takes the tour: each stop runs the tour's reset lines and its
   own, waits for the bakes, arms its pinned steps a fixed lead after the tick
-  they settled at (`world.at`), and takes a settled capture pinned to a named
+  they settled at (`world.at`), with `world.lockstep on` and camera framing plus
+  `view.reseed 0` pinned to the start tick, and takes a settled capture pinned to a named
   tick (the start tick plus the stop's settle ticks). The
   stops cover every area indoors and out, a jump, flight and noclip, and the
   owner's walkthrough findings at their poses. `--stop` runs only the named
@@ -2438,7 +2440,11 @@ Each signal is red when a red rule of the plan holds or its line was refused,
 amber when an amber rule holds, and clean otherwise. Silence is never success:
 a signal is unmeasured when the World's attachment closed before it, the
 sweep's time passed, the answer held no metric of its parser, or a rule reads a
-metric the answer lacks; a tool is unmeasured when it did not finish within its
+metric the answer lacks. One evidence check covers every script line, signal
+and recheck, including empty text and truncated output. A tour checks each
+`world.at` result by tick and command after capture; an arm receipt proves
+only arming. Missing or refused prelude, reset, frame, motion and after lines
+fail the stop. A tool is unmeasured when it did not finish within its
 ticks; a stop is unmeasured when the sweep could not reach it. Unmeasured fails
 the run like red. A signal the plan marks `recheck` (the watchdog, the rule
 failures, the addons) is read again after the tour as `<name>.after-tour`.

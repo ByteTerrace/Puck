@@ -10,7 +10,6 @@ public static partial class CanaryCommand {
     private static readonly IReadOnlyDictionary<string, string> NarratedMutationVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["world.generate"] = "Generate '",
         ["world.state.cell.remove"] = "RemoveStateCell '",
-        ["world.state.cell.set"] = "UpsertStateCell '",
     };
 
     // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary authority.

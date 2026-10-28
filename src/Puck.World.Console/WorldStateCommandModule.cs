@@ -20,7 +20,8 @@ namespace Puck.World;
 /// string for an already-live text-kind row); <c>world.state.cell.remove</c> removes one, <c>world.generate</c>
 /// redraws a draw site, and <c>world.state</c> reads all three grains back (every row, one row with its cells, one
 /// cell alone). A slot is a row with one cell keyed <see cref="StateRow.SlotKey"/>, so there is no separate verb
-/// family for it. Every write verb routes <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick
+/// family for it. A cell set settles with its typed authoritative accept/reject receipt, including numeric, text and vector forms; no empty submission is a success receipt. Every write verb routes
+/// <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick
 /// boundary, the stdin barrier serializes a following read); <c>world.state</c> is an
 /// <see cref="CommandRouting.Immediate"/> read of the live section.
 /// </summary>
@@ -576,7 +577,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 Kind: WorldDocumentWriteKind.Set,
                 RawToken: vectorString,
                 Vector: parsedVector
-            ));
+            ), echoes: echoes, verb: "world.state.cell.set");
         }
 
         if (
@@ -596,7 +597,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 Value: 0L,
                 Kind: WorldDocumentWriteKind.Set,
                 Text: text
-            ));
+            ), echoes: echoes, verb: "world.state.cell.set");
         }
 
         if (
@@ -630,7 +631,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             Value: 0L,
             Kind: kind,
             RawToken: args[2].ToString()
-        ));
+        ), echoes: echoes, verb: "world.state.cell.set");
     }
 
     private const int DefaultRuleTraceEvaluations = 8;

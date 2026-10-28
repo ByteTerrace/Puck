@@ -119,6 +119,9 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     };
 
     captureToolOption.AcceptOnlyFromAmong(values: [.. GpuCaptureTools.Names]);
+    var pausedOption = new Option<bool>(name: "--paused") {
+        Description = "Pause the boot instance before the host starts, so no simulation tick precedes an operator attachment. Resume with world.rate resume.",
+    };
     var unpacedOption = new Option<bool>(name: "--unpaced") {
         DefaultValueFactory = static _ => false,
         Description = "Advance a headless world on its fixed simulation tick grid without wall-clock pacing. Intended for an armed authored schedule or another offline run; refused for presented hosts.",
@@ -190,6 +193,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         softwareGpuOption,
         scheduleDirOption,
         unpacedOption,
+        pausedOption,
         exitAfterSecondsOption,
         headlessOption,
         stateDirOption,
@@ -618,6 +622,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // reason on stderr and fails the boot here, identically in both shapes, rather than starting a host whose own boot
     // document the real vocabulary would have refused.
     if (!WorldPostBuildWiring.Install(services: host.Services)) {
+        host.Dispose();
+        return 1;
+    }
+    if (parseResult.GetValue(option: pausedOption) && !host.Services.GetRequiredService<WorldInstanceHost>().TryPause(name: WorldInstanceHost.BootInstanceName, reason: out var pauseReason)) {
+        Console.Error.WriteLine(value: $"--paused refused: {pauseReason}");
         host.Dispose();
         return 1;
     }

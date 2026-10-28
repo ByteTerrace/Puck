@@ -99,16 +99,18 @@ public sealed class CanaryAccountingLawTests {
             filter: result => ((result.Detail == "world.generate occurrence 1 was accepted") && result.Passed)
         );
     }
-    [Fact]
-    public void ARegisteredVerbsAcceptedClaimDefaultsToStdout() {
+    [Theory]
+    [InlineData("world.row.set")]
+    [InlineData("world.state.cell.set")]
+    public void ARegisteredVerbsAcceptedClaimDefaultsToStdout(string verb) {
         var commands = new[] { Accepted(
             occurrence: 1,
-            verb: "world.row.set"
+            verb: verb
         ) };
         var lines = new[] { Line(
             sequence: 1,
             stream: CliProcessOutputStream.Stdout,
-            text: "[world.row.set: UpsertKit 'wren' applied]"
+            text: $"[{verb}: applied]"
         ) };
         var results = CanaryCommand.EvaluateCommandAccounting(
             commands: commands,
@@ -117,7 +119,7 @@ public sealed class CanaryAccountingLawTests {
 
         Assert.Contains(
             collection: results,
-            filter: result => ((result.Detail == "world.row.set occurrence 1 was accepted") && result.Passed)
+            filter: result => ((result.Detail == $"{verb} occurrence 1 was accepted") && result.Passed)
         );
     }
     // The World writes a multi-line answer to one stream while the other stream carries narration from the same frame,

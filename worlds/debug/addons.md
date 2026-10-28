@@ -295,6 +295,9 @@ attachment. Height changes in place keep a current shoulder-height target instea
 of pursuing an old breadcrumb through a moving car's floor. Its surface takeoff
 hold lets it leave the floor again after an incidental landing. Evasions reflect
 an inward escape away from the Moth and preserve clearance from her whole capsule.
+Any leg that would pass within 1 m of her axis at her height, whether a curiosity,
+a loop, a breadcrumb or an evasion, is flown round that circle instead, so the
+companion never runs into her at speed.
 
 ## Machine debugger
 

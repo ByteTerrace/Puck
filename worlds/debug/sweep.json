@@ -1,14 +1,6 @@
 {
-  "note": "The debug world's sweep (puck sweep): the tools it runs for a bounded span, the signals it reads, and the capture tour. Rules name a metric, an operator and a value; a red rule makes the signal red, an amber rule amber, and a rule whose metric the answer lacks leaves the signal unmeasured, which fails the run like red. compare says how a metric is judged against a previous report: exact (any change is named), relative:<fraction> (a change beyond that fraction of the old value is named) or none. The headless leg steps its World only inside waits (paused between calls), so ticks and tick-counted metrics repeat; the wall-clock metrics (host.frames, host.memory) and the compile-cache counters (world.boot.*, which depend on how warm the cache is) are not compared exactly. A signal marked recheck is read again after the tour.",
+  "note": "The debug world's sweep (puck sweep): the tools it runs for a bounded span, the signals it reads, and the capture tour. Rules name a metric, an operator and a value; a red rule makes the signal red, an amber rule amber, and a rule whose metric the answer lacks leaves the signal unmeasured, which fails the run like red. compare says how a metric is judged against a previous report: exact (any change is named), relative:<fraction> (a change beyond that fraction of the old value is named) or none. The headless leg boots paused before its first tick and steps only inside waits, so ticks and tick-counted metrics repeat; only wall-clock metrics (host.frames, host.memory) are not compared exactly. Every world.boot count, including cache work, is compared exactly. A signal marked recheck is read again after the tour.",
   "tools": [
-    {
-      "name": "chess-scope",
-      "note": "The chess table's idle demonstration: the first cycle records its scope tape, the second replays and compares it. It runs first because the fuzzer's and traversal bot's runs leave the scope refusing its start (Scope starting hash MISMATCH after restore).",
-      "lines": [],
-      "until": { "line": "replay.scope chess-demo", "metric": "status", "in": ["4", "-1"], "red": ["-1"] },
-      "everyTicks": 300,
-      "maxTicks": 12000
-    },
     {
       "name": "fuzzer",
       "note": "300 seeded steps of body 44 in the studio bounds, under the watchdog.",
@@ -32,6 +24,14 @@
       "until": { "line": "world.state traversal", "metric": "run", "in": ["0"] },
       "everyTicks": 150,
       "maxTicks": 6000
+    },
+    {
+      "name": "chess-scope",
+      "note": "The chess table's idle demonstration: the first cycle records its scope tape, the second replays and compares it. It runs after the fuzzer and the traversal bot, whose lift rides recompile the solid consumers, so the sweep shows the scope's restore validating exactly its own rows and bodies.",
+      "lines": [],
+      "until": { "line": "replay.scope chess-demo", "metric": "status", "in": ["4", "-1"], "red": ["-1"] },
+      "everyTicks": 300,
+      "maxTicks": 12000
     }
   ],
   "signals": [
@@ -63,7 +63,7 @@
       "compare": { "placements": "exact", "state.rows": "exact", "rules": "exact", "rules.worst": "relative:0.25", "rules.work": "relative:0.25", "rigid": "exact" }
     },
     { "name": "counters-state", "line": "world.counters state", "parse": "counters", "compare": { "*": "exact" } },
-    { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "*": "none" } },
+    { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "*": "exact" } },
     { "name": "counters-physics", "line": "world.counters physics", "parse": "counters", "compare": { "*": "exact" } },
     { "name": "addons", "line": "world.addons", "parse": "text", "recheck": true, "metrics": { "watchdog.fuel": "watchdog ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "companion.fuel": "companion ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "dropped": "answers-dropped-total:(?<sum>\\d+)" }, "red": ["dropped > 0", "text ~ FAULTED", "text ~ DISABLED", "watchdog.fuel < 1"], "compare": { "watchdog.fuel": "relative:0.25", "companion.fuel": "relative:0.25" } },
     { "name": "frames", "line": "host.frames 300", "parse": "frames", "leg": "headless", "compare": { "simulate.p50": "none" } },
@@ -78,10 +78,10 @@
     { "name": "memory-windowed", "line": "host.memory", "parse": "pairs", "leg": "windowed", "compare": { "ws": "relative:0.25", "private": "relative:0.25" } }
   ],
   "tour": {
-    "note": "Each stop starts from the reset lines, runs its own, waits for the bakes, and takes a settled capture pinned to a named tick: a start tick a fixed lead after the bakes settled, plus the stop's settle ticks. A stop's steps are console lines pinned to ticks after the start tick (world.at), so a motion still shows the same tick whatever the bakes cost. Images are compared with the baseline's by changed pixels: a pixel changes when any channel differs by more than the level tolerance, and a still whose changed fraction exceeds the amber fraction is amber.",
-    "prelude": ["world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
+    "note": "Each stop starts from the reset lines, runs its own, waits for the bakes, and takes a settled capture pinned to a named tick: a start tick a fixed lead after the bakes settled, plus the stop's settle ticks. The frame lines (camera recenter and animation reseed) run at the start tick, and a stop's steps are pinned after it (world.at). Lockstep presentation follows those ticks, so a motion still shows the same tick whatever the bakes cost. Images are compared with the baseline's by changed pixels: a pixel changes when any channel differs by more than the level tolerance, and a still whose changed fraction exceeds the amber fraction is amber.",
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
     "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
-    "frame": ["player.look.recenter"],
+    "frame": ["player.look.recenter", "view.reseed 0"],
     "settle": 45,
     "levelTolerance": 16,
     "amberFraction": 0.02,
@@ -119,7 +119,7 @@
       { "name": "portal-link", "group": "indoor", "lines": ["debug.go portal-link"] },
       { "name": "portal-fall", "group": "indoor", "lines": ["debug.go portal-fall"] },
       { "name": "garden-painting", "group": "indoor", "lines": ["debug.go portal-garden"] },
-      { "name": "night-painting", "group": "indoor", "note": "The night field through its painting: a body.fly tape that crosses a door can crash the World (WorldInputRuntime.CompleteBodyScripts), so the tour crosses once, into the garden, last.", "lines": ["debug.go portal-night"] },
+      { "name": "night-painting", "group": "indoor", "note": "The night field through its painting, seen from the gallery.", "lines": ["debug.go portal-night"] },
       { "name": "studio", "group": "outdoor", "lines": ["debug.go hero"] },
       { "name": "traversal-course", "group": "outdoor", "lines": ["body.pose 60 0.05 -28 0 0 0"] },
       { "name": "rate-range", "group": "outdoor", "lines": ["debug.go range"] },
@@ -129,7 +129,7 @@
       { "name": "jump", "group": "motion", "note": "The jump press lands 30 ticks after the start tick and the still is taken 9 ticks later, on the tick it names whatever the bakes cost.", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press jump 1 0.6" }], "settle": 39 },
       { "name": "flight", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press flight 1 0.2" }, { "at": 40, "run": "body.fly 0 0 1 0 0 0 1.5" }], "settle": 90, "after": ["body.press flight 1 0.2", "world.wait 120"] },
       { "name": "noclip", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press noclip 1 0.2 0" }, { "at": 40, "run": "body.press rise 1 1 0" }], "settle": 65, "after": ["body.press noclip 1 0.2 0", "world.wait 60"] },
-      { "name": "garden", "group": "outdoor", "note": "Through the garden painting, last: a stop after a crossing poses a body in another instance, and the first such pose has thrown a NullReferenceException.", "lines": ["debug.go portal-garden", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] }
+      { "name": "garden", "group": "outdoor", "note": "Through the garden painting, last: once she stands in the garden, debug.go's places are the debug world's and the garden refuses them by name, so no later stop could pose her.", "lines": ["debug.go portal-garden", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] }
     ]
   }
 }
