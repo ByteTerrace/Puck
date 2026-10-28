@@ -374,6 +374,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteInt32(value: row.Body);
             w.WriteOptional(value: row.Acceleration, writeValue: static (v, acceleration) => v.WriteFixedVector(value: acceleration));
         });
+        writer.WriteArray(items: (section.AttachedSolids ?? []), writeItem: static (w, row) => {
+            w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation);
+        });
 
         return writer.ToArray();
     }
@@ -444,6 +447,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadInt32()));
         var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.CapacityCeiling,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
+        var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
+            readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion()));
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -453,6 +458,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         section = new WorldPopulationCheckpoint(
+            AttachedSolids: attached,
             Entries: entries,
             EventBodies: eventBodies,
             Generations: generations,

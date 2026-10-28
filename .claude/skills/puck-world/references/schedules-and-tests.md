@@ -270,23 +270,29 @@ the values the gate saw, status 0/1/2 = never-evaluated/pass/fail). A verdict ro
 a Fixed or Bool row sits in a row of that kind carrying `witness: "<verdict
 row>"`, which the same doors refuse and which freezes with its verdict.
 `world.verdicts` reads the verdict rows; `puck test <path>` boots each such world through the real
-executable and prints one line per verdict, and `--reproduce` boots it twice
-and refuses one whose two exports differ. Its manifest also carries per-tick
-authoritative replay hashes for the boot world and every running instance;
-reproduction names the first differing sampled tick and instance before still
-requiring byte-identical exports and manifests. Preparation shares composed
+executable and prints one line per verdict. Each worker boots once, restores its
+boot checkpoint before every compatible scenario, and replaces state, rules and
+schedule. `--reproduce` restores each authority's start and replays the captured
+input through the tape's ordinary doors, checking every tick's authoritative
+hash, final machine cores and final canonical export. It never boots a second
+host or re-submits the schedule. Its manifest describes the authored run;
+`reproduction.json` records the replay verdict per authority. Preparation shares composed
 imports, including authored-value origins, through the existing content-checked
 composition cache; each reader gets a fresh tree. Staging consumes roots without
 retaining their composed images or scalar-origin snapshots, while shared imports
 retain their origins. Generated test compiles share persisted entries but release
-their in-memory documents after staging each source. Each worker reuses its process
-and builds a fresh native host through the normal composition root for each document.
+their in-memory documents after staging each source. Each worker builds one
+native host through the normal composition root for one boot configuration.
 Provider reuse by rewriting singleton lifetimes changes dependency validation,
 caller ownership and child-scope identity, so every graph uses the native container.
-Reproduce replicas always occupy different processes, even with `--jobs 1`, and
-the second visits worlds in reverse order to expose predecessor state leaks.
-The default runs at most two worker processes concurrently; `--jobs 1` serializes
-the replicas. Transcripts stream to disk and verdicts are read one world at a time.
+Input producers, their submission guards, session allocators, resolver generations,
+host transfers and schedules reset with the authority cohort. A changed scenario
+uses the normal document admission and canonical checkpoint parsing paths. Do not
+seed it by shallow-cloning the live boot definition: that shortcut changed the
+debug world's store hashes while leaving poses and verdicts unchanged. A changed scenario
+followed by a pristine one must match a fresh-process run. The default runs at most
+two worker processes concurrently; `--jobs 1` serializes workers. Transcripts stream
+to disk and verdicts are read one world at a time.
 A `schedule` declaring `instances`
 arms those sibling worlds beside the booted one (the `world.instance.start`
 path), steps them in the same host step, exports each at the tick the booted

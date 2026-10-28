@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.Testing;
 using Puck.World.Addons;
 using Puck.World.Protocol;
@@ -34,79 +35,115 @@ public sealed class ReplayAddonRestartLawTests {
         """;
 
     private static WorldDefinition Document(TemporaryDirectory directory) {
-        var bytes = Encoding.UTF8.GetBytes(Counter);
-        var path = directory.PathOf("counter.wat").Replace('\\', '/');
-        File.WriteAllBytes(path, bytes);
+        var bytes = Encoding.UTF8.GetBytes(s: Counter);
+        var path = directory.PathOf(name: "counter.wat").Replace(newChar: '/', oldChar: '\\');
+
+        File.WriteAllBytes(bytes: bytes, path: path);
         return Fixtures.BuildDocument() with {
+            ChannelsRaw = [.. Fixtures.BuildDocument().Channels, new("held", ChannelShape.Binary, Composition: true)],
             AddonsRaw = [new WorldAddonRow("counter", path,
-                "sha256/" + Convert.ToHexStringLower(SHA256.HashData(bytes)), 1000000UL, true)],
+                ("sha256/" + Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes))), 1000000UL, true)],
         };
     }
-
     private static WorldReplayTape Tape(WorldFixture fixture, TemporaryDirectory directory) => new(
-        addonHostFactory: static (definition, server) => WorldAddonRuntime.Create(definition, server),
+        addonHostFactory: static (definition, server) => WorldAddonRuntime.Create(definition: definition, server: server),
         engines: [],
         liveServer: fixture.Server,
         machineHostFactory: Fixtures.MachineHostFactory,
         profiles: fixture.Server.Profiles,
-        stateRoot: new WorldStateRoot(directory.RootPath),
-        transport: new LoopbackTransport(fixture.Server)
+        stateRoot: new WorldStateRoot(path: directory.RootPath),
+        transport: new LoopbackTransport(server: fixture.Server)
     );
 
     [Fact]
     public void ALateArmRestartsGuestMemoryAndReDrivesFromItsCheckpoint() {
         using var directory = new TemporaryDirectory(prefix: "puck-addon-arm-");
-        using var fixture = Fixtures.FreshServer(Document(directory));
+        using var fixture = Fixtures.FreshServer(Document(directory: directory));
+
         fixture.JoinSeat();
-        using var runtime = WorldAddonRuntime.Create(fixture.Server.Definition, fixture.Server);
-        var tape = Tape(fixture, directory);
+        using var runtime = WorldAddonRuntime.Create(definition: fixture.Server.Definition, server: fixture.Server);
+        var tape = Tape(directory: directory, fixture: fixture);
+
         fixture.Step();
-        var firstFuel = Assert.Single(runtime.DescribeCost()).LastTickFuelConsumed;
-        for (var tick = 0; tick < 4; tick++) { fixture.Step(); }
-        Assert.True(Assert.Single(runtime.DescribeCost()).LastTickFuelConsumed > firstFuel);
+        var firstFuel = Assert.Single(collection: runtime.DescribeCost()).LastTickFuelConsumed;
+        var actor = Principal.Addon(name: "counter");
+
+        fixture.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(index: 0), false, Budget: 8,
+            Reach: new(["held"])), Principal.Console);
+        Assert.True(condition: fixture.Server.Body(index: 0)!.Channels.TryGetOrdinal(name: "held", ordinal: out var ordinal));
+        var intent = default(PlayerIntent).WithChannel(ordinal: ordinal, value: FixedQ4816.One);
+
+        Assert.True(condition: fixture.Server.Input.TryPublishSnapshot(actor, 0, "guest", intent, fixture.Server.Input.Interval.Tick,
+            out var session, out var batch, out var inputReason), userMessage: inputReason);
+        Assert.True(condition: fixture.Server.Input.TryAdmit(session, batch, out inputReason), userMessage: inputReason);
+        for (var tick = 0; (tick < 4); tick++) { fixture.Step(); }
+        Assert.True(condition: (Assert.Single(collection: runtime.DescribeCost()).LastTickFuelConsumed > firstFuel));
         // An ordinary checkpoint still cannot claim to hold the guest's private memory.
-        Assert.False(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out _, out _));
-        Assert.True(tape.TryBeginRecording("late-addon", out var refusal), refusal);
-        Assert.False(runtime.AnyEverPumped);
-        Assert.Equal(0UL, Assert.Single(runtime.DescribeCost()).TotalFuelConsumed);
+        Assert.False(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out _, out _));
+        Assert.True(condition: tape.TryBeginRecording(name: "late-addon", refusal: out var refusal), userMessage: refusal);
+        Assert.False(condition: runtime.AnyEverPumped);
+        Assert.Equal(0UL, Assert.Single(collection: runtime.DescribeCost()).TotalFuelConsumed);
         fixture.Step();
         tape.NoteTick();
-        Assert.Equal(firstFuel, Assert.Single(runtime.DescribeCost()).LastTickFuelConsumed);
-        for (var tick = 0; tick < 5; tick++) { fixture.Step(); tape.NoteTick(); }
+        Assert.Equal(firstFuel, Assert.Single(collection: runtime.DescribeCost()).LastTickFuelConsumed);
+        for (var tick = 0; (tick < 5); tick++) { fixture.Step(); tape.NoteTick(); }
         var stop = tape.StopRecording();
-        Assert.Null(stop.VerifyFault);
-        Assert.True(stop.Verdict!.Passing, stop.Verdict.Describe());
-        using var stream = File.OpenRead(stop.Path);
-        Assert.Equal(5UL, WorldReplaySnapshot.Read(stream).StartTick);
-        Assert.True(tape.Verify("late-addon").Passing);
-    }
 
-    [Theory]
+        Assert.Null(@object: stop.VerifyFault);
+        Assert.True(condition: stop.Verdict!.Passing, userMessage: stop.Verdict.Describe());
+        using var stream = File.OpenRead(path: stop.Path);
+
+        Assert.Equal(5UL, WorldReplaySnapshot.Read(stream: stream).StartTick);
+        Assert.True(condition: tape.Verify(name: "late-addon").Passing);
+    }
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void ARefusedArmLeavesTheRunningGuestMemoryIntact(bool changedModule) {
         using var directory = new TemporaryDirectory(prefix: "puck-addon-arm-refusal-");
-        using var fixture = Fixtures.FreshServer(Document(directory));
+        using var fixture = Fixtures.FreshServer(Document(directory: directory));
+
         fixture.JoinSeat();
-        using var runtime = WorldAddonRuntime.Create(fixture.Server.Definition, fixture.Server);
-        var tape = Tape(fixture, directory);
-        for (var tick = 0; tick < 5; tick++) { fixture.Step(); }
-        var before = Assert.Single(runtime.DescribeCost());
+        using var runtime = WorldAddonRuntime.Create(definition: fixture.Server.Definition, server: fixture.Server);
+        var tape = Tape(directory: directory, fixture: fixture);
+
+        for (var tick = 0; (tick < 5); tick++) { fixture.Step(); }
+        var before = Assert.Single(collection: runtime.DescribeCost());
+
         if (changedModule) {
-            File.AppendAllText(directory.PathOf("counter.wat"), "\n;; changed after the document pinned it\n");
+            File.AppendAllText(directory.PathOf(name: "counter.wat"), "\n;; changed after the document pinned it\n");
         } else {
             fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(
-                Row: new WorldStateRow(Name: CellName.Parse("pending"), Kind: CellKind.Int),
+                Row: new WorldStateRow(Name: CellName.Parse(candidate: "pending"), Kind: CellKind.Int),
                 Principal: Principal.Console
             ));
         }
-        Assert.False(tape.TryBeginRecording("refused-addon", out var refusal));
-        Assert.StartsWith("StartNotCheckpointable:", refusal, StringComparison.Ordinal);
+        Assert.False(condition: tape.TryBeginRecording(name: "refused-addon", refusal: out var refusal));
+        Assert.StartsWith(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedStartString: "StartNotCheckpointable:");
         Assert.Equal(WorldReplayMode.Idle, tape.Mode);
-        Assert.Equal(before, Assert.Single(runtime.DescribeCost()));
-        Assert.True(runtime.AnyEverPumped);
-        Assert.Null(fixture.Server.MutationTap);
+        Assert.Equal(before, Assert.Single(collection: runtime.DescribeCost()));
+        Assert.True(condition: runtime.AnyEverPumped);
+        Assert.Null(@object: fixture.Server.MutationTap);
         fixture.Step();
-        Assert.True(Assert.Single(runtime.DescribeCost()).LastTickFuelConsumed > before.LastTickFuelConsumed);
+        Assert.True(condition: (Assert.Single(collection: runtime.DescribeCost()).LastTickFuelConsumed > before.LastTickFuelConsumed));
+    }
+    [Fact]
+    public void AnIndependentCaptureReplaysAnOperatorArmAndItsGuestRestart() {
+        using var directory = new TemporaryDirectory(prefix: "puck-addon-probe-");
+        using var fixture = Fixtures.FreshServer(Document(directory: directory));
+
+        fixture.JoinSeat();
+        using var runtime = WorldAddonRuntime.Create(definition: fixture.Server.Definition, server: fixture.Server);
+        var tape = Tape(directory: directory, fixture: fixture);
+        using var probe = tape.ObserveReplay();
+
+        for (var tick = 0; (tick < 5); tick++) { fixture.Step(); tape.NoteTick(); }
+        Assert.True(condition: tape.TryBeginRecording(name: "inside-probe", refusal: out var refusal), userMessage: refusal);
+        for (var tick = 0; (tick < 5); tick++) { fixture.Step(); tape.NoteTick(); }
+        var stopped = tape.StopRecording();
+
+        Assert.Null(@object: stopped.VerifyFault);
+        Assert.True(condition: stopped.Verdict!.Passing, userMessage: stopped.Verdict.Describe());
+        Assert.Equal(-1, probe.Verify());
     }
 }

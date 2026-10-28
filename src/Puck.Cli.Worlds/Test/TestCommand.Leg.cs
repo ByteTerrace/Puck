@@ -514,18 +514,18 @@ public static partial class TestCommand {
         };
         var reproduceOption = new Option<bool>(name: "--reproduce") {
             DefaultValueFactory = static _ => false,
-            Description = "Run every test world a second time and require byte-identical state exports and test-run manifests. Use for determinism qualification; ordinary authored tests run once.",
+            Description = "Restore each scenario's checkpoint and replay its recorded input, requiring identical per-tick authority hashes, machine cores and final state exports without another boot.",
         };
         var jobsOption = new Option<int>(name: "--jobs") {
             DefaultValueFactory = static _ => Math.Clamp(value: (Environment.ProcessorCount / 2), min: 1, max: 2),
-            Description = "Maximum concurrent worker processes (default: at most 2). Reproduce replicas use separate processes, serialized when --jobs 1. Output remains in authored order.",
+            Description = "Maximum concurrent worker processes (default: at most 2). Each worker boots once and restores compatible scenarios from its checkpoint. Output remains in authored order.",
         };
         var command = new Command(
             description: """
             Boots each test world through the real Puck.World executable, headless and unpaced, to the tick its own
             schedule section declares its state export at, then reads that export's verdict rows: one line per verdict
             naming the gate and the values it saw. A `.puck` source is compiled first and the worlds its `test`
-            blocks generate are what run. --reproduce adds a second run and requires byte-identical output. Exit
+            blocks generate are what run. --reproduce restores the checkpoint and replays recorded input. Exit
             codes are 0 for every verdict passing, 1 for a failing verdict, and 2 for usage, a world declaring no
             schedule or no verdict row, a source that does not compile, a build or boot refusal, or a reproduction
             mismatch.

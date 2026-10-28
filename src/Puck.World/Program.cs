@@ -617,10 +617,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // host starts, so it observes the fully built container in either boot shape. A refused re-validation prints its
     // reason on stderr and fails the boot here, identically in both shapes, rather than starting a host whose own boot
     // document the real vocabulary would have refused.
-    if (!WorldPostBuildWiring.Install(services: host.Services)) {
+    if (!WorldPostBuildWiring.Install(services: host.Services, armSchedule: (batchHost is null))) {
         host.Dispose();
         return 1;
     }
+    batchHost?.Initialize?.Invoke(host);
     if (connectTarget is { } remoteEndpoint) {
         var instances = host.Services.GetRequiredService<WorldInstanceHost>();
 

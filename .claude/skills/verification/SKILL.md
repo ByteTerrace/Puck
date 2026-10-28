@@ -60,20 +60,19 @@ use when they pay for themselves, never preconditions. An engine change's
 cross-family review is required and never blocks a landing
 ([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)). A
 change to simulation state stays deterministic; `puck test --reproduce` shows
-two replicas in separate processes agree, including their per-tick authoritative
-replay hashes and byte-identical exports and manifests. A differing trace names
+recorded input reproduces every authority from its checkpoint in the same worker,
+including per-tick authoritative hashes, final machine cores and canonical exports. A differing trace names
 its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` reuses worker processes while creating and disposing an independent
-native host through the ordinary composition root for every world. Never rewrite
+`puck test` boots once per worker, restores its boot authority cohort before each
+compatible scenario, and installs that scenario's state, rules and schedule. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
 caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
 and extensions require the native container. `WorldTestHostLawTests` preserves the
-three review witnesses. The second replica reverses
-the world order, so matching contamination from identical predecessors cannot
-hide a leak. `TestCommandLawTests.ReusedWorkersIsolateDocumentsWithTheSameIdentityInOppositeOrders`
+three native-container witnesses. `TestCommandLawTests.OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput`
+checks pristine/changed/pristine scenarios with one boot and replay, and
 also compares a reused worker's export and manifest with a fresh-process boot.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
@@ -87,10 +86,10 @@ roots used once must not retain a composed image and a scalar-origin snapshot.
 Generated test compiles share persisted entries but use a source-local memory cache,
 so the process-wide cache cannot retain every staged test's bytes.
 Shared imports keep their origins for correct path relocation. Logs stream to
-disk, and verdict reading holds only the current world's pair. A negative control
-can route a wall-clock probe axis into an authoritative row: `--reproduce` must
-refuse it and name the first differing tick/instance. Keep that nondeterminism
-in a scratch world, never in engine simulation logic.
+disk, and verdict reading holds only the current world's export. Replay captures
+external inputs; it checks deterministic continuation from those inputs, rather
+than sampling external sources twice. Keep nondeterministic negative controls in
+scratch worlds, never in engine simulation logic.
 
 ### Coverage
 

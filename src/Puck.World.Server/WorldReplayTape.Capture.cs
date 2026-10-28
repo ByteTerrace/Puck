@@ -176,7 +176,7 @@ public sealed partial class WorldReplayTape {
         var wanted = (
             (m_captureSuspensions == 0) &&
             (m_mode != WorldReplayMode.Replaying) &&
-            ((m_mode == WorldReplayMode.Recording) || (m_history is not null))
+            ((m_mode == WorldReplayMode.Recording) || (m_history is not null) || (m_probes.Count != 0))
         );
 
         if (wanted == m_capturing) {

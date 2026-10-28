@@ -1860,8 +1860,7 @@ puck test <path> --keep <dir>          run in <dir> and keep it: every generated
                                        and manifests
 puck test <path> --jobs <n>            run at most n worker processes concurrently (default: 2,
                                      or 1 on a machine with fewer than four logical CPUs)
-puck test <path> --reproduce           rerun every world and require byte-identical state
-                                       exports and test-run manifests
+puck test <path> --reproduce           restore each authority's checkpoint and replay its recorded input
 puck test -h / --help                  this text
 ```
 
@@ -1870,10 +1869,11 @@ that a passing run deletes and a failing run keeps and names (see
 [Conventions](#conventions)).
 
 Each collected world owns a numbered directory under `<dir>/worlds`, starting
-at `000000/run1`. Its `state` persistence, `out` exports and manifests, and
-transcripts are isolated even when input files share a basename. Each report
-names the source and its artifact directory. `--reproduce` writes `run2`
-beside `run1`.
+at `000000/run1`. Its `out` exports, manifest and transcripts describe that
+scenario. Each report names the source and artifact directory. The worker uses
+an isolated state root and restores the boot checkpoint between scenarios.
+`--reproduce` writes `reproduction.json` beside the transcript, one verdict per
+authority; it creates no second run directory. `process-id` identifies the worker.
 
 A source compiles through the compile cache the game shares (`compilations` in
 the [per-user Puck directory](../development/contributing.md#per-user-directory)), as does every basis and import its test
@@ -1908,31 +1908,30 @@ The work summary reports source compiles, compositions and shared images, worker
 processes, container host boots, world runs, and exported authority ticks (excluding
 the extra shutdown ticks). Executable build reuse is reported separately.
 
-Each worker reuses its process; every document goes through the normal World
-composition root and receives an independent, fully disposed native host container.
+Each worker boots once through the normal World composition root and restores
+the boot checkpoint before each compatible scenario. Its state, rules and schedule
+are replaced by the scenario's declarations; changes to other boot configuration
+receive another worker.
 Native dependency validation, singleton identity in child scopes and caller ownership
 of supplied singleton instances are preserved. Container reuse by rewriting lifetimes
-cannot preserve arbitrary factories and extensions, so every graph uses a fresh host.
-Clocks, sessions, addons, schedules and state directories are separate.
-Reproduce replicas always use different processes, even with `--jobs 1`,
-and the second replica visits worlds in reverse order to expose predecessor state
-leaks. `--jobs` bounds concurrent workers, including replicas. For 96 worlds,
-`--reproduce --jobs 2` uses four workers, 192 native container
-boots and 192 isolated world runs. Ordinary runs use one replica. The default of
+cannot preserve arbitrary factories and extensions, so the native container remains
+intact. Authority clocks, session allocators, guest memory, client input producers,
+schedules and the boot authority cohort reset between scenarios. `--jobs` bounds
+concurrent workers. For 96 compatible scenarios, `--reproduce --jobs 2` uses two
+workers, two native container boots and 96 authored scenario runs. The default of
 at most two concurrent workers leaves memory headroom on a 32 GB development machine;
 use `--jobs 1` alongside other heavy work.
 
 Ordinary authoring runs every isolated test world once. `--reproduce` adds the
-determinism qualification pass: each world runs twice into sibling leg
-directories, and a world whose two exports or two `test-run.json` manifests
-differ byte for byte is refused rather than reported. The manifest records only
-facts a rerun reproduces exactly: a row's authored tick, outcome and detail,
-plus each running authority's replay hash at every completed boot-world tick
-through the export. A differing trace refuses the run naming the first sampled
-tick and instance; the final state exports and complete manifests must still
-match byte for byte. A recorded edit verdict carries no tick because an echo reaches the runner when
-the host narrates it, which is not the tick the edit applied on. The comparison
-is possible because the export tick is the document's rather than the runner's.
+determinism qualification pass: the worker captures each authority's starting
+checkpoint and the tape's input stream, restores that checkpoint in place, then
+replays the input through the ordinary replay doors. Every completed tick's authority
+hash, final machine cores and final canonical state export must match. A mismatch
+names the authority, recorded tick and differing hash components. The authored
+schedule runs once: its outcomes, edit echoes and sampled hashes remain in
+`test-run.json`; replay consumes the resulting inputs instead of executing console
+commands again. External input is captured once, so this checks deterministic
+continuation rather than agreement between two samples of an external source.
 
 Only a rule's own effect writes a verdict row. The rule-effect door stamps the
 firing's simulation tick into the row's reserved `$firedTick` cell. Generated

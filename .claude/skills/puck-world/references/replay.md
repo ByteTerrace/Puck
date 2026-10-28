@@ -24,6 +24,20 @@ to the session state directory (`Replays/<name>.puckreplay`) so two isolated
 scheduled runs record the same verdict text. Live replay drive remains outside
 scheduled tests because restoring its timeline would also rewind the schedule.
 
+Checkpoint continuation includes the last sampled attached-solid transforms: carrier
+poses can move after collision sampling, and resampling during restore can wake a
+sleeping island a tick early. Restore scoped replay images after compiling their
+final bindings. An addon restart cancels its old input controllers, so capture the
+recording's start after that commit, with a preflight capture before committing.
+An independent test/history capture records that restart as an ordered tape entry.
+Session allocators and awake/sleeping work sets replace their discarded timeline;
+retaining later generations or work-set membership breaks in-place reproduction.
+
+`WorldReplayProbe` consumes the tape's existing input capture independently of
+operator recording. Scenario workers detach all probes at the completed host-step
+boundary, then restore and replay each authority in place. Boot screen observations
+are reconstructed between scenarios, not retained from the preceding scenario.
+
 ## Contents
 
 - Format and development version

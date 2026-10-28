@@ -151,6 +151,11 @@ public sealed partial class WorldPopulation {
     // Rebuild the index and an equivalent star graph from canonical roots; adjacency within a frozen component
     // matters only when the whole component wakes. External supports and discovery work are retained explicitly.
     private void RestoreSleepingIslands(WorldPopulationCheckpoint checkpoint) {
+        m_awakeBodies.Clear();
+        m_sleepingBodies.Clear();
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); }
+        }
         m_rigidNeighbours.Clear();
         m_nonRigidSupports.Clear();
         m_sleepGravity.Clear();

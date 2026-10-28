@@ -380,6 +380,9 @@ public sealed partial class WorldReplayTape {
             authoritativeHash: authoritativeHash,
             input: new WorldReplayTickInput(Authority: authority, Intents: intents)
         );
+        foreach (var probe in m_probes) {
+            probe.NoteTick(new WorldReplayTickInput(Authority: authority, Intents: intents), authoritativeHash);
+        }
 
         if (
             (m_mode != WorldReplayMode.Recording) ||

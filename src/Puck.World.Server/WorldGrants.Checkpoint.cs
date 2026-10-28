@@ -167,12 +167,12 @@ public sealed partial class WorldGrants {
             m_driveGates[row.BodyIndex] = row.Reason;
         }
 
-        // An epoch never moves backward: the later of the checkpoint's epoch and this world's own stays retired.
+        // A checkpoint replaces the timeline, including the allocator. Keeping epochs from its discarded
+        // future makes the same recorded controller admission mint a different principal on replay.
+        m_sessionEpochs.Clear();
+        m_sessionOrdinalBound = 0;
         foreach (var (ordinal, epoch) in checkpoint.SessionEpochs) {
-            m_sessionEpochs[ordinal] = Math.Max(
-                val1: epoch,
-                val2: m_sessionEpochs.GetValueOrDefault(key: ordinal)
-            );
+            m_sessionEpochs[ordinal] = epoch;
         }
 
         RestoreSessions(sessions: checkpoint.Sessions);

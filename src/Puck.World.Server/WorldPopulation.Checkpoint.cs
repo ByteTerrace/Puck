@@ -64,6 +64,7 @@ public sealed partial class WorldPopulation {
             SleepingSupports: CaptureSleepingSupports(),
             SleepingGravity: [.. m_sleepGravity.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             SharedNavigation: m_navigation.CaptureShared(),
+            AttachedSolids: (m_baseContactField as WorldColliderSet)?.CaptureAttached(),
             Revision: m_revision,
             SeatKit: m_seatKit,
             SimulatedCount: m_simulatedCount
@@ -245,6 +246,7 @@ public sealed partial class WorldPopulation {
 
         ValidateCheckpoint(checkpoint: checkpoint);
         m_navigation.RestoreShared(checkpoints: checkpoint.SharedNavigation);
+        if (m_baseContactField is WorldColliderSet attached) { attached.RestoreAttached(rows: (checkpoint.AttachedSolids ?? [])); }
 
         // Restore is replacement. All caller-controlled entry and route addresses were preflighted above, before
         // this destructive phase starts.
@@ -440,6 +442,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        if (m_baseContactField is WorldColliderSet attached) { attached.ValidateAttached(rows: (checkpoint.AttachedSolids ?? [])); }
         if ((checkpoint.Entries is null) || (checkpoint.EventBodies is null) ||
             (checkpoint.SleepingSupports is null) || (checkpoint.SleepingGravity is null)) {
             throw new InvalidOperationException(message: "population checkpoint entries are null.");

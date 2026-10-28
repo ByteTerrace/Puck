@@ -18,7 +18,7 @@ internal sealed record WorldTestRunManifestEntry(
 /// <summary>One local edit verdict the run produced, as the server's own echo reported it.</summary>
 /// <remarks>Carries no tick. An echo reaches this type when the server narrates it, which is not the tick coordinate
 /// the edit applied on: the manifest records only facts a rerun of the same document reproduces exactly, so
-/// <c>puck test</c> can compare two legs' manifests byte for byte.</remarks>
+/// fresh-boot equivalence checks can compare manifests byte for byte.</remarks>
 internal sealed record WorldTestRunManifestEcho(bool Rejected, string Message);
 /// <summary>One authority's replay hash at a completed boot-world tick.</summary>
 internal sealed record WorldTestRunHash(ulong Tick, string World, ulong AuthorityTick, ulong Hash);
@@ -94,23 +94,34 @@ internal sealed class WorldTestRun {
         WriteIndented = true,
     };
 
-    private readonly string m_directory;
+    private string m_directory = string.Empty;
     private readonly List<WorldTestRunManifestEcho> m_echoes = [];
     private readonly List<WorldTestRunHash> m_hashes = [];
-    private readonly ulong m_exportTick;
+
+    private ulong m_exportTick;
+
     private readonly WorldInstanceHost m_instances;
+
     private readonly List<Landed> m_landed = [];
+
     private readonly WorldServer m_server;
+
     // One entry per world this run exports, in the order the manifest lists them: the booted world first, then each
     // armed sibling. A sibling that refused to start keeps its entry so the manifest says why rather than dropping
     // the world the document asked for.
     private readonly List<WorldTestRunManifestWorld> m_worlds = [];
-    private readonly string m_worldDirectory;
-    private readonly string m_worldFile;
+    private string m_worldDirectory = string.Empty;
+    private string m_worldFile = string.Empty;
+
     private readonly bool m_armed;
 
     private bool m_armedInstances;
     private bool m_exported;
+
+    private readonly WorldTickScript m_tickScript;
+    private readonly Func<InputRouter> m_router;
+
+    public event Action? Exported;
 
     public WorldTestRun(WorldServer server, WorldDefinitionSource definitionSource, WorldTickScript tickScript, Func<InputRouter> router, WorldInstanceHost instances, WorldScheduleRoot scheduleRoot) {
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -124,14 +135,27 @@ internal sealed class WorldTestRun {
         m_armed = scheduleRoot.IsArmed;
 
         m_server = server;
+        m_tickScript = tickScript;
+        m_router = router;
+        Reset(definitionSource.SourcePath, (m_armed ? scheduleRoot.Directory : string.Empty));
+    }
 
-        m_worldDirectory = WorldDocumentPaths.DirectoryOf(documentPath: definitionSource.SourcePath);
-        m_worldFile = Path.GetFileName(path: definitionSource.SourcePath);
+    public void Reset(string sourcePath, string directory) {
+        m_tickScript.Clear();
+        m_echoes.Clear();
+        m_hashes.Clear();
+        m_landed.Clear();
+        m_worlds.Clear();
+        m_armedInstances = false;
+        m_exported = false;
 
-        var schedule = server.Configuration.Schedule;
+        m_worldDirectory = WorldDocumentPaths.DirectoryOf(documentPath: sourcePath);
+        m_worldFile = Path.GetFileName(path: sourcePath);
+
+        var schedule = m_server.Configuration.Schedule;
 
         m_directory = (((schedule is not null) && m_armed)
-            ? scheduleRoot.Directory
+            ? directory
             : string.Empty
         );
         m_exportTick = (schedule?.ExportTick ?? 0UL);
@@ -155,11 +179,11 @@ internal sealed class WorldTestRun {
             }
 
             _ = PrincipalTokens.TryParse(principal: out var principal, token: row.Principal);
-            if (tickScript.ArmSeat(
+            if (m_tickScript.ArmSeat(
                 tick: row.Tick,
                 text: WorldScheduleCommands.EffectiveCommand(row: row),
                 slot: principal.Index,
-                router: router,
+                router: m_router,
                 line: out var line
             ) is { } refusal) {
                 throw new InvalidOperationException(message: $"test step could not arm: {refusal}");
@@ -421,6 +445,7 @@ internal sealed class WorldTestRun {
         if (!IsArmed || m_exported) {
             return;
         }
+        if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick {tick}]"); }
         NoteHash(server: m_server, tick: tick, world: WorldScheduleSection.BootWorldName);
         foreach (var name in m_instances.Names.Order(comparer: StringComparer.Ordinal)) {
             if ((name != WorldInstanceHost.BootInstanceName) &&
@@ -433,6 +458,7 @@ internal sealed class WorldTestRun {
                 tick: tick,
                 truncated: false
             );
+            Exported?.Invoke();
         }
     }
 }

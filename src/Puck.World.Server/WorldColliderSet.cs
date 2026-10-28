@@ -32,13 +32,14 @@ namespace Puck.World.Server;
 /// those colliders once per tick, before any body advances, so every body's <see cref="Resolve"/> call this tick
 /// depenetrates against the same snapshot rather than repeating the recompute per body.</para>
 /// </remarks>
-public sealed class WorldColliderSet : IContactField {
+public sealed partial class WorldColliderSet : IContactField {
     private List<FixedStaticCollider> m_attachedColliders = [];
     // The attached row each collider in m_attachedColliders came from, parallel to it.
     private List<int> m_attachedColliderRows = [];
     // The refresh before the latest one: the colliders a body that was grounded last tick stood on, and their rows.
     private List<FixedStaticCollider> m_previousAttachedColliders = [];
     private List<int> m_previousAttachedColliderRows = [];
+
     // Each attached row's resolved origin at the latest refresh and at the one before it, and whether the row resolved
     // at each: the difference is the displacement a body standing on the row rides (TryRideDisplacement).
     private FixedVector3[] m_attachedOrigins;
@@ -68,6 +69,7 @@ public sealed class WorldColliderSet : IContactField {
 
     private readonly Dictionary<(int X, int Z), int[]> m_colliderGrid;
     private readonly int[] m_unboundedColliders;
+
     private readonly List<int> m_candidates = [];
 
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private set; } = [];
@@ -476,6 +478,7 @@ public sealed class WorldColliderSet : IContactField {
             m_placements = placementsCompiled,
         };
     }
+
     // One static solid row's colliders, compiled from the creation it shows at its resolved frame, with the inputs they
     // were compiled from. A responding row also holds the colliders of every creation it can show, compiled with it at
     // the same frame (Shows, keyed by creation and holding this entry too), so a response change compiles nothing.
@@ -699,6 +702,7 @@ public sealed class WorldColliderSet : IContactField {
             Planes: planes
         );
     }
+
     /// <summary>Recomputes every ATTACHED solid row's colliders from the live population's CURRENT body poses — the
     /// dynamic counterpart to the static loop <see cref="Build"/> already compiled once for every non-attached solid
     /// row. Called exactly once per tick (<see cref="WorldPopulation.AdvanceSimulated"/>, before any body advances),
@@ -799,11 +803,6 @@ public sealed class WorldColliderSet : IContactField {
                 continue;
             }
 
-            m_attachedOrigins[row] = fixedPosition;
-            m_attachedResolved[row] = true;
-
-            m_refreshMargin = FixedQ4816.FromDouble(value: placement.Solid!.Margin);
-            m_refreshRow = row;
             // The SAME creation-shape transform chain the static loop above (and the renderer) already runs, fed the
             // resolved dynamic origin/yaw instead of the row's static authored Position/YawDegrees — and taken through
             // the FIXED-POINT emitter, because this runs every tick on a live body's pose. The single-precision
@@ -814,18 +813,7 @@ public sealed class WorldColliderSet : IContactField {
                 axis: FixedVector3.UnitY
             );
 
-            m_attachedRotations[row] = stampRotation;
-
-            CreationStampEmitter.VisitFixedPrimitiveCopies(
-                document: creation.EngineDocument,
-                transform: new FixedCreationStampTransform(
-                    Origin: fixedPosition,
-                    Rotation: stampRotation,
-                    Scale: FixedQ4816.FromDouble(value: placement.Scale),
-                    ReflectionNormal: null
-                ),
-                visitor: m_attachedVisitor
-            );
+            RestoreAttachedRow(origin: fixedPosition, rotation: stampRotation, row: row);
         }
 
         if (m_refreshHash.Value != m_attachedHash) {

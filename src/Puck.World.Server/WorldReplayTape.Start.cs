@@ -33,6 +33,9 @@ public sealed partial class WorldReplayTape {
             }
 
             start = WorldReplaySnapshot.ForTape(checkpoint: checkpoint!);
+            if (m_capturing && (m_liveServer.Addons is { MountedCount: > 0 })) {
+                m_currentAuthority.Add(item: new WorldReplayEntry.RestartAddons());
+            }
 
             return true;
         } catch (InvalidOperationException exception) {

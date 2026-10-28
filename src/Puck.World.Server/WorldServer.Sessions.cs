@@ -66,62 +66,78 @@ public sealed partial class WorldServer {
                 return (Observation: ((WorldSessionObservation?)null), Reason: refused);
             }
 
-            var admitted = new WorldSessionObservation(
-                server: this,
-                session: session,
-                sourceAuthority: sourceAuthority,
-                tier: tier
-            );
-            var observed = new WorldSessionSink(
-                inner: sink,
-                observation: admitted,
-                server: this
-            );
-
-            admitted.Attach(sink: observed);
-
-            // Unfiltered at the hub: the session sink redacts each snapshot under the world's live observer policy
-            // itself, so a policy edit reaches the next delivery rather than the one frozen at attach. The hub refuses
-            // an attach from inside its own delivery; the session just admitted ends with the refusal.
-            IDisposable lease;
-
-            try {
-                lease = m_document.AttachSink(sink: observed);
-            } catch (InvalidOperationException exception) {
-                _ = m_grants.EndSession(
-                    refusal: out _,
-                    session: session
-                );
-                admitted.MarkEnded();
-
-                return (Observation: ((WorldSessionObservation?)null), Reason: exception.Message);
-            }
-
-            m_sessionSinks[session] = (lease, admitted);
-
-            // A primer the observer faulted or detached on ended it before it was ever delivered a tick: the session
-            // ends rather than standing admitted with nothing observing through it.
-            if (
-                (observed.Fault is not null) ||
-                (observed.DetachReason is not null)
-            ) {
-                _ = m_grants.EndSession(
-                    refusal: out _,
-                    session: session
-                );
-                DetachSessionSink(session: session);
-
-                return (Observation: ((WorldSessionObservation?)null), Reason: ((observed.Fault is { } fault)
-                    ? $"the observer faulted on its first delivery: {fault.Message}"
-                    : $"the observer detached on its first delivery: {observed.DetachReason}"));
-            }
-
-            return (Observation: admitted, Reason: string.Empty);
+            return AttachSessionObservation(session: session, sink: sink, sourceAuthority: sourceAuthority, tier: tier);
         });
 
         refusal = reason;
 
         return observation;
+    }
+
+    // Reattaches a boot checkpoint's observer to its restored principal without minting a session or grant.
+    internal WorldSessionObservation RestoreSessionObservation(Principal session, WorldDisclosureTier tier, string sourceAuthority, IClientSink sink) {
+        if (!IsLiveSession(principal: session)) { throw new InvalidOperationException(message: "The restored observation has no live session."); }
+        var (observation, reason) = AttachSessionObservation(session: session, sink: sink, sourceAuthority: sourceAuthority, tier: tier);
+        return (observation ?? throw new InvalidOperationException(message: reason));
+    }
+    internal void ClearSessionObservers() {
+        foreach (var principal in m_sessionSinks.Keys.ToArray()) { DetachSessionSink(session: principal); }
+        m_observerEndedSessions.Clear();
+    }
+
+    private (WorldSessionObservation? Observation, string Reason) AttachSessionObservation(
+        Principal session, WorldDisclosureTier tier, string sourceAuthority, IClientSink sink) {
+        var admitted = new WorldSessionObservation(
+            server: this,
+            session: session,
+            sourceAuthority: sourceAuthority,
+            tier: tier
+        );
+        var observed = new WorldSessionSink(
+            inner: sink,
+            observation: admitted,
+            server: this
+        );
+
+        admitted.Attach(sink: observed);
+
+        // Unfiltered at the hub: the session sink redacts each snapshot under the world's live observer policy
+        // itself, so a policy edit reaches the next delivery rather than the one frozen at attach. The hub refuses
+        // an attach from inside its own delivery; the session just admitted ends with the refusal.
+        IDisposable lease;
+
+        try {
+            lease = m_document.AttachSink(sink: observed);
+        } catch (InvalidOperationException exception) {
+            _ = m_grants.EndSession(
+                refusal: out _,
+                session: session
+            );
+            admitted.MarkEnded();
+
+            return (Observation: ((WorldSessionObservation?)null), Reason: exception.Message);
+        }
+
+        m_sessionSinks[session] = (lease, admitted);
+
+        // A primer the observer faulted or detached on ended it before it was ever delivered a tick: the session
+        // ends rather than standing admitted with nothing observing through it.
+        if (
+            (observed.Fault is not null) ||
+            (observed.DetachReason is not null)
+        ) {
+            _ = m_grants.EndSession(
+                refusal: out _,
+                session: session
+            );
+            DetachSessionSink(session: session);
+
+            return (Observation: ((WorldSessionObservation?)null), Reason: ((observed.Fault is { } fault)
+                ? $"the observer faulted on its first delivery: {fault.Message}"
+                : $"the observer detached on its first delivery: {observed.DetachReason}"));
+        }
+
+        return (Observation: admitted, Reason: string.Empty);
     }
 
     /// <summary>Detaches a session's observation, marking it ended; nothing when it has none.</summary>
@@ -157,6 +173,7 @@ public sealed partial class WorldServer {
 
         m_observerEndedSessions.Clear();
     }
+
     /// <summary>Ends every live session no observer holds, through the one end door: a session a checkpoint restored,
     /// whose viewer is not watching this world, so nothing it last pressed or pointed at stays held. A session admits
     /// only through an observation (<see cref="TryObserveAsSession"/>), so one without an attached observer has nobody
@@ -172,6 +189,7 @@ public sealed partial class WorldServer {
             }
         }
     }
+
     /// <summary>Detaches every session's observation.</summary>
     internal void DetachSessionSinks() {
         foreach (var session in m_sessionSinks.Keys.ToList()) {

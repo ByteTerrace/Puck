@@ -59,8 +59,7 @@ public sealed record TestEcho(bool Rejected, string Message);
 public sealed record TestSubmission(ulong Tick, string Principal, string Command, string Outcome, string? Detail);
 /// <summary>One world's export inside a leg: the world this run booted with, or a sibling it armed beside it.</summary>
 /// <param name="World">The world's name — <c>boot</c> for the world the leg booted with.</param>
-/// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
-/// qualification.</param>
+/// <param name="ExportBytes">The authored run's canonical state-export bytes.</param>
 /// <param name="ExportTick">The tick this world's export was taken at.</param>
 /// <param name="Verdicts">Every verdict row this world's export declares.</param>
 /// <param name="Document">The document an instance a crossing started runs, or <see langword="null"/> for the booted
@@ -77,10 +76,8 @@ public sealed record TestWorldExport(string World, byte[] ExportBytes, ulong Exp
     );
 }
 /// <summary>One leg's whole reading of a world: the export bytes the run wrote and what they say.</summary>
-/// <param name="ExportBytes">The canonical state-export bytes, compared across runs during reproduction
-/// qualification.</param>
-/// <param name="ManifestBytes">The submission-manifest bytes, compared across runs during reproduction
-/// qualification.</param>
+/// <param name="ExportBytes">The authored run's canonical state-export bytes.</param>
+/// <param name="ManifestBytes">The authored schedule's submission-manifest bytes.</param>
 /// <param name="ExportTick">The tick the export was taken at, as the manifest recorded it.</param>
 /// <param name="Truncated">Whether the run ended before the tick the document declared.</param>
 /// <param name="Worlds">Every world this leg exported: the booted one first, then each armed sibling in the order

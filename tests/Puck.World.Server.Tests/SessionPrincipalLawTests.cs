@@ -20,6 +20,20 @@ namespace Puck.World.Server.Tests;
 /// </summary>
 public sealed class SessionPrincipalLawTests {
     [Fact]
+    public void RestoringACheckpointRestoresTheNextSessionIdentity() {
+        using var fixture = Fixtures.FreshServer(definition: Document());
+
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), userMessage: reason);
+        var first = AdmitSession(fixture: fixture);
+
+        Assert.True(condition: fixture.Server.EndSession(refusal: out reason, session: first), userMessage: reason);
+        var future = AdmitSession(fixture: fixture);
+
+        Assert.NotEqual(actual: future, expected: first);
+        fixture.Server.Persistence.RestoreScenario(checkpoint: checkpoint!);
+        Assert.Equal(first, AdmitSession(fixture: fixture));
+    }
+    [Fact]
     public void BodylessTimedInputRetainsBothEdgesAndResetsItsPointerImage() {
         var document = Document();
 

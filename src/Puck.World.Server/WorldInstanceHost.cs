@@ -1407,6 +1407,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             stepped: false
         );
         RecordAdmittedCompanion(row: row);
+        Admitted?.Invoke(row);
     }
     /// <summary>Admits <paramref name="row"/> as this host's one boot row and seeds every embodied local seat's
     /// route to it — a desktop's one-time boot admission, never called by a boot-free host.</summary>

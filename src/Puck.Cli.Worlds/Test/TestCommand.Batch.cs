@@ -6,22 +6,17 @@ namespace Puck.Cli.Test;
 public static partial class TestCommand {
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
-    // Replicas ALWAYS live in separate processes, even with --jobs 1. Each process boots a sequence of unrelated
-    // test documents through the real composition root, with an independent native host for each document.
-    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int chunks, int run) {
+    // A worker owns one native boot configuration and restores its scenarios' checkpoints between runs.
+    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce) {
         var legs = new List<object>();
 
-        var indices = Enumerable.Range(start: 0, count: worlds.Count).Where(predicate: index => ((index % chunks) == chunk));
-        // The second replica has different predecessor worlds. A shared mutable service cannot hide merely
-        // because both replicas happened to inherit identical contamination from the same earlier document.
-        if (run == 2) { indices = indices.Reverse(); }
         foreach (var index in indices) {
             var world = worlds[index];
 
             if (!TryReadSchedule(world: world.Path, schedule: out var schedule, reason: out _)) {
                 continue; // The normal per-world report names this refusal.
             }
-            var legDirectory = Path.Combine(path1: WorldDirectory(index: index, runDirectory: runDirectory), path2: $"run{run}");
+            var legDirectory = Path.Combine(path1: WorldDirectory(index: index, runDirectory: runDirectory), path2: "run1");
             // --keep retains evidence, never input state. In particular a crashed worker must not inherit an old
             // successful exit marker or export and turn its missing result into a pass.
             if (Directory.Exists(path: legDirectory)) {
@@ -29,12 +24,12 @@ public static partial class TestCommand {
             }
             legs.Add(item: new {
                 World = world.Path,
+                Reproduce = reproduce,
                 Directory = legDirectory,
-                Script = LegScript(exportTick: schedule!.ExportTick, rateHz: schedule.RateHz),
-                ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),
+                ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule!.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),
             });
         }
-        var batch = Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{run}.json");
+        var batch = Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-1.json");
 
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
@@ -50,7 +45,8 @@ public static partial class TestCommand {
                     ((line.Stream == CliProcessOutputStream.Stdout) ? output : error).WriteLine(value: line.Line);
                     if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[test.batch: begin ")) {
                         watchdog.CancelAfter(delay: StartupBudget);
-                    } else if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: WaitAnswer)) {
+                    } else if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: WaitAnswer) ||
+                        line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[test.batch: tick ")) {
                         watchdog.CancelAfter(delay: ProgressBudget);
                     }
                 });

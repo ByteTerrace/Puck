@@ -580,6 +580,13 @@ public sealed partial class WorldPersistence {
                     Host.Addons!.Commit(plan: plan);
                     committed = true;
                     Host.Addons.Finish(plan: plan);
+                    // Restart retires the guests' input controllers and releases their held body channels.
+                    // The tape must start AFTER those authoritative changes, just as the live recording does.
+                    // The first capture above preflights every refusal before the restart is committed.
+                    if (!TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint.Empty, out checkpoint, out reason,
+                        restartingAddons: true)) {
+                        throw new InvalidOperationException(message: $"the committed addon restart invalidated its checkpoint: {reason}");
+                    }
                 }
                 return true;
             } finally {
@@ -864,6 +871,7 @@ public sealed partial class WorldPersistence {
                 Tick: tick
             ));
         }
+        Host.Document.Pending.Clear();
         Host.Tick.RestoreClock(
             completedEngineTicks: server.LastCompletedEngineTicks,
             completedTick: server.LastCompletedTick,
@@ -930,12 +938,6 @@ public sealed partial class WorldPersistence {
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.Input = restoredInput;
         Host.Input.BindRestoredBodies();
-        foreach (var scope in (server.ScopedReplays ?? [])) {
-            var runtime = (Host.ScopedReplays.SingleOrDefault(predicate: runtime => (runtime.Name == scope.Name))
-                ?? throw new InvalidOperationException(message: "Checkpoint names an undeclared replay scope."));
-
-            runtime.RestoreCheckpoint(checkpoint: scope);
-        }
         Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership
@@ -997,6 +999,14 @@ public sealed partial class WorldPersistence {
             );
         }
         Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation, arena: restoredArena);
+        // Recompilation installs the final live document and scope bindings. Restoring before it lets the
+        // binding replacement discard a captured scope's starting image and derived tape.
+        foreach (var scope in (server.ScopedReplays ?? [])) {
+            var runtime = (Host.ScopedReplays.SingleOrDefault(predicate: runtime => (runtime.Name == scope.Name))
+                ?? throw new InvalidOperationException(message: "Checkpoint names an undeclared replay scope."));
+
+            runtime.RestoreCheckpoint(checkpoint: scope);
+        }
         Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");

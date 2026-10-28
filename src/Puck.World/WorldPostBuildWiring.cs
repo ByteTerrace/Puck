@@ -46,7 +46,8 @@ public static class WorldPostBuildWiring {
     /// <returns><see langword="true"/> when the boot may proceed; <see langword="false"/> when the re-validated boot
     /// document refused (a reason is already printed to stderr) and the caller must fail the boot instead of calling
     /// <c>IHost.RunAsync</c>.</returns>
-    public static bool Install(IServiceProvider services) {
+    /// <param name="armSchedule">Whether to arm the boot schedule now; a batch arms it after restoring its checkpoint.</param>
+    public static bool Install(IServiceProvider services, bool armSchedule = true) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
         var machineCatalog = services.GetRequiredService<WorldMachineCatalog>();
@@ -295,7 +296,7 @@ public static class WorldPostBuildWiring {
 
         // The boot row is admitted by the time this runs, so a sibling world the armed document declares can start
         // beside it before the first step.
-        scheduleRunner.ArmInstances();
+        if (armSchedule) { scheduleRunner.ArmInstances(); }
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
             // A scheduled command's own mutation verdict arrives here and nowhere else, so a test world that
             // schedules a command the world must refuse has that refusal recorded in the schedule manifest.

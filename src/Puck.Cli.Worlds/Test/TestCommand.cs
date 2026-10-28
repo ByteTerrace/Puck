@@ -15,8 +15,8 @@ namespace Puck.Cli.Test;
 /// <remarks>
 /// Each collected world owns a numbered directory, independent of its filename, so parallel worlds never share
 /// persistence, transcripts or verdict exports.
-/// With <c>--reproduce</c>, every world runs twice into sibling directories and a world whose two exports differ
-/// byte for byte is refused. Ordinary authored tests run once; reproducibility qualification is an explicit tier.
+/// Each worker boots once and restores compatible scenarios from its checkpoint. With <c>--reproduce</c>, recorded
+/// input must reproduce each authority's hashes, machine cores and final export in place.
 /// </remarks>
 public static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";
@@ -112,13 +112,16 @@ public static partial class TestCommand {
             max: Math.Max(val1: 1, val2: worlds.Count)
         );
 
-        var replicas = (reproduce ? 2 : 1);
-        var batchPassed = new bool[(parallelism * replicas)];
+        var batches = Enumerable.Range(0, worlds.Count)
+            .GroupBy(keySelector: index => Puck.World.Server.WorldPersistence.ScenarioBootShape(json: File.ReadAllBytes(path: worlds[index].Path)))
+            .SelectMany(selector: group => group.Select(selector: (index, ordinal) => (index, ordinal))
+                .GroupBy(keySelector: item => (item.ordinal % parallelism)).Select(selector: chunk => chunk.Select(selector: item => item.index).ToArray())).ToArray();
+        var batchPassed = new bool[batches.Length];
 
-        Parallel.For(fromInclusive: 0, toExclusive: (parallelism * replicas),
+        Parallel.For(fromInclusive: 0, toExclusive: batches.Length,
             parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            body: worker => batchPassed[worker] = RunBatch(artifact: artifact!, chunk: (worker / replicas), chunks: parallelism,
-                run: ((worker % replicas) + 1), runDirectory: runDirectory, worlds: worlds));
+            body: worker => batchPassed[worker] = RunBatch(artifact: artifact!, chunk: worker, indices: batches[worker],
+                reproduce: reproduce, runDirectory: runDirectory, worlds: worlds));
         var boots = 0;
         var ticks = 0UL;
         var refused = batchPassed.Any(predicate: static passed => !passed);
@@ -135,7 +138,7 @@ public static partial class TestCommand {
             failed |= (verdict != 0);
         }
 
-        Console.WriteLine(value: $"test: work processes={(parallelism * replicas)} host-boots={boots} world-runs={(worlds.Count * replicas)} exported-authority-ticks={ticks}");
+        Console.WriteLine(value: $"test: work processes={batches.Length} host-boots={boots} world-runs={worlds.Count} exported-authority-ticks={ticks}");
         if (refused) {
             return 2;
         }
@@ -147,152 +150,47 @@ public static partial class TestCommand {
         }
 
         Console.WriteLine(value: (reproduce
-            ? $"PASS: every verdict in {worlds.Count} test world(s) passed, and each world's two runs exported identical bytes."
+            ? $"PASS: every verdict in {worlds.Count} test world(s) passed, and recorded inputs reproduced every authority from its checkpoint."
             : $"PASS: every verdict in {worlds.Count} test world(s) passed."
         ));
 
         return 0;
     }
-    // One world: one ordinary run, or two plus a byte comparison for explicit reproducibility qualification.
+    // The authored run supplies verdicts; reproduction replays captured input inside its worker.
     private static int RunWorld(TestWorld test, string worldDirectory, TextWriter output, TextWriter error, bool reproduce, out int boots, out ulong ticks) {
         boots = 0;
-        ticks = 0UL;
+        ticks = 0;
         var name = test.Name;
         var world = test.Path;
 
         output.WriteLine(value: $"test {name}: {world}");
         output.WriteLine(value: $"  artifacts: {worldDirectory.Replace(newChar: '/', oldChar: '\\')}");
-
-        if (!TryReadSchedule(
-            reason: out var scheduleReason,
-            schedule: out var collectedSchedule,
-            world: world
-        )) {
+        if (!TryReadSchedule(reason: out var scheduleReason, schedule: out var schedule, world: world)) {
             error.WriteLine(value: $"ERROR: {scheduleReason}");
-
             return 2;
         }
+        var leg = Path.Combine(path1: worldDirectory, path2: "run1");
+        var bootCount = Path.Combine(path1: leg, path2: "host-boots");
 
-        var schedule = collectedSchedule!;
-        TestReading? first = null;
-        string? unexpected = null;
+        if (File.Exists(path: bootCount)) { boots = int.Parse(File.ReadAllText(path: bootCount), CultureInfo.InvariantCulture); }
+        if (!TryReadBatchLeg(error: error, legDirectory: leg, reading: out var reading, world: world)) { return 2; }
+        ticks = reading!.Worlds.Aggregate(0UL, (total, row) => (total + row.ExportTick));
+        var verdict = TestReconciliation.Judge(name: name, reading: reading, reason: out var judged, schedule: schedule!);
 
-        var runCount = (reproduce ? 2 : 1);
+        if (verdict == TestReconciliationVerdict.Unmeasured) { error.WriteLine(value: $"  REFUSED: {judged}"); return 2; }
+        if (verdict == TestReconciliationVerdict.Unexpected) { error.WriteLine(value: $"  OUTCOME: {judged}"); }
+        if (reproduce) {
+            var proof = Path.Combine(path1: leg, path2: "reproduction.json");
 
-        for (var run = 1; (run <= runCount); run++) {
-            var bootCount = Path.Combine(path1: worldDirectory, path2: $"run{run}", path3: "host-boots");
-
-            if (File.Exists(path: bootCount)) {
-                boots += int.Parse(s: File.ReadAllText(path: bootCount), provider: CultureInfo.InvariantCulture);
-            }
-            if (!TryReadBatchLeg(
-                legDirectory: Path.Combine(
-                path1: worldDirectory,
-                path2: $"run{run.ToString(provider: CultureInfo.InvariantCulture)}"
-            ),
-                reading: out var reading,
-                error: error,
-                world: world
-            )) {
-                return 2;
-            }
-
-            ticks += reading!.Worlds.Aggregate(seed: 0UL, func: static (total, world) => (total + world.ExportTick));
-
-            // Reaching the authored tick, accounting for every declared row, and every row answering what it declared
-            // are part of the verdict, and they are checked on each requested leg: two identically truncated runs
-            // reproduce each other perfectly.
-            switch (TestReconciliation.Judge(
-                name: name,
-                reading: reading!,
-                reason: out var judged,
-                schedule: schedule
-            )) {
-                case TestReconciliationVerdict.Unmeasured:
-                    error.WriteLine(value: $"  REFUSED: {judged}");
-
-                    return 2;
-                case TestReconciliationVerdict.Unexpected:
-                    if (unexpected is null) {
-                        unexpected = judged;
-
-                        error.WriteLine(value: $"  OUTCOME: {judged}");
-                    }
-
-                    break;
-                default:
-                    break;
-            }
-
-            if (run == 1) {
-                first = reading;
-
-                continue;
-            }
-
-            var beforeHashes = (JsonNode.Parse(utf8Json: first!.ManifestBytes)?["hashes"] as JsonArray);
-            var afterHashes = (JsonNode.Parse(utf8Json: reading!.ManifestBytes)?["hashes"] as JsonArray);
-
-            if ((beforeHashes is null) || (afterHashes is null) || (beforeHashes.Count == 0) || (afterHashes.Count == 0)) {
-                error.WriteLine(value: $"  REFUSED: {name} did not record its per-tick authoritative hashes.");
-                return 2;
-            }
-            for (var index = 0; (index < Math.Max(val1: beforeHashes.Count, val2: afterHashes.Count)); index++) {
-                var before = ((index < beforeHashes.Count) ? beforeHashes[index] : null);
-                var after = ((index < afterHashes.Count) ? afterHashes[index] : null);
-
-                if (!JsonNode.DeepEquals(node1: before, node2: after)) {
-                    var divergent = (after ?? before!);
-
-                    error.WriteLine(value: $"  REFUSED: the two runs of {name} diverged at tick {divergent["tick"]} in '{divergent["world"]}' (authority tick {divergent["authorityTick"]}).");
-                    return 2;
-                }
-            }
-
-            // Every world the run armed is compared, not just the booted one: a composed run whose far world
-            // diverges reproduces nothing, however stable the world the process booted with looks.
-            if (first!.Worlds.Count != reading!.Worlds.Count) {
-                error.WriteLine(value: $"  REFUSED: the two runs of {name} exported {first.Worlds.Count} and {reading.Worlds.Count} world(s) — the run does not reproduce, so its verdicts say nothing.");
-
-                return 2;
-            }
-
-            for (var index = 0; (index < first.Worlds.Count); index++) {
-                var before = first.Worlds[index];
-                var after = reading.Worlds[index];
-
-                if (
-                    (before.World != after.World) ||
-                    !before.ExportBytes.AsSpan().SequenceEqual(other: after.ExportBytes.AsSpan())
-                ) {
-                    error.WriteLine(value: $"  REFUSED: the two runs of {name} exported different bytes for '{after.World}' at tick {schedule.ExportTick} — the world does not reproduce, so its verdicts say nothing.");
-
-                    return 2;
-                }
-            }
-
-            if (!first.ManifestBytes.AsSpan().SequenceEqual(other: reading.ManifestBytes.AsSpan())) {
-                error.WriteLine(value: $"  REFUSED: the two runs of {name} recorded different {WorldScheduleSection.ManifestFileName} bytes — what the run did is not reproducible, so the refusals it reports are evidence of nothing.");
-
+            if (!File.Exists(path: proof) || (JsonNode.Parse(File.ReadAllText(path: proof)) is not JsonArray { Count: > 0 } rows) ||
+                rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1))) {
+                error.WriteLine(value: "  REFUSED: missing or divergent checkpoint reproduction.");
                 return 2;
             }
         }
+        var reported = Report(name, reading, test.Expectations, output, error);
 
-        var reported = Report(
-            error: error,
-            expectations: test.Expectations,
-            name: name,
-            output: output,
-            reading: first!
-        );
-
-        return ((reported != 0)
-            ? reported
-            : ((unexpected is null)
-                ? 0
-                : 1
-            )
-        );
+        return ((reported != 0) ? reported : ((verdict == TestReconciliationVerdict.Unexpected) ? 1 : 0));
     }
     private static int Report(string name, TestReading reading, IReadOnlyList<WorldTestForeign> expectations, TextWriter output, TextWriter error) {
         // An expectation about a sibling document is judged by the instance a crossing started. A run that started none

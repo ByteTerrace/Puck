@@ -9,7 +9,7 @@ namespace Puck.Cli.Worlds.Tests;
 /// build <c>Puck.World</c> again: the test project already depends on that build.</remarks>
 public sealed class TestCommandLawTests {
     [Fact]
-    public void ReusedWorkersIsolateDocumentsWithTheSameIdentityInOppositeOrders() {
+    public void OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
 
         directory.WriteText(name: "isolation.puck", text: """
@@ -24,7 +24,10 @@ public sealed class TestCommandLawTests {
 
         var (exit, output) = RunTest(directory.PathOf(name: "isolation.puck"), "--reproduce", "--keep", kept);
         Assert.Equal(actual: exit, expected: 0);
-        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "host-boots=6 world-runs=6");
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=1 world-runs=3");
+        for (var index = 0; (index < 3); index++) {
+            Assert.Contains("\"divergence\":-1", File.ReadAllText(path: Path.Combine(path1: kept, path2: $"worlds/{index:D6}/run1/reproduction.json")), StringComparison.Ordinal);
+        }
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
             actual: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000002/run1/out/state-export.json")));
         // Also compare a reused worker to a truly fresh process, using the same staged world and ordinary boot.

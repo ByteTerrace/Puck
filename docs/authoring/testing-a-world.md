@@ -400,14 +400,19 @@ Decompilation keeps those authored row names and sections. Generated
 
 | Code | Meaning |
 |---|---|
-| 0 | every verdict passed; with `--reproduce`, both runs also exported identical bytes |
+| 0 | every verdict passed; with `--reproduce`, recorded inputs also reproduced the authority hashes, machine cores and final exports |
 | 1 | a verdict failed, or a step's recorded outcome was not the one it declared |
 | 2 | usage: a source that does not compile, a source with neither tests nor a scheduled verdict document, a `--reproduce` mismatch, a build or boot refusal |
 
-Ordinary authoring runs each isolated test world once. `--reproduce` is the
-determinism qualification tier: it runs every world twice into sibling
-directories and refuses a world whose state export or schedule manifest differs
-byte for byte.
+Each worker boots one native World host. Scenarios sharing its boot configuration
+restore the boot checkpoint, install their state, rules and schedule, and run in
+authored order. A different boot configuration gets another worker. `--reproduce`
+captures each authority's input, restores its starting checkpoint in place, and
+replays that input without another boot. It requires matching per-tick authority
+hashes, final machine cores and byte-identical final state exports. The schedule
+manifest describes the authored run; replay consumes its resulting input rather
+than submitting the schedule again. `--keep` retains `reproduction.json` beside
+each run's transcript.
 
 ---
 

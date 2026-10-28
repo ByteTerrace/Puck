@@ -2,8 +2,10 @@ using Microsoft.Extensions.Hosting;
 
 namespace Puck.World;
 
-/// <summary>Builds each scheduled world's ordinary native host inside a reusable worker process.</summary>
+/// <summary>Builds the ordinary native host a scenario worker retains until its batch completes.</summary>
 public sealed class WorldTestHost {
+    internal Action<IHost>? Initialize { get; set; }
+
     /// <summary>Gets the number of native host containers built by this worker.</summary>
     public int Boots { get; private set; }
 
@@ -12,7 +14,7 @@ public sealed class WorldTestHost {
     /// <returns>The native host, owned by the caller.</returns>
     public IHost Build(HostApplicationBuilder builder) {
         // Arbitrary factories and extensions can create child scopes or supply caller-owned instances. Rewriting
-        // singleton lifetimes cannot preserve their native semantics, so reuse only the process, never its provider.
+        // singleton lifetimes cannot preserve their native semantics. Keep the native host and restore authorities.
         var host = builder.Build();
 
         Boots++;
