@@ -8,6 +8,8 @@ namespace Puck.Cli.Sweep;
 public static partial class SweepSignals {
     /// <summary>The parser names a signal may give.</summary>
     public static readonly IReadOnlyList<string> Parsers = ["cells", "counters", "frames", "pairs", "report", "text", "words"];
+    /// <summary>The name of the regular-expression group a metric pattern uses to read the total of a group over every match.</summary>
+    public const string SumGroup = "sum";
 
     /// <summary>Reads metrics from an answer.</summary>
     /// <param name="parse">The parser's name.</param>
@@ -19,6 +21,11 @@ public static partial class SweepSignals {
 
         switch (parse) {
             case "cells":
+                // The row's own header is a reading even when the row holds no cell.
+                if (RowPattern().Match(input: output) is { Success: true } row) {
+                    metrics["row.cells"] = row.Groups["cells"].Value;
+                }
+
                 foreach (Match match in CellPattern().Matches(input: output)) {
                     metrics[match.Groups["key"].Value] = Unquote(value: match.Groups["value"].Value);
                 }
@@ -61,10 +68,32 @@ public static partial class SweepSignals {
         metrics["text"] = output.Trim();
 
         foreach (var (name, pattern) in (extra ?? new Dictionary<string, string>())) {
-            var match = Regex.Match(input: output, options: RegexOptions.CultureInvariant, pattern: pattern, matchTimeout: TimeSpan.FromSeconds(value: 2));
+            var expression = new Regex(options: RegexOptions.CultureInvariant, pattern: pattern, matchTimeout: TimeSpan.FromSeconds(value: 2));
 
-            if (match.Success && (match.Groups.Count > 1)) {
-                metrics[name] = match.Groups[1].Value;
+            // A pattern with a group named sum reads the total of that group over every match: a count that is zero
+            // in each place it is stated still gives a reading, 0.
+            if (expression.GetGroupNames().Contains(value: SumGroup)) {
+                var sum = 0d;
+                var found = false;
+
+                foreach (Match match in expression.Matches(input: output)) {
+                    if (SweepRule.TryNumber(number: out var part, text: match.Groups[SumGroup].Value)) {
+                        found = true;
+                        sum += part;
+                    }
+                }
+
+                if (found) {
+                    metrics[name] = sum.ToString(provider: CultureInfo.InvariantCulture);
+                }
+
+                continue;
+            }
+
+            var first = expression.Match(input: output);
+
+            if (first.Success && (first.Groups.Count > 1)) {
+                metrics[name] = first.Groups[1].Value;
             }
         }
 
@@ -149,6 +178,8 @@ public static partial class SweepSignals {
     }
     private static string Unquote(string value) => (((value.Length >= 2) && (value[0] == '\'') && (value[^1] == '\'')) ? value[1..^1] : value);
 
+    [GeneratedRegex(pattern: @"\[world\.state\.row '[^']*' kind=\w+ cells=(?<cells>\d+)/", options: RegexOptions.CultureInvariant)]
+    private static partial Regex RowPattern();
     [GeneratedRegex(pattern: @"\[world\.state\.cell '[^']*'\.'(?<key>[^']*)' value=(?<value>'[^']*'|[^\]]*)\]", options: RegexOptions.CultureInvariant)]
     private static partial Regex CellPattern();
     [GeneratedRegex(pattern: @"^(?<name>[A-Za-z][\w.-]*\.[\w.-]+)\s+(?<value>-?\d+(\.\d+)?)$", options: RegexOptions.CultureInvariant)]

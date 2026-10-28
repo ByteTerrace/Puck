@@ -577,8 +577,12 @@ check the flag: the owner may be holding the pad.
   running it, and the debug world's sweep is its signal
   ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)):
   `puck sweep` reads the tools, reports, budgets and counters on a headless
-  World, `--tour` (or `--attach <world>`) the rendered signals and the capture
-  tour, and a new signal or tour stop is a row of `worlds/debug/sweep.json`
+  World (paused between calls, so its ticks repeat), `--tour` (or `--attach
+  <world>`) the rendered signals and the capture tour (each still pinned to a
+  named tick, a stop's motion armed with `world.at`), and a new signal or tour
+  stop is a row of `worlds/debug/sweep.json`. Whatever it could not measure
+  (a closed attachment, a spent `--timeout`, a metric a rule reads that the
+  answer lacks) is reported unmeasured and fails the run like red
   ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 
 Verify game behavior by running the game (`AGENTS.md` rule 3). Write a test only

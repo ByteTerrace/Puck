@@ -83,6 +83,17 @@ public sealed class SweepLawTests {
         Assert.Equal(expected: "735", actual: text["rules"]);
         Assert.Equal(expected: "rules 735, worst 9", actual: text["text"]);
         Assert.False(condition: text.ContainsKey(key: "absent"));
+
+        var sums = SweepSignals.Read(extra: new Dictionary<string, string> { ["dropped"] = @"dropped:(?<sum>\d+)", ["none"] = @"gone:(?<sum>\d+)" }, output: "a dropped:0 b dropped:2", parse: "text");
+
+        Assert.Equal(expected: "2", actual: sums["dropped"]);
+        Assert.False(condition: sums.ContainsKey(key: "none"));
+        Assert.Equal(expected: "0", actual: SweepSignals.Read(extra: null, output: "[world.state.row 'w' kind=Text cells=0/4096 domain=keys]", parse: "cells")["row.cells"]);
+    }
+    [Fact]
+    public void APinnedStepIsAConsoleLineBeforeTheCapture() {
+        Assert.Contains(expectedSubstring: "not pinnable", actualString: Refusal(json: """{ "tour": { "settle": 9, "stops": [ { "name": "s", "lines": [], "steps": [ { "at": 1, "run": "world.wait 3" } ] } ] } }"""));
+        Assert.Contains(expectedSubstring: "after its capture", actualString: Refusal(json: """{ "tour": { "settle": 9, "stops": [ { "name": "s", "lines": [], "steps": [ { "at": 10, "run": "body.stop 0" } ] } ] } }"""));
     }
     [Fact]
     public void ARuleComparesNumbersTextAndOtherMetrics() {
@@ -136,8 +147,9 @@ public sealed class SweepLawTests {
 
             previous.Write(path: path);
 
-            Assert.Equal(expected: SweepStatus.Amber, actual: previous.Status);
-            Assert.Contains(expectedSubstring: "sweep amber: 0 red, 1 amber, 1 unknown, 2 clean", actualString: previous.Summary());
+            Assert.Equal(expected: SweepStatus.Unknown, actual: previous.Status);
+            Assert.True(condition: previous.Failed);
+            Assert.Contains(expectedSubstring: "sweep unmeasured: 0 red, 1 amber, 1 unmeasured, 2 clean", actualString: previous.Summary());
             Assert.True(condition: SweepBaseline.TryRead(baseline: out var baseline, error: out var error, path: path), userMessage: error);
             Assert.Equal(expected: Path.GetFullPath(path: still), actual: baseline!.StillFor(name: "stage"));
             Assert.Null(@object: baseline.StillFor(name: "garden"));
@@ -159,7 +171,11 @@ public sealed class SweepLawTests {
     [Fact]
     public void AReportsColourIsItsWorst() {
         Assert.Equal(expected: SweepStatus.Red, actual: SweepStatus.Worse(left: SweepStatus.Amber, right: SweepStatus.Red));
-        Assert.Equal(expected: SweepStatus.Amber, actual: SweepStatus.Worse(left: SweepStatus.Amber, right: SweepStatus.Unknown));
+        Assert.Equal(expected: SweepStatus.Unknown, actual: SweepStatus.Worse(left: SweepStatus.Amber, right: SweepStatus.Unknown));
+        Assert.True(condition: SweepStatus.Fails(status: SweepStatus.Unknown));
+        Assert.True(condition: SweepStatus.Fails(status: SweepStatus.Red));
+        Assert.False(condition: SweepStatus.Fails(status: SweepStatus.Amber));
+        Assert.False(condition: SweepStatus.Fails(status: SweepStatus.Skipped));
         Assert.Equal(expected: SweepStatus.Clean, actual: SweepStatus.Worse(left: SweepStatus.Clean, right: SweepStatus.Clean));
         Assert.True(condition: new SweepSignal(Leg: SweepLegs.Windowed, Line: "l", Name: "s").ReadsOn(leg: SweepLegs.Windowed));
         Assert.False(condition: new SweepSignal(Leg: SweepLegs.Windowed, Line: "l", Name: "s").ReadsOn(leg: SweepLegs.Headless));
