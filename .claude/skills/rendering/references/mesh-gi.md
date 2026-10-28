@@ -69,7 +69,9 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   extent: the finite-occluder part of the review remains open. Blending four
   rays at the receiver-to-B plane crossing, even excluding tangent rays,
   reopened the high teal roof and sky light on the Moth; that experiment was
-  removed after its retry. Do not teach it as a verified bound. Compute the original
+  removed after its retry. The retained neighbour-plane test closes the high
+  roof again in settled Direct3D 12 and Vulkan captures. Do not teach the removed
+  footprint as a verified bound. Compute the original
   separation scores first, then weight A's veto by how much of A survives that
   pass, and by B's suspect share. Fully separated probes cannot veto each other.
   Equal surface confidence alone must not disable separation: a dynamic body has
