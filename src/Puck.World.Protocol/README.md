@@ -170,7 +170,10 @@ seed data reaches every observer; restricted data reaches only admitted readers.
 Checked snapshots supply the current cells. Hydration reconstructs
 the separate state topologies from those disclosed declarations.
 `ApplyFieldCells` names the
-rows a snapshot moved, and `WorldStateMirror.RefreshRows` re-reads them. A
+rows a snapshot moved, field rows and the document rows whose cells (with their
+trait clocks) ride the same channel, and `WorldStateMirror.RefreshRows` re-reads
+them; a re-read cell still easing joins the slots each later tick reads until it
+rests. A
 `WorldSessionMirror` keeps the rows its state deliveries moved until
 `FollowState` takes them, so a session view or a seat routed to that authority
 (through `WorldAuthorityEndpoint.FollowState`) reads only moved slots. It applies

@@ -21,14 +21,6 @@ namespace Puck.World.Client;
 /// <param name="definition">Returns the definition currently delivered; read on every call.</param>
 public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : IWorldStateView {
     private StateArena m_arena = null!;
-    private readonly int[] m_valueRowsMoved = new int[StateCapacity.MaxRows];
-
-    private int m_valueRowsMovedCount;
-
-    /// <summary>Gets the serial of the latest snapshot cell batch.</summary>
-    public int ValueSerial { get; private set; }
-    /// <summary>Gets the document row ordinals moved by the latest snapshot cell batch.</summary>
-    public ReadOnlySpan<int> ValueRowsMoved => m_valueRowsMoved.AsSpan(length: m_valueRowsMovedCount, start: 0);
 
     private readonly Func<WorldDefinition> m_definition = (definition ?? throw new ArgumentNullException(paramName: nameof(definition)));
     // The delivered field cells, one raw Q48.16 array per declared field over the lattice they were delivered on; the
@@ -259,13 +251,14 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         return changed;
     }
-    /// <summary>Applies one snapshot's field-cell writes (<see cref="WorldSnapshot.FieldCells"/>) to the cells a field
-    /// row is read from, and names each field row a write moved, so the owner refreshes the mirror slots bound to it
-    /// (<see cref="WorldStateMirror.RefreshRows"/>). A write naming a field or a cell the delivered lattice does not
-    /// hold is ignored. It allocates nothing unless the delivered lattice changed shape, which starts every field's
-    /// cells at zero until the next full snapshot writes them.</summary>
+    /// <summary>Applies one snapshot's cell writes (<see cref="WorldSnapshot.FieldCells"/>): a field write to the cells
+    /// a field row is read from, and a document row's cells (a write naming a row) to the arena the view reads every
+    /// other row from, clocks included. It names each row a write moved, so the owner refreshes the mirror slots bound
+    /// to it (<see cref="WorldStateMirror.RefreshRows"/>) or notes them for its next refresh. A write naming a field or
+    /// a cell the delivered lattice does not hold is ignored. It allocates nothing unless the delivered lattice changed
+    /// shape, which starts every field's cells at zero until the next full snapshot writes them.</summary>
     /// <param name="deltas">The snapshot's cell writes.</param>
-    /// <param name="moved">Receives the catalog ordinal of each field row a write changed; at least
+    /// <param name="moved">Receives the catalog ordinal of each row a write changed, each once; at least
     /// <see cref="StateCapacity.MaxRows"/> long.</param>
     /// <returns>How many ordinals <paramref name="moved"/> received.</returns>
     public int ApplyFieldCells(ReadOnlySpan<FieldCellDelta> deltas, Span<int> moved) {
@@ -277,15 +270,13 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
 
         Span<bool> changed = stackalloc bool[StateCapacity.MaxRows];
         Span<bool> valueChanged = stackalloc bool[StateCapacity.MaxRows];
-
-        m_valueRowsMovedCount = 0;
-        ValueSerial++;
+        var count = 0;
 
         foreach (var delta in deltas) {
             if (delta.Row >= 0) {
                 if (((uint)delta.Row) >= ((uint)m_arena.Rows.Count)) { continue; }
                 if (delta.Cell < 0) { m_arena.BeginProjectionRow(rowOrdinal: delta.Row, count: checked((int)delta.Raw)); } else { m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image); }
-                if (!valueChanged[delta.Row]) { m_valueRowsMoved[m_valueRowsMovedCount++] = delta.Row; valueChanged[delta.Row] = true; }
+                if (!valueChanged[delta.Row]) { moved[count++] = delta.Row; valueChanged[delta.Row] = true; }
                 continue;
             }
             // Recipient disclosure can remove preceding fields; the authority's local ordinal then differs from
@@ -307,12 +298,11 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             changed[field] = true;
         }
 
-        var count = 0;
-
         for (var field = 0; (field < m_cells.Length); field++) {
             if (
                 changed[field] &&
-                (m_ordinalOfField[field] >= 0)
+                (m_ordinalOfField[field] >= 0) &&
+                !valueChanged[m_ordinalOfField[field]]
             ) {
                 moved[count++] = m_ordinalOfField[field];
             }

@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.Testing;
 using Puck.World.Client;
@@ -13,8 +14,9 @@ namespace Puck.World.Server.Tests;
 /// Laws for the mirror's row slots (<see cref="WorldStateConversion.Row"/>), the read a pass's array binds: a keyed row
 /// read whole, cell <c>i</c> at element <c>i</c> and an absent cell as zero, over the element count its shape states; a
 /// tick moving the row re-reads it as one read and moves the slot's revision, a tick moving another row reads nothing,
-/// and a steady refresh allocates nothing; one row's region reads the same bytes under every residency policy; and
-/// a keyless token naming a keyed row joins the manifest as a row read.
+/// and a steady refresh allocates nothing; snapshot-carried values, an eased cell's rebased clock among them, reach the
+/// slots that read them; one row's region reads the same bytes under every residency policy; and a keyless token naming
+/// a keyed row joins the manifest as a row read.
 /// </summary>
 public sealed class WorldStateMirrorRowLawTests {
     [Fact]
@@ -33,16 +35,80 @@ public sealed class WorldStateMirrorRowLawTests {
         Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: encoded, failure: out _, snapshot: out var decoded));
         mirror.Refresh(new WorldStateStamp(ArenaValues: true, EngineTick: 1680, Everything: false, MovedRows: new[] { 0 }, Tick: 1));
         Assert.Equal(3d, mirror.RowValues(slot: slot)[2]);
-        Span<int> moved = stackalloc int[WorldFieldCapacity.MaxFields];
+        Span<int> moved = stackalloc int[StateCapacity.MaxRows];
         var borrowed = decoded.FieldCells.ToArray();
+        var count = view.ApplyFieldCells(deltas: borrowed, moved: moved);
 
-        view.ApplyFieldCells(deltas: borrowed, moved: moved);
-        mirror.Advance(engineTick: 1680, tick: 1);
+        Assert.Equal(expected: new[] { 0 }, actual: moved[..count].ToArray());
+        mirror.RefreshRows(ordinals: moved[..count]);
         Assert.Equal(99d, mirror.RowValues(slot: slot)[2]);
         Assert.Equal(3L, definition.State[0].Cells![1].Value.Raw);
         borrowed[0] = borrowed[0] with { Image = new ArenaCellImage(Key: CellName.Parse("2"), Value: CellValue.Int(value: 17)) };
         Assert.True(condition: view.TryRead(engineTick: 1680, key: "2", ordinal: 0, sample: out var retained, target: false, tick: 1));
         Assert.Equal(99L, retained.Value.Raw);
+    }
+
+    /// <summary>A resting eased cell whose snapshot carries a new target and a rebased clock follows that clock on every
+    /// later tick until it rests, then leaves the ticks' reads: the client order is cells applied, their rows re-read,
+    /// then the tick advanced.</summary>
+    [Fact]
+    public void AnEasedSnapshotValueFollowsItsRebasedClockUntilItRests() {
+        var follower = new DynamicsRow(Damping: 1f, Frequency: 6f, Name: "boost", Response: 0f);
+        var document = Fixtures.BuildDocument();
+        var definition = (document with { DynamicsRaw = [.. document.Dynamics, follower] }).WithWorldState(rows: [
+            new WorldStateRow(
+                Name: CellName.Parse(candidate: "boost"),
+                Kind: CellKind.Fixed,
+                Dynamics: new StateDynamics(Row: follower.Name),
+                Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: 0L))]
+            ),
+        ]);
+        var view = new WorldDocumentStateView(definition: () => definition);
+        var mirror = new WorldStateMirror(view: view);
+        var slot = mirror.Bind(binding: new StateBinding(Key: null, Row: "boost", Target: false), conversion: WorldStateConversion.Number);
+        Span<int> moved = stackalloc int[StateCapacity.MaxRows];
+
+        mirror.Install(engineTick: 0UL, tick: 0UL);
+        Assert.True(condition: view.TryResolveRow(ordinal: out var boost, rowName: "boost"));
+        Assert.Equal(expected: WorldStateMotion.Still, actual: mirror.Sample(slot: slot).Motion);
+
+        // The authority's tick 10 wrote the target 0 while its follower stood at 1.
+        FieldCellDelta[] cells = [
+            new(Cell: -1, Field: 0, Raw: 1L, Row: boost),
+            new(Cell: 0, Field: 0, Raw: 0L, Row: boost, Image: new ArenaCellImage(
+                Clock: new StateCellClock(EpochEngineTick: (10L * 1680L), EpochTick: 10L, Y0: FixedQ4816.One.Value),
+                Key: WorldStateRow.SlotKey,
+                Value: CellValue.Fixed(rawBits: 0L)
+            )),
+        ];
+        var count = view.ApplyFieldCells(deltas: cells, moved: moved);
+
+        mirror.RefreshRows(ordinals: moved[..count]);
+        mirror.Advance(engineTick: (10UL * 1680UL), tick: 10UL);
+        Assert.True(condition: mirror.TryNumber(slot: slot, value: out var start));
+        Assert.Equal(expected: 1f, actual: start);
+
+        var previous = start;
+
+        for (var tick = 11UL; (tick <= 20UL); tick++) {
+            mirror.Advance(engineTick: (tick * 1680UL), tick: tick);
+            mirror.Apply(fraction: 1f);
+            Assert.True(condition: mirror.TryNumber(slot: slot, value: out var eased));
+            Assert.True(condition: (eased < previous), userMessage: $"tick {tick} presented {eased} after {previous}");
+            previous = eased;
+        }
+        for (var tick = 21UL; (tick <= 600UL); tick++) {
+            mirror.Advance(engineTick: (tick * 1680UL), tick: tick);
+        }
+
+        Assert.True(condition: mirror.TryNumber(slot: slot, value: out var rested));
+        Assert.Equal(expected: 0f, actual: rested);
+        Assert.Equal(expected: WorldStateMotion.Still, actual: mirror.Sample(slot: slot).Motion);
+
+        var reads = Reads(mirror: mirror);
+
+        mirror.Advance(engineTick: (601UL * 1680UL), tick: 601UL);
+        Assert.Equal(expected: reads, actual: Reads(mirror: mirror));
     }
 
     private const int Capacity = 6;

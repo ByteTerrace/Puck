@@ -80,8 +80,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private int m_responseRevision;
     private WorldDocumentVersion m_documentVersion;
 
-    // The field rows a snapshot's field-cell writes moved, handed to the state mirror.
-    private readonly int[] m_movedFields = new int[StateCapacity.MaxRows];
+    // The field and document rows a snapshot's cell writes moved, handed to the state mirror.
+    private readonly int[] m_movedCells = new int[StateCapacity.MaxRows];
     private readonly int[] m_movedBodyState = new int[WorldDocumentStateView.MaxMovedBodyState];
 
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
@@ -878,15 +878,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         Array.Clear(array: m_seen);
 
-        // A field's cells are state the snapshot carries beside the document; the mirror re-reads the rows they moved.
-        var movedFields = m_stateView.ApplyFieldCells(
+        // Field and document row cells are state the snapshot carries beside the document; the mirror re-reads the
+        // rows they moved.
+        var movedCells = m_stateView.ApplyFieldCells(
             deltas: snapshot.FieldCells.Span,
-            moved: m_movedFields
+            moved: m_movedCells
         );
 
-        if ((movedFields > 0) && !m_pendingStateInstall) {
-            m_stateMirror.RefreshRows(ordinals: m_movedFields.AsSpan(
-                length: movedFields,
+        if ((movedCells > 0) && !m_pendingStateInstall) {
+            m_stateMirror.RefreshRows(ordinals: m_movedCells.AsSpan(
+                length: movedCells,
                 start: 0
             ));
         }

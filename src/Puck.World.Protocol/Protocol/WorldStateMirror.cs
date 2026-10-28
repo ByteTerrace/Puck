@@ -110,7 +110,6 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
 
     private ulong m_tick;
     private bool m_ticked;
-    private int m_valueSerial;
 
     /// <summary>Initializes a new instance of the <see cref="WorldStateMirror"/> class.</summary>
     /// <param name="view">The state view every slot reads through.</param>
@@ -376,9 +375,11 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
         if (notifyDelivery) { Delivered?.Invoke(); }
     }
     /// <summary>Re-reads the slots bound to rows whose values arrive beside the document rather than in it, at the
-    /// mirror's current tick: a field row, whose cells a snapshot carries
-    /// (<see cref="WorldDocumentStateView.ApplyFieldCells"/>). Such a row's cells never move between writes, so the
-    /// read leaves every moving slot's interpolation as it was; a row no slot reads reads nothing.</summary>
+    /// mirror's current tick: a field row or a document row, whose cells a snapshot carries
+    /// (<see cref="WorldDocumentStateView.ApplyFieldCells"/>), or an action-state row. A slot whose cell carries a
+    /// value-over-time trait that has not come to rest joins the slots every later <see cref="Advance"/> reads, so an
+    /// eased cell follows its new clock until it rests rather than holding the value it read here; a row no slot reads
+    /// reads nothing.</summary>
     /// <param name="ordinals">The catalog ordinals of the rows whose values moved, each once.</param>
     public void RefreshRows(ReadOnlySpan<int> ordinals) {
         foreach (var ordinal in ordinals) {
@@ -388,6 +389,13 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
 
             for (var slot = m_firstSlotByOrdinal[ordinal]; (slot >= 0); slot = m_nextSlotOfOrdinal[slot]) {
                 Read(slot: slot);
+
+                if (
+                    (m_slots[slot].Sample.Motion != WorldStateMotion.Still) &&
+                    !m_restless.AsSpan(length: m_restlessCount, start: 0).Contains(value: slot)
+                ) {
+                    m_restless[m_restlessCount++] = slot;
+                }
             }
         }
     }
@@ -396,10 +404,6 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <param name="tick">The completed tick.</param>
     /// <param name="engineTick">The completed engine tick.</param>
     public void Advance(ulong tick, ulong engineTick) {
-        if ((m_view is WorldDocumentStateView view) && (m_valueSerial != view.ValueSerial)) {
-            m_valueSerial = view.ValueSerial;
-            RefreshRows(ordinals: view.ValueRowsMoved);
-        }
         if (
             m_ticked &&
             (tick <= m_tick)

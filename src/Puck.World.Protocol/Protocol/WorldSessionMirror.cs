@@ -72,8 +72,8 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private int m_followedLifetime;
 
-    // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
-    private readonly int[] m_movedFields = new int[StateCapacity.MaxRows];
+    // The field and document rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
+    private readonly int[] m_movedCells = new int[StateCapacity.MaxRows];
     // The body-state rows one snapshot's entries moved (TakeMovedBodyState's output), used only under m_followGate.
     private readonly int[] m_movedBodyState = new int[WorldDocumentStateView.MaxMovedBodyState];
 
@@ -654,12 +654,12 @@ public sealed class WorldSessionMirror : IClientSink {
                 if (!snapshot.FieldCells.IsEmpty) {
                     var moved = m_stateView.ApplyFieldCells(
                         deltas: snapshot.FieldCells.Span,
-                        moved: m_movedFields
+                        moved: m_movedCells
                     );
 
                     lock (m_stampGate) {
                         for (var index = 0; (index < moved); index++) {
-                            NoteRow(ordinal: m_movedFields[index]);
+                            NoteRow(ordinal: m_movedCells[index]);
                         }
                     }
                 }
