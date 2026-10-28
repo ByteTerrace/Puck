@@ -161,7 +161,7 @@ Three echo models — do not conflate them:
    narrates on stderr alone. A verb that submits
    through the registering `Submit(link, mutation, echoes, verb)` overload
    (`WorldDeferredVerbEchoes`; the `world.row.set`/`world.row.remove`/`world.assign`/
-   `world.state.transform`/`world.state.act` family) also gets a per-verb
+   `world.state.transform`/`world.state.act`/`world.state.cell.set` family) also gets a per-verb
    `[<verb>: …]` line the tick-boundary drain settles — stderr on rejection
    (beside the verb-agnostic `[world.mutation rejected: …]`), stdout on
    acceptance — so a canary can account either outcome against the
@@ -181,7 +181,7 @@ Three echo models — do not conflate them:
    for all of this: `WorldPostBuildWiring` and the silo both attach it, and the
    World echo tap passes each echo to its `Answer`. A verb that submits through
    the plain `Submit(link, mutation)` overload (`world.generate`,
-   `world.state.cell.set`, `world.state.cell.remove`) registers no verb of its
+   `world.state.cell.remove`) registers no verb of its
    own: its console link registers the line, so a refusal counts, but its only
    observable answer is the universal `[world.mutation: … applied]`/
    `[world.mutation rejected: … — …]` narration, always stderr regardless of

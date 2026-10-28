@@ -73,12 +73,28 @@ public sealed class MotionWorldProcess : IDisposable {
             startInfo.ArgumentList.Add(item: argument);
         }
 
-        var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
-        var world = new MotionWorldProcess(
-            process: process,
-            stderr: new StreamWriter(path: Path.Combine(path1: logDirectory, path2: "stderr.log"), append: false, encoding: Utf8),
-            stdout: new StreamWriter(path: Path.Combine(path1: logDirectory, path2: "stdout.log"), append: false, encoding: Utf8)
-        );
+        // Acquire fallible log sinks before spawning a child. A failure here starts no World.
+        var stdout = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: "stdout.log"), append: false, encoding: Utf8);
+        StreamWriter? stderr = null;
+        Process? process = null;
+        MotionWorldProcess world;
+
+        try {
+            stderr = new StreamWriter(path: Path.Combine(path1: logDirectory, path2: "stderr.log"), append: false, encoding: Utf8);
+            process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
+            world = new MotionWorldProcess(process: process, stderr: stderr, stdout: stdout);
+            Console.Error.WriteLine(value: $"[motion.world: started process {process.Id}]");
+        } catch {
+            stdout.Dispose();
+            stderr?.Dispose();
+            if (process is not null) {
+                if (!process.HasExited) {
+                    process.Kill();
+                }
+                process.Dispose();
+            }
+            throw;
+        }
 
         world.Pump(reader: process.StandardOutput, stream: CliProcessOutputStream.Stdout);
         world.Pump(reader: process.StandardError, stream: CliProcessOutputStream.Stderr);
@@ -102,10 +118,16 @@ public sealed class MotionWorldProcess : IDisposable {
     /// <param name="from">The first line index to look at.</param>
     /// <param name="accept">Whether a line is the one waited for.</param>
     /// <param name="timeout">How long to wait.</param>
-    /// <returns>The line, or <see langword="null"/> when the timeout passed or the World exited without it.</returns>
-    public MotionOutputLine? WaitFor(int from, Func<MotionOutputLine, bool> accept, TimeSpan timeout) {
+    /// <param name="cancellation">Ends the attachment wait promptly when cancelled.</param>
+    /// <returns>The line, or null when cancelled, timed out or the World exited.</returns>
+    public MotionOutputLine? WaitFor(int from, Func<MotionOutputLine, bool> accept, TimeSpan timeout, CancellationToken cancellation = default) {
         var deadline = (Stopwatch.GetTimestamp() + ((long)(timeout.TotalSeconds * Stopwatch.Frequency)));
         var cursor = from;
+        using var registration = cancellation.Register(callback: () => {
+            lock (m_gate) {
+                Monitor.PulseAll(obj: m_gate);
+            }
+        });
 
         while (true) {
             lock (m_gate) {
@@ -117,6 +139,9 @@ public sealed class MotionWorldProcess : IDisposable {
 
                 var remaining = TimeSpan.FromSeconds(value: ((deadline - Stopwatch.GetTimestamp()) / ((double)Stopwatch.Frequency)));
 
+                if (cancellation.IsCancellationRequested) {
+                    return null;
+                }
                 if ((remaining <= TimeSpan.Zero) || m_process.HasExited) {
                     // A line that arrived between the last scan and the exit is still in the list: scan once more.
                     if (m_process.HasExited && (cursor < m_lines.Count)) {

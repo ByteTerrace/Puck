@@ -61,9 +61,10 @@ test "a press on the ground takes the suit off and refuses flight" {
     ticks 30
     seat1: body.press suit 1 0.2 0
     ticks 15
-    seat1: body.press flight 1 0.2 0
+    // Out of the suit flight and rise are not her channels (the pilot form, input-modes.puck).
+    seat1 refused "unknown channel 'flight'": body.press flight 1 0.2 0
     ticks 15
-    seat1: body.press rise 1 1 0
+    seat1 refused "unknown channel 'rise'": body.press rise 1 1 0
     ticks 30
   }
   expect {

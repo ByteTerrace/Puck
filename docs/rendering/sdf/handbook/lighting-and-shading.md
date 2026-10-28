@@ -173,41 +173,48 @@ in the frame.
   across an edge, an eighth across a corner, `SdfMeshIrradiance.FilterWeights`),
   so a sunlit patch a few rays catch does not show as a band; a neighbour
   behind a wall or inside geometry takes no part, and the light visibility bits
-  are each probe's own. A probe also stores a depth cube, how far it sees
-  along each axis before the first geometry. Rays escaping beside a blocker
-  cannot extend its blocking depth. Its 26 neighbour rays retain their first
-  hit planes too (normal and distance as four halves each); the plane along
-  the receiver's nearest lattice direction rejects diagonal wall/roof corners
-  that every axis ray misses. A plane tests the actual receiver, rather than
-  comparing its distance to a ray travelling in a different direction.
-- **A probe lights only what lies within its depth.** A read weights each of
-  the eight probes about a point by whether the point, pushed off its surface,
-  lies nearer along each axis than the probe's depth that way, fading over
-  4 cm past it (`SdfMeshIrradianceProbe.DepthFade`,
-  `sdfMeshProbeDepthVisibility`): a probe in the storey above a wall's top, the
-  room beyond a partition or the void under a floor stops at the slab, wall or
-  floor and lights nothing past it, which the preference for the probes in
-  front of a surface cannot tell for a wall. The fade is thinner than the
-  thinnest floor, because a point on a wall where it meets a floor or ceiling
-  is pushed along the wall, level with the floor's surface, and a probe on the
-  far side of that floor sees it only the floor's thickness past its depth; a
-  softer fade would draw the far side's light along every junction. Where every probe about a point stands across a
-  wall or slab from it, or no probe has traced, the point takes no indirect
-  light. An axis ray is one line wide, so a
-  window or doorway on a probe's axis lets its depth pass a wall the probe
-  stands across from the point; each answering probe's weight therefore also
+  are each probe's own. A probe also stores the first-hit plane of its ray
+  toward each of its 26 neighbouring cells (normal and distance as four halves
+  each, the normal facing away from the probe; a zero plane is a ray that
+  reached open space). A plane tests the actual receiver, rather than comparing
+  its distance to a ray travelling in a different direction.
+- **A probe lights only what lies on its side of its blocking planes.** The
+  26 directions are the 3×3 directions of each face of the cube about the
+  probe, so a read blends, bilinearly, the planes of the four directions about
+  the receiver's own (`SdfMeshIrradiance.PlaneVisibility`,
+  `sdfMeshProbePlaneVisibility`), each admitting the point, pushed 5 cm off its
+  surface (`SdfMeshIrradianceProbe.NormalBias`, metres, less than the thinnest
+  wall), while it lies on the probe's side of the plane and fading it out over
+  4 cm past it (`DepthFade`). A wall or slab every ray toward it meets is that
+  plane, so a probe in the storey above a wall's top, the room beyond a
+  partition or the void under a floor lights nothing past it, whichever way the
+  receiver lies from the probe; a finite blocker, a plinth or a stair's nosing,
+  darkens only the directions whose rays meet it, and softly between them,
+  never the whole half-space beyond it. The fade stays thinner than the
+  thinnest floor, since a probe under a floor sees a point on the wall standing
+  on it only the floor's thickness past its plane. Where every probe about a
+  point stands across a wall or slab from it, or no probe has traced, the point
+  takes no indirect light. A ray is one line wide, so a probe just above a roof
+  or beside a doorway still admits a point past that roof or wall through the
+  rays that cleared its edge or passed the doorway. Where another of the eight
+  probes cannot see it (their neighbour bit is clear), that probe's plane toward
+  it is the blocker between them, and a point on the near side of that plane
+  lies across it from the far probe, which gives way by the share of its own
+  rays that never met the point's surface (a ray that reached open space or
+  went on past the point admits it only for want of a hit; one that met the
+  surface saw it) (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`). Each
+  answering probe's weight also
   fades out as the share of the other answering probes' weight it sees and is
   seen by along the lattice falls from three quarters to a quarter (the
   neighbour bits the trace records, `SdfMeshIrradianceProbe.NeighboursWord`,
   `MutualLow`, `MutualHigh`, `sdfMeshProbeMutualShares`), so a probe outside a
   room's corner, which sees in through a window above it and may hold the
-  sunlit day, gives way entirely to the probes inside. The directional hit
-  planes cover diagonal blockers, but architecture none of the sampled rays
-  crosses still resolves at the lattice's coarseness.
+  sunlit day, gives way entirely to the probes inside. Architecture none of
+  the 26 sampled rays crosses still resolves at the lattice's coarseness.
 - **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
-  probes about the shaded point once (`sdfMeshProbesAt`), pushed 0.35 of a cell
-  along its normal, weighted trilinearly, by how far each lies in front of the
-  surface and by its depth. The sky term is the live sky's irradiance over π under the
+  probes about the shaded point once (`sdfMeshProbesAt`), pushed 5 cm along
+  its normal, weighted trilinearly, by how far each lies in front of the
+  surface and by its blocking planes. The sky term is the live sky's irradiance over π under the
   volume's sky visibility, so the sky can change without a retrace; the
   reflected term adds as stored. The sum replaces the harmonic sky ambient and
   the authored fill, under the `apply` intensity, tint and contact. A static
@@ -215,7 +222,7 @@ in the frame.
   whose centre sees it (`sdfMeshLightVisibility`), which scales its direct
   term, so a fixture lights nothing through the slab under it; an anchored
   light is never traced and goes unoccluded. Outside the volume, the lookup
-  clamps to its boundary probes while their depth tests still use the actual
+  clamps to its boundary probes while their plane tests still use the pushed
   receiver position. They extend only the light their visibility supports;
   the volume boundary adds no sky. `world.debug-view
   indirect` shows the volume's light alone. A window's view and a sky layer's

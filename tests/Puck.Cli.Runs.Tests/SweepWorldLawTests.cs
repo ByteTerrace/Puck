@@ -1,4 +1,6 @@
 using Puck.Cli.Sweep;
+using Puck.Cli.Motion;
+using System.Text.Json;
 
 using Xunit;
 
@@ -51,6 +53,7 @@ public sealed class SweepWorldLawTests : IDisposable {
 
     private sealed class Lease : IDisposable {
         public bool Released { get; private set; }
+
         public void Dispose() => Released = true;
     }
 
@@ -61,6 +64,7 @@ public sealed class SweepWorldLawTests : IDisposable {
         "--exit-after-seconds", "300",
         "--headless", "true",
         "--unpaced", "true",
+        "--paused",
     ];
     private SweepWorld Boot(string name, SweepBudget budget) {
         Assert.True(condition: SweepWorld.TryBoot(arguments: Arguments(state: name), artifact: m_entry, bootTimeout: TimeSpan.FromMinutes(value: 5), budget: budget, error: out var error, lease: null, logDirectory: Path.Combine(path1: m_directory, path2: name), session: out var world, workingDirectory: m_root), userMessage: error);
@@ -85,24 +89,25 @@ public sealed class SweepWorldLawTests : IDisposable {
     [Fact]
     public void AHeadlessSweepRunsItsPlanOnASteppedWorldAndFailsOnAMissingMetric() {
         var first = Path.Combine(path1: m_directory, path2: "first");
+
         var (exit, text, report) = Sweep(plan: ShortPlan, output: first);
 
         Assert.True(condition: (exit == 0), userMessage: text);
-        Assert.Contains(expectedSubstring: "\"name\": \"watchdog\"", actualString: report);
-        Assert.DoesNotContain(expectedSubstring: "windowed", actualString: report);
+        Assert.Contains(actualString: report, expectedSubstring: "\"name\": \"watchdog\"");
+        Assert.DoesNotContain(actualString: report, expectedSubstring: "windowed");
 
         // A rule that reads a metric the answer lacks is unmeasured, and an unmeasured signal fails the run.
-        var (missing, missingText, missingReport) = Sweep(plan: ShortPlan.Replace(oldValue: "\"count > 0\"", newValue: "\"nonexistent > 0\""), output: Path.Combine(path1: m_directory, path2: "missing"), "--baseline", Path.Combine(path1: first, path2: SweepReport.FileName));
+        var (missing, missingText, missingReport) = Sweep(plan: ShortPlan.Replace(newValue: "\"nonexistent > 0\"", oldValue: "\"count > 0\""), output: Path.Combine(path1: m_directory, path2: "missing"), "--baseline", Path.Combine(path1: first, path2: SweepReport.FileName));
 
-        Assert.Equal(expected: 1, actual: missing);
-        Assert.Contains(expectedSubstring: "unmeasured", actualString: missingText);
-        Assert.Contains(expectedSubstring: "nonexistent", actualString: missingReport);
+        Assert.Equal(actual: missing, expected: 1);
+        Assert.Contains(actualString: missingText, expectedSubstring: "unmeasured");
+        Assert.Contains(actualString: missingReport, expectedSubstring: "nonexistent");
 
         // A baseline folder named as the output would be overwritten before it is compared.
         var (refused, refusedText, _) = Sweep(plan: ShortPlan, output: first, "--baseline", Path.Combine(path1: first, path2: SweepReport.FileName));
 
-        Assert.Equal(expected: 2, actual: refused);
-        Assert.Contains(expectedSubstring: "overwrite", actualString: refusedText);
+        Assert.Equal(actual: refused, expected: 2);
+        Assert.Contains(actualString: refusedText, expectedSubstring: "overwrite");
     }
     [Fact]
     public void ASweepWithoutTimeLeftReportsEverythingUnmeasuredAndStopsTheWorld() {
@@ -111,7 +116,7 @@ public sealed class SweepWorldLawTests : IDisposable {
         var plan = Plan(json: ShortPlan);
         int processId;
 
-        using (var world = Boot(name: "spent", budget: budget)) {
+        using (var world = Boot(budget: budget, name: "spent")) {
             processId = world.ProcessId;
 
             var run = new SweepRun(baseline: null, directory: Path.Combine(path1: m_directory, path2: "spent-report"), plan: plan, progress: TextWriter.Null, world: world);
@@ -138,7 +143,7 @@ public sealed class SweepWorldLawTests : IDisposable {
             Assert.Contains(expectedSubstring: "cancelled", actualString: budget.Reason);
         }
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => System.Diagnostics.Process.GetProcessById(processId));
+        _ = Assert.Throws<ArgumentException>(testCode: () => System.Diagnostics.Process.GetProcessById(processId: processId));
     }
     [Fact]
     public void AWorldThatNeverAttachesReleasesItsLease() {
@@ -147,7 +152,68 @@ public sealed class SweepWorldLawTests : IDisposable {
 
         Assert.False(condition: SweepWorld.TryBoot(arguments: Arguments(state: "never"), artifact: m_entry, bootTimeout: TimeSpan.Zero, budget: budget, error: out var error, lease: lease, logDirectory: Path.Combine(path1: m_directory, path2: "never"), session: out var world, workingDirectory: m_root));
         Assert.Null(@object: world);
-        Assert.Contains(expectedSubstring: "never published", actualString: error);
+        Assert.Contains(actualString: error, expectedSubstring: "never published");
         Assert.True(condition: lease.Released);
+    }
+    [Fact]
+    public void AWorldStartsPausedAndScheduledRefusalsAreObservedAfterArmingSucceeded() {
+        using var budget = new SweepBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
+        using var world = Boot(budget: budget, name: "scheduled-refusal");
+
+        AssertTick(expected: 0);
+        var applied = world.Run("world.state.cell.set fuzzer seed 12345");
+
+        Assert.True(condition: applied.Ok, userMessage: string.Join(separator: "; ", values: applied.Refusals));
+        Assert.Contains("world.state.cell.set:", applied.Output);
+        var refused = world.Run("world.state.cell.set no-such-row seed 1");
+
+        Assert.False(condition: refused.Ok);
+        Assert.NotEmpty(collection: refused.Output);
+        // Coordinator delay and immediate reads cannot advance the boot authority.
+        _ = world.Run("world.counters state");
+        AssertTick(expected: 0);
+        Assert.True(condition: world.Run("world.at 3 body.stop 999999").Ok);
+        Assert.True(condition: world.Run("world.rate resume\nworld.wait 10\nworld.rate pause").Ok);
+        var evidence = SweepEvidence.Scheduled(world.Run("world.at --json"), [(3UL, "body.stop 999999")]);
+
+        Assert.False(condition: evidence.Ok);
+        Assert.Contains(collection: evidence.Refusals, filter: reason => reason.Contains(comparisonType: StringComparison.Ordinal, value: "refused"));
+
+        void AssertTick(ulong expected) {
+            var answer = world.Run("world.at --json");
+
+            Assert.True(condition: answer.Ok, userMessage: answer.Output);
+            using var json = JsonDocument.Parse(answer.Output);
+
+            Assert.Equal(expected, json.RootElement.GetProperty(propertyName: "tick").GetUInt64());
+        }
+    }
+    [Fact]
+    public void ALogOpenFailureStartsNoChildAndReleasesTheLease() {
+        var folder = Path.Combine(path1: m_directory, path2: "bad-log");
+
+        _ = Directory.CreateDirectory(path: Path.Combine(path1: folder, path2: "stderr.log"));
+        using var budget = new SweepBudget(TimeSpan.FromMinutes(minutes: 2), CancellationToken.None);
+        var lease = new Lease();
+        // stdout is opened first; failure opening stderr must also close stdout.
+        Assert.Throws<UnauthorizedAccessException>(testCode: () => SweepWorld.TryBoot(m_entry, Arguments(state: "bad-log"), m_root, folder, lease,
+            TimeSpan.FromMinutes(minutes: 1), budget, out _, out _));
+        Assert.True(condition: lease.Released);
+        using var reopened = new FileStream(Path.Combine(path1: folder, path2: "stdout.log"), FileMode.Open, FileAccess.Write, FileShare.None);
+    }
+    [Fact]
+    public void ThePublicationWaitCancelsAndItsOwnedProcessStops() {
+        int pid;
+
+        using (var process = MotionWorldProcess.Start(m_entry, Arguments(state: "cancel-wait"), m_root, Path.Combine(path1: m_directory, path2: "cancel-wait"))) {
+            pid = process.ProcessId;
+            using var cancel = new CancellationTokenSource(delay: TimeSpan.FromMilliseconds(milliseconds: 100));
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            Assert.Null(@object: process.WaitFor(0, _ => false, TimeSpan.FromMinutes(minutes: 5), cancel.Token));
+            Assert.True(condition: cancel.IsCancellationRequested);
+            Assert.True(condition: (clock.Elapsed < TimeSpan.FromSeconds(seconds: 5)));
+        }
+        Assert.Throws<ArgumentException>(testCode: () => System.Diagnostics.Process.GetProcessById(processId: pid));
     }
 }

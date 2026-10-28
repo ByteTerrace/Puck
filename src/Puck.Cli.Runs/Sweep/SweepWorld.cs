@@ -9,8 +9,9 @@ namespace Puck.Cli.Sweep;
 /// <summary>One answer a World gave a sweep line or script.</summary>
 /// <param name="Ok">Whether every line completed.</param>
 /// <param name="Output">The answer of the script's last line, or the refusal.</param>
-/// <param name="Refusals">Each refused line with its refusal.</param>
-public sealed record SweepAnswer(bool Ok, string Output, IReadOnlyList<string> Refusals);
+/// <param name="Refusals">Each refused or unmeasured line with its reason.</param>
+/// <param name="Unmeasured">Whether missing evidence, rather than a known refusal, failed this answer.</param>
+public sealed record SweepAnswer(bool Ok, string Output, IReadOnlyList<string> Refusals, bool Unmeasured = false);
 /// <summary>A World a sweep drives through its Operator attachment: one the sweep booted (headless, or windowed under
 /// the GPU lease), or a running World it attached to. Lines run one call at a time on the attachment's ordered
 /// session, so a write is settled before the next line reads.</summary>
@@ -92,7 +93,8 @@ public sealed class SweepWorld : IDisposable {
             var line = process.WaitFor(
                 accept: static line => line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: AttachmentLine),
                 from: 0,
-                timeout: budget.Bound(wait: bootTimeout)
+                timeout: budget.Bound(wait: bootTimeout),
+                cancellation: budget.Token
             );
 
             if (line is null) {
@@ -118,7 +120,7 @@ public sealed class SweepWorld : IDisposable {
     /// <returns>The answer; a refusal when the budget has passed or the attachment failed.</returns>
     public SweepAnswer Run(string script, int timeoutSeconds = 60) {
         if (m_budget.Reason is { } over) {
-            return new SweepAnswer(Ok: false, Output: over, Refusals: [$"{script}: {over}"]);
+            return new SweepAnswer(Ok: false, Output: over, Refusals: [$"{script}: {over}"], Unmeasured: true);
         }
 
         ControlResponse response;
@@ -131,19 +133,10 @@ public sealed class SweepWorld : IDisposable {
                 timeoutMilliseconds: Milliseconds(seconds: timeoutSeconds)
             ).GetAwaiter().GetResult();
         } catch (Exception exception) when (IsAttachmentFailure(exception: exception)) {
-            return new SweepAnswer(Ok: false, Output: $"the attachment failed: {exception.Message}", Refusals: [$"{script}: the attachment failed"]);
+            return new SweepAnswer(Ok: false, Output: $"the attachment failed: {exception.Message}", Refusals: [$"{script}: the attachment failed"], Unmeasured: true);
         }
 
-        // A truncated answer is the head of a longer one: a parser reading it would report the cut as the World's.
-        if (response.Commands is { Length: > 0 } commands) {
-            var refusals = commands.Where(predicate: static command => (command.IsError || command.Truncated)).Select(selector: static command => $"{command.Command}: {(command.Truncated ? Truncation(output: command.Output) : command.Output)}").ToArray();
-
-            return new SweepAnswer(Ok: (refusals.Length == 0), Output: commands[^1].Output, Refusals: refusals);
-        }
-
-        return ((response.IsError || response.Truncated)
-            ? new SweepAnswer(Ok: false, Output: response.Output, Refusals: [$"{script}: {(response.Truncated ? Truncation(output: response.Output) : response.Output)}"])
-            : new SweepAnswer(Ok: true, Output: response.Output, Refusals: []));
+        return SweepEvidence.FromResponse(response: response, script: script);
     }
     /// <summary>Takes a settled capture of the composed frame.</summary>
     /// <param name="tick">The simulation tick the still is pinned to: the call holds until the World has completed it,
@@ -233,13 +226,8 @@ public sealed class SweepWorld : IDisposable {
     }
     private static bool IsAttachmentFailure(Exception exception) => (exception is IOException or ObjectDisposedException or OperationCanceledException or InvalidOperationException);
     // The call's deadline in milliseconds: at most the attachment's ceiling, and at most what the sweep has left.
-    private int Milliseconds(int seconds) => Milliseconds(seconds: seconds, budget: m_budget);
+    private int Milliseconds(int seconds) => Milliseconds(budget: m_budget, seconds: seconds);
     private static int Milliseconds(int seconds, SweepBudget budget) => ((int)Math.Clamp(max: 120_000d, min: 1d, value: Math.Min(val1: (seconds * 1000d), val2: budget.Remaining.TotalMilliseconds)));
-    private static string Truncation(string output) {
-        var marker = output.LastIndexOf(comparisonType: StringComparison.Ordinal, value: "[control: output truncated");
-
-        return ((marker < 0) ? "the answer was truncated" : output[marker..].Trim());
-    }
     private static string? Find(string world) {
         foreach (var file in Directory.EnumerateFiles(path: Path.GetTempPath(), searchPattern: CapabilityPattern)) {
             LocalEndpointInfo info;

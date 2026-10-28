@@ -188,6 +188,15 @@ looks {
 // toggle is one rule per local seat (suit-toggle.puck): every Moth world seats one.
 suitToggle(seat: 1, index: 0)
 
+// The basis's flight switch, in the suit only: out of it she has no flight pack. Each change of the flight input family
+// releases a held rise, which a noclip climb out of the suit (noclip.puck) holds, so out of the suit the press must not
+// switch flight mode on even for the tick before the toggle's `suit-off-flight` would switch it off again.
+rule "fly-1" {
+  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0 and bodyState(body, 0, suit) == 1
+  mode: Level
+  setBodyState(key: 0, state: "flightFuel", expression: 1000)
+}
+
 // The basis's flight pose, raised only in the suit: out of it she has no wings to deploy.
 rule "airborne-on" {
   when fact(each, Airborne) == 1 and bodyState(each, flightFuel) > 0 and bodyState(each, suit) == 1

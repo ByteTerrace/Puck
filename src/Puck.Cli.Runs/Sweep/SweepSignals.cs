@@ -8,6 +8,7 @@ namespace Puck.Cli.Sweep;
 public static partial class SweepSignals {
     /// <summary>The parser names a signal may give.</summary>
     public static readonly IReadOnlyList<string> Parsers = ["cells", "counters", "frames", "pairs", "report", "text", "words"];
+
     /// <summary>The name of the regular-expression group a metric pattern uses to read the total of a group over every match.</summary>
     public const string SumGroup = "sum";
 
@@ -56,7 +57,7 @@ public static partial class SweepSignals {
 
                 break;
             case "words":
-                var words = output.Trim().Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries);
+                var words = output.Trim().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
 
                 for (var index = 1; ((index + 1) < words.Length); index += 2) {
                     metrics[words[index]] = words[(index + 1)];
@@ -135,7 +136,7 @@ public static partial class SweepSignals {
             var root = document.RootElement;
             var severities = new SortedDictionary<string, int>(comparer: StringComparer.Ordinal);
 
-            if (root.TryGetProperty(propertyName: "findings", value: out var findings) && (findings.ValueKind == JsonValueKind.Array)) {
+            if ((root.ValueKind == JsonValueKind.Object) && root.TryGetProperty(propertyName: "findings", value: out var findings) && (findings.ValueKind == JsonValueKind.Array)) {
                 foreach (var finding in findings.EnumerateArray()) {
                     var severity = (finding.TryGetProperty(propertyName: "severity", value: out var value) ? (value.GetString() ?? "none") : "none");
 
@@ -145,6 +146,10 @@ public static partial class SweepSignals {
                 metrics["findings"] = findings.GetArrayLength().ToString(provider: CultureInfo.InvariantCulture);
             }
 
+            if (!metrics.ContainsKey(key: "findings")) {
+                metrics["error"] = "unmeasured: the report lacks its findings array";
+                return;
+            }
             foreach (var severity in new[] { "red", "unknown" }) {
                 metrics[$"findings.{severity}"] = severities.GetValueOrDefault(key: severity).ToString(provider: CultureInfo.InvariantCulture);
             }
@@ -172,13 +177,12 @@ public static partial class SweepSignals {
                     metrics["coverage.skipped"] = skipped.EnumerateObject().Sum(selector: static entry => (entry.Value.TryGetInt64(value: out var count) ? count : 0L)).ToString(provider: CultureInfo.InvariantCulture);
                 }
             }
-        } catch (JsonException exception) {
+        } catch (Exception exception) when ((exception is JsonException or InvalidOperationException)) {
             metrics["error"] = $"the answer is not a JSON report: {exception.Message}";
         }
     }
     private static string Unquote(string value) => (((value.Length >= 2) && (value[0] == '\'') && (value[^1] == '\'')) ? value[1..^1] : value);
-
-    [GeneratedRegex(pattern: @"\[world\.state\.row '[^']*' kind=\w+ cells=(?<cells>\d+)/", options: RegexOptions.CultureInvariant)]
+    [GeneratedRegex(pattern: @"\[world\.state\.row '[^']*' kind=\w+ cells=(?<cells>\d+)/[^\]\r\n]*\]", options: RegexOptions.CultureInvariant)]
     private static partial Regex RowPattern();
     [GeneratedRegex(pattern: @"\[world\.state\.cell '[^']*'\.'(?<key>[^']*)' value=(?<value>'[^']*'|[^\]]*)\]", options: RegexOptions.CultureInvariant)]
     private static partial Regex CellPattern();
@@ -205,7 +209,7 @@ public sealed record SweepRule(string Metric, string Operator, string Value) {
     /// <param name="rule">The rule.</param>
     /// <returns><see langword="true"/> when the text is a rule.</returns>
     public static bool TryParse(string text, out SweepRule rule) {
-        var parts = text.Split(separator: ' ', count: 3, options: StringSplitOptions.RemoveEmptyEntries);
+        var parts = text.Split(count: 3, options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
 
         rule = new SweepRule(Metric: string.Empty, Operator: string.Empty, Value: string.Empty);
 
