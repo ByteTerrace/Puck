@@ -495,6 +495,60 @@ public sealed class TextCommandSourceTests {
         );
     }
 
+    // Law: a session that settles nothing (a piped script) still hears a refusing release report, which a held pick's
+    // timeout relies on; a successful report and a hold with no report add no line.
+    [Fact]
+    public void AHoldInASessionThatSettlesNothingStillPublishesItsRefusal() {
+        var held = true;
+        var published = new List<(string Line, CommandResult Result)>();
+        var source = new TextCommandSource(registry: new CommandRegistry(modules: [new HoldModule(held: () => held)]));
+        using var piped = source.CreateSession(
+            onResult: (line, result) => published.Add(item: (line, result)),
+            principal: Principal.Console
+        );
+
+        piped.Enqueue(line: "hold refuse");
+        source.Collect();
+        Assert.Equal(
+            actual: published.Select(selector: static answer => answer.Line),
+            expected: ["hold refuse"]
+        );
+
+        held = false;
+        source.Collect();
+        Assert.Equal(
+            actual: published.Select(selector: static answer => (answer.Line, answer.Result.IsError, answer.Result.Output)),
+            expected: [("hold refuse", false, "[hold: armed]"), ("hold refuse", true, "[hold: refused]")]
+        );
+
+        published.Clear();
+        held = true;
+        piped.Enqueue(line: "hold report");
+        piped.Enqueue(line: "hold plain");
+        source.Collect();
+        held = false;
+        source.Collect();
+        source.Collect();
+        Assert.Equal(
+            actual: published.Select(selector: static answer => answer.Line),
+            expected: ["hold report", "hold plain"]
+        );
+
+        published.Clear();
+        piped.AnswerDeadline = new TextAnswerDeadline(
+            budget: TimeSpan.Zero,
+            clock: TimeProvider.System
+        );
+        held = true;
+        piped.Enqueue(line: "hold plain");
+        source.Collect();
+        source.Collect();
+        Assert.Equal(
+            actual: published.Select(selector: static answer => (answer.Line, answer.Result.IsError)),
+            expected: [("hold plain", false), ("hold plain", true)]
+        );
+    }
+
     // hold report arms a hold that reports its release; hold plain arms one with no report.
     private sealed class HoldModule(Func<bool> held) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
@@ -505,9 +559,11 @@ public sealed class TextCommandSourceTests {
                 handler: (context, args) => {
                     context.TextSession!.HoldWhile(
                         hold: held,
-                        released: (args[0].ToString() == "report")
-                            ? static deadlinePassed => (deadlinePassed ? CommandResult.Error(output: "[hold: answer due]") : new CommandResult(Output: "[hold: released]"))
-                            : null
+                        released: args[0].ToString() switch {
+                            "refuse" => static _ => CommandResult.Error(output: "[hold: refused]"),
+                            "report" => static deadlinePassed => (deadlinePassed ? CommandResult.Error(output: "[hold: answer due]") : new CommandResult(Output: "[hold: released]")),
+                            _ => null,
+                        }
                     );
 
                     return new CommandResult(Output: "[hold: armed]");
