@@ -92,7 +92,7 @@ internal sealed partial class WorldCursorFeed : IDisposable {
         if (!ReferenceEquals(objA: m_hoverPicker, objB: picker)) {
             // The explanation settled its own cancellation, and a console pick still waiting on its frame keeps its
             // request. A superseding consumer owns any newer request.
-            if (!explaining && (m_hoverPicker is { Reserved: false } released)) { released.Clear(); }
+            if (!explaining && (m_hoverPicker is { Reserved: false } released)) { released.Release(); }
             m_hoverPicker = picker;
         }
         if (picker is not null) {

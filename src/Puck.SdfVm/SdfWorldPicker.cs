@@ -18,6 +18,9 @@ public sealed class SdfWorldPicker {
     // The identity of the explicit request a caller waits on: a hover's Demand leaves it standing until it is answered,
     // cleared or replaced by another explicit request.
     private long m_reserved;
+    // The published answer to that explicit request, kept apart from Result until its caller takes it: a hover's release
+    // or a later hover answer replaces Result, and the caller reads on a different thread's schedule than the frame.
+    private SdfPickResult? m_unclaimed;
     // Whether the latest request has no answer yet, and whether it still needs a copy recorded.
     private bool m_awaiting;
     private bool m_queued;
@@ -70,8 +73,30 @@ public sealed class SdfWorldPicker {
 
         m_floor = (request - 1);
         m_reserved = request;
+        m_unclaimed = null;
         Result = null;
         return request;
+    }
+    /// <summary>Takes the published answer to an explicit <see cref="Request"/>, once. Unlike <see cref="Result"/> it
+    /// survives a hover's <see cref="Release"/> and a later hover answer, until the caller that asked takes it, another
+    /// explicit request replaces it, or <see cref="Clear"/> cancels it.</summary>
+    /// <param name="request">The identity <see cref="Request"/> returned.</param>
+    /// <returns>The answer, or null while it has not landed, was already taken or was discarded.</returns>
+    public SdfPickResult? TakeAnswer(long request) {
+        if (m_unclaimed is { } answer && (answer.Request == request)) {
+            m_unclaimed = null;
+            return answer;
+        }
+
+        return null;
+    }
+    /// <summary>Ends a hover's use of this picker: <see cref="Clear"/> without discarding the answer of an explicit
+    /// request that its caller has not taken yet.</summary>
+    public void Release() {
+        var unclaimed = m_unclaimed;
+
+        Clear();
+        m_unclaimed = unclaimed;
     }
     /// <summary>Demands a live hover pixel. While the latest request is unanswered, equal coordinates reuse it; after
     /// its answer, demand samples the next rendered frame, including camera and geometry motion beneath a stationary
@@ -96,6 +121,7 @@ public sealed class SdfWorldPicker {
         m_floor = ++m_request;
         m_queued = false;
         m_awaiting = false;
+        m_unclaimed = null;
         Result = null;
     }
 
@@ -152,6 +178,7 @@ public sealed class SdfWorldPicker {
         }
         if ((result is { } answer) && (answer.Request > m_floor) && Current(result: answer)) {
             Result = answer;
+            if (answer.Request == m_reserved) { m_unclaimed = answer; }
             if (answer.Request == m_request) {
                 m_awaiting = false;
                 m_queued = false;
