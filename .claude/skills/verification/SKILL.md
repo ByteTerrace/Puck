@@ -40,7 +40,8 @@ so the integration lane's sweep reads them
    a granted GPU leg: in a windowed World with its bakes settled, `host.frames`
    after standing still and again after the batch's workload (walk the area it
    touches, `player.move` in a `world.at` script), and the sweep's report states
-   both readings. A coding lane has no GPU leg, so its commit body names that
+   both readings (`puck sweep --tour` reads them as `frames-standing` and
+   `frames-walking`; a batch's own walk is a signal added to its plan). A coding lane has no GPU leg, so its commit body names that
    workload instead. A frame over 16.7 ms that a change caused turns the batch
    red and the culprit is bisected out, whatever else passed. A reported speed-up
    is measured in frame time, never inferred from one phase: a tick that fell

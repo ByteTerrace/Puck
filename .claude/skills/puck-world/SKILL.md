@@ -575,7 +575,11 @@ check the flag: the owner may be holding the pad.
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).
   A scenario is for an invariant that running cannot show; a feature is shown by
   running it, and the debug world's sweep is its signal
-  ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+  ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)):
+  `puck sweep` reads the tools, reports, budgets and counters on a headless
+  World, `--tour` (or `--attach <world>`) the rendered signals and the capture
+  tour, and a new signal or tour stop is a row of `worlds/debug/sweep.json`
+  ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 
 Verify game behavior by running the game (`AGENTS.md` rule 3). Write a test only
 where running cannot show the behavior. Standalone runners, record directories
