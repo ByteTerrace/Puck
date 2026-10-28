@@ -2408,16 +2408,25 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   runs each tool for its bounded span (the fuzzer's 300 seeded steps, the
   traversal bot's studio and gallery passes, the chess table's scoped replay),
   then reads the signals: the watchdog, the tools' records, `replay.scope`,
-  `world.rule.failures`, both `world.debug-view report … --json` reports,
-  `world.budget`, narrowed `world.counters`, `world.addons`, `host.frames` and
-  `host.memory collect`.
+  `world.rule.failures`, the colliders report
+  (`world.debug-view report colliders --json`, read as JSON) and the contacts
+  report (`world.debug-view report contacts`, read from its text header, since
+  its JSON form is far past the attachment's answer limit), `world.budget`,
+  narrowed `world.counters`, `world.addons`, `host.frames` and
+  `host.memory collect`. The World is paused between calls and stepped only
+  inside the calls that wait for ticks, so a plan takes the same ticks however
+  long the coordinator takes; the signals then read one frozen tick. The
+  wall-clock metrics (`host.frames`, `host.memory`) and the compile-cache
+  counters (`world.boot.*`) are not compared exactly.
 - **The windowed leg** (`--tour`) boots a windowed World under the GPU lease,
   or drives the running World `--attach` names (a process id, attachment id or
   attachment file; a World `puck_world_start` started, say). It waits for the
   renderer and the bakes, reads the rendered signals (the bake and mesh-GI
   counters, `world.indirect`, GPU counters, `host.frames` standing and walking,
   memory), then takes the tour: each stop runs the tour's reset lines and its
-  own, waits its settle ticks and the bakes, and takes a settled capture. The
+  own, waits for the bakes, arms its pinned steps a fixed lead after the tick
+  they settled at (`world.at`), and takes a settled capture pinned to a named
+  tick (the start tick plus the stop's settle ticks). The
   stops cover every area indoors and out, a jump, flight and noclip, and the
   owner's walkthrough findings at their poses. `--stop` runs only the named
   stops, which suits tuning a pose on a World left running.
@@ -2426,8 +2435,16 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   the world once per scenario, so a default sweep reports it as unrun.
 
 Each signal is red when a red rule of the plan holds or its line was refused,
-amber when an amber rule holds, and clean otherwise; a tool is amber when it
-did not finish within its ticks. A rule reads `<metric> <op> <value>`, with
+amber when an amber rule holds, and clean otherwise. Silence is never success:
+a signal is unmeasured when the World's attachment closed before it, the
+sweep's time passed, the answer held no metric of its parser, or a rule reads a
+metric the answer lacks; a tool is unmeasured when it did not finish within its
+ticks; a stop is unmeasured when the sweep could not reach it. Unmeasured fails
+the run like red. A signal the plan marks `recheck` (the watchdog, the rule
+failures, the addons) is read again after the tour as `<name>.after-tour`.
+`--timeout` bounds the whole sweep, an attached World and the scenarios
+included, and an interrupt ends it the same way; the Worlds, the GPU lease and
+the processes the sweep started are released on every exit path. A rule reads `<metric> <op> <value>`, with
 `==`, `!=`, `>`, `>=`, `<`, `<=` and `~` (contains), and a value that names
 another metric compares with it. A parser turns each answer into metrics:
 `cells` (`world.state`), `counters`, `frames` (`host.frames`), `pairs`
@@ -2448,8 +2465,9 @@ pixel counts as changed when a colour channel differs by more than the tour's
 baseline still above its current one. The report is a derived product: keep it
 outside the repository.
 
-Exit codes: 0 nothing red, 1 something red, 2 a refusal (a plan, a baseline, a
-build or a World that did not boot).
+Exit codes: 0 nothing red or unmeasured, 1 something red or unmeasured, 2 a
+refusal (a plan, a baseline, a `--output` that is the `--baseline` report's
+folder, a build or a World that did not boot), 130 an interrupt.
 
 ---
 

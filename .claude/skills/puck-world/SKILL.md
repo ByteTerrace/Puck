@@ -212,7 +212,11 @@ Keep reads lean: `world.view.camera` answers a compact line (`full` for every
 field, a key list for chosen ones), `help <prefix>` answers one synopsis line per
 verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
 one script rather than one call per sample. `world.view.pick <view> <x> <y>`
-holds its call until a rendered frame answers, a paused World included.
+holds its call until a rendered frame answers, a paused World included; a view that
+renders no frame is refused as unanswered when the call's deadline passes (10 seconds in a piped
+session, where the refusal prints on stdout after the `pending` line), and neither hover nor a hover's
+release replaces a waiting pick or erases its answer before the asking call reads it. A command text
+with a newline is a script (`commands`, `isError` false); one without is an ordinary command whose refusal is `isError`.
 
 ## The model
 
@@ -575,8 +579,12 @@ check the flag: the owner may be holding the pad.
   running it, and the debug world's sweep is its signal
   ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)):
   `puck sweep` reads the tools, reports, budgets and counters on a headless
-  World, `--tour` (or `--attach <world>`) the rendered signals and the capture
-  tour, and a new signal or tour stop is a row of `worlds/debug/sweep.json`
+  World (paused between calls, so its ticks repeat), `--tour` (or `--attach
+  <world>`) the rendered signals and the capture tour (each still pinned to a
+  named tick, a stop's motion armed with `world.at`), and a new signal or tour
+  stop is a row of `worlds/debug/sweep.json`. Whatever it could not measure
+  (a closed attachment, a spent `--timeout`, a metric a rule reads that the
+  answer lacks) is reported unmeasured and fails the run like red
   ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 
 Verify game behavior by running the game (`AGENTS.md` rule 3). Write a test only

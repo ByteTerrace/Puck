@@ -206,7 +206,7 @@ A World an agent boots passes `--devices none`; one the owner asked to play in p
 Load [orchestration](.claude/skills/orchestration/SKILL.md) for branches, delegation and long runs.
 Preserve unrelated work; stage explicit paths and inspect the whole index. Commits carry no `Co-Authored-By` trailer.
 Merge the integration tip into your branch: merge, never rebase.
-Pushing `main`, force-pushing, and deleting a remote branch are the owner's: ask first.
+Pushing `main`, force-pushing, and deleting a remote branch that holds unmerged work are the owner's: ask first. A remote branch whose work has landed on the integration branch backs up nothing, and the lead deletes it (the owner's ruling).
 Decide, don't ask, except for product/taste decisions and owner-only actions: those above, Azure deployment, package publication, or changes outside this repository.
 End runs with **Needs you**, **Changed**, **Found**; state verification and unconfirmed findings.
 

@@ -87,7 +87,7 @@ The document members are `views.layouts`, `views.seatControl`, `views.seatRig`
 and `seatDefaults.seatCameraFeel` (C# `WorldDefinition.PlayerDefaults.SeatLook`,
 a `WorldSeatCameraFeel`). The console's row path for the feel is
 `playerDefaults.seatLook` (`world.row.set playerDefaults.seatLook <json>`), and
-`world.view.camera` reads the effective feel and control back. An absent feel
+`world.view.camera <player> full` reads the effective feel and control back. An absent feel
 is `WorldSeatCameraFeel.Default`: zero pointer and stick response, so every look
 input turns the camera by nothing. The camera boom's smoothing is the
 `camera-boom` row of the world's `dynamics` table.
@@ -239,7 +239,7 @@ The room probe starts at the authored eye and runs backward along the requested
 view direction, independently of the current transition and chase target shift.
 Entry needs continuously less than 0.85 m for 0.2 s; exit needs continuously more
 than 1.35 m for 0.15 s. Intermediate clearance retains the current state and
-interrupting either dwell resets its timer. `world.view.camera` echoes `view`,
+interrupting either dwell resets its timer. `world.view.camera <player> full` echoes `view`,
 `viewSource`, `transition`, `autoFirstPerson`, `room` and `dwell`, alongside the
 actual presented eye/target, fade and third-person clearance result.
 
@@ -322,7 +322,7 @@ A target inside geometry (a portal frame around the pivot) skips a 1.1 m shell
 before sweeping and keeps the authored boom where that shell reaches past it.
 The eye radius, skin and scan are engine constants; the ceiling is authored; the
 body volume is the kit's authored collider and the creation's own shapes; the
-ease is the rig's authored dynamics. `world.view.camera` echoes the arm's latest
+ease is the rig's authored dynamics. `world.view.camera <player> full` echoes the arm's latest
 frame (`eye=`, `target=`, `boom=<placed>/<authored>`, `rise=` in degrees,
 `near=` in metres, `clearance=open|shortened|risen|crowded`). `WorldCameraClearanceLawTests` holds
 the keep-out and the ease back out on the CPU.
@@ -517,7 +517,7 @@ device: every synthesized signal shares the default device id, and the roster's
 seating policy would put that device on the first seat holding no device of its
 kind, so a seated physical pad would send a scripted stick to seat 2. A held
 synthesized stick or key is carried until its zero or release sample, or until
-OS window focus loss releases every held input. `world.view.camera` echoes `orbit=`/`steer=` for the
+OS window focus loss releases every held input. `world.view.camera <player> full` echoes `orbit=`/`steer=` for the
 two holds. A synthesized pointer never reports an absolute position, so
 `world.view.pointer` keeps answering `reason=no-position` under a scripted drag.
 
@@ -738,14 +738,19 @@ and replay paths. Keyless rows cannot be removed.
 Use a writable state directory when booting locally:
 
 ```text
-world.view.camera 1
+world.view.camera 1 full
 world.view.state
 world.view.pointer
 world.view.panes 8.5 40.5
 ```
 
-The camera read-back reports pitch limits and live angles in degrees; authored
-payloads remain radians. A discriminating control must move right-stick X and
+The default `world.view.camera` is compact (tick, view, eye, target, yaw, pitch,
+fov, mode, fade, clearance). Pitch limits (`minPitch`/`maxPitch`), the held-input
+state (`freeLook`, `orbit`, `steer`) and `cameraApplication` come from `full` or
+explicit keys (`world.view.camera 1 minPitch,maxPitch,orbit,steer`); a key the
+seat does not report is refused by name (`cameraApplication` appears only while
+a seat is in Free Cam). The read-back reports pitch limits and live angles in
+degrees; authored payloads remain radians. A discriminating control must move right-stick X and
 observe camera yaw plus upright body facing change while `Turn` remains zero;
 right-stick Y must change pitch without tilting the body. Then move left-stick X
 and prove lateral translation without a facing change; while holding left-stick
@@ -758,5 +763,5 @@ For a camera program: author an unknown op `$type`, put `anchor` anywhere but
 first, put `clampPitch` after its `orbit`, omit `fieldOfView`, name an
 undeclared program from a `blend`/`selectProgram`, or point two programs'
 blends (or select cases) at each other. Each is refused by name at load, the
-cycle carrying its trail. `world.view.camera`
-reports `cameraApplication=true` while a seat is in Free Cam.
+cycle carrying its trail. `world.view.camera <player> full` (or the key
+`cameraApplication`) reports `cameraApplication=true` while a seat is in Free Cam.

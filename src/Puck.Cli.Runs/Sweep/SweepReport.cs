@@ -5,14 +5,18 @@ using System.Text.Json.Serialization;
 
 namespace Puck.Cli.Sweep;
 
-/// <summary>The colours a sweep gives a signal, a tool or a still, worst last.</summary>
+/// <summary>The colours a sweep gives a signal, a tool or a still, worst last. Silence is never success: whatever the
+/// sweep could not measure is <see cref="Unknown"/> or <see cref="Red"/>, and both fail the run.</summary>
 public static class SweepStatus {
     /// <summary>Nothing a rule names holds.</summary>
     public const string Clean = "clean";
-    /// <summary>The read did not happen or did not answer what its rules read.</summary>
-    public const string Unknown = "unknown";
-    /// <summary>An amber rule holds, a tool did not finish, or a still changed beyond the tolerance.</summary>
+    /// <summary>Nothing was asked of it: the scenarios when no file was named.</summary>
+    public const string Skipped = "skipped";
+    /// <summary>An amber rule holds, or a still changed beyond the tolerance.</summary>
     public const string Amber = "amber";
+    /// <summary>The sweep could not measure it: the read did not happen, the World's attachment closed, the answer
+    /// held no metric a rule reads, or a tool did not finish. It fails the run.</summary>
+    public const string Unknown = "unmeasured";
     /// <summary>A red rule holds, a line was refused, or a capture failed.</summary>
     public const string Red = "red";
 
@@ -21,15 +25,19 @@ public static class SweepStatus {
     /// <param name="right">The second colour.</param>
     /// <returns>The worse colour.</returns>
     public static string Worse(string left, string right) => ((Rank(status: left) >= Rank(status: right)) ? left : right);
-    /// <summary>Returns a colour's place in clean, unknown, amber, red.</summary>
+    /// <summary>Returns a colour's place in clean, amber, unknown, red.</summary>
     /// <param name="status">The colour.</param>
     /// <returns>Zero for clean up to three for red.</returns>
     public static int Rank(string status) => status switch {
         Red => 3,
-        Amber => 2,
-        Unknown => 1,
+        Unknown => 2,
+        Amber => 1,
         _ => 0,
     };
+    /// <summary>Returns whether a colour fails the run: red, or whatever the sweep could not measure.</summary>
+    /// <param name="status">The colour.</param>
+    /// <returns><see langword="true"/> for red and unknown.</returns>
+    public static bool Fails(string status) => (Rank(status: status) >= Rank(status: Unknown));
 }
 /// <summary>One World a sweep drove.</summary>
 /// <param name="Leg">The leg.</param>
@@ -117,6 +125,9 @@ public sealed record SweepReport(
     /// <summary>Gets the worst colour of the report.</summary>
     [JsonIgnore]
     public string Status => Everything().Aggregate(func: SweepStatus.Worse, seed: SweepStatus.Clean);
+    /// <summary>Gets whether anything is red or could not be measured, which fails the run.</summary>
+    [JsonIgnore]
+    public bool Failed => SweepStatus.Fails(status: Status);
 
     /// <summary>Writes the report.</summary>
     /// <param name="path">The file.</param>
@@ -127,20 +138,20 @@ public sealed record SweepReport(
         var text = new StringBuilder();
         var counts = Everything().GroupBy(keySelector: static status => status).ToDictionary(elementSelector: static group => group.Count(), keySelector: static group => group.Key);
 
-        _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"sweep {Status}: {counts.GetValueOrDefault(key: SweepStatus.Red)} red, {counts.GetValueOrDefault(key: SweepStatus.Amber)} amber, {counts.GetValueOrDefault(key: SweepStatus.Unknown)} unknown, {counts.GetValueOrDefault(key: SweepStatus.Clean)} clean in {Seconds:0} s at {Commit}{((Baseline is null) ? string.Empty : $", against {Baseline}")}"));
+        _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"sweep {Status}: {counts.GetValueOrDefault(key: SweepStatus.Red)} red, {counts.GetValueOrDefault(key: SweepStatus.Amber)} amber, {counts.GetValueOrDefault(key: SweepStatus.Unknown)} unmeasured, {counts.GetValueOrDefault(key: SweepStatus.Clean)} clean in {Seconds:0} s at {Commit}{((Baseline is null) ? string.Empty : $", against {Baseline}")}"));
 
         foreach (var tool in Tools) {
-            _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {tool.Status,-7} tool {tool.Name} ({tool.Ticks} ticks){Join(items: tool.Reasons)}"));
+            _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {tool.Status,-10} tool {tool.Name} ({tool.Ticks} ticks){Join(items: tool.Reasons)}"));
         }
         foreach (var signal in Signals) {
-            _ = text.AppendLine(value: $"  {signal.Status,-7} {signal.Leg} {signal.Name}{Join(items: signal.Reasons)}{((signal.Changes.Count == 0) ? string.Empty : $" | changed: {string.Join(separator: "; ", values: signal.Changes)}")}");
+            _ = text.AppendLine(value: $"  {signal.Status,-10} {signal.Leg} {signal.Name}{Join(items: signal.Reasons)}{((signal.Changes.Count == 0) ? string.Empty : $" | changed: {string.Join(separator: "; ", values: signal.Changes)}")}");
         }
 
-        _ = text.AppendLine(value: $"  {Scenarios.Status,-7} scenarios{Join(items: Scenarios.Reasons)}");
+        _ = text.AppendLine(value: $"  {Scenarios.Status,-10} scenarios{Join(items: Scenarios.Reasons)}");
 
         if (Tour is { } tour) {
             foreach (var still in tour.Stills) {
-                _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {still.Status,-7} still {still.Name}{((still.ChangedFraction is { } fraction) ? $" ({fraction:P2} changed)" : string.Empty)}{Join(items: still.Reasons)}"));
+                _ = text.AppendLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {still.Status,-10} still {still.Name}{((still.ChangedFraction is { } fraction) ? $" ({fraction:P2} changed)" : string.Empty)}{Join(items: still.Reasons)}"));
             }
             foreach (var (group, sheet) in tour.Sheets) {
                 _ = text.AppendLine(value: $"  sheet {group}: {sheet}");
