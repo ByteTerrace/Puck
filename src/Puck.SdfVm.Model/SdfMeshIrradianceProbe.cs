@@ -5,22 +5,23 @@ namespace Puck.SdfVm;
 /// pass's read (<c>shade/sdf-mesh-irradiance.hlsli</c>), which <see cref="SdfIsaHlsl"/> writes them into: a probe is
 /// <see cref="ProbeWords"/> words, its key (each cell coordinate's low ten bits) with the flags above it, the sky
 /// visibility cube as six halves, the radiance cube as eighteen (red, green and blue of +X, -X, +Y, -Y, +Z and -Z), the
-/// visibility of each light of the lights table from the probe, one bit a record from <see cref="LightsWord"/>, the
-/// depth cube as six halves from <see cref="DepthWord"/>: how far the probe's rays travel about each axis before they
-/// meet geometry, at <see cref="NeighboursWord"/> which of its 26 neighbouring probes its centre sees, and at
-/// <see cref="PlanesWord"/> the first blocking plane along each of those directions.
+/// visibility of each light of the lights table from the probe, one bit a record from <see cref="LightsWord"/>, at
+/// <see cref="NeighboursWord"/> which of its 26 neighbouring probes its centre sees, and at <see cref="PlanesWord"/> the
+/// first blocking plane along each of those 26 lattice directions, which bound what the probe lights.
 /// </summary>
 public static class SdfMeshIrradianceProbe {
     /// <summary>The words one probe takes in the volume table.</summary>
-    public const int ProbeWords = 73;
-    /// <summary>Two words per neighbour direction holding the first hit's plane relative to the probe: four halves
+    public const int ProbeWords = 70;
+    /// <summary>Two words per lattice direction holding the first hit's plane relative to the probe: four halves
     /// (normal XYZ and plane distance). A zero plane means the ray reached open space. The normal faces away from
-    /// the probe, so a receiver beyond the plane is occluded. Directions use the neighbour mask's order.</summary>
-    public const int PlanesWord = 21;
+    /// the probe, so a receiver beyond the plane is occluded. Directions use the neighbour mask's order, and the 26
+    /// of them are the 3×3 directions of each face of the cube about the probe, so a read blends the four about a
+    /// receiver's direction (<c>SdfMeshIrradiance.PlaneVisibility</c>, <c>sdfMeshProbePlaneVisibility</c>).</summary>
+    public const int PlanesWord = 18;
     /// <summary>The word holding which neighbouring probes the probe's centre sees: bit <c>n</c> for the neighbour at
     /// offset <c>(x, y, z)</c>, each in -1, 0 and 1 and not all zero, where <c>n</c> is <c>9(x + 1) + 3(y + 1) + (z + 1)</c>
     /// less one past the origin's 13, so the neighbour at <c>25 - n</c> lies opposite.</summary>
-    public const int NeighboursWord = 20;
+    public const int NeighboursWord = 17;
     /// <summary>The share of the other answering probes' weight a probe about a point must see, across the lattice, to
     /// keep any of its own weight: its weight fades in from here to <see cref="MutualHigh"/>. A probe across a wall from
     /// the rest sees few of them and may hold light many times as bright, so it gives way entirely.</summary>
@@ -33,22 +34,20 @@ public static class SdfMeshIrradianceProbe {
     public const int LightsWord = 13;
     /// <summary>The words holding the light visibility bits: one bit a record of the lights table.</summary>
     public const int LightWords = 4;
-    /// <summary>The first of the three words holding the depth cube: how far, in metres, the probe sees along each axis
-    /// before the first geometry on that axis, an open ray counting the trace's reach, as six halves in the cube's
-    /// axis order. Rays beside the axis cannot extend its blocking depth.</summary>
-    public const int DepthWord = 17;
-    /// <summary>The distance, in metres, over which a probe's weight at a point fades to nothing as the point's distance
-    /// along an axis passes the probe's depth there: a probe across a wall or slab lights nothing beyond it. It is
-    /// thinner than the thinnest floor, so a probe under a floor finish lights nothing on the wall standing on
-    /// it.</summary>
+    /// <summary>The distance, in metres, over which a probe's weight at a point fades to nothing as the point passes
+    /// one of the probe's blocking planes: a probe across a wall or slab lights nothing beyond it. It is thinner than
+    /// the thinnest floor, so a probe under a floor finish lights nothing on the wall standing on it.</summary>
     public const float DepthFade = 0.04f;
     /// <summary>The key flag a written probe carries; a slot without it holds no probe.</summary>
     public const uint WrittenFlag = (1u << 30);
     /// <summary>The key flag of a probe inside geometry, which views never read.</summary>
     public const uint InvalidFlag = (1u << 31);
-    /// <summary>The share of a cell a shaded point is pushed along its surface normal before the probes about it are
-    /// read.</summary>
-    public const float NormalBias = 0.35f;
+    /// <summary>How far, in metres, a shaded point is pushed along its surface normal before the probes about it are
+    /// read and tested against their blocking planes: a little more than <see cref="DepthFade"/>, so a probe behind the
+    /// surface's own wall, whose plane the surface lies on, rejects the pushed point outright, and less than the
+    /// thinnest wall, so a surface facing a near wall never reads the room beyond it; it is metres, not a share of the
+    /// probe spacing, because the walls it must stay inside do not scale with the lattice.</summary>
+    public const float NormalBias = 0.05f;
     /// <summary>The share of a cell a probe may lie behind a shaded surface's plane and still light it. A probe farther
     /// behind lies past the wall or slab the surface belongs to, in a room that may be lit many times as brightly, and
     /// lights the surface only where no probe lies in front of it.</summary>

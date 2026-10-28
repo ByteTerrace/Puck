@@ -271,13 +271,21 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   visibility; a probe artefact (a band along a wall) shows in
   `world.debug-view indirect` apart from the direct light. The volume a view
   reads is filtered over the neighbours each probe sees
-  (`SdfMeshIrradiance.Filter`), and a probe lights only what lies within its
-  depth cube along one axis (`sdfMeshProbeDepthVisibility`): a leak through a
-  wall off the axes, or a storey the 2 m lattice straddles, is the lattice's
-  coarseness. The depth's fade (`SdfMeshIrradianceProbe.DepthFade`, metres)
-  stays thinner than the thinnest floor: a wall pixel where it meets a floor or
-  ceiling is pushed along the wall, level with that surface, and a softer fade
-  draws the far side's light along every junction as a bright line. Debug a
+  (`SdfMeshIrradiance.Filter`), and a probe lights only what lies on its side
+  of the first-hit planes of its 26 lattice rays, the four about the receiver's
+  direction blended (`sdfMeshProbePlaneVisibility`): a leak through a wall
+  none of those rays meets, or a storey the 2 m lattice straddles, is the
+  lattice's coarseness, and a soft dark patch beside a finite blocker is the
+  cone of the rays that hit it. A probe another gathered probe cannot see gives
+  way on the near side of that probe's plane toward it
+  (`sdfMeshProbeSeparate`): without it a probe just above a roof or beside a
+  doorway lights the room's upper walls in jagged patches through the rays
+  that cleared the edge. Never test a half-space (an axis depth), which
+  rejects every receiver beyond a plinth, and never push the receiver by a
+  share of the spacing: the push (`SdfMeshIrradianceProbe.NormalBias`) and the
+  planes' fade (`DepthFade`) are metres under the thinnest wall and floor,
+  since a wall pixel where it meets a floor is level with that surface and a
+  surface facing a near wall must not read the room beyond it. Debug a
   probe artefact by splitting the gather in a scratch edit of the `indirect`
   case in `debug/sdf-debug-views.hlsli` (each corner's share, or magenta where
   no probe answers) and `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in

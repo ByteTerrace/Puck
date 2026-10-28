@@ -38,12 +38,42 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The scheduler's separate saved-pose/input-capacity defect has a focused
   boundary test; it is not the established cause of this slow gallery boot.
   See [mesh baking](mesh-bake.md#groups-poses-and-materials).
-- A depth axis stores its first hit. Averaging it with rays that escape beside
-  a blocker, or choosing the farther distance, erases that blocker.
+- A direction's plane is its ray's first hit. Averaging it with rays that
+  escape beside a blocker, or choosing the farther hit, erases that blocker.
 - At the volume boundary, clamp the lookup to the boundary probes, then test
-  the **actual receiver position** against their depth limits. Clamping the
-  visibility test too extrapolates through walls. No answering probe means no
-  measured indirect light; an unwritten cell is not evidence of open sky.
+  the **receiver position** (pushed `NormalBias` metres off its surface, never
+  the clamped lookup) against their planes. Clamping the visibility test too
+  extrapolates through walls. No answering probe means no measured indirect
+  light; an unwritten cell is not evidence of open sky.
+- The push off the surface is metres, under the thinnest wall. A push that
+  scales with the probe spacing (0.35 of a 2 m cell) carries a surface facing a
+  near wall through it, and the room beyond lights the surface: white slivers
+  along a silhouette turned toward a wall, and the exterior's light as rims
+  on a body in every room.
+- Visibility is never a half-space. An axis depth that bounds a probe along a
+  whole axis rejects everything beyond a finite blocker on that one ray (a
+  plinth, a stair's nosing, an exhibit), and selecting one of the 26 planes by
+  nearest direction snaps between them at the half-component thresholds: a
+  plinth then casts hard-edged, lattice-aligned rectangles of darkness and the
+  floor around an exhibit's base goes black. The read blends the four planes
+  about the receiver's direction (`PlaneVisibility`,
+  `sdfMeshProbePlaneVisibility`); a wall every ray meets is still exact, and a
+  finite blocker darkens only its own directions.
+- A blended plane test alone leaks where a ray clears a blocker's edge: a
+  probe just above a thin roof whose horizontal rays graze past it, or beside a
+  doorway, admits the room's upper walls in jagged, plane-cut patches, and the
+  under-floor probe draws a sawtooth along the wall–floor junction. The
+  separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`) closes
+  it with the other probes' planes: where probe A cannot see probe B, A's plane
+  toward B is the blocker between them, and a receiver on A's side of it takes
+  nothing from B. It applies only by B's suspect share (`PlaneVisibility`'s
+  `suspect`): the blend of B's rays toward the receiver that reached open
+  space or went on more than a quarter of the spacing past it. A ray that met
+  the receiver's own surface saw it, so a stair flight between two probes
+  separates neither from the walls beside it (applied to every admission, the
+  rule blacked out the stairwell's level 3 flight), while a tall exhibit
+  between two probes still separates them over the floor beyond it (the
+  SPHERE step keeps a soft line along the exhibit's face plane).
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
@@ -78,19 +108,15 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - The depth fade stays thinner than the thinnest floor. A wall sample at a
   floor junction is level with the floor, so a broad fade admits the probe
   underneath and draws a bright line along the junction.
-- The 26 neighbour rays also retain their first hit planes. The receiver's
-  nearest lattice direction selects a plane, tested in addition to the six
-  axis depths. A probe diagonally outside a roof/wall corner can miss both
-  surfaces on every axis; the diagonal hit closes that hole. Plane distance,
-  rather than ray distance, keeps a flat blocker in the same place as the
-  receiver's direction changes. CPU and shader use the same selection.
-  Components halfway between directions select the diagonal, away from zero:
-  `NearestPlane` on the CPU and an explicit half threshold in HLSL. HLSL's
-  documented `round()` is ties-to-even, so it does not express that rule.
-  The record is 73 words (292 bytes), including 52 words of half-precision
-  planes. The existing neighbour rays now trace to the lighting reach and
-  their first hit also determines the neighbour mask; no second scene is built.
-- Axis depths, directional planes and neighbour visibility are coarse spatial support, not
+- The 26 neighbour rays retain their first hit planes, and the receiver's
+  direction blends the four about it (the 3×3 directions of the cube face it
+  lies toward, bilinear in the face's two minor components, which the CPU and
+  the shader arrange the same way). Plane distance, rather than ray distance,
+  keeps a flat blocker in the same place as the receiver's direction changes.
+  The record is 70 words (280 bytes), including 52 words of half-precision
+  planes. The neighbour rays trace to the lighting reach and their first hit
+  also determines the neighbour mask; no second scene is built.
+- Directional planes and neighbour visibility are coarse spatial support, not
   exact receiver visibility. Inspect corners and openings with
   `world.debug-view indirect`, separately from `ao` and `shadow`, and compare
   final shading and `world.exposure`. Check an outdoor view and move across
