@@ -347,7 +347,7 @@ public static class WorldPostBuildWiring {
                 (echo.Mutation?.Principal.Kind == PrincipalKind.Addon)
             );
             // A scoped replay's input acts as the seat that recorded it while no seat typed it: an applied one is
-            // narrated on stderr by the server and reaches no toast, console row or cue. Its refusals still do.
+            // not narrated by the server and reaches no toast, console row or cue. Its refusals still do.
             var scopedApplied = (
                 !echo.Rejected &&
                 (echo.ConnectionId == SubmissionEnvelope.ScopedReplayConnectionId)

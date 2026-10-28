@@ -174,8 +174,8 @@ rejection and on stdout for an acceptance.
 A scoped replay submits its timed inputs and recorded tape under
 `SubmissionEnvelope.ScopedReplayConnectionId`, so the `EchoTap` subscriber
 tells them from the seat's own submissions (which share the principal): an
-applied one is narrated on stderr and reaches no toast, console row or cue,
-while a refusal still does.
+applied one is neither narrated on stderr nor sent to a toast, console row
+or cue (`replay.scope` reads its progress), while a refusal still is.
 
 ## The link
 
