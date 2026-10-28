@@ -526,7 +526,7 @@ beside a skill that still says otherwise changes nothing.
 
 ## No bad loops
 
-Every lane and the lead follow four rules, so that a failure costs one retry and
+Every lane and the lead follow five rules, so that a failure costs one retry and
 not a spiral:
 
 - Retry a failing step (a build, test, boot, start, review or restart) once. If
@@ -537,6 +537,9 @@ not a spiral:
   pile with its owner and is not argued back and forth.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30
   minutes, saves its tree as a WIP commit, and hands the work to another lane.
+- When the review of a fix finds more instances of the class it fixed, the next
+  fix is structural: one check that holds the invariant everywhere and a test
+  over every case, not another path-by-path round.
 
 ## Rule on collisions
 
