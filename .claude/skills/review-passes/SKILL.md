@@ -16,13 +16,14 @@ overrides this skill and is written into it in that session.
 
 ## When a lane gets a review
 
-- A lane gets no review pass by default. Its implementer shows it working
-  ([landing bar](../verification/SKILL.md#the-landing-bar)) and the lead lands
-  it. A review never stands between finished code and its landing.
-- A review is a tool the lead may choose when a second reader pays for itself,
-  for example on a subtle determinism, persisted-format or federation change.
-  Cross-family is the usual choice: Codex reviews Claude-written code, a Claude
-  agent reviews Codex-written code.
+- An engine change gets an adversarial cross-family review by default, sized to
+  its risk; docs and world content get none or a scout's spot-check
+  ([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)).
+  Codex reviews Claude-written code and a Claude agent reviews Codex-written
+  code; Argon takes security, large-context and UI reviews.
+- The review runs while the author implements its next item, so it holds the
+  branch, never the author. The brief gives the reviewer the diff and the
+  author's claim, not the author's reasoning, and asks it to break the change.
 - Every pass is review-and-fix, never report-only. Both Codex models, Astra
   (`gpt-6-astra`) and Sol (`gpt-6.1-sol`), are free to use for a pass. The
   installed Codex plugin's result-handling guidance not to auto-apply a

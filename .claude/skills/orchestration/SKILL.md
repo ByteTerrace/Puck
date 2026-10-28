@@ -22,6 +22,38 @@ on it and put the best-fit partner there. Busy is not progress: never queue
 filler to make a partner look busy. Idleness is a prompt to re-read the path, not
 to create work.
 
+## Spend verification, not writing
+
+Writing is cheap and verifying is expensive: builds, boots, suites and GPU
+windows on one shared machine set the pace, so the work in flight is bounded by
+what the machine can verify. The owner's direction:
+
+- **Batch, including unrelated areas.** Several lanes work independent areas at
+  once, and the integration lane verifies them together in one sweep of the
+  debug world
+  ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)),
+  which also shows breakage in partner systems that a single-feature check
+  misses. Isolate a change only for a benchmark against a baseline, a
+  determinism or fixed-point change, or a regression hunt.
+- **Brief along the whole path a change travels**, not one system: the lane maps
+  the systems its change reaches (`puck references`, the owning skills) and
+  checks those partners before handing back.
+- **Review adversarially across families, concurrently.** A Claude author's
+  engine change is reviewed by Codex, a Codex author's by Claude, and Argon takes
+  security, large-context and UI reviews. The reviewer gets the diff and the
+  author's claim, not the author's reasoning, and tries to break it with a repro,
+  a counterexample or a missed caller. Review depth follows risk: determinism,
+  maths and renderer changes get an Astra- or `principal`-grade reviewer, ordinary
+  engine code Sol or `specialist`, docs and world content none or a scout's
+  spot-check. The author starts its next item when it hands back, and the reviewer
+  fixes what it finds on the author's branch (review-and-fix,
+  [`review-passes`](../review-passes/SKILL.md)); a review never holds the author.
+- **One integration lane, fed in batches.** It is the only heavy job on the
+  machine. It takes branches whose review findings each have a destination,
+  batches them by risk (low-risk work together, determinism and renderer work
+  alone or in pairs), runs the union of what the batch's changes declare they
+  affect, bisects a red batch, and fast-forwards the integration branch.
+
 ## Own tracks, not tasks
 
 Partners own tracks and outcomes. A brief gives the outcome and the
@@ -143,10 +175,10 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
 When several branches wait, the integration lane may verify them in one merged
 build, and splits the batch to find the culprit if it goes red. A finished
 branch is never held back for others to arrive. A lane that cannot land alone
-is a dependency to name in the brief. A wait for a
-review or a review slot never holds a lane that meets the landing bar, since a
-review is optional
-([`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review)). Gates,
+is a dependency to name in the brief. An engine change lands once its
+cross-family review's findings each have a destination
+([spend verification](#spend-verification-not-writing)); the review runs while
+its author works the next item, so it holds the branch, never the author. Gates,
 parity, canaries and counters checks run when the owner asks for a
 qualification, on the head the owner names. A red check on the integration
 branch is the next piece of work, not a reason to stop landing.
@@ -301,9 +333,9 @@ model on subtle or correctness-heavy work. Codex's two models, Astra
 (`gpt-6-astra`, the frontier model) and Sol (`gpt-6.1-sol`, the workhorse), are
 both free to use and encouraged, for implementation and for review-and-fix
 passes; pass `--model` and `--effort` on every launch
-([`review-passes`](../review-passes/SKILL.md#before-launching)). Keep every
-Codex slot implementing; a review is optional
-([`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review)).
+([`review-passes`](../review-passes/SKILL.md#before-launching)). Use Codex
+slots both to implement and to review Claude authors' changes
+([spend verification](#spend-verification-not-writing)).
 Delegating to subagents needs no one's permission. A follow-on wave much larger
 than the last (dozens of agents, or a second full fan-out) is a spend decision:
 state its plan and cost to the owner in one sentence before launching it.

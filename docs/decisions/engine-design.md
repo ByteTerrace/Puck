@@ -226,6 +226,30 @@ keep their verbs and wait, unrun, until the owner calls for qualification; the
 A quarantined world returns by being rewritten or re-admitted under the gate,
 never by building it in place.
 
+## The debug world is the engine's instrument
+
+The owner's ruling: the debug world exists so that agents can steward the whole
+engine, and it is also a world that is fun to play in. It is modelled so that
+one walkthrough visits every visual and every interaction, indoors and in the
+outdoor prototypes, and the replay system is shaped so that agents can drive
+and repeat that walkthrough. Its debug tools (the rate range for the LoD and
+rate tiers, the traversal course and the kinematics scope for position and
+measurement, the watchdog, the fuzzer and the traversal bot) are part of the
+instrument and are kept in working order like any other feature.
+
+So the engine is judged whole. A sweep of the debug world reads every signal
+the world produces (invariant violations, bot failures, the diagnostic
+reports, scoped-replay verdicts, budgets, counters, frame times, memory, bake
+and lighting stats, scenario verdicts and a capture tour at fixed poses) and
+compares it with the previous sweep. Agents find the defects a walkthrough
+shows before the owner does. Work is chosen from what the sweep shows red, and
+changes in unrelated areas are batched on purpose, because one sweep verifies
+them all and shows breakage in a partner system that a single-feature check
+misses. A feature lands with a signal the sweep reads: chess, the portals and
+typed input are the pattern, and a diegetic keyboard is planned. Changes are
+isolated only where attribution is the point: a benchmark measured against a
+baseline, a determinism or fixed-point change, and a regression hunt.
+
 ## A portal is a plane a body passes through
 
 A door fires when the body's origin passes through its glass, from the side the
