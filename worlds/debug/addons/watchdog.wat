@@ -6,8 +6,8 @@
 ;;                           catches a body at y = -40, long after it fell through);
 ;;   unnormalised-orientation a body whose orientation quaternion is more than 1/64 away from unit length;
 ;;   piece-overlap           a collision begin between two chess pieces (bodies 8 to 39), which rest apart;
-;;   companion-overlap       a collision begin between the Moth (body 0) and the companion (body 42), which keeps 2 m
-;;                           away from her.
+;;   companion-overlap       a collision begin between the Moth (body 0) and the companion (body 42), whose flight
+;;                           keeps clear of her capsule (companion.wat).
 ;; The host discloses an Observe handle for every body watchdog.puck grants. The guest queries the pose of every body
 ;; in one BodyPoses bulk read every tick. Collision
 ;; begins arrive as events on the same grants. A pose answer and an event in the batch of tick T describe the tick that

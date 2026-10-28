@@ -293,6 +293,56 @@
     (drop (call $emit (i32.const 1) (i32.const 1) (i32.const 0) (i32.const 0) (i32.const 5)
       (i64.const 0x6040) (i64.const 5) (i64.const 0))))
 
+  ;; A straight leg toward a goal must not cross the Moth's capsule: the clearance below acts only within 0.75 m, too
+  ;; late to turn a flight at speed. When the leg from our point to (gx, gz) passes within 1 m of her axis while we fly
+  ;; at her height, the goal becomes a point on that circle: 45 degrees round from our bearing, on the goal's side,
+  ;; or the near point when the goal itself lies inside it. Re-chosen every tick, the detour orbits her until clear.
+  (global $skirted (mut i32) (i32.const 0))
+  (global $skirtX (mut i64) (i64.const 0))
+  (global $skirtZ (mut i64) (i64.const 0))
+  (func $skirt (param $gx i64) (param $gz i64)
+    (local $px i64) (local $pz i64) (local $dx i64) (local $dz i64) (local $pd i64) (local $dd i64)
+    (local $pp i64) (local $near i64) (local $length i64) (local $ux i64) (local $uz i64) (local $side i64)
+    (global.set $skirted (i32.const 0))
+    (if (i64.ge_s (call $abs (i64.sub (global.get $selfY) (i64.add (global.get $mothY) (i64.const 65536))))
+        (i64.const 78643)) (then (return)))
+    (local.set $px (i64.sub (global.get $selfX) (global.get $mothX)))
+    (local.set $pz (i64.sub (global.get $selfZ) (global.get $mothZ)))
+    (local.set $pp (i64.add (call $mul (local.get $px) (local.get $px)) (call $mul (local.get $pz) (local.get $pz))))
+    ;; Inside the circle the capsule clearance below owns the escape.
+    (if (i64.le_s (local.get $pp) (i64.const 65536)) (then (return)))
+    (local.set $dx (i64.sub (local.get $gx) (global.get $selfX)))
+    (local.set $dz (i64.sub (local.get $gz) (global.get $selfZ)))
+    (local.set $pd (i64.add (call $mul (local.get $px) (local.get $dx)) (call $mul (local.get $pz) (local.get $dz))))
+    (if (i64.ge_s (local.get $pd) (i64.const 0)) (then (return)))
+    (local.set $dd (i64.add (call $mul (local.get $dx) (local.get $dx)) (call $mul (local.get $dz) (local.get $dz))))
+    ;; A leg longer than 64 m is a crossing to somewhere else; the guard takes it up as it nears her.
+    (if (i32.or (i64.le_s (local.get $dd) (i64.const 0)) (i64.gt_s (local.get $dd) (i64.const 0x10000000))) (then (return)))
+    (local.set $length (call $isqrt (i64.add (i64.mul (local.get $px) (local.get $px)) (i64.mul (local.get $pz) (local.get $pz)))))
+    (local.set $ux (i64.div_s (i64.shl (local.get $px) (i64.const 16)) (local.get $length)))
+    (local.set $uz (i64.div_s (i64.shl (local.get $pz) (i64.const 16)) (local.get $length)))
+    (if (i64.ge_s (i64.sub (i64.const 0) (local.get $pd)) (local.get $dd))
+      (then
+        ;; The goal is the leg's nearest point to her: skirt only when it lies inside the circle.
+        (local.set $near (i64.add
+          (call $mul (i64.sub (local.get $gx) (global.get $mothX)) (i64.sub (local.get $gx) (global.get $mothX)))
+          (call $mul (i64.sub (local.get $gz) (global.get $mothZ)) (i64.sub (local.get $gz) (global.get $mothZ)))))
+        (if (i64.ge_s (local.get $near) (i64.const 65536)) (then (return)))
+        (global.set $skirtX (i64.add (global.get $mothX) (local.get $ux)))
+        (global.set $skirtZ (i64.add (global.get $mothZ) (local.get $uz))))
+      (else
+        (local.set $near (i64.sub (local.get $pp) (i64.div_s (i64.mul (local.get $pd) (local.get $pd)) (local.get $dd))))
+        (if (i64.ge_s (local.get $near) (i64.const 65536)) (then (return)))
+        ;; The perpendicular of our bearing on the side the leg turns to, then halfway between them on the circle.
+        (local.set $side (i64.const 1))
+        (if (i64.lt_s (i64.sub (call $mul (local.get $px) (local.get $dz)) (call $mul (local.get $pz) (local.get $dx))) (i64.const 0))
+          (then (local.set $side (i64.const -1))))
+        (global.set $skirtX (i64.add (global.get $mothX) (call $mul (i64.const 46341)
+          (i64.sub (local.get $ux) (i64.mul (local.get $side) (local.get $uz))))))
+        (global.set $skirtZ (i64.add (global.get $mothZ) (call $mul (i64.const 46341)
+          (i64.add (local.get $uz) (i64.mul (local.get $side) (local.get $ux))))))))
+    (global.set $skirted (i32.const 1)))
+
   (func $steer
     (local $dx i64) (local $dy i64) (local $dz i64) (local $gx i64) (local $gy i64) (local $gz i64)
     (local $distance i64) (local $length i64) (local $at i32) (local $fx i64) (local $fz i64)
@@ -440,6 +490,8 @@
     (if (i32.and (i64.gt_u (global.get $verticalEnd) (global.get $tick))
           (i64.lt_s (local.get $distance) (i64.const 163840))) (then
       (local.set $gy (i64.add (global.get $mothY) (i64.const 98304)))))
+    (call $skirt (local.get $gx) (local.get $gz))
+    (if (global.get $skirted) (then (local.set $gx (global.get $skirtX)) (local.set $gz (global.get $skirtZ))))
     ;; Keep clear of the Moth's whole occupied capsule, including during an evasion or vertical ride. A centre
     ;; sampled at torso height alone does not protect the ends of a tall body while a platform moves it.
     (if (i32.and (i64.lt_s (local.get $distance) (i64.const 49152))
