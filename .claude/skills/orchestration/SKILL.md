@@ -154,6 +154,9 @@ head. "What the merge touched" includes what consumes it:
 
 The sweep is the batch's proof: the whole debug world, every signal compared with
 the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+`puck sweep --tour --baseline <previous report.json>` runs it under the GPU lease
+(or `--attach` names a World `puck_world_start` started) and writes the report
+and contact sheets ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 The full debug-world replay (every test world, about 45 minutes) is the
 integration lane's next heavy job after a batch lands, never beside another heavy
 job and never a condition of a landing (the owner's ruling: "The whole idea was

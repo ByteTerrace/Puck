@@ -130,6 +130,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
+| [`puck sweep`](#puck-sweepthe-debug-worlds-sweep) | the debug world's sweep: drives its tools for a bounded span, reads every signal its plan (`worlds/debug/sweep.json`) names on a headless World, and with `--tour` (or `--attach`) the rendered signals and a capture tour on a windowed one, and writes a `puck.sweep.v1` report with contact sheets that `--baseline` compares with. |
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's SPIR-V to another and compare it byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck verbs`](#puck-verbsconsole-verb-catalog) | the console verb catalog `src/Puck.World.Vocabulary/Assets/puck.console.verbs.json`, every verb any boot shape registers, read from a headless and a windowed World's `world.affordances` and checked against them; authored commands are validated against it. |
@@ -2384,6 +2385,71 @@ differences.
 Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a
 blocked camera, a body in the wrong form or a failed reproduction, 2 a refusal
 (a scenario file that does not parse, a build, or a World that did not complete).
+
+---
+
+## `puck sweep`—the debug world's sweep
+
+`puck sweep` reads every signal the debug world produces and writes one report
+that a later sweep compares with
+([the instrument decision](../decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+It drives each World through its Operator attachment, so every line it sends is
+an existing console verb or an authored `commands` row, and every answer is
+that line's own. The plan, `worlds/debug/sweep.json`, names what runs; add a
+signal or a stop by editing it.
+
+```text
+puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir>]
+           [--no-headless] [--stop <name>...] [--scenarios <file>...] [--plan <file>]
+```
+
+- **The headless leg** boots the world headless and unpaced, with no device and
+  a state directory of its own, so it uses no GPU and runs beside a GPU job. It
+  runs each tool for its bounded span (the fuzzer's 300 seeded steps, the
+  traversal bot's studio and gallery passes, the chess table's scoped replay),
+  then reads the signals: the watchdog, the tools' records, `replay.scope`,
+  `world.rule.failures`, both `world.debug-view report … --json` reports,
+  `world.budget`, narrowed `world.counters`, `world.addons`, `host.frames` and
+  `host.memory collect`.
+- **The windowed leg** (`--tour`) boots a windowed World under the GPU lease,
+  or drives the running World `--attach` names (a process id, attachment id or
+  attachment file; a World `puck_world_start` started, say). It waits for the
+  renderer and the bakes, reads the rendered signals (the bake and mesh-GI
+  counters, `world.indirect`, GPU counters, `host.frames` standing and walking,
+  memory), then takes the tour: each stop runs the tour's reset lines and its
+  own, waits its settle ticks and the bakes, and takes a settled capture. The
+  stops cover every area indoors and out, a jump, flight and noclip, and the
+  owner's walkthrough findings at their poses. `--stop` runs only the named
+  stops, which suits tuning a pose on a World left running.
+- **Scenarios** run only when `--scenarios` names test files (through this
+  CLI's `puck test … --jobs 1`); the whole `worlds/debug/*-tests.puck` set boots
+  the world once per scenario, so a default sweep reports it as unrun.
+
+Each signal is red when a red rule of the plan holds or its line was refused,
+amber when an amber rule holds, and clean otherwise; a tool is amber when it
+did not finish within its ticks. A rule reads `<metric> <op> <value>`, with
+`==`, `!=`, `>`, `>=`, `<`, `<=` and `~` (contains), and a value that names
+another metric compares with it. A parser turns each answer into metrics:
+`cells` (`world.state`), `counters`, `frames` (`host.frames`), `pairs`
+(`key=value` numbers), `report` (the diagnostic reports' findings by severity,
+coverage and comparisons), `words` (`replay.scope`) and `text`, plus any
+regular expressions the signal names.
+
+The output directory holds `report.json` (`puck.sweep.v1`: every signal with
+its colour, reasons, metrics and answer file, every tool, still and sheet), the
+answers under `headless/` and `windowed/`, and the stills and contact sheets
+under `tour/`, one `sheet-<group>.png` per group (findings, indoor, outdoor,
+motion). With `--baseline <previous report.json>` each signal lists what
+changed under the plan's compare mode for each metric (`exact`,
+`relative:<fraction>` or `none`), and each still its changed-pixel fraction: a
+pixel counts as changed when a colour channel differs by more than the tour's
+`levelTolerance` (16 levels), and a still whose fraction exceeds
+`amberFraction` (2%) is amber; a `compare-<group>.png` sheet then sets each
+baseline still above its current one. The report is a derived product: keep it
+outside the repository.
+
+Exit codes: 0 nothing red, 1 something red, 2 a refusal (a plan, a baseline, a
+build or a World that did not boot).
 
 ---
 
