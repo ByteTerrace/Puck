@@ -61,6 +61,7 @@ The shared pile a cross-family review's findings go to ([orchestration](../../.c
 
 Flagged by the owner while playing the debug world and reproduced by the lead. Poses are `body.pose <x> <y> <z> <yaw> 0 0`; overlays are `world.debug-view <mode>`.
 
+- [ ] `debug.go <place>` from inside another instance (the garden, the night field) is refused, because `body.pose spawn:` looks the place up in the instance she stands in. `places.puck` promises one line reaches any feature from anywhere, so `debug.go` takes her home to the debug world first and then poses her (the lead's ruling, from the sweep-reds lane).
 - [ ] Indirect light fails around walls, junctions and exhibits. Every case shows in `world.debug-view indirect` and none in `normals`, `material-id` or `ao`:
   - Surfaces facing a near wall take bright light (white slivers along the Moth's wall-side silhouette at `10.67 2.32 39.33 156`, and the gold rims she shows in every interior room).
   - A bright line runs along wall–floor junctions.
