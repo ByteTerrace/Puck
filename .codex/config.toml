@@ -39,3 +39,8 @@ startup_timeout_sec = 600
 # A world.reload or a capture can outlast two minutes; the same operation budget as Antigravity's.
 tool_timeout_sec = 600
 enabled = true
+
+# OpenAI's read-only documentation server (developers.openai.com, platform.openai.com, learn.chatgpt.com), the
+# owner's approval: Codex answers questions about Codex itself from its manual.
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
