@@ -81,12 +81,13 @@ internal sealed partial class WorldViewCommandModule {
             }
             session.HoldWhile(
                 hold: () => {
-                    // The answer is taken as soon as it lands, before a later hover request can replace the result.
-                    if ((answer is null) && (picker.Result is { } landed) && (landed.Request == request)) { answer = landed; }
+                    // The picker keeps this request's answer apart from the hover's result until it is taken here.
+                    answer ??= picker.TakeAnswer(request: request);
 
                     return ((answer is null) && (picker.RequestIdentity == request) && picker.Awaiting);
                 },
                 released: deadlinePassed => {
+                    answer ??= picker.TakeAnswer(request: request);
                     if (answer is { } landed) {
                         return new CommandResult(Output: Answer(instance: instance, result: landed));
                     }

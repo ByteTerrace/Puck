@@ -31,7 +31,7 @@ public static partial class SweepCommand {
         var scenariosOption = new Option<string[]>(name: "--scenarios") { AllowMultipleArgumentsPerToken = true, Description = "Run these test files with puck test --jobs 1 and read their verdicts; none when omitted." };
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
-        var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 40, Description = "The most minutes the whole run may take, a build excepted." };
+        var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 40, Description = "The most minutes the whole run may take, a build excepted: every World call, boot, lease wait and scenario process is bounded by what remains." };
         var command = new Command(
             description: "Sweep the debug world: run its tools, read every signal, take the capture tour, and write a report a later sweep compares with.",
             name: Verb
@@ -60,12 +60,20 @@ public static partial class SweepCommand {
             --baseline names a previous report.json: each signal then lists what changed by the plan's compare modes,
             and each still its changed-pixel fraction beyond the tour's level tolerance.
 
-            Exit codes: 0 nothing red, 1 something red, 2 a refusal (a plan, a build or a World that did not boot).
+            Silence is never success: a signal the sweep could not measure (the attachment closed, the time passed, an
+            answer lacking a metric a rule reads, a tool that did not finish) is reported unmeasured and fails the run
+            like a red one. --timeout bounds the whole sweep, an attached World and the scenarios included, and an
+            interrupt ends it the same way; the Worlds, the GPU lease and the processes the sweep started are released
+            on every exit path.
+
+            Exit codes: 0 nothing red or unmeasured, 1 something red or unmeasured, 2 a refusal (a plan, a build, a
+            baseline folder used as --output, or a World that did not boot), 130 an interrupt.
             """);
-        command.SetAction(action: parseResult => Run(
+        command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
             artifact: parseResult.GetValue(option: artifactOption),
             attach: parseResult.GetValue(option: attachOption),
             baselinePath: parseResult.GetValue(option: baselineOption),
+            cancellation: cancellationToken,
             noHeadless: parseResult.GetValue(option: noHeadlessOption),
             output: parseResult.GetValue(option: outputOption),
             planPath: parseResult.GetValue(option: planOption),
@@ -74,12 +82,12 @@ public static partial class SweepCommand {
             timeoutMinutes: parseResult.GetValue(option: timeoutOption),
             tour: parseResult.GetValue(option: tourOption),
             worldPath: parseResult.GetValue(option: worldOption)
-        ));
+        )));
 
         return command;
     }
 
-    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, string[] stops, string[] scenarios, string? worldPath, string? artifact, int timeoutMinutes) {
+    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, string[] stops, string[] scenarios, string? worldPath, string? artifact, int timeoutMinutes, CancellationToken cancellation) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -108,9 +116,15 @@ public static partial class SweepCommand {
         var windowed = (tour || (attach is not null));
         var directory = Path.GetFullPath(path: (output ?? RunDirectory.CreatePath(prefix: "puck-sweep-")));
         var world = Path.GetFullPath(path: (worldPath ?? Path.Combine(path1: repositoryRoot, path2: DefaultWorld)));
+
+        // The baseline's answers and stills are read while this run writes its own beside them: one folder for both
+        // would replace the baseline before it is compared.
+        if ((baseline is not null) && SamePath(left: Path.GetDirectoryName(path: baseline.Path)!, right: directory)) {
+            return CliExit.Refuse(verb: Verb, what: "--output", why: $"{CliPaths.ToDisplay(fullPath: directory)} holds the --baseline report, and this run would overwrite its answers and stills before comparing them; name another directory");
+        }
+
         var started = DateTimeOffset.UtcNow;
         var clock = Stopwatch.StartNew();
-        var deadline = TimeSpan.FromMinutes(value: timeoutMinutes);
         var legs = new List<SweepLegResult>();
         var tools = new List<SweepToolResult>();
         var signals = new List<SweepSignalResult>();
@@ -131,6 +145,12 @@ public static partial class SweepCommand {
             build = lease;
         }
 
+        // The whole sweep, a build excepted, is bounded by one budget, and an interrupt ends it the same way: every
+        // wait of a World, a lease or a scenario honours it, and the Worlds, leases and processes below are released by
+        // the scopes that own them, in order.
+        using var budget = new SweepBudget(caller: cancellation, total: TimeSpan.FromMinutes(value: timeoutMinutes));
+        var deadline = TimeSpan.FromMinutes(value: timeoutMinutes);
+
         using (build) {
             if (!noHeadless) {
                 var logs = Path.Combine(path1: directory, path2: SweepLegs.Headless);
@@ -139,6 +159,7 @@ public static partial class SweepCommand {
                     arguments: Arguments(deadline: deadline, extra: ["--headless", "true", "--unpaced", "true"], state: Path.Combine(path1: logs, path2: "state"), world: world),
                     artifact: entry!,
                     bootTimeout: TimeSpan.FromMinutes(value: 5),
+                    budget: budget,
                     error: out var bootError,
                     lease: null,
                     logDirectory: logs,
@@ -159,28 +180,40 @@ public static partial class SweepCommand {
             }
 
             if (windowed) {
-                SweepWorld? rendered;
+                SweepWorld? rendered = null;
                 string? logs = null;
 
                 if (attach is not null) {
-                    if (!SweepWorld.TryAttach(error: out var attachError, session: out rendered, world: attach)) {
+                    if (!SweepWorld.TryAttach(budget: budget, error: out var attachError, session: out rendered, world: attach)) {
                         return CliExit.Refuse(verb: Verb, what: $"--attach {attach}", why: attachError);
                     }
+                } else if (budget.Reason is { } over) {
+                    signals.Add(item: WindowedNotRun(reason: over));
                 } else {
                     logs = Path.Combine(path1: directory, path2: SweepLegs.Windowed);
 
-                    var gpu = CliLease.AcquireAsync(
-                        clock: TimeProvider.System,
-                        holder: Verb,
-                        name: "gpu",
-                        root: CliLease.RootAsync(checkout: repositoryRoot).GetAwaiter().GetResult(),
-                        wait: TimeSpan.FromMinutes(value: 20)
-                    ).GetAwaiter().GetResult();
+                    var arguments = Arguments(deadline: deadline, extra: ["--headless", "false"], state: Path.Combine(path1: logs, path2: "state"), world: world);
+                    CliLease? gpu = null;
 
-                    if (!SweepWorld.TryBoot(
-                        arguments: Arguments(deadline: deadline, extra: ["--headless", "false"], state: Path.Combine(path1: logs, path2: "state"), world: world),
+                    try {
+                        gpu = CliLease.AcquireAsync(
+                            cancellationToken: budget.Token,
+                            clock: TimeProvider.System,
+                            holder: Verb,
+                            name: "gpu",
+                            root: CliLease.RootAsync(cancellationToken: budget.Token, checkout: repositoryRoot).GetAwaiter().GetResult(),
+                            wait: budget.Bound(wait: TimeSpan.FromMinutes(value: 20))
+                        ).GetAwaiter().GetResult();
+                    } catch (Exception exception) when (exception is TimeoutException or OperationCanceledException) {
+                        signals.Add(item: WindowedNotRun(reason: $"the GPU lease was not acquired: {exception.Message}"));
+                    }
+
+                    // The boot owns the lease from here: it releases it on every path that returns no World or throws.
+                    if ((gpu is not null) && !SweepWorld.TryBoot(
+                        arguments: arguments,
                         artifact: entry!,
                         bootTimeout: TimeSpan.FromMinutes(value: 5),
+                        budget: budget,
                         error: out var bootError,
                         lease: gpu,
                         logDirectory: logs,
@@ -191,7 +224,9 @@ public static partial class SweepCommand {
                     }
                 }
 
-                using (var shown = rendered!) {
+                if (rendered is not null) {
+                    using var shown = rendered;
+
                     if (shown.Leg != SweepLegs.Windowed) {
                         return CliExit.Refuse(verb: Verb, what: $"World {shown.ProcessId.ToString(provider: CultureInfo.InvariantCulture)}", why: "it composes no renderer, so it cannot take the tour");
                     }
@@ -199,9 +234,14 @@ public static partial class SweepCommand {
                     var run = new SweepRun(baseline: baseline, directory: directory, plan: plan, progress: Console.Error, world: shown);
 
                     Console.Error.WriteLine(value: $"{Verb}: windowed World {shown.ProcessId.ToString(provider: CultureInfo.InvariantCulture)} attached");
-                    run.Settle(deadline: TimeSpan.FromMinutes(value: 10));
+
+                    if (run.Settle(deadline: TimeSpan.FromMinutes(value: 10)) is { } unsettled) {
+                        signals.Add(item: unsettled);
+                    }
+
                     signals.AddRange(collection: run.Signals());
                     tourResult = run.Tour(names: stops);
+                    signals.AddRange(collection: run.Recheck());
                     legs.Add(item: new SweepLegResult(Booted: shown.Owned, Leg: SweepLegs.Windowed, Logs: ((logs is null) ? null : CliPaths.ToDisplay(fullPath: logs)), Notes: run.Notes, ProcessId: shown.ProcessId));
                 }
             }
@@ -211,7 +251,7 @@ public static partial class SweepCommand {
             Baseline: baseline?.Path.Replace(newChar: '/', oldChar: '\\'),
             Commit: (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var commit, revision: "HEAD") ? commit : "unknown"),
             Legs: legs,
-            Scenarios: Scenarios(directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
+            Scenarios: Scenarios(budget: budget, directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
             Schema: SweepReport.SchemaName,
             Seconds: clock.Elapsed.TotalSeconds,
             Signals: signals,
@@ -226,8 +266,16 @@ public static partial class SweepCommand {
         Console.Out.Write(value: report.Summary());
         Console.Out.WriteLine(value: $"{Verb}: report {CliPaths.ToDisplay(fullPath: reportFile)}");
 
-        return ((report.Status == SweepStatus.Red) ? CliExit.Failed : CliExit.Success);
+        if (cancellation.IsCancellationRequested) {
+            return CliExit.Cancelled;
+        }
+
+        // Red, and whatever the sweep could not measure, fails the run: a run that read nothing is not a clean one.
+        return (report.Failed ? CliExit.Failed : CliExit.Success);
     }
+
+    private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
+    private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
 
     private static List<string> Arguments(string world, string state, TimeSpan deadline, IReadOnlyList<string> extra) => [
         "--world", world,
@@ -238,11 +286,14 @@ public static partial class SweepCommand {
     ];
     // Each file through this CLI's own puck test, one worker at a time, read from its "test <name>:" and
     // "<passed>/<total> verdict(s) passed" lines and its exit code.
-    private static SweepScenarioResult Scenarios(string directory, string[] files, string repositoryRoot) {
+    private static SweepScenarioResult Scenarios(SweepBudget budget, string directory, string[] files, string repositoryRoot) {
         var command = $"puck test {((files.Length == 0) ? "worlds/debug/*-tests.puck" : string.Join(separator: " ", values: files))} --jobs 1";
 
         if (files.Length == 0) {
-            return new SweepScenarioResult(Command: command, Reasons: ["not run: the whole set boots the world once per scenario (pass --scenarios to run files)"], Status: SweepStatus.Unknown, Worlds: new Dictionary<string, string>());
+            return new SweepScenarioResult(Command: command, Reasons: ["not run: the whole set boots the world once per scenario (pass --scenarios to run files)"], Status: SweepStatus.Skipped, Worlds: new Dictionary<string, string>());
+        }
+        if (budget.Reason is { } over) {
+            return new SweepScenarioResult(Command: command, Reasons: [$"not run: {over}"], Status: SweepStatus.Unknown, Worlds: new Dictionary<string, string>());
         }
 
         var startInfo = new ProcessStartInfo {
@@ -265,10 +316,19 @@ public static partial class SweepCommand {
 
         using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
         var error = process.StandardError.ReadToEndAsync();
-        var stdout = process.StandardOutput.ReadToEnd();
+        var output = process.StandardOutput.ReadToEndAsync();
+        string? unfinished = null;
 
-        process.WaitForExit();
+        // The run ends with the sweep's time, and takes its process tree with it.
+        try {
+            process.WaitForExitAsync(cancellationToken: budget.Token).GetAwaiter().GetResult();
+        } catch (OperationCanceledException) {
+            unfinished = $"puck test did not finish: {budget.Reason}";
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+        }
 
+        var stdout = output.GetAwaiter().GetResult();
         var stderr = error.GetAwaiter().GetResult();
 
         File.WriteAllText(contents: (stdout + stderr), path: Path.Combine(path1: directory, path2: "scenarios.txt"));
@@ -297,11 +357,23 @@ public static partial class SweepCommand {
             }
         }
 
-        if ((process.ExitCode != 0) && (reasons.Count == 0)) {
-            reasons.Add(item: $"puck test exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}; see scenarios.txt");
+        var status = SweepStatus.Clean;
+
+        if (unfinished is not null) {
+            reasons.Add(item: unfinished);
+            status = SweepStatus.Unknown;
+        } else if (process.ExitCode != 0) {
+            status = SweepStatus.Red;
+
+            if (reasons.Count == 0) {
+                reasons.Add(item: $"puck test exited {process.ExitCode.ToString(provider: CultureInfo.InvariantCulture)}; see scenarios.txt");
+            }
+        } else if (worlds.Count == 0) {
+            reasons.Add(item: "puck test exited 0 but printed no verdict; see scenarios.txt");
+            status = SweepStatus.Unknown;
         }
 
-        return new SweepScenarioResult(Command: command, Reasons: reasons, Status: ((process.ExitCode == 0) ? SweepStatus.Clean : SweepStatus.Red), Worlds: worlds);
+        return new SweepScenarioResult(Command: command, Reasons: reasons, Status: status, Worlds: worlds);
     }
 
     [GeneratedRegex(pattern: @"^test (?<name>[^:]+):", options: RegexOptions.CultureInvariant)]

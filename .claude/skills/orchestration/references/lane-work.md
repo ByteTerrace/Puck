@@ -34,8 +34,9 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
 - Every commit carries the checkout's configured git identity, whoever made it.
   Establish a commit's origin from `git reflog` and by diffing it against what
   the remote already holds, never from its author line.
-- Pushing `main`, force-pushing, and deleting a remote branch are the owner's:
-  ask first.
+- Pushing `main`, force-pushing, and deleting a remote branch that holds
+  unmerged work are the owner's: ask first. The lead deletes a remote branch
+  whose work has landed on the integration branch.
 - The lead deletes a local branch only once `git cherry` shows its work landed and no
   worktree holds it.
 
@@ -87,7 +88,7 @@ When you are the delegate:
 When a step needs no input from the owner, keep going, and put status notes in
 the message that carries the next action. Stop and ask only when the work
 cannot continue without the owner, or before an owner-only action: pushing
-`main`, force-pushing or deleting a remote branch (the branch rules above),
+`main`, force-pushing or deleting a remote branch that holds unmerged work (the branch rules above),
 deploying to Azure, publishing a package, or changing or deleting anything
 outside this repository. Refactoring, deleting inside the repository, and
 changing tests, gates and CI need no one's permission.

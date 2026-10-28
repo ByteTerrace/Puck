@@ -1,10 +1,13 @@
 using System.Globalization;
+using System.Text.Json;
 
 using Puck.Cli.Motion;
 
 namespace Puck.Cli.Sweep;
 
-/// <summary>Runs a plan's tools, signals and tour on one World and collects what each showed.</summary>
+/// <summary>Runs a plan's tools, signals and tour on one World and collects what each showed. Silence is never
+/// success: a read the World did not answer, a metric a rule reads that the answer lacks, and a tool or stop the sweep
+/// could not reach are each reported as unmeasured or red, never clean.</summary>
 /// <param name="plan">The plan.</param>
 /// <param name="world">The World.</param>
 /// <param name="directory">The report's directory; answers, stills and sheets are written beneath it.</param>
@@ -14,49 +17,78 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     // A wait over the attachment is bounded by its 120-second call ceiling, so longer waits repeat.
     private const int WaitSeconds = 110;
     private const int MaximumTextMetric = 2048;
+    // The ticks between the tick a stop's lines and bakes settled at and the start of its pinned timeline: the room a
+    // call needs to arm the timeline and the capture before the World reaches them.
+    private const int LeadTicks = 30;
+    // The suffix of a failure signal read again after the tour.
+    private const string RecheckSuffix = ".after-tour";
 
     /// <summary>Gets what the leg noticed outside any signal.</summary>
     public List<string> Notes { get; } = [];
 
     /// <summary>Waits until a windowed World's renderer is ready and its bakes have settled.</summary>
     /// <param name="deadline">The longest wait.</param>
-    public void Settle(TimeSpan deadline) {
+    /// <returns><see langword="null"/> when the World settled; otherwise a red signal named <c>settle</c> that says
+    /// why it did not: the attachment closed, the sweep's time passed, the World refused the wait, or it was not
+    /// ready within the deadline.</returns>
+    public SweepSignalResult? Settle(TimeSpan deadline) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
+        string? failure = null;
 
         foreach (var form in new[] { "ready", "bakes" }) {
-            while (true) {
+            while (failure is null) {
                 var answer = world.Run(script: $"world.wait {form} {WaitSeconds.ToString(provider: CultureInfo.InvariantCulture)}", timeoutSeconds: (WaitSeconds + 5));
 
-                if (answer.Ok && !answer.Output.Contains(comparisonType: StringComparison.Ordinal, value: "not settled") && !answer.Output.Contains(comparisonType: StringComparison.Ordinal, value: "not ready")) {
+                if (answer.Ok) {
                     break;
                 }
-                if (clock.Elapsed > deadline) {
-                    Notes.Add(item: $"world.wait {form}: still waiting after {deadline.TotalMinutes:0} minutes: {answer.Output}");
 
-                    break;
+                var unsettled = (answer.Output.Contains(comparisonType: StringComparison.Ordinal, value: "not settled") || answer.Output.Contains(comparisonType: StringComparison.Ordinal, value: "not ready"));
+
+                if (!unsettled || world.Gone || world.Budget.Expired) {
+                    failure = $"world.wait {form}: {answer.Output}";
+                } else if (clock.Elapsed > deadline) {
+                    failure = $"world.wait {form}: still waiting after {deadline.TotalMinutes:0.##} minutes: {answer.Output}";
                 }
             }
         }
 
-        progress.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"sweep: {world.Leg} World {world.ProcessId} settled in {clock.Elapsed.TotalSeconds:0} s"));
+        progress.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"sweep: {world.Leg} World {world.ProcessId} {((failure is null) ? "settled" : "did not settle")} in {clock.Elapsed.TotalSeconds:0} s"));
+
+        return ((failure is null)
+            ? null
+            : new SweepSignalResult(Changes: [], File: string.Empty, Leg: world.Leg, Line: "world.wait ready, world.wait bakes", Metrics: new Dictionary<string, string>(), Name: "settle", Reasons: [failure], Status: SweepStatus.Red));
     }
-    /// <summary>Runs every tool for its bounded span.</summary>
+    /// <summary>Runs every tool for its bounded span. The World is paused first and stepped only inside the calls
+    /// that wait for ticks, and stays paused after, so every tool starts and ends on ticks the plan fixes and every
+    /// signal that follows reads one tick.</summary>
     /// <returns>Each tool's result.</returns>
     public IReadOnlyList<SweepToolResult> Tools() {
         var results = new List<SweepToolResult>();
+        var held = world.Run(script: "world.rate pause");
+
+        if (!held.Ok) {
+            Notes.Add(item: $"the World was not paused before the tools: {string.Join(separator: "; ", values: held.Refusals)}");
+        }
 
         foreach (var tool in plan.Tools) {
             var reasons = new List<string>();
             var status = SweepStatus.Clean;
             var ticks = 0;
 
-            foreach (var line in (tool.Lines ?? [])) {
-                var answer = world.Run(script: line);
+            if (Stopped() is { } stopped) {
+                results.Add(item: new SweepToolResult(Name: tool.Name, Reasons: [$"not run: {stopped}"], Status: SweepStatus.Unknown, Ticks: 0));
 
-                if (!answer.Ok) {
-                    reasons.AddRange(collection: answer.Refusals);
-                    status = SweepStatus.Red;
-                }
+                continue;
+            }
+
+            // The World is held paused between calls and runs only inside them, so the same plan takes the same ticks
+            // however long the coordinator takes between calls.
+            var begun = world.Run(script: string.Join(separator: '\n', values: ["world.rate resume", .. (tool.Lines ?? []), "world.wait 2", "world.rate pause"]), timeoutSeconds: 120);
+
+            if (!begun.Ok) {
+                reasons.AddRange(collection: begun.Refusals);
+                status = SweepStatus.Red;
             }
 
             if (tool.Until is { } until) {
@@ -80,12 +112,20 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                     }
                     if (ticks >= tool.MaxTicks) {
                         reasons.Add(item: string.Create(provider: CultureInfo.InvariantCulture, handler: $"not done after {ticks} ticks: {until.Metric}={(metrics.TryGetValue(key: until.Metric, value: out var last) ? last : "absent")}"));
-                        status = SweepStatus.Worse(left: status, right: SweepStatus.Amber);
+                        status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
 
                         break;
                     }
 
-                    _ = world.Run(script: $"world.wait {tool.EveryTicks.ToString(provider: CultureInfo.InvariantCulture)}", timeoutSeconds: 120);
+                    var waited = world.Run(script: $"world.rate resume\nworld.wait {tool.EveryTicks.ToString(provider: CultureInfo.InvariantCulture)}\nworld.rate pause", timeoutSeconds: 120);
+
+                    if (!waited.Ok) {
+                        reasons.AddRange(collection: waited.Refusals);
+                        status = SweepStatus.Red;
+
+                        break;
+                    }
+
                     ticks += tool.EveryTicks;
                 }
             }
@@ -96,71 +136,24 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         return results;
     }
-    /// <summary>Reads every signal the World's leg reads.</summary>
+    /// <summary>Reads every signal the World's leg reads. A signal the sweep could not read is reported unmeasured.</summary>
     /// <returns>Each signal's reading.</returns>
-    public IReadOnlyList<SweepSignalResult> Signals() {
-        var results = new List<SweepSignalResult>();
-        var answers = Path.Combine(path1: directory, path2: world.Leg);
-
-        _ = Directory.CreateDirectory(path: answers);
-
-        foreach (var signal in plan.Signals.Where(predicate: signal => signal.ReadsOn(leg: world.Leg))) {
-            if (world.Gone) {
-                Notes.Add(item: $"the World's attachment closed before the signal {signal.Name}; the signals after it were not read");
-
-                break;
-            }
-
-            var answer = world.Run(script: signal.Line, timeoutSeconds: signal.TimeoutSeconds);
-            var file = Path.Combine(path1: answers, path2: $"{signal.Name}.txt");
-
-            File.WriteAllText(contents: answer.Output, path: file);
-
-            var metrics = SweepSignals.Read(extra: signal.Metrics, output: answer.Output, parse: signal.Parse);
-            var reasons = new List<string>();
-            var status = (answer.Ok ? SweepStatus.Clean : SweepStatus.Red);
-
-            reasons.AddRange(collection: answer.Refusals);
-
-            if (metrics.TryGetValue(key: "error", value: out var error)) {
-                reasons.Add(item: error);
-                status = SweepStatus.Red;
-            }
-
-            status = Judge(metrics: metrics, reasons: reasons, rules: signal.AmberRules, status: status, when: SweepStatus.Amber);
-            status = Judge(metrics: metrics, reasons: reasons, rules: signal.RedRules, status: status, when: SweepStatus.Red);
-
-            // The answer's file keeps the whole text; the report keeps it only as a short text signal's value.
-            if ((signal.Parse != "text") || (metrics["text"].Length > MaximumTextMetric)) {
-                _ = metrics.Remove(key: "text");
-            }
-
-            var changes = (baseline?.Changes(leg: world.Leg, metrics: metrics, signal: signal, status: status) ?? []);
-
-            progress.WriteLine(value: $"sweep: {world.Leg} {signal.Name} {status}");
-            results.Add(item: new SweepSignalResult(
-                Changes: changes,
-                File: Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\'),
-                Leg: world.Leg,
-                Line: signal.Line,
-                Metrics: metrics,
-                Name: signal.Name,
-                Reasons: reasons,
-                Status: status
-            ));
-        }
-
-        return results;
-    }
-    /// <summary>Runs the capture tour: every stop's lines, its settle wait and a settled capture, then each group's
-    /// contact sheet and, with a baseline, each group's comparison sheet.</summary>
+    public IReadOnlyList<SweepSignalResult> Signals() => Read(signals: plan.Signals.Where(predicate: signal => signal.ReadsOn(leg: world.Leg)), suffix: string.Empty);
+    /// <summary>Reads the failure signals again, as <c>&lt;name&gt;.after-tour</c>, once a workload or the tour has run.</summary>
+    /// <returns>Each failure signal's second reading.</returns>
+    public IReadOnlyList<SweepSignalResult> Recheck() => Read(signals: plan.Signals.Where(predicate: signal => (signal.Recheck && signal.ReadsOn(leg: world.Leg))), suffix: RecheckSuffix);
+    /// <summary>Runs the capture tour: every stop's lines, its bakes, its pinned timeline and a settled capture at its
+    /// named tick, then each group's contact sheet and, with a baseline, each group's comparison sheet. A stop the
+    /// sweep could not reach is reported unmeasured.</summary>
     /// <param name="names">The stops to run; every stop when empty.</param>
     /// <returns>The tour's stills and sheets.</returns>
     public SweepTourResult Tour(IReadOnlyCollection<string> names) {
         var tour = plan.Tour;
         var stills = new List<SweepStillResult>();
         var images = new Dictionary<string, MotionImage>(comparer: StringComparer.Ordinal);
+        var previous = new Dictionary<string, MotionImage>(comparer: StringComparer.Ordinal);
         var folder = Path.Combine(path1: directory, path2: "tour");
+        var prelude = new List<string>();
 
         _ = Directory.CreateDirectory(path: folder);
 
@@ -168,19 +161,19 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             var answer = world.Run(script: line);
 
             if (!answer.Ok) {
-                Notes.Add(item: $"tour prelude: {string.Join(separator: "; ", values: answer.Refusals)}");
+                prelude.Add(item: $"tour prelude refused: {string.Join(separator: "; ", values: answer.Refusals)}");
             }
         }
 
         foreach (var stop in tour.Stops.Where(predicate: stop => ((names.Count == 0) || names.Contains(value: stop.Name)))) {
-            if (world.Gone) {
-                Notes.Add(item: $"the World's attachment closed before the stop {stop.Name}; the stops after it were not taken");
+            var reasons = new List<string>(collection: prelude);
+            var status = ((prelude.Count == 0) ? SweepStatus.Clean : SweepStatus.Amber);
 
-                break;
+            if (Stopped() is { } stopped) {
+                stills.Add(item: new SweepStillResult(Capture: string.Empty, ChangedFraction: null, File: null, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: [$"not taken: {stopped}"], Status: SweepStatus.Unknown));
+
+                continue;
             }
-
-            var reasons = new List<string>();
-            var status = SweepStatus.Clean;
 
             foreach (var line in (tour.Reset ?? []).Concat(second: (stop.Lines ?? [])).Concat(second: (tour.Frame ?? []))) {
                 var answer = world.Run(script: line, timeoutSeconds: 120);
@@ -191,31 +184,41 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 }
             }
 
-            _ = world.Run(script: $"world.wait {(stop.Settle ?? tour.Settle).ToString(provider: CultureInfo.InvariantCulture)}", timeoutSeconds: 120);
-
+            // The bakes settle first, then the stop's motion runs on ticks counted from the tick they settled at, so
+            // a slow bake moves neither the motion nor the capture.
             var bakes = world.Run(script: "world.wait bakes 60", timeoutSeconds: 70);
 
-            if (!bakes.Ok || bakes.Output.Contains(comparisonType: StringComparison.Ordinal, value: "not settled")) {
+            if (!bakes.Ok) {
                 reasons.Add(item: $"captured with bakes unsettled: {bakes.Output}");
                 status = SweepStatus.Worse(left: status, right: SweepStatus.Amber);
             }
 
-            var png = world.Capture(output: out var capture);
+            var pinned = Pin(captureTick: out var captureTick, reasons: reasons, stop: stop, tour: tour);
+
+            if (!pinned) {
+                status = SweepStatus.Red;
+            }
+
+            var capture = string.Empty;
+            var png = (pinned ? world.Capture(output: out capture, tick: captureTick) : null);
             string? relative = null;
             double? changed = null;
 
-            if (png is null) {
+            if (pinned && (png is null)) {
                 reasons.Add(item: $"capture refused: {capture}");
                 status = SweepStatus.Red;
-            } else {
+            } else if (png is not null) {
                 var file = Path.Combine(path1: folder, path2: $"{stop.Name}.png");
+                var before = ((baseline?.StillFor(name: stop.Name) is { } earlier) ? MotionSheets.Read(path: earlier) : null);
 
+                // The baseline still is read before this run writes its own, so a run never compares an image with itself.
                 File.WriteAllBytes(bytes: png, path: file);
                 relative = Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\');
                 images[stop.Name] = MotionSheets.Read(path: file);
 
-                if (baseline?.StillFor(name: stop.Name) is { } previous) {
-                    changed = ChangedFraction(after: images[stop.Name], before: MotionSheets.Read(path: previous), level: tour.LevelTolerance);
+                if (before is not null) {
+                    previous[stop.Name] = before;
+                    changed = ChangedFraction(after: images[stop.Name], before: before, level: tour.LevelTolerance);
 
                     if (changed is null) {
                         reasons.Add(item: "the baseline still has another size");
@@ -230,7 +233,12 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             foreach (var line in (stop.After ?? [])) {
-                _ = world.Run(script: line, timeoutSeconds: 120);
+                var answer = world.Run(script: line, timeoutSeconds: 120);
+
+                if (!answer.Ok) {
+                    reasons.Add(item: $"after the capture: {string.Join(separator: "; ", values: answer.Refusals)}");
+                    status = SweepStatus.Worse(left: status, right: SweepStatus.Amber);
+                }
             }
 
             progress.WriteLine(value: $"sweep: still {stop.Name} {status}");
@@ -240,13 +248,117 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
         return new SweepTourResult(
             AmberFraction: tour.AmberFraction,
             LevelTolerance: tour.LevelTolerance,
-            Sheets: Sheets(folder: folder, images: images, stills: stills, tour: tour),
+            Sheets: Sheets(folder: folder, images: images, previous: previous, stills: stills, tour: tour),
             Stills: stills
         );
     }
 
+    // Arms the stop's pinned steps from a start tick a lead after the World's completed tick, and names the tick the
+    // capture is pinned to. False, with the reason added, when the World's tick could not be read or the steps were refused.
+    private bool Pin(SweepStop stop, SweepTour tour, List<string> reasons, out ulong captureTick) {
+        captureTick = 0UL;
+
+        var read = world.Run(script: "world.at --json");
+        ulong completed;
+
+        try {
+            using var document = JsonDocument.Parse(json: read.Output);
+
+            if (!read.Ok || !document.RootElement.TryGetProperty(propertyName: "tick", value: out var tick) || !tick.TryGetUInt64(value: out completed)) {
+                reasons.Add(item: $"the stop's tick could not be read: {read.Output}");
+
+                return false;
+            }
+        } catch (JsonException) {
+            reasons.Add(item: $"the stop's tick could not be read: {read.Output}");
+
+            return false;
+        }
+
+        var start = (completed + LeadTicks);
+
+        if ((stop.Steps is { Count: > 0 } steps)) {
+            var script = JsonSerializer.Serialize(value: new { start, steps = steps.Select(selector: static step => new { at = step.At, run = step.Run }) });
+            var armed = world.Run(script: $"world.at {script}");
+
+            if (!armed.Ok) {
+                reasons.AddRange(collection: armed.Refusals);
+
+                return false;
+            }
+        }
+
+        captureTick = (start + ((ulong)(stop.Settle ?? tour.Settle)));
+
+        return true;
+    }
+    // Why the World can no longer be driven, or null while it can.
+    private string? Stopped() => (world.Gone ? "the World's attachment closed" : world.Budget.Reason);
+    private List<SweepSignalResult> Read(IEnumerable<SweepSignal> signals, string suffix) {
+        var results = new List<SweepSignalResult>();
+        var answers = Path.Combine(path1: directory, path2: world.Leg);
+
+        _ = Directory.CreateDirectory(path: answers);
+
+        foreach (var signal in signals) {
+            var name = (signal.Name + suffix);
+
+            if (Stopped() is { } stopped) {
+                progress.WriteLine(value: $"sweep: {world.Leg} {name} {SweepStatus.Unknown}");
+                results.Add(item: new SweepSignalResult(Changes: [], File: string.Empty, Leg: world.Leg, Line: signal.Line, Metrics: new Dictionary<string, string>(), Name: name, Reasons: [$"not read: {stopped}"], Status: SweepStatus.Unknown));
+
+                continue;
+            }
+
+            var answer = world.Run(script: signal.Line, timeoutSeconds: signal.TimeoutSeconds);
+            var file = Path.Combine(path1: answers, path2: $"{name}.txt");
+
+            File.WriteAllText(contents: answer.Output, path: file);
+
+            var metrics = SweepSignals.Read(extra: signal.Metrics, output: answer.Output, parse: signal.Parse);
+            var reasons = new List<string>();
+            var status = (answer.Ok ? SweepStatus.Clean : SweepStatus.Red);
+
+            reasons.AddRange(collection: answer.Refusals);
+
+            if (metrics.TryGetValue(key: "error", value: out var error)) {
+                reasons.Add(item: error);
+                status = SweepStatus.Red;
+            }
+            if (answer.Ok && (signal.Parse != "text") && (metrics.Count == 1)) {
+                reasons.Add(item: $"unmeasured: the answer held no {signal.Parse} metric");
+                status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
+            }
+
+            status = Judge(metrics: metrics, reasons: reasons, rules: signal.AmberRules, status: status, when: SweepStatus.Amber);
+            status = Judge(metrics: metrics, reasons: reasons, rules: signal.RedRules, status: status, when: SweepStatus.Red);
+
+            // The answer's file keeps the whole text; the report keeps it only as a short text signal's value.
+            if ((signal.Parse != "text") || (metrics["text"].Length > MaximumTextMetric)) {
+                _ = metrics.Remove(key: "text");
+            }
+
+            var changes = (baseline?.Changes(leg: world.Leg, metrics: metrics, signal: (signal with { Name = name }), status: status) ?? []);
+
+            progress.WriteLine(value: $"sweep: {world.Leg} {name} {status}");
+            results.Add(item: new SweepSignalResult(
+                Changes: changes,
+                File: Path.GetRelativePath(path: file, relativeTo: directory).Replace(newChar: '/', oldChar: '\\'),
+                Leg: world.Leg,
+                Line: signal.Line,
+                Metrics: metrics,
+                Name: name,
+                Reasons: reasons,
+                Status: status
+            ));
+        }
+
+        return results;
+    }
+
     // One sheet per group, and with a baseline one comparison sheet per group: the baseline's still above the current.
-    private Dictionary<string, string> Sheets(string folder, IReadOnlyDictionary<string, MotionImage> images, IReadOnlyList<SweepStillResult> stills, SweepTour tour) {
+    // The baseline's images are the ones read before this run wrote its own.
+    private Dictionary<string, string> Sheets(string folder, IReadOnlyDictionary<string, MotionImage> images, IReadOnlyDictionary<string, MotionImage> previous, IReadOnlyList<SweepStillResult> stills, SweepTour tour) {
         var sheets = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var labelHeight = MotionSheets.LabelHeightFor();
 
@@ -254,8 +366,8 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             var members = group.ToArray();
             var scaled = members.Select(selector: still => MotionSheets.ScaleToWidth(source: images[still.Name], width: tour.CellWidth)).ToArray();
             var cellHeight = scaled.Max(selector: static image => image.Height);
-            var previous = members.Select(selector: still => ((baseline?.StillFor(name: still.Name) is { } path) ? MotionSheets.ScaleToWidth(source: MotionSheets.Read(path: path), width: tour.CellWidth) : null)).ToArray();
-            var compare = previous.Any(predicate: static image => (image is not null));
+            var earlier = members.Select(selector: still => (previous.TryGetValue(key: still.Name, value: out var image) ? MotionSheets.ScaleToWidth(source: image, width: tour.CellWidth) : null)).ToArray();
+            var compare = earlier.Any(predicate: static image => (image is not null));
             var cameras = (compare ? 2 : 1);
             var layout = MotionSheetLayout.Plan(cameras: cameras, cellHeight: cellHeight, cellWidth: tour.CellWidth, columns: Math.Max(val1: 1, val2: tour.Columns), frames: members.Length, labelHeight: labelHeight);
             var frames = new List<IReadOnlyList<MotionImage>>();
@@ -268,8 +380,8 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 var current = $"{title}\n{Fit(text: $"{members[index].Status} {members[index].Capture}", width: detail)}";
 
                 if (compare) {
-                    frames.Add(item: [(previous[index] ?? Blank(height: cellHeight, width: tour.CellWidth)), scaled[index]]);
-                    labels.Add(item: [$"{title}\n{((previous[index] is null) ? "no baseline still" : "baseline")}", current]);
+                    frames.Add(item: [(earlier[index] ?? Blank(height: cellHeight, width: tour.CellWidth)), scaled[index]]);
+                    labels.Add(item: [$"{title}\n{((earlier[index] is null) ? "no baseline still" : "baseline")}", current]);
                 } else {
                     frames.Add(item: [scaled[index]]);
                     labels.Add(item: [current]);
@@ -307,13 +419,27 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         return (changed / ((double)pixels));
     }
+    // A rule that holds colours the signal; a rule whose metric the answer lacks cannot be judged, which is
+    // unmeasured, never clean.
     private static string Judge(IReadOnlyDictionary<string, string> metrics, List<string> reasons, IReadOnlyList<string> rules, string status, string when) {
         foreach (var text in rules) {
-            if (SweepRule.TryParse(rule: out var rule, text: text) && (rule.Holds(metrics: metrics) == true)) {
-                var value = (metrics.TryGetValue(key: rule.Metric, value: out var found) ? found : string.Empty);
+            if (!SweepRule.TryParse(rule: out var rule, text: text)) {
+                continue;
+            }
 
-                reasons.Add(item: $"{when}: {rule} ({rule.Metric}={((value.Length > 80) ? value[..80] : value)})");
-                status = SweepStatus.Worse(left: status, right: when);
+            switch (rule.Holds(metrics: metrics)) {
+                case true:
+                    var value = metrics.GetValueOrDefault(key: rule.Metric, defaultValue: string.Empty);
+
+                    reasons.Add(item: $"{when}: {rule} ({rule.Metric}={((value.Length > 80) ? value[..80] : value)})");
+                    status = SweepStatus.Worse(left: status, right: when);
+
+                    break;
+                case null:
+                    reasons.Add(item: $"unmeasured: {when} rule '{rule}' reads {rule.Metric}, which the answer does not give");
+                    status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
+
+                    break;
             }
         }
 

@@ -89,6 +89,19 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
 
                 return false;
             }
+
+            foreach (var step in (stop.Steps ?? [])) {
+                if ((step.At < 0) || string.IsNullOrWhiteSpace(value: step.Run) || step.Run.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait")) {
+                    error = $"the tour stop '{stop.Name}' has a step that is not a console line at a tick offset of zero or more (world.wait is not pinnable)";
+
+                    return false;
+                }
+                if (step.At > (stop.Settle ?? plan.Tour.Settle)) {
+                    error = $"the tour stop '{stop.Name}' pins a step after its capture";
+
+                    return false;
+                }
+            }
         }
 
         error = string.Empty;
@@ -128,6 +141,8 @@ public sealed record SweepUntil(string Line, string Metric, IReadOnlyList<string
 /// <c>relative:&lt;fraction&gt;</c> or <c>none</c>, by metric name, a name ending in <c>*</c> covering a prefix.</param>
 /// <param name="Metrics">Extra metrics read from the answer by a regular expression's first group.</param>
 /// <param name="TimeoutSeconds">How long the read may take.</param>
+/// <param name="Recheck">Whether the signal is a failure signal that is read again, as <c>&lt;name&gt;.after-tour</c>,
+/// once the tour has run, so a violation the walking workload or the tour caused is not missed.</param>
 public sealed record SweepSignal(
     string Name,
     string Line,
@@ -137,7 +152,8 @@ public sealed record SweepSignal(
     IReadOnlyList<string>? Amber = null,
     IReadOnlyDictionary<string, string>? Compare = null,
     IReadOnlyDictionary<string, string>? Metrics = null,
-    int TimeoutSeconds = 60
+    int TimeoutSeconds = 60,
+    bool Recheck = false
 ) {
     /// <summary>The leg value that reads a signal on every leg.</summary>
     public const string AnyLeg = "any";
@@ -174,6 +190,13 @@ public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<str
 /// <param name="Group">The contact sheet the still belongs to.</param>
 /// <param name="Note">What the still shows.</param>
 /// <param name="Lines">The lines that pose it.</param>
-/// <param name="Settle">The ticks to wait before the capture, or <see langword="null"/> for the tour's.</param>
+/// <param name="Settle">The ticks from the start tick to the capture, or <see langword="null"/> for the tour's.</param>
 /// <param name="After">Lines run after the capture, to undo a form the stop entered.</param>
-public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null);
+/// <param name="Steps">Lines pinned to ticks after the start tick: the motion a still shows. The start tick is a fixed
+/// lead after the tick at which the stop's own lines and the bakes have settled, so the same stop captures the same
+/// motion tick whatever the bakes cost.</param>
+public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null);
+/// <summary>One console line pinned to a tick of a stop.</summary>
+/// <param name="At">The ticks after the stop's start tick.</param>
+/// <param name="Run">The console line; never a <c>world.wait</c>.</param>
+public sealed record SweepStep(int At, string Run);
