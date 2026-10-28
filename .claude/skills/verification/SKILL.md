@@ -155,10 +155,9 @@ process itself keeps its loaded DLLs locked while the child build runs. Copy aft
 the build lease from another CLI copy.
 
 When `puck schema` reports missing XML documentation, do not accept the resulting
-removal of schema descriptions. On the restricted Windows harness, the XML files
-were present and parseable but the generator's XML reader could not load them;
-the same lane CLI under normal file access generated the descriptions correctly.
-Check the files beside the CLI and rerun with that access before checking in output.
+removal of schema descriptions: on the restricted Windows harness the generator's
+XML reader can fail to load files that are present and parseable. Check the files
+beside the CLI and rerun under normal file access before checking in output.
 
 ## Boot every World with `--devices none`
 

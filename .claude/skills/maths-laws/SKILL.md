@@ -73,8 +73,8 @@ dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReus
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 ```
 
-`dotnet test` forwards switches it does not know to the test host, which exits
-5, so `-nodeReuse:false` belongs to the build step only. The plain run is the
+`-nodeReuse:false` belongs to the build step only
+([verification](../verification/SKILL.md#build-before-you-test)). The plain run is the
 Default tier and includes the completeness and leg checks,
 which only a run that includes the Default tier checks. Deep and Exhaustive
 cases are explicit:

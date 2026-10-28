@@ -110,9 +110,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
 - Gates (`when`, `if`, `expect`) accept ordinary expressions. Zero and absence
   are false; nonzero numeric values are true. `and` and `or` short-circuit;
   `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise
-  `&`/`|` bind above comparisons. Kind suffixes are retired: write the expression
-  directly. `compareState(...)` and `compareValue(...)` in a source gate are
-  refused by name; write a comparison such as `left == right`.
+  `&`/`|` bind above comparisons. `compareState(...)` and `compareValue(...)`
+  in a source gate are refused by name; write a comparison such as `left == right`.
 - **One bracket rule.** `row.key` names a literal key; `row[expression]`
   evaluates. Names in brackets resolve lexically, so an unknown bare word is
   an error. Use `row["key"]` for a quoted literal key. Read a local as `name`,

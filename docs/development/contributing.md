@@ -375,11 +375,9 @@ What the C# loop costs:
   agent build and restore passes ([verification](../../.claude/skills/verification/SKILL.md))
   keeps shared agent machines free of lingering nodes and makes every agent
   build cold; an agent timing this loop says which it measured. The switch
-  belongs to the build and the restore alone: `dotnet test` on the xUnit v3
-  projects can forward unknown switches to the test host;
-  [verification](../../.claude/skills/verification/SKILL.md#build-before-you-test)
-  records the observed refusal. Build with `-nodeReuse:false`, then run
-  `dotnet test --no-build`.
+  belongs to the build and the restore alone
+  ([verification](../../.claude/skills/verification/SKILL.md#build-before-you-test)
+  says why): build with `-nodeReuse:false`, then run `dotnet test --no-build`.
 - **One compile.** An edit that keeps its project's public surface keeps its
   reference assembly, so no dependent recompiles: a body edit in `Puck.SdfVm`
   compiles `Puck.SdfVm` alone. The rest of the build is MSBuild's check of the
@@ -563,9 +561,8 @@ For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 line coverage CI counts (about half a minute on the reference machine);
 Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
 is selected by its `tier` trait. Pass `-nodeReuse:false` to the build and the
-restore only: `dotnet test` forwards a switch it does not know to the test
-host, which rejects it ([verification](../../.claude/skills/verification/SKILL.md)
-records the observed failure).
+restore only ([verification](../../.claude/skills/verification/SKILL.md#build-before-you-test)
+says why).
 
 ```powershell
 dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReuse:false

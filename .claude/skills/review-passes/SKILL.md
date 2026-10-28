@@ -124,10 +124,10 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    commits on the author's branch.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
    commit when the integration branch may move. Two dots compare the two tips
-   (`git diff A..B` is `git diff A B`), three dots start at their merge base,
-   and `git log A..B` lists what B has that A lacks; none of them says A is an
-   ancestor of B, so check that with `git merge-base --is-ancestor A B` before
-   calling the range the lane's own. List each lane commit by commit and
+   (`git diff A..B` is `git diff A B`) and three dots start at their merge base;
+   neither says A is an ancestor of B, so check that with
+   `git merge-base --is-ancestor A B` before calling the range the lane's own
+   ([ancestry](../verification/SKILL.md#branches)). List each lane commit by commit and
    subject and say "read each message". Name exclusions exactly: a
    merge of already-reviewed work is reviewed only for its conflict
    resolutions, in the files you name.
@@ -160,12 +160,13 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    checks written after reading it inherit its blind spots.
 6. **Evidence gathered.** What the lane already ran and measured, so the pass
    reads instead of re-running it.
-7. **Rules block,** verbatim. Codex reads `AGENTS.md` from the worktree root
-   on its own; the block names it and restates the rules a review pass most
-   often needs in front of it:
+7. **Rules block,** verbatim. The repository's rules live in `AGENTS.md` and the
+   owning skills, which the pass reads itself; the block restates none of them,
+   and the rest of the brief adds only scope, authority, exceptions and the
+   finish line:
 
    ```text
-   Repo rules: AGENTS.md at the worktree root holds the repository's rules; follow it. In particular: no backwards compatibility, ever (never preserve old wrong behaviour; no compat aliases, shims or read-side tolerance for old shapes). No InternalsVisibleTo (make a member public instead). No environment variable switches Puck code. One spelling per thing. LF everywhere; never raise newline issues. Docs state current behaviour in present tense with no dates or SHAs. Determinism: no wall clock, ambient randomness or float in simulation state; randomness is a seeded Puck.Maths stream whose state is persisted.
+   Repo rules: read AGENTS.md at the worktree root and the skills that own the areas the diff touches, and follow them. This brief adds scope, authority, exceptions and the finish line.
    ```
 
 8. **Instructions block,** verbatim:

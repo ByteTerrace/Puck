@@ -446,8 +446,8 @@ is decorative and its text must say so as an `ENVELOPE`.
 
 Commands (`maths-usage` owns the routing; these are the ones a probe needs).
 Build first with `dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj
--c Release -nodeReuse:false`; `dotnet test` forwards switches it does not know
-to the test host, which exits 5, so the tests run with `--no-build`:
+-c Release -nodeReuse:false`, then run the tests with `--no-build`
+([why](../../verification/SKILL.md#build-before-you-test)):
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build

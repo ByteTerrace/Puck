@@ -163,9 +163,9 @@ No game addresses or title knowledge belongs in this guest.
 
 The debug world runs 30 world ticks per second, holding inputs across about two native
 frames. Hash/probe reads drain workers; checkpoints preserve their rational cycle phase,
-so these generic checks need no extra frame-stamped input seam. AGB's queued core must
-implement pure PeekByte/PeekBytes: inheriting the default zero peek concealed live RAM.
-Its peek now delegates to pure bus inspection, including byte lanes of 16-bit IO registers.
+so these generic checks need no extra frame-stamped input seam. Every queued core
+implements pure `PeekByte`/`PeekBytes` (AGB's reads bus inspection, including byte
+lanes of 16-bit IO registers); the inherited default peeks zero and hides live RAM.
 The focused hardware-access law checks nonzero bytes and native progress after restore.
 
 The authored machine-debugger-tests.puck runs bundled diagnostic cartridges, with a

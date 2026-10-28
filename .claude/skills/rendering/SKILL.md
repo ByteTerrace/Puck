@@ -24,8 +24,8 @@ optional output-relative pyramid; `SdfBloomRecorder` records its down/up passes.
 `SdfWorldPasses.Entry.OpticalBloom` gates transport, diagnostic, full screen
 fidelity and disabled views before allocating. Keep that gate and `world.bloom`'s
 reported bypass reasons aligned. Direct root views export the named `bloom` image
-for `place.bloom`; filmed cameras use `bloom-apply`. The renamed direct image
-`BloomDirect` still binds the composite's output member. A named image publication
+for `place.bloom`; filmed cameras use `bloom-apply`. The direct image
+`BloomDirect` binds the composite's output member. A named image publication
 must retain its storage through graph replacement and carry its readable layout,
 just as the default image does. Optional absent bloom binds the shared stand-in.
 Keep root placement's optional input stable across enable/disable: a graph still

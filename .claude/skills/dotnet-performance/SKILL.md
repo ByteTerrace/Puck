@@ -112,8 +112,7 @@ outside this contract and takes the references as written.
 
 - A capturing local function can allocate its display class at method entry,
   before a cache check returns. Keep a hot cache-check method separate from its
-  closure-bearing slow rebuild. Scoped replay's active hash regression measures
-  1,000 warmed calls; an inactive-tick test alone cannot see this allocation.
+  closure-bearing slow rebuild.
 - Start with a profile, benchmark, allocation trace or demonstrated hot path. A
   suspected hot path is not one; ask for the evidence, and keep the clearer
   form (LINQ, `foreach`, an interface call) when it does not show a win.
@@ -149,8 +148,7 @@ outside this contract and takes the references as written.
 - Keep identities structural on hot read paths: formatting a principal or a parsed
   channel just to check a public policy or compare a channel name creates garbage
   even when the check has no work to do. Format only when the policy or output
-  needs text. A response mask change preserves placement ids and order, so carry
-  their resolved addresses across it; refresh live permission checks on every use.
+  needs text.
 - No law gates a timing: cost laws state deterministic counts. The managed
   allocation meter is `Puck.Abstractions.Counting.AllocationWindow`: `Least`
   takes the least of up to 16 windows of `GC.GetAllocatedBytesForCurrentThread`
@@ -181,11 +179,11 @@ calls in a fresh process can run several times slower than its steady state.
   of startup; an ordinary build still produces IL that tiers. A rendering World
   of either build prepares the engine's non-generic methods on a lowest-priority
   background thread after boot (`WorldCodeWarmer`, `[world.warm]` on stderr),
-  so a first crossing or a first addon write no longer compiles tens of
-  milliseconds of code on the frame thread; a method prepared that way still
-  tiers up. First-use cost left after it is generic instantiations and static
-  constructors. Addon mounting initializes `WorldAddonMutationDecoder`'s vocabulary and JSON contracts before
-  its first submitted write; this runs no guest and submits no mutation.
+  so first crossings and first addon writes do not compile on the frame thread;
+  a method prepared that way still tiers up. First-use cost left after it is
+  generic instantiations and static constructors. Addon mounting pre-initializes
+  `WorldAddonMutationDecoder`'s vocabulary and JSON contracts before its first
+  submitted write; this runs no guest and submits no mutation.
 - Check each hot method's tier with `DOTNET_JitDisasmSummary` in a scratch
   process pinned to one CPU, and record first-call cost beside the steady state.
   Pinning a harness to one CPU before it warms up starves the background tiering

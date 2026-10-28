@@ -290,8 +290,8 @@ dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release -nodeReus
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 ```
 
-(`dotnet test` forwards switches it does not know, `-nodeReuse:false` included,
-to the test host, which exits 5, so the build is its own command.) That is the Default tier, the ordinary run. It is
+(The build is its own command: [verification](../../verification/SKILL.md#build-before-you-test)
+says why.) That is the Default tier, the ordinary run. It is
 where structural completeness and evidence declarations are checked directly,
 without any recorded artifact.
 

@@ -121,9 +121,10 @@ maps each question to its wing and README section.
 Work on `PrimeExtensions.IsPrime`, `NthPrime(uint)`, `PrimeKernels` and
 `ScaledResidueRing64` follows
 [references/prime-kernels.md](references/prime-kernels.md). Preserve the fast
-single-value decision and its SIMD fallbacks. The owner's prime-research
-cleanup removes wide counting, selection and interval exploration, while
-`Research/`, `Algebra/` and `Oracle/` remain outside that cleanup.
+single-value decision and its SIMD fallbacks. Wide prime counting, selection and
+interval exploration are out of scope (the owner's ruling,
+[prime exploration](../../../docs/reference/prime-exploration.md));
+`Research/`, `Algebra/` and `Oracle/` are unaffected.
 
 ## Verify
 
@@ -134,9 +135,8 @@ Build the test project (`dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.cs
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 ```
 
-`dotnet test` can forward unknown switches to its test host; pass
-`-nodeReuse:false` to the build step only. See the observed refusal in
-[verification](../verification/SKILL.md#build-before-you-test). The run is
+Pass `-nodeReuse:false` to the build step only
+([verification](../verification/SKILL.md#build-before-you-test)). The run is
 the Default tier. A rounding change or a new value
 kernel also earns Deep (`--explicit on --filter-trait tier=Deep`). Exhaustive
 takes tens of minutes: run it only when the member's waiver or the coverage

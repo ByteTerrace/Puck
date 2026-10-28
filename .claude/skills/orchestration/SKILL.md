@@ -109,9 +109,8 @@ stop is a stop, not a pause.
 Verify any base claim yourself with
 `git merge-base --is-ancestor <base> <integration-head>`, checking its exit
 status, and count the commits behind with
-`git rev-list --count <base>..<integration-head>`. A two-dot range counts the
-commits reachable from the right side and not the left; an empty range does not
-establish ancestry.
+`git rev-list --count <base>..<integration-head>`
+([why a two-dot range is not ancestry](../verification/SKILL.md#branches)).
 
 Only the assignment's last commit carries one of these trailers, as the last
 line of its message:

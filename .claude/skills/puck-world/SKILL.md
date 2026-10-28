@@ -157,9 +157,7 @@ Codex discovers these tools through the session's tool inventory (search for
 `puck`); its repository MCP configuration uses the same launcher as Claude.
 Antigravity names the same server `puck_operator` (its workspace plugin `puck`
 registers the server `operator`), so its tools appear as `puck_operator/*`.
-Use the tools directly before writing a stdin process wrapper. The headless
-start, named `puck_exec`, `world.wait`, headless capture refusal and stop were
-exercised from a Codex lane's actual MCP tools.
+Use the tools directly before writing a stdin process wrapper.
 The hook installs completed CLI builds through the launcher's signed local
 development channel under `.claude/mcp-install`. A persistent front follows
 activated builds without reconnecting the client; earlier backends retain
@@ -172,9 +170,9 @@ Azure release or application-copy staging is involved. The main checkout's
 `.claude/mcp-install` serves every session on the machine, the lead's
 included: a lane proving an adapter change publishes into an install root in
 its own worktree (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`)
-and runs that front, never the main checkout's. A lane once activated its
-unfinished adapter there and every session's tool results broke until the lead
-pointed `current` back at `last-good`. The stub counts each launch of a pending
+and runs that front, never the main checkout's: activating an unfinished
+adapter there breaks every session's tool results until `current` points back at
+`last-good`. The stub counts each launch of a pending
 version and rolls back after three unproven ones, and a client's protocol probe
 plus its connect launch the front twice, so the front and its worker both clear
 the health marker as they start. A build the stub rolled back has spent its
@@ -434,7 +432,7 @@ event the window receives before a seat sees it
 (`WorldWindowInputFilters.ConsumesEveryEvent`). A framed desktop screen claims no
 system-wide hotkey either (`WorldSourcePassthrough.ClaimsSystemChord`), so the
 owner's Control+Alt+Escape never reaches the World. stdin, the console,
-`player.signal`, `body.*`, schedule rows and MCP drive the World as before. The
+`player.signal`, `body.*`, schedule rows and MCP still drive the World. The
 boot says `[world.host] physical input devices are off` on stderr; a stderr with
 a `[gamepad]` or `[gameinput]` line means the flag was missed. A headless or
 offscreen boot opens no device either way, and the flag is harmless there. The
