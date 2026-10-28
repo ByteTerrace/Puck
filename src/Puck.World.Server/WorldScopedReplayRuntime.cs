@@ -148,12 +148,14 @@ public sealed partial class WorldScopedReplayRuntime {
         if (m_recording) {
             foreach (var input in m_source.Inputs) {
                 if (input.Tick != m_cursor) { continue; }
-                m_server.EnqueueMutation(new WorldMutation.Batch(input.Principal, input.Cells.Select(selector: cell =>
-                    ((WorldMutation)new WorldMutation.UpsertStateCell(input.Principal, cell.Row, cell.Key, cell.Value, WorldDocumentWriteKind.Set))).ToArray()));
+                m_server.EnqueueMutation(
+                    new WorldMutation.Batch(input.Principal, input.Cells.Select(selector: cell =>
+                        ((WorldMutation)new WorldMutation.UpsertStateCell(input.Principal, cell.Row, cell.Key, cell.Value, WorldDocumentWriteKind.Set))).ToArray()),
+                    connectionId: SubmissionEnvelope.ScopedReplayConnectionId);
             }
         } else {
             while ((m_inputCursor < m_inputs.Count) && (m_inputs[m_inputCursor].Tick == m_cursor)) {
-                m_server.EnqueueMutation(m_inputs[m_inputCursor++].Mutation);
+                m_server.EnqueueMutation(m_inputs[m_inputCursor++].Mutation, connectionId: SubmissionEnvelope.ScopedReplayConnectionId);
             }
             foreach (var input in m_commands) { if (input.Tick == m_cursor) { m_server.ApplyCommand(input.Command); } }
             foreach (var input in m_intents) {

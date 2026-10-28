@@ -171,6 +171,12 @@ verdict fires — a LOCAL submission's verdict prints an accountable
 `[<verb>: …]` line, on stderr beside the verb-agnostic narration for a
 rejection and on stdout for an acceptance.
 
+A scoped replay submits its timed inputs and recorded tape under
+`SubmissionEnvelope.ScopedReplayConnectionId`, so the `EchoTap` subscriber
+tells them from the seat's own submissions (which share the principal): an
+applied one is narrated on stderr and reaches no toast, console row or cue,
+while a refusal still does.
+
 ## The link
 
 - `IServerLink`: the client-facing surface — `SubmitIntent`, `SubmitEnvelope`
