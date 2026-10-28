@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: "Runs an optional review-and-fix pass on a Puck lane. Use for review briefs and scope ranges, Codex task flags (--write, --cwd, --help), job status, findings, blockers, second rounds, landing fixes."
+description: "Runs a review-and-fix pass on a Puck lane. Use for review briefs and scope ranges, Codex task flags (--write, --cwd, --help), job status, findings, blockers, second rounds, follow-up fix branches."
 ---
 
 # Review passes
@@ -8,7 +8,7 @@ description: "Runs an optional review-and-fix pass on a Puck lane. Use for revie
 A review pass is one run by the selected reviewer that reads a lane's commits
 adversarially, fixes what is local and clear, and reports the rest. This skill
 owns the brief that starts it and the protocol that turns its uncommitted
-output into verified commits. It does not choose the model, effort or
+output into a verified follow-up branch. It does not choose the model, effort or
 concurrency; the lead's brief names those. The user's current instruction
 outranks this skill; a rule here that argues against a requested change is
 stale and is corrected in the same change. What the owner says in a session
@@ -16,14 +16,18 @@ overrides this skill and is written into it in that session.
 
 ## When a lane gets a review
 
-- An engine change gets an adversarial cross-family review by default, sized to
-  its risk; docs and world content get none or a scout's spot-check
+- An engine change gets an adversarial cross-family review, required and sized
+  to its risk; docs and world content get none or a scout's spot-check
   ([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)).
   Codex reviews Claude-written code and a Claude agent reviews Codex-written
   code; Argon takes security, large-context and UI reviews.
-- The review runs while the author implements its next item, so it holds the
-  branch, never the author. The brief gives the reviewer the diff and the
+- The review runs while the author implements its next item and never blocks
+  the landing or pauses the author. The brief gives the reviewer the diff and the
   author's claim, not the author's reasoning, and asks it to break the change.
+- Findings go to the shared pile ranked by severity, each with one owner; a high
+  finding is scheduled into the next integration batch. The pass's fixes are a
+  follow-up branch of their own in that batch, never edits to the author's
+  branch.
 - Every pass is review-and-fix, never report-only. Both Codex models, Astra
   (`gpt-6-astra`) and Sol (`gpt-6.1-sol`), are free to use for a pass. The
   installed Codex plugin's result-handling guidance not to auto-apply a
@@ -39,14 +43,12 @@ overrides this skill and is written into it in that session.
 Use [verification](../verification/SKILL.md#what-uses-the-gpu) for private CLI
 copies, granted GPU legs and heavy-work leases.
 
-- Run the pass in a worktree of the author's own working branch, at the lane's
-  head: the author's worktree when it is clean, or one detached at that head,
-  since git checks a branch out in one worktree only. Create and push no branch
-  for the pass; its fixes land on the author's branch as commits. Never point
-  it at another lane's checkout, and never run two passes in one worktree.
-  Keep a detached worktree under the checkout's `.claude/worktrees/<name>`.
-  Pause other edits and commits on the author's branch until the pass lands;
-  preserve any existing dirty work and clear it before the fast-forward.
+- Run the pass in a worktree of its own, detached at the lane's head, so the
+  author's branch and worktree stay untouched and the author keeps working. Push
+  nothing for the pass: its fixes are commits on that detached head, and the
+  lead puts a local follow-up branch on the verified head for the next batch.
+  Never point it at another lane's checkout, and never run two passes in one
+  worktree. Keep the worktree under the checkout's `.claude/worktrees/<name>`.
 - Never launch a `--write` pass into a tree a canary, counters or parity run
   builds from: an edit mid-run changes the source state that run reuses. Wait
   for the run to finish or give the pass a separate worktree.
@@ -90,8 +92,8 @@ copies, granted GPU legs and heavy-work leases.
   refused git work in any other tree, so its brief names the lane's head commit
   and tells it to run `git checkout --detach <lane head>` in its own worktree
   before reading anything. It may commit WIP as
-  `review: <lane> pass, unverified`; the lead then fast-forwards the author's
-  branch to the verified head as in step 4 below.
+  `review: <lane> pass, unverified`; the lead then puts the follow-up branch on
+  the verified head as in step 4 below.
 - Preserve the launch's working-directory spelling for `status`, `result` and
   `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
   launch is invisible to a PowerShell `C:/...` query, and the reverse. A job
@@ -118,8 +120,8 @@ Write the parts in this order. Each is short; the hunt list is the longest.
 2. **Tree.** The worktree's absolute path and branch, and "Edit only in this
    tree." Add "don't commit" for companion `task`; for a native writer or
    Claude pass add "commit WIP as `review: <lane> pass, unverified`."
-   For a detached tree, name its head and the author's
-   working branch that will receive its commits.
+   Name the detached tree's head; its commits become a follow-up branch, never
+   commits on the author's branch.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
    commit when the integration branch may move. Two dots compare the two tips
    (`git diff A..B` is `git diff A B`), three dots start at their merge base,
@@ -195,10 +197,12 @@ no brief, so it raises compatibility findings and tries to run tests.
    builds and proves every law outside it.
    Record the fix range before continuing. A blocker the pass left open goes
    to the lead before anyone repairs it; the lead rules on each one (a scoped
-   fix, a recorded open item, or a dismissal with its reason), and a scoped
-   fix it directs is verified in step 3, not reviewed again. A non-blocking
+   fix, a recorded open item, or a dismissal with its reason) and ranks it on the
+   shared pile by severity with one owner. A scoped fix the lead directs is
+   verified in step 3, not reviewed again. A non-blocking
    finding is reported, and its fix, if any, is verified the same way; neither
-   ever opens another review. If the
+   ever opens another review, and findings never go back and forth between the
+   reviewer and the author. If the
    pass changes nothing, skip steps 2 to 4: report remaining blockers to the
    lead, or go straight to step 5 when it reports none. Never create an empty
    WIP.
@@ -218,20 +222,21 @@ no brief, so it raises compatibility findings and tries to run tests.
    verified diff; nothing here opens another pass, whether the verifier
    repairs a fix, rejects one, or finds a regression the pass introduced.
 4. **Replace the WIP.** Rewrite the local WIP into commits with
-   `area: sentence` subjects, and land them on the author's working branch (a
-   fast-forward when the pass ran detached at its head). From the clean
-   author's worktree, use `git merge --ff-only <verified review head>`; if
-   the branch has diverged, stop and report it, never reset or rebase it.
-   Rewrite only the pass's unpublished commits, preserving earlier branch
-   history. Each message names the findings fixed and how each fix was shown
+   `area: sentence` subjects on the follow-up branch the lead puts at the pass's
+   detached head. Rewrite only the pass's unpublished commits. The author's
+   branch is never reset, rebased or edited, and it need not have stood still: if
+   the author has moved on, the integration lane resolves the overlap when it
+   merges both. Each message names the findings fixed and how each fix was shown
    working, or the documentation checks for doc-only fixes. No
    `Co-Authored-By` trailer.
-5. **Hand over.** Merge the integration branch's current tip into the working
-   branch and rebuild what it touched. Once the
-   [landing bar](../verification/SKILL.md#the-landing-bar) holds on that merged
-   head, the lead handles any push. A local lane never pushes; a separately
-   authorized remote partner follows AGENTS.md's explicit-refspec rule.
-   Only the lead merges it into the integration branch the lead's brief names.
+5. **Hand over.** Merge the integration branch's current tip into the follow-up
+   branch and rebuild what it touched. It is then an ordinary ready lane for the
+   integration lane's next batch ([land in
+   batches](../orchestration/SKILL.md#land-in-batches)); a high finding it fixes
+   or leaves open is scheduled into that batch. A local lane never pushes; a
+   separately authorized remote partner follows AGENTS.md's explicit-refspec
+   rule. Only the lead merges into the integration branch the lead's brief
+   names.
 
 ## Route adjacent work
 

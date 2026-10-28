@@ -48,8 +48,10 @@ that session.
    clipped at a door. A body that vanishes away from any portal blocks the
    landing.
 
-Gates, parity, canaries, counters, baselines, `puck laws prove` and review
-passes are tools to use when they pay for themselves, never preconditions. A
+Gates, parity, canaries, counters, baselines and `puck laws prove` are tools to
+use when they pay for themselves, never preconditions. An engine change's
+cross-family review is required and never blocks a landing
+([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)). A
 change to simulation state stays deterministic; `puck test --reproduce` shows
 two replicas in separate processes agree, including their per-tick authoritative
 replay hashes and byte-identical exports and manifests. A differing trace names
@@ -338,7 +340,7 @@ prune or repack objects another worktree on the machine still reads.
 | Skill | Route there for |
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, landings and machines. |
-| [`review-passes`](../review-passes/SKILL.md) | An optional review-and-fix pass and verifying its fixes. |
+| [`review-passes`](../review-passes/SKILL.md) | A review-and-fix pass and verifying its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and structural completeness. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The emulator suites. |
 | [`rendering`](../rendering/SKILL.md) | Captures, parity and GPU counters for render work. |

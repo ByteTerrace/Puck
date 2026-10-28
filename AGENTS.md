@@ -89,9 +89,14 @@ agent works in that mode by default, without asking:
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
     prepare` and the Azure release build from its package, `worlds/debug`.
-- The gates, ledgers, red-leg proofs and review passes described in this file
-  and the skills were written by agents, not ordered by the owner. They are
-  tools to use when they pay for themselves, never preconditions for landing.
+- The gates, ledgers and red-leg proofs described in this file and the skills
+  were written by agents, not ordered by the owner. They are tools to use when
+  they pay for themselves, never preconditions for landing. An engine change's
+  adversarial cross-family review is the owner's direction: required, and never
+  a precondition for landing. Its findings go to the shared pile, and the only
+  blocking review gate is before the owner pushes `main`: every high finding
+  from the milestone is resolved or explicitly deferred by the owner
+  ([orchestration](.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)).
   A document records something as the owner's ruling only when the owner said
   it.
 

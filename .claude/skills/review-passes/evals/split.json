@@ -12,7 +12,7 @@
     "r11-broker-holds-the-worktree",
     "r15-hard-pass-adds-a-compat-alias",
     "r16-hard-pass-changed-nothing",
-    "r23-finished-lane-needs-no-review",
+    "r23-review-never-blocks-landing",
     "r25-launch-command-for-a-sol-pass"
   ],
   "test": [
@@ -22,7 +22,7 @@
     "r10-task-help",
     "r12-nonblocking-finding-after-the-pass",
     "r13-hard-doc-only-fixes-in-the-pass",
-    "r14-hard-author-branch-diverged",
+    "r14-hard-author-moved-on-during-a-pass",
     "r17-hard-verifier-rejects-a-fix",
     "r18-scope-two-dot-log-versus-diff",
     "r20-pass-ends-on-a-question",

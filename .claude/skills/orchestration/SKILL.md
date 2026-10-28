@@ -38,21 +38,32 @@ what the machine can verify. The owner's direction:
 - **Brief along the whole path a change travels**, not one system: the lane maps
   the systems its change reaches (`puck references`, the owning skills) and
   checks those partners before handing back.
-- **Review adversarially across families, concurrently.** A Claude author's
-  engine change is reviewed by Codex, a Codex author's by Claude, and Argon takes
+- **Review adversarially across families, concurrently.** An engine change's
+  cross-family review is required and never blocks landing. A Claude author's
+  change is reviewed by Codex, a Codex author's by Claude, and Argon takes
   security, large-context and UI reviews. The reviewer gets the diff and the
   author's claim, not the author's reasoning, and tries to break it with a repro,
   a counterexample or a missed caller. Review depth follows risk: determinism,
   maths and renderer changes get an Astra- or `principal`-grade reviewer, ordinary
   engine code Sol or `specialist`, docs and world content none or a scout's
-  spot-check. The author starts its next item when it hands back, and the reviewer
-  fixes what it finds on the author's branch (review-and-fix,
-  [`review-passes`](../review-passes/SKILL.md)); a review never holds the author.
+  spot-check.
+  - The author starts its next item when it hands back and is never paused; the
+    change lands in its batch whether or not the review has finished.
+  - Findings go to the shared pile ranked by severity, each with one owner. A
+    high finding is scheduled into the next integration batch.
+  - The reviewer's fixes are a follow-up branch of their own in that batch
+    (review-and-fix, [`review-passes`](../review-passes/SKILL.md)), never edits
+    to the author's branch.
+  - The integration lane may revert a landed change when leaving it in is worse
+    than removing it.
+  - The only blocking review gate is before the owner pushes `main`: every high
+    finding from the milestone is resolved or explicitly deferred by the owner.
 - **One integration lane, fed in batches.** It is the only heavy job on the
-  machine. It takes branches whose review findings each have a destination,
-  batches them by risk (low-risk work together, determinism and renderer work
-  alone or in pairs), runs the union of what the batch's changes declare they
-  affect, bisects a red batch, and fast-forwards the integration branch.
+  machine. It takes ready branches, batches them by risk (low-risk work
+  together, determinism and renderer work alone or in pairs), merges them,
+  builds what the merge touched, runs the batch's sweep, bisects a red batch, and
+  hands the lead the green head to fast-forward
+  ([land in batches](#land-in-batches)).
 
 ## Own tracks, not tasks
 
@@ -119,21 +130,29 @@ The message is the notification; git is the record. Inspect the reported
 changes and what the lane ran to show them working before merging
 ([landing bar](../verification/SKILL.md#the-landing-bar)).
 
-## Land each lane on its own
+## Land in batches
 
-A lane lands as soon as it meets the
-[landing bar](../verification/SKILL.md#the-landing-bar): the lead merges the
-integration head into it, builds what the merge touched, and fast-forwards the
-integration branch. "What the merge touched" includes what consumes it:
+A lane is ready when it meets its own focused checks
+([landing bar](../verification/SKILL.md#the-landing-bar)): it builds what it
+touched, its commit body says what it ran to show the change working, and it has
+merged the integration tip. A ready lane joins the integration lane's next batch
+and is held for nothing else: not another lane, not its review. The integration
+lane merges the batch, builds what the merge touched, runs the batch's sweep and
+bisects a red result; the lead fast-forwards the integration branch to the green
+head. "What the merge touched" includes what consumes it:
 - a change to a shader, interface or generated header builds `Puck.slnx`, test projects included;
-- a change to a world document runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`, plus the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`);
+- a change to a world document runs the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) and shows itself in the sweep;
+- a change to simulation state, maths or determinism also runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
 
-The full debug-world replay (every test world, about 45 minutes) never blocks a
-landing (the owner's ruling: "The whole idea was to be EFFICIENT"). It runs in
-the background on the integration head after landing, beside other work, and
-what it finds is ordinary work for the next lane. Never wait on one lane's
-landing checks to start the next lane's.
+The sweep is the batch's proof ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+The full debug-world replay (every test world, about 45 minutes) is the
+integration lane's next heavy job after a batch lands, never beside another heavy
+job and never a condition of a landing (the owner's ruling: "The whole idea was
+to be EFFICIENT"); what it finds is ordinary work for the next lane. A red check
+on the integration branch is the next piece of work, not a reason to stop
+landing, and the integration lane may revert a landed change when leaving it in
+is worse than removing it.
 
 ### Coding lanes and the integration lane
 
@@ -143,28 +162,33 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
   their focused tests. They run no whole-solution build, no full suite and no
   GPU leg, and they hand back a branch that builds and passes those tests.
   Several run at once (the owner's direction: don't over-serialize for
-  memory). Claude Code can reap background jobs under memory pressure while
-  the session idles. When that happens, save the reaped lane's tree as a WIP
-  commit and restart it with a continuation note. Keep one heavy integration
-  job at a time. A windowed debug World holds about 10 GB of working set
-  (15 GB private) within a minute of boot. On a 32 GB machine, while one runs,
-  only a couple of building lanes fit beside it. Keep windowed capture batches short (boot,
-  capture, stop), and tune on a headless World. A lane that runs scenario files
-  (`puck test <file>`) names the files and passes `--jobs 1`: this serializes
-  headless worker processes, including reproduce replicas, with one independent
-  native host live at a time. A review lane's earlier `--jobs 4` run
-  beside the lead's replay once took free memory from 20 GB to 3 GB and killed
-  the replay. Every brief, a read-only review's included, says so.
-- **The integration lane** is one long-running lane. It takes finished branches
-  in the order the lead names, merges each onto its own staging branch, and
-  resolves generated-file conflicts by running their generators. Then it runs
-  the landing bar above once on the merged result: the whole-solution build, the
-  suites, the debug-world scenarios and any granted GPU check. It reports green
-  or red per branch. It also lists each branch's deleted files (`git diff
-  --diff-filter=D` against the integration tip) and compares them with what the
-  brief allowed. A deletion the brief didn't name is reported to the lead before
-  landing, never merged silently. A lane once deleted native capture while
-  asked only to consolidate.
+  memory), within the WIP limit: about three building writers, one heavy
+  integration job and one GPU leg. A windowed debug World holds about 10 GB of
+  working set (15 GB private) within a minute of boot. On a 32 GB machine, while
+  one runs, only a couple of building lanes fit beside it. Keep windowed capture
+  batches short (boot, capture, stop), and tune on a headless World. A lane that
+  runs scenario files (`puck test <file>`) names the files and passes `--jobs 1`:
+  this serializes headless worker processes, including reproduce replicas, with
+  one independent native host live at a time, where a higher `--jobs` beside a
+  replay can exhaust memory and kill it. Every brief, a read-only review's
+  included, says so.
+- **Reaping** is prevented by that limit, because Claude Code reaps background
+  jobs when memory runs critically low. A reaped lane is handled once: the lead
+  saves its tree as a WIP commit, removes the cause, and restarts it with a
+  continuation note. A second reap of the same lane stops it; it goes to the pile
+  with what was running, and the owner decides.
+- **The integration lane** is one long-running lane. It takes ready branches in
+  the order the lead names, batches them by risk, merges each batch onto its own
+  staging branch, and resolves generated-file conflicts by running their
+  generators. Then it runs, once on the merged result, the builds and suites
+  that [the merge touched](#land-in-batches) and the batch's sweep: the
+  debug-world scenarios the batch declares it affects and, under a granted GPU
+  leg, the windowed frame-time and patrol readings
+  ([landing bar](../verification/SKILL.md#the-landing-bar)). It reports green or
+  red per batch and splits a red batch to find the culprit. It also lists each
+  branch's deleted files (`git diff --diff-filter=D` against the integration tip)
+  and compares them with what the brief allowed. A deletion the brief didn't name
+  is reported to the lead before landing, never merged silently.
 - **Briefs** that allow deletion say what may be deleted. A finding capture names
   its settle state: bakes settled and irradiance settled, or marked partial. A
   capture taken before settling can't support a lighting finding.
@@ -172,16 +196,12 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
   routes a red result back to the lane that owns it, and decides any merge
   conflict that needs judgement.
 
-When several branches wait, the integration lane may verify them in one merged
-build, and splits the batch to find the culprit if it goes red. A finished
-branch is never held back for others to arrive. A lane that cannot land alone
-is a dependency to name in the brief. An engine change lands once its
-cross-family review's findings each have a destination
-([spend verification](#spend-verification-not-writing)); the review runs while
-its author works the next item, so it holds the branch, never the author. Gates,
-parity, canaries and counters checks run when the owner asks for a
-qualification, on the head the owner names. A red check on the integration
-branch is the next piece of work, not a reason to stop landing.
+A ready branch is never held back for others to arrive. A lane that cannot land
+alone is a dependency to name in the brief. Review follows its own rule
+([spend verification](#spend-verification-not-writing)): it runs beside the
+batch and never holds a branch or its author. Gates, parity, canaries and
+counters checks run when the owner asks for a qualification, on the head the
+owner names.
 
 Use [verification](../verification/SKILL.md#what-uses-the-gpu) for GPU grants,
 lease acquisition, time boxes and failure handling. Load it before a GPU leg or
@@ -234,9 +254,8 @@ deletes files says to use `git rm`. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
-lead watches the lane's worktree for file writes. After 30 minutes with no
-writes, the lead stops the run, commits its edits as WIP, and hands them to
-another lane. The home policy is the block contributing
+lead watches the lane's worktree for file writes and applies [no bad
+loops](#no-bad-loops). The home policy is the block contributing
 records; login and trust material stay local. The workspace plugin exposes the MCP
 configuration because a bare `.agents/mcp_config.json` is not a discovery root.
 
@@ -284,9 +303,9 @@ whole-solution build, a full suite or a debug-world replay, which the
 integration lane (or the lead acting as it) runs one at a time. Writing the
 landing bar into every coding brief turns each lane into an integration lane:
 heavy jobs then run side by side and Claude Code reaps every background command
-when memory runs critically low, as it did twice in one session at seven and at
-three concurrent heavy jobs. Their worktrees survive and Codex lanes resume by
-session id, but nothing restarts until the owner says so.
+when memory runs critically low. Reaped worktrees survive and Codex lanes resume
+by session id; [reaping](#coding-lanes-and-the-integration-lane) owns what the
+lead does next.
 
 Run a load governor on any machine that hosts many agents, through
 `puck host load`, which samples the machine's load and names its state. Under a
@@ -467,13 +486,29 @@ thing the owner cares about, not machine load alone:
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the
 drift it exists for. On each audit, act on what degraded in the same turn: a
-lane waiting more than an hour to land, an idle slot with ready work, a review
-or check holding a lane that already meets the landing bar, or a stale board.
+ready lane waiting more than an hour for a batch, an idle slot with ready work,
+a lane held for anything but the integration lane's next batch, a lane that
+repeats a failure or has made no writes for 30 minutes ([no bad
+loops](#no-bad-loops)), or a stale board.
 
 When an owner correction reveals a process rule, change the repository skill
 that drives the behavior (this one, `review-passes`, `verification`) in the
 same turn. Agents and the lead's own briefs read the skills; a private note
 beside a skill that still says otherwise changes nothing.
+
+## No bad loops
+
+Every lane and the lead follow four rules, so that a failure costs one retry and
+not a spiral:
+
+- Retry a failing step (a build, test, boot, start, review or restart) once. If
+  it fails again, stop, record what failed and what was tried, and take the next
+  item.
+- Every poll has a deadline.
+- Findings never bounce between a reviewer and an author: a finding goes to the
+  pile with its owner and is not argued back and forth.
+- The lead's audit stops a lane that repeats a failure or makes no writes for 30
+  minutes, saves its tree as a WIP commit, and hands the work to another lane.
 
 ## Rule on collisions
 
@@ -517,5 +552,5 @@ listed name, which survives a restart where its bridge address does not.
 | Skill | Route there for |
 |---|---|
 | [`verification`](../verification/SKILL.md) | The landing bar, optional checks, private CLI copies and GPU execution. |
-| [`review-passes`](../review-passes/SKILL.md) | Optional review passes: briefs, companion launch commands and landing fixes on the author's branch. |
+| [`review-passes`](../review-passes/SKILL.md) | Review-and-fix passes: briefs, companion launch commands and the follow-up branch a pass hands over. |
 | [`boy-scout`](../boy-scout/SKILL.md) | Keeping agent-facing documents and skills in step with a change; [Writing documentation](../../../docs/development/documentation.md) owns their prose and the skill evaluation procedure. |
