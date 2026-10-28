@@ -11,6 +11,9 @@ namespace Puck.World.Client;
 /// </summary>
 public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter routes, IWorldAdjacencySource adjacencies) {
     private readonly WorldClient m_client = (client ?? throw new ArgumentNullException(paramName: nameof(client)));
+
+    /// <summary>Gets the latest simulation tick the boot client has received.</summary>
+    public ulong Tick => m_client.Tick;
     private readonly WorldSeatAuthorityRouter m_routes = (routes ?? throw new ArgumentNullException(paramName: nameof(routes)));
     private readonly IWorldAdjacencySource m_adjacencies = (adjacencies ?? throw new ArgumentNullException(paramName: nameof(adjacencies)));
     private readonly WorldAuthorityRoute?[] m_selectedRoutes = new WorldAuthorityRoute?[WorldSeatBindings.SeatCount];

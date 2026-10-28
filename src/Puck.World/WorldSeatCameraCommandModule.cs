@@ -10,7 +10,83 @@ namespace Puck.World;
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
 internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
-    private string Describe(int slot) {
+    // The keys the default reading keeps: where the camera is and looks, how, and what the clearance did to the view.
+    private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "mode", "fade", "clearance"];
+
+    // The reading `world.view.camera [player] [full|compact|<key>,<key>...]` asks for: the compact set by default,
+    // every field for `full`, or the named keys in the order given. A key the seat does not report is named in the
+    // refusal rather than dropped.
+    private CommandResult Read(CommandContext context, WireArgs args) {
+        if (args.Count > 2) {
+            return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>] [full|compact|<key>,<key>...], player an integer 1..{PlayerRoster.MaxSlots}]");
+        }
+
+        // A lone token that is not a seat number is the shape, read for the acting seat.
+        var shapeAt = ((args.Count == 2) ? 1 : (((args.Count == 1) && !char.IsAsciiDigit(c: args[0][0])) ? 0 : -1));
+        var shape = ((shapeAt >= 0) ? args[shapeAt].ToString() : "compact");
+        int slot;
+        CommandResult? error;
+
+        if (shapeAt == 0) {
+            (slot, error) = (context.Slot, null);
+        } else {
+            (slot, error) = SeatCommandArgs.ResolveSlot(
+                args: in args,
+                at: 0,
+                context: context,
+                verb: "world.view.camera"
+            );
+        }
+
+        if (error is { } refusal) {
+            return refusal;
+        }
+
+        var fields = Fields(slot: slot);
+
+        if (shape == "full") {
+            return new CommandResult(Output: Frame(fields: fields));
+        }
+
+        var keys = ((shape == "compact") ? CompactKeys : shape.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        var chosen = new List<KeyValuePair<string, string>>(capacity: keys.Length);
+
+        foreach (var key in keys) {
+            var found = fields.FindIndex(match: field => (field.Key == key));
+
+            if (found >= 0) {
+                chosen.Add(item: fields[found]);
+            } else if (shape != "compact") {
+                return CommandResult.Error(output: $"[world.view.camera: no field '{key}' — `full` lists every field]");
+            }
+        }
+
+        return new CommandResult(Output: Frame(fields: chosen));
+    }
+    private static string Frame(List<KeyValuePair<string, string>> fields) {
+        var builder = new StringBuilder(value: "[world.view.camera:");
+
+        foreach (var (key, value) in fields) {
+            _ = builder.Append(value: ' ').Append(value: key).Append(value: '=').Append(value: value);
+        }
+
+        return builder.Append(value: ']').ToString();
+    }
+    private string Describe(int slot) => Frame(fields: Compact(fields: Fields(slot: slot)));
+    private static List<KeyValuePair<string, string>> Compact(List<KeyValuePair<string, string>> fields) => [.. CompactKeys.SelectMany(selector: key => fields.Where(predicate: field => (field.Key == key)))];
+    // Every field the seat reports, in reading order, as the key=value tokens its description is made of.
+    private List<KeyValuePair<string, string>> Fields(int slot) {
+        var fields = new List<KeyValuePair<string, string>>();
+
+        foreach (var token in Text(slot: slot).Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries)) {
+            var split = token.IndexOf(value: '=');
+
+            fields.Add(item: new(key: token[..split], value: token[(split + 1)..]));
+        }
+
+        return fields;
+    }
+    private string Text(int slot) {
         var definition = instances.ResolveRoutedDefinition(slot: slot);
         var seat = roster.Seat(slot: slot);
         var seatLook = (seat?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
@@ -20,7 +96,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         var choice = (state?.ClearanceChoice(control: control, feel: seatLook) ?? ((seatLook.ClearanceMode == WorldCameraClearanceChoice.Auto) ? control.ClearanceMode : seatLook.ClearanceMode));
         var angularVelocity = (seat?.MotionAngularVelocity ?? Vector3.Zero);
         var route = seatRouter.Route(slot: slot);
-        var builder = new StringBuilder(value: "[world.view.camera: ");
+        var builder = new StringBuilder();
         var resolved = continuum.TryResolvePresentedSeatPose(
             interpolationAlpha: 1f,
             orientation: out _,
@@ -30,7 +106,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
         _ = builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"player={PlayerRoster.DisplayNumber(slot: slot)} authority={route.Endpoint.Identity} entity={route.Entity.Authority}/{route.Entity.Index}#{route.Entity.Generation} epoch={route.Epoch} resolved={resolved.ToString().ToLowerInvariant()}"
+            handler: $"tick={continuum.Tick} fov={float.RadiansToDegrees(radians: (state?.FieldOfView ?? 0f)):0.##} player={PlayerRoster.DisplayNumber(slot: slot)} authority={route.Endpoint.Identity} entity={route.Entity.Authority}/{route.Entity.Index}#{route.Entity.Generation} epoch={route.Epoch} resolved={resolved.ToString().ToLowerInvariant()}"
         );
         if (resolved) {
             _ = builder.Append(
@@ -57,7 +133,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             _ = builder.Append(value: " cameraApplication=true");
         }
 
-        return builder.Append(value: ']').ToString();
+        return builder.ToString();
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -143,25 +219,8 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.camera",
-            description: $"Echoes a seat's live control policy, held free-look state, motion-input state, camera orbit and last presented eye: world.view.camera [player], player 1..{PlayerRoster.MaxSlots}. view= first or third, viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds. eye= and target= are world metres, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, mode= fade or cutaway, fade= zero (solid) to one (hidden), clearance= none, open, shortened, risen or crowded. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
-            handler: (context, args) => {
-                if (args.Count > 1) {
-                    return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
-                }
-
-                var (slot, error) = SeatCommandArgs.ResolveSlot(
-                    args: in args,
-                    at: 0,
-                    context: context,
-                    verb: "world.view.camera"
-                );
-
-                if (error is { } refusal) {
-                    return refusal;
-                }
-
-                return new CommandResult(Output: Describe(slot: slot));
-            },
+            description: $"Echoes a seat's camera: world.view.camera [player] [full|<key>,<key>...], player 1..{PlayerRoster.MaxSlots}; the default reading is tick, view, eye, target, yaw, pitch, fov, mode, fade and clearance. `full` reads every field (control policy, held free-look state, motion-input state, camera orbit and the last presented eye), and a comma list reads just those keys in the order given. tick= is the latest simulation tick the client received, view= first or third, eye= and target= are world metres, yaw= and pitch= degrees, fov= the vertical field of view in degrees of the last framed seat camera (0 before any frame, as in a headless World). full also reads viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, mode= fade or cutaway, fade= zero (solid) to one (hidden), clearance= none, open, shortened, risen or crowded. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
+            handler: Read,
             routing: CommandRouting.Immediate
         );
     }

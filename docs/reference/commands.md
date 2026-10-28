@@ -661,8 +661,8 @@ commands [
   A line may call another authored command; a chain that loops is refused.
 
 The registry answers an authored command beside the engine's verbs: `help` and
-`help --names` list its name, `help --full` and `help <prefix>` list it with its
-usage and the lines it
+`help --names` list its name, `help <prefix>` lists it with its usage (its
+synopsis), `help --full` with its usage and the lines it
 runs, `CommandRegistry.Definitions` and `TryGetMetadata` describe it (a
 bindable, Simulation-routed verb taking wire arguments), and a binding row or
 wheel sector names it like any verb, with or without `text` arguments. The
@@ -874,7 +874,10 @@ Run `world.debug-view report` first if no findings have been collected.
 `primary` resolves to the first seat's current rendered instance (`world`
 before presentation); an explicit render instance name is also accepted.
 The coordinate form is `world.view.pick <view-or-instance> <x> <y>`,
-with normalized coordinates. The answer names what the pixel's mesh or program
+with normalized coordinates. In a text session it holds the call until a
+rendered frame answers (a paused World still renders), then answers in place of
+`pending`; the call's answer deadline ends the hold with a line saying the pick
+went unanswered. The answer names what the pixel's mesh or program
 instance draws: `body=<index>` for a body's stamp and `placement=<id>` for a
 placement, whether the pixel is a baked mesh the frame drew from a group or a
 portal-straddle copy, or a mesh the host drew itself.
@@ -983,8 +986,10 @@ member-by-member surface.
   before it reads a module's, declared `Unbindable` and `Immediate`. So
   `TryGetId` and `TryGetMetadata` answer for them, `Definitions` is the whole
   dispatchable catalogue rather than the catalogue minus three, and the `help`
-  listing covers every command (names on bare `help` and `help --names`, full
-  descriptions on `help --full` and `help <prefix>`) including its own.
+  listing covers every command (names on bare `help` and `help --names`,
+  synopses on `help <prefix>`, full descriptions on `help --full`) including its
+  own. A synopsis is a description's first sentence, at most 200 characters,
+  ending in ` ...` when words were left out.
 - **`wire.ack` sets how loud an accepted line is.** `wire.ack on`, the default,
   echoes every accepted command; `wire.ack quiet` drops the bare success
   acknowledgements, and only those. A verb opts into being droppable by
