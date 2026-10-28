@@ -22,6 +22,10 @@ public sealed class WorldActionStateLane {
     /// <summary>Gets a value indicating whether an arena has been bound.</summary>
     public bool IsBound => (m_arena is not null);
 
+    /// <summary>Gets a register's live storage generation, including open writes and rewinds.</summary>
+    /// <param name="slot">The register-file slot.</param>
+    public ulong Generation(int slot) => (((m_arena is { } arena) && (((uint)slot) < ((uint)m_rows.Length)) && (m_rows[slot] >= 0))
+        ? arena.RowGeneration(rowOrdinal: m_rows[slot]) : 0);
     /// <summary>Binds the arena the lanes are stored in and resolves every register slot's row.</summary>
     /// <param name="arena">The server's columnar store.</param>
     /// <param name="definitions">The world's compiled register file.</param>

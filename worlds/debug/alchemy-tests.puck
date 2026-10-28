@@ -1,8 +1,9 @@
 // The Alchemy table's scenarios (alchemy.puck), each booted in the whole debug world:
 // `puck test worlds/debug/alchemy-tests.puck --reproduce --jobs 1`.
 // Cells are named by ordinal on the 8x5 `alchemyGrid` (8 * row + column): cell 0 is the reset tile, cells 1 to 31 hold
-// the 31 element tokens (`alchemyToken1`..`alchemyToken31`, bodies 223..193), and row 4 holds the cauldron between the
+// the 31 element tokens (`alchemyToken1`..`alchemyToken31`, bodies 502..472), and row 4 holds the cauldron between the
 // left hand well (cell 34, world x = 64.79, z = 30.88) and right hand well (cell 37, world x = 65.21, z = 30.88).
+// Body indices follow shapes.puck's population counts: the cursor is 503, and token e is 503 - e.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -14,7 +15,7 @@ test "the tokens settle on their shelf cells with the four starters face up" {
   }
   expect {
     alchemyHold == 9
-    physics(quiescent) == 1
+    physics(quiescent, alchemyElement) == 1
     board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
     board(cellOf, alchemyBoard, placement, alchemyToken4) == 4
     board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
@@ -47,7 +48,7 @@ test "fire and water make steam and turn its token face up on the table" {
     discovered == 5
     alchemyBoard[5] == 1
     alchemyHold == 9
-    physics(quiescent) == 1
+    physics(quiescent, alchemyElement) == 1
     board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
     upright(placement, alchemyToken5) > 0
   }
@@ -56,13 +57,13 @@ test "fire and water make steam and turn its token face up on the table" {
 test "overturned tokens on their own shelves return to the book's face" {
   when {
     ticks 150
-    seat1: body.pose 64.65 9.97 30.32 0 0 180 223
-    seat1: body.pose 65.21 9.97 30.32 0 0 0 219
+    seat1: body.pose 64.65 9.97 30.32 0 0 180 502
+    seat1: body.pose 65.21 9.97 30.32 0 0 0 498
     ticks 150
   }
   expect {
     alchemyHold == 9
-    physics(quiescent) == 1
+    physics(quiescent, alchemyElement) == 1
     alchemyIllegal == 1
     board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
     board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
@@ -162,8 +163,8 @@ test "a seated player picks two elements with the cursor and drops tokens into t
     ticks 4
     seat1: body.press confirm
     ticks 20
-    seat1: body.pose 64.79 9.97 30.88 0 0 0 221
-    seat1: body.pose 65.21 9.97 30.88 0 0 0 220
+    seat1: body.pose 64.79 9.97 30.88 0 0 0 500
+    seat1: body.pose 65.21 9.97 30.88 0 0 0 499
     ticks 150
   }
   expect {
@@ -180,6 +181,35 @@ test "a seated player picks two elements with the cursor and drops tokens into t
     alchemyCell.alchemyToken3 == 3
     alchemyCell.alchemyToken4 == 4
     alchemyIllegal == 0
+  }
+}
+
+// Go's first stone stays airborne throughout this reading. Only Alchemy's own tokens must settle, including the
+// Fire and Water tokens dropped into its wells; the global and Go quiescence reads must remain false.
+test "the hand wells resolve while another table is still moving" {
+  given {
+    goAiSide = 0
+  }
+  when {
+    seat1: body.pose 56.5 1000 30.6 0 0 0 470
+    ticks 150
+    seat1: body.pose 64.79 9.97 30.88 0 0 0 500
+    seat1: body.pose 65.21 9.97 30.88 0 0 0 499
+    ticks 150
+  }
+  expect {
+    physics(quiescent) == 0
+    physics(quiescent, goCell) == 0
+    physics(quiescent, alchemyElement) == 1
+    alchemyHold == 9
+    made == Steam
+    newest == Steam
+    discovered == 5
+    mixes == 1
+    alchemyIllegal == 0
+    alchemyCell.alchemyToken3 == 3
+    alchemyCell.alchemyToken4 == 4
+    upright(placement, alchemyToken5) > 0
   }
 }
 

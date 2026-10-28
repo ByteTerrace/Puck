@@ -262,7 +262,7 @@ public static class FixedConvexContact {
         in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) =>
         TryPush(collider: in collider, orientation: in orientation, position: position, push: out push, skin: skin, supportQueries: out _, volume: in volume);
 
-    /// <summary>Queries an exact chamfered-box or superellipsoid contact and reports the deterministic number
+    /// <summary>Queries an exact finite convex collider contact and reports the deterministic number
     /// of support-map evaluations spent by GJK, the simplex bootstrap, EPA and face-normal recovery.</summary>
     /// <param name="collider">The exact convex static collider.</param>
     /// <param name="position">The body's world position.</param>
@@ -275,15 +275,19 @@ public static class FixedConvexContact {
     public static bool TryPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push, out int supportQueries) {
         supportQueries = 0;
-        if (collider.Kind is not (FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid)) {
-            throw new ArgumentException(message: "An exact convex contact requires a chamfered box or superellipsoid.", paramName: nameof(collider));
+        if (collider.Kind == FixedStaticColliderKind.HalfSpace) {
+            throw new ArgumentException(message: "A convex support query requires a finite collider.", paramName: nameof(collider));
         }
-        var localPosition = collider.Rotation.RotateInverse(vector: (position - collider.Center));
-        var localOrientation = (collider.Rotation.Conjugate() * orientation).Normalize();
+        var rotation = ((collider.Kind is FixedStaticColliderKind.Sphere or FixedStaticColliderKind.AxisAlignedBox)
+            ? FixedQuaternion.Identity : collider.Rotation);
+        var localPosition = rotation.RotateInverse(vector: (position - collider.Center));
+        var localOrientation = (rotation.Conjugate() * orientation).Normalize();
 
         var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in localOrientation, position: localPosition, volume: in volume);
         var padding = (collider.Radius + skin);
-        var limit = ((collider.Extent + extent) + new FixedVector3(X: padding, Y: padding, Z: padding));
+        var shapeExtent = ((collider.Kind == FixedStaticColliderKind.Sphere)
+            ? new FixedVector3(X: collider.Extent.X, Y: collider.Extent.X, Z: collider.Extent.X) : collider.Extent);
+        var limit = ((shapeExtent + extent) + new FixedVector3(X: padding, Y: padding, Z: padding));
 
         if ((FixedQ4816.Abs(value: center.X) > limit.X) || (FixedQ4816.Abs(value: center.Y) > limit.Y) || (FixedQ4816.Abs(value: center.Z) > limit.Z)) {
             push = default; return false;
@@ -303,7 +307,7 @@ public static class FixedConvexContact {
                 for (var z = -1; (z <= 1); z++) {
                     var axes = ((Math.Abs(value: x) + Math.Abs(value: y)) + Math.Abs(value: z));
 
-                    if ((axes == 0) || ((collider.Kind == FixedStaticColliderKind.Superellipsoid) && (axes != 1))) { continue; }
+                    if ((axes == 0) || ((collider.Kind != FixedStaticColliderKind.ChamferedBox) && (axes != 1))) { continue; }
                     var normal = new FixedVector3(X: FixedQ4816.FromInteger(value: x), Y: FixedQ4816.FromInteger(value: y),
                         Z: (FixedQ4816.FromInteger(value: z) * ((axes == 3) ? rootTwo : FixedQ4816.One))).Normalize();
 
@@ -315,7 +319,7 @@ public static class FixedConvexContact {
                 }
             }
         }
-        push = push with { Normal = collider.Rotation.Rotate(vector: push.Normal) };
+        push = push with { Normal = rotation.Rotate(vector: push.Normal) };
         return (push.Penetration > FixedQ4816.Zero);
     }
 

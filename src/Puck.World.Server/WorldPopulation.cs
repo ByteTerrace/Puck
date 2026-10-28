@@ -188,6 +188,10 @@ public sealed partial class WorldPopulation {
     // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
     // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
     private readonly WorldSweepBody[] m_dynamicContactBodies;
+    private readonly bool[] m_dynamicContactIncluded;
+    private readonly Dictionary<(long Y, long Z), int> m_awakeContactGrid;
+    private readonly int[] m_awakeContactNext;
+    private readonly bool[] m_contactIndexedAwake;
     private readonly byte[] m_dynamicContactDegrees;
     // Y/Z cell heads and links in X-sweep order. Only lookups enumerate cells, never dictionary iteration.
     private readonly Dictionary<(long Y, long Z), int> m_dynamicContactGrid;
@@ -348,7 +352,17 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
+        m_awakeBodies = new BodyWorkSet(capacity: m_entries.Length);
+        m_sleepingBodies = new BodyWorkSet(capacity: m_entries.Length);
+        m_eventBodies = new BodyWorkSet(capacity: m_entries.Length);
         m_dynamicContactBodies = new WorldSweepBody[m_entries.Length];
+        m_dynamicContactIncluded = new bool[m_entries.Length];
+        m_awakeContactGrid = new Dictionary<(long Y, long Z), int>(capacity: m_entries.Length);
+        m_awakeContactNext = new int[m_entries.Length];
+        m_contactIndexedAwake = new bool[m_entries.Length];
+        m_stepBodies = new int[m_entries.Length];
+        m_sleepQueries = new int[m_entries.Length];
+        m_eventBodyImage = new int[m_entries.Length];
         m_dynamicContactDegrees = new byte[m_entries.Length];
         m_dynamicContactGrid = new Dictionary<(long Y, long Z), int>(capacity: m_entries.Length);
         m_dynamicContactCells = new (long Y, long Z)[m_entries.Length];
@@ -379,6 +393,7 @@ public sealed partial class WorldPopulation {
 
         for (var index = 0; (index < Capacity); index++) {
             m_entries[index] = new Entry {
+                Owner = this,
                 Index = index,
                 Lane = m_actionStateLane,
                 KitIndex = SelectRow(
@@ -416,6 +431,7 @@ public sealed partial class WorldPopulation {
     // index-seeded heading a fresh activation faces the new body toward. Body is the entry's own sim — null while
     // inactive, minted on activation (a session join for a seat, the census or an inhabitant join for a peer).
     private sealed class Entry {
+        public required WorldPopulation Owner { get; init; }
         // The arena slot lanes' roster is this flag, by construction rather than by convention at every caller:
         // occupying a slot admits its lane ordinal and births every register at its authored initial, and releasing
         // one clears what it answered, so the next occupant can never inherit what the last one left. Both halves
@@ -435,9 +451,19 @@ public sealed partial class WorldPopulation {
                 } else {
                     Lane.Leave(ordinal: Index);
                 }
+                Owner.BodyEntryChanged(index: Index);
             }
         }
-        public WorldBody? Body { get; set; }
+        public WorldBody? Body {
+            get;
+            set {
+                if (ReferenceEquals(objA: field, objB: value)) { return; }
+                if (field is { } previous) { previous.BindPopulationWake(index: Index, observer: null); }
+                field = value;
+                value?.BindPopulationWake(index: Index, observer: Owner.BodyWoke);
+                Owner.BodyEntryChanged(index: Index);
+            }
+        }
         public Vector3 BodyColor { get; set; }
         public required int Index { get; init; }
         public required WorldActionStateLane Lane { get; init; }

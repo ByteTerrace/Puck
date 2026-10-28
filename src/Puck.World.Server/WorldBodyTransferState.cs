@@ -123,6 +123,7 @@ namespace Puck.World.Server;
 /// tail of every <see cref="WorldBody.Advance"/>, one-tick, like <c>m_heldChannels</c>.</para>
 /// <para><b>Checkpoint-only continuation.</b> <see cref="WorldBodyIntegrationResidue"/> carries the same-world integration
 /// state a cross-world transfer deliberately cannot: position/rotation/gravity-axis accumulator remainders,
+/// canonical rigid sleeping-island membership (the population rebuilds its wake graph and spatial index),
 /// previous position, grounded/up/frame/reseat state, dynamics-follower seed latches, engagement latches, and the
 /// complete <see cref="WorldBodyTetherResidue"/>. The latter includes every field <c>WorldBody.Tether.cs</c> declares
 /// except the compiled tether facet, which the checkpoint's own world definition (its owning kit row) reconstructs

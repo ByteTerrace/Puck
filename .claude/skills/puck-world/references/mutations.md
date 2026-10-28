@@ -57,8 +57,15 @@ sweeps between steps 9 and 10):
    write-back — dequeue order proves nothing about contention).
 7. `ResolveEngageProbes`: resolve context-button candidates against pre-move
    positions.
-8. `WorldPopulation.AdvanceSimulated`, then `AdvanceSeats`: advance every
-   body (stand-ins/peers first, seats second), then apply fired auto-engages.
+8. `WorldPopulation.AdvanceSimulated`, then `AdvanceSeats`: advance the
+   integration roster (stand-ins/peers first, seats second), then apply fired
+   auto-engages. A rigid island woken after the roster snapshot joins this
+   tick's contacts with empty support scratch and zero hold time; its first
+   integration is next tick. Wake a contacted sleeper before recording the
+   pair's new support. A late wake re-queries current static support before the
+   pair split and contact finalization, so clearing stale scratch cannot let
+   correction push it into its floor. Checkpoint restore retains support/gravity
+   sleep rows only for surviving bodies and wakes components that lost a member or support.
 9. `WorldEventFeed.Collect`: collect settled collision, region, seat, and
    route edges.
 10. `WorldAddonRuntime.ResolveReads`: guests' reads resolve against the

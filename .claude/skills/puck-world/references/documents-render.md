@@ -468,12 +468,21 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 instead of a locomotion program — see
 [the server reference](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs).
 `mass` is required and positive; the other four are non-negative per-second
-decay rates, never per-tick fractions. Requires `collider` (sphere, capsule,
-or box — never `fromCreation`) and `bodyContact: solid`.
+decay rates, never per-tick fractions. Requires `collider` with exactly one
+sphere, capsule, box or ellipsoid volume and `bodyContact: solid`. A
+`fromCreation` collider admits a creation's single primitive too; a nonuniform
+Sphere or Ellipsoid retains its actual radii and curved support, rather than
+its bounding box. Compound creations still refuse rigid inertia derivation.
+An ellipsoid's creation-local rotation must keep its principal inertia axes
+aligned with the body (axis permutations and equal-radius-plane rotations
+are admitted); rotate the body itself to give it an arbitrary orientation.
+The older Box mass path still reads its original half-extents without rotating
+the tensor for a collider-local rotation; keep an anisotropic box primitive
+unrotated until that path has the same principal-axis admission check.
 
 A kit's `rigid` facet (`Puck.World.Schema.WorldRigid`) is a passive
 physical entity — mass/restitution/friction/damping derived to
-mass/inertia from the kit's own sphere/capsule/box collider, never a free
+mass/inertia from the kit's own primitive collider, never a free
 density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
 whole step to the rigid solver instead of the grounded/free motion
 program. Every contact anchor — static (ground/obstruction) and pair alike —
@@ -495,12 +504,27 @@ domino line) crosses more than one pair-hop within one tick instead of one
 body per tick; a box-vs-box pair depenetrates by the complete fifteen-axis
 separating-axis test (`Puck.Physics.FixedOrientedBox.TrySeparation`), not the
 coarser world-bounds approximation a capsule-vs-box pair still uses. Once the resting latch
-closes, `AdvanceRigid` stops integrating that body entirely until something
+closes over a complete rigid contact island, the population parks every member until something
 wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
-teleport, or a live solid edit replacing the contact field it rested
+teleport, glide, reconciliation, changed scale/collider/rigid facet, or a live solid edit replacing the contact field it rested
 against) — this is what makes `Resting`/`$physics:quiescent` mean the body
 is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
-`$physics:quiescent` rule operand are the console/rule surface; see
+`physics(quiescent)` rule operand are the console/rule surface. A carried rigid
+body is never quiescent. `physics(quiescent, roster)` limits the check to the
+authored keys of a keyed state row, each naming one count-1 inhabited placement;
+the compiler resolves those names to placement ordinals, so each read costs one
+lookup per listed placement rather than a population scan per member. Cell
+values do not filter membership, and uninhabited or inactive bodies contribute
+no motion. Dynamic-pair support counts toward the hold after the pair solve. A stack sleeps as one island;
+touching or changing any member wakes the component, so moving a lower body releases the stack.
+Sleeping bodies retain a spatial index and leave the integration, broadphase construction and event work sets.
+An awake neighbour queries that index before its sweep. Canonical island roots are checkpointed; the spatial
+index and rigid wake adjacency are rebuilt from those roots. Non-rigid supports keep explicit wake dependencies
+on sleeping loads. Solved gravity changes wake affected components before integration, even without a contact-field
+revision. Checkpoints also retain pending event discovery and its last policy: clearing that history would change
+which edges consume a bounded candidate budget. Reconstruct captured scale and effective kit before restoring
+rest latches, so register catch-up does not spuriously wake an unchanged body. `puck bench world` reports sleeping bodies and integration,
+broadphase and event work counts. See
 [Crowd scale policies](#crowd-scale-policies)
 for the authored `collision.bodyContacts` rigid fields, and the
 [server](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)

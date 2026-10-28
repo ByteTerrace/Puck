@@ -56,7 +56,7 @@ public static class FixedTwoBodyKernel {
 
         return angular;
     }
-    private static void ApplyToOneBody(FixedRigidBody body, FixedVector3 anchor, FixedVector3 impulse, FixedRigidScales scales, ref int refusals) {
+    private static void ApplyToOneBody(FixedRigidBody body, FixedVector3 anchor, FixedVector3 impulse, FixedVector3 normal, long impulseRaw, FixedRigidScales scales, ref int refusals) {
         if (!body.IsDynamic) {
             return;
         }
@@ -98,9 +98,11 @@ public static class FixedTwoBodyKernel {
         );
 
         var orientation = body.CurrentOrientation;
-        var torque = orientation.RotateInverse(vector: FixedVector3.Cross(
+        // Apply inverse inertia to the geometric lever before the small impulse magnitude. Rounding r×impulse
+        // to Q16 first quantizes a centimetre body's torque into whole radians/second (or zero).
+        var lever = orientation.RotateInverse(vector: FixedVector3.Cross(
             left: anchor,
-            right: impulse
+            right: normal
         ));
 
         if (!FixedSymmetricSolve.TryApplySymmetric3(
@@ -110,15 +112,24 @@ public static class FixedTwoBodyKernel {
             d: body.InverseInertiaYY,
             e: body.InverseInertiaYZ,
             f: body.InverseInertiaZZ,
-            vX: torque.X.Value,
-            vY: torque.Y.Value,
-            vZ: torque.Z.Value,
+            vX: lever.X.Value,
+            vY: lever.Y.Value,
+            vZ: lever.Z.Value,
             fractionBitsMatrix: scales.InverseInertia,
             fractionBitsVector: FixedQ4816.FractionBitCount,
-            fractionBitsOut: FixedQ4816.FractionBitCount,
-            x: out var wx,
-            y: out var wy,
-            z: out var wz
+            fractionBitsOut: scales.InverseInertia,
+            x: out var responseX,
+            y: out var responseY,
+            z: out var responseZ
+        ) || !FusedArithmetic.TryMixedScaleProduct(
+            a: responseX, fractionBitsA: scales.InverseInertia, b: impulseRaw, fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount, result: out var wx
+        ) || !FusedArithmetic.TryMixedScaleProduct(
+            a: responseY, fractionBitsA: scales.InverseInertia, b: impulseRaw, fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount, result: out var wy
+        ) || !FusedArithmetic.TryMixedScaleProduct(
+            a: responseZ, fractionBitsA: scales.InverseInertia, b: impulseRaw, fractionBitsB: FixedQ4816.FractionBitCount,
+            fractionBitsOut: FixedQ4816.FractionBitCount, result: out var wz
         )) {
             ++refusals;
             return;
@@ -165,6 +176,8 @@ public static class FixedTwoBodyKernel {
             anchor: anchorA,
             body: bodyA,
             impulse: -impulse,
+            impulseRaw: impulseRaw,
+            normal: -normal,
             refusals: ref refusals,
             scales: scales
         );
@@ -172,6 +185,8 @@ public static class FixedTwoBodyKernel {
             anchor: anchorB,
             body: bodyB,
             impulse: impulse,
+            impulseRaw: impulseRaw,
+            normal: normal,
             refusals: ref refusals,
             scales: scales
         );

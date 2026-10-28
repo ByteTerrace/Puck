@@ -640,6 +640,7 @@ public sealed partial class WorldBody {
         RigidAngularVelocity: m_angularVelocity,
         RigidResting: m_resting,
         RigidRestingHoldTicks: m_restingHoldTicks,
+        RigidSleepRootPlusOne: m_rigidSleepRootPlusOne,
         RigidGroundContacting: m_rigidGroundContacting,
         RigidObstructionContacting: m_rigidObstructionContacting,
         RigidGroundMissStreak: m_rigidGroundMissStreak,
@@ -746,6 +747,7 @@ public sealed partial class WorldBody {
         m_angularVelocity = residue.RigidAngularVelocity;
         m_resting = residue.RigidResting;
         m_restingHoldTicks = residue.RigidRestingHoldTicks;
+        m_rigidSleepRootPlusOne = residue.RigidSleepRootPlusOne;
         m_rigidGroundContacting = residue.RigidGroundContacting;
         m_rigidObstructionContacting = residue.RigidObstructionContacting;
         m_rigidGroundMissStreak = residue.RigidGroundMissStreak;

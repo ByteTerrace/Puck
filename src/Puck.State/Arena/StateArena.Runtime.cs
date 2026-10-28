@@ -83,6 +83,10 @@ public sealed partial class StateArena {
         ? m_visibilities[slot]
         : null
     );
+    /// <summary>Returns whether a row has materialized cell audience restrictions. When false every cell's own
+    /// visibility is null, so a reader need not enumerate the row to discover policy dependencies.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    public bool HasCellVisibility(int rowOrdinal) => (m_visibilities?.HasRow(row: rowOrdinal) == true);
     /// <summary>Attempts to read one cell's clock without materializing a record.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>
@@ -130,7 +134,7 @@ public sealed partial class StateArena {
     /// <param name="reason">Why the write was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the clock was stored.</returns>
     public bool TryWriteClock(int rowOrdinal, CellKey key, long epochTick, long epochEngineTick, long y0, long v0, long substepTicks, out string reason) {
-        if (!m_layout.HasColumn(row: rowOrdinal, column: ArenaColumn.ClockSet) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))) {
+        if (!m_layout.HasColumn(column: ArenaColumn.ClockSet, row: rowOrdinal) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))) {
             reason = $"row '{RowName(rowOrdinal: rowOrdinal)}' declares no writable clock";
             return false;
         }
@@ -311,7 +315,7 @@ public sealed partial class StateArena {
     /// <remarks>A lattice row's cells are addressed by topology cell ordinal without interning a key per cell,
     /// which is what a whole-board sweep needs.</remarks>
     public bool TryWriteObservationAt(int rowOrdinal, int position, StateObservation? observation) {
-        if (!m_layout.HasColumn(row: rowOrdinal, column: ArenaColumn.Observation) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))) {
+        if (!m_layout.HasColumn(column: ArenaColumn.Observation, row: rowOrdinal) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal))) {
             return false;
         }
         if (!TryPresentSlotAt(
@@ -378,7 +382,7 @@ public sealed partial class StateArena {
     /// <remarks>The arena copies an arbitrary reader list into its immutable, tightly sized representation. Passing
     /// back a visibility read from the arena reuses that representation.</remarks>
     public bool TryWriteVisibility(int rowOrdinal, CellKey key, StateVisibility? visibility) {
-        if (!m_layout.HasColumn(row: rowOrdinal, column: ArenaColumn.Visibility) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
+        if (!m_layout.HasColumn(column: ArenaColumn.Visibility, row: rowOrdinal) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
             key: key,
             rowOrdinal: rowOrdinal,
             slot: out var slot
@@ -434,7 +438,7 @@ public sealed partial class StateArena {
         );
     }
     private bool TryWriteCellNumber(int rowOrdinal, CellKey key, ArenaColumn column, long value) {
-        if (!m_layout.HasColumn(row: rowOrdinal, column: column) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
+        if (!m_layout.HasColumn(column: column, row: rowOrdinal) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
             key: key,
             rowOrdinal: rowOrdinal,
             slot: out var slot
@@ -451,7 +455,7 @@ public sealed partial class StateArena {
         return true;
     }
     private bool TryWriteCellReference(int rowOrdinal, CellKey key, ArenaColumn column, object? value) {
-        if (!m_layout.HasColumn(row: rowOrdinal, column: column) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
+        if (!m_layout.HasColumn(column: column, row: rowOrdinal) || ((m_poolMutationDepth == 0) && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) || !TryPresentSlot(
             key: key,
             rowOrdinal: rowOrdinal,
             slot: out var slot

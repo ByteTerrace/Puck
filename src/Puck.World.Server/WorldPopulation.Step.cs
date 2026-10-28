@@ -730,9 +730,9 @@ public sealed partial class WorldPopulation {
     // The tick's one gravity solve. Gathered in ENTITY ORDER so the solver's input order is the population's own
     // stable order: an approximate solver's answer depends on the order its tree is built in, so activation history
     // must not reach it.
-    private void SolveGravity() {
+    private bool SolveGravity() {
         if (m_gravityField is not { IsActive: true } gravity) {
-            return;
+            return false;
         }
 
         gravity.RefreshAttachedAreas(population: this);
@@ -758,6 +758,16 @@ public sealed partial class WorldPopulation {
         }
 
         gravity.Solve(targets: m_gravityTargets);
+        var woke = false;
+        // The field's contact revision says nothing about solved acceleration. Reuse its already-required,
+        // entity-ordered target pass; a static/default-gravity world pays no sleeping-body scan.
+        foreach (var target in m_gravityTargets) {
+            if (!m_sleepGravity.TryGetValue(key: target.EntityIndex, value: out var previous)) { continue; }
+            FixedVector3? current = (gravity.TryAcceleration(entityIndex: target.EntityIndex, acceleration: out var acceleration) ? acceleration : null);
+
+            if (current != previous) { WakeBodyIsland(index: target.EntityIndex); woke = true; }
+        }
+        return woke;
     }
     private static void BindCadence(ulong period, int ordinal, int count, ref ulong boundPeriod, ref ulong elapsed, ref ulong remaining) {
         if (boundPeriod == period) {
@@ -809,14 +819,16 @@ public sealed partial class WorldPopulation {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
     public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+        SimulatedBodyVisits = 0;
 
         AutonomyStatistics = default;
 
-        if (m_baseContactField is WorldColliderSet colliders) {
-            colliders.RefreshAttached(population: this);
+        if (m_baseContactField is WorldColliderSet attached) { attached.RefreshAttached(population: this); }
+        var stepBodies = PrepareBodyStep();
 
+        if (m_baseContactField is WorldColliderSet colliders) {
             // Every body standing on a moving attached solid rides it before any body advances, seats included.
-            for (var index = 0; (index < Capacity); index++) {
+            foreach (var index in stepBodies) {
                 if (
                     m_entries[index].Active &&
                     (m_entries[index].Body is { } rider)
@@ -826,7 +838,8 @@ public sealed partial class WorldPopulation {
             }
         }
 
-        SolveGravity();
+        // A solved-field change can wake a member after the first snapshot, before integration begins.
+        if (SolveGravity()) { stepBodies = PrepareBodyStep(); }
         FreezeFlockImage();
         m_navigation.BeginStep();
 
@@ -834,7 +847,7 @@ public sealed partial class WorldPopulation {
         // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
         var contactFieldVersion = ContactFieldVersion;
 
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
+        foreach (var index in stepBodies) {
             var entry = m_entries[index];
 
             // Network peers AND inhabitants advance here (both own their body and run a deterministic producer until a
@@ -846,6 +859,7 @@ public sealed partial class WorldPopulation {
             ) {
                 continue;
             }
+            SimulatedBodyVisits++;
 
             // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no
             // cadence bookkeeping, no Advance. See WorldBody.Sleep.cs.

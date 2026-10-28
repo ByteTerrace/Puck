@@ -786,7 +786,7 @@ every active body's `Scale` from that register once a tick after the world
 rules, and at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
 every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
-`WorldPopulation.Restore` rebuilds every body at the constructed default, a
+`WorldPopulation.Restore` reconstructs each body's captured scale and selected kit before its latches, a
 detached-seat/peer transfer restore, and an escrow landing that has loaded a
 traveller's carried registers), so a reused population slot—or a
 body a checkpoint restore or transfer just minted fresh—never inherits a
@@ -931,6 +931,21 @@ Checkpoint restoration preserves the sleep tick, any partially accumulated
 idle floor, and a pending contact-field wake. It records whether the body's
 field observation was current, rather than depending on a process-local
 counter surviving reconstruction. Ordinary transfers still wake the body.
+Rigid islands retain canonical membership, non-rigid support dependencies,
+solved gravity observations and pending collision discovery work. Restore
+retains those dependencies and observations only for surviving bodies; losing
+a support or any rigid island member wakes the remaining component. A remote
+human retired under zero reconnect grace cannot leave orphaned sleep metadata.
+
+The pre-integration roster fixes which bodies integrate that tick. A rigid
+body woken after that snapshot joins the contact solve immediately with empty
+per-step support scratch and zero elapsed hold time; it first integrates on
+the next tick. An arriving pair wakes its sleepers before noting fresh pair
+support. A late wake queries the static field at its current pose before the
+support-aware pair split and contact finalization, so its floor can still block
+a downward correction. This boundary applies equally to live and restored
+bodies, so no grounded fact or rest hold can depend on transient pre-sleep
+contact scratch.
 The checkpoint codec carries this continuation state, identity-owned
 record snapshots, and generation-qualified rule latches. It refuses older envelopes.
 
@@ -1111,9 +1126,11 @@ sequential-impulse passes distribute the normal impulse across every
 manifold point still closing, then friction clamps per point to THAT point's
 own accumulated normal impulse—never the manifold's total—which is what
 keeps an upright body's centre of mass over its support polygon without an
-artificial extra damping term; a standing capsule or any other single-point
-volume falls back to the ordinary witness-point path, which already carries
-the same torque over the one point that actually touches. The world is
+artificial extra damping term. An ellipsoid uses the same pre-sweep manifold
+response over its one off-centre witness, so gravity tips it. The two-body kernel
+applies inverse inertia to the geometric lever before multiplying the impulse
+magnitude, preserving small contact torques that Q16 torque rounding would erase.
+The world is
 modeled as an infinite-mass static phantom (`WorldBody.GroundPhantomHandle`),
 so linear and angular motion stay coupled exactly as inertia dictates and a
 spinning ball can genuinely start rolling (or a rolling one stop spinning)
@@ -1180,10 +1197,10 @@ published by `WorldBody.FactHolds`) after its linear and angular speed stay
 below threshold for a short hold window while grounded—the LINEAR threshold
 scales with the body's own live `Scale` (a spatial rate, like a hold's own
 travel speed), the ANGULAR one does not (no length dimension). Once the latch
-closes, `WorldBody.AdvanceRigid` stops integrating that body entirely—position,
+closes over a complete contact island, the population parks every member—position,
 orientation, and both contact latches hold bit-identical every tick—until
 something wakes it (`TryApplyRigidImpulse`, `CommitRigidHandle`,
-`ApplyRigidPositionalCorrection`, a `Pose` teleport, or `SetContactField`
+`ApplyRigidPositionalCorrection`, `Pose`, `Glide`, `Reconcile`, a changed scale or collider/rigid facet, or `SetContactField`
 handing it a different field reference—a live solid edit that moved or
 removed the floor it rested against—each of which clears the latch
 itself): this
@@ -1196,13 +1213,31 @@ second way when the impulse's scaled velocity delta overflows the fixed-point
 representation, leaving velocity entirely unchanged rather than applying a
 wrapped or partial result) wakes it. `$physics:quiescent`
 (`WorldPopulation.RigidBodiesQuiescent`) reads 1 when every active rigid body
-rests, vacuously 1 for a world authoring none. `world.rigid` echoes the live
+rests uncarried, vacuously 1 for a world authoring none. The scoped expression
+`physics(quiescent, roster)` checks only the count-1 inhabitants named by a keyed
+row's authored keys (`WorldPopulation.RigidPlacementsQuiescent`); its compiled
+placement ordinals make a read one lookup per member. A carried member keeps
+the read false. A body's final resting hold includes dynamic-pair support and the post-pair velocity.
+Bodies supported by other bodies sleep together once the whole contact component rests. Moving, carrying,
+rescaling, recompiling or striking a member wakes its entire island in stable slot order, so removing a support
+releases its stack. Sleeping bodies leave the integration work set and retain a spatial index of frozen bounds;
+only an awake body's nearby sleepers enter a dynamic sweep. Extra passes can discover further sleepers as an
+impulse propagates. Region occupancy and overlap events retain unchanged sleeping results and reconsider them
+when a body wakes, a region moves or the collision policy changes. Body register synchronization skips unchanged
+register generations and occupancy/configuration revisions.
+Non-rigid solid supports remain awake and retain explicit wake dependencies on their sleeping loads; moving or
+removing one releases the load. A changed solved gravity vector (including participation in an attached area)
+wakes affected islands before integration, independently of the contact-field revision. Checkpoint version 19
+retains these support dependencies and gravity observations, pending event-body work, the collision discovery
+policy and begin-budget work left over. Those decisions affect bounded admission and must continue identically
+after restore; reconstructed frozen bodies do not count as new discoveries.
+`world.rigid` echoes the live
 per-body census (mass, velocity, angular velocity, resting) plus the
 quiescent verdict; the compiled rest/substep/pair-restitution policy and the
 last tick's solver work (pair resolutions, worst substep count) are
 `world.budget`'s own `rigid` segment. Checkpoint (`WorldBodyIntegrationResidue`)
 and the diagnostic population hash (`WorldReplaySnapshot.HashState`) both cover
-linear/angular velocity, the resting latch and hold-tick counter, BOTH
+linear/angular velocity, the resting latch and hold-tick counter, canonical sleeping-island membership, BOTH
 restitution edge latches, and both channels' miss streaks. A kit swap that
 adds or drops the `rigid` facet resets every rigid-solver field
 (`WorldBody.RecompileKit`) rather than leaking the other kind of body's stale

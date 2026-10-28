@@ -548,8 +548,8 @@ public static class WorldSearchCompilation {
                                 moves: out moves,
                                 reason: out reason,
                                 relocate: relocate,
-                                shapeIndex: index,
                                 row: row,
+                                shapeIndex: index,
                                 tokens: tokens,
                                 topology: topology!
                             )
@@ -1370,52 +1370,7 @@ public static class WorldSearchCompilation {
             }
         }
 
-        var scoreCost = ((score is null)
-            ? RuleWork.Zero
-            : RuleWorkBudget.ExpressionCost(
-                context: context,
-                kind: CellKind.Int,
-                tokens: score
-            )
-        );
-
-        if (!scoreCost.IsKnown) {
-            reason = $"search '{row.Name}' has no work allowance: one score read is {scoreCost}";
-
-            return false;
-        }
-
-        var work = SearchWork.Price(
-            allowance: allowance,
-            cellCount: cellCount,
-            chanceCells: (chance?.CellCount ?? 0),
-            depth: row.Depth,
-            judge: judgeCost,
-            keyed: ((score is not null) && (row.Method == SearchMethod.Negamax)),
-            method: row.Method,
-            position: position,
-            score: scoreCost.Units,
-            seats: ((row.Scores is { } seatRow)
-                ? (WorldDefinitionRows.FindStateRow(
-                    name: seatRow,
-                    rows: definition.State
-                )?.Cells?.Count ?? 0)
-                : 0),
-            shapes: shapes,
-            tokens: ((int)Math.Min(
-                val1: int.MaxValue,
-                val2: context.RowCapacity(name: row.Tokens)
-            ))
-        );
-
-        if (
-            (work.Minimum == long.MaxValue) ||
-            (work.Allowance < work.Minimum)
-        ) {
-            reason = $"search '{row.Name}' has too little work left: a tick may spend {work.Allowance} work units on it, and it needs {((work.Minimum == long.MaxValue)
-                ? "more than any tick holds"
-                : work.Minimum.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))} to make progress — a restart at {work.Restart}, a replay of {work.Scopes} plies at {work.Candidate} each (one judge run is {judgeCost}), and one unit at {work.Unit}";
-
+        if (!TryPrice(definition, row, judgeCost, allowance, position, context, shapes, cellCount, (chance?.CellCount ?? 0), score, out var work, out reason)) {
             return false;
         }
 
@@ -1451,6 +1406,66 @@ public static class WorldSearchCompilation {
 
         return true;
     }
+
+    // Price only after the plan's authored inputs are validated. Keeping this separate lets admission reserve every
+    // job's stamp rows before giving any job the remainder, without compiling its score a second time.
+    private static bool TryPrice(WorldDefinition definition, WorldSearchRow row, long judgeCost, long allowance, long position,
+        WorldFactsCompileContext context, SearchShapePlan[] shapes, int cellCount, int chanceCells, CompiledExpressionToken[]? score,
+        out SearchWork work, out string reason) {
+        work = default;
+        var scoreCost = ((score is null)
+            ? RuleWork.Zero
+            : RuleWorkBudget.ExpressionCost(
+                context: context,
+                kind: CellKind.Int,
+                tokens: score
+            )
+        );
+
+        if (!scoreCost.IsKnown) {
+            reason = $"search '{row.Name}' has no work allowance: one score read is {scoreCost}";
+
+            return false;
+        }
+
+        work = SearchWork.Price(
+            allowance: allowance,
+            cellCount: cellCount,
+            chanceCells: chanceCells,
+            depth: row.Depth,
+            judge: judgeCost,
+            keyed: ((score is not null) && (row.Method == SearchMethod.Negamax)),
+            method: row.Method,
+            position: position,
+            score: scoreCost.Units,
+            seats: ((row.Scores is { } seatRow)
+                ? (WorldDefinitionRows.FindStateRow(
+                    name: seatRow,
+                    rows: definition.State
+                )?.Cells?.Count ?? 0)
+                : 0),
+            shapes: shapes,
+            tokens: ((int)Math.Min(
+                val1: int.MaxValue,
+                val2: context.RowCapacity(name: row.Tokens)
+            ))
+        );
+
+        if (
+            (work.Minimum == long.MaxValue) ||
+            (work.Allowance < work.Minimum)
+        ) {
+            reason = $"search '{row.Name}' has too little work left: a tick may spend {work.Allowance} work units on it, and it needs {((work.Minimum == long.MaxValue)
+                ? "more than any tick holds"
+                : work.Minimum.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))} to make progress — a restart at {work.Restart}, a replay of {work.Scopes} plies at {work.Candidate} each (one judge run is {judgeCost}), and one unit at {work.Unit}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
     /// <summary>Plans search from an existing compilation and its shared work sheet, without compiling rules or
     /// interactions again. The returned plans, judges, and scores follow the definition's search row order.</summary>
     /// <param name="compilation">The unchanged definition's compilation receipt.</param>
@@ -1494,20 +1509,8 @@ public static class WorldSearchCompilation {
             return false;
         }
 
-        // One fold of every row is what the search pays a tick before any job moves: the stamp that tells a job its
-        // inputs changed. It comes out of what the sheet leaves, and the rest is every job's allowance: a tick steps
-        // one job with work to do (ArenaSearch.Step), so jobs take turns rather than splitting a tick.
-        var position = 0L;
-
-        for (var ordinal = 0; (ordinal < definition.StateCatalog.Descriptors.Count); ordinal++) {
-            position += context.RowCapacity(rowOrdinal: ordinal);
-        }
-
-        var allowance = Math.Max(
-            val1: 0L,
-            val2: ((RuleCapacity.MaxWorkUnitsPerTick - sheet.Units) - position)
-        );
-
+        // Validate and compile each job before resolving its dependency rows. Upkeep is shared by every job,
+        // whereas position keys are priced from the rows that particular job actually folds.
         for (var index = 0; (index < rows.Count); index++) {
             judges[index] = JudgeRules(
                 catalog: definition.StateCatalog,
@@ -1529,9 +1532,9 @@ public static class WorldSearchCompilation {
             if (!TryPlan(
                 definition: definition,
                 row: rows[index],
-                allowance: allowance,
+                allowance: long.MaxValue,
                 judgeCost: judgeCost.Units,
-                position: position,
+                position: 0L,
                 context: context,
                 plan: out var plan,
                 score: out var compiledScore,
@@ -1542,6 +1545,58 @@ public static class WorldSearchCompilation {
 
             plans[index] = plan!;
             scores[index] = compiledScore;
+        }
+
+        var outputs = new HashSet<int>();
+
+        int Ordinal(string? name) => (((name is not null) && definition.StateCatalog.TryResolve(
+            handle: out var handle, lane: StateLane.Document, name: name)) ? handle.Ordinal : -1);
+        foreach (var plan in plans) {
+            foreach (var name in new[] { plan.Best, plan.Legal, plan.Reach, plan.Counts }) {
+                if (Ordinal(name: name) is >= 0 and var ordinal) {
+                    outputs.Add(item: ordinal);
+                }
+            }
+        }
+
+        var positions = new long[plans.Length];
+        var upkeep = 0L;
+
+        for (var index = 0; (index < plans.Length); index++) {
+            var plan = plans[index];
+            var keyRows = new SortedSet<int>(collection: RuleDataflow.KeyRows(rules: judges[index], score: scores[index]));
+
+            foreach (var name in new[] { plan.Tokens, plan.Turn, plan.Verdict, plan.Scores, plan.Chance?.Row }
+                .Concat(second: plan.Zones).Concat(second: plan.Shapes.Select(selector: static shape => shape.Codes))) {
+                if (Ordinal(name: name) is >= 0 and var ordinal) {
+                    keyRows.Add(item: ordinal);
+                }
+            }
+            foreach (var ordinal in keyRows) {
+                positions[index] = Puck.Maths.BinaryIntegerFunctions.AddSaturating(left: positions[index], right: context.RowCapacity(rowOrdinal: ordinal));
+            }
+            foreach (var name in new[] { plan.Held, plan.Revision }) {
+                if (Ordinal(name: name) is >= 0 and var ordinal) {
+                    keyRows.Add(item: ordinal);
+                }
+            }
+            keyRows.ExceptWith(other: outputs);
+            // ArenaSearch checks every job's inputs before choosing one job to advance. Shared dependency rows
+            // therefore occur once per job here too, even though their unchanged content fold is cached at runtime.
+            foreach (var ordinal in keyRows) {
+                upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(left: upkeep, right: context.RowCapacity(rowOrdinal: ordinal));
+            }
+        }
+        var allowance = Math.Max(val1: 0L, val2: (Math.Max(val1: 0L, val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet.Units)) - upkeep));
+
+        for (var index = 0; (index < plans.Length); index++) {
+            var plan = plans[index];
+
+            if (!TryPrice(definition, rows[index], plan.Work.Judge, allowance, positions[index], context,
+                plan.Shapes, plan.CellCount, (plan.Chance?.CellCount ?? 0), scores[index], out var work, out reason)) {
+                return false;
+            }
+            plans[index] = plan with { Work = work };
         }
 
         reason = string.Empty;

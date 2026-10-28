@@ -1170,6 +1170,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixedVector(value: residue.RigidAngularVelocity);
         writer.WriteBoolean(value: residue.RigidResting);
         writer.WriteUInt64(value: residue.RigidRestingHoldTicks);
+        writer.WriteInt32(value: residue.RigidSleepRootPlusOne);
         writer.WriteBoolean(value: residue.RigidGroundContacting);
         writer.WriteBoolean(value: residue.RigidObstructionContacting);
         writer.WriteInt32(value: residue.RigidGroundMissStreak);
@@ -1218,6 +1219,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var rigidAngularVelocity = reader.ReadFixedVector();
         var rigidResting = reader.ReadBoolean();
         var rigidRestingHoldTicks = reader.ReadUInt64();
+        var rigidSleepRootPlusOne = reader.ReadInt32();
         var rigidGroundContacting = reader.ReadBoolean();
         var rigidObstructionContacting = reader.ReadBoolean();
         var rigidGroundMissStreak = reader.ReadInt32();
@@ -1261,6 +1263,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             RigidObstructionMissStreak: rigidObstructionMissStreak,
             RigidResting: rigidResting,
             RigidRestingHoldTicks: rigidRestingHoldTicks,
+            RigidSleepRootPlusOne: rigidSleepRootPlusOne,
             RigidVelocity: rigidVelocity,
             RotationRemainderX: rotationRemainderX,
             RotationRemainderY: rotationRemainderY,

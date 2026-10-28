@@ -502,18 +502,19 @@ prototypes {
 }
 
 // ---- Reading the physical table ----------------------------------------------------------------------------------
-// Whenever the physics has rested for `alchemySettleTicks`, the rules read each token's cell and face off the board. A
+// Whenever Alchemy's tokens have rested for `alchemySettleTicks`, the rules read each token's cell and face off the board. A
 // token dropped into the left hand well (cell 34) or right hand well (cell 37) loads that hand and triggers a sync back
 // to its shelf cell; any other displacement or collision is counted as illegal and synced back.
+// The keyed `alchemyElement` roster contains only this table's 31 tokens; other tables cannot hold its reading up.
 
 rule "alchemy-settle-hold-advance" {
-  when physics(quiescent) == 1 and alchemyHold < alchemySettleTicks
+  when alchemyHold < alchemySettleTicks and physics(quiescent, alchemyElement) == 1
   mode: Level
   alchemyHold += 1
 }
 
 rule "alchemy-settle-hold-reset" {
-  when physics(quiescent) != 1
+  when alchemyHold > 0 and physics(quiescent, alchemyElement) != 1
   mode: Level
   alchemyHold = 0
 }

@@ -144,7 +144,8 @@ Puck.World extends the rule compiler the way any host does (see
 
 - **`WorldFactsVocabulary.Instance`** is the `RuleVocabulary` every world
   compile shares. Its operand family answers the reserved world channels:
-  `$population`, `$physics:quiescent`, `$region:`, `$influence:`, `$machine:`,
+  `$population`, `$physics:quiescent` (optionally scoped to a keyed placement
+  roster or a replay scope's stable bodies), `$region:`, `$influence:`, `$machine:`,
   `$argmax:`, `$argmin:`, `$distance:`, `$los:`, `$upright:`, `$fact:`,
   `$bodyPosition:`, `$engaged:`, `$bodyState:`, `$identity:`, `$nav:`, `$parked:`, `$link:`, `$channel:`, `$pointer:`, `$nearest:`,
   `$clock:`, `$board:cellOf:`, and the seated-seat reads `$board:engaged:`,

@@ -182,7 +182,7 @@ public static partial class WorldDefinitionValidator {
             foreach (var volume in collider.Volumes) {
                 var centerSquared = Squared(value: volume.Center);
 
-                if (volume.Kind == FixedBodyColliderKind.Box) {
+                if (volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid) {
                     // A rotation-independent sphere around the box center, then around the body root.
                     // R >= sqrt(C) + sqrt(E), compared exactly without narrowing or irrational rounding.
                     var extentSquared = Squared(value: volume.HalfExtents);

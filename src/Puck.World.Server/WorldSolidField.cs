@@ -232,7 +232,7 @@ public sealed class WorldSolidField : IContactField {
             foreach (var volume in collider.Volumes) {
                 reach = FixedQ4816.Max(
                     x: reach,
-                    y: ((volume.Kind == FixedBodyColliderKind.Box)
+                    y: ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
                     ? volume.HalfExtents.Length
                     : volume.Radius)
                 );

@@ -10,13 +10,15 @@ public enum FixedBodyColliderKind : byte {
     Capsule,
     /// <summary>An oriented box defined by a local center, half-extents, and rotation.</summary>
     Box,
+    /// <summary>An ellipsoid defined by local radii and orientation.</summary>
+    Ellipsoid,
 }
 /// <summary>One deterministic convex volume in a body's local frame.</summary>
 /// <param name="Kind">The volume kind.</param>
 /// <param name="Center">The sphere/box center or capsule lower endpoint.</param>
 /// <param name="Endpoint">The capsule upper endpoint.</param>
-/// <param name="HalfExtents">The box half-extents.</param>
-/// <param name="Rotation">The box's local orientation.</param>
+/// <param name="HalfExtents">The box half-extents or ellipsoid radii.</param>
+/// <param name="Rotation">The box or ellipsoid's local orientation.</param>
 /// <param name="Radius">The sphere/capsule radius.</param>
 public readonly record struct FixedBodyColliderVolume(
     FixedBodyColliderKind Kind,

@@ -172,4 +172,41 @@ public static class RuleDataflow {
 
         return writes;
     }
+    /// <summary>Returns the rows a rule evaluation and optional expression depend on, including rule writes whose
+    /// scratch values later rules may read, in ordinal order.</summary>
+    /// <param name="rules">The rules evaluated in one frame.</param>
+    /// <param name="score">An expression evaluated after the rules, or null.</param>
+    public static int[] KeyRows(CompiledRule[] rules, CompiledExpressionToken[]? score) {
+        ArgumentNullException.ThrowIfNull(argument: rules);
+
+        var accesses = new List<CellAccess>();
+        var rows = new SortedSet<int>();
+
+        foreach (var rule in rules) {
+            accesses.Clear();
+            rule.CollectReads(into: accesses);
+            rule.CollectWrites(into: accesses);
+
+            foreach (var access in accesses) {
+                if (access.RowOrdinal >= 0) {
+                    _ = rows.Add(item: access.RowOrdinal);
+                }
+            }
+        }
+
+        accesses.Clear();
+
+        RuleDataflow.CollectExpression(
+            into: accesses,
+            tokens: score
+        );
+
+        foreach (var access in accesses) {
+            if (access.RowOrdinal >= 0) {
+                _ = rows.Add(item: access.RowOrdinal);
+            }
+        }
+
+        return [.. rows];
+    }
 }

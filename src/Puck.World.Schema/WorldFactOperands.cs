@@ -51,7 +51,7 @@ public sealed class WorldPopulationOperand : WorldFactOperand {
         return facet.Read(operand: PopulationOperand.Instance);
     }
 }
-/// <summary>Whether the selected rigid bodies are at rest (<see cref="WorldRuleFacts.PhysicsQuiescent"/>).
+/// <summary>Whether every selected rigid body rests uncarried (<see cref="WorldRuleFacts.PhysicsQuiescent"/>).
 /// The work is priced at the selected scope's body count, or population capacity for the global census.</summary>
 public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
     /// <summary>The shared instance.</summary>
@@ -61,7 +61,9 @@ public sealed class WorldPhysicsQuiescentOperand : WorldFactOperand {
 
     /// <summary>Creates a census over the selected bodies, or the population when omitted.</summary>
     /// <param name="bodies">Stable body ordinals, or null for the whole population.</param>
-    public WorldPhysicsQuiescentOperand(IReadOnlyList<int>? bodies = null) : base(valueKind: CellKind.Bool) => m_operand = new PhysicsQuiescentOperand(bodies: bodies);
+    public WorldPhysicsQuiescentOperand(IReadOnlyList<int>? bodies = null) : base(valueKind: CellKind.Bool) => m_operand = ((bodies is null)
+        ? PhysicsQuiescentOperand.Instance
+        : PhysicsQuiescentOperand.ForBodies(bodies: bodies));
 
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => ((m_operand.Bodies is { } bodies) ? bodies.Count : PopulationCapacity(context: context));

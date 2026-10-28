@@ -44,7 +44,7 @@ public sealed partial class WorldPopulation {
             );
         }
 
-        return $"rigid {rigidCount} body/bodies ({restingCount} resting), pairsResolved={RigidPairResolvedCount}, pairPasses={RigidPairPassesThisTick}/{m_bodyContactPolicy.RigidPairIterationCeiling} pairBudget={m_bodyContactPolicy.RigidPairIterationBudget}, manifoldIterations={m_bodyContactPolicy.RigidManifoldIterations}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={((double)m_rigidVelocityCeiling):0.###}";
+        return $"rigid {rigidCount} body/bodies ({restingCount} resting, {SleepingRigidBodies} sleeping), pairsResolved={RigidPairResolvedCount}, pairPasses={RigidPairPassesThisTick}/{m_bodyContactPolicy.RigidPairIterationCeiling} pairBudget={m_bodyContactPolicy.RigidPairIterationBudget}, manifoldIterations={m_bodyContactPolicy.RigidManifoldIterations}, worstSubsteps={worstSubsteps}/{m_bodyContactPolicy.RigidSubstepCeiling}, restLinear<={m_bodyContactPolicy.RigidRestLinearSpeed:0.###} restAngular<={m_bodyContactPolicy.RigidRestAngularSpeed:0.###} restHold={m_bodyContactPolicy.RigidRestHoldSeconds:0.###}s substepFraction={m_bodyContactPolicy.RigidSubstepTravelFraction:0.###} substepMinTravel={m_bodyContactPolicy.RigidSubstepMinimumTravel:0.####} pairRestitutionSpeed={m_bodyContactPolicy.RigidPairRestitutionSpeed:0.###} impulseVelocityCeiling={((double)m_rigidVelocityCeiling):0.###}";
     }
 
     /// <summary>Resolves one already-detected overlapping pair where at least one side is a rigid kit: an
@@ -52,8 +52,7 @@ public sealed partial class WorldPopulation {
     /// when both sides are rigid — the contact anchor is each rigid side's own true witness point
     /// (<see cref="FixedRigidWitness.Anchor"/>) facing the other body, never the body-center anchor a torque-free
     /// response would imply and never a point on the conservative bounding sphere either; a kinematic side
-    /// contributes its own velocity but is never itself pushed — see <see cref="WorldBody.TwoBodyHandle"/>), plus the
-    /// SAME positional split <see cref="ResolveDynamicContacts"/> already applies to a kinematic-vs-kinematic pair,
+    /// contributes its own velocity but is never itself pushed — see <see cref="WorldBody.TwoBodyHandle"/>), plus positional depenetration,
     /// restricted to the rigid side(s) only: a kinematic body is never repositioned by a rigid body it did not choose
     /// to contact physically. May be replayed more than once in the same tick — see
     /// <see cref="ResolveDynamicContacts"/>'s own extra-pass replay.</summary>
@@ -74,6 +73,9 @@ public sealed partial class WorldPopulation {
         // pair as a POSITIVE closing speed, so the impulse gate below never opens until the two bodies' centers have
         // already crossed.
         var normal = correction.Normalize();
+
+        left.NoteRigidPairSupport(normal: normal);
+        right.NoteRigidPairSupport(normal: -normal);
         var aHandle = right.TwoBodyHandle();
         var bHandle = left.TwoBodyHandle();
         // Each rigid side's own contact-point anchor: the true witness point of ITS shape facing the other body —
@@ -168,7 +170,7 @@ public sealed partial class WorldPopulation {
             }
         }
 
-        // Positional depenetration: split between two rigid bodies exactly as the kinematic-vs-kinematic path does;
+        // Positional depenetration: split between two rigid bodies unless static support blocks one share;
         // restricted to the rigid side alone against a kinematic partner, which never moves for a body it did not
         // choose to contact. Routed through the rigid-aware correction (never the locomotion one, whose planar/
         // vertical-velocity channels a rigid body does not use) so a body this displaces wakes rather than keeping a
@@ -191,10 +193,14 @@ public sealed partial class WorldPopulation {
             left.IsRigid &&
             right.IsRigid
         ) {
+            // A supported body cannot take its half through the static surface. Give that share to its partner,
+            // rather than repeatedly embedding the lower body and collapsing a stack on the next static sweep.
+            var leftBlocked = left.RigidSupportBlocks(direction: correction, policy: m_rigidContactPolicy);
+            var rightBlocked = right.RigidSupportBlocks(direction: -correction, policy: m_rigidContactPolicy);
             var shared = (correction / FixedQ4816.FromInteger(value: 2L));
 
-            left.ApplyRigidPositionalCorrection(correction: shared);
-            right.ApplyRigidPositionalCorrection(correction: -shared);
+            left.ApplyRigidPositionalCorrection(correction: ((leftBlocked && !rightBlocked) ? FixedVector3.Zero : ((rightBlocked && !leftBlocked) ? correction : shared)));
+            right.ApplyRigidPositionalCorrection(correction: ((rightBlocked && !leftBlocked) ? FixedVector3.Zero : ((leftBlocked && !rightBlocked) ? -correction : -shared)));
         } else if (left.IsRigid) {
             left.ApplyRigidPositionalCorrection(correction: correction);
         } else if (right.IsRigid) {
@@ -223,6 +229,7 @@ public sealed partial class WorldPopulation {
             left: aHandle.AngularVelocity,
             right: anchorA
         )));
+
         if (!relativeVelocity.TryRejectNormalized(
             length: out var tangentSpeed,
             unit: out var tangentDirection,

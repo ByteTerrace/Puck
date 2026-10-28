@@ -925,9 +925,8 @@ public sealed partial class WorldPersistence {
             defaults: Host.Document.Definition.PlayerDefaults,
             tick: Host.Tick.CompletedTick
         );
-        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — a body's size is its register,
-        // which the arena restored, so it needs the same catch-up every other admission door gives a freshly minted
-        // body.
+        // Restore reconstructs captured geometry before its latches. Catch up only register writes that were still
+        // pending at capture; an already synchronized sleeping body must retain its exact continuation.
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.Input = restoredInput;
         Host.Input.BindRestoredBodies();

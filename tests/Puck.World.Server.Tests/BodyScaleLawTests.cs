@@ -158,9 +158,8 @@ public sealed class BodyScaleLawTests {
             actual: body.Scale
         );
     }
-    // RestoreCheckpoint rebuilds every WorldBody at the constructed default (WorldPopulationCheckpoint carries no
-    // Scale field of its own — a body's size is its register, restored with the arena), so this proves the catch-up
-    // resync. The register is written away from its initial value, so a restore that reborn it would read one.
+    // Both the synchronized geometry and its register survive restore. The register is written away from its
+    // initial value, so a restore that rebirthed it would change the body's scale on catch-up.
     [Fact]
     public void ScaleRegister_WrittenValue_SurvivesCheckpointRestoreIntoBodyScale() {
         var authored = FixedQ4816.FromDouble(value: 0.15);

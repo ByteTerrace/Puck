@@ -45,10 +45,10 @@ public sealed class ConvexContactWorkLawTests {
         }
     }
     [Fact]
-    public void TheExactQueryRefusesShapesWithTheirOwnAnalyticKernel() {
-        var sphere = FixedStaticCollider.Sphere(center: FixedVector3.Zero, radius: FixedQ4816.One);
+    public void TheExactQueryRefusesAnUnboundedShape() {
+        var halfSpace = FixedStaticCollider.HalfSpace(FixedVector3.Zero, FixedVector3.UnitY);
 
-        Assert.Throws<ArgumentException>(testCode: () => FixedConvexContact.TryPush(sphere, FixedVector3.Zero,
+        Assert.Throws<ArgumentException>(testCode: () => FixedConvexContact.TryPush(halfSpace, FixedVector3.Zero,
             FixedQuaternion.Identity, default, FixedQ4816.Zero, out _, out _));
     }
     [InlineData(false, FixedBodyColliderKind.Sphere)]

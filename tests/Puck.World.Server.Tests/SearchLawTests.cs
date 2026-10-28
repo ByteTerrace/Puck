@@ -169,7 +169,7 @@ public sealed class SearchLawTests {
         Assert.InRange(actual: seen, high: 1_000_000L, low: 1L);
         Assert.Equal(expected: seen, actual: fixture.KeyedValue(key: "$value", row: "roll"));
     }
-    // What the sheet and one fold of every row leave is every job's allowance, since a tick steps one job with work to
+    // What the sheet and every job's input stamp leave is each job's allowance, since a tick steps one job with work to
     // do, and an allowance that cannot cover a restart, a full replay and one unit is refused by that sum rather than
     // left to stall.
     [Fact]
@@ -199,8 +199,9 @@ public sealed class SearchLawTests {
 
         Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
         Assert.True(condition: (alone.Allowance >= alone.Minimum));
+        // Both jobs fold their token, turn and verdict rows before one advances: 2 + 1 + 1 cells each.
         Assert.Equal(
-            alone.Allowance,
+            (alone.Allowance - 4L),
             shared[0].Work.Allowance
         );
         Assert.Equal(
@@ -210,10 +211,7 @@ public sealed class SearchLawTests {
 
         var context = WorldFactsCompiler.Context(definition: one);
         // The price of a unit folds the position key, so the refusal is asked at the fold the planner itself uses.
-        var position = Enumerable.Range(
-            count: one.StateCatalog.Descriptors.Count,
-            start: 0
-        ).Sum(selector: ordinal => context.RowCapacity(rowOrdinal: ordinal));
+        var position = 4L; // Tokens, turn and verdict; neither the unobserved board nor the best output.
 
         Assert.False(condition: WorldSearchCompilation.TryPlan(
             allowance: (alone.Minimum - 1L),
@@ -235,7 +233,20 @@ public sealed class SearchLawTests {
             expectedSubstring: $"may spend {(alone.Minimum - 1L)}"
         );
     }
+    [Fact]
+    public void UnrelatedRowsDoNotRaiseSearchKeyPricesOrSpendItsStampAllowance() {
+        var definition = MiniNegamaxWorld(depth: 3);
+        var enlarged = definition.WithWorldState([.. definition.AuthoredState,
+            new WorldStateRow(CellName.Parse(candidate: "otherTable"), CellKind.Int, Capacity: 1_000_000)]);
 
+        static SearchWork Price(WorldDefinition world) {
+            Assert.True(condition: WorldSearchCompilation.TryPlanAll(WorldRuleCompilation.Compile(definition: world),
+                out var plans, out _, out _, out var reason), userMessage: reason);
+            return Assert.Single(collection: plans).Work;
+        }
+
+        Assert.Equal(Price(world: definition), Price(world: enlarged));
+    }
     // Two jobs with work to do take turns: each tick steps one of them, the tick's turn picking which, until both
     // have answered, and once both have answered no tick spends anything.
     [Fact]
@@ -254,7 +265,7 @@ public sealed class SearchLawTests {
             fixture.Step();
 
             var after = fixture.Server.SearchStatus().Select(selector: status => status.Work).ToArray();
-            var moved = Enumerable.Range(start: 0, count: 2).Where(predicate: index => (after[index] != before[index])).ToArray();
+            var moved = Enumerable.Range(count: 2, start: 0).Where(predicate: index => (after[index] != before[index])).ToArray();
 
             Assert.True(condition: (moved.Length <= 1), userMessage: $"tick {tick} stepped {moved.Length} jobs");
             foreach (var index in moved) {
@@ -530,8 +541,6 @@ public sealed class SearchLawTests {
         Assert.Equal((1L << 6) | (1L << 9) | (1L << 13) | (1L << 14), fixture.KeyedValue(key: "k", row: "legal"));
         Assert.Equal(11L, status.Count);
     }
-
-    [Theory]
     [InlineData("no moves to read")]
     [InlineData("moves name codes")]
     [InlineData("declares 0 moves")]
@@ -539,6 +548,7 @@ public sealed class SearchLawTests {
     [InlineData("range -1")]
     [InlineData("not all zero")]
     [InlineData("has no translations")]
+    [Theory]
     public void RelocateMovesAreRefusedByName(string refusal) {
         var definition = refusal switch {
             "no moves to read" => MovesWorld(shape: new WorldSearchShape.Relocate(Codes: "pieceCode")),

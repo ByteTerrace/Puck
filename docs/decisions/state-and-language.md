@@ -310,9 +310,9 @@ read by its bare name, ceiling `MaxLocalsPerRule`; the old spelling is
 rewritten once with no alias.
 
 **Go ships at 19×19.** The 9×9 answer rested on the 256-cell set the pattern
-algebra lowered to. C2 widens that carrier for reasons of its own, so the full
-board is no longer engine work one game has to justify, and Go waits for C2
-rather than shipping small twice.
+algebra lowered to. C2 widened that carrier for reasons of its own. The debug
+world now has the [full physical table](../../worlds/debug/go.md), with all
+361 stones; Go no longer waits on that engine work.
 
 ## The language
 

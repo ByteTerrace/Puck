@@ -2032,6 +2032,7 @@ public sealed partial class WorldReplaySnapshot {
                 ? 1UL
                 : 0UL));
             hash.Add(value: body.RigidRestingHoldTicks);
+            hash.Add(value: unchecked((uint)body.RigidSleepRootPlusOne));
             hash.Add(value: (body.RigidGroundContacting
                 ? 1UL
                 : 0UL));

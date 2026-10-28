@@ -931,11 +931,15 @@ public static class WorldModuleNamespace {
                 );
             }
         }
-        public void Word(int index) => output.Add(item: rewriter.RewriteSegment(
-            kind: null,
-            map: false,
-            segment: arguments[index]
-        ));
+        public void Word(int index) {
+            if (index < arguments.Count) {
+                output.Add(item: rewriter.RewriteSegment(
+                    kind: null,
+                    map: false,
+                    segment: arguments[index]
+                ));
+            }
+        }
         public void Words(int from) {
             for (var index = from; (index < arguments.Count); index++) {
                 Word(index: index);
@@ -1183,7 +1187,10 @@ public static class WorldModuleNamespace {
         }),
         (ChannelName(spelling: WorldRuleFacts.LinkPrefix), static read => read.Names(from: 0, kind: null)),
         (ChannelName(spelling: WorldRuleFacts.RegionPrefix), static read => read.Names(from: 0, kind: WorldNameKind.Placement)),
-        (ChannelName(spelling: WorldRuleFacts.PhysicsQuiescent), static read => read.Words(from: 0)),
+        (ChannelName(spelling: WorldRuleFacts.PhysicsQuiescent), static read => {
+            read.Word(index: 0);
+            read.Names(from: 1, kind: WorldNameKind.State);
+        }),
         (ChannelName(spelling: RuleFacts.SearchPly), static read => read.Words(from: 0)),
     }.ToFrozenDictionary(
         comparer: StringComparer.Ordinal,

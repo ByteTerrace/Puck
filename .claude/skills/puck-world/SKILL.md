@@ -64,7 +64,10 @@ active recording, with ordered, scoped inputs. Hot scope observers enumerate
 and a warmed active scope hash must allocate zero bytes. Keep closure-bearing
 rebinding in the slow method after the compiled-array identity check.
 Scope rules must read local facts: `physics(quiescent, "chess-demo")` restricts
-the existing census to that scope's bodies, while the global `physics(quiescent)`
+the existing census to that scope's bodies. The second argument can also name a
+keyed placement roster; its cell values do not filter membership. A state row
+and replay scope sharing that name are ambiguous and refused. Both selections
+require rigid bodies to rest uncarried, while the global `physics(quiescent)`
 couples a table to unrelated rigid bodies. The debug world's idle example
 and its game-score citation are in [chess.md](../../../worlds/debug/chess.md).
 See [replay](references/replay.md#scoped-live-replays) for the control cells.

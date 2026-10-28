@@ -10,7 +10,15 @@ internal static class FixedConvexGeometry {
     private static readonly FixedQ4816 RootTwo = FixedQ4816.Sqrt(value: Two);
 
     internal static FixedVector3 Support(in FixedStaticCollider collider, FixedVector3 direction) {
+        if (collider.Kind is not (FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid)) {
+            return (collider with { Center = FixedVector3.Zero, Rotation = FixedQuaternion.Identity }).SupportPoint(direction: direction);
+        }
         if (collider.Kind == FixedStaticColliderKind.Superellipsoid) {
+            if (collider.Exponent == Two) {
+                var weightedDirection = FixedVector3.Multiply(left: direction, right: collider.Extent).Normalize();
+
+                return (FixedVector3.Multiply(left: weightedDirection, right: collider.Extent) + (direction.Normalize() * collider.Radius));
+            }
             var weighted = FixedVector3.Multiply(left: FixedVector3.Abs(value: direction), right: collider.Extent);
             var largest = FixedQ4816.Max(x: weighted.X, y: FixedQ4816.Max(x: weighted.Y, y: weighted.Z));
 

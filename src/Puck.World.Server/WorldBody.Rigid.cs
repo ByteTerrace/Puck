@@ -22,7 +22,7 @@ namespace Puck.World.Server;
 /// see <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>.</param>
 /// <param name="PairRestitutionThreshold">Below this closing speed, a rigid-vs-rigid pair contact restitutes at
 /// zero rather than the authored coefficient — see <see cref="WorldBodyContactPolicy.RigidPairRestitutionSpeed"/>.</param>
-/// <param name="ManifoldIterations">The sequential-impulse pass count a box or capsule body's own ground support
+/// <param name="ManifoldIterations">The sequential-impulse pass count a body's own ground support
 /// manifold resolves over — see <see cref="WorldBodyContactPolicy.RigidManifoldIterations"/>.</param>
 public readonly record struct RigidContactPolicy(
     FixedQ4816 RestLinearThreshold,
@@ -270,6 +270,7 @@ public sealed partial class WorldBody {
 
         return accumulatorRaw;
     }
+
     /// <summary>Gets the rigid facet's world-space centre of mass — <c>root + orientation·CenterOffset</c>, the
     /// point every substep actually rotates and translates about (see <see cref="AdvanceRigid"/>). For a rolling or
     /// tumbling body this orbits away from <see cref="WorldBody.FixedPosition"/> (the root); the pose <c>body.where</c>
@@ -305,6 +306,7 @@ public sealed partial class WorldBody {
         }
 
         m_rigidVelocity = candidate;
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
         return true;
@@ -373,6 +375,7 @@ public sealed partial class WorldBody {
                 left: left,
                 right: right
             ));
+
     // impulse * inverseMass, both at their own declared scales, rounded once to FixedQ4816. Refuses (rather than
     // silently reading a zero raw) when any axis's correctly-rounded product overflows the signed 64-bit raw.
     private static bool TryImpulseToVelocity(FixedVector3 impulse, long inverseMassRaw, out FixedVector3 delta) {
@@ -522,6 +525,7 @@ public sealed partial class WorldBody {
 
         m_rigidVelocity = handle.LinearVelocity;
         m_angularVelocity = handle.AngularVelocity;
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
     }
@@ -541,8 +545,81 @@ public sealed partial class WorldBody {
         }
 
         m_position += correction;
+        NotifyPopulationWake();
         m_resting = false;
         m_restingHoldTicks = 0UL;
+    }
+
+    // Contact-pass scratch, derived anew each advance and never read across a checkpoint boundary.
+    private ulong m_rigidStepTicks;
+    private ulong m_rigidHoldBeforeStep;
+    private bool m_rigidPairSupported;
+    private bool m_rigidStaticSupported;
+    private FixedVector3 m_rigidSupportNormal;
+
+    private void InvalidateRigidRest() {
+        NotifyPopulationWake();
+        m_resting = false;
+        m_restingHoldTicks = 0UL;
+        m_rigidGroundContacting = false;
+        m_rigidObstructionContacting = false;
+        m_rigidGroundMissStreak = 0;
+        m_rigidObstructionMissStreak = 0;
+    }
+
+    internal void NoteRigidPairSupport(FixedVector3 normal) {
+        if (normal.Y >= m_walkableThreshold) {
+            m_rigidPairSupported = true;
+            m_rigidSupportNormal = normal;
+        }
+    }
+    internal bool RigidSupportBlocks(FixedVector3 direction, RigidContactPolicy policy) {
+        RefreshRigidStaticSupport(policy: policy);
+        return (m_rigidStaticSupported && (FixedVector3.Dot(left: direction, right: m_rigidSupportNormal) < FixedQ4816.Zero));
+    }
+
+    private void RefreshRigidStaticSupport(RigidContactPolicy policy) {
+        if (((m_rigidStepTicks == 0) || (m_rigidStaticSupported && (m_rigidSupportNormal == FixedVector3.Zero))) && (m_contactField is { } field)) {
+            // A late wake skipped integration and cleared its old support scratch. Recover current static
+            // support before a pair can push it into the floor, independently of pre-sleep/live/restore history.
+            // Recheck at the current pose on later pair passes and finalization; the probe never moves the body.
+            var probePosition = (m_position - (FixedVector3.UnitY * policy.SubstepMinimumTravel));
+            var probeVelocity = FixedVector3.Zero;
+            var support = field.ResolveSweep(previousPosition: m_position, position: ref probePosition,
+                velocity: ref probeVelocity, orientation: m_orientation, volumes: ScaledColliderVolumes(), up: FixedVector3.UnitY);
+
+            m_rigidStaticSupported = support.Grounded;
+            if (support.Grounded) { m_rigidSupportNormal = ((support.GroundNormal != FixedVector3.Zero) ? support.GroundNormal : FixedVector3.UnitY); }
+        }
+    }
+
+    // Pair impulses and depenetration run after AdvanceRigid. Count the hold window once, from the final solved
+    // velocity, including support supplied by another body. A resting body still awaiting the rest of its island
+    // rechecks dynamic support; a fully resting island is parked by the population outside this solve.
+    internal void FinishRigidContacts(RigidContactPolicy policy) {
+        if ((m_rigid is null) || m_sweepRefusedThisTick) { return; }
+        if (m_rigidPairSupported) { m_rigidGroundContacting = false; }
+        if (m_resting && m_rigidStaticSupported && !m_rigidPairSupported) { return; }
+        RefreshRigidStaticSupport(policy: policy);
+        m_grounded = (m_rigidStaticSupported || m_rigidPairSupported);
+        m_lastContactCount = (m_grounded ? 1 : 0);
+        // The final pair impulse can push a supported body's centre into its support. Project that residual
+        // closing velocity just as the static sweep does; its contact-point torque was already solved above.
+        var closing = FixedVector3.Dot(left: m_rigidVelocity, right: m_rigidSupportNormal);
+
+        if (m_grounded && (closing < FixedQ4816.Zero)) { m_rigidVelocity -= (m_rigidSupportNormal * closing); }
+        if (m_grounded && (m_rigidVelocity.Length <= (policy.RestLinearThreshold * m_scale)) &&
+            (m_angularVelocity.Length <= policy.RestAngularThreshold)) {
+            m_restingHoldTicks = (m_rigidHoldBeforeStep + m_rigidStepTicks);
+            m_resting = (m_restingHoldTicks >= policy.RestHoldTicks);
+            if (m_resting) {
+                m_rigidVelocity = FixedVector3.Zero;
+                m_angularVelocity = FixedVector3.Zero;
+            }
+        } else {
+            m_resting = false;
+            m_restingHoldTicks = 0;
+        }
     }
 
     /// <summary>Advances a rigid-kit body by one exact simulation step: damping, gravity, a swept, substepped
@@ -557,6 +634,11 @@ public sealed partial class WorldBody {
     /// <param name="scratch">The caller's step scratch, which a refused substep restores the tick from.</param>
     private void AdvanceRigid(int entityIndex, ulong stepTicks, RigidContactPolicy policy, StepScratch scratch) {
         m_entityIndex = entityIndex;
+        m_rigidStepTicks = stepTicks;
+        m_rigidHoldBeforeStep = m_restingHoldTicks;
+        m_rigidPairSupported = false;
+        m_rigidStaticSupported = false;
+        m_rigidSupportNormal = FixedVector3.Zero;
 
         if (
             (m_rigid is not { } rigid) ||
@@ -565,16 +647,18 @@ public sealed partial class WorldBody {
             return;
         }
 
-        // A body the rest latch has closed stays FROZEN — position, orientation, and both contact latches held
+        // A static-supported body the rest latch has closed stays FROZEN — position, orientation, and contact latches held
         // bit-identical — until something wakes it: TryApplyRigidImpulse, CommitRigidHandle (a dynamic-pair
         // impulse), ApplyRigidPositionalCorrection (a dynamic-pair depenetration), Pose (a hard teleport), or
-        // SetContactField (a live solid edit replacing the static world it rested against — both in
-        // WorldBody.Lifecycle.cs), each of which clears m_resting itself. `$physics:quiescent`/`world.rigid`/
+        // SetContactField, Glide, Reconcile, or a changed scale/collider/rigid facet. Dynamic-supported bodies that
+        // reach here still await the rest of their contact island. Once it all rests, the population parks the
+        // complete island and changing any support wakes it. `$physics:quiescent`/`world.rigid`/
         // `body.where`'s own "resting" fact all read this latch directly, so this IS what those facts mean: a body
         // actually at rest has nothing left to solve, and re-deriving gravity/contact against it every tick (the
         // bounded-iteration ground manifold below converges close to, never exactly, zero net impulse) is exactly
         // what would make them lie.
-        if (m_resting) {
+        if (m_resting && m_rigidGroundContacting) {
+            m_rigidStaticSupported = true;
             RigidStaticSubstepsThisTick = 0;
             return;
         }
@@ -640,6 +724,7 @@ public sealed partial class WorldBody {
         var subTicks = (stepTicks / unchecked((ulong)derivedSubsteps));
         var leftoverTicks = (stepTicks - (subTicks * unchecked((ulong)derivedSubsteps)));
         var grounded = false;
+
         DiagnosticSupport = null;
         m_diagnosticManifoldPoint = null;
         var scaledColliderVolumes = ScaledColliderVolumes();
@@ -736,17 +821,21 @@ public sealed partial class WorldBody {
                     : FixedVector3.UnitY
                 );
 
+                m_rigidSupportNormal = groundNormal;
+
                 m_rigidGroundMissStreak = 0;
 
                 // A box or capsule rests on a MANIFOLD (up to four corners, or two cap points lying on a side), never
                 // a single witness point straight below its centre — that single point carries no lever against a
                 // tip in the direction perpendicular to it, which is exactly the tip a body standing on its own
-                // support polygon must resist. A sphere's own witness point is already its unique ground contact.
+                // support polygon must resist. An ellipsoid has one off-centre witness but needs the same raw
+                // pre-sweep velocity to generate tipping torque. A sphere's witness carries no normal lever.
                 var groundVolume = scaledColliderVolumes[0];
 
                 if (
                     (groundVolume.Kind == FixedBodyColliderKind.Box) ||
-                    (groundVolume.Kind == FixedBodyColliderKind.Capsule)
+                    (groundVolume.Kind == FixedBodyColliderKind.Capsule) ||
+                    (groundVolume.Kind == FixedBodyColliderKind.Ellipsoid)
                 ) {
                     ResolveRigidGroundManifold(
                         contacting: ref m_rigidGroundContacting,
@@ -781,13 +870,14 @@ public sealed partial class WorldBody {
 
             grounded = (grounded || resolution.Grounded);
             if (resolution.Support is { } support) {
-                DiagnosticSupport = m_diagnosticManifoldPoint is { } point ? support with { BodyPoint = point } : support;
+                DiagnosticSupport = ((m_diagnosticManifoldPoint is { } point) ? support with { BodyPoint = point } : support);
             }
         }
 
         // Rigid bodies bypass the locomotion contact operation. Publish the measured contact here as well;
         // retaining its prior value would leave a falling body reporting its spawn-time grounded fact.
         m_grounded = grounded;
+        m_rigidStaticSupported = grounded;
         m_lastContactCount = (grounded ? 1 : 0);
 
         var linearSpeed = m_rigidVelocity.Length;
@@ -944,9 +1034,9 @@ public sealed partial class WorldBody {
         m_rigidVelocity = ballHandle.LinearVelocity;
         m_angularVelocity = ballHandle.AngularVelocity;
     }
-    /// <summary>Resolves a box or capsule rigid body's ground contact over its own support manifold
+    /// <summary>Resolves a rigid body's ground contact over its own support manifold
     /// (<see cref="FixedRigidWitness.SupportManifold"/> — up to four box corners, or two capsule cap points lying on
-    /// a side, down to a single true corner once the body is tilted enough) instead of one CoM-anchored witness
+    /// a side, down to one witness for a tilted box or an ellipsoid) instead of one CoM-anchored witness
     /// point: <paramref name="iterations"/> sequential-impulse passes distribute a real NORMAL impulse — reflected by
     /// restitution on a rising edge, targeting zero closing speed otherwise, on the same terms
     /// <see cref="ResolveRigidContact"/>'s own restitution branch uses — over every manifold point still closing,
@@ -1084,12 +1174,13 @@ public sealed partial class WorldBody {
 
         // Retain a point that actually carried the solved load, never an invented point below the body centre.
         var loaded = -1;
-        for (var point = 0; point < pointCount; point++) {
-            if (accumulatedNormalImpulseRaw[point] > 0 && (loaded < 0 || accumulatedNormalImpulseRaw[point] > accumulatedNormalImpulseRaw[loaded])) {
+
+        for (var point = 0; (point < pointCount); point++) {
+            if ((accumulatedNormalImpulseRaw[point] > 0) && ((loaded < 0) || (accumulatedNormalImpulseRaw[point] > accumulatedNormalImpulseRaw[loaded]))) {
                 loaded = point;
             }
         }
-        if (loaded >= 0) { m_diagnosticManifoldPoint = m_position + m_orientation.Rotate(rigid.CenterOffset) + anchors[loaded]; }
+        if (loaded >= 0) { m_diagnosticManifoldPoint = ((m_position + m_orientation.Rotate(vector: rigid.CenterOffset)) + anchors[loaded]); }
 
         for (var point = 0; (point < pointCount); point++) {
             if (accumulatedNormalImpulseRaw[point] <= 0L) {

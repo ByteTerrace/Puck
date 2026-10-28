@@ -101,6 +101,7 @@ public sealed partial class WorldBody {
         }
 
         m_carryingIndex = targetIndex;
+        target.NotifyPopulationWake();
         target.m_carriedByIndex = selfIndex;
         target.m_rigidVelocity = FixedVector3.Zero;
         target.m_angularVelocity = FixedVector3.Zero;
@@ -109,12 +110,13 @@ public sealed partial class WorldBody {
         reason = "";
         return true;
     }
+
     /// <summary>Gets whether this body's own collider, at its CURRENT pose, overlaps the static contact field — a
     /// zero-displacement probe sweep (previous position equal to current) that still reports a correction exactly
     /// when the pose is already embedded. Used to refuse a carry release whose left-behind pose would penetrate a
     /// wall — see <c>WorldPopulation.TryEndCarry</c>. <see langword="false"/> for a body with no collider or contact
     /// field, since there is nothing there to embed in.</summary>
-    internal bool IsPenetratingStaticGeometry() {
+    public bool IsPenetratingStaticGeometry() {
         if (
             (m_contactField is not { } field) ||
             (m_collider is not { } collider)
@@ -137,6 +139,7 @@ public sealed partial class WorldBody {
 
         return (probePosition != m_position);
     }
+
     /// <summary>Ends this body's active carry, handing <paramref name="target"/> back to the rigid solver with this
     /// body's own current world velocity (<see cref="ApproximateWorldVelocity"/>) — a released body leaves with the
     /// carrier's motion rather than snapping to rest. A no-op (never a refusal) when this body carries nothing;

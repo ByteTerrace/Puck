@@ -36,7 +36,7 @@ public static partial class WorldFactsVocabulary {
             "$inputHeldPress:<owner>:<channel>",
             WorldRuleFacts.Population,
             WorldRuleFacts.PhysicsQuiescent,
-            $"{WorldRuleFacts.PhysicsQuiescent}:<scope>",
+            $"{WorldRuleFacts.PhysicsQuiescent}:<placementRow|scope>",
             $"{WorldRuleFacts.RegionPrefix}<placementId>",
             $"{WorldRuleFacts.InfluencePrefix}<channel>:<placementId>",
             $"{WorldRuleFacts.MachinePrefix}<screen>:<address>",
@@ -387,22 +387,73 @@ public static partial class WorldFactsVocabulary {
                     ruleName: ruleName
                 );
                 fact = WorldPopulationOperand.Instance;
-            } else if ((name == WorldRuleFacts.PhysicsQuiescent) || name.StartsWith(comparisonType: StringComparison.Ordinal, value: (WorldRuleFacts.PhysicsQuiescent + ":"))) {
+            } else if (name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: (WorldRuleFacts.PhysicsQuiescent + ":")
+            )) {
                 RuleCompiler.RefuseKeyOnReservedChannel(
                     key: cell,
                     keyFieldLabel: site.KeyFieldLabel,
                     name: name,
                     ruleName: ruleName
                 );
-                if (name == WorldRuleFacts.PhysicsQuiescent) { fact = WorldPhysicsQuiescentOperand.Instance; } else {
-                    var scopeName = name[(WorldRuleFacts.PhysicsQuiescent.Length + 1)..];
-                    var scope = world.Definition.ReplaysRaw?.FirstOrDefault(predicate: scope => (scope.Name == scopeName));
 
-                    if (scope is null) {
-                        throw new RuleException(detail: $"'{name}' names no replay scope '{scopeName}'", refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName);
-                    }
-                    fact = new WorldPhysicsQuiescentOperand(bodies: scope.Bodies);
+                var tokens = call!.Texts();
+                var row = ((tokens.Length == 2) ? world.FindRow(name: tokens[1]) : null);
+                var scope = ((tokens.Length == 2) ? world.Definition.ReplaysRaw?.FirstOrDefault(predicate: scope => (scope.Name == tokens[1])) : null);
+
+                if ((row is not null) && (scope is not null)) {
+                    throw new RuleException(detail: $"'{name}' is ambiguous: '{tokens[1]}' names both a state row and a replay scope", refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName);
                 }
+                if (scope is not null) {
+                    fact = new WorldPhysicsQuiescentOperand(bodies: scope.Bodies);
+
+                    return true;
+                }
+
+                if ((row is null) || !row.IsKeyed) {
+                    throw new RuleException(
+                        detail: $"'{name}' requires physics(quiescent, <keyed placement roster row or replay scope>)",
+                        refusal: WorldRuleRefusal.SpatialChannelMalformed,
+                        ruleName: ruleName
+                    );
+                }
+
+                var cells = (row.Cells ?? []);
+                var ordinals = new int[cells.Count];
+
+                for (var index = 0; (index < cells.Count); index++) {
+                    ordinals[index] = world.PlacementOrdinal(
+                        channel: name,
+                        placementId: cells[index].Key.Value,
+                        ruleName: ruleName
+                    );
+                }
+
+                var operand = PhysicsQuiescentOperand.ForPlacements(placementOrdinals: ordinals);
+
+                fact = BodyFact(
+                    bodyA: default,
+                    bodyB: default,
+                    cost: Math.Max(val1: 1, val2: ordinals.Length),
+                    describe: name,
+                    read: facet => facet.Read(operand: operand),
+                    rowOrdinal: RuleCompiler.ResolveRowOrdinal(context: world, name: row.Name.Value),
+                    valueKind: CellKind.Bool,
+                    world: world
+                );
+            } else if (string.Equals(
+                a: name,
+                b: WorldRuleFacts.PhysicsQuiescent,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                RuleCompiler.RefuseKeyOnReservedChannel(
+                    key: cell,
+                    keyFieldLabel: site.KeyFieldLabel,
+                    name: name,
+                    ruleName: ruleName
+                );
+                fact = WorldPhysicsQuiescentOperand.Instance;
             } else if (name.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: WorldRuleFacts.InfluencePrefix
@@ -1318,7 +1369,8 @@ public static partial class WorldFactsVocabulary {
                 fact = BodyFact(
                     bodyA: body,
                     bodyB: default,
-                    cost: topology.CellCount,
+                    // Grid, box and hex resolve directly; only authored/generated graph centres are scanned.
+                    cost: ((topology.Kind is TopologyKind.Graph or TopologyKind.Tiling) ? topology.CellCount : 1L),
                     describe: name,
                     read: facet => facet.Read(operand: operand),
                     rowOrdinal: RuleCompiler.ResolveRowOrdinal(

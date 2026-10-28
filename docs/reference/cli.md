@@ -1935,7 +1935,9 @@ the host narrates it, which is not the tick the edit applied on. The comparison
 is possible because the export tick is the document's rather than the runner's.
 
 Only a rule's own effect writes a verdict row. The rule-effect door stamps the
-firing's simulation tick into the row's reserved `$firedTick` cell — an ordinary
+firing's simulation tick into the row's reserved `$firedTick` cell. Generated
+expectation rows seed that cell at zero, so recording all verdicts on their
+export tick needs no arena reservation growth. The stamp is an ordinary
 cell from there on, so the arena's export, the state hash and a checkpoint all
 carry it — and a status with no stamp beside it is reported as "never evaluated"
 whatever the cell reads, so a status a cell trait accrued into, or a scheduled

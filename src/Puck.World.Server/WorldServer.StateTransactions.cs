@@ -43,7 +43,7 @@ public sealed partial class WorldServer {
             }
             validateBindings |= DocumentValueRows().Contains(item: name);
         }
-        if (!m_arena.TryValidateRelations(reason: out reason)) { return false; }
+        if (!m_arena.TryValidateRelations(changedRows: m_transactionRows, reason: out reason)) { return false; }
         if (!Input.TryValidate(reason: out reason)) { return false; }
         if (validateBindings) {
             try {

@@ -1,7 +1,6 @@
 // The Go table's scenarios (go.puck), each booted in the whole debug world: `puck test worlds/debug/go-tests.puck`.
-// Points are named by ordinal, 9 * row + column, column along +X and row along +Z: the centre point is 40, with 31 on
-// its -Z side, 49 on its +Z side, 39 on its -X side and 41 on its +X side. A position given on `goBoard` is the accepted
-// position; the table fills it from the trays, one point a reading, and a scenario that moves stones waits for that.
+// Points use 19 * row + column. The centre is 180, neighbours 161, 179, 181 and 199.
+// The table fills a given accepted position one point per reading.
 // Every scenario but the opponent's own leaves both sides to the steps (goAiSide 0).
 
 schema: "puck.world.definition.v1"
@@ -20,8 +19,10 @@ test "the stones settle in their trays and the board reads empty" {
     goCollisions == 0
     goIllegal == 0
     goCell.goStone0 == -1
-    goCell.goStone81 == -82
+    goCell.goStone360 == -361
     goHold == 9
+    goNewCell == -1
+    goFix == -1
   }
 }
 
@@ -34,11 +35,11 @@ test "a seated player plays the centre and the computer answers" {
     seat1: body.press interact
     ticks 5
     seat1: body.press confirm
-    ticks 400
+    ticks 1000
   }
   expect {
-    goBoard[40] == 1
-    goSeen[40] == 1
+    goBoard[180] == 1
+    goSeen[180] == 1
     goMoves == 2
     goTurn == 1
     goStoneCount[1] == 1
@@ -69,24 +70,24 @@ test "a seated player steps the cursor, plays and passes" {
     ticks 10
   }
   expect {
-    goBoard[48] == 1
-    goSeen[48] == 1
+    goBoard[198] == 1
+    goSeen[198] == 1
     goTurn == 1
     goPasses == 1
-    goSeat.cursor == 48
+    goSeat.cursor == 198
   }
 }
 
 test "a lone stone keeps four liberties" {
   given {
     goAiSide = 0
-    goMove.play = 40
+    goMove.play = 180
   }
   when {
     ticks 3
   }
   expect {
-    goBoard[40] == 1
+    goBoard[180] == 1
     goGroup == 1
     goLiberties == 4
     goAtari == 0
@@ -95,51 +96,51 @@ test "a lone stone keeps four liberties" {
   }
 }
 
-// White at 40 has black on its -Z and -X sides; black's stone on its +X side leaves it one liberty, 49.
+// White at 180 has black on its -Z and -X sides; black's stone on its +X side leaves it one liberty, 199.
 test "a stone taking the second-last liberty puts the group in atari" {
   given {
     goAiSide = 0
-    goBoard[40] = 2
-    goBoard[31] = 1
-    goBoard[39] = 1
+    goBoard[180] = 2
+    goBoard[161] = 1
+    goBoard[179] = 1
     goStoneCount[1] = 2
     goStoneCount[2] = 1
-    goMove.play = 41
+    goMove.play = 181
   }
   when {
     ticks 3
   }
   expect {
-    goBoard[41] == 1
-    goBoard[40] == 2
+    goBoard[181] == 1
+    goBoard[180] == 2
     goAtari == 1
     goLiberties == 3
     goCaptured == 0
   }
 }
 
-// White's two stones at 40 and 41 share their liberties; black's stone at 50 takes the last one and the whole group
+// White's two stones at 180 and 181 share their liberties; black's stone at 200 takes the last one and the whole group
 // comes off.
 test "a stone filling the last liberty captures a whole group" {
   given {
     goAiSide = 0
-    goBoard[40] = 2
-    goBoard[41] = 2
-    goBoard[31] = 1
-    goBoard[32] = 1
-    goBoard[39] = 1
-    goBoard[42] = 1
-    goBoard[49] = 1
+    goBoard[180] = 2
+    goBoard[181] = 2
+    goBoard[161] = 1
+    goBoard[162] = 1
+    goBoard[179] = 1
+    goBoard[182] = 1
+    goBoard[199] = 1
     goStoneCount[1] = 5
     goStoneCount[2] = 2
-    goMove.play = 50
+    goMove.play = 200
   }
   when {
     ticks 3
   }
   expect {
-    goBoard[40] == 0
-    goBoard[41] == 0
+    goBoard[180] == 0
+    goBoard[181] == 0
     goCaptured == 2
     goPrisoners[1] == 2
     goStoneCount[2] == 0
@@ -148,23 +149,23 @@ test "a stone filling the last liberty captures a whole group" {
   }
 }
 
-// Black surrounds 40 on every side; a white stone there would have no liberty and takes nothing.
+// Black surrounds 180 on every side; a white stone there would have no liberty and takes nothing.
 test "a stone with no liberty that captures nothing is refused as suicide" {
   given {
     goAiSide = 0
     goTurn = 2
-    goBoard[31] = 1
-    goBoard[39] = 1
-    goBoard[41] = 1
-    goBoard[49] = 1
+    goBoard[161] = 1
+    goBoard[179] = 1
+    goBoard[181] = 1
+    goBoard[199] = 1
     goStoneCount[1] = 4
-    goMove.play = 40
+    goMove.play = 180
   }
   when {
     ticks 3
   }
   expect {
-    goBoard[40] == 0
+    goBoard[180] == 0
     goRefusal == 2
     goRejected == 1
     goMoves == 0
@@ -173,33 +174,33 @@ test "a stone with no liberty that captures nothing is refused as suicide" {
   }
 }
 
-// The ko shape: black's stone at 41 sits in a white mouth whose one opening is 40, and black guards 40 from -Z, -X and
-// +Z. White takes at 40; black taking straight back at 41 would remake the position the game opened on, which the
+// The ko shape: black's stone at 181 sits in a white mouth whose one opening is 180, and black guards 180 from -Z, -X and
+// +Z. White takes at 180; black taking straight back at 181 would remake the position the game opened on, which the
 // history ring still holds one turn back.
 test "retaking a ko at once is refused" {
   given {
     goAiSide = 0
     goTurn = 2
-    goBoard[31] = 1
-    goBoard[39] = 1
-    goBoard[49] = 1
-    goBoard[41] = 1
-    goBoard[32] = 2
-    goBoard[42] = 2
-    goBoard[50] = 2
+    goBoard[161] = 1
+    goBoard[179] = 1
+    goBoard[199] = 1
+    goBoard[181] = 1
+    goBoard[162] = 2
+    goBoard[182] = 2
+    goBoard[200] = 2
     goStoneCount[1] = 4
     goStoneCount[2] = 3
   }
   when {
     ticks 2
-    seat1: world.state.cell.set goMove play 40
+    seat1: world.state.cell.set goMove play 180
     ticks 2
-    seat1: world.state.cell.set goMove play 41
+    seat1: world.state.cell.set goMove play 181
     ticks 2
   }
   expect {
-    goBoard[40] == 2
-    goBoard[41] == 0
+    goBoard[180] == 2
+    goBoard[181] == 0
     goRefusal == 3
     goRejected == 1
     goMoves == 1
@@ -213,66 +214,66 @@ test "a ko may be retaken after an exchange elsewhere" {
   given {
     goAiSide = 0
     goTurn = 2
-    goBoard[31] = 1
-    goBoard[39] = 1
-    goBoard[49] = 1
-    goBoard[41] = 1
-    goBoard[32] = 2
-    goBoard[42] = 2
-    goBoard[50] = 2
+    goBoard[161] = 1
+    goBoard[179] = 1
+    goBoard[199] = 1
+    goBoard[181] = 1
+    goBoard[162] = 2
+    goBoard[182] = 2
+    goBoard[200] = 2
     goStoneCount[1] = 4
     goStoneCount[2] = 3
   }
   when {
     ticks 2
-    seat1: world.state.cell.set goMove play 40
+    seat1: world.state.cell.set goMove play 180
     ticks 2
     seat1: world.state.cell.set goMove play 0
     ticks 2
-    seat1: world.state.cell.set goMove play 80
+    seat1: world.state.cell.set goMove play 360
     ticks 2
-    seat1: world.state.cell.set goMove play 41
+    seat1: world.state.cell.set goMove play 181
     ticks 2
   }
   expect {
-    goBoard[41] == 1
-    goBoard[40] == 0
+    goBoard[181] == 1
+    goBoard[180] == 0
     goCaptured == 1
     goRejected == 0
     goMoves == 4
   }
 }
 
-// A position given on the board is set on the table from the trays; black then plays 49 with a put, capturing the white
-// stone at 40, which goes back to White's tray.
+// A position given on the board is set on the table from the trays; black then plays 199 with a put, capturing the white
+// stone at 180, which goes back to White's tray.
 test "the table fills a given position and a captured stone goes back to its tray" {
   given {
     goAiSide = 0
-    goBoard[40] = 2
-    goBoard[31] = 1
-    goBoard[39] = 1
-    goBoard[41] = 1
+    goBoard[180] = 2
+    goBoard[161] = 1
+    goBoard[179] = 1
+    goBoard[181] = 1
     goStoneCount[1] = 3
     goStoneCount[2] = 1
   }
   when {
+    ticks 1000
+    seat1: world.state.cell.set goPut $value 199
     ticks 400
-    seat1: world.state.cell.set goPut $value 49
-    ticks 200
   }
   expect {
-    goBoard[49] == 1
-    goBoard[40] == 0
-    goSeen[40] == 0
-    goSeen[31] == 1
-    goSeen[49] == 1
+    goBoard[199] == 1
+    goBoard[180] == 0
+    goSeen[180] == 0
+    goSeen[161] == 1
+    goSeen[199] == 1
     goCaptured == 1
     goChangedCount == 0
-    goCell.goStone81 == -82
+    goCell.goStone360 == -361
   }
 }
 
-// Black to move, a white stone (goStone41, body 150) is set by hand on point 41, 10 cm over the board: the reading
+// Black to move, a white stone (goStone181, body 289) is set by hand on point 181, 10 cm over the board: the reading
 // records the arrangement illegal and puts the stone back in White's tray. Then a black stone and a second black stone
 // beside it: two points changed, illegal again, and both go back.
 test "an arrangement that is not one stone of the side to move is illegal and put right" {
@@ -281,20 +282,94 @@ test "an arrangement that is not one stone of the side to move is illegal and pu
   }
   when {
     ticks 150
-    seat1: body.pose 56.65 10 30.6 0 0 0 150
+    seat1: body.pose 56.58 10 30.6 0 0 0 289
     ticks 150
-    seat1: body.pose 56.65 10 30.6 0 0 0 191
-    seat1: body.pose 56.8 10 30.6 0 0 0 190
-    ticks 200
+    seat1: body.pose 56.58 10 30.6 0 0 0 470
+    seat1: body.pose 56.66 10 30.6 0 0 0 469
+    ticks 400
   }
   expect {
     goIllegal == 2
     goMoves == 0
-    goSeen[41] == 0
-    goSeen[42] == 0
+    goSeen[181] == 0
+    goSeen[182] == 0
     goChangedCount == 0
-    goCell.goStone41 == -42
+    goCell.goStone181 == -182
     goCell.goStone0 == -1
+  }
+}
+
+// The higher-ordinal White token wins the inverse-board projection, so dropping Black onto it changes no visible
+// point. The physical collision still has to settle, be refused, and return Black to its tray.
+test "a stone stacked on an occupied point is returned even when the board projection is unchanged" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 2
+    goStoneCount[2] = 1
+  }
+  when {
+    ticks 300
+    seat1: world.state.cell.set goIllegal $value 0
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 470
+    ticks 400
+  }
+  expect {
+    goIllegal == 1
+    goMoves == 0
+    goBoard[180] == 2
+    goSeen[180] == 2
+    goCell.goStone0 == -1
+    goCollisions == 0
+    goHold == 9
+  }
+}
+
+test "two stones of the accepted colour keep one point and return the duplicate" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 1
+    goStoneCount[1] = 1
+  }
+  when {
+    ticks 300
+    seat1: world.state.cell.set goIllegal $value 0
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 469
+    ticks 400
+  }
+  expect {
+    goIllegal == 1
+    goMoves == 0
+    goBoard[180] == 1
+    goSeen[180] == 1
+    goCell.goStone0 == 180
+    goCell.goStone1 == -2
+    goCollisions == 0
+    goHold == 9
+  }
+}
+
+test "a higher-ordinal wrong-colour stone does not replace or duplicate the accepted stone beneath it" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 1
+    goStoneCount[1] = 1
+  }
+  when {
+    ticks 300
+    seat1: world.state.cell.set goIllegal $value 0
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 289
+    ticks 400
+  }
+  expect {
+    goIllegal == 1
+    goMoves == 0
+    goBoard[180] == 1
+    goSeen[180] == 1
+    goCell.goStone0 == 180
+    goCell.goStone181 == -182
+    goCell.goStone1 == -2
+    goCollisions == 0
+    goHold == 9
   }
 }
 
@@ -305,7 +380,7 @@ test "the computer plays one move" {
     goAiSide = 1
   }
   when {
-    ticks 400
+    ticks 1000
   }
   expect {
     goMoves == 1
@@ -322,19 +397,19 @@ test "the game ends on two passes and is scored by area" {
   given {
     goAiSide = 0
     goBoard[3] = 1
-    goBoard[12] = 1
-    goBoard[21] = 1
-    goBoard[27] = 1
-    goBoard[28] = 1
-    goBoard[29] = 1
-    goBoard[30] = 1
-    goBoard[77] = 2
-    goBoard[68] = 2
-    goBoard[59] = 2
-    goBoard[53] = 2
-    goBoard[52] = 2
-    goBoard[51] = 2
-    goBoard[50] = 2
+    goBoard[22] = 1
+    goBoard[41] = 1
+    goBoard[57] = 1
+    goBoard[58] = 1
+    goBoard[59] = 1
+    goBoard[60] = 1
+    goBoard[357] = 2
+    goBoard[338] = 2
+    goBoard[319] = 2
+    goBoard[303] = 2
+    goBoard[302] = 2
+    goBoard[301] = 2
+    goBoard[300] = 2
     goStoneCount[1] = 7
     goStoneCount[2] = 7
   }
@@ -351,5 +426,248 @@ test "the game ends on two passes and is scored by area" {
     goTerritory[1] == 9
     goTerritory[2] == 9
     goWinner == 2
+  }
+}
+
+test "a capture is legal even when the drop begins with no empty neighbour" {
+  given {
+    goAiSide = 0
+    goBoard[180] = 2
+    goBoard[161] = 1
+    goBoard[179] = 1
+    goBoard[181] = 1
+    goBoard[198] = 2
+    goBoard[200] = 2
+    goBoard[218] = 2
+    goStoneCount[1] = 3
+    goStoneCount[2] = 4
+    goMove.play = 199
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    goBoard[180] == 0
+    goBoard[199] == 1
+    goCaptured == 1
+    goRejected == 0
+  }
+}
+
+test "the far corner belongs to the full board" {
+  given {
+    goAiSide = 0
+    goMove.play = 360
+  }
+  when {
+    ticks 3
+  }
+  expect {
+    goBoard[360] == 1
+    goLiberties == 2
+    goMoves == 1
+  }
+}
+
+test "a reset drains its deterministic return queue" {
+  given {
+    goAiSide = 0
+  }
+  when {
+    ticks 150
+    seat1: body.pose 56.5 10 30.6 0 0 0 470
+    ticks 150
+    seat1: world.state.cell.set goReset $value 1
+    ticks 400
+  }
+  expect {
+    goMoves == 0
+    goTurn == 1
+    goReseat == 0
+    goResetAll == 0
+    goChangedCount == 0
+    goCell.goStone0 == -1
+    goCell.goStone360 == -361
+  }
+}
+
+test "scoring a winding 19 by 19 corridor takes more than 128 passes" {
+  given {
+    goAiSide = 0
+    goOver = 1
+    goScoring = 1
+    goGrowing = 1
+    goBlackReach[0] = 1
+    goBoard[19] = 1
+    goBoard[20] = 1
+    goBoard[21] = 1
+    goBoard[22] = 1
+    goBoard[23] = 1
+    goBoard[24] = 1
+    goBoard[25] = 1
+    goBoard[26] = 1
+    goBoard[27] = 1
+    goBoard[28] = 1
+    goBoard[29] = 1
+    goBoard[30] = 1
+    goBoard[31] = 1
+    goBoard[32] = 1
+    goBoard[33] = 1
+    goBoard[34] = 1
+    goBoard[35] = 1
+    goBoard[36] = 1
+    goBoard[58] = 1
+    goBoard[59] = 1
+    goBoard[60] = 1
+    goBoard[61] = 1
+    goBoard[62] = 1
+    goBoard[63] = 1
+    goBoard[64] = 1
+    goBoard[65] = 1
+    goBoard[66] = 1
+    goBoard[67] = 1
+    goBoard[68] = 1
+    goBoard[69] = 1
+    goBoard[70] = 1
+    goBoard[71] = 1
+    goBoard[72] = 1
+    goBoard[73] = 1
+    goBoard[74] = 1
+    goBoard[75] = 1
+    goBoard[95] = 1
+    goBoard[96] = 1
+    goBoard[97] = 1
+    goBoard[98] = 1
+    goBoard[99] = 1
+    goBoard[100] = 1
+    goBoard[101] = 1
+    goBoard[102] = 1
+    goBoard[103] = 1
+    goBoard[104] = 1
+    goBoard[105] = 1
+    goBoard[106] = 1
+    goBoard[107] = 1
+    goBoard[108] = 1
+    goBoard[109] = 1
+    goBoard[110] = 1
+    goBoard[111] = 1
+    goBoard[112] = 1
+    goBoard[134] = 1
+    goBoard[135] = 1
+    goBoard[136] = 1
+    goBoard[137] = 1
+    goBoard[138] = 1
+    goBoard[139] = 1
+    goBoard[140] = 1
+    goBoard[141] = 1
+    goBoard[142] = 1
+    goBoard[143] = 1
+    goBoard[144] = 1
+    goBoard[145] = 1
+    goBoard[146] = 1
+    goBoard[147] = 1
+    goBoard[148] = 1
+    goBoard[149] = 1
+    goBoard[150] = 1
+    goBoard[151] = 1
+    goBoard[171] = 1
+    goBoard[172] = 1
+    goBoard[173] = 1
+    goBoard[174] = 1
+    goBoard[175] = 1
+    goBoard[176] = 1
+    goBoard[177] = 1
+    goBoard[178] = 1
+    goBoard[179] = 1
+    goBoard[180] = 1
+    goBoard[181] = 1
+    goBoard[182] = 1
+    goBoard[183] = 1
+    goBoard[184] = 1
+    goBoard[185] = 1
+    goBoard[186] = 1
+    goBoard[187] = 1
+    goBoard[188] = 1
+    goBoard[210] = 1
+    goBoard[211] = 1
+    goBoard[212] = 1
+    goBoard[213] = 1
+    goBoard[214] = 1
+    goBoard[215] = 1
+    goBoard[216] = 1
+    goBoard[217] = 1
+    goBoard[218] = 1
+    goBoard[219] = 1
+    goBoard[220] = 1
+    goBoard[221] = 1
+    goBoard[222] = 1
+    goBoard[223] = 1
+    goBoard[224] = 1
+    goBoard[225] = 1
+    goBoard[226] = 1
+    goBoard[227] = 1
+    goBoard[247] = 1
+    goBoard[248] = 1
+    goBoard[249] = 1
+    goBoard[250] = 1
+    goBoard[251] = 1
+    goBoard[252] = 1
+    goBoard[253] = 1
+    goBoard[254] = 1
+    goBoard[255] = 1
+    goBoard[256] = 1
+    goBoard[257] = 1
+    goBoard[258] = 1
+    goBoard[259] = 1
+    goBoard[260] = 1
+    goBoard[261] = 1
+    goBoard[262] = 1
+    goBoard[263] = 1
+    goBoard[264] = 1
+    goBoard[286] = 1
+    goBoard[287] = 1
+    goBoard[288] = 1
+    goBoard[289] = 1
+    goBoard[290] = 1
+    goBoard[291] = 1
+    goBoard[292] = 1
+    goBoard[293] = 1
+    goBoard[294] = 1
+    goBoard[295] = 1
+    goBoard[296] = 1
+    goBoard[297] = 1
+    goBoard[298] = 1
+    goBoard[299] = 1
+    goBoard[300] = 1
+    goBoard[301] = 1
+    goBoard[302] = 1
+    goBoard[303] = 1
+    goBoard[323] = 1
+    goBoard[324] = 1
+    goBoard[325] = 1
+    goBoard[326] = 1
+    goBoard[327] = 1
+    goBoard[328] = 1
+    goBoard[329] = 1
+    goBoard[330] = 1
+    goBoard[331] = 1
+    goBoard[332] = 1
+    goBoard[333] = 1
+    goBoard[334] = 1
+    goBoard[335] = 1
+    goBoard[336] = 1
+    goBoard[337] = 1
+    goBoard[338] = 1
+    goBoard[339] = 1
+    goBoard[340] = 1
+  }
+  when {
+    ticks 250
+  }
+  expect {
+    goScoring == 2
+    goBlackReach[342] == 1
+    goScorePasses > 128
+    goWinner == 1
   }
 }

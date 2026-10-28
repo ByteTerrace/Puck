@@ -52,6 +52,15 @@ state {
       distance = 16.0
       nearDistance = 4.0
     }
+    table companionNeighbour {
+      body = -1
+    }
+    // All population slots are eligible; nearest skips inactive bodies and the querying body itself.
+    row {
+      name: "companionBodies"
+      kind: "Int"
+      cells: map(range(0, galleryPopulation + 2 + boardRoomBodies), i => { key: $"{i}", value: 1 })
+    }
     table companionCue {
       guide = -1
       door = 1
@@ -95,6 +104,7 @@ rule "companion-senses" {
   companionSense.door = liftDoors.car == 1 ? 1 : 0
   companionAttention.distance = 16
   companionAttention.nearDistance = 2.25
+  companionNeighbour.body = nearest(body, 42, companionBodies)
 }
 
 // Actual exhibit positions come from the gallery layout, shared with its plinths and guide regions. Inspection is
@@ -131,19 +141,23 @@ for (point, index) in companionAttractions {
   }
 }
 
+// Select once by root distance, then publish the point 0.8 m above that root for avoidance. This keeps the
+// 1.5 m neighbourhood independent of the target's height offset and prices one population scan per tick.
 rule "companion-neighbours" {
-  local dx = bodyPosition(each, x) - bodyPosition(body, 42, x)
-  local dy = bodyPosition(each, y) + 0.8 - bodyPosition(body, 42, y)
-  local dz = bodyPosition(each, z) - bodyPosition(body, 42, z)
+  local neighbourX = bodyPosition(cell, companionNeighbour, body, x)
+  local neighbourY = bodyPosition(cell, companionNeighbour, body, y)
+  local neighbourZ = bodyPosition(cell, companionNeighbour, body, z)
+  local dx = neighbourX - bodyPosition(body, 42, x)
+  local dy = neighbourY - bodyPosition(body, 42, y)
+  local dz = neighbourZ - bodyPosition(body, 42, z)
   local distance = dx * dx + dy * dy + dz * dz
-  when (dx or dz) and distance < companionAttention.nearDistance
+  when companionNeighbour.body >= 0 and distance < companionAttention.nearDistance
   mode: Level
-  forEach: $bodies
   companionAttention.nearDistance = distance
   companionSense.near = 1
-  companionSense.nx = bodyPosition(each, x)
-  companionSense.ny = bodyPosition(each, y) + 0.8
-  companionSense.nz = bodyPosition(each, z)
+  companionSense.nx = neighbourX
+  companionSense.ny = neighbourY + 0.8
+  companionSense.nz = neighbourZ
 }
 
 // The guide's spoken arrival and the lift's moving door are authored cue edges. Their points use the same sensory

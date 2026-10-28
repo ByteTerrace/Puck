@@ -5,9 +5,43 @@ namespace Puck.World.Server;
 /// the authored <c>bodies.sleepAfterSeconds</c>, <see cref="WorldPopulation.AdvanceSimulated"/> stops
 /// staging and advancing it outright — no motion program, no contact solve — until something wakes it. A rigid or
 /// carried body never reaches this: both already return from <see cref="Advance"/> before <see cref="Advance"/>'s
-/// own sleep bookkeeping runs, and a rigid kit's rest latch (<see cref="Resting"/>) is a distinct, older mechanism.
+/// own sleep bookkeeping runs. A rigid kit's rest latch (<see cref="Resting"/>) instead parks complete contact
+/// islands in the population. A change to any member wakes the whole island before its next solve.
 /// </summary>
 public sealed partial class WorldBody {
+    private Action<int>? m_populationWake;
+    private int m_populationIndex;
+    private int m_rigidSleepRootPlusOne;
+
+    internal bool PopulationSleeping => (m_rigidSleepRootPlusOne != 0);
+    internal int RigidSleepRootPlusOne => m_rigidSleepRootPlusOne;
+
+    internal void BindPopulationWake(int index, Action<int>? observer) {
+        m_populationIndex = index;
+        m_populationWake = observer;
+    }
+    internal void ParkRigidIsland(int rootPlusOne, ulong contactFieldVersion) {
+        m_rigidSleepRootPlusOne = rootPlusOne;
+        m_lastContactFieldVersion = contactFieldVersion;
+        RigidStaticSubstepsThisTick = 0;
+        m_previousPosition = m_position;
+    }
+    internal void WakeRigidIsland() {
+        m_rigidSleepRootPlusOne = 0;
+        InvalidateRigidRest();
+        // PrepareBodyStep fixes this tick's integration roster. A later wake joins the contact solve immediately,
+        // but integrates only next tick. Start its contact phase empty, exactly as a reconstructed body does;
+        // neither support nor a hold tick may come from the advance that preceded sleep. Zero step ticks also
+        // tell RefreshRigidStaticSupport to query a fresh static witness during this tick's contacts.
+        m_rigidHoldBeforeStep = 0;
+        m_rigidStepTicks = 0;
+        m_rigidPairSupported = false;
+        m_rigidStaticSupported = false;
+        m_rigidSupportNormal = default;
+    }
+
+    private void NotifyPopulationWake() => m_populationWake?.Invoke(obj: m_populationIndex);
+
     // 0 while awake; otherwise the simulation tick this body fell asleep at (see AsleepSinceTick's own read-back
     // contract). sleepAfterTicks is validated non-negative and this only ever gets a value at least that large, so
     // 0 as the sentinel never collides with a genuine sleep tick.
@@ -30,6 +64,7 @@ public sealed partial class WorldBody {
     /// (<see cref="ApplyTransferState"/>), an admission change resuming a parked body, or a targeted effect
     /// (<see cref="ApplyTargetedEffect"/>). A no-op while already awake.</summary>
     internal void WakeUp() {
+        NotifyPopulationWake();
         m_asleepSinceTick = 0UL;
         m_sleepIdleTicks = 0UL;
     }

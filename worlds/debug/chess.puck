@@ -1075,12 +1075,14 @@ rule "chess-ai-request" {
 
 // A numeric move mailbox is the console's and replay's real move door. It joins the seated player's apply path:
 // captures, castling and promotion are placed by chess-ai-relocate, then the ordinary settled-board judge decides.
+// Its physical resting read also keeps live mailbox inputs out of hypothetical search candidates.
 rule "chess-input-move" {
   when (chessInput.request == 1 and
     chessInput.from == pieceCell[$each] and
     (pieceCode[$each] * (1 - 2 * turn)) > 0 and
     ai.pending == 0 and
-    settleHold == chessSettleTicks)
+    settleHold == chessSettleTicks and
+    physics(quiescent, "chess-demo") == 1)
   mode: Level
   forEach: pieceCode
   ai.from = chessInput.from

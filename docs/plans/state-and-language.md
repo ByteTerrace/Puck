@@ -888,7 +888,7 @@ clears one line; the corpus inventory counts every claimed construct.
 
 ### G1 — Go
 
-**Status:** implemented at 19x19 as a headless game, and now played at 9x9 on
+**Status:** played at 19×19 on
 the debug world's Go table ([go.md](../../worlds/debug/go.md)), whose rules
 are the same move door under a physical table of stones.
 [go-tests.puck](../../worlds/debug/go-tests.puck) shows an atari, a group
@@ -898,12 +898,12 @@ byte for byte. The 19x19 package exposed four engine faults, each fixed with
 laws: a tree search judged every
 candidate of a node when it expanded, so a 19x19 pool filled after about
 twenty expansions (it now grows one node an iteration under progressive
-widening); the canonical fingerprint folds mirror images, so the ko check
-reads the exact `board(fingerprint, …)`; a fold was scheduled and priced by
+widening); the canonical fingerprint folds mirror images, so the live table's ko check
+compares the predecessor board point for point; a fold was scheduled and priced by
 its row's authored cells, so a fold over a row written at run time was stale in
 a memoized local; and an assignment target could not take the `$"…"` key a
 read takes. Capture is `clearEnclosed`, the placement's own liberty flood. The
-CPU's score is material alone.
+beginner opponent uses a one-ply tactical and positional score, bounded by eight candidates per step.
 
 **Owns:** `worlds/debug/go.puck` and its tests. Constructs:
 `clearEnclosed`, `writeSet`, `board(component, …)`, `board(boundary, …)`,

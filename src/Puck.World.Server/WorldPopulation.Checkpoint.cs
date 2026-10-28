@@ -60,6 +60,9 @@ public sealed partial class WorldPopulation {
         new(
             Entries: CaptureEntries(),
             Generations: m_entries.Select(selector: entry => entry.Generation).ToArray(),
+            EventBodies: m_eventBodies.ToArray(),
+            SleepingSupports: CaptureSleepingSupports(),
+            SleepingGravity: [.. m_sleepGravity.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             SharedNavigation: m_navigation.CaptureShared(),
             Revision: m_revision,
             SeatKit: m_seatKit,
@@ -131,6 +134,9 @@ public sealed partial class WorldPopulation {
         return new WorldPopulationEntryCheckpoint(
             Index: index,
             KitIndex: entry.KitIndex,
+            SelectedKit: entry.SelectedKit,
+            SelectedLook: entry.SelectedLook,
+            Scale: body.Scale,
             BodyColor: entry.BodyColor,
             CatalogRig: entry.CatalogRig,
             TravelTurn: entry.TravelTurn,
@@ -272,10 +278,7 @@ public sealed partial class WorldPopulation {
 
         foreach (var captured in checkpoint.Entries) {
             var entry = m_entries[captured.Index];
-            var bodyKitIndex = ((captured.Index < LocalSeatCount)
-                ? checkpoint.SeatKit
-                : captured.KitIndex
-            );
+            var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
             var profile = ((captured.Profile is { } projection)
                 ? WorldIdentity.FromProjection(
                     defaults: defaults,
@@ -295,6 +298,9 @@ public sealed partial class WorldPopulation {
                 walkableThreshold: m_walkableThreshold
             );
             body.SetGravityField(field: m_gravityField);
+            // Reconstruct live geometry before restoring latches. The next register catch-up must be a no-op
+            // when scale/selection already matched at capture, and a real change when a write was still pending.
+            body.SetScale(value: captured.Scale);
             body.Pose(
                 position: captured.Position,
                 yawRadians: captured.Yaw,
@@ -321,6 +327,8 @@ public sealed partial class WorldPopulation {
             }
 
             entry.KitIndex = captured.KitIndex;
+            entry.SelectedKit = captured.SelectedKit;
+            entry.SelectedLook = captured.SelectedLook;
             entry.BodyColor = captured.BodyColor;
             entry.CatalogRig = captured.CatalogRig;
             entry.TravelTurn = captured.TravelTurn;
@@ -425,12 +433,15 @@ public sealed partial class WorldPopulation {
         m_seatKit = checkpoint.SeatKit;
         m_revision = checkpoint.Revision;
         RebuildCarryRelationships();
+        RestoreSleepingIslands(checkpoint: checkpoint);
+        m_bodyCellDefinition = null;
     }
 
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
-        if (checkpoint.Entries is null) {
+        if ((checkpoint.Entries is null) || (checkpoint.EventBodies is null) ||
+            (checkpoint.SleepingSupports is null) || (checkpoint.SleepingGravity is null)) {
             throw new InvalidOperationException(message: "population checkpoint entries are null.");
         }
         // An empty document has no kits and retains the constructor's zero selection sentinel.
@@ -471,6 +482,9 @@ public sealed partial class WorldPopulation {
             if (((uint)captured.KitIndex) >= ((uint)m_kits.Length)) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names kit {captured.KitIndex} outside {m_kits.Length} compiled kits.");
             }
+            if ((captured.SelectedKit < -1) || (captured.SelectedKit >= m_kits.Length) || (captured.Scale <= FixedQ4816.Zero)) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has invalid selected geometry.");
+            }
             if (captured.Generation != checkpoint.Generations[captured.Index]) {
                 throw new InvalidOperationException(message: "population checkpoint entry generation disagrees with the slot image.");
             }
@@ -502,10 +516,7 @@ public sealed partial class WorldPopulation {
             ) {
                 throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names an invalid carrier index {captured.Residue.CarriedBy}.");
             }
-            var bodyKitIndex = ((captured.Index < LocalSeatCount)
-                ? checkpoint.SeatKit
-                : captured.KitIndex
-            );
+            var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
 
             ValidateAutonomyCheckpoint(
                 captured.Autonomy,
@@ -514,9 +525,51 @@ public sealed partial class WorldPopulation {
             ValidateNavigationCheckpoint(navigation: captured.Navigation);
         }
 
+        var previousEvent = -1;
+
+        foreach (var index in checkpoint.EventBodies) {
+            if ((index <= previousEvent) || (((uint)index) >= ((uint)Capacity))) {
+                throw new InvalidOperationException(message: "population checkpoint has invalid event discovery work.");
+            }
+            previousEvent = index;
+        }
+        var previousGravity = -1;
+        var sleepingCount = checkpoint.Entries.Count(predicate: static entry => (entry.Residue.RigidSleepRootPlusOne > 0));
+
+        if (checkpoint.SleepingGravity.Count != sleepingCount) {
+            throw new InvalidOperationException(message: "population checkpoint must retain every sleeper's solved gravity.");
+        }
+        foreach (var row in checkpoint.SleepingGravity) {
+            if ((row.Body <= previousGravity) || (((uint)row.Body) >= ((uint)Capacity)) ||
+                (restored[row.Body] is not { Residue.RigidSleepRootPlusOne: > 0 })) {
+                throw new InvalidOperationException(message: "population checkpoint has invalid sleeping gravity.");
+            }
+            previousGravity = row.Body;
+        }
+        var previousSupport = (-1, -1);
+
+        foreach (var edge in checkpoint.SleepingSupports) {
+            if ((edge.CompareTo(other: previousSupport) <= 0) || (((uint)edge.Support) >= ((uint)Capacity)) ||
+                (((uint)edge.Body) >= ((uint)Capacity)) || (edge.Support == edge.Body) ||
+                (restored[edge.Support] is not { } support) || (restored[edge.Body] is not { Residue.RigidSleepRootPlusOne: > 0 }) ||
+                (m_kits[CapturedKitIndex(captured: support, seatKit: checkpoint.SeatKit)].Rigid is not null)) {
+                throw new InvalidOperationException(message: "population checkpoint has invalid sleeping support dependencies.");
+            }
+            previousSupport = edge;
+        }
+
         foreach (var captured in checkpoint.Entries) {
             var carrying = captured.Residue.Carrying;
             var carriedBy = captured.Residue.CarriedBy;
+            var sleeping = captured.Residue.RigidSleepRootPlusOne;
+
+            if ((sleeping < 0) || (sleeping > Capacity) ||
+                ((sleeping > 0) && ((sleeping > (captured.Index + 1)) ||
+                    (restored[(sleeping - 1)] is not { } root) || (root.Residue.RigidSleepRootPlusOne != sleeping) ||
+                    !captured.Residue.RigidResting || (carriedBy >= 0) ||
+                    (m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Rigid is null)))) {
+                throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} has an invalid sleeping rigid island.");
+            }
 
             if (
                 (carrying >= 0) &&
@@ -530,12 +583,8 @@ public sealed partial class WorldPopulation {
                     (restored[carrying] is not { } target) ||
                     (target.Residue.CarriedBy != captured.Index) ||
                     (target.Residue.Carrying >= 0) ||
-                    (m_kits[((captured.Index < LocalSeatCount)
-                    ? checkpoint.SeatKit
-                    : captured.KitIndex)].Carry is null) ||
-                    (m_kits[((target.Index < LocalSeatCount)
-                    ? checkpoint.SeatKit
-                    : target.KitIndex)].Rigid is null)
+                    (m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Carry is null) ||
+                    (m_kits[CapturedKitIndex(captured: target, seatKit: checkpoint.SeatKit)].Rigid is null)
                 ) {
                     throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} carries body {carrying} without one valid mirrored carry relationship.");
                 }
@@ -546,12 +595,8 @@ public sealed partial class WorldPopulation {
                     (restored[carriedBy] is not { } carrier) ||
                     (carrier.Residue.Carrying != captured.Index) ||
                     (carrier.Residue.CarriedBy >= 0) ||
-                    (m_kits[((carrier.Index < LocalSeatCount)
-                    ? checkpoint.SeatKit
-                    : carrier.KitIndex)].Carry is null) ||
-                    (m_kits[((captured.Index < LocalSeatCount)
-                    ? checkpoint.SeatKit
-                    : captured.KitIndex)].Rigid is null)
+                    (m_kits[CapturedKitIndex(captured: carrier, seatKit: checkpoint.SeatKit)].Carry is null) ||
+                    (m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Rigid is null)
                 ) {
                     throw new InvalidOperationException(message: $"population checkpoint entry {captured.Index} names carrier {carriedBy} without one valid mirrored carry relationship.");
                 }
@@ -559,6 +604,8 @@ public sealed partial class WorldPopulation {
         }
     }
 
+    private byte CapturedKitIndex(WorldPopulationEntryCheckpoint captured, byte seatKit) => ((captured.SelectedKit >= 0)
+        ? checked((byte)captured.SelectedKit) : ((captured.Index < LocalSeatCount) ? seatKit : captured.KitIndex));
     private static void ValidateAutonomyCheckpoint(WorldPopulationAutonomyCheckpoint state, in FixedWorldKit kit) {
         var maximum = FixedTickConversion.TicksPerSecond;
 

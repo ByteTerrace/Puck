@@ -38,7 +38,8 @@ public abstract record WorldCollider {
     /// <param name="HalfExtents">The positive half-extents.</param>
     /// <param name="Rotation">The body-local orientation.</param>
     public sealed record Box(DocumentVector3 HalfExtents, DocumentQuaternion Rotation) : WorldCollider;
-    /// <summary>The finite primitive bounds emitted by a creation, composed into one compound body collider.</summary>
+    /// <summary>The finite primitives emitted by a creation, composed into one compound body collider. Spheres
+    /// and ellipsoids retain their exact surfaces; other primitives currently use their local boxes.</summary>
     /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>.</param>
     public sealed record FromCreation(string PrototypeId) : WorldCollider;
 }
@@ -323,6 +324,10 @@ public readonly struct FixedWorldCollider {
                                     center: copy.Center,
                                     radius: (FixedQ4816.FromDouble(value: sphere.HalfExtents.X) * copy.UniformScale)
                                 ));
+                            } else if (copy.Shape.Type is SdfSolidPrimitive.Sphere or SdfSolidPrimitive.Ellipsoid) {
+                                volumes.Add(item: new FixedBodyColliderVolume(Kind: FixedBodyColliderKind.Ellipsoid,
+                                    Center: copy.Center, Endpoint: FixedVector3.Zero, HalfExtents: copy.LocalHalfExtents,
+                                    Rotation: copy.Rotation, Radius: FixedQ4816.Zero));
                             } else {
                                 volumes.Add(item: Box(
                                     center: copy.Center,

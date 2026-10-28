@@ -263,6 +263,10 @@ last 2.2–8.2 seconds and vary their destinations and loop periods. Movement an
 height changes make it attend to a run, jump or stop; the Moth's quaternion keeps
 face inspections aligned when she turns. Nearby bodies supply avoidance and
 approaching-body threats. The world's `companionSense` projection also supplies
+the nearest active body's root within 1.5 m, selected by one `nearest` population
+scan per tick; the avoidance point stays 0.8 m above that root. Selection uses
+root distance rather than distance to the raised point, keeping proximity
+independent of that target offset. The projection supplies
 the guide's speech arrival and the lift's door edges as positioned cues. A
 tick-driven glow pulse speeds up and brightens with the guest's flight, and the
 connected shell banks with its acceleration.

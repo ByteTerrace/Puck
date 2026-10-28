@@ -21,10 +21,10 @@
 let galleryStorey = 4.5
 let galleryPopulation = 43
 // The board game room's bodies (boardroom.puck): Alchemy's cursor and 31 element tokens (alchemy.puck), Go's cursor and
-// 82 stones (go.puck), then Reversi's cursor and 64 discs (reversi.puck). debug.puck imports them ahead of every other
+// 361 stones (go.puck), then Reversi's cursor and 64 discs (reversi.puck). debug.puck imports them ahead of every other
 // population, so they take the population's top slots and every body below them keeps its index.
 let alchemyBodies = 32
-let goBodies = 83
+let goBodies = 362
 let reversiBodies = 65
 let boardRoomBodies = (alchemyBodies + goBodies + reversiBodies)
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))

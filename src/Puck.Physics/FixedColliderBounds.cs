@@ -21,6 +21,8 @@ public static class FixedColliderBounds {
                 x: FixedVector3.Dot(left: (position + orientation.Rotate(vector: volume.Center)), right: normal),
                 y: FixedVector3.Dot(left: (position + orientation.Rotate(vector: volume.Endpoint)), right: normal)) - volume.Radius),
             FixedBodyColliderKind.Box => FixedOrientedBox.FromVolume(orientation: in orientation, position: position, volume: in volume).MinimumProjection(normal: normal),
+            FixedBodyColliderKind.Ellipsoid => FixedVector3.Dot(left: (position + orientation.Rotate(vector:
+                FixedRigidWitness.LocalSupportPoint(volume, orientation.RotateInverse(vector: -normal)))), right: normal),
             _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
         };
     /// <summary>Computes the world-space axis-aligned bounds of one body volume at a pose.</summary>
@@ -29,7 +31,7 @@ public static class FixedColliderBounds {
     /// <param name="volume">The body-local convex volume.</param>
     /// <returns>The bounds' center and half-extent: a sphere's center and radius; a capsule's segment midpoint and
     /// half the segment's absolute span plus its radius; a box's center and <see cref="FixedOrientedBox.WorldExtent"/>.</returns>
-    /// <exception cref="InvalidOperationException">The volume's kind is not a sphere, capsule or box.</exception>
+    /// <exception cref="InvalidOperationException">The volume's kind has no support map.</exception>
     public static (FixedVector3 Center, FixedVector3 Extent) WorldBounds(
         FixedVector3 position,
         in FixedQuaternion orientation,
@@ -67,6 +69,15 @@ public static class FixedColliderBounds {
             );
 
             return (Center: box.Center, Extent: box.WorldExtent);
+        }
+
+        if (volume.Kind == FixedBodyColliderKind.Ellipsoid) {
+            var center = (position + orientation.Rotate(vector: volume.Center));
+            var x = (-MinimumProjection(position, in orientation, in volume, -FixedVector3.UnitX) - center.X);
+            var y = (-MinimumProjection(position, in orientation, in volume, -FixedVector3.UnitY) - center.Y);
+            var z = (-MinimumProjection(position, in orientation, in volume, -FixedVector3.UnitZ) - center.Z);
+
+            return (center, new FixedVector3(X: x, Y: y, Z: z));
         }
 
         throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}.");

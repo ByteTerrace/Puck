@@ -72,12 +72,17 @@ internal static class WorldBenchmarks {
         var allocationSamples = new long[SampleTicks];
         var elapsedTicksSamples = new long[SampleTicks];
         var countsBefore = ReadContactWork();
+        long simulatedBodyVisits = 0, dynamicPairVisits = 0, eventOverlapTests = 0, regionBodyTests = 0;
 
         for (var tick = 0; (tick < SampleTicks); tick++) {
             var timestampBefore = Stopwatch.GetTimestamp();
 
             allocationSamples[tick] = AllocationWindow.Total(window: () => server.Advance(stepTicks: stepTicks));
             elapsedTicksSamples[tick] = (Stopwatch.GetTimestamp() - timestampBefore);
+            simulatedBodyVisits += server.Population.SimulatedBodyVisits;
+            dynamicPairVisits += server.Population.DynamicContactPairVisits;
+            eventOverlapTests += server.Events.CollisionOverlapTests;
+            regionBodyTests += server.Events.RegionBodyTests;
         }
 
         var countsAfter = ReadContactWork();
@@ -90,6 +95,10 @@ internal static class WorldBenchmarks {
 
         rows.Add(item: ("world: idle tick (median)", $"{medianElapsedMs:F3} ms"));
         rows.Add(item: ("world: quiet-tick allocation (median)", $"{medianAllocation:N0} bytes"));
+        rows.Add(item: ("world: sleeping rigid bodies", $"{server.Population.SleepingRigidBodies}"));
+        rows.Add(item: ("world: simulated body visits / tick", $"{(simulatedBodyVisits / ((double)SampleTicks)):F1}"));
+        rows.Add(item: ("world: dynamic broadphase pair visits / tick", $"{(dynamicPairVisits / ((double)SampleTicks)):F1}"));
+        rows.Add(item: ("world: event overlap / region body tests / tick", $"{(eventOverlapTests / ((double)SampleTicks)):F1} / {(regionBodyTests / ((double)SampleTicks)):F1}"));
 
         // The contact work behind the tick, as deterministic counts: what a timing row is read beside.
         for (var kind = 0; (kind < ContactWorkKinds.Length); kind++) {
