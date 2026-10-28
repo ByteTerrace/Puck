@@ -351,8 +351,11 @@ it in the running debug world (the package `worlds/debug/`, booted with
 **C#**: build and boot in one command, restore skipped:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release --no-restore -- --world worlds/debug
+dotnet run --project src/Puck.World -c Release --no-restore -- --world worlds/debug --devices none
 ```
+
+An agent passes `--devices none`; a run the owner plays in passes `--devices all`
+([devices](#game-changes)).
 
 A Windows build of one project builds DXIL alone, so a Vulkan run
 (`-- --backend vulkan`), which such a build refuses at boot, needs

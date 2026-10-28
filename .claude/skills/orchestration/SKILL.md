@@ -292,8 +292,8 @@ wall-clock work needs a quiet machine, and the lead takes it: a lane judges
 by counts and lists the timing reads it wants, and the lead runs them in a
 window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
-takes no timing while other lanes run. Booting `Puck.World` is a GPU leg
-even when only its startup is measured. Use
+takes no timing while other lanes run. Booting a windowed `Puck.World` is a GPU
+leg even when only its startup is measured; a headless one is not. Use
 [`verification`](../verification/SKILL.md#what-uses-the-gpu) for GPU work
 classification and execution.
 

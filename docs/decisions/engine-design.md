@@ -204,7 +204,8 @@ express.
 
 While the current engine campaign is in progress, the debug world
 ([`debug.puck`](../../worlds/debug/debug.puck)) is the only
-live world, and the World boots it when no `--world` is given. Its own
+live world, booted with `--world worlds/debug`; the World refuses a boot with no
+`--world`, because the engine has no default world. Its own
 dependencies stay live with it: the Moth avatar it takes as its basis, the
 quality presets that avatar imports, the skies it imports, the garden and the
 night field its painting wing opens onto ([`garden.puck`](../../worlds/debug/garden.puck),

@@ -662,8 +662,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   build or with `-p:PuckShaderSpirvEnabled=true`. A build of one suite under
   `tests/` builds SPIR-V (`tests/Directory.Build.rsp`). Shader outputs come
   from the per-user shader cache; never copy bytecode between trees.
-- Run it and look: `dotnet run --project src/Puck.World -c Release -- --world worlds/debug
-  --devices none --exit-after-seconds 0`, edit, `world.shaders.reload`, capture. A claim about
+- Run it and look: start a World with `puck_world_start`
+  ([puck-world](../puck-world/SKILL.md#the-live-world-is-shared); `windowed: true`
+  only for a granted GPU leg), edit, `world.shaders.reload`, capture, and end it
+  with `puck_world_stop`. A claim about
   how something renders rests on an inspected capture; say which backends you
   looked at. A boot bakes the groups the mesh store does not hold; a reboot of
   an unchanged world loads its completed meshes, and an empty `--cache-dir`
@@ -688,9 +690,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   so garden/night back-references can instantiate another debug world. Keep
   device-machine screens intact and disclose the desktop substitution in the
   capture report. After a suit change, allow its rule to run and check the
-  residency's `[sdf.mesh-bake] done` log before capturing; `world.wait` accepts
-  tick counts, and a tick wait alone can show the old mesh stretched over the
-  new rig. Clear an operator camera with
+  residency's `[sdf.mesh-bake] done` log before capturing with
+  `world.wait bakes <seconds>`: a tick wait alone can show the old mesh
+  stretched over the new rig. Clear an operator camera with
   `view.override camera auto` before switching to a following motion layout.
 - GPU captures, device faults and the validation layers:
   [kernels](references/kernels.md#captures-faults-and-validation).

@@ -130,10 +130,13 @@ settles a question, decide by that principle and say why.
    Gates prove observable behavior, never internal structure.
 3. **The game is greenfield.** `Puck.World` and everything under
    `src/Puck.World/` are expected to churn and are never settled precedent.
-   Verify game changes by running `Puck.World`
-   (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds 2`;
-   0 or less runs until the window closes; a windowed boot is a GPU leg,
-   granted and under `puck lease gpu`). `Puck.World` boots only the world
+   Verify game changes by running `Puck.World`. An agent starts a World with the
+   `puck` server's `puck_world_start` (`checkout`: its worktree; headless needs
+   no grant, and `windowed: true` is a GPU leg, granted and under `puck lease
+   gpu`) and ends it with `puck_world_stop`. A stdin-script recipe boots it by
+   hand with `--devices none --headless`
+   (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --headless --exit-after-seconds 2`;
+   0 or less runs until the window closes). `Puck.World` boots only the world
    it is handed: without `--world` it refuses. `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
    stderr. Never substitute a build-only check, add a `--validate-*` flag, or
