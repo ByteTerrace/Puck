@@ -351,6 +351,26 @@ internal sealed partial class PlayerCommandModule {
                         spawnPoints: location.Endpoint.Definition.SpawnPoints,
                         id: spawnId
                     ) is not { } routedPoint) {
+                        // A point only the home world declares takes the body home, standing at it.
+                        if (WorldDefinitionRows.FindSpawnPoint(
+                            spawnPoints: m_server.Definition.SpawnPoints,
+                            id: spawnId
+                        ) is { } homePoint) {
+                            m_instances.EnqueueTransfer(
+                                actingPrincipal: context.Principal,
+                                arrivalPose: FixedSpawnPoint.Compile(point: in homePoint),
+                                destination: WorldInstanceHost.TransferDestination.Existing(name: WorldInstanceHost.BootInstanceName),
+                                scope: WorldInstanceHost.TransferScope.Body,
+                                sourceInstance: location.Endpoint.Identity,
+                                sourceSlot: location.EntityIndex
+                            );
+
+                            return Echoed(
+                                args: in args,
+                                handler: $"[body.pose: body:{requestedSpawnIndex} leaves '{location.Endpoint.Identity}' for spawn '{spawnId}' ({homePoint.Position.X:0.00}, {homePoint.Position.Y:0.00}, {homePoint.Position.Z:0.00}) yaw={homePoint.YawDegrees:0}°]"
+                            );
+                        }
+
                         return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared by '{location.Endpoint.Identity}' — see its spawnPoints section]");
                     }
 
