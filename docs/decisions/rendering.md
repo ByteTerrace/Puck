@@ -1049,22 +1049,29 @@ owns its layout, costs and limits.
 
 **It is presentation and bounds no leak by proof.** The volume holds back light
 through walls with its back-face weight, its inside-geometry test, the read's
-preference for the probes in front of a surface and each probe's depth cube,
-which stops it at the wall or slab its rays meet along each axis, and the first
-hit planes of its 26 neighbour directions. The receiver's nearest lattice
-direction selects a plane to reject a diagonal corner every axis ray misses.
-These are sampled visibility, not an exact ray to every surface. The depth is the exact
-distance to a wall or slab across the axis, and a point a few centimetres past
+preference for the probes in front of a surface and the first-hit planes of its
+26 neighbour directions. The receiver blends the four planes about its direction;
+a finite blocker affects its sampled directions rather than an infinite half-space.
+These are sampled visibility, not an exact ray to every surface. A wall or slab's
+plane stays in the same place at oblique angles, and a point a few centimetres past
 it takes nothing from the probe, because a point where a wall meets a floor
 lies level with the floor's surface, only the floor's thickness from a probe
 under it. A point every probe about it stands across a wall or slab from is
 enclosed and takes no indirect light. An untraced point has no measured
 indirect light either: missing coverage says nothing about sky visibility.
 Outside the camera's window the lookup clamps to boundary probes, while their
-depth tests use the actual receiver position. This extends their light only
+plane tests use the actual receiver position. This extends their light only
 as far as their visibility supports, without a transition to unoccluded sky.
-Each depth keeps its axis ray's first blocker; open rays beside it never
-extend that limit. The CPU exposure meter traces visibility from the camera
+Each ray retains its first hit. Separation closes admissions through rays that
+clear a roof edge or a doorway: a stronger answering probe's blocked neighbour
+ray locates a potential separating plane, and the four rays around the
+receiver-to-probe crossing bound that blocker's footprint. Tangent rays say
+nothing about a wall's extent. Only the difference in the probes' suspect shares
+can suppress an admission; those shares use perpendicular distance to the hit
+plane, so a ray meeting the receiver's own surface supplies evidence even at
+grazing angles. Front eligibility precedes separation, all shares read unchanged
+weights, and a gather retains its original weights if separation would empty it.
+The strict confidence order prevents mutual vetoes. The CPU exposure meter traces visibility from the camera
 to each probe so a thin partition cannot import another room's meter reading.
 A probe also gives way to the other probes about a point in
 proportion to how few of them it sees, by the neighbour sight lines the trace

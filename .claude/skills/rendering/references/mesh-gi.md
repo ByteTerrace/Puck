@@ -63,17 +63,22 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   probe just above a thin roof whose horizontal rays graze past it, or beside a
   doorway, admits the room's upper walls in jagged, plane-cut patches, and the
   under-floor probe draws a sawtooth along the wall–floor junction. The
-  separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`) closes
-  it with the other probes' planes: where probe A cannot see probe B, A's plane
-  toward B is the blocker between them, and a receiver on A's side of it takes
-  nothing from B. It applies only by B's suspect share (`PlaneVisibility`'s
-  `suspect`): the blend of B's rays toward the receiver that reached open
-  space or went on more than a quarter of the spacing past it. A ray that met
-  the receiver's own surface saw it, so a stair flight between two probes
-  separates neither from the walls beside it (applied to every admission, the
-  rule blacked out the stairwell's level 3 flight), while a tall exhibit
-  between two probes still separates them over the floor beyond it (the
-  SPHERE step keeps a soft line along the exhibit's face plane).
+  separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`) uses
+  only answering probes, after front eligibility. Where A cannot see B, A's
+  neighbour plane locates the receiver-to-B segment's crossing. The four planes
+  around that crossing must support the blocker there (`PlaneSeparation` /
+  `sdfMeshProbePlaneSeparation`), rather than extending one sample's half-space.
+  Rays tangent to or pointing away from that plane do not contradict its extent:
+  otherwise a continuous wall reopens beside a tangent ray. Only A's stronger
+  evidence of the receiver's surface may suppress B, by the difference in their
+  suspect shares. Equal-confidence mutually blocked probes cannot veto each
+  other. Compute shares from unchanged weights, and keep the original gather if
+  none would survive. `PlaneVisibility`'s `suspect` blends open rays and the
+  perpendicular gap from receiver to hit plane, fading from a quarter to three
+  quarters of the spacing. Never subtract Euclidean receiver distance from a
+  different ray's length: oblique and nearly tangent rays hitting the receiver's
+  own surface must still supply evidence. A stair flight between probes should
+  not separate them from the walls beside it.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
@@ -175,11 +180,12 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 | SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
 | COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
 
-The SPHERE step shows in `indirect` as a soft line along the exhibit's face
-plane; the floor is shadowed in `shadow`. Do not attribute it to sun cascades.
-The 26 planes are coarse support, and can reject visible receivers beside a
-finite occluder; normalization cannot recover light when all accepted weights
-vanish. The SPIN dotted ceiling seam reproduces in
+The SPHERE step showed in `indirect` as a soft line along the exhibit's face
+plane; use it to check finite separation footprints. The floor is shadowed in
+`shadow`; do not attribute an indirect-view line to sun cascades. The 26 planes
+remain coarse support. Separation never empties an answering gather; a receiver
+the initial visibility tests reject everywhere still has no measured light.
+The SPIN dotted ceiling seam reproduces in
 beauty but not in `indirect`, `normals` or `shadow`
 ([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
 records the experiments).

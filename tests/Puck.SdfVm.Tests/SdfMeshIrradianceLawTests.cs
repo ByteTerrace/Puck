@@ -30,6 +30,7 @@ public sealed class SdfMeshIrradianceLawTests {
 
         return new Vector4(x: Half(high: false, word: first), y: Half(high: true, word: first), z: Half(high: false, word: second), w: Half(high: true, word: second));
     }
+
     [Fact]
     public void RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements() {
         var volume = new SdfMeshIrradiance();
@@ -62,7 +63,7 @@ public sealed class SdfMeshIrradianceLawTests {
         var planes = new Vector4[26];
 
         // A face 1 m along +X, hit by the +X ray alone.
-        planes[PlusX] = new Vector4(x: 1f, y: 0f, z: 0f, w: 1f);
+        planes[PlusX] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f);
         Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 0f, z: 0f)));
         Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0.9f, y: 0f, z: 0f)));
         Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 1.5f, z: 0f)));
@@ -75,23 +76,96 @@ public sealed class SdfMeshIrradianceLawTests {
         // for want of a hit.
         _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out var seen, toward: new Vector3(x: 0.95f, y: 0f, z: 0f));
         _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out var open, toward: new Vector3(x: 0f, y: 2f, z: 0f));
-        planes[PlusX] = new Vector4(x: 1f, y: 0f, z: 0f, w: 3f);
+        planes[PlusX] = new Vector4(w: 3f, x: 1f, y: 0f, z: 0f);
         _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out var passed, toward: new Vector3(x: 0.95f, y: 0f, z: 0f));
-        Assert.Equal(expected: 0f, actual: seen);
-        Assert.Equal(expected: 1f, actual: open);
-        Assert.Equal(expected: 1f, actual: passed);
-        planes[PlusX] = new Vector4(x: 1f, y: 0f, z: 0f, w: 1f);
+        Assert.Equal(actual: seen, expected: 0f);
+        Assert.Equal(actual: open, expected: 1f);
+        Assert.Equal(actual: passed, expected: 1f);
+        planes[PlusX] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f);
 
         // The same face met by every ray toward +X: a point past it is hidden from every direction on that side.
         foreach (var y in new[] { -1, 0, 1 }) {
             foreach (var z in new[] { -1, 0, 1 }) {
-                planes[NeighbourIndex(x: 1, y: y, z: z)] = new Vector4(x: 1f, y: 0f, z: 0f, w: 1f);
+                planes[NeighbourIndex(x: 1, y: y, z: z)] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f);
             }
         }
         Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.1f, y: 0.75f, z: -0.75f)));
         Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.5f, y: 1.5f, z: 0f)));
         Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 0.95f, y: 1.5f, z: 0f)));
         Assert.Equal(expected: 0.5f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 1f, suspect: out _, toward: new Vector3(x: 1.02f, y: 0.1f, z: 0f)), precision: 4);
+    }
+    [Fact]
+    public void SurfaceEvidenceUsesPerpendicularPlaneDistanceAtObliqueAndGrazingAngles() {
+        // Both contributing rays meet this same surface. Their ray lengths differ greatly, but neither admission
+        // depends on open space. Exercise all major axes and both signs, including an almost tangent diagonal ray.
+        foreach (var normal in new[] { Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ, -Vector3.UnitX, Vector3.Normalize(value: new Vector3(x: 1f, y: -0.99f, z: 0f)) }) {
+            var toward = ((normal == Vector3.UnitY) ? new Vector3(x: 2f, y: 4f, z: 0f)
+                : ((normal == Vector3.UnitZ) ? new Vector3(x: 2f, y: 0f, z: 4f)
+                : ((normal == -Vector3.UnitX) ? new Vector3(x: -4f, y: 2f, z: 0f)
+                : new Vector3(x: 4f, y: 2f, z: 0f))));
+            var distance = Vector3.Dot(vector1: normal, vector2: toward);
+            var planes = Enumerable.Repeat(element: new Vector4(value: normal, w: (distance + 0.05f)), count: 26).ToArray();
+
+            Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 2f, suspect: out var surface, toward: toward));
+            Assert.Equal(actual: surface, expected: 0f);
+            Array.Fill(array: planes, value: new Vector4(value: normal, w: (distance + 1f)));
+            _ = SdfMeshIrradiance.PlaneVisibility(planes: planes, spacing: 2f, suspect: out var halfway, toward: toward);
+            Assert.Equal(actual: halfway, expected: 0.5f, precision: 5);
+        }
+    }
+    [Fact]
+    public void ASeparatorsFiniteFootprintDoesNotBecomeAnInfiniteHalfSpace() {
+        var planes = new Vector4[26];
+        var toward = new Vector3(x: 2f, y: 0f, z: 0f);
+
+        // A narrow blocker between the probes at x=1. A receiver around its side has an unobstructed segment to
+        // the far probe even though it lies in the near half-space of that one hit plane.
+        planes[PlusX] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f);
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: Vector3.Zero, spacing: 2f), precision: 5);
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 0f, y: 4f, z: 0f), spacing: 2f));
+        var partial = SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 0f, y: 1f, z: 0f), spacing: 2f);
+
+        Assert.InRange(actual: partial, high: 0.9f, low: 0.1f);
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 1.2f, y: 0f, z: 0f), spacing: 2f));
+
+        // Extend the blocker into a wall: the diagonal hit now supports the crossing too. The open +Y ray is
+        // tangent to the wall and cannot contradict it; including it would reopen half the wall here.
+        foreach (var y in new[] { -1, 0, 1 }) {
+            foreach (var z in new[] { -1, 0, 1 }) { planes[NeighbourIndex(x: 1, y: y, z: z)] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f); }
+        }
+        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 0f, y: 4f, z: 0f), spacing: 2f), precision: 5);
+        Array.Clear(array: planes);
+        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: Vector3.Zero, spacing: 2f));
+    }
+    [Fact]
+    public void NonAnsweringAndMutuallySeparatedProbesCannotVetoTheGather() {
+        var support = Enumerable.Repeat(count: 64, element: 1f).ToArray();
+        float[] suspect = [1f, 1f, 0f, 0f, 0f, 0f, 0f, 0f];
+        float[] weights = [0.6f, 0.4f, 0f, 0f, 0f, 0f, 0f, 0f];
+
+        // Every pair is blocked, but the two answering probes have equally weak evidence. The six stronger probes
+        // are not answering (missing, rejected by visibility, or behind the surface) and cannot veto either answer.
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.Equal(expected: 0.6f, actual: weights[0]);
+        Assert.Equal(expected: 0.4f, actual: weights[1]);
+
+        // A stronger answering probe can suppress the weaker one, while remaining an answer itself.
+        suspect[1] = 0f;
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.Equal(expected: 0f, actual: weights[0]);
+        Assert.Equal(expected: 0.4f, actual: weights[1]);
+
+        // A chain reads the original evidence and weights, independently of corner iteration order.
+        suspect[0] = 1f;
+        suspect[1] = 0.5f;
+        weights[0] = 0.6f;
+        weights[1] = 0.4f;
+        weights[2] = 0.2f;
+        support[2] = 0f;
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.Equal(expected: 0.3f, actual: weights[0]);
+        Assert.Equal(expected: 0.2f, actual: weights[1]);
+        Assert.Equal(expected: 0.2f, actual: weights[2]);
     }
 
     // A box between two corners, its faces wound outward, as the bake winds them.
@@ -290,7 +364,7 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.Equal(expected: 0.016d, actual: SdfViewExposures.SecondsOf(frame: (frame with { TickLocked = false }), frameSeconds: 0.016d, previousTime: 2f));
     }
     [Fact]
-    public void AStaticPointLightIsSeenAndBouncedInItsOwnRoomAlone_AndADepthCubeStopsAtTheSlab() {
+    public void AStaticPointLightIsSeenAndBouncedInItsOwnRoomAlone_AndHitPlanesStopAtTheSlab() {
         var volume = new SdfMeshIrradiance();
         var frame = Frame();
 
@@ -422,6 +496,6 @@ public sealed class SdfMeshIrradianceLawTests {
         var plane = Plane(index: PlusX, probe: probe);
 
         Assert.Equal(expected: Vector3.UnitX, actual: new Vector3(x: plane.X, y: plane.Y, z: plane.Z));
-        Assert.InRange(actual: plane.W, low: 0.499f, high: 0.501f);
+        Assert.InRange(actual: plane.W, high: 0.501f, low: 0.499f);
     }
 }
