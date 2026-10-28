@@ -159,9 +159,9 @@ toroidal volume creates no rectangular wall patch or bright distance band.
 The teal corner must also stay closed high up where its walls meet the roof;
 checking only the lower stepped strip misses the diagonal-probe case.
 Aim the same eye at `4.60 4.2 29.76` to inspect that junction: a triangular
-bright patch can remain there in both indirect and final shading (tracked in
-[open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)).
-Do not infer a clean roof from the lower reference view.
+bright patch there, in both indirect and final shading, is the probe above the
+roof admitted through the rays that graze past the roof's edge, which the
+separation rule closes. Do not infer a clean roof from the lower reference view.
 
 ## Gallery isolation checks
 
@@ -175,11 +175,11 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 | SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
 | COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
 
-The SPHERE step and REVOLVED floor rectangle reproduce in `indirect`; the
-floor is shadowed in `shadow`. Do not attribute those patches to sun cascades.
-The six first-hit depths and 26 planes are coarse support, and can reject
-visible receivers beside a finite occluder; normalization cannot recover light
-when all accepted weights vanish. The SPIN dotted ceiling seam reproduces in
+The SPHERE step shows in `indirect` as a soft line along the exhibit's face
+plane; the floor is shadowed in `shadow`. Do not attribute it to sun cascades.
+The 26 planes are coarse support, and can reject visible receivers beside a
+finite occluder; normalization cannot recover light when all accepted weights
+vanish. The SPIN dotted ceiling seam reproduces in
 beauty but not in `indirect`, `normals` or `shadow`
 ([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
 records the experiments).
