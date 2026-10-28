@@ -60,6 +60,38 @@ public sealed class McpAdversarialTests {
             Assert.Equal(expected: structured, actual: line.TryGetProperty(propertyName: "data", value: out _));
         }
     }
+    // A script that ran is a completed call: its text names the refused lines (a client shows only the text of an error),
+    // its lines are told apart by number without echoing the commands, and the World is named only when the call named none.
+    [Fact]
+    public async Task AScriptWithARefusedLineNamesItInTheTextAndOmitsEchoedCommands() {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        await using var adapter = new InProcessAdapter(() => new RefusingSession());
+
+        adapter.Send(line: InProcessAdapter.Request(id: 1, parameters: """{"name":"puck_exec","arguments":{"command":"ok\nbad\nok"}}"""));
+        using var unnamed = await adapter.ReplyAsync();
+        var result = unnamed.RootElement.GetProperty(propertyName: "result");
+
+        Assert.False(condition: result.TryGetProperty(propertyName: "isError", value: out var flagged) && flagged.GetBoolean());
+        var text = result.GetProperty(propertyName: "content")[0].GetProperty(propertyName: "text").GetString();
+
+        Assert.Contains(expectedSubstring: "1 refused (line 2: [wire.reject: unknown command 'bad'", actualString: text);
+        var structured = result.GetProperty(propertyName: "structuredContent");
+
+        Assert.Equal(expected: "refused", actual: structured.GetProperty(propertyName: "status").GetString());
+        Assert.True(condition: structured.TryGetProperty(propertyName: "world", value: out var world));
+        Assert.False(condition: world.TryGetProperty(propertyName: "document", value: out _));
+        var lines = structured.GetProperty(propertyName: "commands").EnumerateArray().ToArray();
+
+        Assert.Equal(expected: [1, 2, 3], actual: lines.Select(selector: static line => line.GetProperty(propertyName: "line").GetInt32()));
+        Assert.All(collection: lines, action: static line => Assert.False(condition: line.TryGetProperty(propertyName: "command", value: out _)));
+
+        var named = world.GetProperty(propertyName: "processId").GetInt32().ToString(provider: CultureInfo.InvariantCulture);
+
+        adapter.Send(line: InProcessAdapter.Request(id: 2, parameters: ("""{"name":"puck_exec","arguments":{"command":"ok","world":""" + $"\"{named}\"" + "}}")));
+        using var selected = await adapter.ReplyAsync();
+
+        Assert.False(condition: selected.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent").TryGetProperty(propertyName: "world", value: out _));
+    }
     // Law: stdin ends the adapter cleanly only at a well-formed EOF. Every input fault fails the adapter with its cause
     // rather than reading as EOF, whatever the read sizes; a UTF-8 scalar may span reads.
     [InlineData("scalar-spans-reads")]
@@ -704,6 +736,18 @@ public sealed class McpAdversarialTests {
             return Task.FromResult(result: ((request.Capture is { IsBurst: true })
                 ? new ControlResponse(request.Id, "completed", "[capture: presented]")
                 : new ControlResponse(request.Id, "completed", "frame", Png: [137, 80, 78, 71])));
+        }
+    }
+    // Answers a script line "bad" with an unknown-verb refusal and every other line with success.
+    private sealed class RefusingSession : IControlSession {
+        public void Dispose() { }
+        public Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) {
+            var lines = request.Command!.Split(separator: '\n');
+            var commands = lines.Select(selector: (line, index) => ((line == "bad")
+                ? new ControlCommandResult(ClearTranscript: false, Command: line, IsError: true, Line: (index + 1), Output: "[wire.reject: unknown command 'bad' — run `help` for the registered verbs]", Status: "refused", Truncated: false)
+                : new ControlCommandResult(ClearTranscript: false, Command: line, IsError: false, Line: (index + 1), Output: "done", Status: "completed", Truncated: false))).ToArray();
+
+            return Task.FromResult(result: new ControlResponse(request.Id, "refused", string.Empty, IsError: true, Commands: commands));
         }
     }
     // Answers each exec line with its name, or echoes the line; "stall" signals entry and waits for cancellation.

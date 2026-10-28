@@ -154,6 +154,9 @@ head. "What the merge touched" includes what consumes it:
 
 The sweep is the batch's proof: the whole debug world, every signal compared with
 the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+`puck sweep --tour --baseline <previous report.json>` runs it under the GPU lease
+(or `--attach` names a World `puck_world_start` started) and writes the report
+and contact sheets ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 The full debug-world replay (every test world, about 45 minutes) is the
 integration lane's next heavy job after a batch lands, never beside another heavy
 job and never a condition of a landing (the owner's ruling: "The whole idea was
@@ -260,6 +263,14 @@ start. Keep the output in a lane-named log. A resumed Codex session retains its 
 sandbox; after changing permissions, start a fresh continuation instead of
 `--resume-last`. Companion restrictions are specific to `task`, not native exec.
 
+A Codex lane that needs the `puck` World tools launches without `--sandbox` (the
+project's `puck` permission profile) or with `--sandbox workspace-write`. Under
+`--sandbox read-only` the same prompt that lists all eight `mcp__puck__*` tools
+in those two launches lists none of them, though the project registration is
+enabled (`codex mcp list`), the launcher runs (it installs the worktree's
+`.claude/mcp-install`) and other servers stay visible (probed with codex-cli
+0.164). A read-only review lane therefore reads sources and cannot drive a World.
+
 An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
 its worktree, without `--mode`: headless flag validation rejects `--mode auto`
 before sign-in, while the user-level `agentMode: "auto"` applies afterwards.
@@ -277,6 +288,13 @@ lead watches the lane's worktree for file writes and applies [no bad
 loops](#no-bad-loops). The home policy is the block contributing
 records; login and trust material stay local. The workspace plugin exposes the MCP
 configuration because a bare `.agents/mcp_config.json` is not a discovery root.
+
+Antigravity lists the `puck_operator` tool names in its context and loads their
+input schemas lazily, from `<appDataDir>/mcp/puck_operator/<toolName>.json`; it calls
+them through `call_mcp_tool`. A brief for an Antigravity lane that drives a World
+says to read the schema file of each `puck_operator` tool before its first call,
+to pass the `world` argument on every call, and to wait for a start with
+`puck_world_start_wait` `timeoutMs` 60000 or more, so a cold build costs few polls.
 
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
@@ -491,6 +509,9 @@ thing the owner cares about, not machine load alone:
 
 - time from a lane's last commit to its landing on the integration branch;
 - implementation slots (Codex and agent) not implementing right now;
+- each family's implementation and review turns in the current wave, as a
+  check that routing still follows fit rather than habit (a reading, not a
+  quota);
 - the board's age against the newest lane change.
 
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
@@ -508,7 +529,7 @@ beside a skill that still says otherwise changes nothing.
 
 ## No bad loops
 
-Every lane and the lead follow four rules, so that a failure costs one retry and
+Every lane and the lead follow five rules, so that a failure costs one retry and
 not a spiral:
 
 - Retry a failing step (a build, test, boot, start, review or restart) once. If
@@ -519,6 +540,9 @@ not a spiral:
   pile with its owner and is not argued back and forth.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30
   minutes, saves its tree as a WIP commit, and hands the work to another lane.
+- When the review of a fix finds more instances of the class it fixed, the next
+  fix is structural: one check that holds the invariant everywhere and a test
+  over every case, not another path-by-path round.
 
 ## Rule on collisions
 

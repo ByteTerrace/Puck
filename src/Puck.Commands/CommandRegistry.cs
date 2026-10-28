@@ -685,7 +685,7 @@ public sealed partial class CommandRegistry {
     private IEnumerable<CommandDefinition> BuiltInCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
-            description: "Lists the available commands: help [--full|--names] [<prefix>] — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - description` lines unless `--names` is given; `--full` prints `name - description` for every verb (or for `<prefix>`).",
+            description: "Lists the available commands: help [--full|--names] [<prefix>] — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
             handler: (context, args) => Help(args: in args, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
@@ -1619,9 +1619,11 @@ public sealed partial class CommandRegistry {
     /// the registry resolves a verb; <see langword="null"/> keeps every command.</param>
     /// <param name="namesOnly">Lists each command's name alone, without its description.</param>
     /// <param name="slot">The slot whose authored commands the listing includes (<see cref="AuthoredCommandsFor"/>).</param>
+    /// <param name="synopsis">Shortens each description to its first sentence, at most 200 characters, ending in
+    /// <c> ...</c> when words were left out.</param>
     /// <returns>A newline-separated list of <c>name - description</c> entries, or of names; empty when nothing
     /// matches.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0) {
+    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false) {
         var registered = m_root.Subcommands.Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty)));
         var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description));
 
@@ -1637,8 +1639,26 @@ public sealed partial class CommandRegistry {
             )
                 .Select(selector: entry => (namesOnly
                     ? entry.Metadata.Name
-                    : $"{entry.Metadata.Name} - {entry.Description}"))
+                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}"))
         );
+    }
+
+    // The longest synopsis a listing line keeps before it ends in the elision marker.
+    private const int SynopsisCharacters = 200;
+
+    // A description's first sentence, cut at a word boundary within SynopsisCharacters; a line that left words out ends
+    // in " ..." so a reader knows `help --full` holds the rest.
+    private static string Synopsis(string description) {
+        var end = description.IndexOf(value: ". ", comparisonType: StringComparison.Ordinal);
+        var sentence = ((end < 0) ? description : description[..(end + 1)]);
+
+        if (sentence.Length > SynopsisCharacters) {
+            var cut = sentence.LastIndexOf(value: ' ', startIndex: (SynopsisCharacters - 1));
+
+            sentence = sentence[..((cut > 0) ? cut : SynopsisCharacters)];
+        }
+
+        return ((sentence.Length < description.Length) ? $"{sentence.TrimEnd(trimChar: '.')} ..." : sentence);
     }
 
     // help [--full|--names] [<prefix>]: bare help lists the names index; --full or a prefix prints name - description,
@@ -1673,7 +1693,8 @@ public sealed partial class CommandRegistry {
         var text = BuildHelpText(
             namesOnly: (names || (!full && (prefix is null))),
             prefix: prefix,
-            slot: slot
+            slot: slot,
+            synopsis: !full
         );
 
         return ((text.Length == 0)

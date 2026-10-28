@@ -149,6 +149,18 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
             return;
         }
 
+        if (!SettlesResults) {
+            // The line already published its own result at submit time, and a successful release changes nothing a
+            // script reads; only a refusal is news the line's caller would otherwise never see.
+            if (report is { IsError: true } late) {
+                Publish(callback: m_onResult, line: line, result: late);
+            } else if (report is null && deadlinePassed) {
+                Publish(callback: m_onResult, line: line, result: CommandResult.Error(output: $"[wire.hold: '{line}' still held its session when this call's answer was due; the session no longer waits for it, so inspect state before any retry]"));
+            }
+
+            return;
+        }
+
         Publish(
             callback: m_onSettled,
             line: line,
@@ -172,6 +184,10 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
 
         if (submitted is not { } result) {
             return;
+        }
+
+        if (!SettlesResults && (held is not null) && ReferenceEquals(objA: held, objB: m_wait)) {
+            held.Line = line;
         }
 
         if (
@@ -273,7 +289,8 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     /// hold every drain, whether or not a line waits behind it, so <paramref name="released"/> runs as the hold ends.
     /// In a session that settles results, the line whose handler arms the hold answers only when the hold ends, with
     /// the report, or with the handler's own result when the report is <see langword="null"/>; a line ended by the
-    /// deadline with no report answers with a refusal. Call only from the host pump, normally through an immediate
+    /// deadline with no report answers with a refusal. A session that settles nothing publishes a refusal report (or the
+    /// deadline's refusal) through its result callback and drops a successful one. Call only from the host pump, normally through an immediate
     /// handler's <see cref="CommandContext.TextSession"/>.</summary>
     /// <param name="hold">A short pump-thread predicate. A new hold replaces the previous session wait.</param>
     /// <param name="released">The release report, run once on the pump as the hold ends; its argument is

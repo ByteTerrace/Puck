@@ -169,10 +169,11 @@ own:
   attachment id), a World that does not accept the attachment, or a name other
   than the pinned World's on an adapter started with `--attach`. It never falls
   back to another World, and naming one does not move the current World.
-- Every result of these three tools carries a `world` member (`attachmentId`,
-  `processId`, `document`, `startedUtc`) naming the World the call reached, null
-  for a refusal that reached none, so a caller that named nothing can see it
-  landed on a wrong one.
+- A result of these three tools carries a `world` member (`attachmentId` and
+  `processId`) naming the World the call reached only when the call named none,
+  so a caller that named nothing can see it landed on a wrong one; a call that
+  named its World gets no member, and `puck_worlds` reports the document and
+  start time.
 
 ### Starting and stopping a World
 
@@ -210,8 +211,12 @@ than writing a boot line:
   read. A discovery refusal distinguishes a 30-second timeout, a failure to start
   Git, and Git's own exit code and stderr.
 - `puck_world_start_wait` takes that `startId` and waits at most `timeoutMs`
-  (1–20000, default 20000). Repeat this wait while `status` is `pending`;
-  repeating the start would admit another World. `started` returns the World
+  (1–120000, default 20000). Repeat this wait while `status` is `pending`;
+  repeating the start would admit another World. A pending answer carries
+  `stage` (`building` while the World build of the checkout's sources resolves,
+  `gpu-lease` while a windowed start waits for the lease, `booting` once the
+  process exists, with its last stderr line in `output`) and `elapsedSeconds`
+  since admission. `started` returns the World
   identity, `processId` and `stdoutLog`/`stderrLog` paths. `refused` returns
   `output`, `isError: true` and, when a process was launched, `checkout`, `build`,
   `stateDirectory`, `stdoutLog`, `stderrLog` and any `exitCode`, `killed` or
@@ -393,7 +398,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 | `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId`, installed `directory`, live `ownedWorlds` (process/attachment IDs) and `pendingStarts` (start IDs). |
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, and `current` or `started` when true. |
 | `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–1800, default 900). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
-| `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–20000, default 20000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId` while pending, `world`, `processId`, `stdoutLog` and `stderrLog` once started, and `output`, `isError: true` (plus `checkout`, `build`, `stateDirectory`, logs and exit fields if launched) when refused. Completed results repeat. |
+| `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–120000, default 20000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId`, `stage` and `elapsedSeconds` while pending, `world`, `processId`, `stdoutLog` and `stderrLog` once started, and `output`, `isError: true` (plus `checkout`, `build`, `stateDirectory`, logs and exit fields if launched) when refused. Completed results repeat. |
 | `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode` and, when true, `killed` and `leaseReleased`. |
 | `puck_exec` | Required `command`: a console line or newline-separated script, at most 8192 characters total and 64 nonblank, noncomment lines. Optional integer `timeoutMs`: 1–120000 for the whole script, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Structured decimal-string `requestId`, `status`, `world`, and `output` (single-line text), `data` (single-line JSON) or `commands` (multi-line script), plus `isError`, `clearTranscript` and `truncated` when true. Empty output is `submitted`, not authoritative application. |
 | `puck_capture_frame` | Optional `timeoutMs`, same range/default, and `world`. Optional `mode`: `settled` (default) or `presented`. Optional `tick` (settled): the simulation tick the still shows. Optional `frames` (presented, 1–120, default 1) and `region` (presented: `{x, y, width, height}` in fractions of the frame, origin top-left). No path. | Settled: completed PNG image content, up to 16 MiB, plus completion metadata; the capture holds presentation from the frame it is armed in until it is served, temporal views converge over the held frame, and the PNG is a render of it. The World steps no tick past the one the still is armed at until it is served, and `output` names that tick and its state hashes (`Settled still held at tick=<T> hash=<world.state.hash at T> pose=<pose hash>; the frame shows tick <T>.`). With `tick`, the call holds its session (`world.wait until <tick>`) and arms the still right after that tick completes, so the still is exactly that tick; a tick the World has already completed is refused. Without it, the still is of whichever tick was last completed when the call reached the World. Presented: nothing is held or settled; each frame is read back as the display presented it. One frame returns its PNG inline with a one-frame report in `output`; a burst writes its PNGs to a private temporary directory on the World's machine, kept for the caller, and returns no image: `output` is the report, a line per frame (path, presentation index, the presentation its image was rendered on, tick, and changed pixels and mean and largest absolute Rec. 709 luma change against the frame before, over the region or whole frame) and a summary line. Both include the composed view and overlays and require an initialized renderer. |
@@ -432,10 +437,16 @@ line runs. Each line waits for the previous line's settlement; successive
 Simulation lines therefore apply on adjacent ticks. Reads see preceding writes,
 and `world.wait` holds only this script. Blank lines and `#` comments are skipped.
 Scripts continue after refusals: inspect every entry of `commands`, which gives
-the one-based source `line`, `command`, `status`, and `output` or `data` (plus
-`isError`, `clearTranscript` and `truncated` when true); top-level `output` and
-`data` are omitted on multi-line scripts. The aggregate status is refused if
-any line refused. The existing 1 MiB output allowance is shared across the
+the one-based source `line` (the command text is not echoed; the line number
+names it), `status`, and `output` or `data` (plus `clearTranscript` and
+`truncated` when true); top-level `output` and `data` are omitted on multi-line
+scripts. The aggregate status is refused if any line refused, while the call
+itself is not an error: a script that ran answers with `isError` false and a
+text that names each refused line and its reason, so a client that shows only
+the text of an error result still reads which line failed. A command is a
+script when its `command` text contains a newline, even a trailing one over a
+single line; a refused command with no newline at all is an ordinary command
+error (`isError: true`, the refusal as the text, no `commands`). The existing 1 MiB output allowance is shared across the
 script, with truncation marked per line. Cancellation or timeout discards lines
 still queued; already dispatched work may have applied. Inspect state before
 retrying an uncertain script. A script is ordered, not an atomic transaction.
@@ -443,7 +454,7 @@ retrying an uncertain script. A script is ordered, not an atomic transaction.
 `data` carries a non-truncated output that is a JSON object or array as a native
 value in place of `output`; otherwise it is omitted. Use it with
 `world.at --json` or `world.debug-view report contacts --json`, for example.
-`commands` is omitted for a single-line call. Non-empty transcript text remains in `output`.
+`commands` is omitted for a call whose `command` has no newline. Non-empty transcript text remains in `output`.
 
 Separate calls are round trips during which the World keeps stepping, so they
 never land a fixed number of ticks apart. A script whose commands and stills
@@ -458,8 +469,9 @@ with a short status line in `content[0].text` (or the refusal message on error),
 is serialized twice. Null and false fields with documented defaults are omitted.
 `requestId` is omitted when no reliable host reply exists. `status` is `completed`,
 `submitted`, `refused` or `unknown`; an uncertain outcome is never certified as success.
-`world` names the World the call reached on local stdio, including for an unknown
-outcome, and is omitted over HTTP and for a refusal before any World was reached.
+`world` names the World the call reached (`attachmentId` and `processId`) on
+local stdio, including for an unknown outcome, only when the call named none; it
+is omitted over HTTP and for a refusal before any World was reached.
 
 Console output arrives whole up to 1,048,576 UTF-16 code units, the control
 transport's `ControlLimits.OutputCharacters`. Longer output is cut to that

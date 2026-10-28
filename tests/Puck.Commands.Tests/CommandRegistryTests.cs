@@ -823,10 +823,17 @@ public sealed class CommandRegistryTests {
             actual: registry.Submit(line: "help --full").Output.Split(separator: '\n').Select(selector: static entry => entry.Split(separator: " - ")[0]),
             expected: ["alpha", "beta", "help", "ping", "run", "sum", "wire.ack", "wire.errors"]
         );
+        var full = registry.Submit(line: "help --full wire.").Output;
+
         Assert.Equal(
-            actual: registry.Submit(line: "help --full wire.").Output,
-            expected: family.Output
+            actual: full,
+            expected: registry.BuildHelpText(prefix: "wire.")
         );
+        Assert.True(condition: (family.Output.Length < full.Length));
+        // A built-in whose description runs past its first sentence is shortened and says so; a prefix listing never
+        // carries a line longer than the synopsis limit beside its name.
+        Assert.EndsWith(actualString: family.Output.Split(separator: '\n')[1], expectedEndString: " ...");
+        Assert.All(collection: family.Output.Split(separator: '\n'), action: static line => Assert.True(condition: (line.Length <= ("wire.errors - ".Length + 204))));
 
         var unmatched = registry.Submit(line: "help world.sky");
 

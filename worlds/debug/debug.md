@@ -89,7 +89,7 @@ Automatic pull-in starts off. To try it, use `player.camera.view auto` followed
 by `player.camera.automatic on`. Below 0.85 m of room for 0.2 s it enters; above
 1.35 m for 0.15 s it leaves. `player.camera.automatic off` disables it, and
 `player.camera.automatic auto` restores the author/profile preference.
-`world.view.camera` reports the requested view, transition fraction, automatic
+`world.view.camera 1 full` reports the requested view, transition fraction, automatic
 preference, independent room probe and dwell with the actual camera pose.
 
 ## Addons

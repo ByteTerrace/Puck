@@ -66,6 +66,15 @@ public sealed class WorldSeatViewState {
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
 
     private WorldCameraClearanceChoice m_clearanceOverride;
+    private float m_fieldOfView;
+
+    /// <summary>Gets the vertical field of view, in radians, of the seat camera the presenter last framed, or zero
+    /// before any frame (a headless World frames none).</summary>
+    public float FieldOfView { get { lock (m_gate) { return m_fieldOfView; } } }
+    /// <summary>Records the vertical field of view, in radians, the presenter framed this seat with, for the camera
+    /// read-back.</summary>
+    /// <param name="radians">The field of view of the camera just built.</param>
+    public void NoteFieldOfView(float radians) { lock (m_gate) { m_fieldOfView = radians; } }
 
     /// <summary>Whether look rotates at the first-person eye and steers the upright body.</summary>
     public bool FirstPersonLook { get { lock (m_gate) { return m_viewTransition.LookFirstPerson; } } }

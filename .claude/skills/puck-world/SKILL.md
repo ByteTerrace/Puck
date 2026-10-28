@@ -130,8 +130,11 @@ only when the task allows it, and restore what you changed.
 To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
 call returns `pending` and a `startId` promptly. Poll `puck_world_start_wait`
-with that id (each wait defaults to its 20-second maximum); never repeat the start while
-pending. A cold build continues between calls and across adapter updates.
+with that id (each wait defaults to 20 seconds; `timeoutMs` allows up to 120000 in one
+call, so a cold build needs few polls); never repeat the start while pending. A pending
+answer names its `stage` (`building` the World from the checkout's sources, `gpu-lease`,
+or `booting`, with the World's last stderr line in `output`) and the seconds `elapsedSeconds`
+since admission. A cold build continues between calls and across adapter updates.
 `cancel: true` on the wait cancels an unfinished start. A cancelled poll only
 ends that poll. Session shutdown cancels starts and stops its Worlds.
 The tool resolves the World build of the checkout's current sources from the same
@@ -155,8 +158,13 @@ leaves your `bin/Release` free to rebuild
 
 Codex discovers these tools through the session's tool inventory (search for
 `puck`); its repository MCP configuration uses the same launcher as Claude.
+A Codex lane launched with `--sandbox read-only` sees none of them; it needs the
+default profile or `workspace-write`
+([orchestration](../orchestration/SKILL.md#launch-capabilities)).
 Antigravity names the same server `puck_operator` (its workspace plugin `puck`
-registers the server `operator`), so its tools appear as `puck_operator/*`.
+registers the server `operator`), so its tools appear as `puck_operator/*`; it
+loads their schemas lazily, so its brief says to read each tool's schema first
+(orchestration, same section).
 Use the tools directly before writing a stdin process wrapper.
 The hook installs completed CLI builds through the launcher's signed local
 development channel under `.claude/mcp-install`. A persistent front follows
@@ -184,9 +192,13 @@ nonblank, noncomment lines and 8192 characters total. The entire script reaches
 one text session together. Each line waits for the preceding settlement, so
 successive Simulation lines apply on adjacent ticks; include `world.wait` to
 space them further. Reads see earlier writes. Scripts continue after refusals;
-inspect the per-line `commands` array (one-based source line, command, status,
-and `output` or `data`, plus flags when true; top-level `output` and `data` are
-omitted on scripts). `timeoutMs` covers the entire script. Cancellation discards
+inspect the per-line `commands` array (one-based source `line`, `status`, and
+`output` or `data`, plus flags when true; the command text is not echoed, since the
+line number names it, and top-level `output` and `data` are omitted on scripts). A
+script that ran is a completed call even when a line was refused (an unknown verb
+included): its text names each refused line and why, and the aggregate `status` is
+`refused`. A result names its `world` (attachment and process id) only when the
+call named none. `timeoutMs` covers the entire script. Cancellation discards
 queued lines but may leave dispatched changes; inspect before retrying.
 Results expose native JSON output as `data` in place of `output`, including each
 script line's `data`; null and false fields with documented defaults are omitted,
@@ -195,6 +207,16 @@ and `content[0].text` carries a short status so no payload is serialized twice.
 with tick, command, status and output. Use `world.at` for absolute ticks or
 several commands at the same tick, and a multiline script for an ordered
 command/wait/read sequence.
+
+Keep reads lean: `world.view.camera` answers a compact line (`full` for every
+field, a key list for chosen ones), `help <prefix>` answers one synopsis line per
+verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
+one script rather than one call per sample. `world.view.pick <view> <x> <y>`
+holds its call until a rendered frame answers, a paused World included; a view that
+renders no frame is refused as unanswered when the call's deadline passes (10 seconds in a piped
+session, where the refusal prints on stdout after the `pending` line), and neither hover nor a hover's
+release replaces a waiting pick or erases its answer before the asking call reads it. A command text
+with a newline is a script (`commands`, `isError` false); one without is an ordinary command whose refusal is `isError`.
 
 ## The model
 
@@ -555,7 +577,15 @@ check the flag: the owner may be holding the pad.
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).
   A scenario is for an invariant that running cannot show; a feature is shown by
   running it, and the debug world's sweep is its signal
-  ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
+  ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)):
+  `puck sweep` reads the tools, reports, budgets and counters on a headless
+  World (paused between calls, so its ticks repeat), `--tour` (or `--attach
+  <world>`) the rendered signals and the capture tour (each still pinned to a
+  named tick, a stop's motion armed with `world.at`), and a new signal or tour
+  stop is a row of `worlds/debug/sweep.json`. Whatever it could not measure
+  (a closed attachment, a spent `--timeout`, a metric a rule reads that the
+  answer lacks) is reported unmeasured and fails the run like red
+  ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 
 Verify game behavior by running the game (`AGENTS.md` rule 3). Write a test only
 where running cannot show the behavior. Standalone runners, record directories

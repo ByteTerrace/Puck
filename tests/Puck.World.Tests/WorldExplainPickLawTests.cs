@@ -103,6 +103,38 @@ public sealed class WorldExplainPickLawTests {
             Assert.Contains("superseded", verdict.Output);
         } else { Assert.False(condition: picker.Pending); }
     }
+    // The published-answer path needs a captured frame only a GPU renderer produces, so the answer is planted where
+    // SdfWorldPicker.Complete keeps it.
+    [Fact]
+    public void AnExplicitAnswerSurvivesAHoverReleaseUntilItsCallerTakesIt() {
+        using var residency = Residency();
+        var picker = Picker(residency: residency);
+        var request = picker.Request(.25f, .75f);
+        var answer = new SdfPickResult(request, 8, 24, 32, 32, 0, 0, 0, new SdfProgramBuilder().Build(), 0);
+
+        typeof(SdfWorldPicker).GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_unclaimed")!
+            .SetValue(obj: picker, value: answer);
+        typeof(SdfWorldPicker).GetProperty(name: nameof(SdfWorldPicker.Result))!.SetValue(obj: picker, value: answer);
+        picker.Release();
+        Assert.Null(value: picker.Result);
+        Assert.Null(value: picker.TakeAnswer(request: (request + 1)));
+        Assert.Equal(answer, picker.TakeAnswer(request: request));
+        Assert.Null(value: picker.TakeAnswer(request: request));
+    }
+    [Fact]
+    public void ClearAndANewerRequestDiscardAnUntakenExplicitAnswer() {
+        using var residency = Residency();
+        var picker = Picker(residency: residency);
+        var field = typeof(SdfWorldPicker).GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_unclaimed")!;
+
+        foreach (var discard in new Action[] { picker.Clear, () => picker.Request(.5f, .5f) }) {
+            var request = picker.Request(.25f, .75f);
+
+            field.SetValue(obj: picker, value: new SdfPickResult(request, 8, 24, 32, 32, 0, 0, 0, new SdfProgramBuilder().Build(), 0));
+            discard();
+            Assert.Null(value: picker.TakeAnswer(request: request));
+        }
+    }
     [Fact]
     public void AnAbsentOrOutsidePaneRefusesWithoutIssuingAPixel() {
         using var residency = Residency();

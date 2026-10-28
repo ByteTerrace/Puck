@@ -185,11 +185,14 @@ public sealed class AuthoredCommand {
         var linesArray = compiled.ToImmutable();
         var description = new StringBuilder();
 
+        // The usage leads, so a listing that keeps each description's first sentence still shows how to call it.
+        _ = description.Append(value: $"Usage: {DescribeUsage(name: name!, parameters: parameterArray)}. ");
+
         if (!string.IsNullOrWhiteSpace(value: help)) {
             _ = description.Append(value: help.Trim()).Append(value: ' ');
         }
 
-        _ = description.Append(value: $"Usage: {DescribeUsage(name: name!, parameters: parameterArray)}. Authored by the world; runs ")
+        _ = description.Append(value: "Authored by the world; runs ")
             .AppendJoin(separator: " | ", values: linesArray.Select(selector: static line => line.Template))
             .Append(value: '.');
 

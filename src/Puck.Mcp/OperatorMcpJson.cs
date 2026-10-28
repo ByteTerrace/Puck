@@ -13,22 +13,24 @@ internal readonly record struct OperatorMcpResultMetadata(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsError,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool ClearTranscript,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Truncated,
-    OperatorMcpWorld? World,
+    OperatorMcpWorldRef? World,
     JsonElement? Data,
     OperatorMcpCommandResult[]? Commands
 );
+// One script line's answer; the caller wrote the script, so its one-based source line number names the command.
 internal readonly record struct OperatorMcpCommandResult(
     int Line,
-    string Command,
     string Status,
     string? Output,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsError,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool ClearTranscript,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Truncated,
     JsonElement? Data
 );
 // The World a result came from: the attachment id and process id a call can name, what it runs, and when it started.
 internal readonly record struct OperatorMcpWorld(string AttachmentId, int ProcessId, string? Document, DateTimeOffset StartedUtc);
+// What a console-backed result names of the World it reached, only when the call did not name one itself: the two ids a
+// later call can name. The document and start time are puck_worlds' and puck_world_start's to report.
+internal readonly record struct OperatorMcpWorldRef(string AttachmentId, int ProcessId);
 internal readonly record struct OperatorMcpListedWorld(
     string AttachmentId,
     int ProcessId,
@@ -53,7 +55,9 @@ internal readonly record struct OperatorMcpWorldRun(
     int? ExitCode,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Killed,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool LeaseReleased,
-    string? StartId
+    string? StartId,
+    string? Stage,
+    int? ElapsedSeconds
 );
 [JsonSerializable(typeof(OperatorMcpResultMetadata))]
 [JsonSerializable(typeof(OperatorMcpWorldList))]
