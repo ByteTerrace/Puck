@@ -623,19 +623,17 @@ public sealed partial class WorldPopulation {
     // Carries one body's navigation route and producer domain from the runtime a recompile replaced into the current one,
     // by domain name. A route stores domain-local node ordinals, so it is kept only when the replacement runtime proved
     // the same complete static bake and rebound its dynamic query provider; every uncertain case replans from the
-    // retained designation on the next producer tick.
+    // retained designation on the next producer tick. A body that holds no route keeps its navigation state whole: a
+    // recompile it played no part in (a placement response swapping a lift door's collider) changes nothing it carries.
     private void RebindNavigation(int bodyIndex, NavigationRuntime previousNavigation) {
         var navigation = m_entries[bodyIndex].NavigationState;
-        var routeRetained = false;
 
         if ((((uint)navigation.DomainIndex) < ((uint)previousNavigation.Count)) && TryFindRetainedDomain(
             index: out var currentIndex,
             name: previousNavigation[navigation.DomainIndex].Name
         )) {
             navigation.DomainIndex = currentIndex;
-            routeRetained = true;
-        }
-        if (!routeRetained) {
+        } else if (navigation.DomainIndex >= 0) {
             navigation.Clear();
         }
         var activeDomain = m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex;

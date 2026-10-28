@@ -19,9 +19,27 @@ public sealed partial class WorldInputRuntime {
         m_host.Output.Narrate("input.refused", reason);
         return default;
     }
+    /// <summary>Finishes the interval of every script controller of the body that did not observe this tick. A
+    /// controller admitted under an earlier generation of the body (it left through a door and came back) has no
+    /// interval in this admission and is retired first, so completing the rest never changes the owner list it walks.</summary>
     internal void CompleteBodyScripts(int body, ulong tick) {
         if (!m_bodyOwners.TryGetValue(key: body, value: out var owners)) { return; }
-        foreach (var owner in owners) {
+        var generation = m_host.Population.Generation(index: body);
+
+        for (var index = (owners.Count - 1); (index >= 0); index--) {
+            var owner = owners[index];
+
+            if ((owner.Controller is not { Source: BodyScriptSource } origin) || (owner.Generation == generation)) { continue; }
+            Reset(owner.Principal);
+            m_host.GrantTable.MarkObserverEnded(session: owner.Principal);
+            RemoveOwner(owner: owner);
+            if (m_controllers.TryGetValue(key: (origin.Actor, body, BodyScriptSource), value: out var keyed) && ReferenceEquals(objA: keyed, objB: owner)) {
+                m_controllers.Remove(key: (origin.Actor, body, BodyScriptSource));
+            }
+        }
+        for (var index = 0; (index < owners.Count); index++) {
+            var owner = owners[index];
+
             if ((owner.Controller is not { Source: BodyScriptSource } origin) || (origin.ObservationTick == tick) ||
                 !m_host.GrantTable.IsLiveSession(principal: owner.Principal)) { continue; }
             _ = AdmitScriptSnapshot(actor: origin.Actor, body: body, image: default, tick: tick);
