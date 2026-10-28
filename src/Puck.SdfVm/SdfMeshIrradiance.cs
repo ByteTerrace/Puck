@@ -736,12 +736,7 @@ public sealed class SdfMeshIrradiance {
     /// the point (fully suspect at three quarters), admits the point only for want of a hit. Distance is perpendicular
     /// to the plane, so rays meeting the point's own surface agree even at oblique or grazing angles.</param>
     /// <returns>The visibility, from zero (hidden) to one (open).</returns>
-    public static float PlaneVisibility(ReadOnlySpan<Vector4> planes, Vector3 toward, float spacing, out float suspect) =>
-        PlaneVisibilityCore(planes: planes, toward: toward, spacing: spacing, suspect: out suspect, supportNormal: Vector3.Zero);
-
-    // A separating plane's footprint uses the same stencil, excluding rays tangent to or pointing away from that plane:
-    // an open tangent ray says nothing about the extent of a wall. KEEP IN SYNC with sdfMeshProbePlaneVisibilityCore.
-    private static float PlaneVisibilityCore(ReadOnlySpan<Vector4> planes, Vector3 toward, float spacing, out float suspect, Vector3 supportNormal) {
+    public static float PlaneVisibility(ReadOnlySpan<Vector4> planes, Vector3 toward, float spacing, out float suspect) {
         var size = Vector3.Abs(value: toward);
         var major = MathF.Max(x: size.X, y: MathF.Max(x: size.Y, y: size.Z));
 
@@ -761,7 +756,6 @@ public sealed class SdfMeshIrradiance {
         var fractionY = (minorY - cellY);
         var fractionZ = (minorZ - cellZ);
         var visibility = 0f;
-        var support = 0f;
 
         for (var corner = 0; (corner < 4); corner++) {
             var highY = corner & 1;
@@ -771,8 +765,6 @@ public sealed class SdfMeshIrradiance {
             var texelZ = ((((int)cellZ) + highZ) - 1);
 
             var (x, y, z) = (xMajor ? (facing, texelY, texelZ) : (yMajor ? (texelY, facing, texelZ) : (texelY, texelZ, facing)));
-            if ((supportNormal != Vector3.Zero) && (Vector3.Dot(vector1: supportNormal, vector2: new Vector3(x: x, y: y, z: z)) <= 1.0e-3f)) { continue; }
-            support += weight;
             var plane = planes[NeighbourIndex(x: x, y: y, z: z)];
             var normal = new Vector3(x: plane.X, y: plane.Y, z: plane.Z);
             var past = (Vector3.Dot(vector1: normal, vector2: toward) - plane.W);
@@ -783,32 +775,7 @@ public sealed class SdfMeshIrradiance {
             suspect += (admits * Math.Clamp(max: 1f, min: 0f, value: ((gap - (0.25f * spacing)) / (0.5f * spacing))));
         }
         suspect = ((visibility > 0f) ? (suspect / visibility) : 0f);
-        return ((supportNormal == Vector3.Zero) ? visibility : ((support > 0f) ? (visibility / support) : 1f));
-    }
-
-    /// <summary>Returns the directional support for a blocker between a neighbouring probe and a receiver, rather
-    /// than extending one sampled plane to an infinite half-space. KEEP IN SYNC with <c>sdfMeshProbePlaneSeparation</c>.</summary>
-    /// <param name="planes">The separator's 26 first-hit planes in neighbour order.</param>
-    /// <param name="neighbour">The index of the separator's ray toward the neighbouring probe.</param>
-    /// <param name="toward">The neighbouring probe relative to the separator, in metres.</param>
-    /// <param name="receiver">The receiver relative to the separator, in metres.</param>
-    /// <param name="spacing">The distance between neighbouring probes, in metres.</param>
-    /// <returns>The supported separation, from zero to one.</returns>
-    public static float PlaneSeparation(ReadOnlySpan<Vector4> planes, int neighbour, Vector3 toward, Vector3 receiver, float spacing) {
-        var plane = planes[neighbour];
-        var normal = new Vector3(x: plane.X, y: plane.Y, z: plane.Z);
-        var far = (Vector3.Dot(vector1: normal, vector2: toward) - plane.W);
-        var near = (Vector3.Dot(vector1: normal, vector2: receiver) - plane.W);
-
-        if ((plane == Vector4.Zero) || (far <= 0f) || (near >= SdfMeshIrradianceProbe.DepthFade) || (far <= near)) { return 0f; }
-
-        // Locate the receiver-to-probe segment's crossing, then ask the four rays around that crossing whether the
-        // blocker exists there. A finite blocker outside this stencil cannot veto the neighbouring probe.
-        var crossing = Vector3.Lerp(value1: toward, value2: receiver, amount: Math.Clamp(max: 1f, min: 0f, value: (far / (far - near))));
-        var beyond = (crossing + (normal * (SdfMeshIrradianceProbe.DepthFade / Vector3.Dot(vector1: normal, vector2: normal))));
-        var visibility = PlaneVisibilityCore(planes: planes, spacing: spacing, supportNormal: normal, suspect: out _, toward: beyond);
-
-        return ((1f - visibility) * (1f - Math.Clamp(max: 1f, min: 0f, value: (near / SdfMeshIrradianceProbe.DepthFade))));
+        return visibility;
     }
 
     // A probe's cubes averaged with those of the cached, valid neighbours it and they see each other across, by the
@@ -1241,8 +1208,9 @@ public sealed class SdfMeshIrradiance {
 
         return ((skyIrradiance * (sky / total)) + (bounce / total));
     }
-    // Only answering probes surviving the original separation can separate another admission. PlaneSeparation bounds
-    // each blocker's footprint; compute both passes from unchanged weights so mutual vetoes do not empty the gather.
+    // Only answering probes surviving the original separation can separate another admission. Compute both passes
+    // from unchanged weights so mutual vetoes do not empty the gather. The sampled neighbour plane still has no finite
+    // blocker extent: the rendering follow-up finding remains open for that part.
     // KEEP IN SYNC with sdfMeshProbeSeparate.
     private static void Separate(in Corners probes, ReadOnlySpan<uint> neighbours, ReadOnlySpan<float> suspect, Span<float> weights, Vector3 first, float spacing, Vector3 pushed) {
         Span<float> support = stackalloc float[64];
@@ -1263,7 +1231,10 @@ public sealed class SdfMeshIrradiance {
 
                 var otherPoint = ((first + new Vector3(x: ((other & 1) + 0.5f), y: (((other >> 1) & 1) + 0.5f), z: (((other >> 2) & 1) + 0.5f))) * spacing);
 
-                support[pair] = PlaneSeparation(planes: probes[other].Planes, neighbour: index, toward: (new Vector3(x: x, y: y, z: z) * spacing), receiver: (pushed - otherPoint), spacing: spacing);
+                var plane = probes[other].Planes[index];
+                var past = (Vector3.Dot(vector1: new Vector3(x: plane.X, y: plane.Y, z: plane.Z), vector2: (pushed - otherPoint)) - plane.W);
+
+                support[pair] = (1f - Math.Clamp(max: 1f, min: 0f, value: (past / SdfMeshIrradianceProbe.DepthFade)));
             }
         }
         Separate(support: support, suspect: suspect, weights: weights);

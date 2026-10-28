@@ -82,10 +82,8 @@ float sdfMeshProbePlaneAdmits(float4 plane, float3 toward) {
 // softly between them. `suspect` is the share of the admission the probe's rays did not see for themselves: a ray that
 // reached open space, or whose hit plane lies more than a quarter of the spacing beyond the point (fully suspect at
 // three quarters), admits the point only for want of a hit. Distance is perpendicular to the plane, so rays meeting
-// the point's own surface agree even at oblique or grazing angles. A separating plane's footprint excludes rays
-// tangent to or pointing away from that plane: an open tangent ray says nothing about a wall's extent.
-// KEEP IN SYNC with SdfMeshIrradiance.PlaneVisibilityCore.
-float sdfMeshProbePlaneVisibilityCore(uint address, float3 toward, float spacing, out float suspect, float3 supportNormal) {
+// the point's own surface agree even at oblique or grazing angles. KEEP IN SYNC with SdfMeshIrradiance.PlaneVisibility.
+float sdfMeshProbePlaneVisibility(uint address, float3 toward, float spacing, out float suspect) {
     float3 size = abs(toward);
     float major = max(size.x, max(size.y, size.z));
 
@@ -104,17 +102,12 @@ float sdfMeshProbePlaneVisibilityCore(uint address, float3 toward, float spacing
     float2 cell = min(floor(minor), 1.0);
     float2 fraction = (minor - cell);
     float visibility = 0.0;
-    float support = 0.0;
 
     [unroll] for (uint corner = 0u; (corner < 4u); corner++) {
         int2 high = int2((corner & 1u), (corner >> 1));
         float weight = (((high.x != 0) ? fraction.x : (1.0 - fraction.x)) * ((high.y != 0) ? fraction.y : (1.0 - fraction.y)));
         int2 texel = ((int2)cell + high - 1);
         int3 d = (xMajor ? int3(facing, texel.x, texel.y) : (yMajor ? int3(texel.x, facing, texel.y) : int3(texel.x, texel.y, facing)));
-        if (any(supportNormal != 0.0) && (dot(supportNormal, (float3)d) <= 1.0e-3)) {
-            continue;
-        }
-        support += weight;
         float4 plane = sdfMeshProbePlane(address, d);
         float admits = (weight * sdfMeshProbePlaneAdmits(plane, toward));
         float gap = (any(plane != 0.0) ? (plane.w - dot(plane.xyz, toward)) : 1.0e30);
@@ -123,32 +116,8 @@ float sdfMeshProbePlaneVisibilityCore(uint address, float3 toward, float spacing
         suspect += (admits * saturate((gap - (0.25 * spacing)) / (0.5 * spacing)));
     }
     suspect = ((visibility > 0.0) ? (suspect / visibility) : 0.0);
-    return (all(supportNormal == 0.0) ? visibility : ((support > 0.0) ? (visibility / support) : 1.0));
+    return visibility;
 }
-// KEEP IN SYNC with SdfMeshIrradiance.PlaneVisibility.
-float sdfMeshProbePlaneVisibility(uint address, float3 toward, float spacing, out float suspect) {
-    return sdfMeshProbePlaneVisibilityCore(address, toward, spacing, suspect, 0.0);
-}
-// The neighbour plane locates the receiver-to-probe segment's crossing; the four rays around that crossing bound
-// the blocker's footprint. KEEP IN SYNC with SdfMeshIrradiance.PlaneSeparation.
-float sdfMeshProbePlaneSeparation(uint address, int3 d, float spacing, float3 receiver) {
-    float4 plane = sdfMeshProbePlane(address, d);
-    float3 toward = ((float3)d * spacing);
-    float farSide = (dot(plane.xyz, toward) - plane.w);
-    float nearSide = (dot(plane.xyz, receiver) - plane.w);
-
-    if (all(plane == 0.0) || (farSide <= 0.0) || (nearSide >= SDF_MESH_IRRADIANCE_DEPTH_FADE) || (farSide <= nearSide)) {
-        return 0.0;
-    }
-
-    float3 crossing = lerp(toward, receiver, saturate(farSide / (farSide - nearSide)));
-    float3 beyond = (crossing + (plane.xyz * (SDF_MESH_IRRADIANCE_DEPTH_FADE / dot(plane.xyz, plane.xyz))));
-    float unseen;
-    float visibility = sdfMeshProbePlaneVisibilityCore(address, beyond, spacing, unseen, plane.xyz);
-
-    return ((1.0 - visibility) * (1.0 - saturate(nearSide / SDF_MESH_IRRADIANCE_DEPTH_FADE)));
-}
-
 struct SdfMeshProbes {
     uint address[8];
     float weight[8];
@@ -207,8 +176,9 @@ void sdfMeshProbeMutualShares(inout SdfMeshProbes probes) {
     }
 }
 
-// Only answering probes surviving the original separation can separate another admission. PlaneSeparation bounds
-// each blocker's footprint; compute both passes from unchanged weights so mutual vetoes do not empty the gather.
+// Only answering probes surviving the original separation can separate another admission. Compute both passes from
+// unchanged weights so mutual vetoes do not empty the gather. The neighbour plane still has no finite blocker extent;
+// that part of the rendering follow-up finding remains open.
 // Every index is a constant once the loops unroll. KEEP IN SYNC with SdfMeshIrradiance.Separate.
 void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 first, float spacing, float3 pushed) {
     uint neighbours[8];
@@ -241,7 +211,7 @@ void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 fir
 
             float3 otherPoint = (((float3)(first + otherOffset) + 0.5) * spacing);
 
-            support[pair] = sdfMeshProbePlaneSeparation(probes.address[other], d, spacing, (pushed - otherPoint));
+            support[pair] = sdfMeshProbePlaneAdmits(sdfMeshProbePlane(probes.address[other], d), (pushed - otherPoint));
 
             separated[corner] = max(separated[corner], (suspect[corner] * support[pair]));
         }

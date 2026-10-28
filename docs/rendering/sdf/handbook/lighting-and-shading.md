@@ -198,9 +198,9 @@ in the frame.
   or beside a doorway still admits a point past that roof or wall through the
   rays that cleared its edge or passed the doorway. Where another of the eight
   answering probes cannot see it (their neighbour bit is clear), its neighbour
-  plane locates the receiver-to-probe crossing. The four planes about that
-  crossing bound the blocker's footprint; an isolated hit is never an infinite
-  separator, and tangent rays do not contradict a continuous wall. Only a probe
+  plane tests the receiver's side. Its finite extent is still unknown, and this
+  separation can over-darken beside a finite blocker; the corresponding review
+  finding remains open. Only a probe
   surviving an initial separation pass may separate another, weighted by that
   survival and the candidate's suspect share. A share uses perpendicular plane distance:
   a hit on the receiver's own surface is evidence at every angle, while open

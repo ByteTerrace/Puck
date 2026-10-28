@@ -1064,9 +1064,10 @@ plane tests use the actual receiver position. This extends their light only
 as far as their visibility supports, without a transition to unoccluded sky.
 Each ray retains its first hit. Separation closes admissions through rays that
 clear a roof edge or a doorway: an answering probe's blocked neighbour
-ray locates a potential separating plane, and the four rays around the
-receiver-to-probe crossing bound that blocker's footprint. Tangent rays say
-nothing about a wall's extent. An initial pass measures each probe's separation;
+ray supplies a separating plane. This still extends the sampled blocker as a
+half-space, and can over-darken beside finite occluders; that review finding
+remains open. A four-ray footprint at the receiver-to-probe crossing reopened
+the teal roof and was removed. An initial pass measures each probe's separation;
 the final pass weights a separator's veto by its survival of that original pass
 and the candidate's suspect share. Those shares use perpendicular distance to the hit
 plane, so a ray meeting the receiver's own surface supplies evidence even at

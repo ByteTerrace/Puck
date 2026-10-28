@@ -65,11 +65,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   under-floor probe draws a sawtooth along the wall–floor junction. The
   separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`) uses
   only answering probes, after front eligibility. Where A cannot see B, A's
-  neighbour plane locates the receiver-to-B segment's crossing. The four planes
-  around that crossing must support the blocker there (`PlaneSeparation` /
-  `sdfMeshProbePlaneSeparation`), rather than extending one sample's half-space.
-  Rays tangent to or pointing away from that plane do not contradict its extent:
-  otherwise a continuous wall reopens beside a tangent ray. Compute the original
+  neighbour plane tests the receiver's side. It still has no finite blocker
+  extent: the finite-occluder part of the review remains open. Blending four
+  rays at the receiver-to-B plane crossing, even excluding tangent rays,
+  reopened the high teal roof and sky light on the Moth; that experiment was
+  removed after its retry. Do not teach it as a verified bound. Compute the original
   separation scores first, then weight A's veto by how much of A survives that
   pass, and by B's suspect share. Fully separated probes cannot veto each other.
   Equal surface confidence alone must not disable separation: a dynamic body has

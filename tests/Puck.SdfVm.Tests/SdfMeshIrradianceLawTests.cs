@@ -114,30 +114,6 @@ public sealed class SdfMeshIrradianceLawTests {
         }
     }
     [Fact]
-    public void ASeparatorsFiniteFootprintDoesNotBecomeAnInfiniteHalfSpace() {
-        var planes = new Vector4[26];
-        var toward = new Vector3(x: 2f, y: 0f, z: 0f);
-
-        // A narrow blocker between the probes at x=1. A receiver around its side has an unobstructed segment to
-        // the far probe even though it lies in the near half-space of that one hit plane.
-        planes[PlusX] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f);
-        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: Vector3.Zero, spacing: 2f), precision: 5);
-        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 0f, y: 4f, z: 0f), spacing: 2f));
-        var partial = SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 0f, y: 1f, z: 0f), spacing: 2f);
-
-        Assert.InRange(actual: partial, high: 0.9f, low: 0.1f);
-        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 1.2f, y: 0f, z: 0f), spacing: 2f));
-
-        // Extend the blocker into a wall: the diagonal hit now supports the crossing too. The open +Y ray is
-        // tangent to the wall and cannot contradict it; including it would reopen half the wall here.
-        foreach (var y in new[] { -1, 0, 1 }) {
-            foreach (var z in new[] { -1, 0, 1 }) { planes[NeighbourIndex(x: 1, y: y, z: z)] = new Vector4(w: 1f, x: 1f, y: 0f, z: 0f); }
-        }
-        Assert.Equal(expected: 1f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: new Vector3(x: 0f, y: 4f, z: 0f), spacing: 2f), precision: 5);
-        Array.Clear(array: planes);
-        Assert.Equal(expected: 0f, actual: SdfMeshIrradiance.PlaneSeparation(planes: planes, neighbour: PlusX, toward: toward, receiver: Vector3.Zero, spacing: 2f));
-    }
-    [Fact]
     public void NonAnsweringAndMutuallySeparatedProbesCannotVetoTheGather() {
         var support = Enumerable.Repeat(count: 64, element: 1f).ToArray();
         float[] suspect = [1f, 1f, 0f, 0f, 0f, 0f, 0f, 0f];
