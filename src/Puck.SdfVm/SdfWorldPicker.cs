@@ -38,6 +38,9 @@ public sealed class SdfWorldPicker {
     /// <summary>Gets whether the latest request needs the next rendered frame to record its copy: false while another
     /// copy is in flight and while nothing is requested, so neither forces a render.</summary>
     public bool Pending => (m_queued && (m_flight is null));
+    /// <summary>Gets whether the latest request has no answer yet, whether its copy is still to be recorded or already in
+    /// flight. It turns false when the request is answered, cleared or discarded with the followed view.</summary>
+    public bool Awaiting => m_awaiting;
     /// <summary>Gets whether a copy is in flight.</summary>
     public bool InFlight => (m_flight is not null);
     /// <summary>Gets the current request identity. A shared one-shot consumer cancels only while this still names

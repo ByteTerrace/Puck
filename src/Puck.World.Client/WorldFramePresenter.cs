@@ -837,6 +837,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             target: ref target
         );
 
+        view.NoteFieldOfView(radians: fieldOfView);
+
         return CameraSnapshot.LookAt(
             fieldOfViewRadians: fieldOfView,
             position: eye,

@@ -505,8 +505,9 @@ continues. Its full control table is
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
-`world.view.camera [player]` reads the same seat-owned state movement and both
-local/travel renderers use.
+`world.view.camera [player] [full|<key>,<key>...]` reads the same seat-owned state movement and both
+local/travel renderers use: by default tick, view, eye, target, yaw, pitch, fov,
+mode, fade and clearance; `full` every field; a key list just those.
 
 A seat's camera reads its rig from the document of the authority the seat is
 routed to, and a rig operand bound to `state.<row>[.<key>]` reads that same

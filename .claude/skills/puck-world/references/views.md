@@ -539,10 +539,12 @@ Free Cam do not alter the logical movement basis.
 
 ## Verbs
 
-- `world.view.camera [player]` — reads the routed structure, portable
-  preference, held free-look state, motion-control gate/sample, the exact
-  live yaw/pitch state used by movement/rendering, and where the chase eye's
-  arm last placed the eye (see "Chase eye clearance").
+- `world.view.camera [player] [full|<key>,<key>...]` — by default reads tick,
+  view, eye, target, yaw, pitch, fov, mode, fade and clearance; `full` also
+  reads the routed structure, portable preference, held free-look state,
+  motion-control gate/sample, the exact live yaw/pitch state used by
+  movement/rendering, and where the chase eye's arm last placed the eye (see
+  "Chase eye clearance"); a key list reads just those fields, in order.
 - `player.camera.clearance [fade|cutaway|auto|toggle]` — changes the issuing
   seat's temporary clearance preference; no argument toggles the two modes.
 - `world.view.state` — reads active layout, selection reason, transition, and
