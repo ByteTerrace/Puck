@@ -21,6 +21,11 @@ The debug world is the engine's instrument ([decision](../decisions/engine-desig
 
 The shared pile a cross-family review's findings go to ([orchestration](../../.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)). One checkbox per finding: `[high|medium|low] <finding> (owner: <lane or role>; from: <branch>)`. A high finding is scheduled into the next integration batch, and every high finding a milestone landed is resolved or deferred by the owner before `main` is pushed.
 
+- [ ] [medium] `world.view.pick` against a registered but inactive picker holds with no answer deadline: picking a retired view through stdin leaves `Awaiting` true and blocks later commands in that session, `quit` included (`src/Puck.World/WorldViewCommandModule.Picking.cs`). (owner: implementer, mcp follow-up; from: mcp-lean)
+- [ ] [medium] `world.view.camera`'s field selection splits the formatted line on spaces, so an authority name with a space (an instance named `side room`) breaks camera reads and makes camera mutations report failure after applying (`src/Puck.World/WorldSeatCameraCommandModule.cs`). (owner: implementer, mcp follow-up; from: mcp-lean)
+- [ ] [medium] A held console pick has no reservation against continuous hover: with the inspector or building hover active, pointer demand at other coordinates supersedes it and the call refuses while rendering continues (`WorldViewCommandModule.Picking.cs`). (owner: implementer, mcp follow-up; from: mcp-lean)
+- [ ] [low] `puck-world/references/views.md` verification steps still expect pitch limits and `cameraApplication=true` from the default `world.view.camera`; they need `full` or explicit keys. (owner: implementer, mcp follow-up; from: mcp-lean)
+
 ## Debug world walkthrough findings
 
 Flagged by the owner while playing the debug world and reproduced by the lead. Poses are `body.pose <x> <y> <z> <yaw> 0 0`; overlays are `world.debug-view <mode>`.
