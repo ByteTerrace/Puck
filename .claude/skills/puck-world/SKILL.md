@@ -167,7 +167,12 @@ included: a lane proving an adapter change publishes into an install root in
 its own worktree (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`)
 and runs that front, never the main checkout's. A lane once activated its
 unfinished adapter there and every session's tool results broke until the lead
-pointed `current` back at `last-good`.
+pointed `current` back at `last-good`. The stub counts each launch of a pending
+version and rolls back after three unproven ones, and a client's protocol probe
+plus its connect launch the front twice, so the front and its worker both clear
+the health marker as they start. A build the stub rolled back has spent its
+replay sequence: `--prepare-install` then keeps the installed version and says
+`kept …`, and rebuilding `src/Puck.Cli` publishes a newer one.
 
 `puck_exec.command` also accepts a newline-separated script: at most 64
 nonblank, noncomment lines and 8192 characters total. The entire script reaches

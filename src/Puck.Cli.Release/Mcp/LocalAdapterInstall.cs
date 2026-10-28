@@ -38,7 +38,13 @@ internal static class LocalAdapterInstall {
             using var provider = services.BuildServiceProvider();
             var result = await provider.GetRequiredService<UpdateService>().ApplyAsync(DateTimeOffset.UtcNow, token).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (!result.Applied) { throw new IOException(message: $"Operator development update refused: {result.Detail}"); }
+            // A refused build (one the stub already rolled back keeps its consumed sequence) must not take the adapter
+            // down: keep serving the installed version until a newer build publishes.
+            if (!result.Applied) {
+                if (current == "0.0.0") { throw new IOException(message: $"Operator development update refused: {result.Detail}"); }
+                Console.Error.WriteLine(value: $"puck-mcp: kept {current}; build {version} was refused ({result.Detail}). Rebuild src/Puck.Cli to publish a newer one.");
+                return current;
+            }
             Console.Error.WriteLine(value: $"puck-mcp: activated {version} through UpdateService ({result.Detail}).");
             return version;
         }

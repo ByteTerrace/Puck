@@ -68,6 +68,9 @@ public static class McpCommand {
                     return 0;
                 }
                 if (!worker) {
+                    // The stub counts each launch of a pending version; a front that started proves it as a worker
+                    // does, or a client's probe-and-reconnect reaches the attempt ceiling and rolls a good build back.
+                    LocalAdapterInstall.Healthy(install: installRoot);
                     await OperatorMcpFront.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(),
                         Path.Combine(path1: installRoot, path2: (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "Puck.Launcher.Stub")),
                         ["mcp", "--profile", "operator", "--worker", "--install-root", installRoot, "--build-source", buildSource,
