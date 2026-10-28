@@ -403,6 +403,8 @@ and none is run until the owner calls for qualification.
 
 ## Cross-plan maintenance
 
+- [ ] Give the counters workloads `.puck` sources. `tests/Puck.Counters/debug.world.json` and `avatar.world.json` are committed JSON derived from `debug.puck`; author their sources, compile them when needed and delete the JSON, so no derived world is committed ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+
 - [ ] The generated `prototypes.schema.json` still says a trim is "authored as one shape against the per-stamp shape budget", but no budget exists: `StampShapeCount` only reports bake work. The text comes from the XML documentation on `ShapeTrimDocument` and its siblings in `Puck.World.Authoring`, so correct the XML docs and regenerate through `puck schema`.
 - [ ] Codex `exec --sandbox read-only` exposed no `puck` MCP tools in one observed run. The cause is unconfirmed: check whether the read-only sandbox prevents the launcher from starting or the project registration is skipped, and record the sandbox a lane needs for the World tools.
 - [ ] Antigravity lazy-loads the `puck_operator` tool schemas and polls `puck_world_start_wait` in 20-second steps. Check whether a brief should tell an Antigravity lane to load the schemas first, and whether the wait's step is worth a longer default for that client.
