@@ -443,7 +443,10 @@ names it), `status`, and `output` or `data` (plus `clearTranscript` and
 scripts. The aggregate status is refused if any line refused, while the call
 itself is not an error: a script that ran answers with `isError` false and a
 text that names each refused line and its reason, so a client that shows only
-the text of an error result still reads which line failed. The existing 1 MiB output allowance is shared across the
+the text of an error result still reads which line failed. A command is a
+script when its `command` text contains a newline, even a trailing one over a
+single line; a refused command with no newline at all is an ordinary command
+error (`isError: true`, the refusal as the text, no `commands`). The existing 1 MiB output allowance is shared across the
 script, with truncation marked per line. Cancellation or timeout discards lines
 still queued; already dispatched work may have applied. Inspect state before
 retrying an uncertain script. A script is ordered, not an atomic transaction.
@@ -451,7 +454,7 @@ retrying an uncertain script. A script is ordered, not an atomic transaction.
 `data` carries a non-truncated output that is a JSON object or array as a native
 value in place of `output`; otherwise it is omitted. Use it with
 `world.at --json` or `world.debug-view report contacts --json`, for example.
-`commands` is omitted for a single-line call. Non-empty transcript text remains in `output`.
+`commands` is omitted for a call whose `command` has no newline. Non-empty transcript text remains in `output`.
 
 Separate calls are round trips during which the World keeps stepping, so they
 never land a fixed number of ticks apart. A script whose commands and stills
