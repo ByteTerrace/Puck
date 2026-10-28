@@ -16,6 +16,10 @@ that session.
 
 ## The landing bar
 
+Steps 1 to 3 make a lane ready for a batch. Steps 4 and 5 need a windowed World,
+so the integration lane's sweep reads them
+([orchestration](../orchestration/SKILL.md#land-in-batches)).
+
 1. A zero-warning, zero-error Release build of what the change touched
    (`dotnet build <project> -c Release -nodeReuse:false`, or `Puck.slnx` when it
    reaches shared projects), on the lane's head with the integration branch's
@@ -31,22 +35,24 @@ that session.
 4. Frame time held, for a change that reaches the running World (simulation,
    presentation, physics, rendering, addons, the debug world's documents): on
    the lead machine the RTX 4070 holds 60 FPS at the highest settings, and that
-   is the owner's floor, not a goal. In a windowed World with its bakes settled,
-   read `host.frames` after standing still and again after the change's own
-   workload (walk the area it touches, `player.move` in a `world.at` script),
-   and the commit body states both readings. A frame over 16.7 ms that the
-   change caused blocks the landing, whatever else passed. A reported speed-up
+   is the owner's floor, not a goal. The integration lane's sweep reads it under
+   a granted GPU leg: in a windowed World with its bakes settled, `host.frames`
+   after standing still and again after the batch's workload (walk the area it
+   touches, `player.move` in a `world.at` script), and the sweep's report states
+   both readings. A coding lane has no GPU leg, so its commit body names that
+   workload instead. A frame over 16.7 ms that a change caused turns the batch
+   red and the culprit is bisected out, whatever else passed. A reported speed-up
    is measured in frame time, never inferred from one phase: a tick that fell
    from 247 ms to 61 ms is still four frames late.
 5. The player's body seen, for a change that reaches what draws bodies (stamps,
-   clips, fades, cameras, portals): patrol the area and read the result
-   (`world.patrol <x0> <z0> <x1> <z1> <step>` in a windowed World with its bakes
-   settled, then `world.wait until <tick>` and `world.patrol`): it poses body 0 at
-   each point of the grid, picks the centre of the third-person view
+   clips, fades, cameras, portals): the sweep patrols the area and reads the
+   result (`world.patrol <x0> <z0> <x1> <z1> <step>` in a windowed World with its
+   bakes settled, then `world.wait until <tick>` and `world.patrol`): it poses
+   body 0 at each point of the grid, picks the centre of the third-person view
    (`world.view.pick primary 0.5 0.5` names `body=0`), and flags `OFF BODY` and
    `STALL` points. `[world.straddle: ...]` in the log names every body drawn
-   clipped at a door. A body that vanishes away from any portal blocks the
-   landing.
+   clipped at a door. A body that vanishes away from any portal turns the batch
+   red. The coding lane names the area to patrol.
 
 Gates, parity, canaries, counters, baselines and `puck laws prove` are tools to
 use when they pay for themselves, never preconditions. An engine change's
@@ -119,12 +125,13 @@ If that guard is available and the directory is empty while it is held,
 removing only the empty directory lets the normal `puck lease` acquire again.
 Never unlink the guard file or remove a directory containing holder metadata.
 
-Judge performance by code, disassembly and load-independent counts; only
-  counts gate a change. Wall-clock and GPU timing are evidence
-  read beside those counts, never alone, and run on a quiet machine: the lead
-  keeps every agent's builds, tests and GPU legs off the machine while one
-  runs ([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)).
-
+Judge a performance change by code, disassembly and load-independent counts;
+only counts gate it. Wall-clock and GPU timing are evidence read beside those
+counts, never alone, and run on a quiet machine: the lead keeps every agent's
+builds, tests and GPU legs off the machine while one runs
+([the rule](../../../docs/decisions/rendering.md#the-pipeline-foundation)). The
+owner's frame-time floor (landing bar step 4) is the one wall-clock reading that
+gates, and it is read in the integration lane's sweep on that quiet machine.
 
 ## Run verbs from your own CLI copy
 
