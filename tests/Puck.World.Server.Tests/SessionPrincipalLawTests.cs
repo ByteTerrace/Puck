@@ -20,6 +20,21 @@ namespace Puck.World.Server.Tests;
 /// </summary>
 public sealed class SessionPrincipalLawTests {
     [Fact]
+    public void LiveRestoreKeepsSessionsRetiredAfterTheSaveRetired() {
+        using var fixture = Fixtures.FreshServer(definition: Document());
+
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
+        var first = AdmitSession(fixture);
+
+        Assert.True(fixture.Server.EndSession(first, out reason), reason);
+        fixture.Server.Persistence.RestoreCheckpoint(checkpoint!);
+        var next = AdmitSession(fixture);
+
+        Assert.Equal(first.Index, next.Index);
+        Assert.True((next.Generation > first.Generation));
+        Assert.False(fixture.Server.IsLiveSession(first));
+    }
+    [Fact]
     public void RestoringACheckpointRestoresTheNextSessionIdentity() {
         using var fixture = Fixtures.FreshServer(definition: Document());
 

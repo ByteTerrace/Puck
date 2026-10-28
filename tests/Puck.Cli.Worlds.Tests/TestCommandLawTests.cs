@@ -9,6 +9,33 @@ namespace Puck.Cli.Worlds.Tests;
 /// build <c>Puck.World</c> again: the test project already depends on that build.</remarks>
 public sealed class TestCommandLawTests {
     [Fact]
+    public void DifferentStateAndRulesHaveDifferentBootShapesAndTheirOwnVerdicts() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-shapes-");
+
+        directory.WriteText("worlds/first.puck", """
+            schema: "puck.world.definition.v1"
+            documentId: "same"
+            state { world { table value { "0" = 7 } } }
+            test "first" { expect { value[0] == 7 } }
+            """);
+        directory.WriteText("worlds/second.puck", """
+            schema: "puck.world.definition.v1"
+            documentId: "same"
+            state { world { table value { "0" = 11 } } }
+            rule "change" { when value[0] == 11 value[0] = 13 }
+            test "second" { expect { value[0] == 13 } }
+            """);
+        var (exit, output) = RunTest(directory.PathOf("worlds"), "--reproduce");
+        Assert.Equal(0, exit);
+        Assert.Contains("processes=2 host-boots=2 world-runs=2", output, StringComparison.Ordinal);
+        var first = System.Text.Encoding.UTF8.GetBytes("""{"state":{"value":7},"rules":[],"schedule":{"tick":1}}""");
+        var rescheduled = System.Text.Encoding.UTF8.GetBytes("""{"state":{"value":7},"rules":[],"schedule":{"tick":2}}""");
+        var changed = System.Text.Encoding.UTF8.GetBytes("""{"state":{"value":11},"rules":[],"schedule":{"tick":1}}""");
+
+        Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(first), Puck.World.Server.WorldPersistence.ScenarioBootShape(rescheduled));
+        Assert.NotEqual(Puck.World.Server.WorldPersistence.ScenarioBootShape(first), Puck.World.Server.WorldPersistence.ScenarioBootShape(changed));
+    }
+    [Fact]
     public void OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
 

@@ -1910,9 +1910,10 @@ processes, container host boots, world runs, and exported authority ticks (exclu
 the extra shutdown ticks). Executable build reuse is reported separately.
 
 Each worker boots once through the normal World composition root and restores
-the boot checkpoint before each compatible scenario. Its state, rules and schedule
-are replaced by the scenario's declarations; changes to other boot configuration
-receive another worker.
+the complete boot checkpoint before each compatible scenario. Only its schedule
+is replaced; differences in state, rules or other boot configuration receive
+another worker. An uncapturable boot runs each scenario in its own native host;
+reproduction still requires a capturable starting checkpoint.
 Native dependency validation, singleton identity in child scopes and caller ownership
 of supplied singleton instances are preserved. Container reuse by rewriting lifetimes
 cannot preserve arbitrary factories and extensions, so the native container remains
@@ -1928,7 +1929,7 @@ determinism qualification pass: the worker captures each authority's starting
 checkpoint and the tape's input stream, restores that checkpoint in place, then
 replays the input through the ordinary replay doors. Every completed tick's authority
 hash, final machine cores and final canonical state export must match. A mismatch
-names the authority, recorded tick and differing hash components. The authored
+names the authority and recorded tick. The authored
 schedule runs once: its outcomes, edit echoes and sampled hashes remain in
 `test-run.json`; replay consumes the resulting inputs instead of executing console
 commands again. External input is captured once, so this checks deterministic

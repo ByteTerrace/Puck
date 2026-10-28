@@ -28,6 +28,9 @@ internal sealed class WorldTestBatch {
     private WorldTestHost m_host = null!;
 
     private int m_reportedBoots;
+    private bool m_reusable;
+    private Timer? m_legDeadline;
+    private string? m_reproductionFailure;
 
     private string m_workingDirectory = string.Empty;
 
@@ -47,7 +50,6 @@ internal sealed class WorldTestBatch {
 
         batch.m_workingDirectory = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: legs[0].World)!, path2: "..",
             path3: ("worker-" + Path.GetFileName(path: Path.GetDirectoryName(path: legs[0].Directory)))));
-        batch.OpenLeg();
         var stateDirectory = Path.Combine(path1: batch.m_workingDirectory, path2: "state");
 
         if (Directory.Exists(path: stateDirectory)) { Directory.Delete(stateDirectory, recursive: true); }
@@ -55,17 +57,29 @@ internal sealed class WorldTestBatch {
         Console.SetError(newError: TextWriter.Synchronized(writer: error));
         host.Initialize = batch.Initialize;
         try {
-            var first = legs[0];
-            var exit = await boot([
+            var exit = 0;
+
+            while (batch.m_index < legs.Length) {
+                batch.OpenLeg();
+                if (Directory.Exists(stateDirectory)) { Directory.Delete(stateDirectory, recursive: true); }
+                var first = legs[batch.m_index];
+                var startingIndex = batch.m_index;
+
+                exit = await boot([
                 "--devices", "none", "--world", batch.WorkingWorld, "--headless", "true", "--unpaced", "true",
-                "--exit-after-seconds", legs.Sum(selector: leg => leg.ExitAfterSeconds).ToString(provider: CultureInfo.InvariantCulture),
+                "--exit-after-seconds", "0",
                 "--state-dir", Path.Combine(path1: batch.m_workingDirectory, path2: "state"),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
+                batch.m_legDeadline?.Dispose();
+                batch.m_control?.Dispose();
+                if ((exit != 0) || (batch.m_index == startingIndex)) { break; }
+            }
 
             return (((exit == 0) && !batch.m_failed && (batch.m_index == legs.Length)) ? 0 : 1);
         } finally {
             foreach (var (_, probe) in batch.m_probes) { probe.Dispose(); }
+            batch.m_legDeadline?.Dispose();
             batch.m_control?.Dispose();
             Console.Out.Flush(); Console.Error.Flush();
             Console.SetOut(newOut: previousOut); Console.SetError(newError: previousError);
@@ -78,19 +92,23 @@ internal sealed class WorldTestBatch {
         var server = Get<WorldServer>();
         var instances = Get<WorldInstanceHost>();
 
-        if (!server.TryCaptureCheckpoint(instances.CaptureRow(row: instances.Boot!), out var checkpoint, out var reason)) {
-            throw new InvalidOperationException(message: $"Test boot cannot be checkpointed: {reason}");
+        m_reusable = server.TryCaptureCheckpoint(instances.CaptureRow(row: instances.Boot!), out var checkpoint, out var reason);
+        if (m_reusable) {
+            m_boot = checkpoint!;
+            try { instances.CaptureScenarioBoot(); }
+            catch (InvalidOperationException exception) { m_reusable = false; reason = exception.Message; }
         }
-        m_boot = checkpoint!;
-        instances.CaptureScenarioBoot();
+        if (!m_reusable) { Console.Error.WriteLine($"[test.batch: boot cannot be reused ({reason}); this scenario owns its native host]"); }
         var stateRoot = Get<WorldStateRoot>().FullPath;
 
         m_bootFiles = (Directory.Exists(path: stateRoot) ? Directory.EnumerateFiles(path: stateRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*")
             .ToDictionary(path => Path.GetRelativePath(path: path, relativeTo: stateRoot), File.ReadAllBytes) : []);
         m_control = Get<TextCommandSource>().CreateSession(Principal.Console);
         Get<WorldTestRun>().Exported += () => { _ = m_control.InvokeAsync(operation: CompleteLeg); };
+        Get<WorldTestRun>().Progress += tick => Console.WriteLine($"[test.batch: tick {tick}]");
+        m_legDeadline = new Timer(_ => Get<IHostApplicationLifetime>().StopApplication(), null, Timeout.Infinite, Timeout.Infinite);
         instances.Admitted += Observe;
-        StartLeg();
+        StartLeg(freshHost: true);
     }
     private void OpenLeg() {
         var leg = m_legs[m_index];
@@ -108,26 +126,32 @@ internal sealed class WorldTestBatch {
         m_output.Flush();
     }
     private void Observe(WorldInstance instance) {
-        if (m_legs[m_index].Reproduce && (instance.Tape is { } tape)) { m_probes.Add(item: (instance.Name, tape.ObserveReplay())); }
+        if (m_legs[m_index].Reproduce && (instance.Tape is { } tape)) {
+            try { m_probes.Add(item: (instance.Name, tape.ObserveReplay())); }
+            catch (InvalidOperationException exception) { m_reproductionFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
+        }
     }
-    private void StartLeg() {
+    private void StartLeg(bool freshHost = false) {
         var leg = m_legs[m_index];
         var server = Get<WorldServer>();
         var source = Get<WorldDefinitionSource>();
 
+        m_reproductionFailure = null;
+        m_legDeadline!.Change(TimeSpan.FromSeconds(leg.ExitAfterSeconds), Timeout.InfiniteTimeSpan);
         source.SourcePath = WorkingWorld;
+        if (m_reusable && !freshHost) {
         if (!WorldDefinitionLoader.TryLoadForAdmission(File.ReadAllBytes(path: WorkingWorld), WorkingWorld, out var admission, out var reason,
             neighbours: server.Neighbours, catalog: server.Machines.ValidationCatalog, documentDirectory: m_workingDirectory)) {
             throw new InvalidOperationException(message: reason);
         }
-        var definition = admission!.Definition;
-        var checkpoint = server.Persistence.ScenarioCheckpoint(boot: m_boot, definition: definition);
+        var checkpoint = server.Persistence.ScenarioCheckpoint(boot: m_boot, admission: admission!);
 
         Get<InputRouter>().ResetTimeline();
         Get<Puck.World.Client.WorldClient>().ResetInputTimeline();
         Get<WorldHistory>().Off();
         Get<WorldInstanceHost>().RestoreScenario(checkpoint: checkpoint);
         RestoreStateFiles();
+        }
         Get<WorldTestRun>().Reset(WorkingWorld, Path.Combine(path1: leg.Directory, path2: "out"));
         foreach (var name in Get<WorldInstanceHost>().Names) {
             if (Get<WorldInstanceHost>().TryGet(instance: out var row, name: name) && (row is not null)) { Observe(instance: row); }
@@ -141,6 +165,8 @@ internal sealed class WorldTestBatch {
             var results = new List<object>();
 
             foreach (var (_, probe) in m_probes) { probe.Dispose(); }
+            ArchiveStateFiles(directory: leg.Directory);
+            if (m_reproductionFailure is not null) { throw new InvalidOperationException(m_reproductionFailure); }
             foreach (var (name, probe) in m_probes) {
                 int divergence;
 
@@ -157,12 +183,11 @@ internal sealed class WorldTestBatch {
             m_failed = true;
         }
         m_probes.Clear();
-        ArchiveStateFiles(directory: leg.Directory);
         File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "host-boots"), (m_host.Boots - m_reportedBoots).ToString(provider: CultureInfo.InvariantCulture));
         m_reportedBoots = m_host.Boots;
         m_output.Flush(); m_error.Flush();
         m_index++;
-        if ((m_index == m_legs.Length) || m_failed) { Get<IHostApplicationLifetime>().StopApplication(); } else { OpenLeg(); StartLeg(); }
+        if ((m_index == m_legs.Length) || !m_reusable) { Get<IHostApplicationLifetime>().StopApplication(); } else { OpenLeg(); StartLeg(); }
         return true;
     }
     private void ArchiveStateFiles(string directory) {
@@ -193,14 +218,16 @@ internal sealed class WorldTestBatch {
     private sealed class Output(TextWriter? progress) : TextWriter {
         private StreamWriter? m_transcript;
 
+        private readonly object m_gate = new();
+
         public override Encoding Encoding => Encoding.UTF8;
 
-        public void Open(string path) { m_transcript?.Dispose(); m_transcript = new StreamWriter(path, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)); }
-        public override void Write(char value) { m_transcript?.Write(value: value); progress?.Write(value: value); }
-        public override void Write(string? value) { m_transcript?.Write(value: value); progress?.Write(value: value); }
-        public override void WriteLine(string? value) { m_transcript?.WriteLine(value: value); progress?.WriteLine(value: value); }
-        public override void Flush() { m_transcript?.Flush(); progress?.Flush(); }
+        public void Open(string path) { lock (m_gate) { m_transcript?.Dispose(); m_transcript = new StreamWriter(path, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)); } }
+        public override void Write(char value) { lock (m_gate) { m_transcript?.Write(value: value); progress?.Write(value: value); } }
+        public override void Write(string? value) { lock (m_gate) { m_transcript?.Write(value: value); progress?.Write(value: value); } }
+        public override void WriteLine(string? value) { lock (m_gate) { m_transcript?.WriteLine(value: value); progress?.WriteLine(value: value); } }
+        public override void Flush() { lock (m_gate) { m_transcript?.Flush(); progress?.Flush(); } }
 
-        protected override void Dispose(bool disposing) { if (disposing) { m_transcript?.Dispose(); } base.Dispose(disposing: disposing); }
+        protected override void Dispose(bool disposing) { lock (m_gate) { if (disposing) { m_transcript?.Dispose(); m_transcript = null; } base.Dispose(disposing: disposing); } }
     }
 }

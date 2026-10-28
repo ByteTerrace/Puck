@@ -806,7 +806,7 @@ public sealed partial class WorldPersistence {
             )),
         });
     }
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true) {
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false) {
         var server = checkpoint.Server;
 
         Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
@@ -938,7 +938,7 @@ public sealed partial class WorldPersistence {
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.Input = restoredInput;
         Host.Input.BindRestoredBodies();
-        Host.GrantTable.Restore(checkpoint: checkpoint.Grants);
+        Host.GrantTable.Restore(checkpoint: checkpoint.Grants, resetSessionEpochs: resetSessionEpochs);
         // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
         // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership
         // cannot remain empty (deny-all) or fall back to a stale role-less projection.

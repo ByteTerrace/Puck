@@ -42,6 +42,7 @@ public sealed partial class WorldInstanceHost {
 
         foreach (var row in m_instances.Values) {
             if (row.Tape is { Mode: WorldReplayMode.Recording } tape) { tape.CancelRecording(); }
+            if (row.Tape is { Mode: WorldReplayMode.Replaying } drive) { drive.CancelDrive(); }
             row.Server.ClearSessionObservers();
         }
         m_screenSessions.Clear();
@@ -75,7 +76,7 @@ public sealed partial class WorldInstanceHost {
             if (!source.AsSpan().SequenceEqual(other: cached.Source)) {
                 if (!WorldDefinitionLoader.TryLoadFileForAdmission(row.SourcePath, out var admission, out _, out var reason,
                     instanceIdentity: name, catalog: row.Server.Machines.ValidationCatalog)) { throw new InvalidOperationException(message: reason); }
-                cached = (source, row.Server.Persistence.ScenarioCheckpoint(boot: initial, definition: admission!.Definition));
+                cached = (source, row.Server.Persistence.ScenarioCheckpoint(boot: initial, admission: admission!));
                 m_scenarioImages[name] = cached;
             }
             var image = cached.Image;

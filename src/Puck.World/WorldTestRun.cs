@@ -122,6 +122,7 @@ internal sealed class WorldTestRun {
     private readonly Func<InputRouter> m_router;
 
     public event Action? Exported;
+    public event Action<ulong>? Progress;
 
     public WorldTestRun(WorldServer server, WorldDefinitionSource definitionSource, WorldTickScript tickScript, Func<InputRouter> router, WorldInstanceHost instances, WorldScheduleRoot scheduleRoot) {
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -445,7 +446,7 @@ internal sealed class WorldTestRun {
         if (!IsArmed || m_exported) {
             return;
         }
-        if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick {tick}]"); }
+        if ((tick % 120) == 0) { Progress?.Invoke(tick); }
         NoteHash(server: m_server, tick: tick, world: WorldScheduleSection.BootWorldName);
         foreach (var name in m_instances.Names.Order(comparer: StringComparer.Ordinal)) {
             if ((name != WorldInstanceHost.BootInstanceName) &&

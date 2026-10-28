@@ -68,7 +68,10 @@ wall time when measuring it on a shared machine; build-lease waits are contentio
 and exported authority ticks exclude the extra shutdown ticks.
 
 `puck test` boots once per worker, restores its boot authority cohort before each
-compatible scenario, and installs that scenario's state, rules and schedule. Never rewrite
+compatible scenario, and installs its schedule. Compatibility includes the entire
+boot state and rules; a different world needs its own boot checkpoint. The reset
+cancels live tape drives as well as recordings. Session epochs reset only in this
+isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
 caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
 and extensions require the native container. `WorldTestHostLawTests` preserves the

@@ -12,7 +12,7 @@ public sealed partial class WorldPersistence {
         bytes => WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: Host.Configuration.DocumentDirectory,
             utf8Json: bytes, machines: Host.Machines.ValidationCatalog));
 
-    /// <summary>A computed identity for the boot configuration, excluding scenario state, rules and schedule.</summary>
+    /// <summary>A computed identity for the entire boot state; only the command schedule may differ.</summary>
     public static string ScenarioBootShape(byte[] json) {
         using var document = JsonDocument.Parse(json);
         using var hash = SHA256.Create();
@@ -21,37 +21,37 @@ public sealed partial class WorldPersistence {
         using (var writer = new Utf8JsonWriter(stream)) {
             writer.WriteStartObject();
             foreach (var property in document.RootElement.EnumerateObject()) {
-                if (property.Name is not ("state" or "rules" or "schedule")) { property.WriteTo(writer: writer); }
+                if (property.Name != "schedule") { property.WriteTo(writer: writer); }
             }
             writer.WriteEndObject();
         }
         stream.FlushFinalBlock();
         return Convert.ToHexStringLower(inArray: hash.Hash!);
     }
-    /// <summary>Seeds a scenario's arena over a captured boot, preserving the boot's participant lanes.</summary>
-    public WorldAuthorityCheckpoint ScenarioCheckpoint(WorldAuthorityCheckpoint boot, WorldDefinition definition) {
-        var json = WorldDefinitionSerialization.Serialize(definition: definition);
 
-        if (ScenarioBootShape(json: json) != ScenarioBootShape(json: boot.Server.DefinitionJson)) {
+    private readonly ConditionalWeakTable<byte[], BootShape> m_bootShapes = new();
+    private readonly ConditionalWeakTable<WorldDefinition, BootShape> m_definitionShapes = new();
+
+    private sealed record BootShape(string Value);
+
+    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(ScenarioBootShape(bytes))).Value;
+
+    /// <summary>Reuses a complete boot checkpoint only for an identical world with a different schedule.</summary>
+    public WorldAuthorityCheckpoint ScenarioCheckpoint(WorldAuthorityCheckpoint boot, WorldDefinitionAdmission admission) {
+        var json = WorldDefinitionSerialization.Serialize(definition: admission.Definition);
+
+        if (CachedBootShape(json: json) != CachedBootShape(json: boot.Server.DefinitionJson)) {
             var expected = JsonNode.Parse(boot.Server.DefinitionJson)!.AsObject();
             var actual = JsonNode.Parse(json)!.AsObject();
             var changed = expected.Select(selector: pair => pair.Key).Union(second: actual.Select(selector: pair => pair.Key))
-                .Where(predicate: key => ((key is not ("state" or "rules" or "schedule")) && !JsonNode.DeepEquals(node1: expected[key], node2: actual[key])));
+                .Where(predicate: key => ((key != "schedule") && !JsonNode.DeepEquals(node1: expected[key], node2: actual[key])));
 
             throw new InvalidOperationException(message: $"Scenario changes boot configuration ({string.Join(separator: ", ", values: changed)}); it requires its own worker.");
         }
-        var admission = CheckpointAdmission(json: boot.Server.DefinitionJson);
-
-        var lanes = PrepareCheckpointArena(boot.Server, admission.Compilation);
-        var time = new ArenaTime(Tick: 0, EngineTick: 0, TicksPerSecond: definition.SimulationRateHz, Dynamics: definition.Dynamics);
-
-        if (!StateArena.TryCreate(catalog: definition.StateCatalog, section: definition.StateRaw,
-            options: WorldSlotLanes.Options(definition: definition), time: in time, arena: out var arena, reason: out var reason)) {
-            throw new InvalidOperationException(message: reason);
-        }
-        lanes.CopyLanesTo(target: arena);
+        m_checkpointAdmissions.Add(json, admission);
+        _ = m_definitionShapes.GetValue(admission.Definition, _ => new BootShape(CachedBootShape(json)));
         return boot with {
-            Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json, Arena = arena.CaptureSnapshot() },
+            Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json },
         };
     }
     /// <summary>Restarts module memory and restores a checkpoint into an already composed compatible authority.</summary>
@@ -61,7 +61,10 @@ public sealed partial class WorldPersistence {
             var definition = admission.Definition;
             // A scenario may edit a kit, screen, input policy or collision row. Restore the derived products
             // before validating and loading their checkpointed continuation into the same authority.
-            if (ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) != ScenarioBootShape(json: checkpoint.Server.DefinitionJson)) {
+            var currentShape = m_definitionShapes.GetValue(Host.Configuration,
+                current => new BootShape(ScenarioBootShape(WorldDefinitionSerialization.Serialize(current)))).Value;
+
+            if (currentShape != CachedBootShape(checkpoint.Server.DefinitionJson)) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
@@ -74,7 +77,7 @@ public sealed partial class WorldPersistence {
                 if (!addons.TryPrepare(candidate: definition, current: null, plan: out plan, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
                 if (plan is not null) { addons.Commit(plan: plan); addons.Finish(plan: plan); }
             }
-            RestoreCheckpointCore(checkpoint, admission);
+            RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true);
         }
     }
 }

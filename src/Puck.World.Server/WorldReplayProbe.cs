@@ -10,16 +10,19 @@ public sealed class WorldReplayProbe : IDisposable {
     private readonly WorldAuthorityCheckpoint m_start;
     private readonly List<WorldReplayTickInput> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
-    private readonly List<ulong[]> m_components = [];
     private readonly ulong[] m_startComponents;
 
+    private int m_skipAuthority;
+    private int m_skipIntents;
     private bool m_attached = true;
     private byte[] m_finalExport = [];
     private IReadOnlyList<WorldReplayMachineDigest> m_finalMachines = [];
 
-    internal WorldReplayProbe(WorldReplayTape tape, WorldServer server) {
+    internal WorldReplayProbe(WorldReplayTape tape, WorldServer server, int skipAuthority, int skipIntents) {
         m_tape = tape;
         m_server = server;
+        m_skipAuthority = skipAuthority;
+        m_skipIntents = skipIntents;
         if (!server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason)) {
             throw new InvalidOperationException(message: $"Replay probe cannot capture its start: {reason}");
         }
@@ -28,9 +31,10 @@ public sealed class WorldReplayProbe : IDisposable {
     }
 
     internal void NoteTick(WorldReplayTickInput input, ulong hash) {
-        m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority], Intents: [.. input.Intents]));
+        m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority.Skip(m_skipAuthority)], Intents: [.. input.Intents.Skip(m_skipIntents)]));
+        m_skipAuthority = 0;
+        m_skipIntents = 0;
         m_hashes.Add(item: hash);
-        m_components.Add(item: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1)));
     }
 
     /// <summary>Restores the start into this authority and feeds its recorded inputs through the ordinary replay doors.</summary>
@@ -52,13 +56,14 @@ public sealed class WorldReplayProbe : IDisposable {
 
                 WorldReplaySnapshot.ApplyRecordedTick(m_server, m_server.Population, m_inputs[tick], expected, outcomes,
                     static rebuild => (null, rebuild.ContentHash));
+                // The companion's tape carries its own delivered input. Re-emitting a screen session's
+                // delivery here would mutate that still-live companion a second time.
+                m_server.ReplaysInput = true;
                 m_server.Advance(stepTicks: step);
+                m_server.EnforceJournalDepth();
                 WorldReplaySnapshot.VerifyRecordedMutationOutcomes(expected: expected, replayed: outcomes, tick: tick);
                 if (WorldStateHashComposition.HashAuthoritative(server: m_server, tick: (m_server.NextInputTick - 1)) != m_hashes[tick]) {
-                    var difference = WorldStateHashComposition.DifferingComponents(left: m_components[tick],
-                        right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1)));
-
-                    throw new InvalidOperationException(message: $"recorded tick {tick} differs: {string.Join(separator: ", ", values: difference)}");
+                    return tick;
                 }
             }
             return ((m_finalExport.AsSpan().SequenceEqual(other: WorldStateExport.ToCanonicalJson(server: m_server)) &&
@@ -79,7 +84,8 @@ public sealed partial class WorldReplayTape {
 
     /// <summary>Observes the same input stream as history and operator recording, starting at this settled boundary.</summary>
     public WorldReplayProbe ObserveReplay() {
-        var probe = new WorldReplayProbe(server: m_liveServer, tape: this);
+        var probe = new WorldReplayProbe(server: m_liveServer, tape: this,
+            skipAuthority: m_currentAuthority.Count, skipIntents: m_currentIntents.Count);
 
         m_probes.Add(item: probe);
         RefreshCapture();

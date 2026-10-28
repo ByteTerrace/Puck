@@ -12,6 +12,22 @@ namespace Puck.World.Server.Tests;
 /// <see cref="WorldBootWork"/> ledger, so a class loading a document beside it moves nothing it reads.
 /// </summary>
 public sealed class WorldValidatedLoadLawTests : IDisposable {
+    [Fact]
+    public void AScenarioRestoreReusesTheAdmissionItsLegAlreadyPaidFor() {
+        using var fixture = Fixtures.FreshServer();
+
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), reason);
+        using var attribution = WorldBootWork.Attribute(m_work);
+        var admission = WorldDefinitionSerialization.DeserializeForAdmission(
+            utf8Json: boot!.Server.DefinitionJson,
+            machines: fixture.Server.Machines.ValidationCatalog);
+        var admitted = Counts();
+        var scenario = fixture.Server.Persistence.ScenarioCheckpoint(boot, admission);
+
+        fixture.Server.Persistence.RestoreScenario(scenario);
+        Assert.Equal(admitted, Counts());
+    }
+
     private readonly WorldBootWork m_work = new();
     // Every FreshProfiles call's own scratch directory, released together when the test instance is (a fresh
     // instance per [Fact], xUnit's default).

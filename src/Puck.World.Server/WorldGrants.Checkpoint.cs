@@ -62,7 +62,7 @@ public sealed partial class WorldGrants {
     /// never a merge onto whatever the boot-seed constructor already installed. The sessions it admits afterwards are
     /// the checkpoint's, each as it stood, with the retired epochs kept; a live session the checkpoint does not hold
     /// ends here, and its screen admits a new one.</summary>
-    public void Restore(WorldGrantsCheckpoint checkpoint) {
+    public void Restore(WorldGrantsCheckpoint checkpoint, bool resetSessionEpochs = false) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         m_applications.Clear();
@@ -167,12 +167,14 @@ public sealed partial class WorldGrants {
             m_driveGates[row.BodyIndex] = row.Reason;
         }
 
-        // A checkpoint replaces the timeline, including the allocator. Keeping epochs from its discarded
-        // future makes the same recorded controller admission mint a different principal on replay.
-        m_sessionEpochs.Clear();
-        m_sessionOrdinalBound = 0;
+        // Only an isolated scenario discards every observer and its timeline. A live load retains retired
+        // epochs so mirrors holding a principal from after the save cannot observe a newly minted session.
+        if (resetSessionEpochs) {
+            m_sessionEpochs.Clear();
+            m_sessionOrdinalBound = 0;
+        }
         foreach (var (ordinal, epoch) in checkpoint.SessionEpochs) {
-            m_sessionEpochs[ordinal] = epoch;
+            m_sessionEpochs[ordinal] = Math.Max(epoch, m_sessionEpochs.GetValueOrDefault(ordinal));
         }
 
         RestoreSessions(sessions: checkpoint.Sessions);
