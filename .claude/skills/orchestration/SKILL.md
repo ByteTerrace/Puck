@@ -509,9 +509,9 @@ thing the owner cares about, not machine load alone:
 
 - time from a lane's last commit to its landing on the integration branch;
 - implementation slots (Codex and agent) not implementing right now;
-- each family's implementation and review turns in the current wave: Claude,
-  Codex and Antigravity each implement or review by fit, so a family with no
-  turn while ready work fits it is a defect to correct in the next brief;
+- each family's implementation and review turns in the current wave, as a
+  check that routing still follows fit rather than habit (a reading, not a
+  quota);
 - the board's age against the newest lane change.
 
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
