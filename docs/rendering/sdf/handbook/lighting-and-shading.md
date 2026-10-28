@@ -197,12 +197,16 @@ in the frame.
   takes no indirect light. A ray is one line wide, so a probe just above a roof
   or beside a doorway still admits a point past that roof or wall through the
   rays that cleared its edge or passed the doorway. Where another of the eight
-  probes cannot see it (their neighbour bit is clear), that probe's plane toward
-  it is the blocker between them, and a point on the near side of that plane
-  lies across it from the far probe, which gives way by the share of its own
-  rays that never met the point's surface (a ray that reached open space or
-  went on past the point admits it only for want of a hit; one that met the
-  surface saw it) (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`). Each
+  answering probes cannot see it (their neighbour bit is clear), its neighbour
+  plane tests the receiver's side. Its finite extent is still unknown, and this
+  separation can over-darken beside a finite blocker; the corresponding review
+  finding remains open. Only a probe
+  surviving an initial separation pass may separate another, weighted by that
+  survival and the candidate's suspect share. A share uses perpendicular plane distance:
+  a hit on the receiver's own surface is evidence at every angle, while open
+  space or a plane far beyond it is suspect. Front eligibility precedes
+  separation; shares read unchanged weights and never empty the gather
+  (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`). Each
   answering probe's weight also
   fades out as the share of the other answering probes' weight it sees and is
   seen by along the lattice falls from three quarters to a quarter (the
