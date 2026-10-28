@@ -214,7 +214,7 @@ verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
 one script rather than one call per sample. `world.view.pick <view> <x> <y>`
 holds its call until a rendered frame answers, a paused World included; a view that
 renders no frame is refused as unanswered when the call's deadline passes (10 seconds in a piped
-session, where the refusal prints on stdout after the `pending` line), and neither hover nor a hover's
+session, where the refusal prints on stderr after the `pending` line on stdout), and neither hover nor a hover's
 release replaces a waiting pick or erases its answer before the asking call reads it. A command text
 with a newline is a script (`commands`, `isError` false); one without is an ordinary command whose refusal is `isError`.
 
