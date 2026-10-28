@@ -461,7 +461,8 @@ check the flag: the owner may be holding the pad.
   `world.reload` inside a batch, never by holding a World open between steps.
   Arm a whole batch with `world.rate pause`, `world.at` scripts at absolute
   ticks and `world.rate resume`, since the World steps on between calls.
-- `--exit-after-seconds 0` or absent runs until the window closes. `--world`
+- `--exit-after-seconds` of 0 or less disables the auto-exit; absent uses the
+  document's `host.exitAfterSeconds`. `--world`
   is required: a package folder (its `manifest.json` names the entry), a
   `.puck` source or a JSON document; without it the boot refuses. `Program.cs` parses the full flag surface;
   host flags are deployment overrides of the document's `host` section.

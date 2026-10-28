@@ -497,6 +497,9 @@ for render-path, shader, presenter, or capture changes. Its authored stations
 exercise specific contracts; passing them does not establish correctness for
 every possible scene. See `puck parity --help` for the current command surface.
 
+While the debug world is the one live world, the canaries and the parity world
+are quarantined and run when the owner calls for qualification
+([quarantined gates](../plans/open-items.md#quarantined-gates)).
 `puck canary --merge` runs the full canary set. It runs every
 [real-World canary](../reference/cli.md#puck-canaryreal-world-behavioral-proofs)
 a merge needs: the automatic set (headless, no environmental requirements) and
@@ -541,9 +544,10 @@ boots each scenario of
 headless in-process and records every tick's per-system state hashes and the
 world's document-level hashes. `puck determinism compare` names the first tick
 and system, or document hash, where two recordings differ. While the debug world
-is the one live world, CI runs no cross-host determinism leg
-([CI](ci.md#build-and-validate)), so record the manifest twice locally, or before
-and after a change, and compare the two streams. A deliberate
+is the one live world the manifest is quarantined and CI runs no cross-host
+determinism leg ([CI](ci.md#build-and-validate)); the check runs when the owner
+calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+A deliberate
 correction to simulation math or logic moves the hashes on both hosts alike, so
 the cross-host compare still agrees and needs no re-recording. A host-dependent
 difference, such as a writer whose line breaks follow the operating system, is

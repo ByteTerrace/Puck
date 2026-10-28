@@ -133,8 +133,12 @@ and a `.world.json` is a cache that `puck compile` derives from it
 ([a derived product is a cache](engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
 The lowered shape changes where the model does, with no read-side tolerance for
 an old one. The tracked `.world.json` files that remain are quarantined under
-`experimental/` or are fixtures in the tests and the Dashboard portal whose
-subject is the JSON document shape itself.
+`experimental/`, fixtures whose subject is the JSON document shape itself
+(`tests/Puck.World.Tests/RoundTripDocuments`, the Dashboard portal's workspace),
+or documents that still owe a `.puck` source compiled when needed:
+`tests/Puck.Counters/debug.world.json` and `avatar.world.json` are workloads
+derived from `debug.puck`, and the browser-parity presentation document is a
+world in its own right, not a shape fixture.
 
 **D11 — Rule groups are runtime constructs.** A fixpoint group evaluates its
 members one pass per tick and closes when a pass changes no row version in its

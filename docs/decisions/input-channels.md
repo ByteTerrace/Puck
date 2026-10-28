@@ -860,8 +860,11 @@ focused tests for what it changed (the Transpiler, Cli.Worlds, Schema, Server an
 Client CPU suites where it reaches them), and shows its behavior by running the
 real World with `--devices none`, using the GPU/heavy-suite leases where needed.
 A scenario file is added only for an invariant that running cannot show
-([AGENTS.md](../../AGENTS.md#puck-is-pre-release)); the demonstrations named
-above are shown by running and are not kept as scenarios. The integration lane
+([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). Checkpoint and hash
+continuity, a mid-session replay restore, and event-time judgement at two
+different simulation rates are such invariants: they stay scenarios, run with
+`puck test --reproduce`. The other demonstrations named above are shown by
+running and are not kept as scenarios. The integration lane
 builds the whole solution, runs the batch's sweep and, after landing, the full
 debug-world replay, following the
 [landing procedure](../../.claude/skills/orchestration/SKILL.md#land-in-batches).

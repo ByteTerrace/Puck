@@ -136,7 +136,7 @@ settles a question, decide by that principle and say why.
    gpu`) and ends it with `puck_world_stop`. A stdin-script recipe boots it by
    hand with `--devices none --headless`
    (`dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --headless --exit-after-seconds 2`;
-   0 or less runs until the window closes). `Puck.World` boots only the world
+   0 or less disables the auto-exit). `Puck.World` boots only the world
    it is handed: without `--world` it refuses. `puck canary` checks game behavior
    only by launching that real executable and observing its stdin, stdout and
    stderr. Never substitute a build-only check, add a `--validate-*` flag, or
