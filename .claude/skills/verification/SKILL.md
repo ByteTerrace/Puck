@@ -95,8 +95,13 @@ in a scratch world, never in engine simulation logic.
 
 CI checks 100% line coverage of live `src/` from the CPU suites on every push
 to `main` (`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside
-what deploy waits for). New code lands with a test that reaches it, and code
-nothing reaches is deleted, not tested. Code only real hardware reaches (a GPU,
+what deploy waits for). New code lands with a test that reaches it, and dead
+internals, duplicates and ledgers that nothing reaches are deleted, not tested.
+"Unreached" is not "unwanted" (the owner's ruling,
+[AGENTS.md](../../../AGENTS.md#puck-is-pre-release)): a product capability
+(capture, input devices, audio or speech, probes, a world or exhibit) that
+nothing calls yet is wired or covered, and the owner is asked before one is
+deleted. Code only real hardware reaches (a GPU,
 or a session's real mouse and foreground window) goes, as a thin seam of
 hardware calls whose decisions are tested apart, in
 `build/CoverageHardwareOnly.txt`, the one exclusion list. To see a suite's coverage
