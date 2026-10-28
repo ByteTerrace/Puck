@@ -397,13 +397,9 @@ other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
 verdicts decide which to keep, and a Claude partner writes the brief and
 checks verifiable constraints, overruling only a hard-constraint violation.
-Concept art a modeller builds from carries no glaring mistake (the owner's
-ruling): every panel passes a written audit by both partners covering
-attachment and continuity, joint range, physical coherence of the pose (thrust
-against motion, weight over the feet), agreement with the turnaround, the
-camera's perspective, compositing seams and the character's fixed facts. A panel
-that fails is regenerated or removed, never kept with a caveat, and the lead
-reviews every panel before merging.
+Every panel passes the written audit in
+[concept art review](../../../docs/game/art/README.md#concept-art-review), and
+the lead reviews every panel before merging.
 
 Pass `effort` on the Agent call to move one lane up or down: `xhigh` for long
 agentic coding on a hard lane, `max` only when correctness outweighs cost.
@@ -432,34 +428,28 @@ Codex lanes reach the same World: the repository's `.codex/config.toml` starts
 the same `puck` MCP launcher, so a companion `task` run in this checkout or a
 worktree of it can call `puck_worlds` and the rest.
 
-| Codex model | Id | OpenAI's positioning | Effort | Price per 1M in / out |
-|---|---|---|---|---|
-| Astra | `gpt-6-astra` | Most capable, for the most demanding work | `low` to `max`; refuses `none` | $10 / $50 |
-| Sol | `gpt-6.1-sol` | Near-Astra for complex coding at lower cost | `low` to `max`, default `medium`; refuses `none` and `minimal` | $2 / $10 |
+| Codex model | Id | Role | Effort |
+|---|---|---|---|
+| Astra | `gpt-6-astra` | The frontier model, for the most demanding work | `low` to `max`; refuses `none` |
+| Sol | `gpt-6.1-sol` | The workhorse, near Astra for complex coding | `low` to `max`, default `medium`; refuses `none` and `minimal` |
 
-Both have a 1,050,000-token context and 128,000 output tokens. The companion's
-`--effort` stops at `xhigh`; `max` needs `codex exec -c
+The companion's `--effort` stops at `xhigh`; `max` needs `codex exec -c
 model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints
-the effort). Prices are API list prices, a guide to relative cost; Codex draws
-on the plan's allowance. Effort is not capability across models: OpenAI's Codex
-guidance says Astra at `low` can outperform Sol at `high`, so a lane that needs
-Sol at `high` or above tries Astra at `low` or `medium` first. Raising effort
-never supplies a missing file, tool or permission; fix the brief first. Codex
-also offers GPT-5.6 Terra (everyday work, routine code changes) and GPT-5.6 Luna
-(fast, focused or repetitive edits), the scout tier of that family. Astra asks more questions when input
+the effort). Codex draws on the plan's allowance. Effort is not capability
+across models: OpenAI's Codex guidance says Astra at `low` can outperform Sol at
+`high`, so a lane that needs Sol at `high` or above tries Astra at `low` or
+`medium` first. Raising effort never supplies a missing file, tool or
+permission; fix the brief first. Astra asks more questions when input
 could change the result and follows `AGENTS.md` and skills more literally, so an
 Astra brief states its authority and finish line outright. The owner's own Codex Desktop thread holds a writer lock while it is
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
 
 Antigravity is the third family, running Gemini 4 Argon (Google's flagship,
-on the owner's Google AI Ultra plan; an Antigravity lane launches as above). Its published results
-put it level with Astra overall (Artificial Analysis Intelligence Index about
-53) and ahead on repository issue fixing (DeepSWE), app and UI generation and
-security remediation (CWE-bench), behind Opus and Astra on long terminal-driven
-and long-horizon work (Terminal-bench, FrontierSWE), with a 1M-token context
-and about twice Astra's output per task; most figures are vendor-reported.
-Route it accordingly:
+on the owner's Google AI Ultra plan; an Antigravity lane launches as above). It
+is strong at repository issue fixing, app and UI generation, security
+remediation and large-context analysis, and weaker on long terminal-driven and
+long-horizon work. Route it accordingly:
 
 | Give Argon | Keep from Argon |
 |---|---|

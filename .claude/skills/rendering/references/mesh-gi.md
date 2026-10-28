@@ -121,26 +121,21 @@ Read the primary view's meter after the scene and lighting settle, and during
 changes: an initial `meter=none` alone cannot establish that a settled room has
 no visible probe. Keep the authored exposure bounds and world headroom intact.
 
-The `codex-gi2` continuation captured a cold Vulkan shaft before and after
-the main GI trace. The near-black early view had no meter; after 496 static
-draws were ready and the three-sweep GI completed, the shaft and hall beauty
-views looked close to Direct3D. This narrows the large darkness difference
-to readiness in that run, not a demonstrated Vulkan shading failure. It is
-not full parity qualification: other geometry was still baking, and the
-shaft's probe meter was 4.087 nits versus Direct3D's 6.576 (both at EV100 7).
-Repeat on the same source state with all geometry settled to isolate that
-remaining difference.
+A cold Vulkan boot shows a near-black shaft with no meter until the static draws
+are ready and the three-sweep GI completes; capture only after that, and
+compare Vulkan with Direct3D on the same source state with all geometry settled
+([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
+records the remaining shaft difference).
 
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the
 toroidal volume creates no rectangular wall patch or bright distance band.
 The teal corner must also stay closed high up where its walls meet the roof;
 checking only the lower stepped strip misses the diagonal-probe case.
-Aim the same eye at `4.60 4.2 29.76` to inspect that junction. The `codex-expo2`
-before/after comparison found a remaining triangular bright patch there in both
-indirect and final shading; its cause is unconfirmed and tracked in
-[open items](../../../../docs/plans/open-items.md). Do not infer a clean roof
-from the lower reference view.
+Aim the same eye at `4.60 4.2 29.76` to inspect that junction: a triangular
+bright patch can remain there in both indirect and final shading (tracked in
+[open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)).
+Do not infer a clean roof from the lower reference view.
 
 ## Gallery isolation checks
 
@@ -156,28 +151,20 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 
 The SPHERE step and REVOLVED floor rectangle reproduce in `indirect`; the
 floor is shadowed in `shadow`. Do not attribute those patches to sun cascades.
-Removing mutual-probe weighting alone leaves the SPHERE step. Removing depth
-rejection reduces the discontinuity but admits light through walls; smoothing
-the directional planes while dropping axis rejection reopens the high teal
-roof junction. Neither is a valid repair. The six first-hit depths and 26
-planes are coarse support, and can reject visible receivers beside a finite
-occluder; normalization cannot recover light when all accepted weights vanish.
-The SPIN dotted ceiling seam reproduces in beauty but not in indirect and
-needs a separate geometry/direct-light investigation. Settled normal and
-shadow captures do not show the dotted seam either; that does not yet isolate
-its cause. A 27-probe quadratic support experiment still left the SPHERE
-step and was discarded; wider filtering alone is not a demonstrated repair.
+The six first-hit depths and 26 planes are coarse support, and can reject
+visible receivers beside a finite occluder; normalization cannot recover light
+when all accepted weights vanish. The SPIN dotted ceiling seam reproduces in
+beauty but not in `indirect`, `normals` or `shadow`
+([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
+records the experiments).
 
 COAT's authored `specular: 0.35` is dielectric F0, not coat strength: it
 reflects a substantial neutral environment over its red diffuse albedo.
 `coat` currently adds a direct-light lobe in `sdfMaterialSpecular`; it is not
 read by the environment-reflection branch in `sdf-light-stage.hlsli`. Compare
 the material with coat disabled separately from changing its base F0 before
-attributing a pale colour to the coat layer. The continuation's settled
-Direct3D captures confirm this isolation: coat zero leaves the salmon colour;
-keeping coat at 0.5 and reducing base F0 from 0.35 to 0.04 restores a saturated
-red. These were live diagnostic edits, restored before the run ended, not a
-change to the authored exhibit or exposure.
+attributing a pale colour to the coat layer: coat zero leaves the salmon colour,
+while coat 0.5 with base F0 reduced from 0.35 to 0.04 restores a saturated red.
 
 See the [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 for the lighting model and [verification](../../verification/SKILL.md) for GPU

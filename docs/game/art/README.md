@@ -12,6 +12,22 @@ documents remain the implementation sources.
 | [Armored chibi hero implementation brief](armored-chibi-hero-brief.md) | Character design and motion | Aesthetic brief defining silhouette, chunky chibi anime armor, materials, and movement dynamics for the hero avatar within Puck's signed-distance renderer. |
 | [Moth concept pack](moth-concept-pack/README.md) | Concept art and model sheets | The Moth's visual standard: the mech-suit turnaround, construction details, poses and expressions, flight, the off-suit Moth with her scale and fit inside the suit, the handheld at true scale, the flight-pack references and prompt provenance. |
 
+## Concept art review
+
+Concept art a modeller builds from carries no glaring mistake (the owner's
+ruling). Every panel passes a written audit by both partners, the artist and the
+checking partner, covering:
+
+- attachment and continuity;
+- joint range;
+- physical coherence of the pose (thrust against motion, weight over the feet);
+- agreement with the turnaround;
+- the camera's perspective;
+- compositing seams;
+- the character's fixed facts.
+
+A panel that fails is regenerated or removed, never kept with a caveat.
+
 ## Authored avatars
 
 Live avatar implementations, authored SDF primitives, and in-game controls live directly alongside the world assets:
