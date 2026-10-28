@@ -9,6 +9,24 @@ starting work, and tick or remove an item in the same change that closes it.
 - [ ] Boot once. `puck test` boots the whole debug world afresh for every scenario and again for `--reproduce` (166 scenarios, about 330 boots, about 45 minutes). Boot it once, checkpoint, restore the checkpoint before each scenario, and prove reproduction by replaying the recorded input rather than a second boot.
 - [ ] Prune scenarios. The count grew from 22 to 166 in a week because lane briefs asked for every demonstration as a scenario. Keep a scenario only for an invariant running cannot show (AGENTS.md), fold duplicates, and stop briefs asking for scenarios by default; the input branch's seven new files are first.
 
+## Debug world walkthrough findings
+
+Flagged by the owner while playing the debug world and reproduced by the lead. Poses are `body.pose <x> <y> <z> <yaw> 0 0`; overlays are `world.debug-view <mode>`.
+
+- [ ] Indirect light fails around walls, junctions and exhibits. Every case shows in `world.debug-view indirect` and none in `normals`, `material-id` or `ao`:
+  - Surfaces facing a near wall take bright light (white slivers along the Moth's wall-side silhouette at `10.67 2.32 39.33 156`, and the gold rims she shows in every interior room).
+  - A bright line runs along wall–floor junctions.
+  - Dead black or brown patches where stairs meet walls (no probe answers): flight A on level 1 around `13.73 3.47 36.89`, the foot of flight A at `11.73 5.31 35.24`, black wedges at the nosings on levels 0 and 1, a black band under the level 2 landing.
+  - Level 3 of the stairwell renders almost black with speckled bright edges.
+  - Hard-edged light and dark rectangles beside gallery plinths, aligned to the plinths rather than any light, and solid black blocks at some plinth bases (the level 2 aisle, x 21 to 50 at z 31).
+  - Beside the level 3 `EMISSIVE` exhibit (`31.74 13.57 22.28`), pitch-black hard shadows of the plinths stretch away from the glowing sphere, and the neighbouring bumpy shape shows jagged blown-out patches on its facing side.
+  Whether these share one cause in the gather (`sdfMeshProbesAt`, its depth visibility and mutual shares) is unconfirmed.
+- [ ] Thin bright lines run along gallery shapes (the torus's crown and inner rim, a ring round the capsule, cylinder tops, box and stair nosing edges) and across the Moth's shoulder pads. They are absent from the `normals`, `material-id`, `shadow`, `ao` and `indirect` views and remain with the curvature terms and the specular terms removed, so they come from a later pass or a crack in the baked mesh; rendering the same shapes without the bake decides which.
+- [ ] Flight B's east side is open beside the lift shaft at z 34.5 to 36 on every storey: `hall-stairs` builds flights, landings and the divider only, and the shaft begins at z 36. Seen from `12.67 7.63 36.82 306`. Whether that side should be closed is a design call.
+- [ ] The chess table's idle demonstration feeds its recorded moves as `seat1` every 90 ticks, and each `chessInput` batch reaches the seat's HUD as its own mutation toast. A replay scope's inputs should not narrate as the seat's own actions.
+- [ ] A recording armed mid-session does not reproduce: after a few minutes of play, `replay.record` then `replay.stop` reports `MISMATCH at tick 0` with PopulationPose, Arena, RuleLatch, BodyContinuation, Input and ScopedReplays differing, so the start checkpoint the re-drive restores is not the live state at the arm.
+- [ ] `world.view.pick` stays pending with no answer while `world.rate pause` holds the world.
+
 ## Awaiting the owner's review
 
 Ideas discussed with the owner and not yet queued. None starts until the owner
