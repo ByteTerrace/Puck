@@ -159,7 +159,6 @@ public sealed partial class CrossingTapeOrderLawTests {
             using var stream = File.OpenRead(path: Tape.PathFor(name: name));
 
             return [.. WorldReplaySnapshot.Read(stream: stream).Ticks.SelectMany(selector: static tick => tick.Authority).Select(selector: static entry => WorldReplayEntryDescriber.Describe(
-                channels: Channels,
                 entry: entry
             ))];
         }

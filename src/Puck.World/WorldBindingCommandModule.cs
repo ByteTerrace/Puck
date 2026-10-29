@@ -338,6 +338,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
 
         var document = m_seatBindings.ComposedDocument(slot: slot);
         var builder = new StringBuilder(value: $"[player.bindings: seat {PlayerRoster.DisplayNumber(slot: slot)}");
+        builder.Append(value: ' ').Append(value: m_server.Input.DescribeBody(body: slot));
         var defaultGroup = ((document.Chords is { Count: > 0 } chords)
             ? (string)chords[0].Group
             : string.Empty
@@ -476,7 +477,10 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
     // reads diff cleanly. Hand-built — names, kinds, and routings are identifier-safe by construction (the registry's
     // own claim guard owns name hygiene), so no serializer dependency is warranted for one flat array.
     private string DescribeAffordances() {
-        var builder = new StringBuilder(value: "[world.affordances:");
+        var builder = new StringBuilder(value: "[world.affordances: {\"commands\":");
+        var catalog = m_server.Population.InputCatalog;
+        var body = m_server.Body(index: 0);
+        var mapping = catalog.Mappings[(body?.InputMappingId ?? catalog.DefaultMapping.Id)];
         var count = 0;
 
         // The registry already hands these out ordinal-sorted by name, so two reads diff cleanly.
@@ -506,7 +510,10 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
 
         var channelCount = 0;
 
-        foreach (var channel in m_server.Definition.Channels) {
+        foreach (var channel in catalog.Channels) {
+            catalog.TryGetLogicalId(name: channel.Name, id: out var logical);
+            var active = mapping.IsLive(logicalId: logical);
+            var address = mapping.Address(logicalId: logical);
             _ = builder.Append(value: ((channelCount > 0)
                 ? ","
                 : "["))
@@ -515,7 +522,11 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
                 .Append(value: "\",\"consumer\":\"").Append(value: ((channel.Role is { } role)
                 ? role.ToString().ToLowerInvariant()
                 : "composition"))
-                .Append(value: "\"}");
+                .Append(value: "\",\"active\":").Append(value: (active ? "true" : "false"))
+                .Append(value: ",\"value\":").Append(value: System.Text.Json.JsonSerializer.Serialize(value:
+                    (!active ? "inactive(selected mode)" : ((address < 0) ? "event-only" :
+                    mapping.Channels.DescribeValue(intent: (body?.ChannelReadComposed ?? default), ordinal: address)))))
+                .Append(value: '}');
             channelCount++;
         }
 
@@ -524,7 +535,8 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
             : builder.Append(value: "[]")
         );
 
-        return builder.Append(value: ']').ToString();
+        builder.Append(value: ",\"input\":").Append(value: System.Text.Json.JsonSerializer.Serialize(value: m_server.Input.DescribeBody(body: 0)));
+        return builder.Append(value: "}]").ToString();
     }
     // A command destination's label for player.bind's echo and player.bindings' read-back: the bare name, or the
     // name plus its trailing value:<v> when the entry carries a constant activation value (the same visibility
@@ -1048,7 +1060,7 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
-            description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, BINDABILITY, and audience (anyone, or operator for a verb the registry answers for the console alone), with \\\"authored\\\": true on a command the live document's `commands` section authors — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
+            description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, BINDABILITY, and audience (anyone, or operator for a verb the registry answers for the console alone), with \\\"authored\\\": true on a command the live document's `commands` section authors — as one compact JSON object with commands, channels and input: world.affordances. Commands are sorted by name; channels report current-mode eligibility and values for the primary body, and input names its tuple, epoch and continuation. Compiled binding handles are internal and absent from this vocabulary. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.affordances"

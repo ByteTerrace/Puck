@@ -311,7 +311,7 @@ public sealed partial class PlayerRoster {
     public void ObserveDevice(InputDeviceId device, InputDeviceKind kind, string name) {
         ArgumentException.ThrowIfNullOrEmpty(argument: name);
 
-        var firstSeen = !m_deviceKind.ContainsKey(key: device);
+        var firstSeen = !m_deviceOrder.Contains(item: device);
 
         m_deviceKind[device] = kind;
         m_deviceName[device] = name;

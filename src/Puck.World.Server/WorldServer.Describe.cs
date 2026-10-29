@@ -289,7 +289,7 @@ public sealed partial class WorldServer {
                 : "no")}");
         }
 
-        return $"[body.channels: body:{bodyIndex} {routeText} pointer={DescribePointer(ray: composed.SourceRay)} {string.Join(
+        return $"[body.channels: body:{bodyIndex} {Input.DescribeBody(body: bodyIndex)} {routeText} pointer={DescribePointer(ray: composed.SourceRay)} {string.Join(
             separator: " | ",
             values: segments
         )}]";

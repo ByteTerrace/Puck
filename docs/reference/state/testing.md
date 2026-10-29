@@ -76,10 +76,7 @@ dotnet test tests/Puck.State.Rebuild.Corpus -c Release
 
 The corpus drives the transpiler in process, so it needs no running world. Its
 [README](../../../tests/Puck.State.Rebuild.Corpus/README.md) lists the sources
-it reads and the one source it excludes. The same project generates
-[the corpus inventory](../../../tests/Puck.State.Rebuild.Corpus/inventory.md), a count of every construct
-those sources use, and fails when the committed page disagrees with the corpus or a game package's claimed
-construct is missing from its own source.
+it reads and the one source it excludes.
 
 ## Test a world with its own verdicts
 
