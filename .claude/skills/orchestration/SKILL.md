@@ -556,6 +556,10 @@ not a spiral:
   few seconds: each check is a model turn, and a boot-once run of 40 file legs
   polled that way spent hours of tokens and wrote a 2 MB log saying "still
   running". A brief with a long run says how to wait for it.
+- The lead starts each lane as its own background task, so each lane's end
+  arrives as its own notification. Lanes launched together in one background
+  command report only when the last one ends: a lane that finished first sat
+  unseen for an hour and a half that way.
 - Findings never bounce between a reviewer and an author: a finding goes to the
   pile with its owner and is not argued back and forth.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30
