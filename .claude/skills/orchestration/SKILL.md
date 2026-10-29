@@ -360,6 +360,12 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   around each heavy suite, sample headroom while holding it, and release it on
   every exit. Nested runs under `puck lease heavy` serialize on child leases
   after validating the ancestor holder's process identity.
+- Lease admission is a queue, not a race: `puck lease` waiters take tickets and
+  the oldest live ticket gets the lease, so a lane that releases and re-acquires
+  waits behind everyone already queued, and a long `--wait` is never starved by a
+  later arrival. A waiter that is killed leaves a ticket the next waiter drops;
+  a stale `<name>.queue` entry needs no manual cleanup
+  ([CLI reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work)).
 - On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
   step only with more free memory than the capacity threshold and more free
   disk than the pressure threshold, so a running agent waits rather than being

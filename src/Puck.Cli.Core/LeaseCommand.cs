@@ -34,7 +34,7 @@ public static class LeaseCommand {
 
                 return run.ExitCode;
             });
-            command.Detail(detail: (("Use: puck lease " + name) + " --holder <lane> [--wait <seconds>] -- <executable> <arguments...>\nThe shared main checkout owns .claude/leases/. A lease older than one hour is reclaimed only when its holder process is gone. Child failure preserves its exit code; cancellation kills the child tree and releases the lease."));
+            command.Detail(detail: (("Use: puck lease " + name) + " --holder <lane> [--wait <seconds>] -- <executable> <arguments...>\nThe shared main checkout owns .claude/leases/. Waiters are admitted first come, first served through tickets in .claude/leases/<name>.queue; a ticket of an exited process is dropped. A lease older than one hour is reclaimed only when its holder process is gone. Child failure preserves its exit code; cancellation kills the child tree and releases the lease."));
             root.Subcommands.Add(item: command);
         }
         return root;
