@@ -40,7 +40,8 @@ public sealed record OperatorWorldBuild(string? Path, IDisposable? Lease, string
 /// so none outlives the adapter that started it.
 /// </summary>
 internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider clock) : IDisposable {
-    internal const int MaxStartSeconds = 1800;
+    // Admission includes the fair GPU queue: six twenty-minute verification lanes can exceed a thirty-minute cap.
+    internal const int MaxStartSeconds = 7200;
     /// <summary>The longest single wait on a pending start, in milliseconds; the same ceiling a console call has.</summary>
     internal const int MaxWaitMilliseconds = 120_000;
 
