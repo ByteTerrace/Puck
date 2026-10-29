@@ -915,6 +915,11 @@ unverified when no device run exists.
   `puck lease heavy --holder <lane> -- dotnet build Puck.slnx -c Release '-nodeReuse:false'`.
   Without the quotes, PowerShell can hand the child `-nodeReuse:` and `false`
   as separate arguments, which MSBuild refuses with MSB1041.
+- When measuring a background child with Windows PowerShell's `Start-Process -PassThru`,
+  retain its process handle immediately (`$null = $child.Handle`) before waiting.
+  Otherwise `WaitForExit()` can complete with a null `ExitCode`, and a runner can
+  mistake a successful build for a failure. Retain the worker's handle too when
+  reading its final CPU time after a longer coordinator run.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with
