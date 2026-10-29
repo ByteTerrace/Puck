@@ -126,13 +126,13 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             name: "body.rig",
             description: "Echoes a body's current input mode, named action types/values and continuation alongside its live creation-look rig state: [body.rig: body:<n> creation=<id> speed=s.ss drivers=<count> effectors=<count> driver:<name> phase=p.pp weight=w.ww … effector:<name> weight=w.ww planted=yes|no|stepping target=(x.xx, y.yy, z.zz)|none …]. speed= is the eased rendered speed the moving/still gate tokens test; a driver's phase= is radians in [0, 2pi) and weight= its eased gate value; an effector's target= is the WORLD point its tip is being asked for this frame, so a scripted run can fence twice and assert a planted foot's target is unchanged while body.where moved; planted=stepping is a resting plant mid-step to a new point. An effector whose chain resolved to too few bones prints bones=<count> and is inert. body.rig [body] [shape] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; a shape name after the index appends shape:<name> parent=<name>|root delta=(x.xx, y.yy, z.zz) turn=r.rr, the parent its motion chains under and the rigid delta the last frame composed for it in creation units and radians, so a live parent or swings edit can be read back, or shape:<name> none when the creation has no such shape). Without a creation rig, including headlessly, input still reads back and creation-rig=none names the absent animation data. A trailing instance:<name> reads that instance with the same zero-based body index.",
             handler: RigHandler
-        ) with { HelpDetails = slot => m_server.Input.DescribeBody(body: slot) };
+        ) with { HelpDetails = InputHelp };
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.channels",
             description: "Echoes the channel decision read-back for a body — per DECLARED channel, the fold's value and owning-seat base, the held overlay admitted later and its composed result, every fold contributor tagged by principal (trusted/untrusted), the pool ceiling in force, and whether the pool actually clamped this write: body.channels [body] (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries). A held source reaches a role channel (one declaring a role, such as MoveUp) through the fold, so it shows in folded and h with held 0, and a composition channel through the held overlay, so it shows in held with folded 0; composed is the value the body reads either way. The fold only ever exists over a human-occupied body (a local seat or an admitted peer); any other target reports that plainly rather than fabricating a base/pool.",
             handler: ChannelsHandler
-        ) with { HelpDetails = slot => m_server.Input.DescribeBody(body: slot) };
+        ) with { HelpDetails = InputHelp };
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "body.state",
@@ -213,7 +213,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             description: "Presses ANY declared channel — movement roles included — for a timed auto-release: body.press <channel> [value] [holdSeconds] [body]. <channel> is a name from world.affordances' channels section; [value] defaults to the shape's max (1) and is validated against the channel's shape (binary: 0 or 1; unipolar: [0,1]; bipolar: [-1,1]); [holdSeconds] how long it reads held (default a short host-step-derived tap, bounded authoritatively by the deciding Drive grant's hold:<seconds> policy — WorldGrant.DefaultHoldSeconds=2 absent an explicit row — and the 60-second engine backstop). The echo names the TRUE outcome, never an assumed one: a non-positive [holdSeconds] is ignored outright (echoed plainly, no cap blamed); a request either cap truncates echoes the EFFECTIVE hold and names whichever cap structurally bound it (the grant's hold budget, or the engine's hold ceiling when the grant permits the full backstop and the request still exceeds it); a refused command (e.g. a CC/death Drive gate) echoes the refusal, never an affirmative; under no cap and no refusal the echo is unchanged. A press carrying a DIFFERENT value than an action's in-flight hold (materialized or still pending) replaces it outright (its own duration), so an opposing press is never silently swallowed by a longer hold's remaining ticks; a re-press carrying the SAME value only ever extends. [body] the trailing index 0..4095 (default 0 — 0..3 seats, 4..4095 population). The press is INDEPENDENT of the movement tape, so body.fly … then body.press jump fires a runner mid-segment. On a composition channel, what the press DOES is the target's kit binding (the default world's grounded kits bind the vertical impulse via \"jump\" — a short hold = short hop, a long hold = full arc via variable height; an unbound channel leaves it inert). There is no sugar verb for a bound button — the bound control rides its own channel-generic command (see world.affordances); this is the scripted/wire twin reaching every channel.",
             handler: PressHandler,
             ackOnly: true
-        ) with { HelpDetails = slot => m_server.Input.DescribeBody(body: slot) };
+        ) with { HelpDetails = InputHelp };
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.control",
@@ -386,7 +386,16 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
             ? command
             : command with { Routing = CommandRouting.Simulation }
         );
-    private bool TryRoutedSeatQuery(in WireArgs args, Func<int, WorldQuery> query, out CommandResult result) {
+    // The input read-back appended to prefixed help for the asking seat, from the authority the seat is routed to and
+    // under the asking principal's Observe grant.
+    private string InputHelp(int slot, Principal caller) => WorldInputReadBack.ForSeat(
+        bootLink: m_link,
+        caller: caller,
+        query: static index => new WorldQuery.PlayerInput(Index: index),
+        router: seatRouter,
+        slot: slot
+    ).Text;
+    private bool TryRoutedSeatQuery(in WireArgs args, Func<int, WorldQuery> query, out CommandResult result, Principal? caller = null) {
         result = default;
         if (
             !WorldArgs.TryParseIndex(
@@ -423,6 +432,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         // the shared helper's 1-based QueryIndex, since this family's WorldQuery kinds are 0-based by convention,
         // unlike Audio/Collision's.
         return seatRouter.TryRouteQuery(
+            caller: caller,
             factory: authorityIndex => query((authorityIndex - 1)),
             result: out result,
             slot: slot,

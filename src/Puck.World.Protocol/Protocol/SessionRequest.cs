@@ -79,6 +79,8 @@ public abstract record WorldQuery {
         StateObservations { Row: { } row } => GrantSubject.State(name: row),
         PlayerWhere where => GrantSubject.Body(index: where.Index),
         PlayerChannels channels => GrantSubject.Body(index: channels.Index),
+        PlayerInput input => GrantSubject.Body(index: input.Index),
+        PlayerAffordances affordances => GrantSubject.Body(index: affordances.Index),
         PlayerState state => GrantSubject.Body(index: state.Index),
         PlayerTargets targets => GrantSubject.Body(index: targets.Index),
         Contacts contacts => GrantSubject.Body(index: (contacts.Index - 1)),
@@ -98,6 +100,17 @@ public abstract record WorldQuery {
     /// principal, and the pool ceiling/clamp state (see <c>Server.WorldServer.Answer</c>).</summary>
     /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerChannels(int Index) : WorldQuery;
+    /// <summary>The input read-back for one entity: its selected tuple and epoch, every declared action's value, and the
+    /// owning principals' sources, holds and kept continuations. It names another body's live input, so it crosses
+    /// <see cref="WorldCapability.Observe"/> over that body like the other body read-backs.</summary>
+    /// <param name="Index">The 0-based body index.</param>
+    public sealed record PlayerInput(int Index) : WorldQuery;
+    /// <summary>The channel and input members of the affordance manifest for one entity (<c>world.affordances</c>):
+    /// every declared action with its shape, consumer, eligibility and value in the entity's selected tuple, and its
+    /// <see cref="PlayerInput"/> read-back. It names another body's live input, so it crosses
+    /// <see cref="WorldCapability.Observe"/> over that body.</summary>
+    /// <param name="Index">The 0-based body index.</param>
+    public sealed record PlayerAffordances(int Index) : WorldQuery;
 
     /// <summary>The roster glance across every local seat (<c>world.players</c>).</summary>
     internal sealed record WorldPlayers : WorldQuery;
