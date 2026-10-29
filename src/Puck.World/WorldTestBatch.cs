@@ -55,7 +55,7 @@ internal sealed class WorldTestBatch {
 
         batch.m_workingDirectory = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: legs[0].World)!, path2: "..",
             path3: ("worker-" + Path.GetFileName(path: Path.GetDirectoryName(path: legs[0].Directory)))));
-        var stateDirectory = Path.Combine(path1: batch.m_workingDirectory, path2: "state");
+        var stateDirectory = batch.m_workingDirectory + "-state";
 
         if (Directory.Exists(path: stateDirectory)) { Directory.Delete(stateDirectory, recursive: true); }
         Console.SetOut(newOut: TextWriter.Synchronized(writer: output));
@@ -73,7 +73,7 @@ internal sealed class WorldTestBatch {
                 exit = await boot([
                 "--devices", "none", "--world", batch.WorkingWorld, "--headless", "true", "--unpaced", "true",
                 "--exit-after-seconds", "0",
-                "--state-dir", Path.Combine(path1: batch.m_workingDirectory, path2: "state"),
+                "--state-dir", stateDirectory,
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
                 batch.m_legDeadline?.Dispose();
@@ -118,9 +118,12 @@ internal sealed class WorldTestBatch {
         var leg = m_legs[m_index];
 
         Directory.CreateDirectory(path: m_workingDirectory);
-        foreach (var file in Directory.EnumerateFiles(path: m_workingDirectory)) { File.Delete(path: file); }
-        foreach (var file in Directory.EnumerateFiles(path: Path.GetDirectoryName(path: leg.World)!)) {
-            File.Copy(file, Path.Combine(path1: m_workingDirectory, path2: Path.GetFileName(path: file)), overwrite: true);
+        foreach (var file in Directory.EnumerateFiles(path: m_workingDirectory, searchPattern: "*", searchOption: SearchOption.AllDirectories)) { File.Delete(path: file); }
+        var sourceDirectory = Path.GetDirectoryName(leg.World)!;
+        foreach (var file in Directory.EnumerateFiles(path: sourceDirectory, searchPattern: "*", searchOption: SearchOption.AllDirectories)) {
+            var target = Path.Combine(m_workingDirectory, Path.GetRelativePath(sourceDirectory, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
         }
         Directory.CreateDirectory(path: leg.Directory);
         File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "process-id"), Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture));
@@ -184,7 +187,12 @@ internal sealed class WorldTestBatch {
             foreach (var (name, probe) in m_probes) {
                 int divergence;
 
-                try { divergence = probe.Verify(); } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
+                try {
+                    Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
+                    divergence = probe.Verify(tick => {
+                        if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick replay {name} {tick}]"); }
+                    });
+                } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
 
                 results.Add(item: new { world = name, divergence });
                 if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}"); }

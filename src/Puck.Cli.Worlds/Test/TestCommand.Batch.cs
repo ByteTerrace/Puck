@@ -8,12 +8,12 @@ public static partial class TestCommand {
     // A boot owns a cohort, not just its root document. Include every staged companion and asset copied
     // into the worker, so two scenarios cannot share a companion's state or rules from another package.
     private static string BatchShape(TestWorld world) => ((Path.GetFileName(path: world.Path) + "\n") + string.Join(separator: "\n",
-        values: Directory.EnumerateFiles(path: Path.GetDirectoryName(path: world.Path)!).Order(comparer: StringComparer.Ordinal).Select(selector: path => {
+        values: Directory.EnumerateFiles(path: Path.GetDirectoryName(path: world.Path)!, searchPattern: "*", searchOption: SearchOption.AllDirectories).Order(comparer: StringComparer.Ordinal).Select(selector: path => {
             var bytes = File.ReadAllBytes(path: path);
             var shape = (((path == world.Path) || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".world.json"))
                 ? Puck.World.Server.WorldPersistence.ScenarioBootShape(json: bytes)
                 : Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
-            var name = Path.GetFileName(path: path);
+            var name = Path.GetRelativePath(relativeTo: Path.GetDirectoryName(path: world.Path)!, path: path).Replace('\\', '/');
 
             return $"{name.Length}:{name}:{shape}";
         })));

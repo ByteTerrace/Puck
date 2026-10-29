@@ -68,7 +68,7 @@ public sealed partial class WorldReplayTape {
             if (companion.Mode == WorldReplayMode.Recording) {
                 _ = companion.CancelRecording();
             }
-            if (owned && ReferenceEquals(
+            if (owned && (companion.m_probes.Count == 0) && ReferenceEquals(
                 objA: row.Tape,
                 objB: companion
             )) {
@@ -87,7 +87,7 @@ public sealed partial class WorldReplayTape {
                 tapes.Add(item: companion.SnapshotRecording());
                 companion.ResetRecordingState();
             }
-            if (owned && ReferenceEquals(
+            if (owned && (companion.m_probes.Count == 0) && ReferenceEquals(
                 objA: row.Tape,
                 objB: companion
             )) {

@@ -45,10 +45,17 @@ public sealed class TestCommandLawTests {
         directory.WriteText(name: "isolation.puck", text: """
             schema: "puck.world.definition.v1"
             documentId: "same"
-            state { world { table value { "0" = 7 } } }
+            grants [
+              { capability: Mutate, grantee: "seat1", subject: "section:state" }
+              { capability: Edit, grantee: "seat1", subject: "all" }
+            ]
+            state { world {
+              table value { "0" = 7 }
+              table marker { "0" = 7 }
+            } }
             test "pristine" {
               when {
-                seat1: world.state.cell.set value 0 7
+                seat1: world.state.cell.set marker 0 7
               }
               expect { value[0] >= 7 }
             }
@@ -60,7 +67,7 @@ public sealed class TestCommandLawTests {
             }
             test "pristine again" {
               when {
-                seat1: world.state.cell.set value 0 7
+                seat1: world.state.cell.set marker 0 7
               }
               expect { value[0] >= 7 }
             }
@@ -82,7 +89,7 @@ public sealed class TestCommandLawTests {
         using var error = new StringWriter();
 
         Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: directory.PathOf(name: "fresh"),
-            exportTick: 2, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
+            exportTick: 7, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")), actual: fresh!.ExportBytes);
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/test-run.json")), actual: fresh.ManifestBytes);
     }

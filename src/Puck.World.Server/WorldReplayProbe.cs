@@ -39,8 +39,9 @@ public sealed class WorldReplayProbe : IDisposable {
     }
 
     /// <summary>Restores the start into this authority and feeds its recorded inputs through the ordinary replay doors.</summary>
+    /// <param name="progress">Optional completed-tick notification for the worker's progress watchdog.</param>
     /// <returns>The first divergent recorded tick, or -1 when every hash, machine core and final export matches.</returns>
-    public int Verify() {
+    public int Verify(Action<int>? progress = null) {
         Dispose();
         m_tape.SuspendCapture();
         try {
@@ -66,6 +67,7 @@ public sealed class WorldReplayProbe : IDisposable {
                 if (WorldStateHashComposition.HashAuthoritative(server: m_server, tick: (m_server.NextInputTick - 1)) != m_hashes[tick]) {
                     return tick;
                 }
+                progress?.Invoke((tick + 1));
             }
             return ((m_finalExport.AsSpan().SequenceEqual(other: WorldStateExport.ToCanonicalJson(server: m_server)) &&
                 m_finalMachines.SequenceEqual(second: WorldReplaySnapshot.MachineDigests(machines: m_server.Machines))) ? -1 : m_inputs.Count);
