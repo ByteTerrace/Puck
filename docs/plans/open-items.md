@@ -781,6 +781,8 @@ Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
 
+- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
+
 - An invalid wait argument on a pending operator MCP start caches the argument
   refusal as the start's completed result: `OperatorMcpFront.Record`
   (`src/Puck.Mcp/OperatorMcpFront.cs:101-108`) stores any non-pending
