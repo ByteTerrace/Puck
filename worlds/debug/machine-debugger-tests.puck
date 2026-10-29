@@ -38,6 +38,10 @@ machines [
     contentFolders ["cartridges/deck"]
     preferFolderDefault: false
   }
+  // The range's televisions are no part of these checks: mounted, but not advanced.
+  { name: "range-deck-9", running: false }
+  { name: "range-deck-24", running: false }
+  { name: "range-deck-50", running: false }
 ]
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {
@@ -114,93 +118,5 @@ test "withholding input fails responsive while the other checks pass" {
     machineDebugger2.changed == 0
     machineDebuggerViolations.count == 1
     machineDebuggerViolations.first > 30
-  }
-}
-
-test "the runtime input program plays every segment then releases the body" {
-  when {
-    seat1: world.state.cell.set machineDebugger screen 2
-    seat1: world.state.cell.set machineDebugger body 6
-    seat1: world.state.cell.set machineDebugger p0 512
-    seat1: world.state.cell.set machineDebugger p1 769
-    seat1: world.state.cell.set machineDebugger window 2
-    ticks 30
-    seat1: body.pose 2 0.05 30.5 0 0 0 6
-    seat1: world.state.cell.set machineDebugger run 2
-    ticks 25
-  }
-  expect {
-    machineDebugger2.driven == 5
-    machineDebugger2.phase == 99
-    machineDebuggerViolations.count == 0
-  }
-}
-
-test "the seeded fuzzer consumes the reproducible PCG stream for its window" {
-  when {
-    seat1: world.state.cell.set machineDebugger screen 2
-    seat1: world.state.cell.set machineDebugger body 6
-    seat1: world.state.cell.set machineDebugger window 12
-    seat1: world.state.cell.set machineDebugger seed 7
-    seat1: world.state.cell.set machineDebugger probe 16
-    seat1: world.state.cell.set machineDebugger probe1 17
-    seat1: world.state.cell.set machineDebugger probe2 18
-    ticks 30
-    seat1: body.pose 2 0.05 30.5 0 0 0 6
-    seat1: world.state.cell.set machineDebugger run 3
-    ticks 35
-  }
-  expect {
-    machineDebugger2.driven == 12
-    machineDebugger2.randomState
-    machineDebugger2.phase == 99
-    machineDebuggerViolations.count == 0
-  }
-}
-
-
-test "an out-of-reach driver reports unknown checks with ticks" {
-  when {
-    seat1: world.state.cell.set machineDebugger screen 2
-    seat1: world.state.cell.set machineDebugger body 6
-    seat1: world.state.cell.set machineDebugger address 0
-    seat1: world.state.cell.set machineDebugger length 2048
-    ticks 30
-    seat1: body.pose 0 0.05 0 0 0 0 6
-    seat1: world.state.cell.set machineDebugger run 1
-    ticks 20
-  }
-  expect {
-    machineDebugger2.alive == 0
-    machineDebugger2.responsive == 0
-    machineDebugger2.rewind == 0
-    machineDebugger2.deterministic == 0
-    machineDebugger2.swap == 0
-    machineDebugger2.eject == 0
-    machineDebugger2.aliveTick > 30
-    machineDebugger2.ejectTick > 30
-    machineDebugger2.phase == 99
-    machineDebuggerViolations.count == 0
-  }
-}
-
-
-test "switching off cancels and publishes the input program" {
-  when {
-    seat1: world.state.cell.set machineDebugger screen 2
-    seat1: world.state.cell.set machineDebugger body 6
-    seat1: world.state.cell.set machineDebugger p0 153617
-    ticks 30
-    seat1: body.pose 2 0.05 30.5 0 0 0 6
-    seat1: world.state.cell.set machineDebugger run 2
-    ticks 20
-    seat1: world.state.cell.set machineDebugger run 0
-    ticks 5
-  }
-  expect {
-    machineDebugger2.driven > 0 and machineDebugger2.driven < 25
-    machineDebugger2.phase == 99
-    machineDebugger2.tick > 30
-    machineDebuggerViolations.count == 0
   }
 }

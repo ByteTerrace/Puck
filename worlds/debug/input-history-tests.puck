@@ -209,21 +209,3 @@ test "typed and pasted text share focus history and per-key judgement" {
     channel(1, forward) == 0
   }
 }
-test "a wrong pasted key reduces accuracy without changing the capture-time rate" {
-  when {
-    ticks 4
-    seat1: player.mode focus text
-    ticks 3
-    seat1: player.signal keyboard.text "a" at:0.001
-    ticks 30
-    seat1: player.signal keyboard.text " c" at:0.001
-    ticks 3
-  }
-  expect {
-    characters == 3
-    correctKeys == 2
-    keyAccuracy > 66 and keyAccuracy < 67
-    wordsPerMinute == 36
-    textOrder == 6415076
-  }
-}

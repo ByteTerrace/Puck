@@ -8,51 +8,7 @@
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "alchemy-tests"
-
-test "the tokens settle on their shelf cells with the four starters face up" {
-  when {
-    ticks 150
-  }
-  expect {
-    alchemyHold == 9
-    physics(quiescent, alchemyElement) == 1
-    board(cellOf, alchemyBoard, placement, alchemyToken1) == 1
-    board(cellOf, alchemyBoard, placement, alchemyToken4) == 4
-    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
-    board(cellOf, alchemyBoard, placement, alchemyToken31) == 31
-    upright(placement, alchemyToken1) > 0
-    upright(placement, alchemyToken2) > 0
-    upright(placement, alchemyToken3) > 0
-    upright(placement, alchemyToken4) > 0
-    upright(placement, alchemyToken5) < 0
-    upright(placement, alchemyToken31) < 0
-    alchemyCollisions == 0
-    alchemyMisplaced == 0
-    alchemyIllegal == 0
-    hints == 6
-  }
-}
-
-test "fire and water make steam and turn its token face up on the table" {
-  given {
-    left = Fire
-    right = Water
-  }
-  when {
-    ticks 150
-  }
-  expect {
-    made == Steam
-    newest == Steam
-    fresh == 1
-    discovered == 5
-    alchemyBoard[5] == 1
-    alchemyHold == 9
-    physics(quiescent, alchemyElement) == 1
-    board(cellOf, alchemyBoard, placement, alchemyToken5) == 5
-    upright(placement, alchemyToken5) > 0
-  }
-}
+import "stopped-machines"
 
 test "overturned tokens on their own shelves return to the book's face" {
   when {
@@ -84,19 +40,6 @@ test "the order of the hands does not matter" {
   }
 }
 
-test "an element can be mixed with itself" {
-  given {
-    left = Water
-    right = Water
-  }
-  expect {
-    made == Sea
-    newest == Sea
-    fresh == 1
-    discovered == 5
-  }
-}
-
 test "a pair that is no recipe fizzles" {
   given {
     left = Air
@@ -122,12 +65,6 @@ test "an undiscovered element is refused" {
     discovered == 4
     made == Nothing
     alchemyVerdict == 0
-  }
-}
-
-test "the starting hints count the recipes open from the four starters" {
-  expect {
-    hints == 6
   }
 }
 

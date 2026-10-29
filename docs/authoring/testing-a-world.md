@@ -4,6 +4,14 @@ Behaviour is written in the world's own language, beside the rules it is about.
 A `test` block names a claim, sets the world up, drives it for a few ticks, and
 says what must be true at the end. `puck test` runs it.
 
+Each test boots a whole world, so write one for an invariant that running the
+world cannot show: a replay that must reproduce, an exact fixed-point or timing
+result, a refusal and its control, or a rule edge case only a constructed
+position reaches. A feature is shown by running it, and in the debug world by a
+[sweep](../reference/cli.md#puck-sweepthe-debug-worlds-sweep) signal. A test
+world that reads no machine stops its machines (the debug world's fixtures
+import `stopped-machines`), since emulating them is most of a tick's cost.
+
 ```puck
 test "all marbles settle into the star" {
   when {

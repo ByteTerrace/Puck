@@ -100,13 +100,9 @@ into the left hand well.
 ## Tests
 
 [`alchemy-tests.puck`](alchemy-tests.puck) holds the table's scenarios, each
-booted in the whole debug world: the 31 tokens settling on their shelf cells
-with the four starters face up (settled hold, actual board cells and upright
-reads), correcting both discovered and sealed tokens overturned on their own
-shelves, `Fire` + `Water` making `Steam` and physically turning its token face
-up on the table, hand-order independence, mixing an element with
-itself (`Water` + `Water` → `Sea`), a non-recipe pair fizzling, an undiscovered
-ingredient being refused, the starting hint count, an alternate recipe for an
+booted in the whole debug world: correcting both discovered and sealed tokens
+overturned on their own shelves, hand-order independence, a non-recipe pair
+fizzling, an undiscovered ingredient being refused, an alternate recipe for an
 already-known element leaving `discovered` unchanged, seated cursor play and
 physical token drops into the hand wells, settling and resolving a physical mix
 while a Go stone is still falling, and completing all 31 elements in 27 mixes.
