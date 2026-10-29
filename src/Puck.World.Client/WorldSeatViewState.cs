@@ -44,9 +44,12 @@ public sealed class WorldSeatViewState {
     /// <summary>Returns the requested boom distance, or the authored orbit distance before the first input.</summary>
     public float BoomDistance(WorldViewDefaults views) {
         lock (m_gate) {
-            return m_distance ?? AuthoredDistance(views);
+            return RequestedDistance(views) ?? AuthoredDistance(views);
         }
     }
+    private float? RequestedDistance(WorldViewDefaults views) =>
+        m_distance is { } distance && views.SeatControl.Boom is { } boom
+            ? Math.Clamp(distance, boom.Minimum, boom.Maximum) : null;
     private static float AuthoredDistance(WorldViewDefaults views) {
         foreach (var operation in views.SeatRig.Operations) {
             if (operation is WorldCameraProgramOp.Orbit orbit) {
@@ -503,7 +506,7 @@ public sealed class WorldSeatViewState {
         var (yaw, pitch) = PresentedLook(interpolationAlpha: interpolationAlpha);
 
         float? distance;
-        lock (m_gate) { distance = m_distance; }
+        lock (m_gate) { distance = RequestedDistance(views); }
         rig.Look = WorldSeatCameraResolver.Look(
             bodyOrientation: bodyOrientation,
             livePitch: pitch,

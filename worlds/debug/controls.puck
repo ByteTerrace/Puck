@@ -235,6 +235,49 @@ bindingOverlays [
             }
           }
         }
+        keys {
+          banks {
+            go {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+            tour {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+          }
+        }
+        pad {
+          banks {
+            go { pieces [{ table: "left", at [-5, 0] }, { table: "right", at [-1, 0] }, { table: "face", at [4, 0] }] }
+            tour {
+              pieces [{ table: "left", at [-5, 0] }, { table: "right", at [-1, 0] }, { table: "face", at [4, 0] }]
+            }
+          }
+        }
+        wings {
+          banks {
+            go { pieces [{ table: "left", at [-9, -6] }, { table: "right", at [9, -6] }] }
+            tour { pieces [{ table: "left", at [-12, -8] }, { table: "right", at [12, -8] }] }
+          }
+        }
+        sidebars {
+          banks {
+            go { pieces [{ table: "column", at [1.2, 0] }], anchor { edge: Left, inset: 1.5 } }
+            tour { pieces [{ table: "column", at [-1.2, 0] }], anchor { edge: Right, inset: 1.5 } }
+          }
+        }
+
       }
     }
   }

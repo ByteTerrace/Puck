@@ -230,6 +230,7 @@ public static partial class WorldFactsCompiler {
             action: new WorldBodyAction(
                 Designation: form.Designation,
                 Direction: form.Direction,
+            UseMoveDirection: form.UseMoveDirection,
                 DurationTicks: form.DurationTicks,
                 Operation: form.Operation,
                 Register: form.Register,

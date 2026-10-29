@@ -549,7 +549,7 @@ public sealed record CreationDocument(
     public const string CurrentSchema = "puck.creation.v1";
     /// <summary>The most entries <see cref="Drivers"/> carries — the width of the per-body phase/weight table a
     /// consuming client keeps per stamped creation.</summary>
-    public const int MaxDrivers = 16;
+    public const int MaxDrivers = 32;
     /// <summary>The most entries <see cref="Effectors"/> carries — the width of the per-body effector weight/latch
     /// table a consuming client keeps per stamped creation. Eight covers a spider's legs.</summary>
     public const int MaxEffectors = 8;

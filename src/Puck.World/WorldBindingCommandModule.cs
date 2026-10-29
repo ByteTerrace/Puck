@@ -26,7 +26,7 @@ namespace Puck.World;
 /// streams (Puck.World is not determinism-gated). <c>player.bind</c>/<c>player.signal</c>/<c>identity.bindings.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
-public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, WorldServer server, WorldOwnedWorlds ownedWorlds, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+public sealed partial class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, WorldServer server, WorldOwnedWorlds ownedWorlds, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     // Each seat's current authority claim: the input read-backs ask the authority a seat is routed to.
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
@@ -1040,6 +1040,13 @@ public sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBind
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.binding-bar",
+            description: "Sets one seat's binding bar preference: player.binding-bar layout|model|scale <value> [seat]. Layout names an authored layout, model selects single or a stacked model, scale is a positive multiplier; auto clears that preference. Unsaved until identity.bindings.save.",
+            handler: BarPreferenceHandler,
+            routing: CommandRouting.Simulation
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.bind",

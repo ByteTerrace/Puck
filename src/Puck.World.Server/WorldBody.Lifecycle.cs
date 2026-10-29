@@ -181,7 +181,10 @@ public sealed partial class WorldBody {
         var (yaw, pitch, roll) = EulerRadians();
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
-        var planarVelocity = m_planarVelocity.ToVector3();
+        var planarVelocity = (m_planarVelocity + m_overlayVelocity).ToVector3();
+        var timerSuffix = string.Join(",", m_actionStateDefinitions.Select((definition, slot) => (definition, slot))
+            .Where(item => item.definition.Kind == ActionStateKind.Timer)
+            .Select(item => $"{item.definition.Name}:{((double)FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: StateTimer(item.slot))):0.###}"));
         var verticalVelocity = ((double)m_verticalVelocity);
         var scale = ((double)m_scale);
         var com = (IsRigid
@@ -217,7 +220,7 @@ public sealed partial class WorldBody {
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00} vel=({planarVelocity.X:0.00}, {verticalVelocity:0.00}, {planarVelocity.Z:0.00}){comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}{DescribeSweepRefusal()}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00} vel=({planarVelocity.X:0.00}, {verticalVelocity:0.00}, {planarVelocity.Z:0.00}){comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix} timers=({timerSuffix}){DescribeSweepRefusal()}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with

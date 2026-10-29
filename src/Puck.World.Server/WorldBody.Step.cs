@@ -154,25 +154,6 @@ public sealed partial class WorldBody {
                     turnSpeed: turnSpeed
                 );
 
-                // The timed impulse overlay rides after the selected program, through its own accumulator.
-                if (m_overlayRemaining > 0) {
-                    var overlayTicks = Math.Min(
-                        val1: stepTicks,
-                        val2: m_overlayRemaining
-                    );
-
-                    m_position += m_overlayAccumulator.Integrate(
-                        elapsedTicks: overlayTicks,
-                        ratePerSecond: m_overlayVelocity
-                    );
-                    m_overlayRemaining -= overlayTicks;
-
-                    if (m_overlayRemaining == 0) {
-                        m_overlayVelocity = default;
-                        m_overlayAccumulator.Reset();
-                    }
-                }
-
                 refused = (m_sweepRefusal != ContactRefusal.None);
             }
         }
@@ -254,7 +235,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (m_orientation.Rotate(vector: instruction.Direction) * (instruction.Value * m_scale));
+                m_overlayVelocity = (ImpulseDirection(in instruction, in m_channelReadComposed, m_orientation) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;
@@ -434,6 +415,22 @@ public sealed partial class WorldBody {
             role: ChannelRole.MoveUp
         ))) * scratch.MoveSpeed);
         scratch.TargetVelocity = scratch.Velocity;
+    }
+    // Resolve the accepted tick's movement resultant through the same surface projection as locomotion.
+    // Normalization gives a fixed overlay speed even at partial stick deflection.
+    private FixedVector3 ImpulseDirection(in CompiledBodyInstruction instruction, in PlayerIntent intent, FixedQuaternion orientation) {
+        if (instruction.UseMoveDirection) {
+            var scratch = new BodyMotionScratch { Intent = intent, Orientation = orientation, Up = m_up };
+            FixedVector3 direction;
+            if (!TryCommandedMoveDirection(ref scratch, out direction)) {
+                var (forward, strafe) = PlanarIntent(in intent);
+                var facing = (m_tuning.MoveFrame == MotionMoveFrame.World ? m_frame.Rotate(-FixedVector3.UnitZ) : orientation.Rotate(-FixedVector3.UnitZ));
+                var right = (m_tuning.MoveFrame == MotionMoveFrame.World ? m_frame.Rotate(FixedVector3.UnitX) : orientation.Rotate(FixedVector3.UnitX));
+                direction = ((facing * forward) + (right * strafe)).RejectFrom(m_up);
+            }
+            if (direction != FixedVector3.Zero) { return direction.WithLength(FixedQ4816.One); }
+        }
+        return orientation.Rotate(instruction.Direction);
     }
     private void ComputePlanarTargetVelocity(ref BodyMotionScratch scratch) {
         var effectiveMoveSpeed = ApplySpeedHeld(
@@ -638,7 +635,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (scratch.Orientation.Rotate(vector: instruction.Direction) * (instruction.Value * m_scale));
+                m_overlayVelocity = (ImpulseDirection(in instruction, in scratch.Intent, scratch.Orientation) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;
@@ -843,12 +840,23 @@ public sealed partial class WorldBody {
         );
 
         scratch.NextPosition = (m_position + step);
+        IntegrateOverlay(ref scratch);
     }
     private void IntegrateScratchVelocity(ref BodyMotionScratch scratch) {
         scratch.NextPosition = (m_position + m_positionAccumulator.Integrate(
             elapsedTicks: scratch.StepTicks,
             ratePerSecond: scratch.Velocity
         ));
+        IntegrateOverlay(ref scratch);
+    }
+    // Keep the timed displacement inside the program's ordinary swept contact boundary. The overlay
+    // retains its own integration residue and never becomes persistent locomotion velocity.
+    private void IntegrateOverlay(ref BodyMotionScratch scratch) {
+        if (m_overlayRemaining == 0) { return; }
+        var ticks = Math.Min(scratch.StepTicks, m_overlayRemaining);
+        scratch.NextPosition += m_overlayAccumulator.Integrate(elapsedTicks: ticks, ratePerSecond: m_overlayVelocity);
+        m_overlayRemaining -= ticks;
+        if (m_overlayRemaining == 0) { m_overlayVelocity = default; m_overlayAccumulator.Reset(); }
     }
     private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body) {
         var movement = default(PlayerIntent);
