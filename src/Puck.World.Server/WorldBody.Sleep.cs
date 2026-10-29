@@ -26,6 +26,8 @@ public sealed partial class WorldBody {
         RigidStaticSubstepsThisTick = 0;
         m_previousPosition = m_position;
     }
+    // A parked rigid body that a contact-field change provably cannot reach observes it without waking.
+    internal void ObserveContactField(ulong contactFieldVersion) => m_lastContactFieldVersion = contactFieldVersion;
     internal void WakeRigidIsland() {
         m_rigidSleepRootPlusOne = 0;
         InvalidateRigidRest();

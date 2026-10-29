@@ -312,6 +312,12 @@ findings by cluster, starting with the hall stairs.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
+- [low] The presentation query field (camera clearance, surface effectors)
+  excludes the solid placement `desk-chair`: its evaluator refuses a
+  `RepeatPolar` fold (`[world.presentation-field: excluded placement
+  'desk-chair' ... RepeatPolar]`, now narrated once per placement), so the chase
+  camera and limb probes see no chair. Give the fixed-point query twin the
+  fold, or bound the folded shape.
 - The bake-side causes live in the [rendering plan's](rendering.md#open-items)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
@@ -481,6 +487,18 @@ simulation thread and its snapshot handoff, then build it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
+- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
+  host frame clamps its wall delta to a quarter second
+  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
+  then runs every step that delta owes, so once a tick costs more than its
+  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
+  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
+  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
+  burst by the wall time it has spent (drop the rest, rebasing the capture pin
+  as a clamp does), so an over-budget tick slows the World instead of the frame.
+- [low] Every rigid advance zero-fills the step's capture snapshot
+  (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
+  body's advance in an EventPipe sample of a lift ride).
 - Pacing at 120 Hz with Windows' Dynamic Refresh Rate (the lead machine's
   display now runs 120 Hz with DRR on, VRR 48 to 120 Hz): confirm the 60 FPS bar
   and VRR pacing hold in front of and behind another window, and that
@@ -676,6 +694,15 @@ schema switch.
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
+- [medium] An attached operator session costs the tick a whole state load on
+  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
+  tier) discloses the definition again from the arena, so its mirror's
+  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
+  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
+  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
+  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
+  change to the session without a fresh disclosure of state, or make the load
+  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a

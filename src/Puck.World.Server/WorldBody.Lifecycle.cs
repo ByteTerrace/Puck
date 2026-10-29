@@ -710,8 +710,12 @@ public sealed partial class WorldBody {
     /// fresh body BEFORE <see cref="ApplyIntegrationResidue"/> re-applies the captured latch, so a restore is never
     /// perturbed by this wake.</summary>
     /// <param name="field">The world contact field.</param>
-    public void SetContactField(IContactField? field) {
+    public void SetContactField(IContactField? field) => AdoptContactField(field: field, wake: true);
+    // wake false hands over a field that provably differs from the old one only where this body cannot reach, so its
+    // rest latch still describes the world it rests in.
+    private void AdoptContactField(IContactField? field, bool wake) {
         if (
+            wake &&
             (m_rigid is not null) &&
             !ReferenceEquals(
             objA: m_contactField,
@@ -733,8 +737,10 @@ public sealed partial class WorldBody {
     /// <param name="upPolicy">The body-frame policy compiled from the live world's contact requirements.</param>
     /// <param name="walkableThreshold">The compiled <c>cos(collision.maxSlopeDegrees)</c> a surface normal's
     /// alignment with the body's up axis must clear to read as ground.</param>
-    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy, FixedQ4816 walkableThreshold) {
-        SetContactField(field: field);
+    /// <param name="wake">Whether a rigid body whose field reference changes wakes; <see langword="false"/> only when the
+    /// new field differs from the old one solely where this body cannot reach.</param>
+    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy, FixedQ4816 walkableThreshold, bool wake = true) {
+        AdoptContactField(field: field, wake: wake);
         SetWalkableThreshold(threshold: walkableThreshold);
 
         if (m_upPolicy != upPolicy) {

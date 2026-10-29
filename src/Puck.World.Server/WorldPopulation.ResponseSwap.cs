@@ -1,3 +1,5 @@
+using Puck.Physics.Navigation;
+
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
@@ -37,7 +39,31 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        InstallProjectedSolids(definition: definition, solids: solids);
+        // An analytic set whose sleepers owe no earlier change can bound what the swap moves: the changed rows' colliders
+        // before it and after. Bodies outside that box keep resting; any other swap reaches every body.
+        var box = default(WorldColliderBox);
+        var local = (
+            (solids is null) &&
+            (m_targetField is null) &&
+            m_sleepFieldTermsKnown &&
+            (m_sleepFieldVersion == ContactFieldVersion) &&
+            (m_baseContactField is WorldColliderSet)
+        );
+
+        if (local) { ((WorldColliderSet)m_baseContactField!).FoldRows(box: ref box, definition: previous, rows: rows); }
+
+        var previousNavigation = m_navigation;
+
+        CompileSolidConsumers(
+            definition: definition,
+            previousNavigation: previousNavigation,
+            solids: solids
+        );
+        if (local && (m_baseContactField is WorldColliderSet rebuilt)) { rebuilt.FoldRows(box: ref box, definition: definition, rows: rows); }
+        RebindSolidConsumers(
+            previousNavigation: previousNavigation,
+            reach: ((local && !box.Unbounded && (m_baseContactField is WorldColliderSet)) ? box : null)
+        );
         return true;
     }
 
@@ -50,6 +76,15 @@ public sealed partial class WorldPopulation {
             previousNavigation: previousNavigation,
             solids: solids
         );
+        RebindSolidConsumers(previousNavigation: previousNavigation, reach: null);
+    }
+
+    // Hands every live body the navigation and contact field the solid consumers compiled. With no reach every rigid
+    // body wakes. With one, every collider the change moved lies inside it: only the rigid bodies it reaches wake (their
+    // rest latch cleared), and the sleepers settle on the new field now, so the change owes the next PrepareBodyStep
+    // nothing and a checkpoint between the two finds no sleeper behind the field it rests in.
+    private void RebindSolidConsumers(NavigationRuntime previousNavigation, WorldColliderBox? reach) {
+        var sleepersBefore = m_sleepingBodies.Count;
 
         for (var index = 0; (index < m_entries.Length); index++) {
             RebindNavigation(
@@ -61,10 +96,16 @@ public sealed partial class WorldPopulation {
                 body.SetContactConfiguration(
                     field: m_contactField,
                     upPolicy: m_bodyUpPolicy,
-                    walkableThreshold: m_walkableThreshold
+                    walkableThreshold: m_walkableThreshold,
+                    wake: ((reach is not { } box) || FieldChangeReaches(box: in box, body: body))
                 );
             }
         }
+        if (reach is null) { return; }
+        var version = ContactFieldVersion;
 
+        ObserveFieldChange(contactFieldVersion: version, sleepersBefore: sleepersBefore);
+        m_sleepFieldVersion = version;
+        m_sleepFieldTerms = m_contactFieldTerms;
     }
 }
