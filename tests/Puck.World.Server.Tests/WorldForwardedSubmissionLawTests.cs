@@ -93,7 +93,7 @@ public sealed class WorldForwardedSubmissionLawTests {
             condition: (fixture.Server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     BodyMotionProgramName: "grounded",
-                    HasMappedArrival: false,
+                    Arrival: WorldTransferArrival.Spawn,
                     PlanarVelocity: default,
                     Position: default,
                     Profile: null,

@@ -402,7 +402,7 @@ public sealed class CrossingReplayLawTests {
             condition: (server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     Profile: null,
-                    HasMappedArrival: false,
+                    Arrival: WorldTransferArrival.Spawn,
                     BodyMotionProgramName: "grounded",
                     Position: default,
                     YawRadians: default,

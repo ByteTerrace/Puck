@@ -356,14 +356,16 @@ internal sealed partial class PlayerCommandModule {
                             spawnPoints: m_server.Definition.SpawnPoints,
                             id: spawnId
                         ) is { } homePoint) {
-                            m_instances.EnqueueTransfer(
+                            if (!m_instances.TryEnqueuePoseHome(
                                 actingPrincipal: context.Principal,
                                 arrivalPose: FixedSpawnPoint.Compile(point: in homePoint),
-                                destination: WorldInstanceHost.TransferDestination.Existing(name: WorldInstanceHost.BootInstanceName),
-                                scope: WorldInstanceHost.TransferScope.Body,
+                                reason: out var homeRefusal,
                                 sourceInstance: location.Endpoint.Identity,
-                                sourceSlot: location.EntityIndex
-                            );
+                                transferId: out _,
+                                traveller: location.Entity
+                            )) {
+                                return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is declared only at home, and body:{requestedSpawnIndex} cannot be carried there — {homeRefusal}]");
+                            }
 
                             return Echoed(
                                 args: in args,

@@ -122,13 +122,27 @@ public sealed record WorldTransferReservationReply(bool Accepted, string Reason,
         Reason: reason
     );
 }
+/// <summary>How a committed traveler is set down at its destination.</summary>
+public enum WorldTransferArrival : byte {
+    /// <summary>The destination's own seat spawn: the commit's pose and motion are not applied.</summary>
+    Spawn = 0,
+
+    /// <summary>A portal or adjacency mapping: the commit's pose, velocity, motion program, action registers and
+    /// continuum carry the traveler's motion across, and the destination must declare its motion program.</summary>
+    Mapped = 1,
+
+    /// <summary>An explicit pose (<c>body.pose spawn:&lt;id&gt;</c> carrying a seat home): the destination's own spawn,
+    /// set down standing still at the commit's position and yaw. Nothing of the traveler's motion is carried, so the
+    /// destination needs none of its motion programs.</summary>
+    Posed = 2,
+}
 /// <summary>One detached source body carried into a previously reserved destination index. <c>TravelTurn</c> is the
 /// traveler's accumulated arrival turn once it lands (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which the
 /// destination keeps on the occupant for the routes it describes. <c>Profile</c> is the traveler's identity projection
 /// at commit, which the destination lands in place of the reservation's.</summary>
 public sealed record WorldTransferCommitMember(
     WorldIdentityProjection? Profile,
-    bool HasMappedArrival,
+    WorldTransferArrival Arrival,
     string BodyMotionProgramName,
     FixedVector3 Position,
     FixedQ4816 YawRadians,
@@ -403,7 +417,7 @@ public sealed partial class WorldTransferEscrow {
                 left: a.Profile,
                 right: b.Profile
             ) ||
-                (a.HasMappedArrival != b.HasMappedArrival) ||
+                (a.Arrival != b.Arrival) ||
                 !string.Equals(
                 a: a.BodyMotionProgramName,
                 b: b.BodyMotionProgramName,
@@ -751,7 +765,7 @@ public sealed partial class WorldTransferEscrow {
                 return WorldTransferStatus.Missing;
             }
             if (
-                member.HasMappedArrival &&
+                (member.Arrival == WorldTransferArrival.Mapped) &&
                 !lease.DestinationDefinition.BodyMotionPrograms.Any(predicate: program => ((program.Kind == BodyProgramKind.Motion) && string.Equals(
                     a: program.Name,
                     b: member.BodyMotionProgramName,
@@ -1144,25 +1158,28 @@ public sealed partial class WorldTransferEscrow {
     }
 
     /// <summary>Returns why a commit member's carried motion cannot land anywhere, or <see langword="null"/> when its
-    /// shape is sound: an unreduced arrival turn, a mapped arrival naming no motion program, or a continuum interval
-    /// that is empty, unconsumed, carries no or too many boundary events, or rides an unmapped arrival. A commit, a
-    /// crossing-log record and a taped arrival all refuse a member this names; only a commit can also check the
-    /// destination's own motion programs.</summary>
+    /// shape is sound: an arrival kind outside <see cref="WorldTransferArrival"/>, an unreduced arrival turn, a mapped
+    /// arrival naming no motion program, or a continuum interval that is empty, unconsumed, carries no or too many
+    /// boundary events, or rides an arrival that is not mapped. A commit, a crossing-log record and a taped arrival all
+    /// refuse a member this names; only a commit can also check the destination's own motion programs.</summary>
     /// <param name="member">The commit member.</param>
     /// <returns>The fault, or <see langword="null"/>.</returns>
     internal static string? CommitMemberFault(WorldTransferCommitMember member) {
+        if (!Enum.IsDefined(value: member.Arrival)) {
+            return $"carries an unknown arrival kind {(byte)member.Arrival}";
+        }
         if (!WorldFrameIsometry.IsTurn(turn: member.TravelTurn)) {
             return $"carries an unreduced arrival turn {member.TravelTurn}";
         }
         if (
-            member.HasMappedArrival &&
+            (member.Arrival == WorldTransferArrival.Mapped) &&
             string.IsNullOrWhiteSpace(value: member.BodyMotionProgramName)
         ) {
             return "names no destination motion program for its mapped arrival";
         }
         if (
             (member.Continuum is { } continuum) &&
-            (!member.HasMappedArrival || !continuum.IsWellFormed)
+            ((member.Arrival != WorldTransferArrival.Mapped) || !continuum.IsWellFormed)
         ) {
             return "carries an invalid continuum interval or boundary count";
         }
@@ -1170,7 +1187,7 @@ public sealed partial class WorldTransferEscrow {
     }
 
     // Writes an admitted occupant's carried state onto its slot: the profile, appearance and arrival turn, its committed
-    // mobility identity, and, for a mapped arrival, the pose and motion the commit carried.
+    // mobility identity, and the commit's pose: with its carried motion for a mapped arrival, standing still for a posed one.
     private void Land(int slot, WorldIdentity? profile, Vector3 bodyColor, byte catalogRig, in WorldMobilityIdentity mobility, string border, WorldTransferCommitMember member) {
         if (profile is not null) {
             m_server.Population.SetSeatProfile(
@@ -1197,7 +1214,13 @@ public sealed partial class WorldTransferEscrow {
             mobility: in mobility
         );
 
-        if (member.HasMappedArrival) {
+        if (member.Arrival == WorldTransferArrival.Posed) {
+            m_server.Population.ApplyPosedArrival(
+                position: member.Position,
+                slot: slot,
+                yawRadians: member.YawRadians
+            );
+        } else if (member.Arrival == WorldTransferArrival.Mapped) {
             m_server.Population.ApplyMappedArrival(
                 actionContinuity: member.ActionContinuity,
                 continuum: member.Continuum,
