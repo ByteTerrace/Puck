@@ -778,6 +778,8 @@ Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
 
+- [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The lease-rotation change counts an undeletable ticket as live on the new CLI; check the start path (the MCP adapter's lease delegate) handles the same error rather than failing the start. Also from the same lane: `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
+
 - [medium] `puck_exec` returns every line's full answer, so `world.affordances` and `world.grants` overflow an agent's token limit. Add an output filter to the tool (selected `lines` or `fields`, a byte cap with an explicit truncation mark) so the agents' own instrument stays usable on large answers. (from: c7-findings lane)
 
 - [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
