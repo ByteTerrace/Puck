@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
+using Puck.Abstractions;
+
 namespace Puck.Cli.Sweep;
 
 /// <summary>
@@ -319,17 +321,23 @@ public static partial class SweepCommand {
         if (files.Length == 0) {
             return new SweepScenarioResult(Command: command, Reasons: ["not selected"], Status: SweepStatus.Skipped, Worlds: worlds);
         }
-        var expanded = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var expanded = new SortedSet<string>(comparer: PuckPaths.Comparer);
         foreach (var file in files) {
-            var path = Path.GetFullPath(path: file, basePath: repositoryRoot);
-            var matches = (Path.GetFileName(path: path).Contains(value: '*')
-                ? Directory.GetFiles(path: Path.GetDirectoryName(path: path)!, searchPattern: Path.GetFileName(path: path))
-                : [path]);
-            if (matches.Length == 0) {
-                reasons.Add(item: $"no scenario source matches {file}");
+            try {
+                var path = PuckPaths.Normalize(path: Path.GetFullPath(path: file, basePath: repositoryRoot));
+                var pattern = Path.GetFileName(path: path);
+                var matches = ((pattern.Contains(value: '*') || pattern.Contains(value: '?'))
+                    ? Directory.GetFiles(path: Path.GetDirectoryName(path: path)!, searchPattern: pattern)
+                    : [path]);
+                if (matches.Length == 0) {
+                    reasons.Add(item: $"no scenario source matches {file}");
+                    status = SweepStatus.Red;
+                }
+                expanded.UnionWith(other: matches.Select(selector: PuckPaths.Normalize));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
+                reasons.Add(item: $"cannot read scenario sources {file}: {exception.Message}");
                 status = SweepStatus.Red;
             }
-            expanded.UnionWith(other: matches);
         }
         var ordinal = 0;
         foreach (var file in expanded) {
@@ -360,7 +368,7 @@ public static partial class SweepCommand {
             WorkingDirectory = repositoryRoot,
         };
 
-        startInfo.ArgumentList.Add(item: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll"));
+        startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll")));
         startInfo.ArgumentList.Add(item: "test");
 
         startInfo.ArgumentList.Add(item: file);
