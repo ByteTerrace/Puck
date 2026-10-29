@@ -178,13 +178,14 @@ in the frame.
   its inside share, validity, cubes and the terms of its weight.
   The published volume holds each probe's own measured sky and radiance cubes;
   neighbours never supply its sky or radiance. Sky and surface radiance use the
-  same full-reach radiance rays. Each probe stores a 12×12 octahedral first-hit
-  surface map, one word per texel: perpendicular distance and compact normal.
+  same full-reach radiance rays, sharing one quadrature across cells so a uniform
+  field gains no lattice noise from independently rotated ray sets. Each probe stores a 12×12 octahedral first-hit
+  surface map, one word per texel: ray distance and compact normal.
   Negative distances mark misses to the receiver support radius. One bounded
   ray per texel traces on the first sweep; later bounces reuse the map.
 - **A probe lights receivers its surface samples support.** Four reflected
-  angular taps test the receiver's signed gap from their measured first-hit
-  surfaces. This keeps a coplanar receiver visible even at grazing angles,
+  angular taps reconstruct compatible local patches and test the signed gap from
+  their surfaces. This keeps flat and curved receivers visible, including grazing angles,
   where interpolating radial distances incorrectly shadowed it. Misses never
   inflate a blocker. Blocked angular coverage closes smoothly; a minority hit
   tap cannot extend a finite block over the opening. There are no whole-sphere

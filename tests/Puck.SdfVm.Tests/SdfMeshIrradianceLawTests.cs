@@ -17,42 +17,53 @@ public sealed class SdfMeshIrradianceLawTests {
     [Fact]
     public void AHomogeneousCeilingDoesNotStampTheProbeLatticeIntoItsLight() {
         var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One, Emissive: 1f));
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Emissive: 1f));
+
         builder.Sphere(0.1f, material);
         var gains = new SdfIndirectGains(Emission: 1f, Feedback: 0f, Lights: 0f, Screens: 0f, Sky: 0f);
-        var frame = Frame() with { Program = builder.Build(), IndirectGains = gains, IndirectSources = gains.Sources,
-            TickLocked = true, IndirectBounces = 0, Lights = new SdfLights(),
-            MeshDraws = [Draw(Box(new Vector3(-10000f, 4f, -10000f), new Vector3(10000f, 4.3f, 10000f)))] };
+        var frame = Frame() with {
+            Program = builder.Build(),
+            IndirectGains = gains,
+            IndirectSources = gains.Sources,
+            TickLocked = true,
+            IndirectBounces = 0,
+            Lights = new SdfLights(),
+            MeshDraws = [Draw(mesh: Box(new Vector3(x: -10000f, y: 4f, z: -10000f), new Vector3(x: 10000f, y: 4.3f, z: 10000f)))],
+        };
+
         var (parameters, words) = Trace(new SdfMeshIrradiance(), frame, SdfIndirectTier.Medium);
         var low = float.PositiveInfinity;
         var high = 0f;
-        for (var x = -4; x <= 4; x++) {
-            var value = Luminance(Probe(words, parameters, x, 0, 0), 0);
-            low = MathF.Min(low, value);
-            high = MathF.Max(high, value);
-        }
-        Assert.True(high - low < 0.001f, $"homogeneous horizontal light spans {low}..{high}");
-    }
 
+        for (var x = -4; (x <= 4); x++) {
+            var value = Luminance(Probe(parameters: parameters, words: words, x: x, y: 0, z: 0), 0);
+
+            low = MathF.Min(x: low, y: value);
+            high = MathF.Max(x: high, y: value);
+        }
+        Assert.True(condition: ((high - low) < 0.001f), userMessage: $"homogeneous horizontal light spans {low}..{high}");
+    }
     [Fact]
     public void AVisibleCurvedSurfaceIsNotShadowedByItsNeighboursTangentPlanes() {
-        var centre = new Vector3(0f, 0f, 2f);
-        var scene = SdfMeshIrradianceScene.Build([Draw(Sphere(centre, 0.75f))]);
+        var centre = new Vector3(x: 0f, y: 0f, z: 2f);
+        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Sphere(centre: centre, radius: 0.75f))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
+
         _ = SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 5.25f, depth);
-        for (var x = -0.55f; x <= 0.55f; x += 0.05f) {
-            for (var y = -0.55f; y <= 0.55f; y += 0.05f) {
-                if (x * x + y * y >= 0.42f) { continue; }
-                var point = new Vector3(x, y, 2f - MathF.Sqrt(0.75f * 0.75f - x * x - y * y));
-                var normal = Vector3.Normalize(point - centre);
-                var pushed = point + SdfMeshIrradianceProbe.NormalBias * normal;
-                Assert.True(scene.Unblocked(Vector3.Zero, Vector3.Normalize(pushed), pushed.Length() - 0.001f));
-                var visibility = SdfMeshProbeDepth.Visibility(depth, pushed);
-                Assert.True(visibility > 0.95f, $"curved receiver ({x}, {y}) visibility={visibility}");
+        for (var x = -0.55f; (x <= 0.55f); x += 0.05f) {
+            for (var y = -0.55f; (y <= 0.55f); y += 0.05f) {
+                if (((x * x) + (y * y)) >= 0.42f) { continue; }
+                var point = new Vector3(x: x, y: y, z: (2f - MathF.Sqrt(x: (((0.75f * 0.75f) - (x * x)) - (y * y)))));
+                var normal = Vector3.Normalize(value: (point - centre));
+                var pushed = (point + (SdfMeshIrradianceProbe.NormalBias * normal));
+
+                Assert.True(condition: scene.Unblocked(Vector3.Zero, Vector3.Normalize(value: pushed), (pushed.Length() - 0.001f)));
+                var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: pushed);
+
+                Assert.True(condition: (visibility > 0.95f), userMessage: $"curved receiver ({x}, {y}) visibility={visibility}");
             }
         }
     }
-
     [Fact]
     public void AFlatSurfaceStaysVisibleAtGrazingAnglesBesideTheDepthReach() {
         var scene = SdfMeshIrradianceScene.Build(draws: [Draw(mesh: Box(low: new Vector3(x: -20f, y: -1.2f, z: -20f), high: new Vector3(x: 20f, y: -1f, z: 20f)))]);

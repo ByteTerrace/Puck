@@ -270,9 +270,9 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   gather supplies indirect light, reflections and traced static-light visibility.
   Each probe publishes its own measured cubes, without neighbour filtering.
   Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
-  per texel. Each word packs perpendicular distance and two signed normal bytes;
-  negative distance marks a measured miss. Four reflected angular taps test
-  signed receiver gaps and blocked coverage. Radial depth interpolation rejects
+  per texel. Each word packs ray distance and two signed normal bytes;
+  negative distance marks a measured miss. Four reflected angular taps reconstruct compatible surface patches before
+  testing signed receiver gaps and blocked coverage. Radial depth interpolation rejects
   coplanar receivers at grazing angles, so no mean/squared-distance pair remains.
   Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
   The sky cube comes from the same full-reach radiance rays as bounced light.

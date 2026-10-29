@@ -35,6 +35,7 @@ public static class SdfMeshProbeDepth {
             var x = ((int)Math.Round(a: (uv.X * scale)));
             var y = ((int)Math.Round(a: (uv.Y * scale)));
             var packed = (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
+
             surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)distance));
         }
         return rays;
@@ -65,6 +66,7 @@ public static class SdfMeshProbeDepth {
         Span<Vector3> points = stackalloc Vector3[4];
         Span<Vector3> normals = stackalloc Vector3[4];
         Span<float> weights = stackalloc float[4];
+
         weights.Clear();
 
         for (var corner = 0; (corner < 4); corner++) {
@@ -74,7 +76,7 @@ public static class SdfMeshProbeDepth {
 
             if (weight <= 0f) { continue; }
             var tap = SdfOctahedral.BorderSource(borderedX: ((x + highX) + 1), borderedY: ((y + highY) + 1), interiorTexels: Size);
-            var index = tap.X + Size * tap.Y;
+            var index = (tap.X + (Size * tap.Y));
             var word = surfaces[index];
             var depth = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)word)));
 
@@ -82,28 +84,31 @@ public static class SdfMeshProbeDepth {
                 if (distance > -depth) { return 0f; }
                 continue;
             }
-            points[corner] = Directions[index] * depth;
-            normals[corner] = Normal(word);
+            points[corner] = (Directions[index] * depth);
+            normals[corner] = Normal(word: word);
             weights[corner] = weight;
         }
         var blocked = 0f;
-        for (var corner = 0; corner < 4; corner++) {
+
+        for (var corner = 0; (corner < 4); corner++) {
             if (weights[corner] <= 0f) { continue; }
             var point = Vector3.Zero;
             var normal = Vector3.Zero;
             var total = 0f;
-            for (var neighbour = 0; neighbour < 4; neighbour++) {
+
+            for (var neighbour = 0; (neighbour < 4); neighbour++) {
                 if (weights[neighbour] <= 0f) { continue; }
-                var sum = normals[corner] + normals[neighbour];
+                var sum = (normals[corner] + normals[neighbour]);
                 // Same smooth patch: opposite faces and distinct parallel walls never interpolate together.
-                if (Vector3.Dot(normals[corner], normals[neighbour]) <= 0f ||
-                    MathF.Abs(Vector3.Dot(sum, points[neighbour] - points[corner])) > SdfMeshIrradianceProbe.DepthSurfaceJoinGap) { continue; }
-                point += weights[neighbour] * points[neighbour];
-                normal += weights[neighbour] * normals[neighbour];
+                if ((Vector3.Dot(vector1: normals[corner], vector2: normals[neighbour]) <= 0f) ||
+                    (MathF.Abs(x: Vector3.Dot(vector1: sum, vector2: (points[neighbour] - points[corner]))) > SdfMeshIrradianceProbe.DepthSurfaceJoinGap)) { continue; }
+                point += (weights[neighbour] * points[neighbour]);
+                normal += (weights[neighbour] * normals[neighbour]);
                 total += weights[neighbour];
             }
-            var gap = Vector3.Dot(Vector3.Normalize(normal), toward - point / total);
-            blocked += weights[corner] * Math.Clamp(-gap / SdfMeshIrradianceProbe.DepthSurfaceFade, 0f, 1f);
+            var gap = Vector3.Dot(vector1: Vector3.Normalize(value: normal), vector2: (toward - (point / total)));
+
+            blocked += (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
         }
         var coverage = Math.Clamp(max: 1f, min: 0f, value: ((blocked - SdfMeshIrradianceProbe.DepthCoverageStart) * SdfMeshIrradianceProbe.DepthCoverageScale));
 

@@ -41,26 +41,28 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Visibility is a per-probe 12×12 octahedral first-hit surface map. Each texel
   traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
   full in-window receiver support including relocation. Each word holds an FP16
-  perpendicular surface distance and two signed octahedral normal bytes. A
+  ray distance and two signed octahedral normal bytes. A
   negative distance explicitly marks a miss and its reach. Receivers beyond
   that measured support receive nothing. Depth is traced on the first sweep
   and reused for later bounces; sky still uses the full-reach radiance rays.
-- Four reflected angular taps test the receiver's signed gap from their first
-  hit surface, fading over `DepthSurfaceFade` (2 cm, less than normal bias).
-  The stored gap is anchored with the decoded normal so quantizing it does not
-  move the measured hit. Axis normals remain exact. Interpolating radial
-  distances rejected receivers on the same flat surface at grazing angles:
-  the CPU law is red at radius 1.2 m, angle 89 degrees (48% visibility).
-  Independently rounded squared metres also produced false FP16 variance;
-  neither radial moments nor a squared-distance field remain.
-  Misses supply no blocker. Blocked angular coverage closes smoothly from half
-  to three-quarter support (`DepthCoverageStart`, `DepthCoverageScale`). A finite
-  block cannot shadow the whole footprint through a minority hit tap. Surface
-  tests apply only to these four angular taps: no 26-ray whole-sphere planes,
-  neighbour separation, suspect sets or cross-probe vetoes return.
-  Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together,
-  including signed normal decoding, seam reflection, gaps and coverage. Reuse
-  `SdfOctahedral` / `field/sdf-octahedral.hlsli` for projection and addressing.
+- Four reflected angular taps reconstruct local surface patches from first-hit
+  positions and signed octahedral normal bytes. Join taps only when their normals
+  agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:
+  opposite faces and separate parallel walls stay separate. Interpolate a patch's
+  positions/normals before testing the signed receiver gap; extending each tangent
+  plane separately shadowed visible curved receivers (the sphere law is red at
+  visibility zero on that implementation). Fade a patch over `DepthSurfaceFade`
+  (2 cm, less than normal bias), then combine its blocked angular coverage.
+  The flat-surface law also rejects radial-distance interpolation: it returned
+  48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
+  No radial moments or squared-distance field remain. Misses supply no blocker.
+  Coverage closes from half to three-quarter support; a minority hit cannot
+  extend a finite block over the footprint. Tests remain confined to these four
+  angular taps: no 26-ray whole-sphere planes, neighbour separation, suspect sets
+  or cross-probe vetoes return. Keep `SdfMeshProbeDepth.Visibility` and
+  `sdfMeshProbeDepthVisibility` together, including signed normal decoding,
+  seam reflection, patch compatibility, gaps and coverage. Projection/addressing
+  reuse `SdfOctahedral` / `field/sdf-octahedral.hlsli`.
 - Gather weight is the cell's trilinear share times
   `max(0, dot(normal, directionToProbe))²` times depth visibility. This continuous
   positive-hemisphere weight excludes probes behind a surface without switching
@@ -134,13 +136,17 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   live `world.probe` GI diagnostics report actual device/upload/shadow/header
   and CPU-volume bytes. Cache blocks hold 172 words (688 bytes) per probe.
   Publication compares/uploads changed slots only, coalesced into runs.
-- Each published probe contains its own measured cubes, exactly as the CPU
-  bounce lookup reads them. Its sky and surface radiance come from the same
-  full-reach radiance rays, so a small opening cannot simultaneously count as
-  both a missed sky ray and a bounced hit in another sample set. Depth rays do
-  no sky measurement. Later sweeps recompute both radiance cubes together and
-  reuse only the geometry-only depth map. Placement scores up to 32 candidates
-  with 32 rays each, but those rays stop at one spacing, never lighting reach.
+- Each published probe contains its own measured cubes, exactly as the CPU bounce
+  read sees them. Sky and surface radiance use the same full-reach rays, so an
+  opening cannot count as sky in one sample set and a bounced hit in another.
+  Every probe uses the same precomputed spherical Fibonacci quadrature per tier;
+  cell-specific random rotations stamped spatial noise into homogeneous lighting
+  (the uniform-ceiling witness spans 1.256–1.476 before this correction). Sharing
+  directions correlates sampling error without borrowing any neighbour's light.
+  Camera traces use that same quadrature. Depth rays do no sky measurement.
+  Later bounces recompute the two radiance cubes together and reuse only the
+  geometry-only surface map. Placement scores up to 32 candidates with 32 shared
+  directions, bounded to one spacing, never lighting reach.
 - A probe stands in the open (`SdfMeshIrradiance.Place`). A lattice centre
   inside geometry (the PRIMITIVES sign at x = 23, y ≈ 3; a stair flight) or
   within `Clearance` (0.1 m) of a surface (a partition face at an odd metre)

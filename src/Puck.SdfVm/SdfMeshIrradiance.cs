@@ -66,6 +66,20 @@ public sealed class SdfMeshIrradiance {
     /// <summary>Gets the volume's counts: its scene builds, the geometry they built and reused, and its probe sweeps.</summary>
     public WorkCounterSet Counters { get; } = new(kinds: DeclaredKinds, name: SourceName);
 
+    private const int HighRays = 128;
+    private const int MediumRays = 96;
+
+    private static readonly Vector3[] PlacementDirections = BuildDirections(count: 32);
+    private static readonly Vector3[] MediumDirections = BuildDirections(count: MediumRays);
+    private static readonly Vector3[] HighDirections = BuildDirections(count: HighRays);
+
+    private static Vector3[] BuildDirections(int count) {
+        var directions = new Vector3[count];
+
+        for (var ray = 0; (ray < count); ray++) { directions[ray] = Fibonacci(count: count, index: ray); }
+        return directions;
+    }
+
     private static readonly (int X, int Y, int Z) HighDims = (48, 16, 48);
     private static readonly (int X, int Y, int Z) MediumDims = (32, 12, 32);
 
@@ -470,7 +484,7 @@ public sealed class SdfMeshIrradiance {
         // A cell can straddle a partition. A sample belongs to its actual origin, never an assumed open cell centre.
         var sky = new float[6];
         var radiance = new Vector3[6];
-        var valid = TraceRadiance(origin: position, rotation: Quaternion.Identity, layout: m_layout, lighting: lighting,
+        var valid = TraceRadiance(origin: position, layout: m_layout, lighting: lighting,
             low: m_low, scene: scene, sweep: (m_layout.Sweeps - 1), sky: sky, radiance: radiance, inside: out _);
         var traced = new CameraSample(Cell: cell, Generation: m_generation, Invalid: !valid, Position: position,
             Radiance: radiance, Settled: !m_owed, Sky: sky);
@@ -907,7 +921,6 @@ public sealed class SdfMeshIrradiance {
     // the first adding the light the hit reflects from cached probes; then which traced lights its origin sees.
     private ProbeData TraceProbe((int X, int Y, int Z) cell, int generation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep, ProbeBlock block, int index) {
         var centre = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
-        var rotation = RotationOf(cell: cell);
         bool valid;
         Vector3 offset;
         float inside;
@@ -916,10 +929,10 @@ public sealed class SdfMeshIrradiance {
             // Every sweep stands where the first did, so one origin owns the probe's cubes, depth and light visibility.
             offset = cached.Current.Offset;
             valid = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: (centre + offset), radiance: block.Radiance(index: index),
-                rotation: rotation, scene: scene, sky: block.Sky(index: index), sweep: sweep);
+                scene: scene, sky: block.Sky(index: index), sweep: sweep);
         } else {
             valid = Place(centre: centre, inside: out inside, layout: layout, lighting: lighting, low: low, offset: out offset, radiance: block.Radiance(index: index),
-                rotation: rotation, scene: scene, sky: block.Sky(index: index));
+                scene: scene, sky: block.Sky(index: index));
         }
 
         var origin = (centre + offset);
@@ -954,7 +967,7 @@ public sealed class SdfMeshIrradiance {
     // A centre in geometry or near a surface tries clear positions in its cell. Among nearby candidates, prefer
     // fewer close hits, charging for distance from the centre: keeping probes away from grazing surfaces conditions
     // the finite angular depth map.
-    private bool Place(Vector3 centre, Quaternion rotation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene,
+    private bool Place(Vector3 centre, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene,
         Span<float> sky, Span<Vector3> radiance, out Vector3 offset, out float inside) {
         var clearance = SdfMeshIrradianceProbe.Clearance;
         var reach = (0.5f * layout.Spacing);
@@ -962,7 +975,7 @@ public sealed class SdfMeshIrradiance {
         offset = Vector3.Zero;
 
         var near = scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out var normal, point: centre, radius: clearance, surface: out var surface);
-        var valid = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0);
+        var valid = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, scene: scene, sky: sky, sweep: 0);
 
         if (valid && !near) { return true; }
         if (!near && !scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out normal, point: centre, radius: ((reach * MathF.Sqrt(x: 3f)) + clearance), surface: out surface)) { return false; }
@@ -981,7 +994,7 @@ public sealed class SdfMeshIrradiance {
             var origin = (centre + trial);
 
             if (scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: origin, radius: clearance, surface: out _)) { continue; }
-            if (Blocked(near: out var nearby, origin: origin, reach: layout.Spacing, rotation: rotation, scene: scene)) { continue; }
+            if (Blocked(near: out var nearby, origin: origin, reach: layout.Spacing, scene: scene)) { continue; }
             if (scored) {
                 var score = (nearby + ((0.25f * trial.Length()) / layout.Spacing));
 
@@ -991,29 +1004,29 @@ public sealed class SdfMeshIrradiance {
                 }
                 continue;
             }
-            if (!TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: origin, radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0)) { continue; }
+            if (!TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: origin, radiance: radiance, scene: scene, sky: sky, sweep: 0)) { continue; }
 
             offset = trial;
             return true;
         }
-        if (float.IsFinite(f: bestScore) && TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: (centre + best), radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0)) {
+        if (float.IsFinite(f: bestScore) && TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: (centre + best), radiance: radiance, scene: scene, sky: sky, sweep: 0)) {
             offset = best;
             return true;
         }
 
         // Nothing in the cell stands clear: the centre's own measurement is kept, as an invalid probe's.
-        _ = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0);
+        _ = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, scene: scene, sky: sky, sweep: 0);
         return false;
     }
     // Whether a point's rays mostly meet back faces, read with a few rays before a candidate is traced in full; `near`
     // receives the share of them that meet any surface within `reach`.
-    private static bool Blocked(Vector3 origin, Quaternion rotation, SdfMeshIrradianceScene scene, float reach, out float near) {
+    private static bool Blocked(Vector3 origin, SdfMeshIrradianceScene scene, float reach, out float near) {
         const int Rays = 32;
         var backFaces = 0;
         var nearby = 0;
 
         for (var ray = 0; (ray < Rays); ray++) {
-            var direction = Vector3.Transform(value: Fibonacci(count: Rays, index: ray), rotation: rotation);
+            var direction = PlacementDirections[ray];
 
             if (!scene.Intersect(direction: direction, distance: out var distance, material: out _, maximum: reach, normal: out var normal, origin: origin)) { continue; }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { backFaces++; }
@@ -1027,15 +1040,17 @@ public sealed class SdfMeshIrradiance {
     // reads the existing scene and bounce cache; a camera sample is never written back into the irradiance volume.
     // `inside` receives the share of the rays that met back faces; the measurement is valid while it is at most
     // InsideShare. The cubes are written from zero.
-    private bool TraceRadiance(Vector3 origin, Quaternion rotation, Layout layout, Lighting lighting, (int X, int Y, int Z) low,
+    private bool TraceRadiance(Vector3 origin, Layout layout, Lighting lighting, (int X, int Y, int Z) low,
         SdfMeshIrradianceScene scene, int sweep, Span<float> sky, Span<Vector3> radiance, out float inside) {
         Span<float> total = stackalloc float[6];
         var backFaces = 0;
 
         sky.Clear();
         radiance.Clear();
+        var directions = ((layout.Rays == MediumRays) ? MediumDirections : HighDirections);
+
         for (var ray = 0; (ray < layout.Rays); ray++) {
-            var direction = Vector3.Transform(value: Fibonacci(index: ray, count: layout.Rays), rotation: rotation);
+            var direction = directions[ray];
             var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out var material, normal: out var normal);
             var light = Vector3.Zero;
 
@@ -1363,23 +1378,6 @@ public sealed class SdfMeshIrradiance {
 
         return new Vector3(x: (radius * MathF.Cos(x: angle)), y: z, z: (radius * MathF.Sin(x: angle)));
     }
-    // A fixed rotation per cell, so neighbouring probes' rays do not share directions: a uniform random rotation from the
-    // cell's PCG3D hash (Pcg3dLatticeNoise.Pcg3d, the kernels' sdfPcg3d), the same on every run and machine.
-    private static Quaternion RotationOf((int X, int Y, int Z) cell) {
-        var (hash, hash2, _) = Pcg3dLatticeNoise.Pcg3d(x: unchecked((uint)cell.X), y: unchecked((uint)cell.Y), z: unchecked((uint)cell.Z));
-        var u1 = ((hash & 0xFFFFu) / 65536f);
-        var u2 = ((hash >> 16) / 65536f);
-        var u3 = ((hash2 >> 16) / 65536f);
-        var a = MathF.Sqrt(x: (1f - u1));
-        var b = MathF.Sqrt(x: u1);
-
-        return Quaternion.Normalize(value: new Quaternion(
-            x: (a * MathF.Sin(x: ((2f * MathF.PI) * u2))),
-            y: (a * MathF.Cos(x: ((2f * MathF.PI) * u2))),
-            z: (b * MathF.Sin(x: ((2f * MathF.PI) * u3))),
-            w: (b * MathF.Cos(x: ((2f * MathF.PI) * u3)))
-        ));
-    }
 
     // One probe: its sky visibility and radiance cubes, its angular surface support, the traced lights its origin
     // sees (one bit a lights-table index), the sweeps
@@ -1552,7 +1550,7 @@ public sealed class SdfMeshIrradiance {
 
             return new Layout(
                 Dims: (high ? HighDims : MediumDims),
-                Rays: (high ? 128 : 96),
+                Rays: (high ? HighRays : MediumRays),
                 Spacing: (high ? 1f : 2f),
                 Sweeps: (1 + Math.Clamp(max: cap, min: 0, value: (bounces ?? cap)))
             );
