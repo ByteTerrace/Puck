@@ -124,12 +124,14 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private readonly WorldSeatViewports m_viewports;
 
     private int m_builtDefinitionRevision;
+    private int m_builtCodeRevision;
     private float m_elapsedSeconds;
     private double m_presentedSeconds;
     private SdfProgram? m_lastProgram;
 
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
+    private int m_staticFieldCode;
     private int m_staticFieldNeighbours = -1;
     private int m_staticFieldResponses = -1;
 
@@ -525,8 +527,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // off the live geometry — cameras FIRST, so a same-delivery View source change resolves the new camera rows.
     private void ReconcileDelivery() {
         var definitionRevision = m_client.DefinitionRevision;
+        var codeRevision = Puck.Abstractions.CodeRevision.Current;
 
-        if (definitionRevision == m_builtDefinitionRevision) {
+        // A hot-reload edit re-derives everything a delivery derives, as a delivery of the same definition would.
+        if ((definitionRevision == m_builtDefinitionRevision) && (codeRevision == m_builtCodeRevision)) {
             return;
         }
 
@@ -565,6 +569,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             derivedFaces: facets.Faces
         );
         m_builtDefinitionRevision = definitionRevision;
+        m_builtCodeRevision = codeRevision;
     }
 
     // The presentation row of the scale register, rebuilt only when the document names another, so a frame allocates
@@ -1668,8 +1673,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (
                 (m_client.DefinitionRevision != m_staticFieldDefinition) ||
                 (m_client.ResponseRevision != m_staticFieldResponses) ||
-                (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours)
+                (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours) ||
+                (m_builtCodeRevision != m_staticFieldCode)
             ) {
+                m_staticFieldCode = m_builtCodeRevision;
                 m_staticFieldDefinition = m_client.DefinitionRevision;
                 m_staticFieldResponses = m_client.ResponseRevision;
                 m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
