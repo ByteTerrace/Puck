@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 using Puck.Cli.Motion;
 
@@ -203,6 +204,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
             var capture = string.Empty;
             var png = (pinned ? world.Capture(output: out capture, tick: captureTick) : null);
+            string? motion = null;
             string? relative = null;
             double? changed = null;
 
@@ -241,6 +243,18 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                     reasons.AddRange(collection: evidence.Refusals);
                     status = SweepStatus.Red;
                 }
+                var pose = world.Run(script: "body.where 0");
+                var rig = world.Run(script: "body.rig 0");
+                if (!pose.Ok || !rig.Ok) {
+                    reasons.AddRange(collection: pose.Refusals.Concat(second: rig.Refusals));
+                    status = SweepStatus.Red;
+                } else {
+                    motion = $"{pose.Output.Trim()}\n{rig.Output.Trim()}";
+                    if ((stop.ExpectedMotion is { } pattern) && !Regex.IsMatch(input: motion, pattern: pattern, options: RegexOptions.CultureInvariant, matchTimeout: TimeSpan.FromSeconds(value: 2))) {
+                        reasons.Add(item: $"motion did not match '{pattern}': {pose.Output.Trim()}");
+                        status = SweepStatus.Red;
+                    }
+                }
             }
 
             foreach (var line in (stop.After ?? [])) {
@@ -253,7 +267,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             progress.WriteLine(value: $"sweep: still {stop.Name} {status}");
-            stills.Add(item: new SweepStillResult(Capture: capture.Trim(), ChangedFraction: changed, File: relative, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: reasons, Status: status));
+            stills.Add(item: new SweepStillResult(Capture: capture.Trim(), ChangedFraction: changed, File: relative, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: reasons, Status: status, Motion: motion));
         }
 
         return new SweepTourResult(

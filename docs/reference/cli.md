@@ -2406,7 +2406,7 @@ signal or a stop by editing it.
 
 ```text
 puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir>] [--cache-dir <dir>]
-           [--no-headless] [--stop <name>...] [--scenarios <file>...] [--plan <file>]
+           [--no-headless] [--stop <name>...] [--scenarios <file>... | --no-scenarios] [--plan <file>]
 ```
 
 - **The headless leg** boots the world headless and unpaced, with no device and
@@ -2416,8 +2416,7 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   then reads the signals: the watchdog, the tools' records, `replay.scope`,
   `world.rule.failures`, the colliders report
   (`world.debug-view report colliders --json`, read as JSON) and the contacts
-  report (`world.debug-view report contacts`, read from its text header, since
-  its JSON form is far past the attachment's answer limit), `world.budget`,
+  report (`world.debug-view report contacts --json`, also read as JSON), `world.budget`,
   narrowed `world.counters`, `world.addons`, `host.frames` and
   `host.memory collect`. The World boots with `--paused` before its first
   simulation tick, stays paused between calls and is stepped only
@@ -2434,14 +2433,17 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   memory), then takes the tour: each stop runs the tour's reset lines and its
   own, waits for the bakes, arms its pinned steps a fixed lead after the tick
   they settled at (`world.at`), with `world.lockstep on` and camera framing plus
-  `view.reseed 0` pinned to the start tick, and takes a settled capture pinned to a named
+  `view.recenter 1` and `view.reseed 0` pinned to the start tick, and takes a settled capture pinned to a named
   tick (the start tick plus the stop's settle ticks). The
   stops cover every area indoors and out, a jump, flight and noclip, and the
   owner's walkthrough findings at their poses. `--stop` runs only the named
   stops, which suits tuning a pose on a World left running.
-- **Scenarios** run only when `--scenarios` names test files (through this
-  CLI's `puck test … --jobs 1`); the whole `worlds/debug/*-tests.puck` set boots
-  the world once per scenario, so a default sweep reports it as unrun.
+- **Scenarios** run the plan's `scenarios` paths or file patterns (the default
+  is `worlds/debug/*-tests.puck`), one source at a time through this CLI's
+  `puck test … --jobs 1` with compatible boots reused within each source.
+  `--scenarios` overrides the set; `--no-scenarios` skips it for focused runs.
+  Each source's generated worlds, transcripts and exports stay under the sweep's
+  `scenarios/<ordinal>/run` directory.
 
 The plan refuses unknown JSON members at every level and refuses an empty
 workload. Selecting no leg or scenario is refused; a report with no measurements fails.
@@ -2450,6 +2452,8 @@ workload. Selecting no leg or scenario is refused; a report with no measurements
 motion`; fresh Worlds can share one writable scratch cache. Omitted, it keeps
 the per-user cache. Cache-dependent boot counters are recorded but excluded
 from exact comparison.
+Scenario workers receive the same `--cache-dir` and explicit `--world-artifact`,
+so an isolated cache or a chosen engine build applies to the entire sweep.
 
 Each signal is red when a red rule of the plan holds or its line was refused,
 amber when an amber rule holds, and clean otherwise. Silence is never success:
@@ -2462,7 +2466,9 @@ only arming. A reseed that restarts zero registrations fails. Authority stays
 paused during bake waits and coordinator calls; explicit tick waits resume and
 pause within one call, and each pinned timeline pauses at its capture tick.
 Missing or refused prelude, reset, frame, motion and after lines
-fail the stop. A tool is unmeasured when it did not finish within its
+fail the stop. A stop's optional `expectedMotion` regular expression must match
+its held body pose and rig; the outdoor stops require the destination instance,
+so a capture before a portal crossing completes fails. A tool is unmeasured when it did not finish within its
 ticks; a stop is unmeasured when the sweep could not reach it. Unmeasured fails
 the run like red. A signal the plan marks `recheck` (the watchdog, the rule
 failures, the addons) is read again after the tour as `<name>.after-tour`.
@@ -2480,14 +2486,13 @@ The output directory holds `report.json` (`puck.sweep.v1`: every signal with
 its colour, reasons, metrics and answer file, every tool, still and sheet), the
 answers under `headless/` and `windowed/`, and the stills and contact sheets
 under `tour/`, one `sheet-<group>.png` per group (findings, indoor, outdoor,
-motion). With `--baseline <previous report.json>` each signal lists what
+motion). Each still records `motion` (`body.where 0` and `body.rig 0`) at its held capture tick for exact pose and gait comparison. With `--baseline <previous report.json>` each signal lists what
 changed under the plan's compare mode for each metric (`exact`,
 `relative:<fraction>` or `none`), and each still its changed-pixel fraction: a
 pixel counts as changed when a colour channel differs by more than the tour's
 `levelTolerance` (16 levels), and a still whose fraction exceeds
 `amberFraction` (2%) is amber; a `compare-<group>.png` sheet then sets each
-baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. The report is a derived product: keep it
-outside the repository.
+baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. The report is a derived product: keep it in an ignored lane scratch directory and never commit it.
 
 Exit codes: 0 nothing red or unmeasured, 1 something red or unmeasured, 2 a
 refusal (a plan, a baseline, a `--output` that is the `--baseline` report's

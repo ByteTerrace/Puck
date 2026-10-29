@@ -153,6 +153,24 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "view.recenter",
+            description: "Resets a seat's live camera orbit and boom to its authored frame: view.recenter [player], player 1..4 (default the acting seat). Answers with the camera state, including without physical devices. Session presentation only.",
+            handler: (context, args) => {
+                if (args.Count > 1) {
+                    return CommandResult.Usage(form: "[player]", verb: "view.recenter");
+                }
+                var (slot, error) = SeatCommandArgs.ResolveSlot(args: in args, at: 0, context: context, verb: "view.recenter");
+                if (error is { } refusal) { return refusal; }
+                if (roster.Seat(slot: slot) is not { } seat) {
+                    return CommandResult.Error(output: "[view.recenter: no occupied seat]");
+                }
+                seat.View.Recenter();
+                return new CommandResult(Output: Describe(slot: slot));
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.camera.view",
             description: "Eases this seat into its authored eye or back out: player.camera.view [first|third|toggle|auto]. No argument toggles. Auto restores the camera program's state-driven view and optional automatic pull-in.",

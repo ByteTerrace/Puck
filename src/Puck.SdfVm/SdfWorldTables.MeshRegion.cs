@@ -30,9 +30,6 @@ public sealed partial class SdfWorldTables {
     private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMeshDraw> m_meshLanded = [];
 
-    // The draws the latest frame staged, whose meshes are written.
-    private IReadOnlyList<SdfMeshDraw>? m_meshDraws;
-
     // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
     // owed mesh): what StageChangedDraws compares a list against.
     private SdfMeshDraw[] m_stagedDraws = [];
@@ -116,7 +113,7 @@ public sealed partial class SdfWorldTables {
     public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
-    internal IReadOnlyList<SdfMeshDraw>? MeshDraws => m_meshDraws;
+    internal ReadOnlySpan<SdfMeshDraw> MeshDraws => m_stagedDraws.AsSpan(start: 0, length: m_stagedCount);
     // The world box of each staged draw, by its index in MeshDraws, or null for a draw no host box bounds
     // (SdfMeshBox.TryOf), which every pass draws.
     internal ReadOnlySpan<SdfMeshBox?> MeshDrawBoxes => m_meshDrawBoxes.AsSpan(length: ((int)m_meshDrawCount), start: 0);
@@ -195,7 +192,6 @@ public sealed partial class SdfWorldTables {
             (m_meshArena.Words > 0)
         ) {
             StageChangedDraws(draws: staged);
-            m_meshDraws = staged;
             m_meshRevision++;
             m_meshStaged = true;
 
@@ -224,7 +220,6 @@ public sealed partial class SdfWorldTables {
             _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: records), offset: 0);
         }
 
-        m_meshDraws = staged;
         m_meshDrawCount = ((uint)staged.Count);
         m_glassDrawCount = 0;
         if (m_meshDrawBoxes.Length < staged.Count) {

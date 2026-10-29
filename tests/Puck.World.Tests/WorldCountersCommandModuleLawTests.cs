@@ -99,6 +99,7 @@ public sealed class WorldCountersCommandModuleLawTests {
             expected: $"[world.counters: {Allocation}state.arena\nstate.arena.visits 12\nworld.boot\nworld.boot.loads 3\nworld.boot.parses 7\n]",
             actual: result.Output
         );
+        Assert.Equal(expected: result.Output, actual: Run(line: "world.counters summary").Output);
     }
     [Fact]
     public void AFilterSelectsWholeSegments() {
@@ -556,7 +557,7 @@ public sealed class WorldCountersCommandModuleLawTests {
     }
     [Fact]
     public void TheOptionsBelongToTheGpuSection() {
-        Assert.True(condition: Run(
+        Assert.False(condition: Run(
             gpu: MeshRegistry(sessions: 0),
             line: "world.counters state summary"
         ).IsError);

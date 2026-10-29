@@ -47,10 +47,16 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
         var shapeName = ((instanceTarget.EffectiveCount == 2) ? args[1].ToString() : null);
+        var pool = m_stamps;
+        var bodyIndex = index;
+        if ((index < PlayerRoster.MaxSlots) && (m_screens.Presenter is { } presenter) && presenter.TrySeatScene(index, out var scene, out _)) {
+            pool = scene.BodyStamps;
+            bodyIndex = seatRouter.Route(slot: index).EntityIndex;
+        }
 
         if (
-            !m_stamps.TryBodyRig(
-            bodyIndex: index,
+            !pool.TryBodyRig(
+            bodyIndex: bodyIndex,
             shapeName: shapeName,
             state: out var state
         ) ||

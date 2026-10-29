@@ -6,6 +6,36 @@ namespace Puck.World.Server;
 
 /// <summary>Presentation measurements shared by diagnostic checks and their precision tests.</summary>
 public static class WorldDiagnosticGeometry {
+    /// <summary>Certifies a witness in the interior of two opposing planar faces. Touching solids cover a
+    /// neighbourhood of such a point; their shared face is not an exposed boundary of the union.</summary>
+    /// <param name="first">One effective collider.</param>
+    /// <param name="second">The touching collider.</param>
+    /// <param name="point">The boundary witness.</param>
+    /// <param name="epsilon">Arithmetic uncertainty in metres.</param>
+    /// <returns>True only for opposing face interiors, never for an exposed edge or corner.</returns>
+    public static bool SharedInteriorFace(FixedStaticCollider first, FixedStaticCollider second, Vector3 point, double epsilon) =>
+        PlanarFace(first, point, epsilon, out var a) && PlanarFace(second, point, epsilon, out var b) && (Vector3.Dot(a, b) < -0.99999f);
+
+    private static bool PlanarFace(FixedStaticCollider collider, Vector3 point, double epsilon, out Vector3 normal) {
+        normal = default;
+        if (collider.Kind is not (FixedStaticColliderKind.AxisAlignedBox or FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox)) { return false; }
+        var rotated = collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox;
+        var relative = FixedVector3.FromVector3(value: point) - collider.Center;
+        var local = (rotated ? collider.Rotation.RotateInverse(vector: relative) : relative).ToVector3();
+        var extent = collider.Extent.ToVector3();
+        var radius = ((collider.Kind == FixedStaticColliderKind.RoundedBox) ? (float)collider.Radius : 0f);
+        for (var axis = 0; axis < 3; axis++) {
+            var next = (axis + 1) % 3;
+            var last = (axis + 2) % 3;
+            if ((Math.Abs(Math.Abs(local[axis]) - extent[axis] - radius) <= epsilon) &&
+                (Math.Abs(local[next]) < extent[next] - epsilon) && (Math.Abs(local[last]) < extent[last] - epsilon)) {
+                normal[axis] = Math.Sign(local[axis]);
+                if (rotated) { normal = collider.Rotation.Rotate(vector: FixedVector3.FromVector3(value: normal)).ToVector3(); }
+                return true;
+            }
+        }
+        return false;
+    }
     /// <summary>Names a signed boundary contradiction only outside the check's explained uncertainty.</summary>
     /// <param name="separation">Positive in authored air, negative inside the authored solid.</param>
     /// <param name="budget">The check's precision components.</param>
