@@ -263,6 +263,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
   HLSL. A layout change needs a host with the matching history allocation before
   loading its kernels. Account for this output-sized history in GPU memory.
+  Preserve a constant coverage component exactly before half packing and after
+  averaging the phases: bound the convex mean by its samples. A rounded value
+  just below one becomes 0.9995 in half storage and invents a background share
+  on an opaque surface. The analytic resolve device witness checks full coverage.
 - **Coincident exposed faces cannot accumulate a stable receiver.** Check
   `world.debug-view material-id` when a static patch changes identity or never
   completes its phase window. Separate meshes sharing an exposed plane can
