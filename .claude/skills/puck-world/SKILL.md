@@ -222,7 +222,11 @@ with tick, command, status and output. Use `world.at` for absolute ticks or
 several commands at the same tick, and a multiline script for an ordered
 command/wait/read sequence.
 
-Keep reads lean: `world.view.camera` answers a compact line (`full` for every
+Keep reads lean: a large answer (`world.affordances`, `world.grants`) is narrowed
+by `puck_exec`'s own filters, which never change what the command does and apply to every
+line's answer: `lines` (one-based ranges such as `1-20,40`), `match` (lines containing a text,
+ignoring case), `fields` (keys of `key=value` answers, or property names anywhere in a JSON
+answer) and `maxBytes` (a cut ending in an explicit mark, with `truncated` set). `world.view.camera` answers a compact line (`full` for every
 field, a key list for chosen ones), `help <prefix>` answers one synopsis line per
 verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
 one script rather than one call per sample. `world.view.pick <view> <x> <y>`
