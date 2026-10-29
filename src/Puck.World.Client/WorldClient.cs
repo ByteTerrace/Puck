@@ -1345,16 +1345,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 continue;
             }
 
-            var position = Vector3.Lerp(
-                value1: m_previousPosition[index],
-                value2: m_currentPosition[index],
-                amount: alpha
+            var position = WorldPoseInterpolation.Position(
+                previous: m_previousPosition[index],
+                current: m_currentPosition[index],
+                alpha: alpha
             );
             // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize.
-            var orientation = Quaternion.Lerp(
-                quaternion1: m_previousOrientation[index],
-                quaternion2: m_currentOrientation[index],
-                amount: alpha
+            var orientation = WorldPoseInterpolation.Orientation(
+                previous: m_previousOrientation[index],
+                current: m_currentOrientation[index],
+                alpha: alpha
             );
 
             m_easers[index].Apply(
