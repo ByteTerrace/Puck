@@ -1,0 +1,60 @@
+{
+  "tools": [
+    {
+      "name": "fighting-motion",
+      "lines": [
+        "world.wait 4",
+        "player.signal keyboard.u press at:0.001",
+        "player.signal keyboard.i press at:0.002",
+        "player.signal keyboard.o press at:0.003",
+        "world.wait 6"
+      ],
+      "until": {
+        "line": "world.state motions",
+        "metric": "$value",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    }
+  ],
+  "scenarios": [],
+  "signals": [
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "motion",
+      "line": "world.state motions",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "buffered",
+      "line": "world.state buffered",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    }
+  ],
+  "tour": {
+    "prelude": [],
+    "reset": [],
+    "frame": [],
+    "settle": 0,
+    "levelTolerance": 0,
+    "amberFraction": 0,
+    "columns": 1,
+    "cellWidth": 1,
+    "stops": []
+  },
+  "note": "Executable rows of the input-channel genre table. No sample game or new interpreter: ordinary worlds, input signals, mode commands and rule read-backs. Exact clock, checkpoint, ring and cancellation invariants remain the input-*-tests.puck scenarios."
+}

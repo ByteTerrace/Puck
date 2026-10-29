@@ -154,8 +154,7 @@ public sealed class CrossingReplayLawTests {
         ))],
     };
 
-    private static bool IsArrival(WorldReplayEntry entry, WorldChannelTable channels) => WorldReplayEntryDescriber.Describe(
-        channels: channels,
+    private static bool IsArrival(WorldReplayEntry entry) => WorldReplayEntryDescriber.Describe(
         entry: entry
     ).StartsWith(
         comparisonType: StringComparison.Ordinal,
@@ -286,12 +285,10 @@ public sealed class CrossingReplayLawTests {
         );
 
         var destination = Assert.Single(collection: scenario.Read(name: name).Companions);
-        var channels = WorldChannelTable.Compile(channels: WorldDefinitionSerialization.Deserialize(utf8Json: destination.DefinitionJson).Channels);
         var arrivalTick = -1;
 
         for (var tick = 0; (tick < destination.Ticks.Count); tick++) {
             if (destination.Ticks[tick].Authority.Any(predicate: entry => IsArrival(
-                channels: channels,
                 entry: entry
             ))) {
                 Assert.Equal(
@@ -324,7 +321,7 @@ public sealed class CrossingReplayLawTests {
         );
 
         // The red leg: the same tape with its arrival removed replays identically up to the arrival and diverges on it.
-        var stripped = KeepingAuthority(keep: entry => !IsArrival(channels: channels, entry: entry), tape: destination);
+        var stripped = KeepingAuthority(keep: entry => !IsArrival(entry: entry), tape: destination);
 
         Assert.Equal(
             expected: arrivalTick,
@@ -464,7 +461,6 @@ public sealed class CrossingReplayLawTests {
         }
 
         static bool IsFederated(WorldReplayEntry entry) => WorldReplayEntryDescriber.Describe(
-            channels: Channels,
             entry: entry
         ).StartsWith(
             comparisonType: StringComparison.Ordinal,

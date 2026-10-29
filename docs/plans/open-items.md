@@ -26,43 +26,45 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Sweep and visual checks](#sweep-and-visual-checks): run the paired windowed
-   qualification sweep-honest could not finish, now that GPU admission is first
-   come, first served (fair-lease). The sweep now fails on any red or
-   unmeasured signal, so its two standing reds (companion overlaps, collider
-   disagreements) are what keep it from going green.
-2. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
-   (depth visibility leaks at every silhouette) and its medium cost and
-   zero-weight findings, then the wrapped-diffuse sun leak. In flight:
-   probe-depth-fix.
-3. [Test runner and replay](#test-runner-and-replay): boot reuse across
-   differing scenarios (every scenario still pays its own host boot), the batch
-   loop that abandons legs after one divergence, and `--reproduce`, which still
-   costs as much again as the ordinary run. In flight: boot-reuse.
-4. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the 87 red
-   collider findings now fail every sweep.
-5. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-   the edit-to-run review's two findings, a hot edit outside `PuckHotReload`
-   that stops applying instead of rebooting, and caches keyed by the modules as
-   built.
-6. [Debug tools](#debug-tools): the developer exhibits, the diagnostics views'
-   windowed checks and a pick that never answers under pause.
-7. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-   the tick still sets the frame's p99; design and build the simulation thread.
-8. [Dual-stick play and the Moth's motion](#dual-stick-play-and-the-moths-motion):
-   fluid camera and body turning on the pad, then the owner's feel sitting.
-9. [Cross-backend parity and GPU robustness](#cross-backend-parity-and-gpu-robustness):
-   bring back an automated parity gate on the debug world and close Vulkan's
-   crossing cost.
-10. [UI step 1: the engine leaks out](#ui-step-1-the-engine-leaks-out): the
-    first [UI step](ui.md), with the overlay text that still spreads too wide.
+1. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
+   (depth visibility leaks at every silhouette) with the zero-weight gather
+   fallback in the same change, then the trace cost and the wrapped-diffuse sun
+   leak. In flight: probe-depth-fix.
+2. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
+   the walkthrough's other high; `SdfMeshInstance.Matrix` already scales at
+   draw, so the fix is in the dynamic bake path's identity and detail.
+3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+   a hot-reload code revision as one invalidation contract (emitter revisions
+   and the static field), then the persisted caches keyed by the modules as
+   built; a product of edited code under the unedited identity is the hazard.
+4. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+   cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
+   answer), the per-swap state load, then the schema switch.
+5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
+   break (`WorldTestBatch.cs:89`), then boot reuse across differing scenarios
+   (in flight: boot-reuse) and `--reproduce`, which still costs as much again as
+   the ordinary run.
+6. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+   comparisons on the corrected rounded-Box diagnostic, then the surviving red
+   findings by cluster; the reds fail every sweep.
+7. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+   it in `panes` and answers under pause, then the diagnostics' windowed checks
+   and the developer exhibits.
+8. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+   chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
+   then one paired windowed tour when no lane holds the GPU.
+9. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+   isolate the temporal-off cadence blink first, then why history never
+   resolves the jitter.
+10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+    the catch-up burst bounded by wall time and the wake margin derived from the
+    contact skin, both confirmed in the code and cheap; the thread itself is a
+    design consensus the owner has yet to queue.
 
 ## Owner decisions
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- The coat layer's F0 semantic, and whether baked static copies occupy SDF
-  instances at all ([lighting](#lighting-and-gi)).
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -88,7 +90,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - Feel and look sittings: the Moth's walk, run, turn and lean values; the faerie;
   the board room; the lift panel's look and reach boxes; the gallery inspection
   lever's values; first-person feel in the lift and stairwell; the glass
-  exhibit on both backends.
+  exhibit on both backends; how indoor rooms read against daylight once the
+  image meter drives exposure ([lighting](#lighting-and-gi)).
+- Whether a cube projection is wanted for screens on shapes, beside the sphere
+  the owner asked for ([curved screens](#screens-on-curved-and-general-sdf-surfaces)).
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
 ## Work packets
@@ -96,8 +101,9 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Sweep and visual checks
 
 Owner: sweep follow-up, with the lead scheduling the GPU slot · medium ·
-Next: two fresh current-tip windowed tours back to back (about 18 minutes of
-GPU), compared stop by stop.
+Next: fix the prelude (dismiss the chess toast, wait in shorter steps),
+reproduce the companion overlaps, then one paired windowed tour (about 18
+minutes of GPU) when no lane holds the GPU, compared stop by stop.
 
 - Finish sweep-honest's paired motion qualification. Its first final tour
   measures all 23 windowed signals and captures all 64 stops cleanly, and 62
@@ -135,13 +141,31 @@ GPU), compared stop by stop.
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · one high, six
-medium, lows · Next: the high silhouette leak, in flight in probe-depth-fix.
+medium, lows · Next: the high silhouette leak with the zero-weight gather
+fallback in the same change, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
-- Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the view's HDR output with a highlight clamp) as the auto-exposure driver, the probe meter kept for local adaptation.
+- Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the
+  view's HDR output with a highlight clamp) drives auto-exposure, the probe
+  meter kept for local adaptation, because the probe meter cannot see dynamic
+  meshes or anchored lights (the lift sits at the EV 7 floor and the Moth basis
+  compensates by 2.5 stops). First a calibration test: an authored 18 % grey
+  card under a known manual EV reads about 118/255. Settle the colour domain
+  with it: `place.comp.hlsl:20` states that the stylized shading is already
+  display-referred and no gamma encode follows the filmic curve, so whether the
+  back buffer owes an output transfer is a contract to establish, not a defect
+  found. Only how the result looks is the owner's.
+- Decide (the lead's call): the coat layer's F0 semantic, chosen consistently
+  with the material model; and whether baked static copies occupy SDF instances
+  at all, the copies represented independently of the bake program's limits.
+- Decide (the lead's call): a missed depth ray stores a bounded distance (about
+  1.5 spacing diagonals) or a flag, never the reach; the sky comes from the
+  radiance rays; an all-zero gather is explicit, never full light. The
+  filtering rule against thin occluders, corners and FP16 precision wants its
+  own short consensus before it is final.
 
 - Probe depth visibility (from the probe-depth review):
   - [high] Depth visibility leaks at every silhouette: a ray that misses stores
@@ -230,12 +254,6 @@ holds the fixed poses and the approaches already rejected.
   camera-meter fallback, and the meter now traces at a camera with no visible
   lattice probe, but the earlier blackout's cause is not established; reproduce
   it with the original camera and lighting state.
-- Exposure architecture (owner decision): the probe meter cannot see dynamic
-  meshes or anchored lights, which is why the lift sits at the EV 7 floor and
-  the Moth basis compensates by 2.5 stops. First, a calibration test: an
-  authored 18 % grey card under a known manual EV should read about 118/255. The
-  display path may write linear light with no output transfer if the back
-  buffer is not sRGB.
 - The plinths' box edges read about 45 degrees of shading error in the GPU bake
   while `puck mesh audit --cpu` scores them clean: `--group "shape-box ("` shows
   the top edges equally clean in the store and the CPU bake (worst corner 45
@@ -246,8 +264,15 @@ holds the fixed poses and the approaches already rejected.
 ### Test runner and replay
 
 Owner: boot-reuse follow-up (runner), replay specialist · medium and low ·
-Next: reuse one host across differing scenarios (in flight: boot-reuse), then
-the batch loop's break.
+Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then reuse
+one host across differing scenarios (in flight: boot-reuse).
+
+- Decide (the lead's call): boot reuse boots the shared base once, checkpoints
+  it, and applies each scenario's own rows, rules and state after the restore,
+  behind a defined reset boundary (grants, journals, addons, machines,
+  subscriptions, input and sibling instances) shown equal to a fresh host on
+  representative scenarios; `--reproduce` stays exact and independent, never
+  sampled.
 
 - Boot-once never reuses a boot in practice: every `puck test` run on the
   trimmed set prints one worker process but `host-boots` equal to `world-runs`
@@ -293,8 +318,9 @@ the batch loop's break.
 
 ### Collision versus drawn mesh
 
-Owner: next geometry and bake lane · red sweep signal · Next: take the 87 red
-findings by cluster, starting with the hall stairs.
+Owner: next geometry and bake lane · red sweep signal · Next: re-run the
+rendered mesh comparisons on the corrected rounded-Box diagnostic, then the
+surviving red findings by cluster, starting with the hall stairs.
 
 - The windowed collider and mesh disagreements: of the original 637 of 9,202 red
   checks, buried shared stair faces were not exterior boundaries, and the
@@ -314,6 +340,12 @@ findings by cluster, starting with the hall stairs.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
+- [low] The presentation query field (camera clearance, surface effectors)
+  excludes the solid placement `desk-chair`: its evaluator refuses a
+  `RepeatPolar` fold (`[world.presentation-field: excluded placement
+  'desk-chair' ... RepeatPolar]`, now narrated once per placement), so the chase
+  camera and limb probes see no chair. Give the fixed-point query twin the
+  fold, or bound the folded shape.
 - The bake-side causes live in the [rendering plan's](rendering.md#open-items)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
@@ -321,10 +353,26 @@ findings by cluster, starting with the hall stairs.
 
 ### Edit to running, hot reload and boot
 
+- [medium] A `world.load` from debug into a same-capacity input fixture leaves
+  authored state-writing rules refused with `the live edit grant refuses
+  state:blink` (and the fixture's counters stay zero); a fresh boot of that
+  fixture runs them. Reproduced in C7 with `input-genre-controls.puck` temporarily
+  set to the debug world's capacity. The seeded `World` Edit grant appears lost
+  across load; that cause is an inference, not yet confirmed. Owner: boot/reload
+  lane. C7's genre sweeps boot each source fresh.
+
 Owner: hot-reload follow-up (boot and build) · two medium, the rest ordinary ·
-Next: the two review findings, then a reboot for an edit outside `PuckHotReload`.
+Next: the hot-reload code revision as one invalidation contract (the
+compositor's emitter revisions and the static-field rebuild), then the
+persisted cache identities, then the parse count; then a reboot for an edit
+outside `PuckHotReload`.
 
 - Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
+- Decide (the lead's call): every persisted product is keyed by a hash of what
+  it read, and `CodeRevision.Current` folds into that identity while an update
+  is applied, so a hot-reloaded process never reads or writes a product of
+  edited code under the unedited identity; a built process derives the
+  ordinary identities.
 
 - [medium] A hot-reload code revision never invalidates the compositor's emitter
   revisions, and the static-field rebuild also needs a changed program, so
@@ -394,9 +442,21 @@ Next: the two review findings, then a reboot for an edit outside `PuckHotReload`
 
 ### Debug tools
 
-Owner: debug-world tools lane (specialist) · ordinary · Next: restore the three
-developer exhibits, then the diagnostics' windowed checks.
+Owner: debug-world tools lane (specialist) · medium · Next: the pick
+(`world.view.pick` addresses the presented world view by default, lists it in
+`panes`, and answers under `world.rate pause`), qualified in one windowed pass;
+then the diagnostics' windowed checks, then the three developer exhibits.
 
+- [medium] Naming what is under a pixel fails on the owner's windowed World:
+  `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and
+  `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object
+  is (`primary` resolves to the seat's render instance,
+  `src/Puck.World/WorldViewCommandModule.Picking.cs:48`; `main` names nothing).
+  Make pick address the presented world view by default and list it in
+  `panes`. Under `world.rate pause` the pick has stayed pending with no answer;
+  the hold now claims a paused World answers, bounded by the call's deadline
+  (`Picking.cs:73-100`), which only a windowed run shows. (from: owner
+  walkthrough)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -419,8 +479,6 @@ developer exhibits, then the diagnostics' windowed checks.
     creation, node, body) and any findings there; each circle is anchored to its
     picked world point, so it follows the thing and `goto` reaches it. A live
     `world.mesh.audit` that circles each bake cluster through it follows.
-- `world.view.pick` stays pending with no answer while `world.rate pause` holds
-  the world.
 - The tight-space camera course's three-up `camera-compare` layout and a live
   mode toggle on the Debug page remain to author (`camera-course.puck`).
 - `gallery.inspect`'s values (60 lux fills, EV100 7) are first picks tuned on
@@ -436,8 +494,26 @@ developer exhibits, then the diagnostics' windowed checks.
 
 ### Simulation tick off the frame thread
 
-Owner: specialist or Astra design lane · ordinary · Next: design the
-simulation thread and its snapshot handoff, then build it.
+Owner: specialist or Astra design lane · two medium, the rest ordinary · Next:
+the catch-up burst bounded by the wall time it has spent and the wake margin
+derived from the contact skin, both confirmed in the code (`FixedStepPump.Advance`,
+`WorldPopulation.Sleep.cs:154`); then the thread's design consensus, once the
+owner queues it.
+
+- The thread itself is an idea discussed with the owner and not yet queued:
+  a design consensus across the families, which the owner's ruling says starts
+  only when the owner reviews it and says so. The input lane it waited on has
+  landed.
+- Decide (the lead's call, for that consensus to confirm): one simulation
+  thread owns the pump, the server and every instance host and publishes
+  immutable per-tick snapshots into a small ring the frame thread reads
+  latest-complete; input is captured on the frame thread into a per-tick queue;
+  offscreen and `world.lockstep` run the tick inline under the same pump;
+  console, MCP and live-edit commands marshal through the pump's existing
+  queue; lifetime and bounded backpressure are settled before any lock-free
+  claim, since a collection pauses both threads.
+
+- [medium] The localized wake around a moving carrier uses a fixed 1 m margin that ignores the configurable contact skin: with a valid `contactSkin` of 2 m, a sleeping sphere resting at skin distance above a lift misses the wake box during small car movements and stays asleep instead of riding (`src/Puck.World.Server/WorldPopulation.Sleep.cs:154`). Derive the margin from the contact skin (and the body's own broadphase radius). (owner: next simulation batch; from: lift-lag review)
 
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
@@ -483,6 +559,23 @@ simulation thread and its snapshot handoff, then build it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
+- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
+  host frame clamps its wall delta to a quarter second
+  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
+  then runs every step that delta owes, so once a tick costs more than its
+  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
+  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
+  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
+  burst by the wall time it has spent (drop the rest, rebasing the capture pin
+  as a clamp does), so an over-budget tick slows the World instead of the frame.
+  Two more readings of the same multiplier: eight catch-up steps cost roughly
+  400 ms a frame on a slow gallery boot, where pausing the boot instance took a
+  frame from about 366 ms to 19 ms; and a cold-bake windowed Vulkan boot (nine
+  lanes loading the machine) read simulate peaks of 1.2-2.1 s in 7 or 8
+  catch-up steps over 600 frames averaging 232 ms.
+- [low] Every rigid advance zero-fills the step's capture snapshot
+  (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
+  body's advance in an EventPipe sample of a lift ride).
 - Pacing at 120 Hz with Windows' Dynamic Refresh Rate (the lead machine's
   display now runs 120 Hz with DRR on, VRR 48 to 120 Hz): confirm the 60 FPS bar
   and VRR pacing hold in front of and behind another window, and that
@@ -491,7 +584,13 @@ simulation thread and its snapshot handoff, then build it.
 ### Dual-stick play and the Moth's motion
 
 Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
-facing and reversal items, then a sitting.
+reversal brake, then a sitting; the rate-limited facing op only if a
+movement-facing scheme returns.
+
+- Binding bar layouts again (the owner's request; with the controls work, which edits the same `controls.puck`). The engine has both switches (`WorldBindingBar.LayoutCell` names the live authored layout; `ModelCell` draws one bar when `single`, every page with the rest as wings otherwise); the debug world authors only `standard` and fixes `barModel.model` at `single`. Recover and author: (1) the linear strips `keys` and `pad` from `controls.puck` at commit `8962c3d5a7` (lines 304-384: `pad` one row, left stick and Back, right stick and press, the face diamond at the right end; `keys` a WASD cross and action keys in a row with camera and function keys above), which the play wheel switched through `state.bar.layout` (`player.state.cell.toggle ... bar layout keys pad`, about line 465); (2) the wings, the WoW addon's modulo layout (commit `e5841bfdad`, `experimental/Puck.Demo/BindingBar/BindingBarLayout.cs`: two mirrored six-slot diamonds, `BarCount` 1 to 5 pushing bars 1-4 outward and downward, at the addon's 600-line reference: button 45 px, centre gap 60 px, anchor 220 px, badge 24/45 at 0.4375) through `ModelCell`; (3) a classical bar with flanking sidebars, never authored, built on the schema's "strip with side columns" (three groups on three anchors); (4) a compact size, which was never a mode (August worlds set `buttonSize 0.075`, `scale 0.72` per world), as a player setting over the layout's scale. Switch layouts, wings and size from play-wheel sectors and a console verb, kept per seat.
+
+- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible engine defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Today the bindable mouse surface is `mouse.left`, `mouse.right`, `mouse.button1/2` and `mouse.motion`: the wheel as a camera input and the middle button need adding to the device input path and its names.
+- A dash for the Moth (the owner's request): a short, nicely animated burst along the move direction (or facing when idle), bound to the gamepad's west face button (`gamepad.buttonWest`: X on Xbox, Square on PlayStation, Y on Switch Pro; the owner's ruling) on the Move page, whose current West action (the bar shows it as `»`) moves to another slot, with a keyboard equivalent, with a cooldown, a rig animation (lean, trail or thruster flare from the Moth's back thrusters) and deterministic simulation (fixed-point impulse, input from the command snapshot). Rule 7: build it on the existing locomotion and rig drivers, not beside them.
 
 - Make the debug world's dual-stick action play fluid. In: the seat camera
   presents its look at the fraction the body is drawn at, so camera and steered
@@ -547,8 +646,11 @@ facing and reversal items, then a sitting.
 
 ### Cross-backend parity and GPU robustness
 
-Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: give the
-debug world a parity contract so `puck parity` runs again.
+Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: after
+Lighting and Body scale land (each would invalidate a recording), a small
+representative capture set with explicit settlement rules and world
+invocation, then the debug world's contract recorded on the RTX 4070 so
+`puck parity` runs again.
 
 - Cross-backend parity (`puck parity`, `experimental/tests/Puck.Parity`) is the
   only automated gate on the shared engine contract (the cross-backend render
@@ -562,21 +664,21 @@ debug world a parity contract so `puck parity` runs again.
 - Settled parity in the lift shaft: a cold Vulkan shaft is near-black with no
   meter until its 496 static draws and the three-sweep GI complete; after it,
   the shaft meter read 4.087 nits against Direct3D 12's 6.576 (both EV100 7)
-  while other geometry still baked. Repeat with all geometry settled. Eight
-  simulation catch-up steps consumed roughly 400 ms a frame on the slow gallery
-  boot, and pausing the boot instance took a frame from about 366 ms to 19 ms;
-  profile that bottleneck and verify the complete gallery on both backends.
+  while other geometry still baked. Repeat with all geometry settled and verify
+  the complete gallery on both backends; the slow boot's catch-up steps are the
+  [simulation packet's](#simulation-tick-off-the-frame-thread) multiplier.
 - Vulkan's warm crossings cost 21 to 36 ms back to the debug world and 34 to
   143 ms into the garden, view nodes' first submissions after a reconfiguration
   blocking in `vkQueueSubmit`; the crossing and pixel-pass items are in the
   [rendering plan](rendering.md#open-items).
-- A cold-bake windowed Vulkan boot spirals (read with nine lanes loading the
-  machine): over 600 frames of a cold bake, frames averaged 232 ms with simulate
-  peaks of 1.2-2.1 s in 7 or 8 catch-up steps, and 95 collections paused 3.2 s
-  in all (single pauses of 260-456 ms); the bake landed 45 meshes in two
-  minutes. Re-read on a quiet machine; if it holds, bound the catch-up and find
-  what a cold bake allocates. Vulkan's first reading after its cold bake also
-  had eight frames of 14 to 15 ms frame-thread work, a post-bake transient.
+- A cold-bake windowed Vulkan boot allocates heavily (read with nine lanes
+  loading the machine): over 600 frames of a cold bake, 95 collections paused
+  3.2 s in all (single pauses of 260-456 ms) while the bake landed 45 meshes in
+  two minutes; its catch-up spiral is the
+  [simulation packet's](#simulation-tick-off-the-frame-thread) multiplier.
+  Re-read on a quiet machine; if it holds, find what a cold bake allocates.
+  Vulkan's first reading after its cold bake also had eight frames of 14 to
+  15 ms frame-thread work, a post-bake transient.
 - Vulkan's board-integrated boot: the patrol reports 40 stalled points and four
   hitched points, worst work 940 ms at (49,25), cause unconfirmed (the earlier
   pre-board patrol had five stalled points and worst work 26 ms); standing
@@ -599,17 +701,23 @@ debug world a parity contract so `puck parity` runs again.
 
 ### UI step 1: the engine leaks out
 
-Owner: UI lane · ordinary · Next: [step 1](ui.md) (the phosphor roles, the unread
-diegetic set and the CRT treatment out of the core sets, a neutral default).
+Owner: UI lane · ordinary · Next: finish [step 1](ui.md) against its check,
+since the engine's neutral default theme (`WorldThemeSection.Default`; no
+phosphor role in `WorldTheme`) and a warp that applies only to
+`WorldScreenMaterial.Crt` are in: the CRT inset deleted, the unread diegetic
+set and component chrome out of the core sets; then the overlay text's advance.
 
 - Overlay text is spread too wide: each character advances a padded atlas cell,
   not the font's advance. Related: a 12 px mono run's 18 px cell spans the whole
   padded atlas cell (1.729 em), so its em is 10.4 px; decide whether overlay
   mono text renders at its nominal size.
-- The engine still draws a bezel band inside every glass
-  (`WorldScreenMappings.Glass`, three hundredths of each side, mirrored by the
-  glass shading), so a device's picture is 94 % of the glass the owner ruled is
-  exactly its picture ([decision](../decisions/rendering.md#in-world-devices-and-screens)).
+- The CRT material still draws a bezel band inside its glass
+  (`WorldScreenMappings.CrtGlass`, an inset of three hundredths of each side,
+  mirrored by the glass shading; `WarpOf` gives every other material none), so
+  a CRT device's picture is 94 % of the glass the owner ruled is exactly its
+  picture, with the bezel outside the glass
+  ([decision](../decisions/rendering.md#in-world-devices-and-screens)). Delete
+  the inset: a CRT's bezel is geometry authored outside the face.
 - Look at the controller bar on the GPU after the modifier-row and opener change
   (`declaredModifiersOnly`, the Move page's LB and RB opener plates, `WH` and
   `GW`) at 3840×2160, and with a PlayStation and a Switch pad; it was seen at
@@ -618,11 +726,14 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 
 ### Transfers, federation and server
 
-Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
-since a failover today leaves a doubt that never resolves.
+Owner: specialist, transfers and server · medium · Next: build the companion
+decision (the companion lands inert in the live debug world today; the lead's call
+between the consensus split), then the uncertain crossing, opened by a two-silo
+failover witness.
 
-- [medium] Companions are not networked players (the owner's ruling): an instance's `networkPlayers` admission cap counts remote humans only. Today the night instance's cap of 0 counts the companion (body 42), so its `painting-night` transfer is refused ("the networkPlayers admission cap (0) is already met") and it returns to the gallery instead of following the player. (from: owner walkthrough)
+- [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
+- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (the same pin, a substituted driver, or nothing); refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -666,22 +777,33 @@ since a failover today leaves a doubt that never resolves.
 
 ### MCP and the operator attachment
 
-Owner: MCP lane (specialist) · medium · Next: the cached wait refusal, then the
+Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
+only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
 
-- [medium] Naming what is under a pixel fails on the owner's windowed World: `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object is. Make pick address the presented world view by default and list it in `panes`. (from: owner walkthrough)
-
-- An invalid wait argument on a pending operator MCP start appears to cache the
-  argument refusal as the start's completed result (`OperatorMcpFront.Record`):
+- An invalid wait argument on a pending operator MCP start caches the argument
+  refusal as the start's completed result: `OperatorMcpFront.Record`
+  (`src/Puck.Mcp/OperatorMcpFront.cs:101-108`) stores any non-pending
+  `puck_world_start_wait` answer under its `startId` and drops the start, so
   later corrected waits and cancellation return that refusal while the World
-  keeps starting. A source diagnosis from one headless boot; run a minimal
-  reproduction.
+  keeps starting. Read in the source from one headless boot and by two
+  reviewers; run a minimal reproduction, then cache only a start's terminal
+  outcome.
 - A connected Claude Code session keeps a tool's old output schema when the MCP
   front switches to a backend whose schemas changed: the first `puck_adapter`
   call after the switch failed with "Structured content does not match the
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
+- [medium] An attached operator session costs the tick a whole state load on
+  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
+  tier) discloses the definition again from the arena, so its mirror's
+  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
+  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
+  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
+  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
+  change to the session without a fresh disclosure of state, or make the load
+  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a
@@ -695,7 +817,7 @@ schema switch.
 ### Language and authoring
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
-hang, then the embeddings round trip.
+hang, then the pre-`main` language findings.
 
 - [medium] A scratch test using `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed over two minutes of CPU during preparation without a
@@ -704,18 +826,6 @@ hang, then the embeddings round trip.
   seconds. Reproduce and bound or repair compilation of an inline console
   command followed by its block's closing brace (a bounded `dotnet-stack` attach
   timed out). (from: scenario-cost)
-- The embeddings sample's source round trip fails:
-  `Puck.State.Rebuild.Corpus.AuthorExpressionTests.SourceCompilesDecompilesAndRecompilesToTheSameDocument`
-  reports that `src/Puck.World.Transpiler/Samples/embeddings.world.puck` (line 35,
-  `from: events.ambush`) compiles to `events[ambush]`, whose decompile and
-  recompile become `events[(ambush)]` (`WorldDocumentEmitter.OperandBinding`,
-  `WorldDecompiler`). It reproduces on the integration tip and on older review
-  binaries; fix the literal and computed key spelling, and confirm whether the
-  two spellings differ in evaluation.
-- `CorpusInventoryTests` holds stale committed inventory counts (13 `addState`
-  effects recorded where the corpus now holds 39). Decide the inventory's future
-  under the no-recorded-ledgers ruling: it is on the keep-list candidates for
-  `puck baselines corpus-inventory`.
 - Language findings from the pre-`main` review, read from the code and not
   reproduced: a string literal on the left of a relational gate is not flipped
   (`WorldDocumentEmitter.Rules`); a header `when` gate makes a body's `local`
@@ -738,27 +848,32 @@ hang, then the embeddings round trip.
 
 ### Input channels
 
-Owner: input lane · ordinary · Next: C7's read-back. The
+Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
-step's completion criteria; C1 to C6 are in.
+step's completion criteria; C1 to C7 are in.
 
-- C7 read-back and cleanup: current-mode action names in `body.rig`,
-  `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
-  ordinal surfaces removed, and executable checks of the genre table.
-- A typing tutor in the gallery (the owner's request), on C5 and C6: a station
-  whose engagement enters a text-focus mode, lessons from the home row to words
-  and sentences on a prompt screen, live per-character feedback, words per
-  minute, per-key accuracy, streaks and a run timer, judged from input history so
-  a replay reproduces every keystroke.
+- Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
+
+- C7 review findings (Claude review of the input-c7 merge `a977bed08`; no determinism change and no broken caller found):
+  - [medium] `player.bindings` and the help of `body.rig`/`body.channels`/`body.press` read `m_server.Input.DescribeBody(body: slot)`, always the boot authority's body at the seat's number, not the seat's routed authority and entity (`WorldBindingCommandModule.cs:341`, `PlayerCommandModule.cs:129,135,216`): after a portal crossing they show the boot body's mode.
+  - [medium] `world.affordances` (an `anyone` verb) prints live channel values and `DescribeBody(0)` (owner principals, sources, raw values, holds) for boot body 0 without a grant (`WorldBindingCommandModule.cs:482,538`).
+  - [medium] `body.rig` (`anyone`) reads any body's authoritative input from `m_server` or `instance.Server` with no grant check or `WorldStateReadView`, where `instance:` used to refuse (`PlayerCommandModule.Rig.cs:44,46`); `body.channels` checks the same facts against the caller's grant.
+  - [medium] Genre checks that cannot fail on what they claim: shooter and fps Edge rules latch before the mode switch they cover (`worlds/debug/input-genre-controls.puck:107,119`); menu fires before `keyboard.k` and the switch to `panel` (`:123`); board's `forward == 0 and run == 0` is made true by the later releases anyway (`input-genre-debug.puck:16`).
+  - [low] A routed `body.rig` nests a refused `body.channels` answer inside a success line (`PlayerCommandModule.Rig.cs:49-50`).
+  - [low] `replay.inspect` and `world.history` print `segment p1 2s` with no intent, while `replay.md:699-703` still says image-only producers show their changed channels (`WorldReplayEntryDescriber.cs:18-20`).
+  - [low] Every active sample enters `m_pressedControls`, so a source that never sends zero or `Completed` (posture streams at rest, possibly the wheel) stays pressed and lights its bar plate (`InputRouter.cs:518`).
+  - [low] `world.devices` mutates the roster: it inserts pads into first-seen order in the manager's index order, renumbering `gamepadN`, and overwrites the device name with the `GamepadType` name (`WorldPopulationCommandModule.cs:36-40`).
+  - [low] `Retained` on the bar comes from the last switch boundary until the next one, so a kept action released and pressed again still shows retained (`WorldSeatInput.cs:35-38`).
+
+- The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).
-- The Steam Controller (Triton, receiver `0x28de:0x1304`) drives player 1 in a
-  windowed World, but `world.devices` lists only the camera, and the parser logs
-  `SteamControllerTriton unparsed report id=0x7b len=54`. List every streaming
-  pad in the device roster, and parse or deliberately ignore report 0x7b.
 - Hardware runs owed (note what each shows in its commit;
   [device input](../reference/input.md#limits-and-hardware-evidence)): the
+  Triton receiver's live streaming roster (including while neutral) and deliberate
+  `0x7b` ignore policy, shown synthetically in C7 but with no attached hardware;
+  the
   DualSense and Switch Pro over Bluetooth, the DualSense Edge, one DualSense on
   USB and Bluetooth at once, the classic Steam Controller, the Triton's reports
   `0x45`/`0x47`, its pairing events, its wired, Bluetooth and Nereid transports,
@@ -878,8 +993,7 @@ Owner: suites lane · ordinary · Next: measure the two unmeasured suites' class
   `SdfPassBindingLawTests`; SignedDistance `SdfEncodingProbeLawTests`; Shaders
   `ShaderRegisterBindingLawTests`, `ShaderFrameBlockLawTests`), and the classes
   verbs run by name (`EntraWorldAuthenticatorTests`, `WorldSiloDefinitionLawTests`,
-  `WorldSiloLifecycleLawTests` for `puck artifacts test-world`;
-  `CorpusInventoryTests` for `puck baselines corpus-inventory`). The trim also
+  `WorldSiloLifecycleLawTests` for `puck artifacts test-world`). The trim also
   deleted guards over non-code files (workflow graph, MSBuild path spelling,
   lock-file ownership, JSON newline spelling, affected workflow readers); the
   owner says whether any return.
@@ -963,7 +1077,11 @@ development install grows 340 MB a CLI rebuild).
 
 Owner: maths lane · ordinary · Next: the float duration fields' schema migration.
 
-- Decide (the lead's call): Production `IsPrime`: whether a hashed-witness table of about 32 KiB may decide primes below 2^47 in one strong round.
+- Decide (the lead's call): Production `IsPrime`: whether a hashed-witness
+  table may decide primes below 2^47 in one strong round. machine-prime's
+  512 KiB table is why it leads Puck there (about 1.5x on primes); a table is
+  capped near 32 KiB and judged cold as well as warm against a fixed small
+  witness set ([primality](../reference/prime-exploration.md#primality)).
 
 - Classify the public Maths surface the retired ratchet grandfathered without a
   law or waiver (algebra wrappers, coordinates, continued-fraction certificates,
@@ -1008,27 +1126,70 @@ Owner: maths lane · ordinary · Next: the float duration fields' schema migrati
   inlined mask, the non-inlined select and a plain ternary, and check the JIT
   listing for `cmovb` in the loop. Switch `ScaledResidueRing64.Subtract` to a
   ternary the day it wins and retire `SubtractBySelect`.
-- Production `IsPrime` (owner decision): machine-prime's 512 KiB hashed-witness
-  table is why it leads Puck below 2^47 (about 1.5x on primes); if a table is
-  allowed, cap it near 32 KiB and judge it cold as well as warm
-  ([primality](../reference/prime-exploration.md#primality)).
 - Make the external prime comparisons reproducible as `puck bench` workloads:
   machine-prime 1.5.7 `is_prime` per bucket (2^32 to 2^63) and input class
   (primes, composites with no factor through 163 or 727, random odd words),
   checked against a deterministic Miller-Rabin oracle; Intel (Alder Lake) and
   Zen 2 timings are unmeasured.
 
+### Bake detail
+
+Owner: specialist lane (rendering, sdf-authoring) · ordinary · Next: measure
+the static round-section term's cost with `puck mesh audit --cpu`.
+
+- Static placements' plain round shapes still bake at
+  15 mm (`ShapeDetail` reads no round section); giving them `BodyDetail`'s
+  curvature term rebakes the world, so measure its cost first
+  (`puck mesh audit --cpu`). A dynamic group refines its whole bound toward its
+  finest member: `SdfMeshBakeGroup.PlanGroups` records per-member regions only
+  for static instances and merges every member's detail into one
+  `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
+  member declare its own detail.
+
 ### Temporal shimmer and cadence flicker
 
-Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two mediums from the owner's walkthrough · Next: find why the history never resolves the jitter on these surfaces.
+Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two
+mediums from the owner's walkthrough · Next: isolate the temporal-off cadence
+blink first (it pollutes the temporal-on reading), then record the rejection,
+clamp and epoch causes at the given pixels to find why the history never
+resolves the jitter on these surfaces.
 
 - [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
 - [medium] The lift door threshold also blinks with temporal off: pairs of frames about 11 presentations apart change about 3 % with max |dY| 26, then hold still, a cadence-driven refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh) independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). (from: owner walkthrough)
 
+### Panes: split screens the player drives
+
+Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary · Next: after the bars-and-pick lane lands (it touches pane listing and pick), a machine-screen source for a pane. The owner's direction: a player can run as the Moth in one pane with the desktop in another, the HGD in a third and a fourth camera angle in another.
+
+- What exists: `views` layouts of normalized `slots`, each the owning seat's view, a named authored `camera`, or a `views.graphs` `instance` (the studio's 2x2 `motion` layouts; `desktop.puck`'s `desktop` layout shows the `source.capture` graph in a pane); `view.override layout <name>` switches.
+- A machine's screen as a pane source: the machines render as `source$machine$<id>` graph nodes, but the source packages a `views.graphs` row can name are `source.capture`, `source.passthrough` (with pointer and scroll) and `source.qr`, so no pane can show the HGD's picture. Add the package (find the existing machine-screen producer first, rule 7).
+- Switching layouts as a player: a binding or controller-bar action that cycles or selects the world's layouts, not only the `view.override` console verb.
+- Pane focus: one pane holds input focus and receives it (the seat's pad and keys drive the Moth until the player focuses the desktop pane, which then takes mouse and keyboard as passthrough, or the HGD pane, which takes the pad); focus is shown on the pane, moves by a binding or a click, and the in-world computer's programs (desktop and typing tutor) use the same focus.
+- Decide (the lead's call): focus is simulation state, one pane at a time,
+  moved by a binding or a click, so its transitions are deterministic and each
+  input stream has one destination; the in-world computer's program switching
+  reuses it rather than a second focus.
+- Arranging panes at runtime (moving, resizing, choosing a pane's content) beyond the world's authored layouts: decide once focus and switching land.
+
+### Screens on curved and general SDF surfaces
+
+Owner: specialist lane (rendering, sdf-authoring, puck-world) · ordinary · Next: one projection end to end, the sphere the owner asked for (the authored projection frame on the renderer's exact hit, and the same projection in fixed point for the pointer), then cylindrical and cube. The owner asked for screens on a sphere's surface and on general SDF shapes.
+
+- Decide (the lead's call): a screen on a shape is an authored projection frame
+  evaluated on the exact hit, with the same projection in fixed point for
+  pointer input; a UV atlas from the bake only if a shown shape defeats
+  projection.
+
+- Today a screen is a flat slab: a rectangle with right and up axes (`ScreenSlab`, `WorldScreenMappings.Normalized`, the screen validator's orthogonal basis); the CRT face kind only shades a curved look on that slab.
+- Projection kinds beside the planar one: spherical (latitude and longitude), cylindrical and cube, so any shape's surface (a globe, a curved display, a pillar, a dome) shows a screen through an authored projection frame; the renderer already has the exact hit and normal on any shape.
+- Pointer input on such a screen uses the same projection in fixed point in the simulation (a screen hit for input is computed there, never trusted from the host), so a click on a globe lands on the same picture point live and in replay.
+- General shapes: a frame-projected decal first (gentle curvature); a UV atlas from the mesh bake only if projection proves not enough.
+
 ### Debug world content
 
-Owner: debug-world content lanes, each started by the owner's direction ·
-ordinary · Next: whichever the owner calls for.
+Owner: debug-world content lanes, each started by the owner's direction · one
+medium, the rest ordinary · Next: the black slats behind the chess table now (a
+material defect needs no taste call); new content and art on the owner's call.
 
 - [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
@@ -1063,13 +1224,9 @@ ordinary · Next: whichever the owner calls for.
     the shell, sole, ankle hub and heel parts each bake alone so every junction
     is a hard overlap or gap, the sheets' flared lilac shin, cuff, hinged knee
     guard and recessed cyan heel light are missing, and the heel needs a housing
-    designed around the downward nozzle the air jump's plume leaves;
-  - static placements' plain round shapes still bake at 15 mm (`ShapeDetail`
-    reads no round section); giving them `BodyDetail`'s curvature term rebakes
-    the world, so measure its cost first (`puck mesh audit --cpu`); and a dynamic
-    group refines its whole bound toward its finest member
-    (`SdfMeshBakeGroup.DetailLow`), where per-member regions would let a thin
-    member declare its own detail.
+    designed around the downward nozzle the air jump's plume leaves (the bake
+    detail these parts get is the
+    [mesh-bake packet's](#dynamic-body-scale-and-the-mesh-bake)).
 - The suit toggle's handheld: only body 0 holds the brick (`pilotHold` declares
   the one key `"0"`); she holds it only while captured standing still, so a
   mirrored engagement that walks or carrying it about wants a hold pose that
@@ -1193,8 +1350,7 @@ runs until the owner calls for qualification; then each is a packet.
   runs only the debug world's stability matrix on both backends.
 - World baselines: `state` (each shipped game's canonical state export and tick
   cost) and the tictactoe state hashes of `browser-parity`; `browser-parity`
-  itself stays registered over its fixture document, and `corpus-inventory`
-  stays live.
+  itself stays registered over its fixture document.
 - `puck test` verdict worlds (`experimental/tests/Puck.World.Verdicts`) and the
   test blocks the quarantined worlds carried.
 - The laws that booted a quarantined world or fixture, each moved to
@@ -1227,8 +1383,6 @@ reviews it and says so (the owner's ruling).
   display-aware curve for HDR10 and scRGB once an HDR display can verify it (the
   lead machine's Dell S2722DGM is 8-bit SDR, 240 nits). The default curve and the
   gallery's look are the owner's call.
-- **The simulation tick off the frame thread**, as a design consensus now that
-  the input lane has landed ([packet](#simulation-tick-off-the-frame-thread)).
 - **The bloom look.** The debug world authors scatter 0.04 and radius 0.08 for the
   owner to judge in the World.
 - **A maths room** in the gallery (tabled by the owner): a 2D grid board and a 3D

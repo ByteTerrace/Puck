@@ -27,6 +27,7 @@ public sealed partial class WorldColliderSet {
             if (image.Resolved) { RestoreAttachedRow(row, image.Origin, image.Rotation); }
         }
         m_attachedHash = m_refreshHash.Value;
+        m_attachedMoves = default;
     }
 
     private void RestoreAttachedRow(int row, FixedVector3 origin, FixedQuaternion rotation) {

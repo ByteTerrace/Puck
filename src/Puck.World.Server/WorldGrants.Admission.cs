@@ -58,11 +58,13 @@ public sealed partial class WorldGrants {
     /// was decided against.</param>
     /// <returns>The admission verdict.</returns>
     /// <param name="occupant">What the traveler brings, which the admitted event records.</param>
-    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant) {
+    /// <param name="source">The traveler's carried intent source. A human keeps its human classification, and its
+    /// count against the <c>networkPlayers</c> cap, whatever its control source.</param>
+    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant, IntentSource source) {
         if (!TryAdmitVerifiedParticipant(
             verdict: verdict,
             reservedSlot: slot,
-            source: IntentSource.Live,
+            source: source,
             authorityTransferred: true,
             occupant: occupant,
             admitted: out _,

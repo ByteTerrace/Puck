@@ -409,8 +409,16 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
             return document;
         }
 
+        // A definition carrying the same state section and catalog over (a response swap moves only placements) keeps the
+        // arena and the values delivered into it: building one again from the section costs a whole state load.
+        if (
+            (m_shaped is null) ||
+            !ReferenceEquals(objA: document.StateRaw, objB: m_shaped.StateRaw) ||
+            !ReferenceEquals(objA: document.StateCatalog, objB: m_shaped.StateCatalog)
+        ) {
+            m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
+        }
         m_shaped = document;
-        m_arena = new StateArena(catalog: document.StateCatalog, section: document.StateRaw, time: ArenaTime.Origin);
         ShapeBodyState(document: document);
 
         var regions = document.FieldRegions;

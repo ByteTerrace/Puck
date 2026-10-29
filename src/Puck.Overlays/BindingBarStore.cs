@@ -35,6 +35,9 @@ namespace Puck.Overlays;
 /// <param name="BadgeY">The badge's vertical nudge as a signed multiple of the layout's glyph offset (+1 up).</param>
 /// <param name="Frame">The index of the frame this plate hangs in (<see cref="OverlayBindingSeat.Frames"/>); its
 /// pitches are normalized to that frame.</param>
+/// <param name="Inactive">Whether the current simulation mode disables the bound action.</param>
+/// <param name="AwaitingNeutral">Whether an input source must return to neutral before actuating again.</param>
+/// <param name="Retained">Whether a nonzero action continued through the last authoritative boundary.</param>
 public readonly record struct OverlayBindingSlot(
     ushort BadgeGlyph0,
     ushort BadgeGlyph1,
@@ -52,7 +55,10 @@ public readonly record struct OverlayBindingSlot(
     bool Toggled = false,
     int Frame = 0,
     float BadgeX = 0f,
-    float BadgeY = 0f
+    float BadgeY = 0f,
+    bool Inactive = false,
+    bool AwaitingNeutral = false,
+    bool Retained = false
 );
 /// <summary>One declared modifier as the renderer consumes it (the trigger indicators between the clusters).</summary>
 /// <param name="BadgeGlyph0">The modifier's first (or only) badge atlas glyph index, 1-based, 0 = none.</param>

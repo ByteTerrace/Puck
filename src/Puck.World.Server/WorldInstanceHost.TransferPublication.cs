@@ -67,11 +67,11 @@ public sealed partial class WorldInstanceHost {
         // a rollback to undo.
         for (var memberOrdinal = 0; (memberOrdinal < landed.Count); memberOrdinal++) {
             var member = landed[memberOrdinal];
-            // A live peer's control follows its body to whichever authority now owns it. The colocated arm is
-            // registered on the same rule as the socket arm: without it, an in-process onward crossing leaves the
-            // client's intents and submissions naming a body this source no longer has.
+            // A remote human's control follows its body to whichever authority now owns it, whatever its control
+            // source. The colocated arm is registered on the same rule as the socket arm: without it, an in-process
+            // onward crossing leaves the client's intents and submissions naming a body this source no longer has.
             if (
-                (member.Peer is { Source.IsLive: true }) &&
+                (member.Peer is { RemoteHuman: true }) &&
                 (sourceInstance is not null)
             ) {
                 IWorldForwardedAuthority? onward = null;

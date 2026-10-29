@@ -184,6 +184,9 @@ public static class FixedConvexContact {
         }
         if (count < edges.Length) { edges[count++] = new Edge(A: a, B: b); }
     }
+    // The polytope's buffers (some 24 KB) are read only below their counts, so they skip the zero fill every query
+    // would otherwise pay.
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     private static bool Penetration(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedQ4816 skin, ReadOnlySpan<Vertex> simplex, out FixedContactPush push, ref int supportQueries) {
         Span<Vertex> vertices = stackalloc Vertex[128];
