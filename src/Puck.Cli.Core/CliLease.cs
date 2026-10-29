@@ -98,7 +98,7 @@ public sealed class CliLease : IDisposable {
 
             try {
                 // CreateNew is the atomic claim: a racing newcomer that computed the same sequence fails here and recomputes.
-                using var stream = new FileStream(access: FileAccess.Write, mode: FileMode.CreateNew, path: path, share: (FileShare.ReadWrite | FileShare.Delete));
+                using var stream = new FileStream(access: FileAccess.Write, mode: FileMode.CreateNew, path: path, share: FileShare.ReadWrite | FileShare.Delete);
                 using var writer = new StreamWriter(stream: stream);
 
                 foreach (var line in lines) { writer.WriteLine(value: line); }
@@ -116,20 +116,20 @@ public sealed class CliLease : IDisposable {
             string[]? lines;
 
             try {
-                using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: (FileShare.ReadWrite | FileShare.Delete));
+                using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: FileShare.ReadWrite | FileShare.Delete);
                 using var reader = new StreamReader(stream: stream);
 
-                lines = reader.ReadToEnd().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            } catch (IOException) {
+                lines = reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
+            } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
                 // Vanished, or being written: a ticket we cannot read yet is counted, never skipped.
                 ahead += (File.Exists(path: file) ? 1 : 0);
                 continue;
             }
             // A ticket whose metadata never became recognizable (its writer died mid-write) is dropped once it is old.
-            var gone = ProcessGone(lines: lines, now: now) ?? ((DateTime.UtcNow - File.GetLastWriteTimeUtc(path: file)) > TimeSpan.FromSeconds(seconds: 10));
+            var gone = (ProcessGone(lines: lines, now: now) ?? ((DateTime.UtcNow - File.GetLastWriteTimeUtc(path: file)) > TimeSpan.FromSeconds(seconds: 10)));
 
             if (gone) {
-                try { File.Delete(path: file); } catch (IOException) { ahead++; }
+                try { File.Delete(path: file); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { ahead++; }
             } else {
                 ahead++;
             }
@@ -140,9 +140,14 @@ public sealed class CliLease : IDisposable {
         if (ticket is null) { return; }
         try { File.Delete(path: ticket); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
-
     private static string[]? ReadHolder(string directory) {
-        try { return File.ReadAllLines(path: Path.Combine(path1: directory, path2: "holder")); } catch (IOException) { return null; }
+        try {
+            // A diagnostic reader must not prevent the holder from releasing its directory on Windows.
+            using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: Path.Combine(path1: directory, path2: "holder"), share: FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream: stream);
+
+            return reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return null; }
     }
 
     /// <summary>Resolves the shared lease directory through the worktree's common Git directory.</summary>
@@ -165,10 +170,8 @@ public sealed class CliLease : IDisposable {
             return null;
         }
         try {
-            if (Directory.Exists(path: directory)) {
-                if (!IsStale(directory: directory, now: clock.GetUtcNow())) { gate.Dispose(); return null; }
-                Directory.Delete(path: directory, recursive: true);
-            }
+            // The exclusive guard is the ownership proof. Leftover metadata can name a still-live adapter
+            // whose World exited while a reader delayed cleanup; it must not strand the released lease.
             Directory.CreateDirectory(path: directory);
             try {
                 using var process = Process.GetCurrentProcess();
@@ -181,7 +184,7 @@ public sealed class CliLease : IDisposable {
                 ]);
                 return new CliLease(directory: directory, gate: gate);
             } catch {
-                Directory.Delete(path: directory, recursive: true);
+                try { Directory.Delete(path: directory, recursive: true); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
                 throw;
             }
         } catch {
@@ -189,14 +192,7 @@ public sealed class CliLease : IDisposable {
             throw;
         }
     }
-    private static bool IsStale(string directory, DateTimeOffset now) {
-        var holder = Path.Combine(path1: directory, path2: "holder");
-        // Missing or unrecognized metadata cannot prove that a holder is gone.
-        if (!File.Exists(path: holder)) { return false; }
-
-        return (ProcessGone(lines: File.ReadAllLines(path: holder), now: now) == true);
-    }
-    /// <summary>Decides from holder or ticket metadata whether its process is gone; null when the metadata is unrecognized.</summary>
+    /// <summary>Decides from a queued ticket's metadata whether its process is gone; null when the metadata is unrecognized.</summary>
     private static bool? ProcessGone(string[] lines, DateTimeOffset now) {
         if ((lines.Length != 4) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return null; }
         try {
@@ -213,6 +209,6 @@ public sealed class CliLease : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        try { Directory.Delete(path: m_directory, recursive: true); } finally { m_gate.Dispose(); }
+        try { Directory.Delete(path: m_directory, recursive: true); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { } finally { m_gate.Dispose(); }
     }
 }

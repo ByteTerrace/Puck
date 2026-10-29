@@ -47,12 +47,12 @@ public sealed class CliLeaseTests : IDisposable {
         clock.Advance(by: TimeSpan.FromMilliseconds(milliseconds: 100));
         using var next = await released;
     }
-    [Theory]
     [InlineData("live")]
     [InlineData("dead")]
     [InlineData("torn")]
     [InlineData("missing")]
     [InlineData("reused")]
+    [Theory]
     public async Task HolderMetadataWithoutTheExclusiveGuardNeverBlocksAcquisition(string state) {
         var clock = new VirtualClock();
         var directory = Path.Combine(path1: m_root, path2: "gpu");
@@ -67,7 +67,7 @@ public sealed class CliLeaseTests : IDisposable {
         if (state != "missing") {
             File.WriteAllLines(path: path, contents: state switch {
                 "live" => Metadata(time: old, pid: process.Id, start: process.StartTime.ToUniversalTime().Ticks),
-                "dead" => Metadata(time: old, pid: int.MaxValue, start: 1),
+                "dead" => Metadata(pid: int.MaxValue, start: 1, time: old),
                 "reused" => Metadata(time: old, pid: process.Id, start: 1),
                 _ => ["unrecognized"],
             });

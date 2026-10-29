@@ -133,12 +133,13 @@ Keep such a functional boot separate from a performance comparison: require
 readiness, settled bakes and completed timestamp windows, and record concurrent
 work when a quiet measurement is unavailable.
 
-An empty shared lease directory can report an unnamed holder indefinitely:
-`CliLease.IsStale` cannot reclaim missing metadata. Diagnose it under the
-existing exclusive `.guard` file, never by the absence of a World alone.
-If that guard is available and the directory is empty while it is held,
-removing only the empty directory lets the normal `puck lease` acquire again.
-Never unlink the guard file or remove a directory containing holder metadata.
+The exclusive `.guard` handle proves lease ownership; holder metadata is
+diagnostic. A Windows reader can delay directory deletion after a World exits,
+leaving an alive adapter PID in that metadata. `CliLease` always releases the
+guard, tolerates delayed cleanup, and replaces leftover metadata once it owns
+the guard. Its metadata readers permit deletion, and an unreadable queue ticket
+counts as occupied until it can be read or disappears. Let the verb recover;
+never unlink the guard or infer ownership from the absence of a World alone.
 
 Judge a performance change by code, disassembly and load-independent counts;
 only counts gate it. Wall-clock and GPU timing are evidence read beside those
