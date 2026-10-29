@@ -144,7 +144,7 @@ holds the fixed poses and the approaches already rejected.
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the view's HDR output with a highlight clamp) as the auto-exposure driver, the probe meter kept for local adaptation.
 
 - Probe depth visibility (from the probe-depth review):
-  - [ ] [high] Depth visibility leaks at every silhouette: a ray that misses stores
+  - [x] [high] Depth visibility leaks at every silhouette: a ray that misses stores
     `min(reach, DepthMaximum = 128 m)`, about forty times the farthest receiver
     a probe serves, and the `distance <= mean` early-out returns 1 before
     Chebyshev runs, so any texel whose bilinear footprint touches a miss admits
@@ -171,11 +171,18 @@ holds the fixed poses and the approaches already rejected.
     38.67 MiB probe table per residency. Re-measure on a quiet machine; if
     Vulkan stays about three times Direct3D 12, find why
     (the probe-depth hand-back in the lead checkout's scratch).
-  - [ ] [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
+  - [x] [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
     still show small dark marks at mid-height on the stairwell's east wall
     (`own-vulkan-stairwell-lit.png`, the black squares the owner reported), 2
     m-scale blotches on the boardroom floor and a bright vertical streak on its
     right partition (`own-vulkan-boardroom-indirect.png`). The sphere reads clean.
+    Closed by explicit misses and compatible local surface reconstruction, a
+    distance-based hemisphere fade and shared radiance quadrature. The final
+    `fast-directx` and `fast-vulkan` fixed lit/indirect captures in the
+    probe-depth-fix lane's scratch were individually inspected: the broad roof
+    band, repeated floor poles, thin far-corner streak and stairwall squares are
+    gone; the sphere stays continuous. The separate dim-enclosure and grazing
+    corner findings below remain open.
   - [x] [low] The sky share is measured over the 1,024 depth rays while bounce
     radiance comes from the 128 radiance rays, so a small window can count twice
     (`SdfMeshProbeDepth.cs:42-43`); FP16 variance cancellation at 3-5 m exceeds

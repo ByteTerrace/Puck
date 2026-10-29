@@ -59,10 +59,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   the receiver ray. Testing only a tangent/chord plane returned 0.574 visibility
   for an exact-segment-visible receiver in the small-curve witness. An unsupported
   tap casts no blocker; a distinct local hit supports the normal-gradient fit.
-  Curvature zero retains the exact plane intersection. Fade a patch over `DepthSurfaceFade`
-  (the common-plane fast path reduces that same quadratic to one signed gap and
-  reuses the decoded normal, avoiding four general fits in CPU bounce reads and pixels)
-  (2 cm, less than normal bias), then combine its blocked angular coverage.
+  Curvature zero retains the exact plane intersection. The common-plane fast path
+  reduces that same quadratic to one signed gap and reuses the decoded normal,
+  avoiding four general fits in CPU bounce reads and pixels. Fade a patch over
+  `DepthSurfaceFade` (2 cm, less than normal bias), then combine its blocked angular coverage.
   The flat-surface law also rejects radial-distance interpolation: it returned
   48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
   No radial moments or squared-distance field remain. Misses supply no blocker.
@@ -144,11 +144,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   existing frame-ring retirement; increment the binding revision when its buffer
   changes. Keep the old table and coordinates until every new slot is measured.
   Five full payloads (device, two uploads, native shadow, CPU volume) total
-  38.203125 MiB at Medium or 114.609375 MiB at High, before headers, cache,
+  55.078125 MiB at Medium or 165.234375 MiB at High, before headers, cache,
   batches and temporary retired buffers, versus the former 193.359375 MiB
   reservation at either tier. Upload buffers can shrink after small flushes;
   live `world.probe` GI diagnostics report actual device/upload/shadow/header
-  and CPU-volume bytes. Cache blocks hold 172 words (688 bytes) per probe.
+  and CPU-volume bytes. Cache blocks hold 244 words (976 bytes) per probe.
   Publication compares/uploads changed slots only, coalesced into runs.
 - Each published probe contains its own measured cubes, exactly as the CPU bounce
   read sees them. Sky and surface radiance use the same full-reach rays, so an
