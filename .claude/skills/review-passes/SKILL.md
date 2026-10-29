@@ -24,10 +24,11 @@ overrides this skill and is written into it in that session.
 - The review runs while the author implements its next item and never blocks
   the landing or pauses the author. The brief gives the reviewer the diff and the
   author's claim, not the author's reasoning, and asks it to break the change.
-- Findings go to the shared pile
-  ([review findings](../../../docs/plans/open-items.md#review-findings)) ranked
-  by severity, each with one owner; a high
-  finding is scheduled into the next integration batch. The pass's fixes are a
+- Findings go into the open items'
+  [work packets](../../../docs/plans/open-items.md#work-packets), each with its
+  severity, one owner, its file and line and its failing case, in the packet
+  that shares its cause or area or in a new one; a high finding goes to the top
+  of Next and so into the next integration batch. The pass's fixes are a
   follow-up branch of their own in that batch, never edits to the author's
   branch.
 - Every pass is review-and-fix, never report-only. Both Codex models, Astra
@@ -200,14 +201,14 @@ no brief, so it raises compatibility findings and tries to run tests.
    builds and proves every law outside it.
    Record the fix range before continuing. A blocker the pass left open goes
    to the lead before anyone repairs it; the lead rules on each one (a scoped
-   fix, a recorded open item, or a dismissal with its reason) and ranks it on the
-   shared pile by severity with one owner. A scoped fix the lead directs is
+   fix, a recorded open item, or a dismissal with its reason) and places it in
+   its work packet with its severity and one owner. A scoped fix the lead directs is
    verified in step 3, not reviewed again. A non-blocking
    finding is reported, and its fix, if any, is verified the same way; neither
    ever opens another review, and findings never go back and forth between the
    reviewer and the author. If the
-   pass changes nothing, it has no follow-up branch: skip steps 2 to 5, put its
-   findings on the shared pile with their severity and owners, and end. Never
+   pass changes nothing, it has no follow-up branch: skip steps 2 to 5, place its
+   findings in their work packets with their severity and owners, and end. Never
    create an empty WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt in that worktree

@@ -102,6 +102,6 @@ These conclusions still guide work on the retained kernels:
 
 These timings are research evidence, not gates. Inspect generated instructions
 and counted work, warm tiered code before measuring, and compare timing on a
-quiet machine. The [open items](../plans/open-items.md) retain the small
+quiet machine. The [open items](../plans/open-items.md#owner-decisions) retain the small
 hashed-witness question because it concerns production `IsPrime`, even though
 wide counting and random selection are gone.

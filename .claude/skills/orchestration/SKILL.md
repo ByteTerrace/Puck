@@ -49,10 +49,13 @@ what the machine can verify. The owner's direction:
   spot-check.
   - The author starts its next item when it hands back and is never paused; the
     change lands in its batch whether or not the review has finished.
-  - Findings go to the shared pile, the
-    [review findings](../../../docs/plans/open-items.md#review-findings) in the
-    open items, ranked by severity, each with one owner. A high finding is
-    scheduled into the next integration batch.
+  - Findings go into the open items'
+    [work packets](../../../docs/plans/open-items.md#work-packets), each with its
+    severity, one owner, its file and line and its failing case. Filing a
+    finding places it: into the packet that shares its cause or area, or into a
+    new packet with an owner role and a next action, never a list of its own. A
+    high finding goes to the top of [Next](../../../docs/plans/open-items.md#next)
+    and so into the next integration batch.
   - The reviewer's fixes are a follow-up branch of their own in that batch
     (review-and-fix, [`review-passes`](../review-passes/SKILL.md)), never edits
     to the author's branch.
@@ -130,8 +133,10 @@ before merging a lane.
 The lead's ledger and plan files that a delegate never writes are the lead's
 own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
-to no one lane: a delegate edits them for what its change delivers, ticking an
-item it closed and correcting text its change made stale, and the brief says so.
+to no one lane: a delegate edits them for what its change delivers, deleting an
+item it closed (after moving the durable fact it carries to its owning home),
+placing what it found and left into a work packet, and correcting text its
+change made stale, and the brief says so.
 
 The message is the notification; git is the record. Inspect the reported
 changes and what the lane ran to show them working before merging
@@ -165,6 +170,18 @@ on the integration branch is the next piece of work, not a reason to stop
 landing, and the integration lane may revert a landed change when leaving it in
 is worse than removing it.
 
+The open items are the batches' queue
+([work packets](../../../docs/plans/open-items.md#work-packets)):
+- each batch's lanes take the top packets of its
+  [Next](../../../docs/plans/open-items.md#next) list, one packet a lane, with
+  any high finding first;
+- the lead re-ranks Next at each batch by payoff, folding in what the batch
+  landed and what its sweep and reviews found;
+- a finished packet is deleted, not ticked, and so is a closed sub-point, once
+  the durable fact it carries is in its owning home (AGENTS.md rule 9);
+- a programme's phase-scale work stays in its plan's open items, and a packet
+  points at it.
+
 ### Coding lanes and the integration lane
 
 Heavy verification runs in one place, one job at a time; this is the owner's
@@ -186,8 +203,8 @@ direction, after concurrent whole-solution builds exhausted the machine's memory
 - **Reaping** is prevented by that limit, because Claude Code reaps background
   jobs when memory runs critically low. A reaped lane is handled once: the lead
   saves its tree as a WIP commit, removes the cause, and restarts it with a
-  continuation note. A second reap of the same lane stops it; it goes to the pile
-  with what was running, and the owner decides.
+  continuation note. A second reap of the same lane stops it; it goes into its
+  work packet in the open items with what was running, and the owner decides.
 - **The integration lane** is one long-running lane. It takes ready branches in
   the order the lead names, batches unrelated changes together on purpose,
   merges each batch onto its own staging branch, and resolves generated-file
@@ -506,11 +523,12 @@ Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
 
-Every finding goes to the
-[review findings pile](../../../docs/plans/open-items.md#review-findings) with a
-severity and one owner. The lead rules on what a review raises: a scoped fix, a
-recorded open item, or a dismissal with its reason; a finding called out of
-scope still sits on the pile with its owner. There is no second round.
+Every finding goes into a
+[work packet](../../../docs/plans/open-items.md#work-packets) in the open items
+with a severity and one owner: the packet that shares its cause or area, or a
+new one. The lead rules on what a review raises: a scoped fix, a recorded open
+item, or a dismissal with its reason; a finding called out of scope still sits
+in its packet with its owner. There is no second round.
 
 Route reviews by where the work lives. A pushed branch can be reviewed in any
 machine's Codex slot; a local-only lane needs the lead's own slots. When the
@@ -560,8 +578,8 @@ not a spiral:
   arrives as its own notification. Lanes launched together in one background
   command report only when the last one ends: a lane that finished first sat
   unseen for an hour and a half that way.
-- Findings never bounce between a reviewer and an author: a finding goes to the
-  pile with its owner and is not argued back and forth.
+- Findings never bounce between a reviewer and an author: a finding goes into
+  its work packet with its owner and is not argued back and forth.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30
   minutes, saves its tree as a WIP commit, and hands the work to another lane.
 - When the review of a fix finds more instances of the class it fixed, the next

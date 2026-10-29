@@ -580,6 +580,29 @@ dotnet test tests/Puck.World.Schema.Tests -c Release
 puck docs links
 ```
 
+## Open items
+
+What the programme still owes. A line is deleted when its work lands, never
+ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
+
+- [The finder's foundation](#the-finders-foundation) (startable today).
+- [MCP's local surface](#mcp--the-local-surface) (startable today).
+- [The population](#the-population): the canary widening (startable today);
+  frames; the neighbour tape and ghosts.
+- [The playthrough substrate remainder](#the-playthrough-substrate-remainder);
+  [composed play](#composed-play).
+- [The content wave](#the-content-wave) and the One World re-authoring;
+  [the seat](#the-seat); [parties and matching](#parties-and-matching).
+- [The federation wave](#the-federation-wave-and-the-remainder);
+  [admission and release](#admission-and-release);
+  [MCP's remote surface](#mcp--the-remote-surface); the gated ladder.
+- The federation remainder (durable crossings, destination tapes, and
+  multi-authority replay within one process are in);
+  [`Puck.Audio`](#wave-4--puckaudio).
+- [Housekeeping, last](#housekeeping-last): the client seam, the signing chain,
+  namespace normalization.
+- Owner-run: the live smoke against `Web.Functions`, the feel sitting.
+
 ---
 
 [Plans](README.md) · [Decisions](../decisions/play.md) ·

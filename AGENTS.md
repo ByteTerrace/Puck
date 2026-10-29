@@ -103,7 +103,8 @@ agent works in that mode by default, without asking:
   were written by agents, not ordered by the owner. They are tools to use when
   they pay for themselves, never preconditions for landing. An engine change's
   adversarial cross-family review is the owner's direction: required, and never
-  a precondition for landing. Its findings go to the shared pile, and the only
+  a precondition for landing. Its findings go into the open items' work
+  packets ([open items](docs/plans/open-items.md#work-packets)), and the only
   blocking review gate is before the owner pushes `main`: every high finding
   from the milestone is resolved or explicitly deferred by the owner
   ([orchestration](.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)).
