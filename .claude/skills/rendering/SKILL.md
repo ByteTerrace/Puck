@@ -195,9 +195,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   shading. A wrong occlusion or shadow value (a dark band, a missing crease,
   acne) is the estimate's, so an edit to the views lighting code changes
   nothing; the window and the pattern's tile are a pair. A side turned from a
-  light is never queried and stores full visibility, so the window's shadow
-  average leaves out neighbours whose normal turns away, and a lit band along a
-  crease is that average's. A sunlit spot on a wall's top under a slab is the
+  light is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
+  (`frame/sdf-shadow-visibility.hlsli`), which decodes as fully visible, and
+  the window's shadow average takes only queried pixels (`sdfShadowQueried`).
+  An unmeasured slot averaged in lights a one-pixel line along every
+  terminator and rounded edge the cascades shadow (indoors, a cosine just
+  above zero under the 100 klx sun), and no debug view shows it, since
+  `shadow` shows the average without its cosine. The average also leaves out neighbours whose normal
+  turns away, so a crease's two lit faces keep their own shadows. A sunlit spot on a wall's top under a slab is the
   filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
   light's cone over the point, and the penumbra is the nearest in-cone
   blocker's. `world.debug-view ao`
