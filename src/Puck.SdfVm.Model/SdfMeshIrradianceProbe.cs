@@ -5,12 +5,12 @@ namespace Puck.SdfVm;
 public static class SdfMeshIrradianceProbe {
     /// <summary>The octahedral depth map's width and height, without duplicated border texels.</summary>
     public const int DepthSize = 16;
-    /// <summary>The first depth word: each packs mean metres low and mean-squared metres high as FP16.</summary>
+    /// <summary>The first depth word: each packs two FP16 first-hit distances. Negative means a miss to that reach.</summary>
     public const int DepthWord = 19;
-    /// <summary>The maximum first-hit distance, keeping squared metres representable in FP16.</summary>
-    public const float DepthMaximum = 128f;
+    /// <summary>The number of packed depth words, two texels per word.</summary>
+    public const int DepthWords = ((DepthSize * DepthSize) / 2);
     /// <summary>The words one probe takes in the volume table.</summary>
-    public const int ProbeWords = (DepthWord + (DepthSize * DepthSize));
+    public const int ProbeWords = (DepthWord + DepthWords);
     /// <summary>Two words of FP16 offset XYZ and back-face share. Every directional read uses this relocated origin.</summary>
     public const int OffsetWord = 17;
     /// <summary>The least distance in metres between a probe and any surface.</summary>
@@ -25,4 +25,8 @@ public static class SdfMeshIrradianceProbe {
     public const uint InvalidFlag = (1u << 31);
     /// <summary>The receiver's normal bias in metres, smaller than the thinnest wall, independent of probe spacing.</summary>
     public const float NormalBias = 0.05f;
+    /// <summary>The hit footprint share below which an edge tap cannot extend a finite block.</summary>
+    public const float DepthCoverageStart = 0.5f;
+    /// <summary>Scales the footprint's closing ramp to complete at three-quarter coverage.</summary>
+    public const float DepthCoverageScale = 4f;
 }

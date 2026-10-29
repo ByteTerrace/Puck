@@ -38,25 +38,25 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The scheduler's separate saved-pose/input-capacity defect has a focused
   boundary test; it is not the established cause of this slow gallery boot.
   See [mesh baking](mesh-bake.md#groups-poses-and-materials).
-- Visibility is a per-probe 16×16 octahedral depth map. Each texel traces four
-  subtexel directions against the existing mesh hierarchy and stores first-hit
-  mean metres and mean-squared metres as two FP16 values. Misses end at the
-  lighting trace reach (at most 128 m, keeping squared metres representable).
-  Do not shorten that reach to the local gather radius: boundary probes also
-  support receivers outside the window, and a short miss creates dark distance bands.
-  Depth is traced at the first sweep and reused by the later bounce sweeps.
-- The receiver samples four depth texels bilinearly in its direction from the
-  relocated probe. Taps reflect across the octahedron's identified edges,
-  reversing the other coordinate. Interpolate the moments before computing
-  variance; clamp negative variance from FP16 rounding to zero. Before the mean,
-  visibility is one; beyond it, the one-sided Chebyshev bound is
-  `variance / (variance + (distance - mean)²)`. Cube it, then crush values
-  below 0.2 by `visibility³ / 0.04`. Keep `SdfMeshProbeDepth.Visibility`
-  and `sdfMeshProbeDepthVisibility` together, including seam taps and rounding.
-  Projection and seam addressing reuse `SdfOctahedral` and
-  `field/sdf-octahedral.hlsli`, shared with the sky map and mesh normals.
-  A finite blocker shades its sampled angular footprint. There are no first-hit
-  planes, neighbour separation vetoes, suspect shares or mutual gather shares.
+- Visibility is a per-probe 16×16 octahedral first-hit distance map. Each texel
+  traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
+  the full in-window receiver support including relocation. Two FP16 distances
+  share each word. A negative value marks a miss and its measured reach. A
+  receiver beyond that reach receives no support. Boundary extrapolation is
+  finite; do not silently turn a bounded miss into unlimited visibility.
+  The map is traced on the first sweep and reused for subsequent bounces.
+- Four bilinear taps reflect across identified octahedral edges. Miss taps
+  never inflate a blocker's distance or variance. Compute the weighted mean
+  of hit distances and their central variance in FP32; independently rounded
+  FP16 mean-squared metres created false variance on flat surfaces at 3–5 m.
+  Before the hit mean visibility is one; beyond it the one-sided Chebyshev bound
+  is cubed and low values crushed. A minority hit footprint must not extend a
+  finite block across the opening: smooth its occlusion from half to three-quarter
+  angular coverage (`DepthCoverageStart`, `DepthCoverageScale`, generated).
+  Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together,
+  including seam taps, hit/miss handling and central variance. Projection and
+  addressing reuse `SdfOctahedral` and `field/sdf-octahedral.hlsli`.
+  There are no infinite first-hit planes or cross-probe separation vetoes.
 - Gather weight is the cell's trilinear share times
   `max(0, dot(normal, directionToProbe))²` times depth visibility. This continuous
   positive-hemisphere weight excludes probes behind a surface without switching
@@ -117,24 +117,25 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   old coordinates** until every new slot has a measured sample. Never publish
   unwritten cells as darkness or initialize them to unoccluded sky. Before the
   first scene has supplied any volume, there is no measured indirect light.
-- A record is 275 words (1,100 bytes): 19 words of key, cubes, light visibility
-  and origin, then 256 packed moment pairs. Medium's 12,288 active probes use
-  12.890625 MiB; High's 36,864 use 38.671875 MiB. The table and CPU staging
-  reserve the High capacity per residency. The staged `GpuRegion` has one
-  38.671875 MiB device buffer, two host upload buffers of that capacity plus
-  copy headers, and a native shadow; `m_volume` adds another capacity-sized
-  CPU array. Those five payloads total 193.359375 MiB before cache and batch
-  storage. A cache block holds 284 words (1,136 bytes) per probe, including its
-  uncompressed cubes; retained cells and previous-generation blocks add to it.
-  Neighbour masks, their 26 rays and cross-probe cube filtering are deleted.
+- A record is 147 words (588 bytes): 19 words of key, cubes, light visibility
+  and origin, then 128 words packing 256 FP16 distances. Medium's 12,288 probes
+  use 6.890625 MiB; High's 36,864 use 20.671875 MiB. The table's staged region
+  still reserves High capacity: one device buffer, two host upload buffers and
+  a native shadow total 82.6875 MiB, before copy headers. `m_volume` allocates
+  the active tier (6.890625 or 20.671875 MiB), rather than High unconditionally.
+  Its five High payloads total 103.359375 MiB, down from 193.359375 MiB.
+  A cached probe block uses 156 words (624 bytes). Previous generations and
+  retained cells add to this. Only changed slots, coalesced into contiguous
+  runs, are compared/uploaded on publication; no full-table comparison per batch.
+  Tier-sized GPU capacity would require changing residency allocation, so the
+  remaining High reservation belongs to that separate resource-lifetime change.
 - Each published probe contains its own measured cubes, exactly as the CPU
-  bounce lookup reads them. Averaging neighbouring cubes imports another probe's
-  sky or wall radiance through a doorway, even when the receiver's own depth
-  test is correct. The 1,024 depth rays also measure the probe's sky cube,
-  cosine weighted with the octahedron's solid-angle Jacobian; this reduces
-  sky variance without borrowing visibility. Later bounce sweeps reuse this
-  geometry-only sky measurement along with the depth map. The first-hit
-  moments use the same solid-angle weighting within each texel.
+  bounce lookup reads them. Its sky and surface radiance come from the same
+  full-reach radiance rays, so a small opening cannot simultaneously count as
+  both a missed sky ray and a bounced hit in another sample set. Depth rays do
+  no sky measurement. Later sweeps recompute both radiance cubes together and
+  reuse only the geometry-only depth map. Placement scores up to 32 candidates
+  with 32 rays each, but those rays stop at one spacing, never lighting reach.
 - A probe stands in the open (`SdfMeshIrradiance.Place`). A lattice centre
   inside geometry (the PRIMITIVES sign at x = 23, y ≈ 3; a stair flight) or
   within `Clearance` (0.1 m) of a surface (a partition face at an odd metre)

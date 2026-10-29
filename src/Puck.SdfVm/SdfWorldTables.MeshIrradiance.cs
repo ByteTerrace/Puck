@@ -16,11 +16,14 @@ public sealed partial class SdfWorldTables {
     /// differs.</summary>
     /// <param name="words">The probe slots, <see cref="SdfMeshIrradianceProbe.ProbeWords"/> words each; at most the High
     /// tier's volume.</param>
+    /// <param name="wordOffset">The first changed word in the table.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="words"/> holds more words than the table.</exception>
-    public void WriteMeshIrradiance(ReadOnlySpan<uint> words) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: words.Length, other: (MeshIrradianceBytes / sizeof(uint)));
+    public void WriteMeshIrradiance(ReadOnlySpan<uint> words, int wordOffset = 0) {
+        ArgumentOutOfRangeException.ThrowIfNegative(wordOffset);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: wordOffset, other: (MeshIrradianceBytes / sizeof(uint)));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: words.Length, other: ((MeshIrradianceBytes / sizeof(uint)) - wordOffset));
 
         if (words.IsEmpty) { return; }
-        _ = m_meshIrradianceRegion.Write(bytes: MemoryMarshal.AsBytes(span: words), offset: 0);
+        _ = m_meshIrradianceRegion.Write(bytes: MemoryMarshal.AsBytes(span: words), offset: wordOffset * sizeof(uint));
     }
 }

@@ -17,9 +17,8 @@ public sealed class SdfMeshIrradianceLawTests {
     [Fact]
     public void AReceiverBehindAnOccluderBesideAnOpenEdgeStaysDark() {
         var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(1f, -10f, -10f), new Vector3(1.1f, 0.11f, 10f)))]);
-        var depth = new uint[SdfMeshIrradianceProbe.DepthSize * SdfMeshIrradianceProbe.DepthSize];
-        var sky = new float[6];
-        SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 60f, depth, sky);
+        var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
+        Assert.Equal(256, SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 2.65f, depth));
         var toward = new Vector3(2f, 0.19f, 0f);
         Assert.False(scene.Unblocked(Vector3.Zero, Vector3.Normalize(toward), toward.Length()));
         var visibility = SdfMeshProbeDepth.Visibility(depth, toward);
@@ -542,7 +541,7 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.True(condition: (upperLuminance > 0f));
         Assert.True(condition: (Luminance(face: 3, probe: lower) < (0.01f * upperLuminance)));
-        var moments = lower.Slice(length: (SdfMeshIrradianceProbe.DepthSize * SdfMeshIrradianceProbe.DepthSize), start: SdfMeshIrradianceProbe.DepthWord);
+        var moments = lower.Slice(length: SdfMeshIrradianceProbe.DepthWords, start: SdfMeshIrradianceProbe.DepthWord);
 
         Assert.True(condition: (SdfMeshProbeDepth.Visibility(moments: moments, toward: new Vector3(x: 0.3f, y: 2.8f, z: -0.2f)) < 0.001f));
         Assert.Equal(1f, SdfMeshProbeDepth.Visibility(moments: moments, toward: new Vector3(x: 0.3f, y: 2.4f, z: -0.2f)));
@@ -637,7 +636,7 @@ public sealed class SdfMeshIrradianceLawTests {
 
         var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
         var probe = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
-        var depth = probe.Slice(length: (SdfMeshIrradianceProbe.DepthSize * SdfMeshIrradianceProbe.DepthSize), start: SdfMeshIrradianceProbe.DepthWord);
+        var depth = probe.Slice(length: SdfMeshIrradianceProbe.DepthWords, start: SdfMeshIrradianceProbe.DepthWord);
 
         Assert.True(condition: (SdfMeshProbeDepth.Visibility(moments: depth, toward: new Vector3(x: 1f, y: 0f, z: 0f)) < 0.05f));
         Assert.Equal(1f, SdfMeshProbeDepth.Visibility(moments: depth, toward: new Vector3(x: 0.4f, y: 0f, z: 0f)));

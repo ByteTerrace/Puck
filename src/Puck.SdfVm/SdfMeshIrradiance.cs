@@ -102,7 +102,9 @@ public sealed class SdfMeshIrradiance {
     private readonly List<(int X, int Y, int Z)> m_landed = [];
     private readonly List<(int X, int Y, int Z)> m_restoreCells = [];
     private uint[] m_restoreWords = [];
-    private readonly uint[] m_volume = new uint[(MaxProbes * SdfMeshIrradianceProbe.ProbeWords)];
+    private uint[] m_volume = [];
+    private readonly bool[] m_dirtySlots = new bool[MaxProbes];
+    private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
 
     private SdfWorldTables? m_writeTables;
@@ -204,7 +206,16 @@ public sealed class SdfMeshIrradiance {
         return Stage(bakePending: bakePending, frame: frame, tier: tier, write: m_write);
     }
 
-    private void WriteToTables(ReadOnlyMemory<uint> words) => m_writeTables!.WriteMeshIrradiance(words: words.Span);
+    private void WriteToTables(ReadOnlyMemory<uint> words) {
+        m_changedSlots.Sort();
+        for (var index = 0; index < m_changedSlots.Count;) {
+            var first = m_changedSlots[index++];
+            var end = first + 1;
+            while (index < m_changedSlots.Count && m_changedSlots[index] == end) { index++; end++; }
+            var offset = first * SdfMeshIrradianceProbe.ProbeWords;
+            m_writeTables!.WriteMeshIrradiance(words.Span.Slice(offset, (end - first) * SdfMeshIrradianceProbe.ProbeWords), offset);
+        }
+    }
     // The camera the window follows: the first view's. While another residency renders that view
     // (SdfViewSnapshot.Elsewhere: its seat is presented in another world, its camera in that world's coordinates) the
     // window holds where it stood, about where the seat left this world and will come back to it.
@@ -283,7 +294,9 @@ public sealed class SdfMeshIrradiance {
                 m_windowValid = true;
                 m_owed = true;
                 if (resized) {
-                    Array.Clear(array: m_volume);
+                    m_volume = new uint[layout.Count * SdfMeshIrradianceProbe.ProbeWords];
+                    Array.Clear(m_dirtySlots);
+                    m_changedSlots.Clear();
                     m_cache.Clear();
                     m_generation++;
                     m_reported = false;
@@ -326,6 +339,8 @@ public sealed class SdfMeshIrradiance {
             // measured sample. Publishing an empty slot would invent darkness; filling it with sky invents a leak.
             if (m_dirty && (m_unwritten == 0)) {
                 write(obj: m_volume.AsMemory(length: (layout.Count * SdfMeshIrradianceProbe.ProbeWords), start: 0));
+                foreach (var slot in m_changedSlots) { m_dirtySlots[slot] = false; }
+                m_changedSlots.Clear();
                 m_dirty = false;
                 m_wrote = true;
                 m_published = new SdfMeshIrradianceParameters(Dims: layout.Dims, Enabled: true, Low: m_low, Spacing: layout.Spacing);
@@ -677,8 +692,14 @@ public sealed class SdfMeshIrradiance {
     private bool Holds((int X, int Y, int Z) cell, (int X, int Y, int Z) dims) =>
         ((m_volume[(SlotOf(dims: dims, x: cell.X, y: cell.Y, z: cell.Z) * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag));
     // A cell's slot words in the volume.
-    private Span<uint> SlotWords((int X, int Y, int Z) cell) =>
-        m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims) * SdfMeshIrradianceProbe.ProbeWords));
+    private Span<uint> SlotWords((int X, int Y, int Z) cell) {
+        var slot = SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims);
+        if (!m_dirtySlots[slot]) {
+            m_dirtySlots[slot] = true;
+            m_changedSlots.Add(slot);
+        }
+        return m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: slot * SdfMeshIrradianceProbe.ProbeWords);
+    }
     // Composes a cached cell's slot words from its own measured cubes, depth and light visibility;
     // false, writing nothing, when the cache holds no probe of it. It reads the cache alone, so it runs outside the gate.
     private bool Compose((int X, int Y, int Z) cell, Span<uint> words) {
@@ -814,7 +835,7 @@ public sealed class SdfMeshIrradiance {
                             ? (entry with { HasPrevious = previous.HasPrevious, Previous = previous.Previous })
                             : (entry with { HasPrevious = true, Previous = Readable(probe: previous) }));
                     }
-                    if (!result.Invalid && (result.Sweeps == 1)) { m_depthRays += ((4L * SdfMeshIrradianceProbe.DepthSize) * SdfMeshIrradianceProbe.DepthSize); }
+                    m_depthRays += result.DepthRays;
                     m_cache[cell] = entry;
                     if (!entry.HasPrevious) { m_landed.Add(item: cell); }
                 }
@@ -898,6 +919,7 @@ public sealed class SdfMeshIrradiance {
         var origin = (centre + offset);
         var lights = block.Lights(index: index);
         var depthMoments = block.Depth(index: index);
+        var depthRays = 0;
 
         if (valid) {
             // A light past its range lights nothing here and stays unseen; one at the probe's origin is seen.
@@ -914,13 +936,14 @@ public sealed class SdfMeshIrradiance {
         if (valid) {
             if ((sweep > 0) && m_cache.TryGetValue(key: cell, value: out var previous)) {
                 previous.Current.Depth.CopyTo(destination: depthMoments);
-                previous.Current.Sky.CopyTo(destination: block.Sky(index: index));
             } else {
-                SdfMeshProbeDepth.Trace(scene: scene, origin: origin, reach: lighting.Reach, moments: depthMoments, sky: block.Sky(index: index));
+                // The farthest in-window receiver is a spacing diagonal plus relocation and the normal bias.
+                depthRays = SdfMeshProbeDepth.Trace(scene: scene, origin: origin,
+                    reach: ((1.5f * MathF.Sqrt(3f) * layout.Spacing) + SdfMeshIrradianceProbe.NormalBias), moments: depthMoments);
             }
         }
 
-        return new ProbeData(Block: block, Generation: generation, Index: index, Inside: inside, Invalid: !valid, Offset: offset, Sweeps: (sweep + 1));
+        return new ProbeData(Block: block, DepthRays: depthRays, Generation: generation, Index: index, Inside: inside, Invalid: !valid, Offset: offset, Sweeps: (sweep + 1));
     }
     // A centre in geometry or near a surface tries clear positions in its cell. Among nearby candidates, prefer
     // fewer close hits, charging for distance from the centre: keeping probes away from grazing surfaces conditions
@@ -952,7 +975,7 @@ public sealed class SdfMeshIrradiance {
             var origin = (centre + trial);
 
             if (scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: origin, radius: clearance, surface: out _)) { continue; }
-            if (Blocked(lighting: lighting, near: out var nearby, origin: origin, reach: layout.Spacing, rotation: rotation, scene: scene)) { continue; }
+            if (Blocked(near: out var nearby, origin: origin, reach: layout.Spacing, rotation: rotation, scene: scene)) { continue; }
             if (scored) {
                 var score = (nearby + ((0.25f * trial.Length()) / layout.Spacing));
 
@@ -978,7 +1001,7 @@ public sealed class SdfMeshIrradiance {
     }
     // Whether a point's rays mostly meet back faces, read with a few rays before a candidate is traced in full; `near`
     // receives the share of them that meet any surface within `reach`.
-    private static bool Blocked(Vector3 origin, Quaternion rotation, SdfMeshIrradianceScene scene, Lighting lighting, float reach, out float near) {
+    private static bool Blocked(Vector3 origin, Quaternion rotation, SdfMeshIrradianceScene scene, float reach, out float near) {
         const int Rays = 32;
         var backFaces = 0;
         var nearby = 0;
@@ -986,7 +1009,7 @@ public sealed class SdfMeshIrradiance {
         for (var ray = 0; (ray < Rays); ray++) {
             var direction = Vector3.Transform(value: Fibonacci(count: Rays, index: ray), rotation: rotation);
 
-            if (!scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out _, normal: out var normal)) { continue; }
+            if (!scene.Intersect(origin: origin, direction: direction, maximum: reach, distance: out var distance, material: out _, normal: out var normal)) { continue; }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { backFaces++; }
             if (distance <= reach) { nearby++; }
         }
@@ -1172,7 +1195,7 @@ public sealed class SdfMeshIrradiance {
                 if ((probes[corner].Lights[lightIndex >> 5] & (1u << (lightIndex & 31))) != 0u) { visible += weights[corner]; }
                 total += weights[corner];
             }
-            return (total > 0f) ? (visible / total) : 1f;
+            return (total > 0f) ? (visible / total) : 0f;
         }
     }
 
@@ -1357,7 +1380,7 @@ public sealed class SdfMeshIrradiance {
     // are a slice of the floats of the batch it was traced in (ProbeBlock), its lights among them, so a batch allocates one
     // block rather than four arrays a probe, in the large object heap, where a collection of the young generations never
     // copies it.
-    private readonly record struct ProbeData(ProbeBlock Block, int Index, int Sweeps, int Generation, bool Invalid, Vector3 Offset, float Inside) {
+    private readonly record struct ProbeData(ProbeBlock Block, int Index, int Sweeps, int Generation, bool Invalid, Vector3 Offset, float Inside, int DepthRays = 0) {
         public Span<float> Sky => Block.Sky(index: Index);
         public Span<Vector3> Radiance => Block.Radiance(index: Index);
         public Span<uint> Depth => Block.Depth(index: Index);
@@ -1365,7 +1388,7 @@ public sealed class SdfMeshIrradiance {
     }
     // The words of one trace batch's probes, each probe's at its index: six sky, six radiance (18 floats) and the packed octahedral depth map, then its light words, held as the floats' bits so a batch is one allocation.
     private sealed class ProbeBlock(int count) {
-        private const int DepthWords = (SdfMeshIrradianceProbe.DepthSize * SdfMeshIrradianceProbe.DepthSize);
+        private const int DepthWords = SdfMeshIrradianceProbe.DepthWords;
         private const int FloatsPerProbe = ((24 + DepthWords) + SdfMeshIrradianceProbe.LightWords);
 
         private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
