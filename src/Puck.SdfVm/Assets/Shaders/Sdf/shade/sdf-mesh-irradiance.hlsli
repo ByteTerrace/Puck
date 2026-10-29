@@ -60,48 +60,35 @@ float3 sdfMeshProbeOffset(uint address) {
 
     return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
 }
-// Packed first hits: misses carry negative measured reach and never enter blocker moments.
-// KEEP IN SYNC with SdfMeshProbeDepth.Visibility, including seam reflection and central variance.
+// First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
+// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
 float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
     float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
     int2 base = (int2)floor(texel);
     float2 fraction = texel - (float2)base;
-    float mean = 0.0;
-    float4 depths = 0.0;
-    float4 weights = 0.0;
-    float total = 0.0;
+    float blocked = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
         int2 high = int2(corner & 1u, corner >> 1);
         float2 axes = lerp(1.0 - fraction, fraction, (float2)high);
         float weight = axes.x * axes.y;
-        int2 tap = sdfOctBorderSource(base + high, (int)SDF_MESH_IRRADIANCE_DEPTH_SIZE);
-        uint index = (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y);
-        uint word = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + (index >> 1u)];
-        float depth = sdfMeshIrradianceHalf(word, index & 1u);
         if (weight <= 0.0) { continue; }
+        int2 tap = sdfOctBorderSource(base + high, (int)SDF_MESH_IRRADIANCE_DEPTH_SIZE);
+        uint word = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y)];
+        float depth = sdfMeshIrradianceHalf(word, 0u);
         if (depth < 0.0) {
             if (distance > -depth) { return 0.0; }
             continue;
         }
-        depths[corner] = depth;
-        weights[corner] = weight;
-        mean += weight * depth;
-        total += weight;
+        int2 encoded = int2((int)(word << 8u) >> 24, (int)word >> 24);
+        float3 normal = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
+        float gap = depth + dot(normal, toward);
+        blocked += weight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
-    if (total <= 0.0) { return 1.0; }
-    mean /= total;
-    if (distance <= mean) { return 1.0; }
-    float4 deviations = depths - mean;
-    float variance = dot(weights, deviations * deviations) / total;
-    float delta = distance - mean;
-    float probability = variance / max(1.0e-8, variance + delta * delta);
-    float visibility = probability * probability * probability;
-    visibility = (visibility < 0.2) ? (visibility * visibility * visibility / 0.04) : visibility;
-    float coverage = saturate((total - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
+    float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
     coverage = coverage * coverage * (3.0 - 2.0 * coverage);
-    return 1.0 + coverage * (visibility - 1.0);
+    return 1.0 - coverage;
 }
 struct SdfMeshProbes {
     uint address[8];

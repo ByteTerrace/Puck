@@ -269,14 +269,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 - **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
   gather supplies indirect light, reflections and traced static-light visibility.
   Each probe publishes its own measured cubes, without neighbour filtering.
-  Visibility uses a 16×16 octahedral first-hit distance map, one ray per texel
-  bounded to receiver support. Two FP16 distances share a word; negative values
-  mark misses and their measured reach. Misses never enter blocker moments.
-  The four reflected seam taps interpolate hit distances and central variance,
-  then apply the one-sided Chebyshev bound and angular coverage. Keep
-  `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
+  Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
+  per texel. Each word packs perpendicular distance and two signed normal bytes;
+  negative distance marks a measured miss. Four reflected angular taps test
+  signed receiver gaps and blocked coverage. Radial depth interpolation rejects
+  coplanar receivers at grazing angles, so no mean/squared-distance pair remains.
+  Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
   The sky cube comes from the same full-reach radiance rays as bounced light.
-  There are no first-hit half-spaces, neighbour separation vetoes or suspect sets.
+  Surface support stays within the angular taps; no neighbour vetoes or suspect sets return.
   Gather weights are trilinear share × positive normal cosine squared × depth
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.

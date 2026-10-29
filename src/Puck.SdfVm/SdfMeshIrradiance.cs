@@ -24,7 +24,7 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// from the second sweep, the light the geometry reflects from the probes around each hit, its sky included). It also
 /// stores which lights of the table its centre sees, one bit a static point or spot light (<see cref="SdfLight.IsTraced"/>),
 /// which the views pass interpolates into each such light's visibility at a surface, so a fixture lights nothing
-/// through the wall or slab between them, and an octahedral map of first-hit distance moments. The receiver's direction
+/// through the wall or slab between them, and an octahedral map of first-hit surface support. The receiver's direction
 /// and distance sample that map through <see cref="SdfMeshProbeDepth.Visibility"/>. A probe whose rays mostly meet
 /// back faces lies inside geometry and is stored
 /// as invalid. The volume is toroidal: a cell's probe lives in the slot its coordinates name modulo the volume's size,

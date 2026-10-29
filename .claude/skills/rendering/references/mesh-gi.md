@@ -38,25 +38,29 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The scheduler's separate saved-pose/input-capacity defect has a focused
   boundary test; it is not the established cause of this slow gallery boot.
   See [mesh baking](mesh-bake.md#groups-poses-and-materials).
-- Visibility is a per-probe 16×16 octahedral first-hit distance map. Each texel
+- Visibility is a per-probe 12×12 octahedral first-hit surface map. Each texel
   traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
-  the full in-window receiver support including relocation. Two FP16 distances
-  share each word. A negative value marks a miss and its measured reach. A
-  receiver beyond that reach receives no support. Boundary extrapolation is
-  finite; do not silently turn a bounded miss into unlimited visibility.
-  The map is traced on the first sweep and reused for subsequent bounces.
-- Four bilinear taps reflect across identified octahedral edges. Miss taps
-  never inflate a blocker's distance or variance. Compute the weighted mean
-  of hit distances and their central variance in FP32; independently rounded
-  FP16 mean-squared metres created false variance on flat surfaces at 3–5 m.
-  Before the hit mean visibility is one; beyond it the one-sided Chebyshev bound
-  is cubed and low values crushed. A minority hit footprint must not extend a
-  finite block across the opening: smooth its occlusion from half to three-quarter
-  angular coverage (`DepthCoverageStart`, `DepthCoverageScale`, generated).
+  full in-window receiver support including relocation. Each word holds an FP16
+  perpendicular surface distance and two signed octahedral normal bytes. A
+  negative distance explicitly marks a miss and its reach. Receivers beyond
+  that measured support receive nothing. Depth is traced on the first sweep
+  and reused for later bounces; sky still uses the full-reach radiance rays.
+- Four reflected angular taps test the receiver's signed gap from their first
+  hit surface, fading over `DepthSurfaceFade` (2 cm, less than normal bias).
+  The stored gap is anchored with the decoded normal so quantizing it does not
+  move the measured hit. Axis normals remain exact. Interpolating radial
+  distances rejected receivers on the same flat surface at grazing angles:
+  the CPU law is red at radius 1.2 m, angle 89 degrees (48% visibility).
+  Independently rounded squared metres also produced false FP16 variance;
+  neither radial moments nor a squared-distance field remain.
+  Misses supply no blocker. Blocked angular coverage closes smoothly from half
+  to three-quarter support (`DepthCoverageStart`, `DepthCoverageScale`). A finite
+  block cannot shadow the whole footprint through a minority hit tap. Surface
+  tests apply only to these four angular taps: no 26-ray whole-sphere planes,
+  neighbour separation, suspect sets or cross-probe vetoes return.
   Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together,
-  including seam taps, hit/miss handling and central variance. Projection and
-  addressing reuse `SdfOctahedral` and `field/sdf-octahedral.hlsli`.
-  There are no infinite first-hit planes or cross-probe separation vetoes.
+  including signed normal decoding, seam reflection, gaps and coverage. Reuse
+  `SdfOctahedral` / `field/sdf-octahedral.hlsli` for projection and addressing.
 - Gather weight is the cell's trilinear share times
   `max(0, dot(normal, directionToProbe))²` times depth visibility. This continuous
   positive-hemisphere weight excludes probes behind a surface without switching
@@ -117,21 +121,19 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   old coordinates** until every new slot has a measured sample. Never publish
   unwritten cells as darkness or initialize them to unoccluded sky. Before the
   first scene has supplied any volume, there is no measured indirect light.
-- A record is 147 words (588 bytes): 19 words of key, cubes, light visibility
-  and origin, then 128 words packing 256 FP16 distances. Medium's 12,288 probes
-  use 6.890625 MiB; High's 36,864 use 20.671875 MiB. Both the table and CPU staging
-  fit the published tier. The table starts at one inert record and grows/shrinks
-  through `GpuRegion` and the existing frame-ring retirement; increment the
-  tables' binding revision whenever its buffer changes. A replacement window
-  keeps its previous allocation and coordinates until all new slots are measured.
-  Count one device buffer, two host uploads (their live size can shrink after a
-  small flush), a native shadow and the CPU volume: the five full payloads total
-  34.453125 MiB at Medium or 103.359375 MiB at High, before copy headers, cache
-  and batch storage. They previously reserved 193.359375 MiB at either tier.
-  A cached probe block uses 156 words (624 bytes); previous generations and
-  retained cells add to this. Publication compares/uploads changed slots only,
-  coalesced into contiguous runs. `world.probe`'s GI description reports actual
-  device/upload/native-shadow/header and CPU-volume bytes when unsettled.
+- A record is 163 words (652 bytes): 19 header/cube/light/origin words and 144
+  packed first-hit surface words. Medium's 12,288 probes use 7.640625 MiB;
+  High's 36,864 use 22.921875 MiB. The table starts at one inert record and both
+  it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
+  existing frame-ring retirement; increment the binding revision when its buffer
+  changes. Keep the old table and coordinates until every new slot is measured.
+  Five full payloads (device, two uploads, native shadow, CPU volume) total
+  38.203125 MiB at Medium or 114.609375 MiB at High, before headers, cache,
+  batches and temporary retired buffers, versus the former 193.359375 MiB
+  reservation at either tier. Upload buffers can shrink after small flushes;
+  live `world.probe` GI diagnostics report actual device/upload/shadow/header
+  and CPU-volume bytes. Cache blocks hold 172 words (688 bytes) per probe.
+  Publication compares/uploads changed slots only, coalesced into runs.
 - Each published probe contains its own measured cubes, exactly as the CPU
   bounce lookup reads them. Its sky and surface radiance come from the same
   full-reach radiance rays, so a small opening cannot simultaneously count as

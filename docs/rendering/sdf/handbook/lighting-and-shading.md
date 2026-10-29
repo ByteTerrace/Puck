@@ -178,21 +178,22 @@ in the frame.
   its inside share, validity, cubes and the terms of its weight.
   The published volume holds each probe's own measured sky and radiance cubes;
   neighbours never supply its sky or radiance. Sky and surface radiance use the
-  same full-reach radiance rays. Each probe stores a 16×16 octahedral map of
-  first-hit distances, two FP16 texels per word; negative distances explicitly
-  mark misses to the receiver support radius. One bounded ray per texel traces
-  once per geometry/lighting generation, and later bounces reuse the map.
-- **A probe lights receivers its depth supports.** Four reflected octahedral
-  taps compute the hit-only mean and central variance in FP32; misses never
-  inflate a blocker's distance. The one-sided Chebyshev bound, cubed and
-  crushed at low weights, fades receivers beyond the mean. Angular coverage
-  keeps a minority hit tap from extending a finite block over an opening.
+  same full-reach radiance rays. Each probe stores a 12×12 octahedral first-hit
+  surface map, one word per texel: perpendicular distance and compact normal.
+  Negative distances mark misses to the receiver support radius. One bounded
+  ray per texel traces on the first sweep; later bounces reuse the map.
+- **A probe lights receivers its surface samples support.** Four reflected
+  angular taps test the receiver's signed gap from their measured first-hit
+  surfaces. This keeps a coplanar receiver visible even at grazing angles,
+  where interpolating radial distances incorrectly shadowed it. Misses never
+  inflate a blocker. Blocked angular coverage closes smoothly; a minority hit
+  tap cannot extend a finite block over the opening. There are no whole-sphere
+  lattice-ray planes, front/back fallback or neighbour separation vetoes.
   Gather multiplies visibility by trilinear share and positive normal cosine
-  squared. There is no front/back fallback or neighbour separation veto.
-  Normal bias is 5 cm, independent of spacing. Depth support ends at 1.5 times
-  the spacing diagonal plus normal bias; sky still traces to full lighting reach.
-  Subtexel geometry and grazing visibility remain sampling limits. Empty gathers
-  provide zero indirect and zero traced static-light visibility.
+  squared. Normal bias is 5 cm; surface fade is 2 cm, independent of spacing.
+  Support ends at 1.5 times the spacing diagonal plus normal bias, while sky
+  still traces to lighting reach. Subtexel geometry remains a sampling limit.
+  Empty gathers provide zero indirect and zero traced static-light visibility.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
   exact CPU/HLSL rule and record. `world.probe` marks changing or pending
   publication reads unsettled, naming the GPU and live windows separately.
