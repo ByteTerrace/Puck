@@ -15,6 +15,21 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
+    public void AFlatSurfaceStaysVisibleAtGrazingAnglesBesideTheDepthReach() {
+        var scene = SdfMeshIrradianceScene.Build(draws: [Draw(mesh: Box(low: new Vector3(-20f, -1.2f, -20f), high: new Vector3(20f, -1f, 20f)))]);
+        var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
+        _ = SdfMeshProbeDepth.Trace(scene: scene, origin: Vector3.Zero, reach: 5.25f, moments: depth);
+        for (var radius = 1f; radius <= 5f; radius += 0.1f) {
+            for (var angle = 0; angle < 360; angle++) {
+                var radians = angle * MathF.PI / 180f;
+                var toward = new Vector3(radius * MathF.Cos(radians), -0.95f, radius * MathF.Sin(radians));
+                var visibility = SdfMeshProbeDepth.Visibility(depth, toward);
+                Assert.True(visibility > 0.999f, $"flat receiver radius={radius} angle={angle} visibility={visibility}");
+            }
+        }
+    }
+
+    [Fact]
     public void AReceiverBehindAnOccluderBesideAnOpenEdgeStaysDark() {
         var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(x: 1f, y: -10f, z: -10f), new Vector3(x: 1.1f, y: 0.11f, z: 10f)))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
