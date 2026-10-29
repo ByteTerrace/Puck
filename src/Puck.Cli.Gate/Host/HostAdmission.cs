@@ -19,7 +19,7 @@ public static class HostAdmission {
     public static CliLease AcquireHeavy(string repositoryRoot, string step, TimeProvider clock, CancellationToken cancellationToken = default) {
         var root = CliLease.RootAsync(cancellationToken: cancellationToken, checkout: repositoryRoot).GetAwaiter().GetResult();
 
-        return CliLease.AcquireAsync(ancestor: IsAncestor, cancellationToken: cancellationToken, clock: clock, holder: step, name: "heavy", root: root, wait: HeavyTimeout).GetAwaiter().GetResult();
+        return CliLease.AcquireAsync(ancestor: IsAncestor, cancellationToken: cancellationToken, clock: clock, holder: step, lane: CliLease.LaneOf(checkout: repositoryRoot), name: "heavy", root: root, wait: HeavyTimeout).GetAwaiter().GetResult();
     }
 
     private static bool IsAncestor(int pid, long ticks) {

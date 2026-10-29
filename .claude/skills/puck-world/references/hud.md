@@ -394,8 +394,15 @@ over `hud.*` (`WorldRowCommandModule`, see [console.md](console.md)):
 Simulation-routed, submitting a mutation and returning `CommandResult.None` —
 NO synchronous echo; the outcome arrives a tick later through
 `WorldServer.EchoTap` (toast, console mirror, stderr), and a rejection
-increments `wire.errors`. The read-backs `world.hud` and `world.hud.template`
-live in `WorldHudCommandModule`, unbindable.
+increments `wire.errors`. A toast narrates what a player's own act caused:
+`WorldToastPolicy` (`Puck.World`) withholds it from an echo whose
+`WorldEditEcho.ActingPrincipal` is `Console` (stdin, an MCP or control
+attachment, a sweep or schedule prelude, the session grants minted at a screen
+session's admission) or `World`, and from an applied addon or scoped-replay
+edit. The console row, stderr and the log carry those outcomes instead. The
+read-backs `world.hud` and `world.hud.template`
+live in `WorldHudCommandModule`, unbindable; `world.hud toast` reads the latest
+toast the store holds (`#<seq> ok|error '<text>'`, or `none`), headless too.
 
 - `world.row.set hud.panels <panel-json>` → `UpsertHudPanel` (whole row,
   elements included — the cross-row transaction boundary).

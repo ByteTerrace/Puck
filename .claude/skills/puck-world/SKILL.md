@@ -361,6 +361,13 @@ server's verdict. Trace the acting principal stamped at ingress when debugging
 a refusal; constructing a `Principal` in a test bypasses the path under investigation.
 [references/authority.md](references/authority.md)
 
+**A toast narrates a player's own act.** `WorldToastPolicy` decides from the
+echo's acting principal: a `Console`-stamped write or grant (stdin, an MCP or
+control attachment, a sweep or schedule prelude, a session screen's admission
+grants) reports through the console row, stderr and `host.log`, never the
+toast. `world.hud toast` reads the toast store in any shape
+([HUD](references/hud.md#verbs)).
+
 **Read through the caller's disclosure.** A console read-back reads the
 `WorldStateReadView` its acting principal is minted
 (`IWorldConsoleAuthority.ReadView`), never `WorldServer.Definition` directly.

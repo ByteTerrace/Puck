@@ -201,8 +201,9 @@ than writing a boot line:
   `ownerPlay` says the owner asked to play in it (`--devices all`); a state
   directory of its own under `puck-mcp-worlds/` in the temporary directory; and
   `--control`. A windowed start first takes the machine's GPU lease (the one
-  `puck lease gpu` takes, recorded under `holder`) and holds it until the World
-  exits. `timeoutSeconds` (1–1800, default 900) bounds the whole job, including
+  `puck lease gpu` takes, recorded under `holder`, admitted in rotation between
+  `lane`s: the holder's first word, or the checkout's directory name when a start
+  names neither) and holds it until the World exits. `timeoutSeconds` (1–1800, default 900) bounds the whole job, including
   build, lease wait and boot. The job continues between calls and across
   activated adapter versions; a client's short call deadline does not bound
   a cold build. It runs from the build store, leaving the checkout free to rebuild.
@@ -397,7 +398,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 |---|---|---|
 | `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId`, installed `directory`, live `ownedWorlds` (process/attachment IDs) and `pendingStarts` (start IDs). |
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, and `current` or `started` when true. |
-| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder` and `timeoutSeconds` (1–1800, default 900). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
+| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder`, `lane` and `timeoutSeconds` (1–1800, default 900). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
 | `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–120000, default 20000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId`, `stage` and `elapsedSeconds` while pending, `world`, `processId`, `stdoutLog` and `stderrLog` once started, and `output`, `isError: true` (plus `checkout`, `build`, `stateDirectory`, logs and exit fields if launched) when refused. Completed results repeat. |
 | `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode` and, when true, `killed` and `leaseReleased`. |
 | `puck_exec` | Required `command`: a console line or newline-separated script, at most 8192 characters total and 64 nonblank, noncomment lines. Optional integer `timeoutMs`: 1–120000 for the whole script, default 30000. Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Structured decimal-string `requestId`, `status`, `world`, and `output` (single-line text), `data` (single-line JSON) or `commands` (multi-line script), plus `isError`, `clearTranscript` and `truncated` when true. Empty output is `submitted`, not authoritative application. |

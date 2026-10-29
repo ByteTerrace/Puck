@@ -733,7 +733,7 @@ failover witness.
 
 - [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
-- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (the same pin, a substituted driver, or nothing); refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
+- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -780,6 +780,8 @@ failover witness.
 Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
+
+- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
 
 - An invalid wait argument on a pending operator MCP start caches the argument
   refusal as the start's completed result: `OperatorMcpFront.Record`
@@ -851,6 +853,8 @@ hang, then the pre-`main` language findings.
 Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
+
+- Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
 
 - C7 review findings (Claude review of the input-c7 merge `a977bed08`; no determinism change and no broken caller found):
   - [medium] `player.bindings` and the help of `body.rig`/`body.channels`/`body.press` read `m_server.Input.DescribeBody(body: slot)`, always the boot authority's body at the seat's number, not the seat's routed authority and entity (`WorldBindingCommandModule.cs:341`, `PlayerCommandModule.cs:129,135,216`): after a portal crossing they show the boot body's mode.
