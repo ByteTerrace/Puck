@@ -4272,6 +4272,7 @@
     { "name": "view.annotate", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "view.isolate", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "view.override", "bindable": true, "audience": "anyone", "valueKind": "axis1d", "wireArgs": true },
+    { "name": "view.recenter", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "view.reseed", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "voice.babble", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "voice.state", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

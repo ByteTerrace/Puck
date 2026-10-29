@@ -59,6 +59,12 @@ an eight-tick pan can finish before the first of eight asynchronous captures lan
 
 ## Mesh pipeline limits
 
+Draw selection reads the retained `SdfWorldTables` staged draw span, the same
+records whose boxes and GPU records were uploaded. Never borrow the frame source's
+mutable draw list across staging: a portal handoff can clear it while the retained
+count still names the previous records.
+
+
 The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
 live transform table and reports an actual `[world.render] envelope`; it builds
 no worst-case probe. `WorldRigidAssets` emits local creation templates once and
@@ -127,7 +133,7 @@ with `FixedSurfaceQuery` and the contact narrowphase. Chamfered authored Boxes
 can still yield real inward discrepancies from their conservative inside
 colliders; neither the fillet nor the chamfer is an error-budget allowance.
 
-Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
+Opposing planar face interiors of touching boxes are inside their union, not exposed collision boundaries; certify that local relation before comparing them with the exterior mesh. Edges and corners stay measured. Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
 `TryNearestSurface`, not normal-ray hits. The nearest query reuses both levels
 of the trace hierarchy and tests world-space triangle distances (object-space
 nearest points are wrong under nonuniform scaling). It includes edges and

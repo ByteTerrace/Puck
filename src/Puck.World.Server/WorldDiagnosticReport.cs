@@ -62,6 +62,7 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
     /// <summary>The other end of a measured support gap, when present.</summary>
     public Vector3? SurfaceWitness { get; init; }
     /// <summary>The coverage of the check snapshot, retained when this finding is picked alone.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public WorldDiagnosticCoverage? Coverage { get; init; }
 
     /// <summary>Serializes a picked finding with the same schema as its report.</summary>
@@ -102,7 +103,9 @@ public sealed record WorldDiagnosticReport(long Snapshot, string View, ulong Tic
 
     /// <summary>Serializes the same record used by every diagnostic consumer.</summary>
     /// <returns>The JSON report.</returns>
-    public string ToJson() => JsonSerializer.Serialize(options: JsonOptions, value: this);
+    public string ToJson() => JsonSerializer.Serialize(options: JsonOptions, value: this with {
+        Findings = Findings.Select(selector: static finding => finding with { Coverage = null }).ToArray(),
+    });
     /// <summary>A concise severity and coverage summary.</summary>
     /// <returns>The console/banner summary.</returns>
     public string Summary() => $"{View}: red={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "red")))} amber={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "amber")))} unknown={Findings.Count(predicate: f => (!f.Resolved && (f.Severity == "unknown")))} tested={Coverage.Tested}/{Coverage.Eligible} coverage={(Coverage.Complete ? "complete" : "incomplete")}";

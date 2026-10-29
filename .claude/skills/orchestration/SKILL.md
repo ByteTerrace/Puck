@@ -360,6 +360,12 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   around each heavy suite, sample headroom while holding it, and release it on
   every exit. Nested runs under `puck lease heavy` serialize on child leases
   after validating the ancestor holder's process identity.
+- Lease admission is a queue, not a race: `puck lease` waiters take tickets and
+  the oldest live ticket gets the lease, so a lane that releases and re-acquires
+  waits behind everyone already queued, and a long `--wait` is never starved by a
+  later arrival. A waiter that is killed leaves a ticket the next waiter drops;
+  a stale `<name>.queue` entry needs no manual cleanup
+  ([CLI reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work)).
 - On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
   step only with more free memory than the capacity threshold and more free
   disk than the pressure threshold, so a running agent waits rather than being
@@ -550,6 +556,10 @@ not a spiral:
   few seconds: each check is a model turn, and a boot-once run of 40 file legs
   polled that way spent hours of tokens and wrote a 2 MB log saying "still
   running". A brief with a long run says how to wait for it.
+- The lead starts each lane as its own background task, so each lane's end
+  arrives as its own notification. Lanes launched together in one background
+  command report only when the last one ends: a lane that finished first sat
+  unseen for an hour and a half that way.
 - Findings never bounce between a reviewer and an author: a finding goes to the
   pile with its owner and is not argued back and forth.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30

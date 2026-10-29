@@ -96,9 +96,14 @@ placement projections. Checkpoints snapshot arena columns directly.
 
 ## Diagnostic reports and pins
 
+Scripted camera framing uses `view.recenter [player]` (1-based), which resets
+the live orbit and boom and answers without devices. `player.look.recenter` is a
+held input binding with no text answer; it is not an operator reset.
+
+
 `world.debug-view report colliders --json` and `world.debug-view report contacts
 --json` are core commands: they run with the view off and in a headless host.
-Unknown coverage is a result, never a clean bill of health. Headless checks
+Coverage is serialized once at the report root; a picked finding carries its own coverage. Unknown coverage is a result, never a clean bill of health. Headless checks
 compare the effective analytic colliders and retained support solves with the
 authored solid field; rendered checks additionally require matching retained
 opaque meshes. Dynamic supports and interpolated body poses without an exact

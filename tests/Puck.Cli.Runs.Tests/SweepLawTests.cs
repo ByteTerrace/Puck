@@ -38,6 +38,7 @@ public sealed class SweepLawTests {
         Assert.Contains(expectedSubstring: "names itself", actualString: Refusal(json: """{ "signals": [ { "name": "", "line": "x" } ] }"""));
         Assert.Contains(expectedSubstring: "two tour stops are named 's'", actualString: Refusal(json: """{ "tour": { "stops": [ { "name": "s", "lines": [] }, { "name": "s", "lines": [] } ] } }"""));
         Assert.Contains(expectedSubstring: "a file name", actualString: Refusal(json: """{ "tour": { "stops": [ { "name": "a/b", "lines": [] } ] } }"""));
+        Assert.Contains(expectedSubstring: "invalid expectedMotion", actualString: Refusal(json: """{ "tour": { "stops": [ { "name": "s", "lines": [], "expectedMotion": "[" } ] } }"""));
         Assert.Contains(expectedSubstring: "no plan", actualString: Refusal(json: "null"));
         Assert.NotEmpty(collection: Refusal(json: "{ \"signals\": 3 }"));
     }
