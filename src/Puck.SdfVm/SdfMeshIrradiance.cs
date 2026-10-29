@@ -964,9 +964,8 @@ public sealed class SdfMeshIrradiance {
 
         return new ProbeData(Block: block, DepthRays: depthRays, Generation: generation, Index: index, Inside: inside, Invalid: !valid, Offset: offset, Sweeps: (sweep + 1));
     }
-    // A centre in geometry or near a surface tries clear positions in its cell. Among nearby candidates, prefer
-    // fewer close hits, charging for distance from the centre: keeping probes away from grazing surfaces conditions
-    // the finite angular depth map.
+    // Take the nearest clear exit, then try the cell's grid nearest-first. Openness scoring moved probes a metre
+    // off thin floors and made neighbouring cells choose different storeys. Surface reconstruction handles grazing.
     private bool Place(Vector3 centre, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene,
         Span<float> sky, Span<Vector3> radiance, out Vector3 offset, out float inside) {
         var clearance = SdfMeshIrradianceProbe.Clearance;
@@ -981,36 +980,19 @@ public sealed class SdfMeshIrradiance {
         if (!near && !scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out normal, point: centre, radius: ((reach * MathF.Sqrt(x: 3f)) + clearance), surface: out surface)) { return false; }
 
         var pushed = ((surface + (normal * (1.25f * clearance))) - centre);
-        var best = Vector3.Zero;
-        var bestScore = float.PositiveInfinity;
 
         for (var candidate = -1; (candidate < Candidates.Length); candidate++) {
             var trial = ((candidate < 0) ? pushed : (Candidates[candidate] * layout.Spacing));
-            var scored = (candidate < ScoredCandidates);
 
-            if (!scored && float.IsFinite(f: bestScore)) { break; }
             if ((MathF.Abs(x: trial.X) > reach) || (MathF.Abs(x: trial.Y) > reach) || (MathF.Abs(x: trial.Z) > reach)) { continue; }
 
             var origin = (centre + trial);
 
             if (scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: origin, radius: clearance, surface: out _)) { continue; }
-            if (Blocked(near: out var nearby, origin: origin, reach: layout.Spacing, scene: scene)) { continue; }
-            if (scored) {
-                var score = (nearby + ((0.25f * trial.Length()) / layout.Spacing));
-
-                if (score < bestScore) {
-                    best = trial;
-                    bestScore = score;
-                }
-                continue;
-            }
+            if (Blocked(origin: origin, reach: layout.Spacing, scene: scene)) { continue; }
             if (!TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: origin, radiance: radiance, scene: scene, sky: sky, sweep: 0)) { continue; }
 
             offset = trial;
-            return true;
-        }
-        if (float.IsFinite(f: bestScore) && TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: (centre + best), radiance: radiance, scene: scene, sky: sky, sweep: 0)) {
-            offset = best;
             return true;
         }
 
@@ -1018,21 +1000,17 @@ public sealed class SdfMeshIrradiance {
         _ = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, scene: scene, sky: sky, sweep: 0);
         return false;
     }
-    // Whether a point's rays mostly meet back faces, read with a few rays before a candidate is traced in full; `near`
-    // receives the share of them that meet any surface within `reach`.
-    private static bool Blocked(Vector3 origin, SdfMeshIrradianceScene scene, float reach, out float near) {
+    // Reject a buried candidate with a few local rays before tracing its full radiance.
+    private static bool Blocked(Vector3 origin, SdfMeshIrradianceScene scene, float reach) {
         const int Rays = 32;
         var backFaces = 0;
-        var nearby = 0;
 
         for (var ray = 0; (ray < Rays); ray++) {
             var direction = PlacementDirections[ray];
 
-            if (!scene.Intersect(direction: direction, distance: out var distance, material: out _, maximum: reach, normal: out var normal, origin: origin)) { continue; }
+            if (!scene.Intersect(direction: direction, distance: out _, material: out _, maximum: reach, normal: out var normal, origin: origin)) { continue; }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { backFaces++; }
-            if (distance <= reach) { nearby++; }
         }
-        near = (nearby / ((float)Rays));
 
         return (backFaces > (InsideShare * Rays));
     }
@@ -1352,8 +1330,6 @@ public sealed class SdfMeshIrradiance {
     // Where a probe may stand in its cell apart from its centre, as shares of the spacing: a lattice a quarter of the
     // spacing apart out to the cell's faces, nearest the centre first (Place).
     private static readonly Vector3[] Candidates = BuildCandidates();
-
-    private const int ScoredCandidates = 32;
 
     private static Vector3[] BuildCandidates() {
         var candidates = new List<Vector3>(capacity: 124);

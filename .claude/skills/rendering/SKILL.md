@@ -282,8 +282,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   spacing; clamping the lookup must not move the visibility-test receiver.
   A zero-weight gather supplies no measured indirect or traced static light.
   Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
-  its own cell; every lookup uses its recorded offset. Placement's short rays
-  stop at one spacing. Debug with `world.probe` after bakes and GI settle;
+  its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
+  stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
   its exact reference segment distinguishes sampling errors from cube content.
   Local adaptation consumes this same gather, so an irradiance error also
   changes exposure. See [mesh GI](references/mesh-gi.md) for sampling, storage,

@@ -145,30 +145,23 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   directions correlates sampling error without borrowing any neighbour's light.
   Camera traces use that same quadrature. Depth rays do no sky measurement.
   Later bounces recompute the two radiance cubes together and reuse only the
-  geometry-only surface map. Placement scores up to 32 candidates with 32 shared
-  directions, bounded to one spacing, never lighting reach.
-- A probe stands in the open (`SdfMeshIrradiance.Place`). A lattice centre
-  inside geometry (the PRIMITIVES sign at x = 23, y ≈ 3; a stair flight) or
-  within `Clearance` (0.1 m) of a surface (a partition face at an odd metre)
-  moves to the nearest point of its cell that stands at least `Clearance` from
-  every surface with its rays mostly meeting front faces: first pushed off the
-  nearest surface along its normal, then over a lattice a quarter of the
-  spacing apart out to the cell's faces. Among nearby candidates, prefer fewer
-  first hits within a spacing, charging for distance from the centre. Keep this
-  openness score with surface support to condition the map near surfaces. The
-  nearest-clear-only experiment did not eliminate grazing marks; those captures
-  also still had neighbour cube filtering, so they do not isolate placement as
-  the cause of light leaks. Later sweeps stand where the first did.
-  The offset rides the record; the gather (`sdfMeshProbesAt`, `Gather`) and the
-  meter (`TryMeter`) read the centre plus the offset. The trilinear share stays
-  the cell's. A cell no surface reaches within its half diagonal is wholly inside
-  or wholly outside and tries no candidate; a probe no candidate frees stays
-  invalid at its centre, and the invalid flag makes the shader's written-key
-  test fail, so its share goes to the corners that answer. An enclosure
-  narrower than twice the clearance still holds no probe and meters by camera
-  trace. `SdfMeshIrradianceLawTests.AProbeOnAWallFaceOrInsideGeometryMovesIntoTheOpenAndABuriedOneStaysInvalid`
-  pins the on-face, pillar and buried cases.
-- Depth moments and the radiance cubes are sampled spatial support, not
+  geometry-only surface map. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
+- A probe stands in the open (`SdfMeshIrradiance.Place`). A centre inside geometry
+  or within `Clearance` (0.1 m) first tries the nearest surface's clear exit, then
+  the cell's quarter-spacing lattice nearest-first. Every candidate must stand
+  clear of all surfaces and pass the back-face validity test; a short 32-ray
+  local rejection precedes a full radiance trace. The former openness score is
+  deleted: it moved a probe one metre off a 10 cm slab despite a 0.175 m clear
+  exit, and neighbouring floor cells could choose different storeys. Grazing
+  surfaces are handled by reconstruction, not by moving probes farther away.
+  Later sweeps keep the first origin. Offset XYZ rides the record and every
+  gather/meter read uses the relocated origin; trilinear share stays the cell's.
+  A cell no surface reaches within its half diagonal is wholly inside or outside
+  and tries no candidates. A cell no candidate frees remains invalid at its
+  centre; the shader rejects its invalid flag. Narrow enclosures without any
+  valid lattice centre meter by camera trace. The placement and thin-slab CPU
+  witnesses cover face, pillar, buried and nearest-clear cases.
+- Angular surface support and the radiance cubes are sampled spatial support, not
   exact receiver visibility. Inspect corners and openings with
   `world.debug-view indirect`, separately from `ao` and `shadow`, and compare
   final shading and `world.exposure`. Check an outdoor view and move across
