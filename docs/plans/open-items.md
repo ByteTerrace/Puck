@@ -1057,6 +1057,16 @@ Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two me
 - [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
 - [medium] The lift door threshold also blinks with temporal off: pairs of frames about 11 presentations apart change about 3 % with max |dY| 26, then hold still, a cadence-driven refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh) independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). (from: owner walkthrough)
 
+### Panes: split screens the player drives
+
+Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary · Next: after the bars-and-pick lane lands (it touches pane listing and pick), a machine-screen source for a pane. The owner's direction: a player can run as the Moth in one pane with the desktop in another, the HGD in a third and a fourth camera angle in another.
+
+- What exists: `views` layouts of normalized `slots`, each the owning seat's view, a named authored `camera`, or a `views.graphs` `instance` (the studio's 2x2 `motion` layouts; `desktop.puck`'s `desktop` layout shows the `source.capture` graph in a pane); `view.override layout <name>` switches.
+- A machine's screen as a pane source: the machines render as `source$machine$<id>` graph nodes, but the source packages a `views.graphs` row can name are `source.capture`, `source.passthrough` (with pointer and scroll) and `source.qr`, so no pane can show the HGD's picture. Add the package (find the existing machine-screen producer first, rule 7).
+- Switching layouts as a player: a binding or controller-bar action that cycles or selects the world's layouts, not only the `view.override` console verb.
+- Pane focus: one pane holds input focus and receives it (the seat's pad and keys drive the Moth until the player focuses the desktop pane, which then takes mouse and keyboard as passthrough, or the HGD pane, which takes the pad); focus is shown on the pane, moves by a binding or a click, and the in-world computer's programs (desktop and typing tutor) use the same focus.
+- Arranging panes at runtime (moving, resizing, choosing a pane's content) beyond the world's authored layouts: decide once focus and switching land.
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction ·
