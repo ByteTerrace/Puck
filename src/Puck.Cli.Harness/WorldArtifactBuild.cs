@@ -197,6 +197,7 @@ public static class WorldArtifactBuild {
                 : CliLease.AcquireAsync(
                     clock: TimeProvider.System,
                     holder: $"{verb} {key}",
+                    lane: CliLease.LaneOf(checkout: repositoryRoot),
                     name: "build",
                     root: leaseRoot(),
                     wait: CliProcess.RemainingBudget(budget: timeout, clock: clock)
