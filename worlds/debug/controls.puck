@@ -72,7 +72,13 @@ bindingOverlays [
             inherits: "base"
             label: "Tour"
             entries [
-              { command: "world.toon", id: "tourToon", label: "Toon shading", text: "toggle", sources ["gamepad.back", "keyboard.f6"] }
+              {
+                command: "world.toon"
+                id: "tourToon"
+                label: "Toon shading"
+                text: "toggle"
+                sources ["gamepad.back", "keyboard.f6"]
+              }
               { command: "gallery.next", id: "tourNext", label: "Next exhibit", sources: padUp }
               { command: "gallery.flag", id: "tourFlag", label: "Flag exhibit", sources: padRight }
               { command: "gallery.prev", id: "tourPrev", label: "Previous exhibit", sources: padDown }
@@ -126,29 +132,29 @@ bindingOverlays [
 ]
 
 icons [
-    { name: "act.next", label: ">" }
-    { name: "act.prev", label: "<" }
-    { name: "act.flag", label: "!" }
-    { name: "act.slice", label: "SL" }
-    { name: "go.stage", label: "SG" }
-    { name: "go.hero", label: "HR" }
-    { name: "go.gallery", label: "GL" }
-    { name: "go.portals", label: "PT" }
-    { name: "go.wonderland", label: "WL" }
-    { name: "go.devices", label: "DE" }
-    { name: "go.chess", label: "CS" }
-    { name: "go.desktop", label: "DK" }
-    { name: "go.level0", label: "L0" }
-    { name: "go.level1", label: "L1" }
-    { name: "go.level2", label: "L2" }
-    { name: "go.level3", label: "L3" }
-    { name: "tour.lightsOff", label: "L-" }
-    { name: "tour.lightsOn", label: "L+" }
-    { name: "tour.motionOff", label: "M0" }
-    { name: "tour.motionOn", label: "M1" }
-    { name: "tour.garden", label: "PG" }
-    { name: "tour.night", label: "PN" }
-    { name: "tour.toon", label: "CE" }
+  { name: "act.next", label: ">" }
+  { name: "act.prev", label: "<" }
+  { name: "act.flag", label: "!" }
+  { name: "act.slice", label: "SL" }
+  { name: "go.stage", label: "SG" }
+  { name: "go.hero", label: "HR" }
+  { name: "go.gallery", label: "GL" }
+  { name: "go.portals", label: "PT" }
+  { name: "go.wonderland", label: "WL" }
+  { name: "go.devices", label: "DE" }
+  { name: "go.chess", label: "CS" }
+  { name: "go.desktop", label: "DK" }
+  { name: "go.level0", label: "L0" }
+  { name: "go.level1", label: "L1" }
+  { name: "go.level2", label: "L2" }
+  { name: "go.level3", label: "L3" }
+  { name: "tour.lightsOff", label: "L-" }
+  { name: "tour.lightsOn", label: "L+" }
+  { name: "tour.motionOff", label: "M0" }
+  { name: "tour.motionOn", label: "M1" }
+  { name: "tour.garden", label: "PG" }
+  { name: "tour.night", label: "PN" }
+  { name: "tour.toon", label: "CE" }
 ]
 
 state {
@@ -218,9 +224,15 @@ bindingOverlays [
       ]
       layouts {
         standard {
+          tables {
+            toon [{ source: "gamepad.back", x: 0, y: 0, badge [0, 1] }]
+          }
           banks {
             go { pieces [{ table: "left" }, { table: "right" }], anchor { edge: Bottom, inset: 3.6 } }
-            tour { pieces [{ table: "left" }, { table: "right" }, { table: "toon" }], anchor { edge: Bottom, inset: 3.6 } }
+            tour {
+              pieces [{ table: "left" }, { table: "right" }, { table: "toon" }]
+              anchor { edge: Bottom, inset: 3.6 }
+            }
           }
         }
       }

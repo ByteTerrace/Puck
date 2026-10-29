@@ -1,6 +1,6 @@
 // What the bar's pages and the play wheel's rings share: the twelve controls of the standard bar by the pad button and the
 // keyboard key that press each, and the rings the garden and the debug world both draw. A library: it emits no document,
-// and controls.puck (every Moth world) and pad.puck (the debug world alone) import it.
+// and the standard controls and the debug world's control refinement import it.
 //
 //   import "pad-kit"
 //
@@ -39,10 +39,8 @@ let padModifiers = [
 // view.override takes an Axis1D from a binding; its text names the layout or camera, so the value is never read.
 let neverRead = { kind: "Axis1D", raw [0, 0, 0, 0] }
 
-// The three rings of the play wheel. A sector's id names its label and icon (`state.wheelLabels`, `state.wheelIcons`),
-// and it carries no source, since the wheel commits it. Act and View go to every Moth world; Places goes to the debug
-// world alone, which declares the wheel again with it (pad.puck), since a later layer's wheel replaces the earlier one
-// whole.
+// The shared play-wheel rings. A sector's id names its label and icon (`state.wheelLabels`, `state.wheelIcons`),
+// and it carries no source, since the wheel commits it. The debug refinement adds its Places ring.
 let actRing = {
   id: "play-acts"
   label: "Act"

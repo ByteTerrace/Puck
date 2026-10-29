@@ -3,7 +3,7 @@
 // no theme draws the engine's neutral one instead. The debug world, the garden and the night field import it beside
 // their other modules:
 //
-//   import "skin"
+//   import "../standard/skin"
 //
 // Colours are #RRGGBB or #RRGGBBAA; sizes and spacing are pixels; durations are milliseconds, except the keycap's march,
 // which is seconds. A component style's colour is a core role (`{ role: Accent }`) or its own (`{ color: "#RRGGBB" }`).

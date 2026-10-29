@@ -3,7 +3,7 @@
 
 import "pad-kit"
 
-// What an importer binds: the rows the play wheel reads its sectors' labels and icons from, which pad.puck's wheel names.
+// Export the label and icon rows so a world's wheel refinement can read them.
 exports {
   bindings [wheelLabels, wheelIcons]
 }
@@ -179,8 +179,6 @@ icons {
     { name: "dbg.history", label: "HI" }
     { name: "dbg.quality", label: "QU" }
     { name: "dbg.rates", label: "RA" }
-    // The Go page and the Places ring: the debug world's places.
-    // The Tour page: the gallery's lights and motion, and the paintings.
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -333,9 +331,6 @@ state {
       dbgStop = "dbg.stop"
       dbgSuit = "dbg.suit"
 
-      // The Go page.
-
-      // The Tour page.
     }
 
     // The bar draws one bar that swaps its page in place as a trigger is held, rather than every page's bank at once.
@@ -405,8 +400,7 @@ bindingOverlays [
         "gamepad.rightStickPress"
         "gamepad.back"
       ]
-      // One bank a page, in the order of the pages: Move, then the left trigger, the right trigger, left then right and
-      // right then left.
+      // One bank a page: Move, View on the left trigger, Debug on the right trigger.
       banks [
         { id: "move", pageId: "base", alpha: 1 }
         { id: "view", pageId: "pad-lt", alpha: 1 }
@@ -434,9 +428,6 @@ bindingOverlays [
             inset: 1.5
           }
           tables {
-            toon [
-              { source: "gamepad.back", x: 0, y: 0, badge [0, 1] }
-            ]
             left [
               { source: "gamepad.dpadUp", x: -4.333, y: 1, badge [0, 1] }
               { source: "gamepad.dpadRight", x: -3.333, y: 0, badge [1, 0] }
@@ -584,9 +575,7 @@ bindingOverlays [
     }
   }
 
-  // The bar's four trigger pages, each the Moth's resting page with the bar's twelve controls rebound: the left trigger
-  // (or Z) holds View, the right trigger (or X) holds Debug, and the two together hold Go when the left went down first
-  // and Tour when the right did. The debug world's places and gallery fill Go and Tour (pad.puck); the suit toggle joins
+  // The shared trigger pages: the left trigger (or Z) holds View, the right trigger (or X) holds Debug. The suit toggle joins
   // Debug (suit.puck), and noclip joins it on the left stick's press in the debug world (noclip.puck). A page inherits `base`, so the sticks and the keyboard's movement keep working while it is held.
   // Close-ups the View page has no plate for (head, boots, shoulder) are `view.override layout <name>`, and the chase
   // camera and annotation are the play wheel's.
