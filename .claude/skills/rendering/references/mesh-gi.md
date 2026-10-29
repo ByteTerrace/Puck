@@ -6,7 +6,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 | Part | Owner |
 |---|---|
 | Static scene and ray visibility | `SdfMeshIrradianceScene` |
-| Trace, cache, filter, bounce lookup and exposure meter | `SdfMeshIrradiance` |
+| Trace, cache, bounce lookup and exposure meter | `SdfMeshIrradiance` |
 | Probe record and generated shader constants | `SdfMeshIrradianceProbe`, `SdfIsaHlsl.DeclareRender` |
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
@@ -38,82 +38,49 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The scheduler's separate saved-pose/input-capacity defect has a focused
   boundary test; it is not the established cause of this slow gallery boot.
   See [mesh baking](mesh-bake.md#groups-poses-and-materials).
-- A direction's plane is its ray's first hit. Averaging it with rays that
-  escape beside a blocker, or choosing the farther hit, erases that blocker.
-- At the volume boundary, clamp the lookup to the boundary probes, then test
-  the **receiver position** (pushed `NormalBias` metres off its surface, never
-  the clamped lookup) against their planes. Clamping the visibility test too
-  extrapolates through walls. No answering probe means no measured indirect
-  light; an unwritten cell is not evidence of open sky.
-- The push off the surface is metres, under the thinnest wall. A push that
-  scales with the probe spacing (0.35 of a 2 m cell) carries a surface facing a
-  near wall through it, and the room beyond lights the surface: white slivers
-  along a silhouette turned toward a wall, and the exterior's light as rims
-  on a body in every room.
-- Visibility is never a half-space. An axis depth that bounds a probe along a
-  whole axis rejects everything beyond a finite blocker on that one ray (a
-  plinth, a stair's nosing, an exhibit), and selecting one of the 26 planes by
-  nearest direction snaps between them at the half-component thresholds: a
-  plinth then casts hard-edged, lattice-aligned rectangles of darkness and the
-  floor around an exhibit's base goes black. The read blends the four planes
-  about the receiver's direction (`PlaneVisibility`,
-  `sdfMeshProbePlaneVisibility`); a wall every ray meets is still exact, and a
-  finite blocker darkens only its own directions.
-- A blended plane test alone leaks where a ray clears a blocker's edge: a
-  probe just above a thin roof whose horizontal rays graze past it, or beside a
-  doorway, admits the room's upper walls in jagged, plane-cut patches, and the
-  under-floor probe draws a sawtooth along the wall–floor junction. The
-  separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`)
-  closes them with the other answering probes' evidence, after front
-  eligibility: where answering probe A cannot see B (their neighbour bit is
-  clear), A's first-hit plane toward B is the blocker between them, and a
-  receiver on A's side of it takes B's light only by the share B's own rays
-  did not see for themselves. That share is `PlaneVisibility`'s `suspect`: a
-  ray that reached open space, or whose hit plane lies more than a quarter of
-  the spacing beyond the receiver (fully suspect at three quarters), admits it
-  only for want of a hit. The gap is measured perpendicular to the plane, so
-  oblique and nearly tangent rays hitting the receiver's own surface still
-  count as evidence; never subtract the receiver's Euclidean distance from a
-  different ray's length. A's veto is weighted by A's share of the answering
-  probes' weight, at full strength from `SeparatorShare` (an eighth, an equal
-  corner's share at a cell's centre) of the total, so a probe entering the
-  eight-corner set at a cell boundary with no trilinear weight vetoes nothing
-  and the gather is continuous across the lattice planes; and by how much of A
-  survives the same
-  test, so a fully separated probe vetoes nothing and two probes that separate
-  each other stand. Both are read from the weights before any veto, and the
-  gather never empties. Equal surface confidence must not disable separation: a
-  dynamic body has no trace surface, so every probe about it may be uncertain
-  and a room-side probe must still reject sky light from across the wall. A
-  stair flight between probes separates neither from the walls beside it,
-  because their rays met those walls. One limit remains
-  ([open items](../../../../docs/plans/open-items.md#review-findings)): the
-  separating plane is the blocker's whole half-space, with no finite extent.
-  `SdfMeshIrradiance.TryGather` reads the gather's cells and weights at a
-  receiver on the CPU, as the pixel gather computes them; a continuity law
-  compares them a hair either side of a lattice plane. A hard step along a
-  lattice plane that survives every weight-blind term's fade is a column whose
-  probes in front of the receiver all lie inside geometry (the SPHERE exhibit
-  at x = 23: the hanging PRIMITIVES sign held both y = 3 probes, `inside=1`,
-  and the y = 1 probes beside the sphere were behind its upper half), so the
-  two neighbouring columns' vanishing trilinear weights normalize to each
-  column's whole light either side of the plane; relocation
-  (`SdfMeshIrradiance.Place`) moves such a probe out and closes it. Read the
-  gather at a point with `world.probe <x> <y> <z> [<nx> <ny> <nz>]`: each
-  corner's position, offset, inside share, validity, neighbours, cubes and
-  weight terms, and the answering total. A near-zero total with answering
-  corners is that case, not a veto.
-- Judge every gather change at the `gather-*` stops of the sweep tour
-  (`worlds/debug/sweep.json`), in `indirect` and the final image: the
-  Wonderland room's south doorway and its floor under the roof edge, the
-  painting wing and board game room doorways, the Moth beside a jamb and
-  beside a plinth, and the stairwell's flight B. The lattice centres lie at
-  odd metres (2 m spacing), so the gallery partitions at x = 51 and the
-  Wonderland room's west wall face at x = 1 lie on lattice planes: a doorway in
-  such a wall puts no far-room probe within a cell of the near room's floor,
-  which makes the gallery doorway stops controls, while the Wonderland south
-  doorway (wall at z 23.7 to 24, outdoor probe at z = 23) is the doorway where
-  a far probe's ray can land on the near floor through the opening.
+- Visibility is a per-probe 16×16 octahedral depth map. Each texel traces four
+  subtexel directions against the existing mesh hierarchy and stores first-hit
+  mean metres and mean-squared metres as two FP16 values. Misses end at the
+  lighting trace reach (at most 128 m, keeping squared metres representable).
+  Do not shorten that reach to the local gather radius: boundary probes also
+  support receivers outside the window, and a short miss creates dark distance bands.
+  Depth is traced at the first sweep and reused by the later bounce sweeps.
+- The receiver samples four depth texels bilinearly in its direction from the
+  relocated probe. Taps reflect across the octahedron's identified edges,
+  reversing the other coordinate. Interpolate the moments before computing
+  variance; clamp negative variance from FP16 rounding to zero. Before the mean,
+  visibility is one; beyond it, the one-sided Chebyshev bound is
+  `variance / (variance + (distance - mean)²)`. Cube it, then crush values
+  below 0.2 by `visibility³ / 0.04`. Keep `SdfMeshProbeDepth.Visibility`
+  and `sdfMeshProbeDepthVisibility` together, including seam taps and rounding.
+  Projection and seam addressing reuse `SdfOctahedral` and
+  `field/sdf-octahedral.hlsli`, shared with the sky map and mesh normals.
+  A finite blocker shades its sampled angular footprint. There are no first-hit
+  planes, neighbour separation vetoes, suspect shares or mutual gather shares.
+- Gather weight is the cell's trilinear share times
+  `max(0, dot(normal, directionToProbe))²` times depth visibility. This continuous
+  positive-hemisphere weight excludes probes behind a surface without switching
+  the whole gather between front and back sets. It also prevents grazing depth
+  uncertainty behind a thin wall from admitting a bright exterior probe.
+  The CPU bounce read and the pixel read use the same rule.
+- At the volume boundary clamp the lookup, then test the actual receiver,
+  pushed `NormalBias` (0.05 m) along its normal, against depth. Never bias by
+  spacing or test the clamped position: either can carry a receiver through a
+  thin wall. An unwritten or invalid probe contributes nothing. No answering
+  probe means no measured indirect light, and a depth miss has finite reach.
+- Read `world.probe <x> <y> <z> [<nx> <ny> <nz>]` for each corner's origin,
+  offset, back-face share, validity, sweeps, cubes and weight terms.
+  Each valid corner also reports an exact mesh-segment `reference-clear` check,
+  for diagnosing depth sampling separately from the lighting stored in its cube.
+  This reference never changes the gather. A changing trace or pending publication reports `unsettled`, with both the
+  published GPU window and live CPU window, rather than reporting the replacement
+  cache as the rendered volume. Take lighting-finding captures only after bakes
+  and irradiance settle; lockstep drains the window before rendering.
+- Judge a visibility change at the `finding-sphere-step` and `gather-*` tour
+  stops in `indirect` and lit views on both backends. Use the same fixed camera;
+  a chase view without recentering can face the opposite way after teleporting.
+  Include the boardroom's far doorway, stairwell flight B and teal roof/floor.
+  Compare the settled GPU volume, exposure and frame time as well as pixels.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
@@ -138,45 +105,48 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   bounce light, even when dynamic or glass draws remain.
 - A lighting change or scene rebuild advances a generation, never clears the
   cache. The tracer counts only that generation's sweeps; bounce reads use its
-  intermediate samples while metering and filtering keep the previous completed
+  intermediate samples while viewers keep the previous completed
   sample until the cell's replacement finishes. An invalid replacement rejects
   immediately. Clear the CPU cache and staging volume only when the layout
   changes. On a resize or window move, retain the uploaded GPU table **and its
   old coordinates** until every new slot has a measured sample. Never publish
   unwritten cells as darkness or initialize them to unoccluded sky. Before the
   first scene has supplied any volume, there is no measured indirect light.
-- The depth fade stays thinner than the thinnest floor. A wall sample at a
-  floor junction is level with the floor, so a broad fade admits the probe
-  underneath and draws a bright line along the junction.
-- The 26 neighbour rays retain their first hit planes, and the receiver's
-  direction blends the four about it (the 3×3 directions of the cube face it
-  lies toward, bilinear in the face's two minor components, which the CPU and
-  the shader arrange the same way). Plane distance, rather than ray distance,
-  keeps a flat blocker in the same place as the receiver's direction changes.
-  The record is 72 words (288 bytes), including 52 words of half-precision
-  planes and two words of where the probe stands (its offset from the cell's
-  centre and its back-face share, `SdfMeshIrradianceProbe.OffsetWord`). The
-  neighbour rays trace to the lighting reach and their first hit also determines
-  the neighbour mask; no second scene is built. They aim at the neighbours'
-  cell centres from where the probe stands.
+- A record is 275 words (1,100 bytes): 19 words of key, cubes, light visibility
+  and origin, then 256 packed moment pairs. Medium's 12,288 active probes use
+  12.890625 MiB; High's 36,864 use 38.671875 MiB. The table and CPU staging
+  reserve the High capacity per residency; upload and cache storage are additional.
+  Neighbour masks, their 26 rays and cross-probe cube filtering are deleted.
+- Each published probe contains its own measured cubes, exactly as the CPU
+  bounce lookup reads them. Averaging neighbouring cubes imports another probe's
+  sky or wall radiance through a doorway, even when the receiver's own depth
+  test is correct. The 1,024 depth rays also measure the probe's sky cube,
+  cosine weighted with the octahedron's solid-angle Jacobian; this reduces
+  sky variance without borrowing visibility. Later bounce sweeps reuse this
+  geometry-only sky measurement along with the depth map. The first-hit
+  moments use the same solid-angle weighting within each texel.
 - A probe stands in the open (`SdfMeshIrradiance.Place`). A lattice centre
   inside geometry (the PRIMITIVES sign at x = 23, y ≈ 3; a stair flight) or
   within `Clearance` (0.1 m) of a surface (a partition face at an odd metre)
   moves to the nearest point of its cell that stands at least `Clearance` from
   every surface with its rays mostly meeting front faces: first pushed off the
   nearest surface along its normal, then over a lattice a quarter of the
-  spacing apart out to the cell's faces. Later sweeps stand where the first did.
-  The offset rides the record, and the gather (`sdfMeshProbesAt`, `Gather`),
-  the separator's plane (`sdfMeshProbeSeparate`, `Separate`) and the meter
-  (`TryMeter`) read the centre plus the offset; the trilinear share stays the
-  cell's. A cell no surface reaches within its half diagonal is wholly inside
+  spacing apart out to the cell's faces. Among nearby candidates, prefer fewer
+  first hits within a spacing, charging for distance from the centre. Keep this
+  openness score with depth moments to condition the map near surfaces. The
+  nearest-clear-only experiment did not eliminate grazing marks; those captures
+  also still had neighbour cube filtering, so they do not isolate placement as
+  the cause of light leaks. Later sweeps stand where the first did.
+  The offset rides the record; the gather (`sdfMeshProbesAt`, `Gather`) and the
+  meter (`TryMeter`) read the centre plus the offset. The trilinear share stays
+  the cell's. A cell no surface reaches within its half diagonal is wholly inside
   or wholly outside and tries no candidate; a probe no candidate frees stays
   invalid at its centre, and the invalid flag makes the shader's written-key
   test fail, so its share goes to the corners that answer. An enclosure
   narrower than twice the clearance still holds no probe and meters by camera
   trace. `SdfMeshIrradianceLawTests.AProbeOnAWallFaceOrInsideGeometryMovesIntoTheOpenAndABuriedOneStaysInvalid`
   pins the on-face, pillar and buried cases.
-- Directional planes and neighbour visibility are coarse spatial support, not
+- Depth moments and the radiance cubes are sampled spatial support, not
   exact receiver visibility. Inspect corners and openings with
   `world.debug-view indirect`, separately from `ao` and `shadow`, and compare
   final shading and `world.exposure`. Check an outdoor view and move across
@@ -220,8 +190,7 @@ The teal corner must also stay closed high up where its walls meet the roof;
 checking only the lower stepped strip misses the diagonal-probe case.
 Aim the same eye at `4.60 4.2 29.76` to inspect that junction: a triangular
 bright patch there, in both indirect and final shading, is the probe above the
-roof admitted through the rays that graze past the roof's edge, which the
-separation rule closes. Do not infer a clean roof from the lower reference view.
+roof admitted through the rays that graze past the roof's edge, which depth visibility must close. Do not infer a clean roof from the lower reference view.
 
 ## Gallery isolation checks
 
@@ -235,12 +204,10 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 | SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
 | COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
 
-The SPHERE step shows in `indirect` as a soft line along the exhibit's face
-plane (the `finding-sphere-step` tour stop); use it to check finite separation
-footprints. The floor is shadowed in
-`shadow`; do not attribute an indirect-view line to sun cascades. The 26 planes
-remain coarse support. Separation never empties an answering gather; a receiver
-the initial visibility tests reject everywhere still has no measured light.
+The SPHERE (`finding-sphere-step`) must shade continuously across its front,
+without a split or patch from the plinth or hanging sign. The floor is shadowed in
+`shadow`; do not attribute an indirect-view line to sun cascades. Depth moments remain sampled support; a receiver all depth tests reject has
+no measured light.
 The SPIN dotted ceiling seam reproduces in
 beauty but not in `indirect`, `normals` or `shadow`
 ([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
