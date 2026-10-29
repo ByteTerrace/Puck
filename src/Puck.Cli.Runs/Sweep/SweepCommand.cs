@@ -31,11 +31,12 @@ public static partial class SweepCommand {
         var scenariosOption = new Option<string[]>(name: "--scenarios") { AllowMultipleArgumentsPerToken = true, Description = "Run these test files with puck test --jobs 1 and read their verdicts; none when omitted." };
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
+        var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
         var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 40, Description = "The most minutes the whole run may take, a build excepted: every World call, boot, lease wait and scenario process is bounded by what remains." };
         var command = new Command(
             description: "Sweep the debug world: run its tools, read every signal, take the capture tour, and write a report a later sweep compares with.",
             name: Verb
-        ) { planOption, outputOption, baselineOption, tourOption, attachOption, noHeadlessOption, stopOption, scenariosOption, worldOption, artifactOption, timeoutOption };
+        ) { planOption, outputOption, baselineOption, tourOption, attachOption, noHeadlessOption, stopOption, scenariosOption, worldOption, artifactOption, cacheOption, timeoutOption };
 
         command.Detail(detail: $"""
             Runs the plan ({DefaultPlan}) against the debug world through its Operator attachment, so every line is an
@@ -73,6 +74,7 @@ public static partial class SweepCommand {
             artifact: parseResult.GetValue(option: artifactOption),
             attach: parseResult.GetValue(option: attachOption),
             baselinePath: parseResult.GetValue(option: baselineOption),
+            cacheDirectory: parseResult.GetValue(option: cacheOption),
             cancellation: cancellationToken,
             noHeadless: parseResult.GetValue(option: noHeadlessOption),
             output: parseResult.GetValue(option: outputOption),
@@ -87,7 +89,7 @@ public static partial class SweepCommand {
         return command;
     }
 
-    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, string[] stops, string[] scenarios, string? worldPath, string? artifact, int timeoutMinutes, CancellationToken cancellation) {
+    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, int timeoutMinutes, CancellationToken cancellation) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -160,7 +162,7 @@ public static partial class SweepCommand {
                 var logs = Path.Combine(path1: directory, path2: SweepLegs.Headless);
 
                 if (!SweepWorld.TryBoot(
-                    arguments: Arguments(deadline: deadline, extra: ["--headless", "true", "--unpaced", "true", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world),
+                    arguments: Arguments(cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--headless", "true", "--unpaced", "true", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world),
                     artifact: entry!,
                     bootTimeout: TimeSpan.FromMinutes(value: 5),
                     budget: budget,
@@ -170,7 +172,7 @@ public static partial class SweepCommand {
                     session: out var booted,
                     workingDirectory: repositoryRoot
                 )) {
-                    return cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the headless World", why: bootError);
+                    return (cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the headless World", why: bootError));
                 }
 
                 using (var headless = booted!) {
@@ -196,7 +198,7 @@ public static partial class SweepCommand {
                 } else {
                     logs = Path.Combine(path1: directory, path2: SweepLegs.Windowed);
 
-                    var arguments = Arguments(deadline: deadline, extra: ["--headless", "false", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world);
+                    var arguments = Arguments(cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--headless", "false", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world);
                     CliLease? gpu = null;
 
                     try {
@@ -224,7 +226,7 @@ public static partial class SweepCommand {
                         session: out rendered,
                         workingDirectory: repositoryRoot
                     )) {
-                        return cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the windowed World", why: bootError);
+                        return (cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the windowed World", why: bootError));
                     }
                 }
 
@@ -292,11 +294,11 @@ public static partial class SweepCommand {
     }
     private static SweepSignalResult WindowedNotRun(string reason) => new(Changes: [], File: string.Empty, Leg: SweepLegs.Windowed, Line: string.Empty, Metrics: new Dictionary<string, string>(), Name: "windowed-leg", Reasons: [$"not run: {reason}"], Status: SweepStatus.Unknown);
     private static bool SamePath(string left, string right) => string.Equals(a: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: left)), b: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: right)), comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
-    private static List<string> Arguments(string world, string state, TimeSpan deadline, IReadOnlyList<string> extra) => [
+    private static List<string> Arguments(string world, string state, string? cacheDirectory, TimeSpan deadline, IReadOnlyList<string> extra) => [
         "--world", world,
         .. WorldDevices.NoneArguments,
         "--state-dir", state,
-        "--cache-dir", Path.Combine(path1: state, path2: "cache"),
+        .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
         "--exit-after-seconds", (((int)deadline.TotalSeconds) + 120).ToString(provider: CultureInfo.InvariantCulture),
         .. extra,
     ];

@@ -2399,7 +2399,7 @@ that line's own. The plan, `worlds/debug/sweep.json`, names what runs; add a
 signal or a stop by editing it.
 
 ```text
-puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir>]
+puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir>] [--cache-dir <dir>]
            [--no-headless] [--stop <name>...] [--scenarios <file>...] [--plan <file>]
 ```
 
@@ -2439,6 +2439,11 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
 
 The plan refuses unknown JSON members at every level and refuses an empty
 workload. Selecting no leg or scenario is refused; a report with no measurements fails.
+
+`--cache-dir` overrides the device-cache root for owned Worlds, as in `puck
+motion`; fresh Worlds can share one writable scratch cache. Omitted, it keeps
+the per-user cache. Cache-dependent boot counters are recorded but excluded
+from exact comparison.
 
 Each signal is red when a red rule of the plan holds or its line was refused,
 amber when an amber rule holds, and clean otherwise. Silence is never success:

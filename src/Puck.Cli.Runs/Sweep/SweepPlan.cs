@@ -63,6 +63,10 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
         }
 
         foreach (var signal in plan.Signals) {
+            if (signal.TimeoutSeconds is <= 0 or > 120) {
+                error = $"signal '{signal.Name}' needs a timeout in 1..120 seconds, the attachment's call limit; split longer waits";
+                return false;
+            }
             if (string.IsNullOrWhiteSpace(value: signal.Name) || string.IsNullOrWhiteSpace(value: signal.Line)) {
                 error = "every signal names itself and the line it reads";
 
