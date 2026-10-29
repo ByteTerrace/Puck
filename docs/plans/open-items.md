@@ -668,8 +668,6 @@ since a failover today leaves a doubt that never resolves.
 Owner: MCP lane (specialist) · medium · Next: the cached wait refusal, then the
 schema switch.
 
-- [medium] Naming what is under a pixel fails on the owner's windowed World: `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object is. Make pick address the presented world view by default and list it in `panes`. (from: owner walkthrough)
-
 - An invalid wait argument on a pending operator MCP start appears to cache the
   argument refusal as the start's completed result (`OperatorMcpFront.Record`):
   later corrected waits and cancellation return that refusal while the World
@@ -1034,8 +1032,6 @@ Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two me
 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: whichever the owner calls for.
-
-- [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and

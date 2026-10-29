@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using Puck.Commands;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -36,16 +37,23 @@ internal sealed partial class WorldViewCommandModule {
     // The answer of a completed pick, one line.
     private static string Answer(string instance, SdfPickResult result) {
         var target = (result.Target as WorldPickTarget);
+        // A screen surface carries its screen index in its material id, above the screen sentinel.
+        var screen = ((result.Material > SdfProgramBuilder.ScreenMaterialId) ? $" screen={(result.Material - SdfProgramBuilder.ScreenMaterialId - 1)}" : string.Empty);
 
         return string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={((uint)result.Kind)} source={result.Source} material={result.Material} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}]");
+            handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={((uint)result.Kind)} source={result.Source} material={result.Material}{screen} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}]");
     }
     private CommandResult Pick(WireArgs args, TextCommandSession? session) {
-        if (args.Count is not (1 or 3)) {
-            return CommandResult.Usage(form: "<view-or-instance> [<x> <y>|finding <id>]", verb: "world.view.pick");
+        if (args.Count > 3) {
+            return CommandResult.Usage(form: "[<view-or-instance>] [<x> <y>|finding <id>]", verb: "world.view.pick");
         }
-        var instance = args[0].ToString();
-        if (instance == "primary") { instance = viewports?.Seat(0).RenderInstance ?? WorldViewGraphs.WorldInstance; }
+        // A view is named by its first argument when one or three are given; with none, or just a point, the pick
+        // addresses the presented world view (the first seat's rendered instance).
+        var named = (args.Count is 1 or 3);
+        var rest = (named ? 1 : 0);
+        var presented = (viewports?.Seat(0).RenderInstance ?? WorldViewGraphs.WorldInstance);
+        var instance = (named ? args[0].ToString() : "primary");
+        if (instance == "primary") { instance = presented; }
 
         if (args.Count == 3 && args.Is(1, "finding")) {
             if (diagnostics?.Find(args[2].ToString()) is not { } finding || finding.Identity.Instance != instance) {
@@ -55,11 +63,11 @@ internal sealed partial class WorldViewCommandModule {
         }
 
         if (graphs?.FindPicker(instance: instance) is not { } picker) {
-            return CommandResult.Error(output: $"[world.view.pick: no rendered SDF view '{instance}']");
+            return CommandResult.Error(output: $"[world.view.pick: no rendered SDF view '{instance}' (the presented view is '{presented}'; world.view.panes names it)]");
         }
-        if (args.Count == 3) {
-            if (!float.TryParse(s: args[1].ToString(), provider: CultureInfo.InvariantCulture, result: out var x) ||
-                !float.TryParse(s: args[2].ToString(), provider: CultureInfo.InvariantCulture, result: out var y) ||
+        if (args.Count >= 2) {
+            if (!float.TryParse(s: args[rest].ToString(), provider: CultureInfo.InvariantCulture, result: out var x) ||
+                !float.TryParse(s: args[rest + 1].ToString(), provider: CultureInfo.InvariantCulture, result: out var y) ||
                 !float.IsFinite(f: x) || !float.IsFinite(f: y) || (x < 0) || (x >= 1) || (y < 0) || (y >= 1)) {
                 return CommandResult.Error(output: "[world.view.pick: coordinates must be finite normalized numbers in [0,1)]");
             }
