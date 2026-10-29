@@ -1,4 +1,3 @@
-using System.Xml.Linq;
 using Puck.Testing;
 
 using Xunit;
@@ -73,9 +72,9 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
 
     // Names `root`'s source in `configuration` and returns the exit code alongside everything the run reported, so a
     // case can pin both the refusal and the fact that it was announced.
-    internal static (int Code, string Report) Format(string root, string configuration) {
+    internal static (int Code, string Report) Format(string root, string configuration, CompileClosures? closures = null) {
         var (code, _, report) = ConsoleCapture.RunSplit(run: () => SemanticPhases.Run(
-            closures: new CompileClosures(),
+            closures: (closures ?? new CompileClosures()),
             configuration: configuration,
             namedArgs: true,
             nullPattern: false,
@@ -112,6 +111,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
 
         var (code, report) = Format(
+            closures: sample.Closures,
             configuration: BuiltSampleProject.NeverBuilt,
             root: sample.Root
         );
@@ -143,6 +143,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
 
         var (code, _) = Format(
+            closures: sample.Closures,
             configuration: "Release",
             root: sample.Root
         );
@@ -169,6 +170,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
 
         var (code, _) = Format(
+            closures: sample.Closures,
             configuration: "Release",
             root: sample.Root
         );
@@ -195,6 +197,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
 
         var (code, _) = Format(
+            closures: sample.Closures,
             configuration: "Release",
             root: sample.Root
         );
@@ -221,6 +224,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
 
         var (code, report) = Format(
+            closures: sample.Closures,
             configuration: "Debug",
             root: sample.Root
         );
@@ -240,6 +244,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         );
         Assert.Equal(
             actual: Format(
+                closures: sample.Closures,
                 configuration: "Release",
                 root: sample.Root
             ).Code,
@@ -253,41 +258,17 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     }
 }
 /// <summary>
-/// The named-args laws over scratch projects of their own: a stale project reference, batched closure evaluation,
-/// granted internals, and sources shared or linked in from outside the project. Each case builds its own projects, so
-/// the class runs beside the cases over the shared built sample.
+/// The named-args laws over areferencing pair of scratch projects: a stale project reference, batched closure
+/// evaluation, granted internals, and sources shared or linked in from outside the project. The pair is built once in
+/// <see cref="BuiltReferencingPair"/>, and this class runs beside the cases over <see cref="BuiltSampleProject"/>.
 /// </summary>
-public sealed class FormatNamedArgsProjectTests : IDisposable {
-    private readonly TemporaryDirectory m_directory = FormatNamedArgsClosureTests.PinnedScratch(prefix: "puck-cli-tests-named-args-");
-
-    private string Source => Path.Combine(
-        path1: m_directory.RootPath,
-        path2: "Probe.cs"
-    );
-
-    private void Build(string configuration) =>
-        Build(
-            configuration: configuration,
-            project: Path.Combine(
-                path1: m_directory.RootPath,
-                path2: "Sample.csproj"
-            )
-        );
-    private static (int Code, string Report) Format(string root, string configuration) => FormatNamedArgsClosureTests.Format(
+public sealed class FormatNamedArgsProjectTests(BuiltReferencingPair pair) : IClassFixture<BuiltReferencingPair> {
+    private static (int Code, string Report) Format(string root, string configuration, CompileClosures? closures = null) => FormatNamedArgsClosureTests.Format(
+        closures: closures,
         configuration: configuration,
         root: root
     );
-    private static void Build(string project, string configuration, bool restore = true) => FormatNamedArgsClosureTests.Build(
-        configuration: configuration,
-        project: project,
-        restore: restore
-    );
 
-    /// <summary>Removes the scratch project directory.</summary>
-    public void Dispose() {
-        m_directory.Dispose();
-        GC.SuppressFinalize(obj: this);
-    }
     /// <summary>
     /// A project reference resolves to the dependency's own reference assembly under its
     /// <c>obj/&lt;configuration&gt;/</c>, so cleaning or rebuilding that dependency elsewhere leaves the closure
@@ -296,122 +277,46 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void AStaleProjectReferenceIsRefusedRatherThanBoundAround() {
-        var library = Path.Combine(
-            path1: m_directory.RootPath,
-            path2: "Library"
-        );
-        var sample = Path.Combine(
-            path1: m_directory.RootPath,
-            path2: "Sample"
-        );
-
-        Directory.CreateDirectory(path: library);
-        Directory.CreateDirectory(path: sample);
-        File.WriteAllText(
-            contents: """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>""",
-            path: Path.Combine(
-                path1: library,
-                path2: "Library.csproj"
-            )
-        );
-        File.WriteAllText(
-            contents: "namespace Library;\n\npublic static class Reach {\n    public static string? Find() => \"found\";\n}\n",
-            path: Path.Combine(
-                path1: library,
-                path2: "Reach.cs"
-            )
-        );
-        File.WriteAllText(
-            contents: """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup></Project>""",
-            path: Path.Combine(
-                path1: sample,
-                path2: "Sample.csproj"
-            )
-        );
-
-        var source = Path.Combine(
-            path1: sample,
-            path2: "Probe.cs"
-        );
+        pair.ResetSources();
         const string Calls = "namespace Sample;\n\ninternal static class Probe {\n    public static string? Use() => string.Concat(Library.Reach.Find(), \"tail\");\n}\n";
 
         File.WriteAllText(
             contents: Calls,
-            path: source
+            path: pair.SampleSource
         );
-        Build(
-            configuration: "Release",
-            project: Path.Combine(
-                path1: sample,
-                path2: "Sample.csproj"
-            )
-        );
-        File.Delete(path: Path.Combine(
-            path1: library,
-            path2: "obj",
-            path3: "Release",
-            path4: "net11.0/ref/Library.dll"
-        ));
+        var backup = (pair.LibraryRefAssembly + ".bak");
 
-        var (code, report) = Format(
-            configuration: "Release",
-            root: sample
+        File.Move(
+            destFileName: backup,
+            overwrite: true,
+            sourceFileName: pair.LibraryRefAssembly
         );
-
-        Assert.Equal(
-            actual: code,
-            expected: 1
-        );
-        Assert.Equal(
-            actual: File.ReadAllText(path: source),
-            expected: Calls
-        );
-        Assert.Contains(
-            actualString: report,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "reference(s) are missing"
-        );
-    }
-
-    // Writes a Library project and a Sample project that references it under the scratch root, each with one source,
-    // builds Sample (and so Library) in Release, and returns both project files.
-    private (string Library, string Sample) BuildReferencingPair(string librarySource, string sampleSource) {
-        var projects = new List<string>();
-
-        foreach (var (name, reference, source) in (((string, string, string)[])[
-            ("Library", "", librarySource),
-            ("Sample", """<ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>""", sampleSource),
-        ])) {
-            var directory = Path.Combine(
-                path1: m_directory.RootPath,
-                path2: name
-            );
-            var project = Path.Combine(
-                path1: directory,
-                path2: $"{name}.csproj"
+        try {
+            var (code, report) = Format(
+                configuration: "Release",
+                root: pair.SampleRoot
             );
 
-            Directory.CreateDirectory(path: directory);
-            File.WriteAllText(
-                contents: $"""<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup>{reference}</Project>""",
-                path: project
+            Assert.Equal(
+                actual: code,
+                expected: 1
             );
-            File.WriteAllText(
-                contents: source,
-                path: Path.Combine(
-                    path1: directory,
-                    path2: $"{name}.cs"
-                )
+            Assert.Equal(
+                actual: File.ReadAllText(path: pair.SampleSource),
+                expected: Calls
             );
-            projects.Add(item: project);
+            Assert.Contains(
+                actualString: report,
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "reference(s) are missing"
+            );
+        } finally {
+            File.Move(
+                destFileName: pair.LibraryRefAssembly,
+                overwrite: true,
+                sourceFileName: backup
+            );
         }
-
-        Build(
-            configuration: "Release",
-            project: projects[1]
-        );
-
-        return (projects[0], projects[1]);
     }
 
     /// <summary>
@@ -423,29 +328,10 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void ABatchedEvaluationReportsEachProjectsOwnClosure() {
-        var (library, sample) = BuildReferencingPair(
-            librarySource: "namespace Library;\n\npublic static class Reach {\n    public static string Find() => \"found\";\n}\n",
-            sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Use() => Library.Reach.Find();\n}\n"
-        );
-        foreach (var project in ((string[])[library, sample])) {
-            var document = XDocument.Load(uri: project);
+        pair.ResetSources();
+        var batched = pair.EnsureBatchedClosures(cancellationToken: TestContext.Current.CancellationToken);
 
-            document.Root!.Add(content: new XElement(name: "Target",
-                new XAttribute(name: "Name", value: "ObserveClosureExecution"),
-                new XAttribute(name: "BeforeTargets", value: "FindReferenceAssembliesForReferences"),
-                new XElement(name: "WriteLinesToFile",
-                    new XAttribute(name: "File", value: "$(MSBuildProjectDirectory)/closure.execution.txt"),
-                    new XAttribute(name: "Lines", value: "$(MSBuildNodeCount)|$(BuildInParallel)"),
-                    new XAttribute(name: "Overwrite", value: "true"))));
-            document.Save(fileName: project);
-        }
-        var batched = CompileClosure.EvaluateAll(
-            cancellationToken: TestContext.Current.CancellationToken,
-            configuration: "Release",
-            projects: [sample, library]
-        );
-
-        foreach (var project in ((string[])[library, sample])) {
+        foreach (var project in ((string[])[pair.LibraryProject, pair.SampleProject])) {
             var execution = Path.Combine(path1: Path.GetDirectoryName(path: project)!, path2: "closure.execution.txt");
 
             Assert.Equal(expected: "1|false", actual: File.ReadAllText(path: execution).Trim());
@@ -476,7 +362,7 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
         }
 
         Assert.Contains(
-            collection: batched[sample].References,
+            collection: batched[pair.SampleProject].References,
             filter: static reference => reference.EndsWith(
                 comparisonType: StringComparison.OrdinalIgnoreCase,
                 value: $"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}Library.dll"
@@ -490,9 +376,10 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void ABatchIsPartitionedByTheGlobalJsonEachProjectSelectsItsSdkFrom() {
+        using var directory = FormatNamedArgsClosureTests.PinnedScratch(prefix: "puck-cli-tests-named-args-partition-");
         string Project(string relative) {
             var project = Path.Combine(
-                path1: m_directory.RootPath,
+                path1: directory.RootPath,
                 path2: relative
             );
 
@@ -506,10 +393,10 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
         }
 
         foreach (var pinned in ((string[])["Alpha", "Beta"])) {
-            Directory.CreateDirectory(path: Path.Combine(path1: m_directory.RootPath, path2: pinned));
+            Directory.CreateDirectory(path: Path.Combine(path1: directory.RootPath, path2: pinned));
             File.Copy(
-                destFileName: Path.Combine(path1: m_directory.RootPath, path2: pinned, path3: "global.json"),
-                sourceFileName: Path.Combine(path1: m_directory.RootPath, path2: "global.json")
+                destFileName: Path.Combine(path1: directory.RootPath, path2: pinned, path3: "global.json"),
+                sourceFileName: Path.Combine(path1: directory.RootPath, path2: "global.json")
             );
         }
 
@@ -532,19 +419,21 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void ABatchedFormatOfSiblingProjectsOutsideACheckoutEvaluatesBoth() {
-        var (library, sample) = BuildReferencingPair(
-            librarySource: "namespace Library;\n\npublic static class Reach {\n    public static string Join(string left, string right) => (left + right);\n    public static string Twice(string value) => Join(value, value);\n}\n",
-            sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Use() => Library.Reach.Join(\"a\", \"b\");\n}\n"
+        pair.ResetSources();
+        File.WriteAllText(
+            contents: "namespace Sample;\n\ninternal static class Probe {\n    public static string Join(string left, string right) => (left + right);\n    public static string Use() => Library.Reach.Join(\"a\", \"b\");\n}\n",
+            path: pair.SampleSource
         );
 
         Assert.Null(@object: RepositoryPaths.Ascend(
             probe: static directory => (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx")) ? directory.FullName : null),
-            start: m_directory.RootPath
+            start: pair.Root
         ));
 
         var (code, report) = Format(
+            closures: pair.EnsureClosures(cancellationToken: TestContext.Current.CancellationToken),
             configuration: "Release",
-            root: m_directory.RootPath
+            root: pair.Root
         );
 
         Assert.Equal(
@@ -557,12 +446,12 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
             expectedSubstring: "skipped"
         );
         Assert.Contains(
-            actualString: File.ReadAllText(path: Path.Combine(path1: Path.GetDirectoryName(path: library)!, path2: "Library.cs")),
+            actualString: File.ReadAllText(path: pair.LibrarySource),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "Join(left: value, right: value)"
         );
         Assert.Contains(
-            actualString: File.ReadAllText(path: Path.Combine(path1: Path.GetDirectoryName(path: sample)!, path2: "Sample.cs")),
+            actualString: File.ReadAllText(path: pair.SampleSource),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "Library.Reach.Join(left: \"a\", right: \"b\")"
         );
@@ -574,15 +463,16 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void ACallIntoInternalsItsReferenceGrantsItIsNamed() {
-        var (_, sample) = BuildReferencingPair(
-            librarySource: "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"Sample\")]\n\nnamespace Library;\n\ninternal static class Reach {\n    internal static string Join(string left, string right) => (left + right);\n}\n",
-            sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Use() => Library.Reach.Join(\"a\", \"b\");\n}\n"
+        pair.ResetSources();
+        File.WriteAllText(
+            contents: "namespace Sample;\n\ninternal static class Probe {\n    public static string Join(string left, string right) => (left + right);\n    public static string Use() => Library.InternalReach.Join(\"a\", \"b\");\n}\n",
+            path: pair.SampleSource
         );
-        var sampleRoot = Path.GetDirectoryName(path: sample)!;
 
         var (code, _) = Format(
+            closures: pair.EnsureClosures(cancellationToken: TestContext.Current.CancellationToken),
             configuration: "Release",
-            root: sampleRoot
+            root: pair.SampleRoot
         );
 
         Assert.Equal(
@@ -590,12 +480,9 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
             expected: 0
         );
         Assert.Contains(
-            actualString: File.ReadAllText(path: Path.Combine(
-                path1: sampleRoot,
-                path2: "Sample.cs"
-            )),
+            actualString: File.ReadAllText(path: pair.SampleSource),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "Library.Reach.Join(left: \"a\", right: \"b\")"
+            expectedSubstring: "Library.InternalReach.Join(left: \"a\", right: \"b\")"
         );
     }
     /// <summary>
@@ -605,42 +492,15 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void ASharedSourceIsFormattedInTheProjectThatLinksIt() {
-        var shared = Path.Combine(
-            path1: m_directory.RootPath,
-            path2: "Shared",
-            path3: "Helper.cs"
-        );
-
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: shared)!);
-        File.WriteAllText(
-            contents: "namespace Sample;\n\ninternal static class Helper {\n    public static string Use() => Probe.Join(\"a\", \"b\");\n}\n",
-            path: shared
-        );
-
-        var (_, sample) = BuildReferencingPair(
-            librarySource: "namespace Library;\n\npublic static class Reach {\n}\n",
-            sampleSource: "namespace Sample;\n\ninternal static class Probe {\n    public static string Join(string left, string right) => (left + right);\n}\n"
-        );
-
-        File.WriteAllText(
-            contents: File.ReadAllText(path: sample).Replace(
-                newValue: "<ItemGroup><Compile Include=\"../Shared/Helper.cs\" Link=\"Helper.cs\" /></ItemGroup></Project>",
-                oldValue: "</Project>"
-            ),
-            path: sample
-        );
-        Build(
-            configuration: "Release",
-            project: sample
-        );
+        pair.ResetSources();
 
         var (code, _, report) = ConsoleCapture.RunSplit(run: () => SemanticPhases.Run(
-            closures: new CompileClosures(),
+            closures: pair.EnsureClosures(cancellationToken: TestContext.Current.CancellationToken),
             configuration: "Release",
             namedArgs: true,
             nullPattern: false,
-            rootArgument: m_directory.RootPath,
-            targets: [shared],
+            rootArgument: pair.Root,
+            targets: [pair.SharedSource],
             check: false
         ));
 
@@ -654,7 +514,7 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
             expectedSubstring: "compiled by no project"
         );
         Assert.Contains(
-            actualString: File.ReadAllText(path: shared),
+            actualString: File.ReadAllText(path: pair.SharedSource),
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "Probe.Join(left: \"a\", right: \"b\")"
         );
@@ -665,51 +525,16 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
     /// </summary>
     [Fact]
     public void ASourceLinkedInFromOutsideTheProjectDirectoryBinds() {
-        using var sharedDirectory = new TemporaryDirectory(prefix: "puck-cli-tests-named-args-shared-");
-        var shared = sharedDirectory.RootPath;
-
+        pair.ResetSources();
         File.WriteAllText(
-            contents: """
-                namespace Sample;
-
-                internal static class Shared {
-                    public static string Join(string left, string right) => (left + right);
-                }
-
-                """,
-            path: Path.Combine(
-                path1: shared,
-                path2: "Shared.cs"
-            )
+            contents: "namespace Sample;\n\ninternal static class Probe {\n    public static string Join(string left, string right) => (left + right);\n    public static string Use() => Helper.Join(\"a\", \"b\");\n}\n",
+            path: pair.SampleSource
         );
-        File.WriteAllText(
-            contents: $"""
-                <Project Sdk="Microsoft.NET.Sdk">
-                    <PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
-                    <ItemGroup><Compile Include="{Path.Combine(path1: shared, path2: "Shared.cs")}" Link="Shared.cs" /></ItemGroup>
-                </Project>
-                """,
-            path: Path.Combine(
-                path1: m_directory.RootPath,
-                path2: "Sample.csproj"
-            )
-        );
-        File.WriteAllText(
-            contents: """
-                namespace Sample;
-
-                internal static class Probe {
-                    public static string Use() => Shared.Join("a", "b");
-                }
-
-                """,
-            path: Source
-        );
-        Build(configuration: "Release");
 
         var (code, report) = Format(
+            closures: pair.EnsureClosures(cancellationToken: TestContext.Current.CancellationToken),
             configuration: "Release",
-            root: m_directory.RootPath
+            root: pair.SampleRoot
         );
 
         Assert.Equal(
@@ -722,11 +547,84 @@ public sealed class FormatNamedArgsProjectTests : IDisposable {
             expectedSubstring: "could not be resolved"
         );
         Assert.Contains(
-            actualString: File.ReadAllText(path: Source),
+            actualString: File.ReadAllText(path: pair.SampleSource),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "Shared.Join(left: \"a\", right: \"b\")"
+            expectedSubstring: "Helper.Join(left: \"a\", right: \"b\")"
         );
     }
+}
+/// <summary>
+/// A <c>Library</c> project and a <c>Sample</c> project that references it and links <c>../Shared/Helper.cs</c>, built
+/// once in <c>Release</c> and shared across the project-graph laws of <see cref="FormatNamedArgsProjectTests"/>.
+/// </summary>
+public sealed class BuiltReferencingPair : IDisposable {
+    private const string DefaultLibrarySource = "[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(\"Sample\")]\n\nnamespace Library;\n\npublic static class Reach {\n    public static string? Find() => \"found\";\n    public static string Join(string left, string right) => (left + right);\n    public static string Twice(string value) => Join(value, value);\n}\n\ninternal static class InternalReach {\n    internal static string Join(string left, string right) => (left + right);\n}\n";
+    private const string DefaultSampleSource = "namespace Sample;\n\ninternal static class Probe {\n    public static string Join(string left, string right) => (left + right);\n    public static string Use() => Library.Reach.Find()!;\n}\n";
+    private const string DefaultSharedSource = "namespace Sample;\n\ninternal static class Helper {\n    public static string Join(string left, string right) => (left + right);\n    public static string Use() => Probe.Join(\"a\", \"b\");\n}\n";
+
+    private readonly TemporaryDirectory m_directory = FormatNamedArgsClosureTests.PinnedScratch(prefix: "puck-cli-tests-named-args-");
+    private readonly CompileClosures m_closures = new();
+    private Dictionary<string, CompileClosure>? m_batched;
+
+    public string Root => m_directory.RootPath;
+    public string LibraryRoot => Path.Combine(path1: Root, path2: "Library");
+    public string SampleRoot => Path.Combine(path1: Root, path2: "Sample");
+    public string LibraryProject => Path.Combine(path1: LibraryRoot, path2: "Library.csproj");
+    public string SampleProject => Path.Combine(path1: SampleRoot, path2: "Sample.csproj");
+    public string LibrarySource => Path.Combine(path1: LibraryRoot, path2: "Library.cs");
+    public string SampleSource => Path.Combine(path1: SampleRoot, path2: "Sample.cs");
+    public string SharedSource => Path.Combine(path1: Root, path2: "Shared", path3: "Helper.cs");
+    public string LibraryRefAssembly => Path.Combine(path1: LibraryRoot, path2: "obj", path3: "Release", path4: "net11.0/ref/Library.dll");
+
+    public BuiltReferencingPair() {
+        Directory.CreateDirectory(path: LibraryRoot);
+        Directory.CreateDirectory(path: SampleRoot);
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: SharedSource)!);
+        const string Target = "<Target Name=\"ObserveClosureExecution\" BeforeTargets=\"FindReferenceAssembliesForReferences\"><WriteLinesToFile File=\"$(MSBuildProjectDirectory)/closure.execution.txt\" Lines=\"$(MSBuildNodeCount)|$(BuildInParallel)\" Overwrite=\"true\" /></Target>";
+
+        File.WriteAllText(
+            contents: $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>{Target}</Project>",
+            path: LibraryProject
+        );
+        File.WriteAllText(
+            contents: $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><ProjectReference Include=\"../Library/Library.csproj\" /><Compile Include=\"../Shared/Helper.cs\" Link=\"Helper.cs\" /></ItemGroup>{Target}</Project>",
+            path: SampleProject
+        );
+        ResetSources();
+        FormatNamedArgsClosureTests.Build(
+            configuration: "Release",
+            project: SampleProject
+        );
+    }
+
+    public void ResetSources() {
+        File.WriteAllText(contents: DefaultLibrarySource, path: LibrarySource);
+        File.WriteAllText(contents: DefaultSampleSource, path: SampleSource);
+        File.WriteAllText(contents: DefaultSharedSource, path: SharedSource);
+    }
+    public Dictionary<string, CompileClosure> EnsureBatchedClosures(CancellationToken cancellationToken) {
+        if (m_batched is null) {
+            m_batched = CompileClosure.EvaluateAll(
+                cancellationToken: cancellationToken,
+                configuration: "Release",
+                projects: [SampleProject, LibraryProject]
+            );
+            foreach (var (project, closure) in m_batched) {
+                m_closures.Record(
+                    closure: closure,
+                    configuration: "Release",
+                    project: project
+                );
+            }
+        }
+
+        return m_batched;
+    }
+    public CompileClosures EnsureClosures(CancellationToken cancellationToken) {
+        _ = EnsureBatchedClosures(cancellationToken: cancellationToken);
+        return m_closures;
+    }
+    public void Dispose() => m_directory.Dispose();
 }
 /// <summary>
 /// One scratch project, built once in <c>Debug</c> and <c>Release</c>, whose source each case writes before formatting
@@ -752,6 +650,8 @@ public sealed class BuiltSampleProject : IDisposable {
 
     private readonly TemporaryDirectory m_directory = FormatNamedArgsClosureTests.PinnedScratch(prefix: "puck-cli-tests-named-args-sample-");
 
+    /// <summary>Gets the shared closure cache for the sample project's unchanged configurations.</summary>
+    public CompileClosures Closures { get; } = new();
     /// <summary>Gets the project directory.</summary>
     public string Root => m_directory.RootPath;
     /// <summary>Gets the one source file the cases rewrite.</summary>
