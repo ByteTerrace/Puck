@@ -41,12 +41,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Visibility is a per-probe 12×12 octahedral first-hit surface map. Each texel
   traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
   full in-window receiver support including relocation. Each word holds an FP16
-  ray distance and two signed octahedral normal bytes. A second word holds the
-  hit triangle's finite projected rectangle as four outward-rounded signed bytes,
-  scaled by the map's receiver-support reach. Drop the quantized normal's dominant
-  axis in both implementations. Pad by one angular footprint plus surface fade;
-  a local plane may block only inside this rectangle. Without that bound, a sign
-  near a probe incorrectly extended its shadow onto the sphere below its edge. A
+  ray distance and two signed octahedral normal bytes. A
   negative distance explicitly marks a miss and its reach. Receivers beyond
   that measured support receive nothing. Depth is traced on the first sweep
   and reused for later bounces; sky still uses the full-reach radiance rays.
@@ -56,7 +51,15 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   opposite faces and separate parallel walls stay separate. Interpolate a patch's
   positions/normals before testing the signed receiver gap; extending each tangent
   plane separately shadowed visible curved receivers (the sphere law is red at
-  visibility zero on that implementation). Fade a patch over `DepthSurfaceFade`
+  visibility zero on that implementation). A sparsely sampled curved surface
+  also needs its normal gradient. During the first sweep, fit curvature from
+  compatible points/normals in each texel's reflected 3×3 angular neighbourhood
+  and store one FP16 value per texel; an unsupported neighbourhood stores NaN.
+  The gather interpolates compatible local quadratic coefficients and intersects their entering root along
+  the receiver ray. Testing only a tangent/chord plane returned 0.574 visibility
+  for an exact-segment-visible receiver in the small-curve witness. An unsupported
+  tap casts no blocker; a distinct local hit supports the normal-gradient fit.
+  Curvature zero retains the exact plane intersection. Fade a patch over `DepthSurfaceFade`
   (2 cm, less than normal bias), then combine its blocked angular coverage.
   The flat-surface law also rejects radial-distance interpolation: it returned
   48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
@@ -131,12 +134,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   old coordinates** until every new slot has a measured sample. Never publish
   unwritten cells as darkness or initialize them to unoccluded sky. Before the
   first scene has supplied any volume, there is no measured indirect light.
-- A record is 308 words (1,232 bytes): 19 header/cube/light/origin words, 144
-  packed first-hit surface words, 144 finite-footprint words and one reach word.
-  Medium's 12,288 probes use 14.4375 MiB; High's 36,864 use 43.3125 MiB.
-  Finite footprints cost more per probe than the former 1,100-byte moments;
-  tier fitting removes the former fixed High reservation at Medium and in empty
-  residencies. Report that tradeoff when measuring memory. The table starts at one inert record and both
+- A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
+  packed first-hit surface words and 72 packed normal-gradient words.
+  Medium's 12,288 probes use 11.015625 MiB; High's 36,864 use 33.046875 MiB.
+  The table starts at one inert record and both
   it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
   existing frame-ring retirement; increment the binding revision when its buffer
   changes. Keep the old table and coordinates until every new slot is measured.
@@ -164,8 +165,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   local rejection precedes a full radiance trace. The former openness score is
   deleted: it moved a probe one metre off a 10 cm slab, and neighbouring floor
   cells could choose different storeys. Increasing clearance did not fix the
-  sphere's false shadow: finite surface support does. The thin-slab witness takes
-  the nearest safe exit (0.175 m at Medium), rather than the openness winner.
+  sparse-curve shadow. The thin-slab witness takes the nearest safe exit (0.175 m
+  at Medium), rather than the openness winner.
   Later sweeps keep the first origin. Offset XYZ rides the record and every
   gather/meter read uses the relocated origin; trilinear share stays the cell's.
   A cell no surface reaches within its half diagonal is wholly inside or outside

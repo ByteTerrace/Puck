@@ -70,6 +70,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float2 fraction = texel - (float2)base;
     float3 points[4];
     float3 normals[4];
+    float curvatures[4];
     float4 weights = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
         points[corner] = 0.0;
@@ -88,24 +89,48 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
         int2 encoded = int2((int)(word << 8u) >> 24, (int)word >> 24);
         normals[corner] = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
         points[corner] = depth * sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
+        uint index = (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y);
+        uint packedCurvature = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + SDF_MESH_IRRADIANCE_DEPTH_SIZE * SDF_MESH_IRRADIANCE_DEPTH_SIZE + (index >> 1u)];
+        float curvature = sdfMeshIrradianceHalf(packedCurvature, index & 1u);
+        if (!isfinite(curvature)) { continue; }
+        curvatures[corner] = curvature;
         weights[corner] = weight;
     }
     float blocked = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
         if (weights[corner] <= 0.0) { continue; }
-        float3 meanPoint = 0.0;
-        float3 normal = 0.0;
+        float quadratic = 0.0;
+        float3 coefficient = 0.0;
+        float constant = 0.0;
         float total = 0.0;
         [unroll] for (uint neighbour = 0u; neighbour < 4u; neighbour++) {
             if (weights[neighbour] <= 0.0) { continue; }
             float3 sum = normals[corner] + normals[neighbour];
             if (dot(normals[corner], normals[neighbour]) <= 0.0 ||
                 abs(dot(sum, points[neighbour] - points[corner])) > SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) { continue; }
-            meanPoint += weights[neighbour] * points[neighbour];
-            normal += weights[neighbour] * normals[neighbour];
+            float curvature = curvatures[neighbour];
+            float3 position = points[neighbour];
+            float3 normal = normals[neighbour];
+            quadratic += weights[neighbour] * 0.5 * curvature;
+            coefficient += weights[neighbour] * (normal - curvature * position);
+            constant += weights[neighbour] * (-dot(normal, position) + 0.5 * curvature * dot(position, position));
             total += weights[neighbour];
         }
-        float gap = dot(normalize(normal), toward - meanPoint / total);
+        quadratic /= total;
+        coefficient /= total;
+        constant /= total;
+        float a = quadratic * dot(toward, toward);
+        float b = dot(coefficient, toward);
+        float c = constant;
+        float discriminant = b * b - 4.0 * a * c;
+        if (c <= 0.0 || discriminant <= 0.0) { continue; }
+        float divisor = sqrt(discriminant) - b;
+        if (divisor <= 1e-8) { continue; }
+        float along = 2.0 * c / divisor;
+        if (along <= 0.0 || along >= 1.0) { continue; }
+        float3 hit = toward * along;
+        float3 gradient = coefficient + 2.0 * quadratic * hit;
+        float gap = dot(normalize(gradient), toward - hit);
         blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
     float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);

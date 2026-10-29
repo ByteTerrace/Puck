@@ -282,9 +282,11 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
   The sky cube comes from the same full-reach radiance rays as bounced light.
   Surface support stays within the angular taps; no neighbour vetoes or suspect sets return.
-  Each angular tap also carries a finite projected triangle footprint: an infinite
-  local plane incorrectly shadowed the sphere below a nearby sign. Test the ray's
-  intersection with the reconstructed patch against that footprint.
+  The first sweep caches FP16 normal gradients from each texel's local angular
+  neighbourhood. Interpolate compatible quadratic coefficients and intersect
+  their entering root; a tangent alone shadowed
+  the visible side of sparsely sampled curved geometry. The sparse-curve law
+  checks against exact mesh segments. No triangle-footprint clipping is used.
   Gather weights are trilinear share × a half-spacing smooth distance fade in front of the receiver × depth
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.

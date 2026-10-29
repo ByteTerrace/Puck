@@ -16,22 +16,26 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
     public void ASparselySampledSphereKeepsItsVisibleSurfaceLit() {
-        var centre = new Vector3(0f, 0f, 2f);
-        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Sphere(centre, 0.5f))]);
+        var centre = new Vector3(x: 0f, y: 0f, z: 2f);
+        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Sphere(centre: centre, radius: 0.5f))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
-        foreach (var origin in new Vector3[] { new(2f, -0.2f, 1f), new(2f, 1.8f, 1f), new(-0.165f, 1.8f, 1f) }) {
-            _ = SdfMeshProbeDepth.Trace(scene, origin, 5.25f, depth);
-            for (var latitude = -80; latitude <= 80; latitude += 5) {
-                for (var longitude = 0; longitude < 360; longitude += 5) {
-                    var lat = latitude * MathF.PI / 180f;
-                    var lon = longitude * MathF.PI / 180f;
-                    var normal = new Vector3(MathF.Cos(lat) * MathF.Cos(lon), MathF.Sin(lat), MathF.Cos(lat) * MathF.Sin(lon));
-                    var point = centre + 0.5f * normal;
-                    if (Vector3.Dot(normal, Vector3.Normalize(origin - point)) <= 0.05f) { continue; }
-                    var toward = point + SdfMeshIrradianceProbe.NormalBias * normal - origin;
-                    if (!scene.Unblocked(origin, Vector3.Normalize(toward), toward.Length() - 0.001f)) { continue; }
-                    var visibility = SdfMeshProbeDepth.Visibility(depth, toward);
-                    Assert.True(visibility > 0.95f, $"sparse sphere origin={origin} receiver={point}: {visibility}");
+
+        foreach (var origin in new Vector3[] { new(x: 2f, y: -0.2f, z: 1f), new(x: 2f, y: 1.8f, z: 1f), new(x: -0.165f, y: 1.8f, z: 1f) }) {
+            _ = SdfMeshProbeDepth.Trace(origin: origin, reach: 5.25f, scene: scene, surfaces: depth);
+            for (var latitude = -80; (latitude <= 80); latitude += 5) {
+                for (var longitude = 0; (longitude < 360); longitude += 5) {
+                    var lat = ((latitude * MathF.PI) / 180f);
+                    var lon = ((longitude * MathF.PI) / 180f);
+                    var normal = new Vector3(x: (MathF.Cos(x: lat) * MathF.Cos(x: lon)), y: MathF.Sin(x: lat), z: (MathF.Cos(x: lat) * MathF.Sin(x: lon)));
+                    var point = (centre + (0.5f * normal));
+
+                    if (Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: (origin - point))) <= 0.05f) { continue; }
+                    var toward = ((point + (SdfMeshIrradianceProbe.NormalBias * normal)) - origin);
+
+                    if (!scene.Unblocked(origin, Vector3.Normalize(value: toward), (toward.Length() - 0.001f))) { continue; }
+                    var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: toward);
+
+                    Assert.True(condition: (visibility > 0.95f), userMessage: $"sparse sphere origin={origin} receiver={point}: {visibility}");
                 }
             }
         }

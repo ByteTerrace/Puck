@@ -18,6 +18,10 @@ public static class SdfMeshProbeDepth {
     /// <returns>The number of closest-hit rays issued.</returns>
     public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> surfaces) {
         var rays = 0;
+        Span<Vector3> points = stackalloc Vector3[(Size * Size)];
+        Span<Vector3> normals = stackalloc Vector3[(Size * Size)];
+
+        surfaces.Slice(start: (Size * Size)).Clear();
 
         for (var texel = 0; (texel < Directions.Length); texel++) {
             var direction = Directions[texel];
@@ -27,6 +31,7 @@ public static class SdfMeshProbeDepth {
             rays++;
             if (!hit) {
                 surfaces[texel] = BitConverter.HalfToUInt16Bits(value: ((Half)(-reach)));
+                points[texel] = normals[texel] = Vector3.Zero;
                 continue;
             }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { normal = -normal; }
@@ -37,6 +42,35 @@ public static class SdfMeshProbeDepth {
             var packed = (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
 
             surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)distance));
+            points[texel] = (direction * ((float)((Half)distance)));
+            normals[texel] = Normal(word: packed);
+        }
+        // Fit normal gradients once from the texel's local angular neighbourhood. Even a gather with only one
+        // hit tap can then distinguish a plane from curvature; a lone hit in the whole neighbourhood is unsupported.
+        for (var texel = 0; (texel < Directions.Length); texel++) {
+            var variance = 0f;
+            var covariance = 0f;
+
+            if (normals[texel] != Vector3.Zero) {
+                for (var dy = -1; (dy <= 1); dy++) {
+                    for (var dx = -1; (dx <= 1); dx++) {
+                        var source = SdfOctahedral.BorderSource(borderedX: (((texel % Size) + dx) + 1), borderedY: (((texel / Size) + dy) + 1), interiorTexels: Size);
+                        var neighbour = (source.X + (Size * source.Y));
+
+                        if ((neighbour == texel) || (normals[neighbour] == Vector3.Zero)) { continue; }
+                        var delta = (points[neighbour] - points[texel]);
+
+                        if ((Vector3.Dot(vector1: normals[texel], vector2: normals[neighbour]) <= 0f) ||
+                            (MathF.Abs(x: Vector3.Dot(vector1: (normals[texel] + normals[neighbour]), vector2: delta)) > SdfMeshIrradianceProbe.DepthSurfaceJoinGap)) { continue; }
+                        variance += delta.LengthSquared();
+                        covariance += Vector3.Dot(vector1: delta, vector2: (normals[neighbour] - normals[texel]));
+                    }
+                }
+            }
+            var curvature = ((variance > 1e-8f) ? (covariance / variance) : float.NaN);
+            var bits = ((uint)BitConverter.HalfToUInt16Bits(value: ((Half)curvature)));
+
+            surfaces[(Directions.Length + (texel >> 1))] |= (bits << (16 * (texel & 1)));
         }
         return rays;
     }
@@ -66,6 +100,7 @@ public static class SdfMeshProbeDepth {
         Span<Vector3> points = stackalloc Vector3[4];
         Span<Vector3> normals = stackalloc Vector3[4];
         Span<float> weights = stackalloc float[4];
+        Span<float> curvatures = stackalloc float[4];
 
         weights.Clear();
 
@@ -86,27 +121,55 @@ public static class SdfMeshProbeDepth {
             }
             points[corner] = (Directions[index] * depth);
             normals[corner] = Normal(word: word);
+            var packedCurvature = surfaces[(Directions.Length + (index >> 1))];
+            var curvature = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(packedCurvature >> (16 * (index & 1))))));
+
+            if (!float.IsFinite(f: curvature)) { continue; }
+            curvatures[corner] = curvature;
             weights[corner] = weight;
         }
         var blocked = 0f;
 
         for (var corner = 0; (corner < 4); corner++) {
             if (weights[corner] <= 0f) { continue; }
-            var point = Vector3.Zero;
-            var normal = Vector3.Zero;
+            var quadratic = 0f;
+            var linear = Vector3.Zero;
+            var constant = 0f;
             var total = 0f;
 
             for (var neighbour = 0; (neighbour < 4); neighbour++) {
                 if (weights[neighbour] <= 0f) { continue; }
                 var sum = (normals[corner] + normals[neighbour]);
-                // Same smooth patch: opposite faces and distinct parallel walls never interpolate together.
+
                 if ((Vector3.Dot(vector1: normals[corner], vector2: normals[neighbour]) <= 0f) ||
                     (MathF.Abs(x: Vector3.Dot(vector1: sum, vector2: (points[neighbour] - points[corner]))) > SdfMeshIrradianceProbe.DepthSurfaceJoinGap)) { continue; }
-                point += (weights[neighbour] * points[neighbour]);
-                normal += (weights[neighbour] * normals[neighbour]);
+                var curvature = curvatures[neighbour];
+                var point = points[neighbour];
+                var normal = normals[neighbour];
+
+                quadratic += ((weights[neighbour] * 0.5f) * curvature);
+                linear += (weights[neighbour] * (normal - (curvature * point)));
+                constant += (weights[neighbour] * (-Vector3.Dot(vector1: normal, vector2: point) + ((0.5f * curvature) * point.LengthSquared())));
                 total += weights[neighbour];
             }
-            var gap = Vector3.Dot(vector1: Vector3.Normalize(value: normal), vector2: (toward - (point / total)));
+            quadratic /= total;
+            linear /= total;
+            constant /= total;
+            var a = (quadratic * toward.LengthSquared());
+            var b = Vector3.Dot(vector1: linear, vector2: toward);
+            var c = constant;
+            var discriminant = ((b * b) - ((4f * a) * c));
+
+            if ((c <= 0f) || (discriminant <= 0f)) { continue; }
+            var divisor = (MathF.Sqrt(x: discriminant) - b);
+
+            if (divisor <= 1e-8f) { continue; }
+            var along = ((2f * c) / divisor);
+
+            if ((along <= 0f) || (along >= 1f)) { continue; }
+            var hit = (toward * along);
+            var gradient = (linear + ((2f * quadratic) * hit));
+            var gap = Vector3.Dot(vector1: Vector3.Normalize(value: gradient), vector2: (toward - hit));
 
             blocked += (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
         }
