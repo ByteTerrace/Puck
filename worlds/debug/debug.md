@@ -302,7 +302,7 @@ garbage collection of about 12 ms lands near the frame. The first crossing of a 
 publish), and a frame of 50 to 56 ms after it while the garden's mesh region
 grows to take the body. Under Vulkan a warm crossing still costs 21 to 36 ms back
 to the debug world and 34 to 143 ms into the garden, its upload submission
-blocking in the driver at worst ([open item](../../docs/plans/open-items.md#rendering)).
+blocking in the driver at worst ([open item](../../docs/plans/rendering.md#open-items)).
 
 - Stand before the garden painting and walk in (`debug.go portal-garden`, then
   `body.fly -1 0 0 0 0 0 4` headless, or hold forward): passing through the

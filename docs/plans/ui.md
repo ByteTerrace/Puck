@@ -16,6 +16,16 @@ Text shaping, bidirectional text, font fallback, input composition and
 localization are a named step after 4. Fonts and specific values are the
 owner's look calls.
 
+## Open items
+
+Every step above is open, step 1 first. What already stands toward it: a world
+with no `theme` draws the engine's neutral one (`WorldThemeSection.Default`), so
+its console, toasts, bar, wheel and cursor stay usable, and the debug world and
+the garden draw their on-screen controls through the debug world's own skin
+(`worlds/debug/skin.puck`) and `worlds/debug/controls.puck`. The
+[open items](open-items.md#ui-step-1-the-engine-leaks-out) hold the packet that
+finishes it. A line is deleted when its step lands, never ticked.
+
 ---
 
 [Plans](README.md) · [The UI decisions](../decisions/ui.md)

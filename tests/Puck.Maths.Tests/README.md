@@ -53,7 +53,7 @@ same domain as its Default sibling adds no evidence and does not belong. For the
 `LawCompletenessTests` resolves declared public members and checks waiver reasons.
 The retired ratchet grandfathered uncovered public members through saved state;
 a check requiring every public member to have a law or waiver does not yet stand
-on the authored declarations alone. See [open work](../../docs/plans/open-items.md).
+on the authored declarations alone. See [open work](../../docs/plans/open-items.md#maths).
 
 ## Reproducible operand windows
 

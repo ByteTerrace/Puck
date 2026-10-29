@@ -2385,7 +2385,7 @@ hashes agree throughout, 484 stills are pixel-identical, and the remaining 54
 differ on at most nine pixels by one level. Lockstep completes program and mesh
 changes, irradiance and hosted machine steps before their frames are read;
 machine source publication numbers alone cannot establish equal video pixels.
-The small remaining residue stays an [open item](../plans/open-items.md#standalone).
+The small remaining residue stays an [open item](../plans/open-items.md#dual-stick-play-and-the-moths-motion).
 Investigate any failed still by scenario, tick and camera before judging its animation; the
 [tick-exact procedure](../../.claude/skills/puck-world/references/schedules-and-tests.md#tick-exact-debug-capture)
 describes the measurement sequence. Do not increase the bound to admit those

@@ -380,6 +380,82 @@ dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts a
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
 
+## Open items
+
+What the programme still owes. A line is deleted when its work lands, never
+ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
+The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-items).
+
+- [Asset ingestion](#asset-ingestion) (startable today).
+- [Firmware and content policy](#firmware-and-content-policy) (startable today).
+- [The cabinet module](#the-cabinet-module): display identity, hardware
+  consumers, boot-anchored reproduction.
+- [Cabinet authoring and player experience](#cabinet-authoring-and-player-experience),
+  after the language's modules.
+- [The program model](#the-program-model): memory model, procedures and banks,
+  interrupts, ROM residency and the save, arithmetic.
+- [The content library](#the-content-library); [optional distribution](#optional-distribution).
+- Humble Gaming Brick corpus failures. No file records an expected outcome, so
+  every corpus ROM that does not pass fails its stage in
+  `Puck.HumbleGamingBrick.Post` on every run. A default run with every corpus
+  fetched fails 14 stages and 1,999 cases: gambatte 1,655, GBMicrotest 109, AGE
+  82, wilbertpol acceptance 70 and misc 5, mealybug 48, SameSuite 19, and a
+  handful of one- or two-case suites (blargg's `oam_bug` screenshots and
+  `7-timing_effect`, cgb-acid-hell, little-things-gb `firstwhite`, scribbltests
+  `scxly`, strikethrough, bully). Each is an inconclusive probe or a screenshot,
+  hex-pattern or register-signature mismatch; the report names a sample per
+  stage and the JUnit file names every case. They are the Humble accuracy work
+  list, closed by emulator corrections, never by recording them.
+- Committed coverage for what the commercial-ROM stages checked. The batteries
+  read no commercial ROM or retail BIOS (the owner's ruling), so the stages that
+  needed one are gone: the Humble and Advanced commercial link-game replays, the
+  Humble scripted cross-generation trade stages and their explorers, the
+  Advanced solar-cartridge replay, the AGS aging cartridge and the retail-BIOS
+  firmware oracle, plus the commercial render-hash floors. Committed stages
+  already cover the cable itself: Humble `serial-link` (DMG-CGB, DMG-AGB,
+  CGB-AGB), `link-churn`, `linked-host-cable`, `linked-host-time-travel`,
+  `infrared-exchange` and the acceptance serial suites; Advanced `link-replay`,
+  `link-churn`, `serial-clock` and `firmware-multiboot`; the solar sensor's GPIO
+  protocol (`solar-device`). Gaps that remain, each closed by a committed
+  homebrew or authored test cartridge:
+  1. the GBA multiplayer SIOCNT SD/SI ready lines are unmodeled
+     (`AgbSerialController.PackSioControl`), and no partner-polling micro-ROM
+     exists to prove them;
+  2. a game-shaped interrupt-driven link handshake with retry loops across a
+     CGB-AGB pair, which the trade stages exercised end to end, has only the
+     byte-exchange stages above;
+  3. retail-hardware conformance of timers, DMA and the PPU, which the AGS
+     cartridge graded, is covered only by the mGBA suite and the jsmolka corpus;
+  4. the bundled firmware has no independent oracle for its functional results
+     beyond documented contracts, since the retail-BIOS comparison ran only
+     against a supplied image (a retail-BIOS control still runs inside several
+     Advanced Tier A stages when `--bios` names one by hand).
+- Shorten the two emulator batteries the CPU suites run.
+  `Puck.HumbleGamingBrick.Tests` runs the Humble battery with an empty corpus
+  cache (about 15 s of its 25 s) and `Puck.HumbleGamingDeck.Tests` runs the
+  Deck's Tier A (its 28 s), each in a child process; each self-contained stage
+  reaches lines no other stage or suite does, so neither run narrows to a
+  subset. Without coverage their wall time is the longest stage:
+  `queued-host-time-travel`, `bundled-firmware` and `boot-rom-handoff` at 7 to
+  8 s each in the Humble battery, `queued-host-time-travel` and
+  `queued-host-memory` in the Deck's. Under coverage, as every CI shard runs a
+  suite, the instrumented emulator loops run about twenty times slower and the
+  stages' summed CPU sets the time: about 230 s for the Humble suite and 97 s
+  for the Deck's on a shared six-core machine, led in the Humble battery by
+  `bundled-firmware` (158 s), `queued-host-time-travel` (136 s),
+  `boot-rom-handoff` (126 s) and `queued-host-memory-access` (112 s). Fewer
+  emulated frames in those stages, with the same checks, is what shortens both.
+- Qualify sub-frame button timing if a future game profile needs it. The
+  generic machine debugger deliberately holds one world-tick input across the
+  native frames it spans; its repeated RAM traces compare the same checkpointed
+  rational clock phase. One `replay.verify` of a machine-debugger scenario that
+  hashes RAM every tick would confirm that queued-core peeks agree between live
+  play and replay.
+- `QueuedMachineWorker` frame-tracking locals are not reset on checkpoint
+  restore or rewind, and `HgdMachine.Reset` keeps a latched bus write (read from
+  the code in a pre-`main` review, not reproduced; confirm with a failing test
+  before fixing).
+
 ---
 
 [Plans](README.md) · [Decisions](../decisions/machines-and-cartridges.md)

@@ -139,7 +139,7 @@ the caller's subject, not an arbitrary target account. Deployment policy and any
 proof-of-possession requirement need separate evidence. The Entra path uses a
 bearer token with an explicitly pinned server transport key; the earlier review
 did not demonstrate a bypass of that pin. See the scoped questions in
-[open items](../plans/open-items.md#standalone).
+[open items](../plans/open-items.md#security-review).
 
 Install recovery treats a protected local intent as already-authorized work.
 It checks the current trust policy at the original verification instant; expiry

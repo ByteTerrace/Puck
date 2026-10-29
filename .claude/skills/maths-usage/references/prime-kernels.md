@@ -20,7 +20,7 @@ algebra or oracle wings.
   those counts; code layout alone has moved cycles by 1–3%.
 - A structural table can accelerate arithmetic, but a table of answers over a
   query range is not a substitute for it. The small hashed-witness certificate
-  remains an [owner decision](../../../../docs/plans/open-items.md), because
+  remains an [owner decision](../../../../docs/plans/open-items.md#owner-decisions), because
   production primality still reaches that range.
 - Re-measure on a new .NET major before relying on old tuning. On .NET 11,
   `Math.BigMul` keeps both halves in registers; the retained reductions use

@@ -563,6 +563,36 @@ dotnet test tests/Puck.World.Tests -c Release
 puck docs links
 ```
 
+## Open items
+
+What the programme still owes. A line is deleted when its work lands, never
+ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
+
+- Finish the five canonical world-source migrations: `puck` and the four
+  `quilt-ne`, `quilt-nw`, `quilt-se`, `quilt-sw` shards. `standard`, `pipeline`
+  and `quilt-nw-gap` are already `.puck`; the resolver prerequisite and
+  trivia-free format fingerprints are implemented. The
+  [implementation status](#implementation-status) names the paths and
+  preservation checks.
+- The rest of the [asset packages](#asset-packages): branding from the manifest,
+  per-package official trees, the release manifest pinning package content
+  (startable today).
+- The ledger (startable today).
+- Compiled worlds: the container's remaining gaps (a hit still validates and
+  compiles, the hosted-load and replay doors, checkpoint and tape references,
+  cache eviction); simulation chunks; everything else. One validated load, the
+  container, its header and the `DEFN`, `ASST` and `CURV` chunks are landed.
+- The presentation view: the projection's mechanism defects and the conformance
+  law (startable today); the static sections as disclosure decisions; target
+  registers and the authoring envelope; bound state as per-recipient
+  observations; the primary client onto the view.
+- Release pairs: group-scoped restore, definition-edit preservation, a qualified
+  pair with the operator exercise. `world release deploy` and `rollback` take
+  the qualification exit codes: `world release qualify` exits 1 for a failed
+  check and 2 for a refusal, but `AzureCommand.DeployWorldReleaseAsync` still
+  throws on a refused start, so both verbs exit 2 for a failed check.
+- The evidence package, against one named candidate.
+
 ---
 
 [Plans](README.md) · [Decisions](../decisions/runtime-and-delivery.md)
