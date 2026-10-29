@@ -827,7 +827,20 @@ unverified when no device run exists.
   whose session ends with the machine resumes from its worktree. LibreHardwareMonitor logs its sensors to a
   CSV each second beside its executable (the winget package's folder under
   `%LOCALAPPDATA%\Microsoft\WinGet\Packages`); after a trip, the last rows name
-  the sensor that ran away.
+  the sensor that ran away. It logs only once it runs elevated with Options →
+  Log Sensors, Run On Windows Startup and Start Minimized ticked (they persist
+  in `LibreHardwareMonitor.config` beside the executable; with no such file it
+  has never logged). System event 41 with `BugcheckCode=0`, no power-button
+  timestamp, no WHEA record and no minidump is the trip's signature. A trip
+  zero-fills files whose data had not reached the disk: in one, `.git/config`,
+  `.git/index`, the integration branch's ref file and every file of an
+  in-progress merge read as NUL bytes. Recovery: find them
+  (`head -c 64 <file> | tr -d '\0' | wc -c` reads 0), restore the branch ref
+  from the last line of its reflog (`logs/refs/heads/...`, NULs stripped),
+  rebuild `.git/config` (core settings, `origin`, branch tracking), move the
+  zeroed index aside and `git reset`, restore zeroed tracked files with
+  `git checkout -- <paths>`, move aside a half-created worktree's metadata, and
+  confirm with `git fsck --no-dangling`.
 - A build cut off by a power loss or a killed session can leave a truncated
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build
