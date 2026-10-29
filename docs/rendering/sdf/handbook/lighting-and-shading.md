@@ -201,9 +201,13 @@ in the frame.
   plane tests the receiver's side. Its finite extent is unknown, so this
   separation can over-darken beside a finite blocker
   ([open items](../../../plans/open-items.md#review-findings)). A separator's
-  veto is weighted by its own survival of the same test and by the candidate's
-  suspect share, so a fully separated probe vetoes nothing and the gather never
-  empties. A share uses perpendicular plane distance:
+  veto is weighted by its share of the answering probes' weight, at full
+  strength from an eighth of the total (`SdfMeshIrradianceProbe.SeparatorShare`),
+  so a probe entering the eight-corner set at a lattice plane with no trilinear
+  weight vetoes nothing and the gather is continuous across it; by its own
+  survival of the same test; and by the candidate's suspect share, so a fully
+  separated probe vetoes nothing and the gather never empties. A share uses
+  perpendicular plane distance:
   a hit on the receiver's own surface is evidence at every angle, while open
   space or a plane far beyond it is suspect. Front eligibility precedes
   separation, and both passes read the weights before any veto

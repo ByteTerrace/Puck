@@ -128,12 +128,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly Dictionary<(string Instance, int Seat), ulong> m_announcedCrossingHolds = [];
     // The escrow border a seat's arrival occupancy was already seeded for, so one arrival seeds once.
     private readonly Dictionary<(string Instance, int Seat), string> m_seededArrivals = [];
-    // Every transfer id this host has drained (committed or aborted). A pure function of enqueue/drain
-    // order, never wall-clock or RNG — checked first in ApplyTransfer so a retry-shaped duplicate (the same
-    // id resubmitted, e.g. world.transfer's transfer:<id> token) refuses by name rather than double-landing.
-    // A diegetic portal crossing always mints a fresh id, so only an explicitly supplied id can collide.
-    private readonly HashSet<(string SourceInstance, ulong TransferId)> m_appliedTransferIds = new();
-    private readonly Dictionary<string, ulong> m_appliedTransferHighWater = new(comparer: StringComparer.Ordinal);
+    // How many lifetimes each name has started under through TryStart, and every authority identity a row admitted here
+    // has held: a name started again names a new authority, so the incarnations its bodies mint never equal one an
+    // earlier lifetime minted and a traveller still carries.
+    private readonly Dictionary<string, int> m_startedLifetimes = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_issuedAuthorities = new(comparer: StringComparer.Ordinal);
+    // Instances an emptying reap spared because a queued transfer was still bound for them; reaped once nothing queued
+    // names them (DrainPendingTransfers).
+    private readonly HashSet<string> m_deferredReaps = new(comparer: StringComparer.Ordinal);
     // Per-site fresh-instance draw counters. The seed ladder's instance rung is the running instance's own
     // name, so a fresh transfer mints a name no earlier draw at that site used. Advances by exactly one per
     // MintFreshInstanceName call, a pure function of call sequence — never wall-clock, RNG, or tick-of-entry.
@@ -477,8 +479,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <c>world.instance.stop</c> uses, applied by rule instead of by name. A no-op — never a refusal — for the boot
     /// instance (which <see cref="TryStop"/> refuses outright), a retained instance (see <see cref="m_retainedInstances"/>
     /// — a <c>persistent</c>-lifetime transfer destination stays up through an occupancy dip to zero, by design), an
-    /// unknown name, an instance that still holds an active entry, or an authority that still forwards departed
-    /// travelers. Forwarding authorities remain available until explicitly stopped.</summary>
+    /// unknown name, an instance that still holds an active entry, an authority that still forwards departed
+    /// travelers, or an instance a queued transfer is bound for. Forwarding authorities remain available until
+    /// explicitly stopped; an instance spared for a queued arrival is reaped by the drain after which nothing queued
+    /// names it, if it is still empty then.</summary>
     /// <param name="name">The instance name to reap if now empty.</param>
     /// <returns><see langword="true"/> when the instance was reaped.</returns>
     public bool ReapIfEmpty(string name) {
@@ -506,10 +510,70 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         if (HasForwardingFrom(source: instance.Server)) { return false; }
 
+        // A queued transfer bound for the instance would otherwise find no instance to land in, or a later start
+        // under the same name. Reaped after the drain that leaves nothing queued for it.
+        if (HasQueuedArrival(name: name)) {
+            _ = m_deferredReaps.Add(item: name);
+
+            return false;
+        }
+
         return TryStop(
             name: name,
             reason: out _
         );
+    }
+    // Whether a queued transfer lands in the instance running under this name.
+    private bool HasQueuedArrival(string name) {
+        foreach (var transfer in m_pendingTransfers) {
+            if (
+                (transfer.Destination.Authority is null) &&
+                string.Equals(
+                a: transfer.Destination.Name,
+                b: name,
+                comparisonType: StringComparison.Ordinal
+            )
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Reaps every instance an emptying reap spared for a queued arrival that is no longer queued.
+    private void ReapDeferred() {
+        if (m_deferredReaps.Count == 0) {
+            return;
+        }
+
+        foreach (var name in m_deferredReaps.Order(comparer: StringComparer.Ordinal).ToArray()) {
+            if (HasQueuedArrival(name: name)) {
+                continue;
+            }
+
+            _ = m_deferredReaps.Remove(item: name);
+            _ = ReapIfEmpty(name: name);
+        }
+    }
+    // The authority identity a row started under this name takes: the name for its first lifetime here, and for a later
+    // one the name joined to the lifetime's ordinal, past any identity a row admitted here already held. Incarnations
+    // are addressed under it (WorldPopulation.ResolveIncarnation), so a traveller one lifetime minted is never mistaken
+    // for a body a later lifetime seats in the same slot at the same generation.
+    private string LifetimeAuthority(string name) {
+        var lifetime = m_startedLifetimes.GetValueOrDefault(key: name);
+        var authority = name;
+
+        while (m_issuedAuthorities.Contains(item: authority)) {
+            lifetime++;
+            authority = GeneratedName.AppendFile(
+                name: name,
+                part: lifetime.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+            );
+        }
+
+        m_startedLifetimes[name] = lifetime;
+
+        return authority;
     }
     /// <summary>Resolves the world definition local seat <paramref name="slot"/> currently presents from, per its
     /// live <c>WorldSeatAuthorityRouter</c> route — the one structure source every drag-time/read-back
@@ -1180,6 +1244,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 envelope: new WorldRenderEnvelope(),
                 machines: machines,
                 instanceIdentity: name,
+                authorityIdentity: LifetimeAuthority(name: name),
                 // The receipt travels when it names this exact document and the catalog this host validates
                 // against; a loader that deferred provider admission to a different catalog leaves construction
                 // to prove it.
@@ -1274,6 +1339,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         _ = m_instances.Remove(key: name);
+        _ = m_deferredReaps.Remove(item: name);
         ForgetResolvedDocuments();
         _ = m_documentShared.Remove(key: name);
         // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
@@ -1399,6 +1465,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         row.Server.TransferForwarder = this;
         m_instances[row.Name] = row;
+        _ = m_issuedAuthorities.Add(item: row.Server.AuthorityIdentity);
         ForgetResolvedDocuments();
         _ = EndpointFor(instance: row);
         ResolveForwardedRecoveries();
@@ -1534,15 +1601,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             ));
         }
 
-        var appliedIds = m_appliedTransferIds
-            .Where(predicate: entry => string.Equals(
-            a: entry.SourceInstance,
-            b: row.Name,
-            comparisonType: StringComparison.Ordinal
-        ))
-            .Select(selector: entry => entry.TransferId)
-            .ToArray();
-
         return new WorldAuthorityHostRowCheckpoint(
             AnnouncedCrossingHolds: [.. m_announcedCrossingHolds
                 .Where(predicate: pair => string.Equals(
@@ -1551,13 +1609,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     comparisonType: StringComparison.Ordinal
                 ))
                 .Select(selector: pair => (pair.Key.Seat, pair.Value))],
-            AppliedTransferHighWater: (m_appliedTransferHighWater.TryGetValue(
-                key: row.Name,
-                value: out var highWater
-            )
-            ? highWater
-            : null),
-            AppliedTransferIds: appliedIds,
+            AppliedTransferHighWater: row.DrainedTransfers.HighWater,
+            AppliedTransferIds: [.. row.DrainedTransfers.Above],
             ElapsedEngineTicks: row.ElapsedEngineTicks,
             ForwardedBodies: forwarded,
             FreshCounter: m_freshCounters.GetValueOrDefault(key: row.Name),
@@ -1614,13 +1667,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             _ = m_retainedInstances.Add(item: row.Name);
         }
 
-        if (slice.AppliedTransferHighWater is { } highWater) {
-            m_appliedTransferHighWater[row.Name] = highWater;
-        }
-
-        foreach (var transferId in slice.AppliedTransferIds) {
-            _ = m_appliedTransferIds.Add(item: (row.Name, transferId));
-        }
+        row.DrainedTransfers.Restore(
+            above: slice.AppliedTransferIds,
+            highWater: slice.AppliedTransferHighWater
+        );
 
         foreach (var row2 in slice.AnnouncedCrossingHolds) {
             m_announcedCrossingHolds[(row.Name, row2.Seat)] = row2.TransferId;

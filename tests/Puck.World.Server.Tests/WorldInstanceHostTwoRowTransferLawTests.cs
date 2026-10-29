@@ -89,10 +89,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
             expected: PeerSlot,
             actual: forwarded.DestinationBodyIndex
         );
-        Assert.Contains(
-            expected: transferId,
-            collection: sourceRow.AppliedTransferIds
-        );
+        Assert.True(condition: ((transferId <= sourceRow.AppliedTransferHighWater) || sourceRow.AppliedTransferIds.Contains(value: transferId)));
 
         var destinationRow = host.CaptureRow(row: rowB.Instance);
 

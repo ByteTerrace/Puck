@@ -1125,6 +1125,65 @@ public sealed class SdfMeshIrradiance {
     // how far the pushed point lies on the probe's side of its blocking planes. No answering probe means no measured
     // incoming light. It reads each probe's own cubes, which the filtered volume averages over its neighbours.
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low) {
+        var squared = (normal * normal);
+        var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
+        Span<float> cornerWeights = stackalloc float[8];
+        Span<(int X, int Y, int Z)> cornerCells = stackalloc (int X, int Y, int Z)[8];
+        var cornerProbes = new Corners();
+
+        Gather(cells: cornerCells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, layout: layout, low: low, normal: normal, point: point, readable: false);
+
+        var sky = 0f;
+        var bounce = Vector3.Zero;
+        var total = 0f;
+
+        for (var corner = 0; (corner < 8); corner++) {
+            if (cornerWeights[corner] <= 0f) { continue; }
+
+            var probe = cornerProbes[corner];
+
+            sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * cornerWeights[corner]);
+            bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * cornerWeights[corner]);
+            total += cornerWeights[corner];
+        }
+
+        if (total <= 0f) {
+            return Vector3.Zero;
+        }
+
+        return ((skyIrradiance * (sky / total)) + (bounce / total));
+    }
+    /// <summary>Reads the eight probes about a receiver as the views pass gathers them (<c>sdfMeshProbesAt</c>): each
+    /// corner's cell and its weight after front eligibility, separation and mutual shares, zero for a corner that does
+    /// not answer. The lookup clamps to the published window's boundary cells, the visibility tests the receiver pushed
+    /// <see cref="SdfMeshIrradianceProbe.NormalBias"/> metres off its surface, and the probes read are the ones views
+    /// read: a cell's last complete measurement.</summary>
+    /// <param name="point">The receiver's position, in world units.</param>
+    /// <param name="normal">The receiver's unit surface normal.</param>
+    /// <param name="cells">Receives the eight corners' cells, corner <c>c</c> at offset <c>(c &amp; 1, c &gt;&gt; 1 &amp; 1,
+    /// c &gt;&gt; 2)</c> from the lookup's first cell; at least eight long.</param>
+    /// <param name="weights">Receives the eight corners' weights; at least eight long.</param>
+    /// <returns><see langword="false"/> while the volume holds no window to read.</returns>
+    public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights) {
+        Layout layout;
+        (int X, int Y, int Z) low;
+
+        lock (m_gate) {
+            if ((m_lighting is null) || !m_windowValid) { return false; }
+            layout = m_layout;
+            low = m_low;
+        }
+
+        var probes = new Corners();
+
+        Gather(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: layout, low: low, normal: normal, point: point, readable: true);
+
+        return true;
+    }
+    // The eight probes about a receiver: each corner's cell, probe and weight after front eligibility, separation and
+    // mutual shares, zero where the corner does not answer. The bounce read gathers the probes the trace is landing
+    // (Current); a viewer's read gathers the ones views read (Readable).
+    private void Gather(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool readable, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes) {
         var pushed = (point + (normal * SdfMeshIrradianceProbe.NormalBias));
         var sample = Vector3.Clamp(
             value1: ((pushed / layout.Spacing) - new Vector3(value: 0.5f)),
@@ -1133,12 +1192,8 @@ public sealed class SdfMeshIrradiance {
         );
         var floor = new Vector3(x: MathF.Floor(x: sample.X), y: MathF.Floor(x: sample.Y), z: MathF.Floor(x: sample.Z));
         var fraction = (sample - floor);
-        var squared = (normal * normal);
-        var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
-        Span<float> cornerWeights = stackalloc float[8];
         Span<bool> cornerFront = stackalloc bool[8];
         Span<uint> cornerNeighbours = stackalloc uint[8];
-        var cornerProbes = new Corners();
         Span<bool> cornerHas = stackalloc bool[8];
         Span<float> cornerSuspect = stackalloc float[8];
         var anyFront = false;
@@ -1147,16 +1202,20 @@ public sealed class SdfMeshIrradiance {
             var offset = new Vector3(x: corner & 1, y: (corner >> 1) & 1, z: (corner >> 2) & 1);
             var cell = (((int)(floor.X + offset.X)), ((int)(floor.Y + offset.Y)), ((int)(floor.Z + offset.Z)));
 
+            cells[corner] = cell;
+            cornerWeights[corner] = 0f;
             if (
                 (cell.Item1 < low.X) || (cell.Item1 >= (low.X + layout.Dims.X)) ||
                 (cell.Item2 < low.Y) || (cell.Item2 >= (low.Y + layout.Dims.Y)) ||
                 (cell.Item3 < low.Z) || (cell.Item3 >= (low.Z + layout.Dims.Z)) ||
-                !m_cache.TryGetValue(key: cell, value: out var entry) || entry.Current.Invalid
+                !m_cache.TryGetValue(key: cell, value: out var entry)
             ) {
                 continue;
             }
 
-            var probe = entry.Current;
+            var probe = (readable ? Readable(probe: entry) : entry.Current);
+
+            if (probe.Invalid) { continue; }
 
             var weights = new Vector3(
                 x: ((offset.X > 0f) ? fraction.X : (1f - fraction.X)),
@@ -1187,26 +1246,6 @@ public sealed class SdfMeshIrradiance {
         }
         Separate(first: floor, neighbours: cornerNeighbours, probes: in cornerProbes, pushed: pushed, spacing: layout.Spacing, suspect: cornerSuspect, weights: cornerWeights);
         MutualShares(neighbours: cornerNeighbours, weights: cornerWeights);
-
-        var sky = 0f;
-        var bounce = Vector3.Zero;
-        var total = 0f;
-
-        for (var corner = 0; (corner < 8); corner++) {
-            if ((cornerWeights[corner] <= 0f) || !cornerHas[corner]) { continue; }
-
-            var probe = cornerProbes[corner];
-
-            sky += (Cube(cube: probe.Sky, normal: normal, squared: squared) * cornerWeights[corner]);
-            bounce += (Cube(cube: probe.Radiance, normal: normal, squared: squared) * cornerWeights[corner]);
-            total += cornerWeights[corner];
-        }
-
-        if (total <= 0f) {
-            return Vector3.Zero;
-        }
-
-        return ((skyIrradiance * (sky / total)) + (bounce / total));
     }
     // A probe's 26 rays are one line wide each, so a probe across a roof, floor or wall from the point still admits it
     // through the rays that cleared the blocker's edge or passed a doorway in it (its suspect share, PlaneVisibility).
@@ -1244,10 +1283,13 @@ public sealed class SdfMeshIrradiance {
     }
 
     /// <summary>Scales each of the eight answering probes' weights by the separation the other answering probes
-    /// supply. A separator's veto is weighted by how much of it survives the same test, read from the weights before
-    /// any veto, so a fully separated probe vetoes nothing and two probes that separate each other leave each other
-    /// standing; a probe that vetoes another fully is therefore unseparated itself, and the gather never empties.
-    /// KEEP IN SYNC with <c>sdfMeshProbeSeparate</c>.</summary>
+    /// supply. A separator's veto is weighted by its share of the answering probes' weight, at full strength from
+    /// <see cref="SdfMeshIrradianceProbe.SeparatorShare"/> of the total, so a probe entering the eight-corner set at a
+    /// cell boundary with no trilinear weight vetoes nothing and the gather is continuous across the lattice planes;
+    /// and by how much of it survives the same test, so a fully separated probe vetoes nothing and two probes that
+    /// separate each other leave each other standing. Both are read from the weights before any veto; a probe that
+    /// vetoes another fully is therefore unseparated itself, and the gather never empties. KEEP IN SYNC with
+    /// <c>sdfMeshProbeSeparate</c>.</summary>
     /// <param name="support">For each candidate probe <c>c</c> and separator <c>s</c>, at index <c>8 * c + s</c>: how
     /// far the receiver lies on the separator's side of the separator's first-hit plane toward the candidate, from one
     /// (the receiver lies across that blocker from the candidate) to zero (it lies past the blocker, on the candidate's
@@ -1255,16 +1297,24 @@ public sealed class SdfMeshIrradiance {
     /// <param name="suspect">Each probe's suspect share from <see cref="PlaneVisibility"/>.</param>
     /// <param name="weights">The eight weights after front eligibility; zero for each non-answering probe.</param>
     public static void Separate(ReadOnlySpan<float> support, ReadOnlySpan<float> suspect, Span<float> weights) {
+        Span<float> share = stackalloc float[8];
         Span<float> shares = stackalloc float[8];
         Span<float> separated = stackalloc float[8];
+        var total = 0f;
 
+        for (var corner = 0; (corner < 8); corner++) {
+            total += MathF.Max(x: 0f, y: weights[corner]);
+        }
+        for (var corner = 0; (corner < 8); corner++) {
+            share[corner] = ((total > 0f) ? Math.Clamp(max: 1f, min: 0f, value: (weights[corner] / (SdfMeshIrradianceProbe.SeparatorShare * total))) : 0f);
+        }
         for (var corner = 0; (corner < 8); corner++) {
             separated[corner] = 0f;
             if (weights[corner] <= 0f) { continue; }
 
             for (var other = 0; (other < 8); other++) {
                 if ((other == corner) || (weights[other] <= 0f)) { continue; }
-                separated[corner] = MathF.Max(x: separated[corner], y: (suspect[corner] * support[((8 * corner) + other)]));
+                separated[corner] = MathF.Max(x: separated[corner], y: ((share[other] * suspect[corner]) * support[((8 * corner) + other)]));
             }
         }
         for (var corner = 0; (corner < 8); corner++) {
@@ -1275,7 +1325,7 @@ public sealed class SdfMeshIrradiance {
 
             for (var other = 0; (other < 8); other++) {
                 if ((other == corner) || (weights[other] <= 0f)) { continue; }
-                veto = MathF.Max(x: veto, y: ((suspect[corner] * support[((8 * corner) + other)]) * (1f - separated[other])));
+                veto = MathF.Max(x: veto, y: (((share[other] * suspect[corner]) * support[((8 * corner) + other)]) * (1f - separated[other])));
             }
             shares[corner] = (1f - veto);
         }

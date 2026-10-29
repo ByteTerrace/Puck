@@ -185,11 +185,27 @@ tape records no reservation. A refused and retried reservation, an abort
 before the detach, an in-doubt restore and a reused body slot each replay tick
 for tick (`CrossingTapeOrderLawTests`).
 A queued transfer that means one traveller names it by that incarnation, never
-by its slot: transfers drained ahead of it can move the traveller on and refill
-the slot. `body.pose spawn:<id>` carrying a seat home
-(`WorldInstanceHost.TryEnqueuePoseHome`) reads the incarnation from the route's
-generation-addressed entity, and the drain finds the traveller wherever it then
-stands (`PoseHomeTransferLawTests`). A commit member's `WorldTransferArrival`
+by its slot: transfers drained ahead of it can move the traveller on, refill
+the slot, or stop and restart the instance it stood in. An incarnation is
+unique across instance lifetimes: a name `WorldInstanceHost.TryStart` starts
+again takes a lifetime-qualified authority identity (`row-a~1`, past every
+identity a row admitted there held), so a body the new lifetime seats at the
+same slot and generation never carries the incarnation a traveller from the old
+one still does. Every queued transfer pins the lifetime that queued it
+(`PendingTransfer.Source`) and its members' incarnations as queued
+(`Travellers`); the drain refuses by name a transfer whose lifetime stopped or
+whose slot now holds another body or none. `body.pose spawn:<id>` carrying a
+seat home (`WorldInstanceHost.TryEnqueuePoseHome`) reads the incarnation from
+the route's generation-addressed entity, and the drain finds the traveller
+wherever it then stands, refusing when no body or more than one carries it.
+Transfer ids are minted per source lifetime in enqueue order, but a follow or a
+non-atomic party's split mints and applies a newer id ahead of older queued
+ones, so duplicates are checked against the lifetime's drained ids
+(`WorldDrainedTransferIds`: a dense watermark that passes an id only once it
+drained, plus the drained ids above it), never a high-water mark. An emptied
+instance a queued transfer is bound for is not reaped until the drain after
+which nothing queued names it (`QueuedTransferInterleavingLawTests` enumerates
+these interleavings; `PoseHomeTransferLawTests`). A commit member's `WorldTransferArrival`
 says how it lands: `Spawn` (the destination's own spawn), `Mapped` (pose and
 motion carried, so the destination must declare its motion program) or `Posed`
 (standing at the pose on the destination's own program).

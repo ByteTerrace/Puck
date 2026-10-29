@@ -357,9 +357,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         // The original body is still there, still parked, still orphaned — the SAME identity now drives two bodies.
         Assert.True(condition: restoredNaive.Population.IsParked(index: PeerSlot));
     }
-    // Control 5 — restore the source row with NextTransferId reset: the next minted id collides with one this row
-    // already applied, and the drain refuses it by name rather than double-landing a second traveler under the
-    // reused id.
+    // Control 5 — restore the source row with NextTransferId reset: the restored drained ids still hold the id this
+    // row already applied, so the drain refuses a transfer reusing it by name rather than double-landing a second
+    // traveler under it, and the reset counter mints past it.
     [Fact]
     public void Control_ResetNextTransferId_CollidesWithAnAppliedId_RefusesByName() {
         var (host, rowA, rowB, machineId, stateRoot) = HostRoundtripFixture.BuildCommittedScenario();
@@ -378,9 +378,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
             expected: 1UL,
             actual: checkpointA.HostRow.NextTransferId
         );
-        Assert.Contains(
+        Assert.Equal(
             expected: 0UL,
-            collection: checkpointA.HostRow.AppliedTransferIds
+            actual: checkpointA.HostRow.AppliedTransferHighWater
         );
 
         var corruptedA = checkpointA with {
@@ -414,6 +414,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
             _ = restoredHost.EnqueueTransfer(
                 actingPrincipal: Principal.Console,
                 destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
+                explicitTransferId: 0UL,
                 scope: WorldInstanceHost.TransferScope.Body,
                 sourceInstance: "row-a",
                 sourceSlot: 1
@@ -430,6 +431,16 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         );
         // The body never moved: refused before any detach, exactly like an ordinary already-applied replay.
         Assert.True(condition: restoredA.Server.Population.IsActive(index: 1));
+        Assert.NotEqual(
+            expected: 0UL,
+            actual: restoredHost.EnqueueTransfer(
+                actingPrincipal: Principal.Console,
+                destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
+                scope: WorldInstanceHost.TransferScope.Body,
+                sourceInstance: "row-a",
+                sourceSlot: 1
+            )
+        );
     }
     // Control 6 — restore with the in-doubt entry dropped: the reservation is never asked to resolve, so it just
     // sits Reserved at the destination (leaked) while the body is nowhere active on either restored row (lost).

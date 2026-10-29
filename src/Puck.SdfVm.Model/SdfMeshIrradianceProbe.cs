@@ -29,6 +29,11 @@ public static class SdfMeshIrradianceProbe {
     /// <summary>The share of the other answering probes' weight a probe must see to keep all of its weight
     /// (<see cref="MutualLow"/>).</summary>
     public const float MutualHigh = 0.75f;
+    /// <summary>The share of the answering probes' total weight at which a separating probe's veto reaches full
+    /// strength: an eighth, an equal corner's share at a cell's centre. A lighter separator vetoes by its share of
+    /// that, and is separated by others the same way, so a probe entering the eight-corner set at a cell boundary with
+    /// no trilinear weight vetoes nothing and the gather is continuous across the lattice planes.</summary>
+    public const float SeparatorShare = 0.125f;
     /// <summary>The first of the <see cref="LightWords"/> words holding the probe's light visibility: bit <c>i</c> of
     /// word <c>LightsWord + i / 32</c> is set when the probe's centre sees light <c>i</c> of the lights table.</summary>
     public const int LightsWord = 13;

@@ -274,16 +274,7 @@ public sealed partial class WorldInstanceHost {
             val1: row.NextTransferId,
             val2: checked((record.TransferId + 1UL))
         );
-        m_appliedTransferHighWater[row.Name] = (m_appliedTransferHighWater.TryGetValue(
-            key: row.Name,
-            value: out var highWater
-        )
-            ? Math.Max(
-                val1: highWater,
-                val2: record.TransferId
-            )
-            : record.TransferId);
-        _ = m_appliedTransferIds.Add(item: (row.Name, record.TransferId));
+        row.DrainedTransfers.DrainThrough(transferId: record.TransferId);
     }
     private void RedoSettlement(WorldInstance row, WorldCrossingRecord.Settlement settlement) {
         var index = m_inDoubtTransfers.FindIndex(match: pending => (string.Equals(

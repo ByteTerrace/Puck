@@ -231,7 +231,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     public bool AnyScreenOpEverApplied { get; private set; }
     /// <summary>Gets the namespace used by durable entity addresses emitted by this authority. A federated
     /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>
-    /// cannot publish colliding addresses; a loopback-only authority uses its process-local instance identity.</summary>
+    /// cannot publish colliding addresses; a loopback-only authority uses its process-local instance identity, or the
+    /// lifetime-qualified identity its host started it under when the name ran before.</summary>
     public string AuthorityIdentity { get; }
     /// <summary>Gets the derived-face screen slots this instance's boot document reserved. The presentation binder
     /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may lower
@@ -498,8 +499,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty, admission or machine
     /// preparation refuses, or the supplied admission names a different definition or machine catalog.</exception>
     /// <param name="landingRefusal">Optional transfer admission policy fixed at composition; null admits each reserved member.</param>
+    /// <param name="authorityIdentity">The namespace this authority's entity addresses are minted under when the
+    /// document names no <c>host.authority</c>, or <see langword="null"/> for <paramref name="instanceIdentity"/>. A
+    /// host starting a name again passes a fresh one, so the incarnations of the bodies the new lifetime seats never
+    /// equal an incarnation the earlier lifetime minted; a replay or history shadow passes the live authority's.</param>
     public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null,
-        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null) {
+        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null, string? authorityIdentity = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
@@ -537,7 +542,9 @@ public sealed partial class WorldServer : IWorldServerHost {
         InstanceIdentity = instanceIdentity;
         AuthorityIdentity = ((definition.Host.Authority is { Length: > 0 } authority)
             ? authority
-            : instanceIdentity
+            : ((authorityIdentity is { Length: > 0 } lifetime)
+                ? lifetime
+                : instanceIdentity)
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         ClockSeeds = WorldClockAnchors.Seeds(definition: definition);
