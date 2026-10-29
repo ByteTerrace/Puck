@@ -513,6 +513,9 @@ simulation thread and its snapshot handoff, then build it.
 Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
 facing and reversal items, then a sitting.
 
+- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible engine defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). The wheel keeps stepping the play wheel's rings while that wheel is open. Today the bindable mouse surface is `mouse.left`, `mouse.right`, `mouse.button1/2` and `mouse.motion`: the wheel as a camera input, the middle button and the side buttons need adding to the device input path and its names.
+- A dash for the Moth (the owner's request): a short, nicely animated burst along the move direction (or facing when idle), bound to the mouse's west side button (back, `XButton1`) and a pad button, with a cooldown, a rig animation (lean, trail or thruster flare from the Moth's back thrusters) and deterministic simulation (fixed-point impulse, input from the command snapshot). Rule 7: build it on the existing locomotion and rig drivers, not beside them.
+
 - Make the debug world's dual-stick action play fluid. In: the seat camera
   presents its look at the fraction the body is drawn at, so camera and steered
   body turn together between 30 Hz ticks; `ComputePlanarTargetVelocity` takes
