@@ -13,7 +13,7 @@ public static partial class TestCommand {
             var shape = (((path == world.Path) || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".world.json"))
                 ? Puck.World.Server.WorldPersistence.ScenarioBootShape(json: bytes)
                 : Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
-            var name = Path.GetRelativePath(relativeTo: Path.GetDirectoryName(path: world.Path)!, path: path).Replace('\\', '/');
+            var name = Path.GetRelativePath(relativeTo: Path.GetDirectoryName(path: world.Path)!, path: path).Replace(newChar: '/', oldChar: '\\');
 
             return $"{name.Length}:{name}:{shape}";
         })));

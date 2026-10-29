@@ -55,7 +55,7 @@ internal sealed class WorldTestBatch {
 
         batch.m_workingDirectory = Path.GetFullPath(path: Path.Combine(path1: Path.GetDirectoryName(path: legs[0].World)!, path2: "..",
             path3: ("worker-" + Path.GetFileName(path: Path.GetDirectoryName(path: legs[0].Directory)))));
-        var stateDirectory = batch.m_workingDirectory + "-state";
+        var stateDirectory = (batch.m_workingDirectory + "-state");
 
         if (Directory.Exists(path: stateDirectory)) { Directory.Delete(stateDirectory, recursive: true); }
         Console.SetOut(newOut: TextWriter.Synchronized(writer: output));
@@ -118,11 +118,13 @@ internal sealed class WorldTestBatch {
         var leg = m_legs[m_index];
 
         Directory.CreateDirectory(path: m_workingDirectory);
-        foreach (var file in Directory.EnumerateFiles(path: m_workingDirectory, searchPattern: "*", searchOption: SearchOption.AllDirectories)) { File.Delete(path: file); }
-        var sourceDirectory = Path.GetDirectoryName(leg.World)!;
-        foreach (var file in Directory.EnumerateFiles(path: sourceDirectory, searchPattern: "*", searchOption: SearchOption.AllDirectories)) {
-            var target = Path.Combine(m_workingDirectory, Path.GetRelativePath(sourceDirectory, file));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        foreach (var file in Directory.EnumerateFiles(path: m_workingDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*")) { File.Delete(path: file); }
+        var sourceDirectory = Path.GetDirectoryName(path: leg.World)!;
+
+        foreach (var file in Directory.EnumerateFiles(path: sourceDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+            var target = Path.Combine(path1: m_workingDirectory, path2: Path.GetRelativePath(path: file, relativeTo: sourceDirectory));
+
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
             File.Copy(file, target, overwrite: true);
         }
         Directory.CreateDirectory(path: leg.Directory);
@@ -189,7 +191,7 @@ internal sealed class WorldTestBatch {
 
                 try {
                     Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
-                    divergence = probe.Verify(tick => {
+                    divergence = probe.Verify(progress: tick => {
                         if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick replay {name} {tick}]"); }
                     });
                 } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }

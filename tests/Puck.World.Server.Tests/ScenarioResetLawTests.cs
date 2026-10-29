@@ -7,28 +7,29 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>A scenario's terminal tape and input mask never cross the next scenario's boot boundary.</summary>
 public sealed class ScenarioResetLawTests {
-    [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    [Theory]
     public void ACompanionProbeKeepsCapturingAfterTheOperatorRecordingEnds(bool cancel) {
         using var run = new WorldHistoryHarness(on: false);
         using var companion = HostRow.Build("companion");
-        Assert.True(run.Tape.TryBeginRecording("short", out var reason), reason);
-        Assert.True(run.Tape.TryRecordCompanion(companion.Instance, out reason), reason);
-        using var probe = run.Tape.ObserveReplay(companion.Instance);
+
+        Assert.True(condition: run.Tape.TryBeginRecording(name: "short", refusal: out var reason), userMessage: reason);
+        Assert.True(condition: run.Tape.TryRecordCompanion(companion.Instance, out reason), userMessage: reason);
+        using var probe = run.Tape.ObserveReplay(instance: companion.Instance);
         var tape = companion.Instance.Tape!;
-        run.Steps(1);
-        companion.Server.Advance(Fixtures.StepTicks);
+
+        run.Steps(count: 1);
+        companion.Server.Advance(stepTicks: Fixtures.StepTicks);
         tape.NoteTick();
 
         if (cancel) { _ = run.Tape.CancelRecording(); } else { _ = run.Tape.StopRecording(); }
         Assert.Same(tape, companion.Instance.Tape);
-        companion.Server.Advance(Fixtures.StepTicks);
+        companion.Server.Advance(stepTicks: Fixtures.StepTicks);
         tape.NoteTick();
         probe.Dispose();
         Assert.Equal(-1, probe.Verify());
     }
-
     [Fact]
     public void AProbeStartingAfterATransferDoesNotReplayTheAlreadyAppliedDeparture() {
         using var directory = new TemporaryDirectory(prefix: "puck-probe-transfer-");
