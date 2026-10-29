@@ -146,6 +146,8 @@ fallback in the same change, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+- [medium] `SdfShadowVisibilityDeviceLawTests.DirectXPreserves…` and `VulkanPreserves…` fail on `lead/catch-up` with 59530 against an expected 59787. The likely cause is the bright-lines change (an unqueried shadow slot now `SDF_SHADOW_UNQUERIED` 255 and the views filter averaging only queried pixels, commits `e27173ef1` and `1c3509778`): decide whether the law's expectation should follow the corrected visibility (re-derive it from the law's own scene, never by copying the new number) or the change broke a case the law pins. A GPU leg. (from: c7-findings lane)
+
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the
@@ -781,6 +783,8 @@ Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
 
+- [medium] `puck_exec` returns every line's full answer, so `world.affordances` and `world.grants` overflow an agent's token limit. Add an output filter to the tool (selected `lines` or `fields`, a byte cap with an explicit truncation mark) so the agents' own instrument stays usable on large answers. (from: c7-findings lane)
+
 - [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
 
 - An invalid wait argument on a pending operator MCP start caches the argument
@@ -853,6 +857,8 @@ hang, then the pre-`main` language findings.
 Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
+
+- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
 - Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
 
