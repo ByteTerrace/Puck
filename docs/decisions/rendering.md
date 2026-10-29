@@ -1064,18 +1064,20 @@ plane tests use the actual receiver position. This extends their light only
 as far as their visibility supports, without a transition to unoccluded sky.
 Each ray retains its first hit. Separation closes admissions through rays that
 clear a roof edge or a doorway: an answering probe's blocked neighbour
-ray supplies a separating plane. This still extends the sampled blocker as a
-half-space, and can over-darken beside finite occluders; that review finding
-remains open. A four-ray footprint at the receiver-to-probe crossing reopened
-the teal roof and was removed. An initial pass measures each probe's separation;
-the final pass weights a separator's veto by its survival of that original pass
-and the candidate's suspect share. Those shares use perpendicular distance to the hit
-plane, so a ray meeting the receiver's own surface supplies evidence even at
-grazing angles. Front eligibility precedes separation, all shares read unchanged
-weights, and a gather retains its original weights if separation would empty it.
-Both passes use unchanged weights, so mutually separated probes cannot veto each
-other. Equal surface confidence does not disable a room-side separator: every
-probe may be uncertain about a moving body's untraced surface. The CPU exposure meter traces visibility from the camera
+ray supplies a separating plane. That plane extends the sampled blocker as a
+half-space, so separation can over-darken beside a finite occluder
+([open items](../plans/open-items.md#review-findings)). An initial pass
+measures each probe's separation; the final pass weights a separator's veto by
+its survival of that pass and the candidate's suspect share, so a fully
+separated probe vetoes nothing, two probes that separate each other leave each
+other standing, and a probe that vetoes another fully is unseparated itself,
+which is why the gather never empties. Both passes read the weights before any
+veto, so the result does not depend on corner order. A suspect share uses
+perpendicular distance to the hit plane, so a ray meeting the receiver's own
+surface supplies evidence even at grazing angles. Front eligibility precedes
+separation. Equal surface confidence does not disable a room-side separator:
+every probe may be uncertain about a moving body's untraced surface. The CPU
+exposure meter traces visibility from the camera
 to each probe so a thin partition cannot import another room's meter reading.
 A probe also gives way to the other probes about a point in
 proportion to how few of them it sees, by the neighbour sight lines the trace
