@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>The seat-owned camera read-back. Camera yaw and pitch participate in camera-relative simulation input,
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
-internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
+internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings, WorldWheelFeed? wheel = null) : ICommandModule {
     // The keys the default reading keeps: where the camera is and looks, how, and what the clearance did to the view.
     private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "mode", "fade", "clearance"];
 
@@ -126,6 +126,12 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         Add("maxPitch", $"{float.RadiansToDegrees(radians: control.MaxPitch):0.##}");
         Add("yaw", $"{float.RadiansToDegrees(radians: (state?.Yaw ?? 0f)):0.##}");
         Add("pitch", $"{float.RadiansToDegrees(radians: (state?.Pitch ?? 0f)):0.##}");
+        Add("boomDistance", $"{state?.BoomDistance(definition.Views) ?? 0f:0.###}");
+        if (control.Boom is { } boom) {
+            Add("boomMinimum", $"{boom.Minimum:0.###}");
+            Add("boomMaximum", $"{boom.Maximum:0.###}");
+            Add("boomStep", $"{boom.Step:0.###}");
+        }
         Add("freeLook", $"{Flag(seat?.FreeLooking ?? false)}");
         Add("orbit", $"{Flag(seat?.Orbiting ?? false)}");
         Add("steer", $"{Flag(seat?.PointerSteering ?? false)}");
@@ -152,6 +158,36 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.boom",
+            description: "Moves the seat's orbit distance from an Axis2D source's vertical input, within views.seatControl.boom. An open wheel owns scroll input first. The existing boom dynamics ease the eye.",
+            valueKind: CommandValueKind.Axis2D,
+            handler: (context, args) => {
+                if (context.Origin != CommandOrigin.Binding) {
+                    return CommandResult.Error(output: "[player.camera.boom: requires an Axis2D binding]");
+                }
+                if (wheel?.IsOpen(context.Slot) == true) { return CommandResult.None; }
+                var seat = roster.Seat(slot: context.Slot);
+                if (seat is null) { return CommandResult.Error(output: "[player.camera.boom: no occupied seat]"); }
+                seat.View.MoveBoom(context.Value.AsAxis2D.Y, instances.ResolveRoutedDefinition(context.Slot).Views);
+                return CommandResult.None;
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.reset",
+            description: "Resets this seat's live orbit angles and distance to its authored rig defaults.",
+            handler: (context, args) => {
+                if (context.Phase is CommandPhase.Completed or CommandPhase.Canceled) { return CommandResult.None; }
+                var seat = roster.Seat(slot: context.Slot);
+                if (seat is null) { return CommandResult.Error(output: "[player.camera.reset: no occupied seat]"); }
+                seat.View.Recenter();
+                return new CommandResult(Output: Describe(context.Slot));
+            },
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "view.recenter",

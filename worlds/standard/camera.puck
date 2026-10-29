@@ -1,0 +1,20 @@
+// Shared camera feel. A world or avatar may refine these rows by id.
+seatDefaults {
+  seatCameraFeel {
+    invertPitch: false
+    invertYaw: false
+    pitchSensitivity: 0.001
+    stickLookRate: 3.5
+    yawSensitivity: 0.001
+  }
+}
+
+dynamics [
+  { name: "camera-boom", f: 4, r: 0, zeta: 1 }
+]
+
+views {
+  seatControl {
+    boom { minimum: 1.5, maximum: 12, step: 0.6 }
+  }
+}

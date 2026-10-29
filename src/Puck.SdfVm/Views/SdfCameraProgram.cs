@@ -193,7 +193,10 @@ public sealed record SdfCameraProgramSet(IReadOnlyList<SdfCameraProgram> Program
 /// and any envelope clamp are the host's: what arrives here is already the composed angle.</summary>
 /// <param name="Yaw">The yaw delta, radians.</param>
 /// <param name="Pitch">The pitch delta, radians.</param>
-public readonly record struct SdfCameraLook(float Yaw, float Pitch);
+public readonly record struct SdfCameraLook(float Yaw, float Pitch) {
+    /// <summary>An optional live distance for interactive orbit operations; null retains their authored distance.</summary>
+    public float? Distance { get; init; }
+}
 /// <summary>One frame's resolved camera.</summary>
 /// <param name="Eye">The eye position.</param>
 /// <param name="Target">The look-at target.</param>
@@ -358,7 +361,7 @@ public static class SdfCameraProgramEvaluator {
                     var pivot = (subject.Position + orbit.PivotOffset);
 
                     eye = (pivot + OrbitRig.Offset(
-                        distance: orbit.Distance.Resolve(scalars: scalars),
+                        distance: (look.Distance ?? orbit.Distance.Resolve(scalars: scalars)),
                         pitch: pitch,
                         yaw: (orbit.Yaw.Resolve(scalars: scalars) + look.Yaw)
                     ));
