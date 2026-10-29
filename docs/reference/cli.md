@@ -1915,9 +1915,12 @@ processes, container host boots, world runs, and exported authority ticks (exclu
 the extra shutdown ticks). Executable build reuse is reported separately.
 
 Each worker boots through the normal World composition root and restores
-the complete boot checkpoint before each compatible scenario. Only its schedule
-is replaced; differences in state, rules or other boot configuration, including
-staged companions and assets, start a fresh native host in that worker.
+the complete boot checkpoint before each compatible scenario, replacing its
+document-state seeds, rules and schedule. The new arena carries session lanes
+from the pristine checkpoint, never from the preceding scenario. Composition
+differences in the root or any staged companion, or changed asset bytes, start a
+fresh native host. Body-register and field-lattice declarations and cells that
+choose the boot inhabitant census belong to that composition.
 An uncapturable boot runs each scenario in its own native host;
 reproduction still requires a capturable starting checkpoint.
 Native dependency validation, singleton identity in child scopes and caller ownership

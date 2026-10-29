@@ -39,8 +39,8 @@ public sealed partial class WorldPersistence {
     // scenario seeds, except cells that choose the boot census: changing those requires a different population.
     private static void WriteStateComposition(Utf8JsonWriter writer, JsonElement state, JsonElement root) {
         var census = new HashSet<string>(StringComparer.Ordinal);
-        if (root.TryGetProperty("placements", out var placements)) {
-            foreach (var placement in placements.EnumerateArray()) {
+        if (root.TryGetProperty("placements", out var placements) && placements.TryGetProperty("rows", out var rows)) {
+            foreach (var placement in rows.EnumerateArray()) {
                 if (placement.TryGetProperty("inhabit", out var inhabit) && inhabit.ValueKind == JsonValueKind.Object &&
                     inhabit.TryGetProperty("count", out var count) && count.ValueKind == JsonValueKind.Object &&
                     count.TryGetProperty("row", out var row) && row.GetString() is { } name) { census.Add(name); }
