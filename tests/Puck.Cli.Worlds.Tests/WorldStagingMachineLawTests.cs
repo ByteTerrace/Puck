@@ -79,8 +79,8 @@ public sealed class WorldStagingMachineLawTests {
 
         files.WriteText(name: "elsewhere/cartridges/one.cgb", text: "one");
         files.WriteText(name: "elsewhere/cartridges/two.cgb", text: "two");
-        var present = files.PathOf(name: "elsewhere/cartridges").Replace(oldChar: '\\', newChar: '/');
-        var absent = files.PathOf(name: "elsewhere/absent").Replace(oldChar: '\\', newChar: '/');
+        var present = files.PathOf(name: "elsewhere/cartridges").Replace(newChar: '/', oldChar: '\\');
+        var absent = files.PathOf(name: "elsewhere/absent").Replace(newChar: '/', oldChar: '\\');
         var world = ((JsonObject)JsonNode.Parse(json: $$"""
             {
               "schema": "{{WorldDefinition.SchemaVersion}}",
@@ -115,9 +115,27 @@ public sealed class WorldStagingMachineLawTests {
         var folders = JsonNode.Parse(utf8Json: File.ReadAllBytes(path: staged))!["machines"]![0]!["contentFolders"]!.AsArray();
         var stagedDirectory = Path.GetDirectoryName(path: staged)!;
 
-        Assert.Equal(expected: ["content/0-0", "content/0-1"], actual: folders.Select(selector: static folder => folder!.GetValue<string>()));
-        Assert.False(condition: Directory.Exists(path: Path.Combine(path1: stagedDirectory, path2: "content/0-0")));
-        Assert.Equal(expected: "two", actual: File.ReadAllText(path: Path.Combine(path1: stagedDirectory, path2: "content/0-1/two.cgb")));
+        Assert.Equal(expected: ["content/gallery.world.json/0-0", "content/gallery.world.json/0-1"], actual: folders.Select(selector: static folder => folder!.GetValue<string>()));
+        Assert.False(condition: Directory.Exists(path: Path.Combine(path1: stagedDirectory, path2: folders[0]!.GetValue<string>())));
+        Assert.Equal(expected: "two", actual: File.ReadAllText(path: Path.Combine(path1: stagedDirectory, path2: folders[1]!.GetValue<string>(), path3: "two.cgb")));
+
+        // Another world uses the same slot for different content. Neither its default nor its files may merge.
+        files.WriteText(name: "elsewhere/other/folder.json", text: "other default");
+        world["machines"]![0]!["contentFolders"] = new JsonArray(present, files.PathOf(name: "elsewhere/other").Replace(newChar: '/', oldChar: '\\'));
+        Assert.True(condition: WorldStaging.TryWrite(world, "other", files.PathOf(name: "source"), stagedDirectory,
+            CliWorldVocabulary.EnsureInstalled(), out var other, out reason), userMessage: reason);
+        var otherFolders = JsonNode.Parse(File.ReadAllBytes(path: other))!["machines"]![0]!["contentFolders"]!.AsArray();
+
+        Assert.NotEqual(folders[0]!.GetValue<string>(), otherFolders[0]!.GetValue<string>());
+        Assert.False(condition: Directory.Exists(path: Path.Combine(path1: stagedDirectory, path2: folders[0]!.GetValue<string>())));
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: stagedDirectory, path2: folders[1]!.GetValue<string>(), path3: "folder.json")));
+        Assert.Equal("other default", File.ReadAllText(path: Path.Combine(path1: stagedDirectory, path2: otherFolders[1]!.GetValue<string>(), path3: "folder.json")));
+
+        // Restaging the same world with a now-absent source clears the old slot too.
+        world["machines"]![0]!["contentFolders"] = new JsonArray(absent, absent);
+        Assert.True(condition: WorldStaging.TryWrite(world, "other", files.PathOf(name: "source"), stagedDirectory,
+            CliWorldVocabulary.EnsureInstalled(), out _, out reason), userMessage: reason);
+        Assert.All(otherFolders, folder => Assert.False(condition: Directory.Exists(path: Path.Combine(path1: stagedDirectory, path2: folder!.GetValue<string>()))));
     }
     // THE LAW: a cabinet's content path resolves beside the staged document to the file it named beside its source. The
     // red leg is the path as authored, which names nothing beside the staged document.

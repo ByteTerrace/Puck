@@ -63,27 +63,41 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   probe just above a thin roof whose horizontal rays graze past it, or beside a
   doorway, admits the room's upper walls in jagged, plane-cut patches, and the
   under-floor probe draws a sawtooth along the wall–floor junction. The
-  separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`) uses
-  only answering probes, after front eligibility. Where A cannot see B, A's
-  neighbour plane tests the receiver's side. It still has no finite blocker
-  extent: the finite-occluder part of the review remains open. Blending four
-  rays at the receiver-to-B plane crossing, even excluding tangent rays,
-  reopened the high teal roof and sky light on the Moth; that experiment was
-  removed after its retry. The retained neighbour-plane test closes the high
-  roof again in settled Direct3D 12 and Vulkan captures. Do not teach the removed
-  footprint as a verified bound. Compute the original
-  separation scores first, then weight A's veto by how much of A survives that
-  pass, and by B's suspect share. Fully separated probes cannot veto each other.
-  Equal surface confidence alone must not disable separation: a dynamic body has
-  no trace surface, so every probe may be uncertain and a room-side probe must
-  still reject sky light from across the wall. Compute both passes from unchanged
-  weights, and keep the original gather if
-  none would survive. `PlaneVisibility`'s `suspect` blends open rays and the
-  perpendicular gap from receiver to hit plane, fading from a quarter to three
-  quarters of the spacing. Never subtract Euclidean receiver distance from a
-  different ray's length: oblique and nearly tangent rays hitting the receiver's
-  own surface must still supply evidence. A stair flight between probes should
-  not separate them from the walls beside it.
+  separation rule (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`)
+  closes them with the other answering probes' evidence, after front
+  eligibility: where answering probe A cannot see B (their neighbour bit is
+  clear), A's first-hit plane toward B is the blocker between them, and a
+  receiver on A's side of it takes B's light only by the share B's own rays
+  did not see for themselves. That share is `PlaneVisibility`'s `suspect`: a
+  ray that reached open space, or whose hit plane lies more than a quarter of
+  the spacing beyond the receiver (fully suspect at three quarters), admits it
+  only for want of a hit. The gap is measured perpendicular to the plane, so
+  oblique and nearly tangent rays hitting the receiver's own surface still
+  count as evidence; never subtract the receiver's Euclidean distance from a
+  different ray's length. A's veto is weighted by how much of A survives the
+  same test, read from the weights before any veto, so a fully separated probe
+  vetoes nothing, two probes that separate each other stand, and the gather
+  never empties. Equal surface confidence must not disable separation: a
+  dynamic body has no trace surface, so every probe about it may be uncertain
+  and a room-side probe must still reject sky light from across the wall. A
+  stair flight between probes separates neither from the walls beside it,
+  because their rays met those walls. Two limits remain
+  ([open items](../../../../docs/plans/open-items.md#review-findings)): the
+  separating plane is the blocker's whole half-space, with no finite extent,
+  and a separator vetoes at full strength whatever its trilinear weight, so a
+  separator entering the eight-corner set at a cell boundary can step the
+  result along that lattice plane.
+- Judge every gather change at the `gather-*` stops of the sweep tour
+  (`worlds/debug/sweep.json`), in `indirect` and the final image: the
+  Wonderland room's south doorway and its floor under the roof edge, the
+  painting wing and board game room doorways, the Moth beside a jamb and
+  beside a plinth, and the stairwell's flight B. The lattice centres lie at
+  odd metres (2 m spacing), so the gallery partitions at x = 51 and the
+  Wonderland room's west wall face at x = 1 lie on lattice planes: a doorway in
+  such a wall puts no far-room probe within a cell of the near room's floor,
+  which makes the gallery doorway stops controls, while the Wonderland south
+  doorway (wall at z 23.7 to 24, outdoor probe at z = 23) is the doorway where
+  a far probe's ray can land on the near floor through the opening.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
@@ -185,8 +199,9 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 | SPIN roof junction, level 3 | `18 13.57 18 0 0 0` | `23 15.5 16.5 23 17.7 21` |
 | COAT, level 2 | `18 9.07 22 0 0 0` | `25.6 11.2 23 25.6 10.3 25` |
 
-The SPHERE step showed in `indirect` as a soft line along the exhibit's face
-plane; use it to check finite separation footprints. The floor is shadowed in
+The SPHERE step shows in `indirect` as a soft line along the exhibit's face
+plane (the `finding-sphere-step` tour stop); use it to check finite separation
+footprints. The floor is shadowed in
 `shadow`; do not attribute an indirect-view line to sun cascades. The 26 planes
 remain coarse support. Separation never empties an answering gather; a receiver
 the initial visibility tests reject everywhere still has no measured light.
