@@ -696,11 +696,13 @@ unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
   capture seconds, admission tick, event identity, activation and paired hold;
   text prints its Unicode scalar. A switch prints its commit tick/epoch,
   selected tuples, consumed activations, cancellations and kept hold origins.
-  Older image-only producers still show changed composed and held channels.
-  `tick T hash=0x… | <entries; …> | p1 forward=1 strafe=-0.5`
-  — seats are `p1..p4`, everything else `body:N`; only the CHANGED channels
-  print, with the new value. The edge baseline is walked from tick 0 even
-  when `<from>` clamps the printed range. `--all` prints every tick.
+  A tape segment (`body.fly`) prints the lanes it drives by bank address,
+  `segment p1 2s [@3=1 @35=0.5] by console`: its raw bank belongs to the mapping
+  of the tick that consumes it, so no name from a fixed or later table labels it.
+  `tick T hash=0x… | <entries; …> | input p1 …`
+  — seats are `p1..p4`, everything else `body:N`; only accepted events, switches
+  and displacement print. The walk starts from tick 0 even when `<from>` clamps
+  the printed range. `--all` prints every tick.
 - Entries print kind-first with the salient payload (`press p1 forward=1
   hold=2s by console`, `grant drive body:0 -> seat2 by console`, `mutation
   UpsertStateRow by console accepted`, `rebuild load '…' sha256-64/… by

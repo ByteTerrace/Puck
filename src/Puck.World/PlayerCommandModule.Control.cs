@@ -117,6 +117,7 @@ internal sealed partial class PlayerCommandModule {
 
         if (TryRoutedSeatQuery(
             args: in args,
+            caller: context.Principal,
             query: static index => new WorldQuery.PlayerChannels(Index: index),
             result: out var routed
         )) {
@@ -135,19 +136,13 @@ internal sealed partial class PlayerCommandModule {
 
         // A query verb, exactly like body.where: the channel read-back IS the answer, so it always echoes — even
         // under wire.ack quiet — and its verdict rides through as IsError so a miss reaches wire.errors. The
-        // completion fires INLINE over loopback; the result formats from it, never a post-submit live read.
-        var result = default(CommandResult);
-
-        m_link.Query(
-            query: new WorldQuery.PlayerChannels(Index: index),
-            completion: answer => {
-                result = new CommandResult(Output: answer.Text) {
-                    IsError = answer.Refused,
-                };
-            }
-        );
-
-        return result;
+        // completion fires INLINE over loopback; the result formats from it, never a post-submit live read. It
+        // crosses the asking principal's Observe check over the body.
+        return WorldInputReadBack.Result(answer: WorldInputReadBack.Ask(
+            caller: context.Principal,
+            link: m_link,
+            query: new WorldQuery.PlayerChannels(Index: index)
+        ));
     }
     private CommandResult ControlHandler(CommandContext context, WireArgs args) {
         // Token 0 is the MODE only when it names one; otherwise the whole (0- or 1-token) tail is just the body index

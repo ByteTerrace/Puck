@@ -531,6 +531,8 @@ public sealed partial class WorldRuleHost {
             Text: $"[body.channels: body:{channels.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
+            WorldQuery.PlayerInput input => new QueryAnswer(Text: Host.Input.DescribeBody(body: input.Index)),
+            WorldQuery.PlayerAffordances affordances => new QueryAnswer(Text: Host.Input.DescribeAffordanceMembers(body: affordances.Index)),
             WorldQuery.PlayerState state when (Host.Body(index: state.Index) is { } body) => new QueryAnswer(Text: $"[body.state: body:{state.Index} identity={(body.Profile?.Id ?? "none")} {body.DescribeActionState()} outputs={Host.DescribeDurableOutputs(entityIndex: state.Index)} writeback={Host.DescribeDocumentReceipt(ownerId: body.Profile?.Id)}]"),
             WorldQuery.PlayerState state => new QueryAnswer(
             Text: $"[body.state: body:{state.Index} is not an active population entry — see world.population]",

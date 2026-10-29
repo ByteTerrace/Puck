@@ -873,8 +873,11 @@ causal record, including while that diagnostic view is off or another is active.
 Run `world.debug-view report` first if no findings have been collected.
 `primary` resolves to the first seat's current rendered instance (`world`
 before presentation); an explicit render instance name is also accepted.
-The coordinate form is `world.view.pick <view-or-instance> <x> <y>`,
-with normalized coordinates. In a text session it holds the call until a
+The coordinate form is `world.view.pick [<view-or-instance>] <x> <y>`,
+with normalized coordinates; without a view it addresses the presented world
+view (what `primary` names), so `world.view.pick 0.5 0.15` asks what lies at a
+pixel of the view on screen. `world.view.panes` names that view as `view
+instance:<name>` when one view covers the display. In a text session it holds the call until a
 rendered frame answers (a paused World still renders), then answers in place of
 `pending`; the call's answer deadline ends the hold with a line saying the pick
 went unanswered. The answer names what the pixel's mesh or program

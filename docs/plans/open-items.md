@@ -146,6 +146,8 @@ fallback in the same change, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+- [medium] `SdfShadowVisibilityDeviceLawTests.DirectXPreserves…` and `VulkanPreserves…` fail on `lead/catch-up` with 59530 against an expected 59787. The likely cause is the bright-lines change (an unqueried shadow slot now `SDF_SHADOW_UNQUERIED` 255 and the views filter averaging only queried pixels, commits `e27173ef1` and `1c3509778`): decide whether the law's expectation should follow the corrected visibility (re-derive it from the law's own scene, never by copying the new number) or the change broke a case the law pins. A GPU leg. (from: c7-findings lane)
+
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the
@@ -447,16 +449,11 @@ Owner: debug-world tools lane (specialist) · medium · Next: the pick
 `panes`, and answers under `world.rate pause`), qualified in one windowed pass;
 then the diagnostics' windowed checks, then the three developer exhibits.
 
-- [medium] Naming what is under a pixel fails on the owner's windowed World:
-  `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and
-  `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object
-  is (`primary` resolves to the seat's render instance,
-  `src/Puck.World/WorldViewCommandModule.Picking.cs:48`; `main` names nothing).
-  Make pick address the presented world view by default and list it in
-  `panes`. Under `world.rate pause` the pick has stayed pending with no answer;
+- [medium] Under `world.rate pause` the pick has stayed pending with no answer;
   the hold now claims a paused World answers, bounded by the call's deadline
-  (`Picking.cs:73-100`), which only a windowed run shows. (from: owner
-  walkthrough)
+  (`Picking.cs`), which only a windowed run shows. The default view and the
+  `panes` listing are done (`world.view.pick <x> <y>`, `view instance:<name>`);
+  the paused run is owed. (from: owner walkthrough)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -781,6 +778,10 @@ Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
 
+- [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The lease-rotation change counts an undeletable ticket as live on the new CLI; check the start path (the MCP adapter's lease delegate) handles the same error rather than failing the start. Also from the same lane: `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
+
+- [medium] `puck_exec` returns every line's full answer, so `world.affordances` and `world.grants` overflow an agent's token limit. Add an output filter to the tool (selected `lines` or `fields`, a byte cap with an explicit truncation mark) so the agents' own instrument stays usable on large answers. (from: c7-findings lane)
+
 - [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
 
 - An invalid wait argument on a pending operator MCP start caches the argument
@@ -854,18 +855,9 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
-- Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
+- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
-- C7 review findings (Claude review of the input-c7 merge `a977bed08`; no determinism change and no broken caller found):
-  - [medium] `player.bindings` and the help of `body.rig`/`body.channels`/`body.press` read `m_server.Input.DescribeBody(body: slot)`, always the boot authority's body at the seat's number, not the seat's routed authority and entity (`WorldBindingCommandModule.cs:341`, `PlayerCommandModule.cs:129,135,216`): after a portal crossing they show the boot body's mode.
-  - [medium] `world.affordances` (an `anyone` verb) prints live channel values and `DescribeBody(0)` (owner principals, sources, raw values, holds) for boot body 0 without a grant (`WorldBindingCommandModule.cs:482,538`).
-  - [medium] `body.rig` (`anyone`) reads any body's authoritative input from `m_server` or `instance.Server` with no grant check or `WorldStateReadView`, where `instance:` used to refuse (`PlayerCommandModule.Rig.cs:44,46`); `body.channels` checks the same facts against the caller's grant.
-  - [medium] Genre checks that cannot fail on what they claim: shooter and fps Edge rules latch before the mode switch they cover (`worlds/debug/input-genre-controls.puck:107,119`); menu fires before `keyboard.k` and the switch to `panel` (`:123`); board's `forward == 0 and run == 0` is made true by the later releases anyway (`input-genre-debug.puck:16`).
-  - [low] A routed `body.rig` nests a refused `body.channels` answer inside a success line (`PlayerCommandModule.Rig.cs:49-50`).
-  - [low] `replay.inspect` and `world.history` print `segment p1 2s` with no intent, while `replay.md:699-703` still says image-only producers show their changed channels (`WorldReplayEntryDescriber.cs:18-20`).
-  - [low] Every active sample enters `m_pressedControls`, so a source that never sends zero or `Completed` (posture streams at rest, possibly the wheel) stays pressed and lights its bar plate (`InputRouter.cs:518`).
-  - [low] `world.devices` mutates the roster: it inserts pads into first-seen order in the manager's index order, renumbering `gamepadN`, and overwrites the device name with the `GamepadType` name (`WorldPopulationCommandModule.cs:36-40`).
-  - [low] `Retained` on the bar comes from the last switch boundary until the next one, so a kept action released and pressed again still shows retained (`WorldSeatInput.cs:35-38`).
+- Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
 
 - The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
@@ -1200,8 +1192,6 @@ Owner: specialist lane (rendering, sdf-authoring, puck-world) · ordinary · Nex
 Owner: debug-world content lanes, each started by the owner's direction · one
 medium, the rest ordinary · Next: the black slats behind the chess table now (a
 material defect needs no taste call); new content and art on the owner's call.
-
-- [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and

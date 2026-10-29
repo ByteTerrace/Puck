@@ -326,7 +326,12 @@ contribution fold. Both name the body's selected tuple and epoch, action shapes,
 values, inactive actions, source rearming and held origins. Prefixed help for
 `body.press`, `body.rig` and `body.channels` appends that current input vocabulary.
 `world.affordances` returns an object with `commands`, `channels` (including
-`active` and `value`), and the primary body's `input` read-back. Compiled binding
+`active` and `value`), and `input`, the last two for the body the asking seat holds
+in the authority it is routed to. Every input read-back (`body.rig`, `body.channels`,
+`player.bindings`, `world.affordances` and that help) asks the seat's routed
+authority for its body through `WorldInputReadBack` as the acting principal, so it
+shows the seat's current mode after a portal crossing and only what the caller may
+observe; a refused query reads back as a refusal. Compiled binding
 handles have no console/help/vocabulary surface. Replay names accepted input
 from each re-driven tick's definition, including barriers and cancelled holds;
 a segment's raw bank is never labelled using a fixed or later mapping.

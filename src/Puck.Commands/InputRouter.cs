@@ -516,7 +516,14 @@ public sealed partial class InputRouter : IDisposable {
         } else if ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) || !signal.Value.IsActive) {
             _ = m_pressedControls.Remove(key: physicalControl);
         } else if (latchesPress && (signal.Phase == CommandPhase.Active)) {
-            m_pressedControls[physicalControl] = slot;
+            // An active sample is a hand on the control only while it is outside the rest band: a posture stream at
+            // rest, or a wheel or stick that reports a small residue and never a zero or a Completed, must not
+            // stay pressed (and light its bar plate) until the device is dropped.
+            if (IsHeldSample(signal: in signal)) {
+                m_pressedControls[physicalControl] = slot;
+            } else {
+                _ = m_pressedControls.Remove(key: physicalControl);
+            }
         }
 
         // A control going inactive is a RELEASE — the one shape that must reach the resolver even under focus
@@ -2351,6 +2358,15 @@ public sealed partial class InputRouter : IDisposable {
 
         if (signal.Phase is CommandPhase.Started or CommandPhase.Completed or CommandPhase.Canceled) {
             return true;
+        }
+
+        return IsHeldSample(signal: in signal);
+    }
+    // Whether a non-posture sample's value is a hand on the control: a digital true, or an analog magnitude outside
+    // the rest band. A posture reading carries gravity in every report and is never a hold.
+    private static bool IsHeldSample(in InputSignal signal) {
+        if (signal.Posture) {
+            return false;
         }
 
         return (signal.Value.Kind switch {
