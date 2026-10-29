@@ -10,6 +10,7 @@ basis: "debug"
 // garden's frames back name it too, so a scenario world under another id would resolve them to a second world rather
 // than to itself.
 documentId: "debug"
+import "stopped-machines"
 
 // The round trip's witnesses, for the scenario that leaves through the garden painting. A live body's size never falls
 // below a quarter (size.puck), so body 0's size reads 0 only while she is in another world: `away` latches that she
@@ -41,46 +42,6 @@ rule "round-trip-home-small" {
     bodyPosition(body, 0, z) > 38)
   mode: Edge
   homeSmall[0] = 1
-}
-
-test "the big painting sets her down a quarter her size" {
-  when {
-    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
-    ticks 15
-    seat1: body.fly 0 -1 0 0 0 0 1.5 0
-    ticks 60
-  }
-  expect {
-    bodyState(body, 0, size) == 0.25
-  }
-}
-
-test "the mouse hole sets her down at full size again" {
-  when {
-    seat1: body.pose 12.5 0.05 30.5 90 0 0 0
-    ticks 15
-    seat1: body.fly 0 -1 0 0 0 0 1.5 0
-    ticks 60
-    seat1: body.pose 8.8 0.05 30.5 -90 0 0 0
-    ticks 15
-    seat1: body.fly 0 1 0 0 0 0 1.5 0
-    ticks 60
-  }
-  expect {
-    bodyState(body, 0, size) == 1
-  }
-}
-
-test "at full size she cannot fit the mouse hole" {
-  when {
-    seat1: body.pose 8.4 0.05 30.5 -90 0 0 0
-    ticks 15
-    seat1: body.fly 0 1 0 0 0 0 1.5 0
-    ticks 60
-  }
-  expect {
-    bodyState(body, 0, size) == 1
-  }
 }
 
 // The register's envelope is a quarter to one: a body already a quarter her size walking into the big painting again

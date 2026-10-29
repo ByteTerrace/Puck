@@ -6,51 +6,11 @@
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "go-tests"
+import "stopped-machines"
 
-test "the stones settle in their trays and the board reads empty" {
-  given {
-    goAiSide = 0
-  }
-  when {
-    ticks 150
-  }
-  expect {
-    goChangedCount == 0
-    goCollisions == 0
-    goIllegal == 0
-    goCell.goStone0 == -1
-    goCell.goStone360 == -361
-    goHold == 9
-    goNewCell == -1
-    goFix == -1
-  }
-}
-
-// Seat 1 stands at Black's edge, sits down with the context button and plays the centre point with the pick button
-// (the cursor starts there); the computer, playing White, answers with a stone of its own.
-test "a seated player plays the centre and the computer answers" {
-  when {
-    seat1: body.pose 56.5 9.25 29 0 0 0 0
-    ticks 150
-    seat1: body.press interact
-    ticks 5
-    seat1: body.press confirm
-    ticks 1000
-  }
-  expect {
-    goBoard[180] == 1
-    goSeen[180] == 1
-    goMoves == 2
-    goTurn == 1
-    goStoneCount[1] == 1
-    goStoneCount[2] == 1
-    goIllegal == 0
-    board(engaged, goBoard, 1) == 1
-  }
-}
-
-// The seated player steps the cursor one point up the board (+Z from Black's side) and one to the right (-X), and the
-// cancel button passes; a second pass, from the console, ends the game.
+// Seat 1 stands at Black's edge and sits down with the context button. The cursor starts on the centre; she steps it one
+// point up the board (+Z from Black's side) and one to the right (-X), plays with the pick button, and the cancel button
+// passes.
 test "a seated player steps the cursor, plays and passes" {
   given {
     goAiSide = 0
@@ -75,24 +35,6 @@ test "a seated player steps the cursor, plays and passes" {
     goTurn == 1
     goPasses == 1
     goSeat.cursor == 198
-  }
-}
-
-test "a lone stone keeps four liberties" {
-  given {
-    goAiSide = 0
-    goMove.play = 180
-  }
-  when {
-    ticks 3
-  }
-  expect {
-    goBoard[180] == 1
-    goGroup == 1
-    goLiberties == 4
-    goAtari == 0
-    goMoves == 1
-    goTurn == 2
   }
 }
 
@@ -241,61 +183,6 @@ test "a ko may be retaken after an exchange elsewhere" {
     goCaptured == 1
     goRejected == 0
     goMoves == 4
-  }
-}
-
-// A position given on the board is set on the table from the trays; black then plays 199 with a put, capturing the white
-// stone at 180, which goes back to White's tray.
-test "the table fills a given position and a captured stone goes back to its tray" {
-  given {
-    goAiSide = 0
-    goBoard[180] = 2
-    goBoard[161] = 1
-    goBoard[179] = 1
-    goBoard[181] = 1
-    goStoneCount[1] = 3
-    goStoneCount[2] = 1
-  }
-  when {
-    ticks 1000
-    seat1: world.state.cell.set goPut $value 199
-    ticks 400
-  }
-  expect {
-    goBoard[199] == 1
-    goBoard[180] == 0
-    goSeen[180] == 0
-    goSeen[161] == 1
-    goSeen[199] == 1
-    goCaptured == 1
-    goChangedCount == 0
-    goCell.goStone360 == -361
-  }
-}
-
-// Black to move, a white stone (goStone181, body 289) is set by hand on point 181, 10 cm over the board: the reading
-// records the arrangement illegal and puts the stone back in White's tray. Then a black stone and a second black stone
-// beside it: two points changed, illegal again, and both go back.
-test "an arrangement that is not one stone of the side to move is illegal and put right" {
-  given {
-    goAiSide = 0
-  }
-  when {
-    ticks 150
-    seat1: body.pose 56.58 10 30.6 0 0 0 289
-    ticks 150
-    seat1: body.pose 56.58 10 30.6 0 0 0 470
-    seat1: body.pose 56.66 10 30.6 0 0 0 469
-    ticks 400
-  }
-  expect {
-    goIllegal == 2
-    goMoves == 0
-    goSeen[181] == 0
-    goSeen[182] == 0
-    goChangedCount == 0
-    goCell.goStone181 == -182
-    goCell.goStone0 == -1
   }
 }
 

@@ -77,6 +77,14 @@ debug world's same-world portals to remain in its boot instance. Giving it a
 different identity can open another `debug` instance through a return portal;
 machine overrides in the fixture do not stop that other instance's machines.
 
+A debug-based fixture none of whose claims reads a machine imports
+`stopped-machines` (`worlds/debug/stopped-machines.puck`): every device stays
+mounted and engageable but the host does not advance it, so the scenario does
+not pay for emulating cartridges it never reads. Emulation and continuation
+hashing are most of a debug scenario's tick cost. A fixture that reads some
+machines stops the rest by name (`machine-debugger-tests.puck`), and a machine
+added to the debug world is added to that fragment.
+
 The arena is the live gameplay store. `WorldServer.Definition` holds declarations
 and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
 Runtime value readers use `WorldStateReader` bound to the live arena, and
@@ -575,7 +583,13 @@ check the flag: the owner may be holding the pad.
   ([references/replay.md](references/replay.md)).
 - `puck test <source>` boots each `.puck` `test` block headless and prints one
   verdict per line ([references/schedules-and-tests.md](references/schedules-and-tests.md)).
-  A scenario is for an invariant that running cannot show; a feature is shown by
+  A scenario is for an invariant that running cannot show: a replay or
+  reproduction, an exact fixed-point or timing result, a refusal or atomic
+  rollback and its control, an input release barrier, a body or register
+  crossing documents, or a rule edge case only a constructed position reaches.
+  A feature or exhibit (a lift's schedule, a lever's values, a companion's
+  flight, a tool's report) gets no scenario by default, and a brief asks for one
+  only by naming its invariant; a feature is shown by
   running it, and the debug world's sweep is its signal
   ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)):
   `puck sweep` reads the tools, reports, budgets and counters on a headless

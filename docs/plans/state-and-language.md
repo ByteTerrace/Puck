@@ -893,7 +893,8 @@ the debug world's Go table ([go.md](../../worlds/debug/go.md)), whose rules
 are the same move door under a physical table of stones.
 [go-tests.puck](../../worlds/debug/go-tests.puck) shows an atari, a group
 capture, a suicide refusal, a ko refusal and the exchange that lifts it, the
-area count, a capture taken off the table and one CPU move, and reproduces
+area count, occupied-point arrangements put right on the table and one CPU
+move, and reproduces
 byte for byte. The 19x19 package exposed four engine faults, each fixed with
 laws: a tree search judged every
 candidate of a node when it expanded, so a 19x19 pool filled after about
