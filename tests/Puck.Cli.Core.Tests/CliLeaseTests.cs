@@ -134,6 +134,23 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.Equal(expected: new[] { "a one", "b one", "renamed c", "a two", "a three" }, actual: order);
     }
     [Fact]
+    public async Task AFourLineTicketRotatesUnderItsHoldersFirstWord() {
+        var queue = Path.Combine(path1: m_root, path2: "gpu.queue");
+        using var process = Process.GetCurrentProcess();
+
+        // Lane a is the lane served last, and its two older tickets carry no lane line.
+        (await Take(holder: "a probe")).Dispose();
+        foreach (var (sequence, holder) in new[] { ("000000000002", "a one"), ("000000000003", "a two") }) {
+            File.WriteAllLines(path: Path.Combine(path1: queue, path2: sequence), contents: [holder, DateTimeOffset.UtcNow.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), process.Id.ToString(provider: CultureInfo.InvariantCulture), process.StartTime.ToUniversalTime().Ticks.ToString(provider: CultureInfo.InvariantCulture)]);
+        }
+        // Read as lane a, they rank behind the never-served lane b despite being older; read as lanes of their own, they would not.
+        using var other = await Take(holder: "b one");
+
+        Assert.Equal(expected: 4, actual: File.ReadAllLines(path: Path.Combine(path1: m_root, path2: "gpu/holder")).Length);
+        other.Dispose();
+        await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(holder: "a three"));
+    }
+    [Fact]
     public async Task ADeadWaitersTicketIsSkippedAndDropped() {
         var clock = new VirtualClock();
         var queue = Path.Combine(path1: m_root, path2: "gpu.queue");

@@ -7,9 +7,6 @@ namespace Puck.Cli;
 
 /// <summary>Serializes lane work under a shared checkout's lease directory, rotating admission between lanes.</summary>
 public sealed class CliLease : IDisposable {
-    /// <summary>The lines of a holder file or ticket: holder, UTC time, process id, process start ticks and lane.</summary>
-    private const int HolderLines = 5;
-
     private readonly FileStream m_gate;
     private readonly string m_directory;
 
@@ -37,7 +34,7 @@ public sealed class CliLease : IDisposable {
             || ((lane is not null) && (string.IsNullOrWhiteSpace(value: lane) || lane.Contains(value: '\n') || lane.Contains(value: '\r')))) {
             throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder and lane, and a nonnegative wait.");
         }
-        lane = (lane?.Trim() ?? holder.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries)[0]);
+        lane = (lane?.Trim() ?? DefaultLane(holder: holder));
         Directory.CreateDirectory(path: root);
         var directory = Path.Combine(path1: root, path2: name);
         var started = clock.GetTimestamp();
@@ -51,7 +48,7 @@ public sealed class CliLease : IDisposable {
                 // child lease instead of waiting on their parent; siblings never borrow each other's hold.
                 var metadata = ReadHolder(directory: directory);
 
-                if ((metadata is { Length: HolderLines }) && int.TryParse(s: metadata[2], result: out var pid) && long.TryParse(s: metadata[3], result: out var ticks) && (ancestor?.Invoke(pid, ticks) == true)) {
+                if ((metadata is { Length: (4 or 5) }) && int.TryParse(s: metadata[2], result: out var pid) && long.TryParse(s: metadata[3], result: out var ticks) && (ancestor?.Invoke(pid, ticks) == true)) {
                     Leave(ticket: ticket);
                     ticket = null;
                     directory = Path.Combine(path1: directory, path2: "child");
@@ -87,17 +84,20 @@ public sealed class CliLease : IDisposable {
         }
     }
 
-    /// <summary>The metadata a holder file and a ticket share: holder, UTC time, process id, process start ticks and lane.</summary>
+    /// <summary>The lane a holder works for when none is named: the first word of its name.</summary>
+    private static string DefaultLane(string holder) => holder.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries)[0];
+    /// <summary>The metadata a holder file and a ticket share: holder, UTC time, process id and process start ticks, then the lane
+    /// only when it is not the holder's first word.</summary>
     private static string[] Metadata(string holder, string lane, TimeProvider clock) {
         using var process = Process.GetCurrentProcess();
-
-        return [
+        string[] lines = [
             holder,
             clock.GetUtcNow().ToString(format: "O", formatProvider: CultureInfo.InvariantCulture),
             Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture),
             process.StartTime.ToUniversalTime().Ticks.ToString(provider: CultureInfo.InvariantCulture),
-            lane,
         ];
+
+        return ((lane == DefaultLane(holder: holder)) ? lines : [.. lines, lane]);
     }
     /// <summary>Takes the next ticket in a queue directory: a file named by a zero-padded sequence, holding the same lines as a holder.</summary>
     private static string Enqueue(string queue, string holder, string lane, TimeProvider clock) {
@@ -160,7 +160,7 @@ public sealed class CliLease : IDisposable {
                     try { File.Delete(path: file); continue; } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 }
             }
-            var key = (recognized ? ("lane:" + lines![4]) : ("ticket:" + id));
+            var key = (recognized ? ("lane:" + ((lines!.Length == 5) ? lines[4] : DefaultLane(holder: lines[0]))) : ("ticket:" + id));
             if (!queues.TryGetValue(key: key, value: out var queue)) { queues[key] = queue = new Queue<string>(); }
             queue.Enqueue(item: id);
             live++;
@@ -268,7 +268,7 @@ public sealed class CliLease : IDisposable {
     }
     /// <summary>Decides from holder or ticket metadata whether its process is gone; null when the metadata is unrecognized.</summary>
     private static bool? ProcessGone(string[] lines, DateTimeOffset now) {
-        if ((lines.Length != HolderLines) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return null; }
+        if ((lines.Length is not (4 or 5)) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return null; }
         try {
             using var process = Process.GetProcessById(processId: pid);
 
