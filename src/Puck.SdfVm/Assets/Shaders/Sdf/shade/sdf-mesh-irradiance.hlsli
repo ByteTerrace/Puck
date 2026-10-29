@@ -68,8 +68,12 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
     int2 base = (int2)floor(texel);
     float2 fraction = texel - (float2)base;
-    float blocked = 0.0;
+    float3 points[4];
+    float3 normals[4];
+    float4 weights = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        points[corner] = 0.0;
+        normals[corner] = 0.0;
         int2 high = int2(corner & 1u, corner >> 1);
         float2 axes = lerp(1.0 - fraction, fraction, (float2)high);
         float weight = axes.x * axes.y;
@@ -82,9 +86,27 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
             continue;
         }
         int2 encoded = int2((int)(word << 8u) >> 24, (int)word >> 24);
-        float3 normal = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
-        float gap = depth + dot(normal, toward);
-        blocked += weight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
+        normals[corner] = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
+        points[corner] = depth * sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
+        weights[corner] = weight;
+    }
+    float blocked = 0.0;
+    [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        if (weights[corner] <= 0.0) { continue; }
+        float3 meanPoint = 0.0;
+        float3 normal = 0.0;
+        float total = 0.0;
+        [unroll] for (uint neighbour = 0u; neighbour < 4u; neighbour++) {
+            if (weights[neighbour] <= 0.0) { continue; }
+            float3 sum = normals[corner] + normals[neighbour];
+            if (dot(normals[corner], normals[neighbour]) <= 0.0 ||
+                abs(dot(sum, points[neighbour] - points[corner])) > SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) { continue; }
+            meanPoint += weights[neighbour] * points[neighbour];
+            normal += weights[neighbour] * normals[neighbour];
+            total += weights[neighbour];
+        }
+        float gap = dot(normalize(normal), toward - meanPoint / total);
+        blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
     float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
     coverage = coverage * coverage * (3.0 - 2.0 * coverage);

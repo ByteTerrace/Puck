@@ -336,6 +336,7 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE", value: SdfMeshIrradianceProbe.DepthCoverageScale);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfMeshIrradianceProbe.DepthNormalScale);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE", value: SdfMeshIrradianceProbe.DepthSurfaceFade);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP", value: SdfMeshIrradianceProbe.DepthSurfaceJoinGap);
         declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).");
         declarations.Count(name: "SDF_HISTORY_SURFACE_WORDS", value: SdfWorldPackage.HistorySurfaceWords);
         declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfTemporalSamples.Period);

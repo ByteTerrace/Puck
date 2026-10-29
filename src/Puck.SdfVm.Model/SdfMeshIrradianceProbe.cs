@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 public static class SdfMeshIrradianceProbe {
     /// <summary>The octahedral depth map's width and height, without duplicated border texels.</summary>
     public const int DepthSize = 12;
-    /// <summary>The first surface word: FP16 perpendicular distance and two signed octahedral normal bytes.
+    /// <summary>The first surface word: FP16 ray distance and two signed octahedral normal bytes.
     /// A negative distance means a miss to that reach.</summary>
     public const int DepthWord = 19;
     /// <summary>The number of packed surface words, one texel per word.</summary>
@@ -14,6 +14,8 @@ public static class SdfMeshIrradianceProbe {
     public const float DepthNormalScale = 127f;
     /// <summary>The surface gap over which an angular tap closes, in metres, smaller than normal bias.</summary>
     public const float DepthSurfaceFade = 0.02f;
+    /// <summary>The symmetric point/normal residual below which angular taps belong to one smooth surface patch.</summary>
+    public const float DepthSurfaceJoinGap = (2f * DepthSurfaceFade);
     /// <summary>The words one probe takes in the volume table.</summary>
     public const int ProbeWords = (DepthWord + DepthWords);
     /// <summary>Two words of FP16 offset XYZ and back-face share. Every directional read uses this relocated origin.</summary>

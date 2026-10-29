@@ -9,7 +9,7 @@ public static class SdfMeshProbeDepth {
 
     private static readonly Vector3[] Directions = BuildDirections();
 
-    /// <summary>Traces one bounded first hit per texel. Each word packs an FP16 perpendicular plane distance and
+    /// <summary>Traces one bounded first hit per texel. Each word packs an FP16 ray distance and
     /// two signed octahedral normal bytes. A negative distance marks a miss and its measured reach.</summary>
     /// <param name="scene">The existing static mesh hierarchy.</param>
     /// <param name="origin">The relocated probe position.</param>
@@ -35,11 +35,7 @@ public static class SdfMeshProbeDepth {
             var x = ((int)Math.Round(a: (uv.X * scale)));
             var y = ((int)Math.Round(a: (uv.Y * scale)));
             var packed = (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
-            // Anchor with the decoded normal, so its quantization does not move the measured hit off its surface.
-            var decoded = Normal(word: packed);
-            var perpendicular = MathF.Max(x: 0f, y: (-Vector3.Dot(vector1: decoded, vector2: direction) * distance));
-
-            surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)perpendicular));
+            surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)distance));
         }
         return rays;
     }
@@ -66,7 +62,10 @@ public static class SdfMeshProbeDepth {
         var x = ((int)MathF.Floor(x: texel.X));
         var y = ((int)MathF.Floor(x: texel.Y));
         var fraction = (texel - new Vector2(x: x, y: y));
-        var blocked = 0f;
+        Span<Vector3> points = stackalloc Vector3[4];
+        Span<Vector3> normals = stackalloc Vector3[4];
+        Span<float> weights = stackalloc float[4];
+        weights.Clear();
 
         for (var corner = 0; (corner < 4); corner++) {
             var highX = corner & 1;
@@ -75,16 +74,36 @@ public static class SdfMeshProbeDepth {
 
             if (weight <= 0f) { continue; }
             var tap = SdfOctahedral.BorderSource(borderedX: ((x + highX) + 1), borderedY: ((y + highY) + 1), interiorTexels: Size);
-            var word = surfaces[(tap.X + (Size * tap.Y))];
+            var index = tap.X + Size * tap.Y;
+            var word = surfaces[index];
             var depth = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)word)));
 
             if (depth < 0f) {
                 if (distance > -depth) { return 0f; }
                 continue;
             }
-            var gap = (depth + Vector3.Dot(vector1: Normal(word: word), vector2: toward));
-
-            blocked += (weight * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
+            points[corner] = Directions[index] * depth;
+            normals[corner] = Normal(word);
+            weights[corner] = weight;
+        }
+        var blocked = 0f;
+        for (var corner = 0; corner < 4; corner++) {
+            if (weights[corner] <= 0f) { continue; }
+            var point = Vector3.Zero;
+            var normal = Vector3.Zero;
+            var total = 0f;
+            for (var neighbour = 0; neighbour < 4; neighbour++) {
+                if (weights[neighbour] <= 0f) { continue; }
+                var sum = normals[corner] + normals[neighbour];
+                // Same smooth patch: opposite faces and distinct parallel walls never interpolate together.
+                if (Vector3.Dot(normals[corner], normals[neighbour]) <= 0f ||
+                    MathF.Abs(Vector3.Dot(sum, points[neighbour] - points[corner])) > SdfMeshIrradianceProbe.DepthSurfaceJoinGap) { continue; }
+                point += weights[neighbour] * points[neighbour];
+                normal += weights[neighbour] * normals[neighbour];
+                total += weights[neighbour];
+            }
+            var gap = Vector3.Dot(Vector3.Normalize(normal), toward - point / total);
+            blocked += weights[corner] * Math.Clamp(-gap / SdfMeshIrradianceProbe.DepthSurfaceFade, 0f, 1f);
         }
         var coverage = Math.Clamp(max: 1f, min: 0f, value: ((blocked - SdfMeshIrradianceProbe.DepthCoverageStart) * SdfMeshIrradianceProbe.DepthCoverageScale));
 

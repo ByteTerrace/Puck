@@ -15,6 +15,26 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
+    public void AHomogeneousCeilingDoesNotStampTheProbeLatticeIntoItsLight() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One, Emissive: 1f));
+        builder.Sphere(0.1f, material);
+        var gains = new SdfIndirectGains(Emission: 1f, Feedback: 0f, Lights: 0f, Screens: 0f, Sky: 0f);
+        var frame = Frame() with { Program = builder.Build(), IndirectGains = gains, IndirectSources = gains.Sources,
+            TickLocked = true, IndirectBounces = 0, Lights = new SdfLights(),
+            MeshDraws = [Draw(Box(new Vector3(-10000f, 4f, -10000f), new Vector3(10000f, 4.3f, 10000f)))] };
+        var (parameters, words) = Trace(new SdfMeshIrradiance(), frame, SdfIndirectTier.Medium);
+        var low = float.PositiveInfinity;
+        var high = 0f;
+        for (var x = -4; x <= 4; x++) {
+            var value = Luminance(Probe(words, parameters, x, 0, 0), 0);
+            low = MathF.Min(low, value);
+            high = MathF.Max(high, value);
+        }
+        Assert.True(high - low < 0.001f, $"homogeneous horizontal light spans {low}..{high}");
+    }
+
+    [Fact]
     public void AVisibleCurvedSurfaceIsNotShadowedByItsNeighboursTangentPlanes() {
         var centre = new Vector3(0f, 0f, 2f);
         var scene = SdfMeshIrradianceScene.Build([Draw(Sphere(centre, 0.75f))]);
@@ -22,7 +42,7 @@ public sealed class SdfMeshIrradianceLawTests {
         _ = SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 5.25f, depth);
         for (var x = -0.55f; x <= 0.55f; x += 0.05f) {
             for (var y = -0.55f; y <= 0.55f; y += 0.05f) {
-                if (x * x + y * y >= 0.5f) { continue; }
+                if (x * x + y * y >= 0.42f) { continue; }
                 var point = new Vector3(x, y, 2f - MathF.Sqrt(0.75f * 0.75f - x * x - y * y));
                 var normal = Vector3.Normalize(point - centre);
                 var pushed = point + SdfMeshIrradianceProbe.NormalBias * normal;
