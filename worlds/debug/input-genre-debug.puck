@@ -7,6 +7,7 @@ state {
     table genreChecks {
       action = 0
       board = 0
+      leak = 0
     }
   }
 }
@@ -15,6 +16,8 @@ rule "action-demonstrated" {
   mode: Edge
   genreChecks["action"] = 1
 }
+// The sweep holds the run and forward keys through entry, so a zero read here is the entry's release barrier
+// and not the keys coming up.
 rule "board-demonstrated" {
   when (genreChecks["action"] == 1 and
     board(engaged, board, 1) == 1 and
@@ -23,4 +26,11 @@ rule "board-demonstrated" {
     play.held == -1)
   mode: Edge
   genreChecks["board"] = 1
+}
+rule "board-leak" {
+  when (genreChecks["action"] == 1 and
+    board(engaged, board, 1) == 1 and
+    (channel(1, forward) == 1 or channel(1, run) == 1))
+  mode: Edge
+  genreChecks["leak"] = 1
 }

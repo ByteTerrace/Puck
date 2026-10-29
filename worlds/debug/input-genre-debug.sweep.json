@@ -44,7 +44,21 @@
         "player.signal keyboard.n press",
         "world.wait 2",
         "body.press interact",
-        "world.wait 3",
+        "world.wait 3"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "board",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    },
+    {
+      "name": "release-board-keys",
+      "lines": [
         "player.signal keyboard.n release",
         "player.signal keyboard.z release",
         "world.wait 3"
@@ -65,7 +79,8 @@
     {
       "red": [
         "action != 1",
-        "board != 1"
+        "board != 1",
+        "leak != 0"
       ],
       "parse": "cells",
       "name": "action-and-board",

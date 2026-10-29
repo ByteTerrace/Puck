@@ -204,6 +204,8 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
         var bodyIndex = query switch {
             WorldQuery.PlayerWhere where => where.Index,
             WorldQuery.PlayerChannels channels => channels.Index,
+            WorldQuery.PlayerInput input => input.Index,
+            WorldQuery.PlayerAffordances affordances => affordances.Index,
             WorldQuery.PlayerState state => state.Index,
             WorldQuery.PlayerTargets targets => targets.Index,
             WorldQuery.Contacts contacts => (contacts.Index - 1),

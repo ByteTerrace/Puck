@@ -795,6 +795,11 @@ drives the existing input verbs, and reads authored state. The text row demonstr
 ordered committed input and per-key judgement; the gallery tutor and chat prompt
 remain content work in the input packet.
 
+Each check reads its channels in the epoch after the switch it covers: a kept
+hold reads live with no press edge in the current epoch, a released action reads
+neutral while its key is still down, and the board sweep keeps the locomotion keys
+held through entry and records a `leak` if either reads live there.
+
 Run `puck sweep --plan worlds/debug/<plan>.sweep.json --world <source>`:
 
 | Plan | Source | Rows demonstrated |

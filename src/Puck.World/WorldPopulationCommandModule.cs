@@ -31,15 +31,22 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
 
-    // Discovery is independent of activity: a neutral streaming pad belongs in the roster without joining a seat.
-    private string DescribeDevices() {
-        if (gamepads is not null) {
-            foreach (var device in gamepads.ConnectedDevices()) {
-                gamepads.TryGetType(deviceId: device, type: out var type);
-                roster.ObserveDevice(device: device, kind: InputDeviceKind.Gamepad, name: type.ToString());
-            }
+    // A connected pad the roster has not yet seen is listed without being recorded: the read never reorders the
+    // roster's tokens or renames a device it already knows.
+    private string DescribeDevices() => roster.DescribeDevices(
+        connectedGamepads: ConnectedGamepads(),
+        gamepadStatus: DescribeGamepadStatus
+    );
+    private IEnumerable<(InputDeviceId Device, string Name)> ConnectedGamepads() {
+        if (gamepads is null) {
+            yield break;
         }
-        return roster.DescribeDevices(gamepadStatus: DescribeGamepadStatus);
+
+        foreach (var device in gamepads.ConnectedDevices()) {
+            gamepads.TryGetType(deviceId: device, type: out var type);
+
+            yield return (device, type.ToString());
+        }
     }
 
     // The sequence and its row view, then any per-body selector as select(<body register>: <value>=<row>, …).

@@ -686,7 +686,7 @@ public sealed partial class CommandRegistry {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
             description: "Lists the available commands: help [--full|--names] [<prefix>] — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
-            handler: (context, args) => Help(args: in args, slot: context.Slot),
+            handler: (context, args) => Help(args: in args, caller: context.Principal, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
@@ -1624,12 +1624,15 @@ public sealed partial class CommandRegistry {
     /// <param name="slot">The slot whose authored commands the listing includes (<see cref="AuthoredCommandsFor"/>).</param>
     /// <param name="synopsis">Shortens each description to its first sentence, at most 200 characters, ending in
     /// <c> ...</c> when words were left out.</param>
+    /// <param name="caller">The principal a command's read-back details are checked for; <see langword="null"/> reads
+    /// as the console.</param>
     /// <returns>A newline-separated list of <c>name - description</c> entries, or of names; empty when nothing
     /// matches.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false) {
+    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false, Principal? caller = null) {
+        var asking = (caller ?? Principal.Console);
         var registered = m_root.Subcommands.Where(predicate: command => !m_byTextCommand[command].BindingOnly)
             .Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty), Details: m_byTextCommand[command].HelpDetails));
-        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description, Details: ((Func<int, string>?)null)));
+        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description, Details: ((Func<int, Principal, string>?)null)));
 
         return string.Join(
             separator: '\n',
@@ -1643,7 +1646,7 @@ public sealed partial class CommandRegistry {
             )
                 .Select(selector: entry => (namesOnly
                     ? entry.Metadata.Name
-                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}{((entry.Details is not null) ? ("\n  " + entry.Details(slot)) : string.Empty)}"))
+                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}{((entry.Details is not null) ? ("\n  " + entry.Details(slot, asking)) : string.Empty)}"))
         );
     }
 
@@ -1667,7 +1670,7 @@ public sealed partial class CommandRegistry {
     // help [--full|--names] [<prefix>]: bare help lists the names index; --full or a prefix prints name - description,
     // and --names keeps names alone even with a prefix. A prefix that matches nothing is refused by name, so a mistyped
     // one never answers an empty success.
-    private CommandResult Help(in WireArgs args, int slot) {
+    private CommandResult Help(in WireArgs args, Principal caller, int slot) {
         var full = false;
         var names = false;
         string? prefix = null;
@@ -1694,6 +1697,7 @@ public sealed partial class CommandRegistry {
         }
 
         var text = BuildHelpText(
+            caller: caller,
             namesOnly: (names || (!full && (prefix is null))),
             prefix: prefix,
             slot: slot,
