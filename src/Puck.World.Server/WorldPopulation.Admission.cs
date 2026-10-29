@@ -422,6 +422,11 @@ public sealed partial class WorldPopulation {
     /// <see cref="ApplyPeerDisconnected"/> exactly as admission set it.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public bool IsAdmittedPeer(int bodyIndex) => ((((uint)bodyIndex) < Capacity) && m_entries[bodyIndex].IsRemoteHuman);
+    /// <summary>Gets the number of remote humans the instance holds, parked ones included: what the
+    /// <see cref="NetworkPlayers"/> cap counts.</summary>
+    public int RemoteHumanCount => CountRemoteHumans();
+    /// <summary>Gets the live document's <c>networkPlayers</c> admission cap on remote humans.</summary>
+    public int NetworkPlayers => m_remoteCap;
     /// <summary>Returns a value indicating whether <paramref name="bodyIndex"/> is human-occupied — the co-driving
     /// fold's occupancy discriminator (and the bot-overwrite door in <c>WorldServer.ApplyIntentSubmission</c>): a
     /// body is human-occupied iff a local seat slot is <see cref="IsActive"/> and bound to it, or the body is bound
@@ -1121,7 +1126,8 @@ public sealed partial class WorldPopulation {
         );
     }
     /// <summary>Admits a remote peer at a body index already bound by a transfer reservation. This is the
-    /// commit-side companion to <see cref="TryAdmitRemotePeer"/>; callers must reserve the exact index first.</summary>
+    /// commit-side companion to <see cref="TryAdmitRemotePeer"/>; callers must reserve the exact index first. Every
+    /// body this door admits is a remote human counted against <see cref="NetworkPlayers"/>, whatever its source.</summary>
     /// <param name="slot">The reserved peer body index.</param>
     /// <param name="source">The body's live or simulated intent source.</param>
     /// <param name="grantTemplates">Admission grant templates to install.</param>
@@ -1134,9 +1140,7 @@ public sealed partial class WorldPopulation {
     /// <returns><see langword="true"/> on success.</returns>
     /// <param name="occupant">What a transferred traveler brings, which the admitted event records; <see langword="null"/>
     /// for a connection.</param>
-    /// <param name="remoteHuman">Whether a human occupies the body. Only a human counts against the
-    /// <c>networkPlayers</c> admission cap.</param>
-    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null, bool remoteHuman = true) {
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null) {
         return TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: authorityTransferred,
@@ -1145,7 +1149,7 @@ public sealed partial class WorldPopulation {
             identitySubject: identitySubject,
             occupant: occupant,
             refusal: out refusal,
-            remoteHuman: remoteHuman,
+            remoteHuman: true,
             slot: slot,
             source: source
         );

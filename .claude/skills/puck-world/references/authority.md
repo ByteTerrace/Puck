@@ -364,8 +364,15 @@ nobody knows until admission runs.
 verdict on the lease to `Commit`, so reserve and commit cannot disagree; its
 per-slot authorization asks the same question of whichever authority will drive
 the body — the live grant table for a colocated traveller keeping its own
-principal, the verdict's templates for a live peer arrival, and source support
-alone for an autonomous traveller, which has no driver at all.
+principal, the verdict's templates for a human arrival (a Live source or the
+sender's `RemoteHuman`, whatever its source; `LandsHuman`), and source support
+alone for an autonomous traveller, which has no driver at all. Reserve also
+refuses a human the `networkPlayers` cap has no room for. A sender can add a
+human and never exempt one: what the destination hands an autonomous traveller
+(no Drive grant, and `IsLiveTransferredPrincipal` refusing every forwarded
+intent, submission and route for a body that is not a remote human) gives an
+outside party nothing to drive
+([session lifecycle](session-lifecycle.md)).
 
 A body that is neither a local seat nor an admitted peer travels as
 `Principal.World` (`WorldInstanceHost.TravelPrincipal`), which holds no
