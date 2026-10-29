@@ -77,7 +77,10 @@ Generated verdict rows and expectation rules do not require another native host.
 Responsive placement holdings are derived from each scenario's seeds; they do not
 split a worker's boot, but restoration recomposes their changed geometry before the
 first command. Drive gates and presentation clock seeds are rebound at the same
-boundary. Restoration rebuilds geometry and population only when their configuration changed. The reset
+boundary. Restoration rebuilds geometry and population only when their configuration changed.
+Checkpoint restoration discards replay-only departure rollback bodies: a committed
+departure otherwise keeps its source-scoped transfer id and falsely refuses the next
+scenario's replay as a duplicate. The scenario reset
 cancels live tape drives as well as recordings. Session epochs reset only in this
 isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
