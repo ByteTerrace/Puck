@@ -225,6 +225,18 @@ holds the fixed poses and the approaches already rejected.
   floor's diagonal patches and black rectangle, which reproduce in `indirect`
   while that floor reads shadowed in the shadow view; and the wing's
   north-east corner remnants ([rendering plan](rendering.md#open-items)).
+- [medium] Far-field irradiance coverage: bounded local depth support exposes
+  unmeasured distant surfaces beyond the camera's probe window. The matched
+  probe-depth-fix tour shows black far walls at `finding-teal-roof`,
+  `gallery-entrance`, `devices`, `desktop`, `rate-range`, `camera-course`,
+  `stage`, `jump`, `flight` and `noclip`, and a larger dark pane through the
+  `garden` return portal. Several gallery/window views show the same far wall.
+  Their clamped boundary probes cannot certify a receiver beyond their measured
+  reach; the gather correctly supplies no measured sky/bounce there. Supply a
+  coarse far-field probe volume while retaining the local visibility test.
+  The earlier garden horizontal strip is part of this coverage finding; the
+  matched before/after sheets establish the expanded black area, rather than
+  attributing it to direct shadows or camera motion.
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level 3
   ceiling and wall junction reproduces in beauty but not in `indirect`,
   `normals` or `shadow`; behind it at level 2 (chase view) a dotted bright line

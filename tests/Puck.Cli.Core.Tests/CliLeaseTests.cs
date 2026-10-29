@@ -47,8 +47,13 @@ public sealed class CliLeaseTests : IDisposable {
         clock.Advance(by: TimeSpan.FromMilliseconds(milliseconds: 100));
         using var next = await released;
     }
-    [Fact]
-    public async Task DeadAndReusedHoldersAreReclaimedImmediatelyButLiveHoldersNeverExpire() {
+    [Theory]
+    [InlineData("live")]
+    [InlineData("dead")]
+    [InlineData("torn")]
+    [InlineData("missing")]
+    [InlineData("reused")]
+    public async Task HolderMetadataWithoutTheExclusiveGuardNeverBlocksAcquisition(string state) {
         var clock = new VirtualClock();
         var directory = Path.Combine(path1: m_root, path2: "gpu");
 
@@ -59,20 +64,26 @@ public sealed class CliLeaseTests : IDisposable {
         string[] Metadata(DateTimeOffset time, int pid, long start) => ["abandoned", time.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), pid.ToString(provider: CultureInfo.InvariantCulture), start.ToString(provider: CultureInfo.InvariantCulture)];
         var old = (clock.GetUtcNow() - TimeSpan.FromHours(hours: 2));
 
-        File.WriteAllLines(path: path, contents: Metadata(time: old, pid: process.Id, start: process.StartTime.ToUniversalTime().Ticks));
+        if (state != "missing") {
+            File.WriteAllLines(path: path, contents: state switch {
+                "live" => Metadata(time: old, pid: process.Id, start: process.StartTime.ToUniversalTime().Ticks),
+                "dead" => Metadata(time: old, pid: int.MaxValue, start: 1),
+                "reused" => Metadata(time: old, pid: process.Id, start: 1),
+                _ => ["unrecognized"],
+            });
+        }
+        using var recovered = await Take(clock: clock);
+
+        Assert.Equal(expected: "agents-slim", actual: File.ReadAllLines(path: path)[0]);
         await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(clock: clock));
-        File.WriteAllLines(path: path, contents: Metadata(time: clock.GetUtcNow(), pid: int.MaxValue, start: 1));
-        using (var recovered = await Take(clock: clock)) { Assert.Equal(expected: "agents-slim", actual: File.ReadAllLines(path: path)[0]); }
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllLines(contents: ["unrecognized"], path: path);
-        await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(clock: clock));
-        File.Delete(path: path);
-        await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(clock: clock));
-        File.WriteAllLines(path: path, contents: Metadata(pid: int.MaxValue, start: 1, time: old));
-        using (var recovered = await Take(clock: clock)) { Assert.Equal(expected: "agents-slim", actual: File.ReadAllLines(path: path)[0]); }
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllLines(path: path, contents: Metadata(time: clock.GetUtcNow(), pid: process.Id, start: 1));
-        using var reusedPid = await Take(clock: clock);
+    }
+    [Fact]
+    public async Task AReaderThatDelaysMetadataDeletionCannotKeepTheReleasedGuard() {
+        var first = await Take();
+        using var reader = new FileStream(path: Path.Combine(path1: m_root, path2: "gpu/holder"), mode: FileMode.Open, access: FileAccess.Read, share: FileShare.ReadWrite);
+
+        first.Dispose();
+        using var second = await Take();
     }
     [Fact]
     public async Task WaitersAreAdmittedInArrivalOrderAndAReacquiringHolderQueuesBehindThem() {
