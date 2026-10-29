@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Diagnostics;
 using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -20,8 +21,6 @@ internal sealed record WorldTestRunManifestEntry(
 /// the edit applied on: the manifest records only facts a rerun of the same document reproduces exactly, so
 /// fresh-boot equivalence checks can compare manifests byte for byte.</remarks>
 internal sealed record WorldTestRunManifestEcho(bool Rejected, string Message);
-/// <summary>One authority's replay hash at a completed boot-world tick.</summary>
-internal sealed record WorldTestRunHash(ulong Tick, string World, ulong AuthorityTick, ulong Hash);
 /// <summary>One world an armed run exported at the export tick.</summary>
 /// <param name="World">The world's name — <see cref="WorldScheduleSection.BootWorldName"/> for the world this
 /// process booted with, else the armed instance's own name.</param>
@@ -55,7 +54,6 @@ internal sealed record WorldTestRunManifestWorld(
 /// <param name="Submissions">One entry per DECLARED row, in declaration order, whether or not its tick was ever
 /// reached; a row the run never published records <see cref="WorldScheduleSection.OutcomeUnreached"/>.</param>
 /// <param name="Echoes">Every local edit verdict and scoped-replay refusal the run recorded.</param>
-/// <param name="Hashes">The authoritative replay hashes at every completed tick through the export.</param>
 internal sealed record WorldTestRunManifest(
     string Schema,
     string World,
@@ -65,8 +63,7 @@ internal sealed record WorldTestRunManifest(
     string Export,
     IReadOnlyList<WorldTestRunManifestWorld> Worlds,
     IReadOnlyList<WorldTestRunManifestEntry> Submissions,
-    IReadOnlyList<WorldTestRunManifestEcho> Echoes,
-    IReadOnlyList<WorldTestRunHash> Hashes
+    IReadOnlyList<WorldTestRunManifestEcho> Echoes
 );
 /// <summary>
 /// Adapts a test world's <c>schedule</c> section to <see cref="WorldTickScript"/> and exports the resulting
@@ -80,6 +77,9 @@ internal sealed record WorldTestRunManifest(
 /// prove the world refuses it.</para>
 /// </remarks>
 internal sealed class WorldTestRun {
+    public int AuthorityTicks { get; private set; }
+    public long ExportTicks { get; private set; }
+
     private sealed record Landed(string PrincipalLabel, WorldTickScript.Line Line);
 
     /// <summary>The bound on recorded edit echoes, so a long run cannot grow the manifest without limit.</summary>
@@ -96,7 +96,6 @@ internal sealed class WorldTestRun {
 
     private string m_directory = string.Empty;
     private readonly List<WorldTestRunManifestEcho> m_echoes = [];
-    private readonly List<WorldTestRunHash> m_hashes = [];
 
     private ulong m_exportTick;
 
@@ -142,9 +141,10 @@ internal sealed class WorldTestRun {
     }
 
     public void Reset(string sourcePath, string directory) {
+        ExportTicks = 0;
+        AuthorityTicks = 0;
         m_tickScript.Clear();
         m_echoes.Clear();
-        m_hashes.Clear();
         m_landed.Clear();
         m_worlds.Clear();
         m_armedInstances = false;
@@ -200,6 +200,8 @@ internal sealed class WorldTestRun {
     public bool IsArmed => (m_armed && (m_server.Configuration.Schedule is not null));
 
     private void Export(ulong tick, bool truncated) {
+        var exportStarted = Stopwatch.GetTimestamp();
+
         m_exported = true;
 
         if (m_directory.Length == 0) {
@@ -282,7 +284,6 @@ internal sealed class WorldTestRun {
                         ExportTick: tick,
                         Truncated: truncated,
                         Echoes: m_echoes,
-                        Hashes: m_hashes,
                         Schema: WorldScheduleSection.ManifestSchemaId,
                         Submissions: [.. m_landed.Select(selector: static landed => new WorldTestRunManifestEntry(
                             Command: landed.Line.Text,
@@ -303,6 +304,8 @@ internal sealed class WorldTestRun {
             Console.Error.WriteLine(value: $"[test.run] tick {tick}: export -> {exportPath}");
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException)) {
             Console.Error.WriteLine(value: $"[test.run] tick {tick}: the export could not be written: {exception.Message}");
+        } finally {
+            ExportTicks += (Stopwatch.GetTimestamp() - exportStarted);
         }
     }
     // The id the instance's document authors, which is the name a test addresses it by; the instance's own name for a
@@ -432,14 +435,6 @@ internal sealed class WorldTestRun {
             Rejected: rejected
         ));
     }
-
-    private void NoteHash(ulong tick, string world, WorldServer server) {
-        var authorityTick = (server.NextInputTick - 1UL);
-
-        m_hashes.Add(item: new WorldTestRunHash(Tick: tick, World: world, AuthorityTick: authorityTick,
-            Hash: WorldStateHashComposition.HashAuthoritative(server: server, tick: authorityTick)));
-    }
-
     /// <summary>Writes the test result when the completed tick reaches the authored export tick.</summary>
     /// <param name="tick">The completed tick.</param>
     public void PublishTick(ulong tick) {
@@ -447,11 +442,13 @@ internal sealed class WorldTestRun {
             return;
         }
         if ((tick % 120) == 0) { Progress?.Invoke(tick); }
-        NoteHash(server: m_server, tick: tick, world: WorldScheduleSection.BootWorldName);
-        foreach (var name in m_instances.Names.Order(comparer: StringComparer.Ordinal)) {
+        // Replay probes own per-authority tick hashes. A verdict-only run needs only the export and answers;
+        // hashing again here duplicates the probe during reproduction and serves no manifest reader.
+        AuthorityTicks++;
+        foreach (var name in m_instances.Names) {
             if ((name != WorldInstanceHost.BootInstanceName) &&
                 m_instances.TryGet(instance: out var instance, name: name) && (instance is not null)) {
-                NoteHash(tick: tick, world: name, server: instance.Server);
+                AuthorityTicks++;
             }
         }
         if (tick >= m_exportTick) {

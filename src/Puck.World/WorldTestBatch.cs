@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,6 +40,12 @@ internal sealed class WorldTestBatch {
 
     private string m_workingDirectory = string.Empty;
 
+    private long m_legStarted;
+    private long m_runStarted;
+    private long m_bootTicks;
+    private long m_restoreTicks;
+    private long m_authoredTicks;
+
     private string WorkingWorld => Path.Combine(path1: m_workingDirectory, path2: Path.GetFileName(path: m_legs[m_index].World));
 
     private WorldTestBatch(Leg[] legs, Output output, Output error) { m_legs = legs; m_output = output; m_error = error; }
@@ -74,6 +81,7 @@ internal sealed class WorldTestBatch {
                 "--devices", "none", "--world", batch.WorkingWorld, "--headless", "true", "--unpaced", "true",
                 "--exit-after-seconds", "0",
                 "--state-dir", stateDirectory,
+                "--cache-dir", (batch.m_workingDirectory + "-cache"),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
                 batch.m_legDeadline?.Dispose();
@@ -115,6 +123,7 @@ internal sealed class WorldTestBatch {
         StartLeg(freshHost: true);
     }
     private void OpenLeg() {
+        m_legStarted = Stopwatch.GetTimestamp();
         var leg = m_legs[m_index];
 
         Directory.CreateDirectory(path: m_workingDirectory);
@@ -141,6 +150,9 @@ internal sealed class WorldTestBatch {
         }
     }
     private void StartLeg(bool freshHost = false) {
+        var started = Stopwatch.GetTimestamp();
+
+        m_bootTicks = (freshHost ? (started - m_legStarted) : 0);
         var leg = m_legs[m_index];
         var server = Get<WorldServer>();
         var source = Get<WorldDefinitionSource>();
@@ -175,8 +187,11 @@ internal sealed class WorldTestBatch {
             if (Get<WorldInstanceHost>().TryGet(instance: out var row, name: name) && (row is not null)) { Observe(instance: row); }
         }
         Get<WorldTestRun>().ArmInstances();
+        m_runStarted = Stopwatch.GetTimestamp();
+        m_restoreTicks = (m_runStarted - started);
     }
     private void FreezeLeg() {
+        m_authoredTicks = (Stopwatch.GetTimestamp() - m_runStarted);
         m_observing = false;
         foreach (var (_, probe) in m_probes) { probe.Dispose(); }
         try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_reproductionFailure = $"cannot archive authored state: {exception.Message}"; }
@@ -184,6 +199,7 @@ internal sealed class WorldTestBatch {
     }
     private bool CompleteLeg() {
         var leg = m_legs[m_index];
+        var replayStarted = Stopwatch.GetTimestamp();
 
         m_observing = false;
         try {
@@ -211,6 +227,19 @@ internal sealed class WorldTestBatch {
             m_failed = true;
         }
         m_probes.Clear();
+        var replayTicks = (Stopwatch.GetTimestamp() - replayStarted);
+        var run = Get<WorldTestRun>();
+
+        static double Milliseconds(long ticks) => ((1000.0 * ticks) / Stopwatch.Frequency);
+        File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
+            authorityTicks = run.AuthorityTicks,
+            bootMilliseconds = Milliseconds(m_bootTicks),
+            restoreMilliseconds = Milliseconds(m_restoreTicks),
+            authoredMilliseconds = Milliseconds(m_authoredTicks),
+            exportMilliseconds = Milliseconds(run.ExportTicks),
+            replayMilliseconds = Milliseconds(replayTicks),
+            otherMilliseconds = Milliseconds((((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
+        }));
         File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "host-boots"), (m_host.Boots - m_reportedBoots).ToString(provider: CultureInfo.InvariantCulture));
         m_reportedBoots = m_host.Boots;
         m_output.Flush(); m_error.Flush();

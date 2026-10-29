@@ -276,7 +276,17 @@ schedule. `--reproduce` restores each authority's start and replays the captured
 input through the tape's ordinary doors, checking every tick's authoritative
 hash, final machine cores and final canonical export. It never boots a second
 host or re-submits the schedule. Its manifest describes the authored run;
-`reproduction.json` records the replay verdict per authority. Preparation shares composed
+`reproduction.json` records the replay verdict per authority. The input tape's
+`WorldReplayProbe` owns the per-tick hashes and their comparison; the test manifest
+contains only exports and command outcomes. Do not collect a second hash list in
+`WorldTestRun`: no verdict reader consumes it, and it duplicates the probe's most
+expensive work during reproduction. Each batch leg also writes `timing.json`
+beside its transcripts: boot, restore/arming, authored execution (including export),
+export, reproduction and other overhead in milliseconds, plus the authority-tick
+observations across running instances. These are diagnostic readings, kept outside
+the deterministic manifest. Worker device caches stay beside its staged documents,
+under the run directory, so a retained run owns its cache writes too.
+Preparation shares composed
 imports, including authored-value origins, through the existing content-checked
 composition cache; each reader gets a fresh tree. Staging consumes roots without
 retaining their composed images or scalar-origin snapshots, while shared imports
