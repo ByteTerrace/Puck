@@ -91,6 +91,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private WorldDefinition m_definition;
     private int m_definitionRevision;
     private int m_responseRevision;
+    private int m_solidResponseRevision;
     private WorldDocumentVersion m_documentVersion;
 
     // The field and document rows a snapshot's cell writes moved, handed to the state mirror.
@@ -130,6 +131,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// shows without moving a presentation facet (<see cref="WorldHoldingChange.Appearance"/>). The frame source composes
     /// again on it; nothing derived from the definition's shape reconciles.</summary>
     public int ResponseRevision => m_responseRevision;
+    /// <summary>Gets the monotonic solid-response counter: bumped with <see cref="ResponseRevision"/> only when a solid
+    /// placement is among the rows the delivery moved, so a consumer of solid geometry alone (the static query field)
+    /// holds across a lamp or a display swapping its creation.</summary>
+    public int SolidResponseRevision => m_solidResponseRevision;
     /// <summary>The version of the latest delivered definition, or <see langword="default"/> before the first delivery.</summary>
     public WorldDocumentVersion DocumentVersion => m_documentVersion;
     /// <summary>The client seat table.</summary>
@@ -1051,6 +1056,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         switch (WorldPlacementResponse.CompareHoldings(after: definition, before: m_definition)) {
             case WorldHoldingChange.Appearance:
                 m_responseRevision++;
+                if (MovesSolidHolding(after: definition, before: m_definition)) { m_solidResponseRevision++; }
 
                 break;
             case WorldHoldingChange.Facets:
@@ -1062,6 +1068,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_definition = definition;
         BeginVersion(version: version);
         m_stateMirror.Refresh(notifyDelivery: false, stamp: in stamp);
+    }
+
+    // Only called once CompareHoldings found moved rows, so both definitions hold the same row count.
+    private static bool MovesSolidHolding(WorldDefinition after, WorldDefinition before) {
+        for (var index = 0; (index < after.Placements.Count); index++) {
+            var next = after.Placements[index];
+
+            if ((next.Solid is not null) && (next.Holding != before.Placements[index].Holding)) { return true; }
+        }
+        return false;
     }
 
     // Records the version a document was delivered at. A different activation is a different world: the state mirror

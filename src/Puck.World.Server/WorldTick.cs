@@ -38,18 +38,19 @@ public sealed partial class WorldTick {
     // --- The co-driving contribution set (fed to FixedContributionFold below) ---
     // A contribution can only ever land on a HUMAN-OCCUPIED body (WorldPopulation.IsHumanOccupied gates it — an
     // unoccupied body is a bot at full authority, applied directly in ApplyIntentSubmission, and never reaches this
-    // set), and occupancy today is exactly the local-seat slice — so the set preallocates LocalSeatCount ×
-    // ChannelLimits.MaxChannels raw-Int64 slots (a handful of longs) rather than a per-mounted-addon bound, and
-    // folding a tick allocates nothing regardless of how many addons are mounted. m_ownerBase/m_hasOwnerBase are the
-    // tick's `h` per seat (the OCCUPYING seat's own submission — never the ladder's winner: a tape still outranks
-    // it, see WorldBody.NextIntent), and m_ownerHeld is that submission's held-device image; the sum arrays are
-    // indexed `(seat * ChannelLimits.MaxChannels) + ordinal`. There is NO per-tick ceiling accumulator: the pool
-    // ceiling is one number per (seat, channel) read straight off the seat's own grant row
-    // (WorldGrants.PoolCeilings), never derived from whichever contributors happened to land this tick.
-    private readonly PlayerIntent[] m_ownerBase = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];
-    private readonly PlayerIntent[] m_ownerHeld = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];
-    private readonly bool[] m_hasOwnerBase = new bool[WorldBodiesLimits.LocalSeatCount];
-    private readonly bool[] m_hasContribution = new bool[WorldBodiesLimits.LocalSeatCount];
+    // set). Occupancy is a local seat or an admitted peer, so every set below is indexed by BODY index and sized to the
+    // population's capacity at construction (Capacity × ChannelLimits.MaxChannels raw-Int64 slots, a few KB) rather
+    // than a per-mounted-addon bound, and folding a tick allocates nothing regardless of how many addons are mounted.
+    // m_ownerBase/m_hasOwnerBase are the tick's `h` per body (the OCCUPYING participant's own submission — never the
+    // ladder's winner: a tape still outranks it, see WorldBody.NextIntent), and m_ownerHeld is that submission's
+    // held-device image; the sum arrays are indexed `(body * ChannelLimits.MaxChannels) + ordinal`. There is NO
+    // per-tick ceiling accumulator: the pool ceiling is one number per (occupant, channel) read straight off the
+    // occupant's own grant row (WorldGrants.PoolCeilings), never derived from whichever contributors happened to land
+    // this tick.
+    private readonly PlayerIntent[] m_ownerBase;
+    private readonly PlayerIntent[] m_ownerHeld;
+    private readonly bool[] m_hasOwnerBase;
+    private readonly bool[] m_hasContribution;
     // Every staged delta was already bounded to |d| <= One at the pump. FixedContributionFold records the exact
     // generic Int64 accumulator boundary; World's concrete set is far smaller: untrusted terms are mounted Wasmtime
     // instances (memory exhausts around 2^20), while trusted co-driving seats number at most LocalSeatCount - 1.
@@ -57,10 +58,10 @@ public sealed partial class WorldTick {
     // do not enter either sum today. With One = 2^16 (FixedQ4816) and at most ~2^20 untrusted terms, a completed sum
     // peaks near 2^36, so it stays roughly twenty-seven binary orders below Int64 overflow without a hot-path
     // checked/saturating add.
-    private readonly long[] m_untrustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly Int128[] m_relativeTrusted = new Int128[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxAxes)];
-    private readonly Int128[] m_relativeUntrusted = new Int128[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxAxes)];
-    private readonly long[] m_trustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_untrustedSum;
+    private readonly Int128[] m_relativeTrusted;
+    private readonly Int128[] m_relativeUntrusted;
+    private readonly long[] m_trustedSum;
     // This tick's contributed HELD-device image per (seat, channel) — a non-owner's composition act (see
     // WorldAddonRuntime.Submit's HeldChannels), accumulated by WorldChannelTable.ComposeHeld's shape-aware rule: a
     // unipolar/binary channel maxes across contributors (an overlay of {0, One} bits — old ActionLanes OR, no ceiling
@@ -68,13 +69,13 @@ public sealed partial class WorldTick {
     // RAW and UNCLAMPED here (see StageContribution) — clamping per contributor would make the result depend on
     // arrival order, so the one clamp is deferred to FoldChannelContributions, where this accumulator is finally
     // combined with the owning seat's own held value.
-    private readonly long[] m_contributedHeld = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_contributedHeld;
     // Per (seat, ordinal): whether THIS TICK's contribution set actually reached this channel through the UNTRUSTED
     // (pooled) path — independent of the numeric sum, which a cancelling pair of contributions can net to zero while
     // the pool was still genuinely exercised. Gates body.channels' ceiling report (FoldChannelContributions): an
     // authored ceiling nobody exercised this tick must read back as "no ceiling in force," never as the number on
     // paper. Reset per seat by ClearContribution once the fold has read it.
-    private readonly ChannelHeldMask[] m_untrustedAcceptedMask = new ChannelHeldMask[WorldBodiesLimits.LocalSeatCount];
+    private readonly ChannelHeldMask[] m_untrustedAcceptedMask;
     // --- body.channels read-back (the Puck.Maths fold primitive retains none of this itself;
     // without it the verification walk could only infer a contribution's effect from displacement across ticks) ---
     // The fold accumulates and clears m_untrustedSum/m_trustedSum/m_contributedHeld above every tick (the hot path pays
@@ -85,17 +86,17 @@ public sealed partial class WorldTick {
     // answers with its last settled write, exactly like m_ownerBase's own raw persistence above. Diagnostic only: read
     // by body.channels alone, off every hashed path, and never fed back into a fold (a read-back must never change
     // what it observes).
-    private readonly PlayerIntent[] m_channelReadBase = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];   // h
-    private readonly PlayerIntent[] m_channelReadFolded = new PlayerIntent[WorldBodiesLimits.LocalSeatCount]; // what SubmitIntent received
+    private readonly PlayerIntent[] m_channelReadBase;   // h
+    private readonly PlayerIntent[] m_channelReadFolded; // what SubmitIntent received
     // Per (seat, ordinal): the pool ceiling in force for the last write that touched this channel (0 = no untrusted
     // contributor reached it; a consent row nobody exercised this write is honestly "no ceiling in force," not the
     // ceiling on paper), and whether the untrusted pool step actually bound the value (Evaluate's poolClamped output).
-    private readonly long[] m_channelReadCeiling = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly bool[] m_channelReadClamped = new bool[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly Principal[] m_channelReadContributor = new Principal[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly bool[] m_channelReadContributorTrusted = new bool[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly ChannelHeldMask[] m_channelReadContributorMask = new ChannelHeldMask[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly int[] m_channelReadContributorCount = new int[WorldBodiesLimits.LocalSeatCount];
+    private readonly long[] m_channelReadCeiling;
+    private readonly bool[] m_channelReadClamped;
+    private readonly Principal[] m_channelReadContributor;
+    private readonly bool[] m_channelReadContributorTrusted;
+    private readonly ChannelHeldMask[] m_channelReadContributorMask;
+    private readonly int[] m_channelReadContributorCount;
     // The one ordered domain for every non-intent submission — command, grant, revoke, session,
     // definition, mutation, undo, composition, lever, and query all enqueue here, never a per-kind queue. A local
     // caller (LoopbackTransport) enqueues and immediately drains inline (see EnqueueOrdered/DrainOrdered), so this
@@ -225,7 +226,25 @@ public sealed partial class WorldTick {
 
         var capacity = host.Population.Capacity;
 
+        m_channelReadBase = new PlayerIntent[capacity];
+        m_channelReadFolded = new PlayerIntent[capacity];
+        m_channelReadCeiling = new long[(capacity * ChannelLimits.MaxChannels)];
+        m_channelReadClamped = new bool[(capacity * ChannelLimits.MaxChannels)];
+        m_channelReadContributor = new Principal[(capacity * MaxReadContributorsPerSeat)];
+        m_channelReadContributorCount = new int[capacity];
+        m_channelReadContributorMask = new ChannelHeldMask[(capacity * MaxReadContributorsPerSeat)];
+        m_channelReadContributorTrusted = new bool[(capacity * MaxReadContributorsPerSeat)];
+        m_contributedHeld = new long[(capacity * ChannelLimits.MaxChannels)];
         m_contended = new bool[capacity];
+        m_hasContribution = new bool[capacity];
+        m_hasOwnerBase = new bool[capacity];
+        m_ownerBase = new PlayerIntent[capacity];
+        m_ownerHeld = new PlayerIntent[capacity];
+        m_relativeTrusted = new Int128[(capacity * ChannelLimits.MaxAxes)];
+        m_relativeUntrusted = new Int128[(capacity * ChannelLimits.MaxAxes)];
+        m_trustedSum = new long[(capacity * ChannelLimits.MaxChannels)];
+        m_untrustedAcceptedMask = new ChannelHeldMask[capacity];
+        m_untrustedSum = new long[(capacity * ChannelLimits.MaxChannels)];
         m_driveDenied = new bool[capacity];
         m_federatedIntents = new WorldFederatedIntentState[capacity];
         m_host = host;

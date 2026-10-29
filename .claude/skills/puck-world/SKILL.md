@@ -717,6 +717,11 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - An attached placement can also `respond` to state: the shown prototype and
   its colliders swap while its attachment stays intact. The lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.
+- A moving carrier or a solid response swap wakes only the parked rigid bodies
+  whose bounds meet the box its changed colliders cover; any other contact-field
+  change wakes every one. A ride or a door that lags the tick shows as
+  `world.counters physics.bodies` advances per tick far above the idle count
+  ([server README](../../../src/Puck.World.Server/README.md)).
 
 ## Route adjacent work
 

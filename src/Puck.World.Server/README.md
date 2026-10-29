@@ -900,7 +900,19 @@ written into one of its own registers, a parked peer resuming, or a bump to
 three independently-increasing counters—a document install/adjacency
 reconfigure, `WorldColliderSet.RefreshAttached` finding an attached row at a
 new pose, and the field lattice's own `Revision`—so an unchanged sum proves
-none of them moved since a sleeping body last observed it. `body.where` trails
+none of them moved since a sleeping body last observed it. A parked rigid
+island wakes on that bump only where the change can reach it: when only attached
+rows moved, `PrepareBodyStep` wakes the sleepers whose broadphase radius plus
+1 m meets the box the moved colliders swept (before and after the move,
+`WorldColliderSet.TakeAttachedChange`), and a response swap that rebuilds the
+analytic set wakes only the rigid bodies the changed rows' colliders reach
+(`InstallResponseSolids`, old and new colliders). Every other sleeper observes
+the new version without waking; a document install, a field step, a half-space
+or a change already owed wakes them all, as does any change for a non-rigid
+sleeper. Waking every rigid island on each tick a carrier moves costs the debug
+world about 500 rigid advances a tick against 14 idle. `world.counters
+physics.bodies` counts the advances and the field wakes and observations.
+`body.where` trails
 `asleep=<tick>` for a sleeping body (absent otherwise); `world.status` echoes
 the population-wide `sleeping` count. A rigid kit's own rest latch
 (`WorldBody.Resting`) is a distinct, older mechanism—a rigid body never
@@ -1590,7 +1602,8 @@ that entry's own authored grant templates. Each door refuses by its OWN named
 spelling (`version-mismatch: …` vs `identity-refused: …`)—the two are never
 conflated. Only once BOTH doors pass does population admission run
 (`WorldServer.TryAdmitPeerConnection`, refused by name when the entity table
-has no free slot or the document's `networkPlayers` admission cap is already met); every
+has no free slot or the document's `networkPlayers` admission cap, which counts remote
+humans only, is already met); every
 subsequent frame
 (decoded through the SAME `WorldFrameCodec`/`WorldSubmissionCodec` leaves the
 loopback and tape use), and disconnect

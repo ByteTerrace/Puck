@@ -90,6 +90,11 @@ public sealed partial class WorldColliderSet : IContactField {
     // never on every call — so a world with no moving attached row (the common case) never wakes a sleeping body.
     private ulong m_attachedHash;
 
+    // The box every attached row that moved since the last TakeAttachedChange swept through: its colliders before and
+    // after each move. A sleeping body outside it cannot meet any collider that moved, so a moving carrier wakes only
+    // what it nears.
+    private WorldColliderBox m_attachedMoves;
+
     private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
         m_colliderExtents = Array.ConvertAll(array: colliders, converter: static collider => collider.WorldHalfExtent());
@@ -729,6 +734,48 @@ public sealed partial class WorldColliderSet : IContactField {
         m_attachedColliderRows.Clear();
         Array.Clear(array: m_attachedResolved);
         RefreshAttachedRows(population: population);
+        FoldAttachedMoves(colliders: m_previousAttachedColliders, rows: m_previousAttachedColliderRows);
+        FoldAttachedMoves(colliders: m_attachedColliders, rows: m_attachedColliderRows);
+    }
+
+    /// <summary>Takes the box that every attached row moved since the previous take swept through: the bounds of its
+    /// colliders before and after each move, empty when no row moved.</summary>
+    /// <returns>The box; a body whose bounds miss it cannot meet any collider that moved.</returns>
+    internal WorldColliderBox TakeAttachedChange() {
+        var moves = m_attachedMoves;
+
+        m_attachedMoves = default;
+        return moves;
+    }
+    /// <summary>Grows a box over the colliders this set compiled for the given rows of the definition it stands for:
+    /// a static row's colliders, and an attached row's at its latest refresh.</summary>
+    /// <param name="definition">The definition this set was built or carried over.</param>
+    /// <param name="rows">The indices of the placement rows to bound.</param>
+    /// <param name="box">The box to grow.</param>
+    internal void FoldRows(WorldDefinition definition, IReadOnlyList<int> rows, ref WorldColliderBox box) {
+        foreach (var row in rows) {
+            var placement = definition.Placements[row];
+
+            if (m_placements.TryGetValue(key: placement, value: out var compiled)) {
+                foreach (ref readonly var collider in compiled.Colliders.AsSpan()) { box.Fold(collider: in collider); }
+            }
+            for (var attached = 0; (attached < m_attachedRows.Count); attached++) {
+                if (!ReferenceEquals(objA: m_attachedRows[attached].Placement, objB: placement)) { continue; }
+                for (var index = 0; (index < m_attachedColliders.Count); index++) {
+                    if (m_attachedColliderRows[index] == attached) { box.Fold(collider: m_attachedColliders[index]); }
+                }
+            }
+        }
+    }
+
+    // A row moved when it resolves at one refresh and not the other, or at another origin or rotation at both.
+    private bool AttachedRowMoved(int row) => ((m_attachedResolved[row] != m_previousAttachedResolved[row]) ||
+        (m_attachedResolved[row] && ((m_attachedOrigins[row] != m_previousAttachedOrigins[row]) || (m_attachedRotations[row] != m_previousAttachedRotations[row]))));
+
+    private void FoldAttachedMoves(List<FixedStaticCollider> colliders, List<int> rows) {
+        for (var index = 0; (index < colliders.Count); index++) {
+            if (AttachedRowMoved(row: rows[index])) { m_attachedMoves.Fold(collider: colliders[index]); }
+        }
     }
 
     // This single-threaded refresh reuses its visitor and working fold for every attached row.

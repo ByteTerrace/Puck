@@ -126,6 +126,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
                 IdentityDomain: "example.test",
                 IdentitySubject: "traveler",
                 PlacementId: null,
+                RemoteHuman: true,
                 Source: IntentSource.Live,
                 TravelTurn: FixedQ4816.FromDouble(value: -1.25)
             ),

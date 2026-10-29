@@ -983,6 +983,7 @@ public sealed partial class WorldPopulation {
                 sleepAfterTicks: m_sleepAfterTicks,
                 contactFieldVersion: contactFieldVersion
             );
+            WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.Advances);
             RecordFlockMotion(body: player);
         }
     }

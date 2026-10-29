@@ -312,6 +312,7 @@ public static partial class WorldFederationCodec {
         var bodyColor = reader.ReadFiniteVector(field: $"traveler {(ordinal + 1)} body color");
         var catalogRig = reader.ReadByte();
         var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
+        var remoteHuman = reader.ReadBoolean();
 
         if (reader.Failed) {
             failure = reader.Failure;
@@ -326,7 +327,8 @@ public static partial class WorldFederationCodec {
             Source: source,
             BodyColor: bodyColor,
             CatalogRig: catalogRig,
-            Mobility: mobility
+            Mobility: mobility,
+            RemoteHuman: remoteHuman
         );
         failure = default;
 
@@ -694,6 +696,7 @@ public static partial class WorldFederationCodec {
                 projection: member.Identity,
                 writer: writer
             );
+            writer.WriteBoolean(value: member.RemoteHuman);
         }
 
         return writer.ToArray();

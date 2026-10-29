@@ -139,6 +139,8 @@ medium, lows · Next: the high silhouette leak, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+- Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
+
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the view's HDR output with a highlight clamp) as the auto-exposure driver, the probe meter kept for local adaptation.
 
 - Probe depth visibility (from the probe-depth review):
@@ -322,6 +324,12 @@ findings by cluster, starting with the hall stairs.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
+- [low] The presentation query field (camera clearance, surface effectors)
+  excludes the solid placement `desk-chair`: its evaluator refuses a
+  `RepeatPolar` fold (`[world.presentation-field: excluded placement
+  'desk-chair' ... RepeatPolar]`, now narrated once per placement), so the chase
+  camera and limb probes see no chair. Give the fixed-point query twin the
+  fold, or bound the folded shape.
 - The bake-side causes live in the [rendering plan's](rendering.md#open-items)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
@@ -447,6 +455,8 @@ developer exhibits, then the diagnostics' windowed checks.
 Owner: specialist or Astra design lane · ordinary · Next: design the
 simulation thread and its snapshot handoff, then build it.
 
+- [medium] The localized wake around a moving carrier uses a fixed 1 m margin that ignores the configurable contact skin: with a valid `contactSkin` of 2 m, a sleeping sphere resting at skin distance above a lift misses the wake box during small car movements and stays asleep instead of riding (`src/Puck.World.Server/WorldPopulation.Sleep.cs:154`). Derive the margin from the contact skin (and the body's own broadphase radius). (owner: next simulation batch; from: lift-lag review)
+
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
@@ -491,6 +501,18 @@ simulation thread and its snapshot handoff, then build it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
+- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
+  host frame clamps its wall delta to a quarter second
+  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
+  then runs every step that delta owes, so once a tick costs more than its
+  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
+  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
+  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
+  burst by the wall time it has spent (drop the rest, rebasing the capture pin
+  as a clamp does), so an over-budget tick slows the World instead of the frame.
+- [low] Every rigid advance zero-fills the step's capture snapshot
+  (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
+  body's advance in an EventPipe sample of a lift ride).
 - Pacing at 120 Hz with Windows' Dynamic Refresh Rate (the lead machine's
   display now runs 120 Hz with DRR on, VRR 48 to 120 Hz): confirm the 60 FPS bar
   and VRR pacing hold in front of and behind another window, and that
@@ -629,6 +651,13 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
 
+- A companion that crosses lands autonomous under Idle (its addon driver stays
+  in the world it left), so in the night field nothing moves it, and a return
+  home lands it Idle and no longer an inhabitant, where its addon's Drive is
+  not expected to steer it (unconfirmed). Decide how a companion's driver
+  follows it: the destination world declaring the companion's addon, or the
+  arrival re-adopting its home placement and source.
+
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -675,6 +704,8 @@ since a failover today leaves a doubt that never resolves.
 Owner: MCP lane (specialist) · medium · Next: the cached wait refusal, then the
 schema switch.
 
+- [medium] Naming what is under a pixel fails on the owner's windowed World: `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object is. Make pick address the presented world view by default and list it in `panes`. (from: owner walkthrough)
+
 - An invalid wait argument on a pending operator MCP start appears to cache the
   argument refusal as the start's completed result (`OperatorMcpFront.Record`):
   later corrected waits and cancellation return that refusal while the World
@@ -686,6 +717,15 @@ schema switch.
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
+- [medium] An attached operator session costs the tick a whole state load on
+  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
+  tier) discloses the definition again from the arena, so its mirror's
+  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
+  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
+  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
+  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
+  change to the session without a fresh disclosure of state, or make the load
+  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a
@@ -749,11 +789,7 @@ step's completion criteria; C1 to C6 are in.
 - C7 read-back and cleanup: current-mode action names in `body.rig`,
   `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
   ordinal surfaces removed, and executable checks of the genre table.
-- A typing tutor in the gallery (the owner's request), on C5 and C6: a station
-  whose engagement enters a text-focus mode, lessons from the home row to words
-  and sentences on a prompt screen, live per-character feedback, words per
-  minute, per-key accuracy, streaks and a run timer, judged from input history so
-  a replay reproduces every keystroke.
+- The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).
@@ -1022,10 +1058,35 @@ Owner: maths lane · ordinary · Next: the float duration fields' schema migrati
   checked against a deterministic Miller-Rabin oracle; Intel (Alder Lake) and
   Zen 2 timings are unmeasured.
 
+### Dynamic body scale and the mesh bake
+
+Owner: specialist lane (rendering, sdf-authoring) · one high from the owner's walkthrough · Next: bake a dynamic body in its own space and apply scale at draw.
+
+- [high] Crossing the Wonderland door (scale 0.25) misses the mesh cache for 180 groups of the Moth (`[sdf.mesh-bake] miss ... geometry new to its set`; 3679 dispatches, 13.4 M samples, 14.65 s) and the full-size meshes keep drawing until it finishes, so the Moth reads large and warped; after it the small Moth is visibly degraded: white slivers along every stripe edge of the back plates, lumpy squashed boots, ragged pads, because the bake's detail is set in world units and a 0.25-scale body gets a mesh four times coarser relative to itself. A dynamic body's bake must not depend on its world scale: bake in local space at its own detail, scale at draw, detail tier by screen size. Poses: `body.pose 6.16 0.07 30.43 23` at scale 0.25, orbit `view.override camera look 6.75 0.32 30.75 6.16 0.24 30.43` and `6.40 0.30 31.05 6.16 0.24 30.43`; captures w07-* in `.claude/scratch/walkthrough/` (the lead's machine). (from: owner walkthrough)
+
+### Temporal shimmer and cadence flicker
+
+Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two mediums from the owner's walkthrough · Next: find why the history never resolves the jitter on these surfaces.
+
+- [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
+- [medium] The lift door threshold also blinks with temporal off: pairs of frames about 11 presentations apart change about 3 % with max |dY| 26, then hold still, a cadence-driven refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh) independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). (from: owner walkthrough)
+
+### Panes: split screens the player drives
+
+Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary · Next: after the bars-and-pick lane lands (it touches pane listing and pick), a machine-screen source for a pane. The owner's direction: a player can run as the Moth in one pane with the desktop in another, the HGD in a third and a fourth camera angle in another.
+
+- What exists: `views` layouts of normalized `slots`, each the owning seat's view, a named authored `camera`, or a `views.graphs` `instance` (the studio's 2x2 `motion` layouts; `desktop.puck`'s `desktop` layout shows the `source.capture` graph in a pane); `view.override layout <name>` switches.
+- A machine's screen as a pane source: the machines render as `source$machine$<id>` graph nodes, but the source packages a `views.graphs` row can name are `source.capture`, `source.passthrough` (with pointer and scroll) and `source.qr`, so no pane can show the HGD's picture. Add the package (find the existing machine-screen producer first, rule 7).
+- Switching layouts as a player: a binding or controller-bar action that cycles or selects the world's layouts, not only the `view.override` console verb.
+- Pane focus: one pane holds input focus and receives it (the seat's pad and keys drive the Moth until the player focuses the desktop pane, which then takes mouse and keyboard as passthrough, or the HGD pane, which takes the pad); focus is shown on the pane, moves by a binding or a click, and the in-world computer's programs (desktop and typing tutor) use the same focus.
+- Arranging panes at runtime (moving, resizing, choosing a pane's content) beyond the world's authored layouts: decide once focus and switching land.
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: whichever the owner calls for.
+
+- [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
