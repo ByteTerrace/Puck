@@ -13,6 +13,9 @@ public sealed class WorldReplayProbe : IDisposable {
     private readonly List<WorldReplayTickInput> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
 
+    /// <summary>Gets the per-tick authoritative hashes recorded by <see cref="WorldReplayTape.NoteTick"/> while this probe was attached.</summary>
+    public IReadOnlyList<ulong> Hashes => m_hashes;
+
     private readonly ulong[] m_startComponents;
 
     private int m_skipAuthority;

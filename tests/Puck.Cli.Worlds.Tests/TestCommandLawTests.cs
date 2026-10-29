@@ -121,12 +121,83 @@ public sealed class TestCommandLawTests {
             File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000001/run1/out/state-export.json")));
         // Also compare a reused worker to a truly fresh process, using the same staged world and ordinary boot.
         var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
+        var freshDirectory = directory.PathOf(name: "fresh");
         using var error = new StringWriter();
 
-        Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: directory.PathOf(name: "fresh"),
+        Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: freshDirectory,
             exportTick: 7, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")), actual: fresh!.ExportBytes);
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/test-run.json")), actual: fresh.ManifestBytes);
+
+        static ulong[] ReadProbeHashes(string reproductionPath) {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(path: reproductionPath));
+
+            return [.. document.RootElement[0].GetProperty(propertyName: "hashes").EnumerateArray().Select(selector: static item => item.GetUInt64())];
+        }
+
+        var pristineHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000000/run1/reproduction.json"));
+        var changedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000001/run1/reproduction.json"));
+        var reusedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000002/run1/reproduction.json"));
+        var freshHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: freshDirectory, path2: "reproduction.json"));
+
+        Assert.Equal(expected: 7, actual: pristineHashes.Length);
+        Assert.Equal(expected: pristineHashes, actual: reusedHashes);
+        Assert.Equal(expected: pristineHashes, actual: freshHashes);
+        Assert.NotEqual(expected: pristineHashes, actual: changedHashes);
+    }
+    [Fact]
+    public void ABatchLegWhoseTimingOrHostBootsWriteFailsFailsPromptlyWithItsReason() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-batch-io-");
+        var worldPath = directory.WriteText(
+            name: "generated/scenario/test.world.json",
+            text: """{"schema":"puck.world.definition.v1","schedule":{"exportTick":1,"settleTicks":1,"rows":[]}}"""
+        );
+        var leg0 = directory.PathOf(name: "worlds/000000/run1");
+        var leg1 = directory.PathOf(name: "worlds/000001/run1");
+
+        _ = Directory.CreateDirectory(path: Path.Combine(path1: leg0, path2: "timing.json"));
+        _ = Directory.CreateDirectory(path: Path.Combine(path1: leg1, path2: "host-boots"));
+
+        var batchPath = directory.WriteText(
+            name: "batch.json",
+            text: System.Text.Json.JsonSerializer.Serialize(value: new[] {
+                new {
+                    World = worldPath,
+                    Directory = leg0,
+                    ExitAfterSeconds = 120,
+                    BootShape = "same",
+                    Reproduce = false,
+                },
+                new {
+                    World = worldPath,
+                    Directory = leg1,
+                    ExitAfterSeconds = 120,
+                    BootShape = "same",
+                    Reproduce = false,
+                },
+            })
+        );
+        var process = CliProcess.RunCaptured(
+            fileName: "dotnet",
+            arguments: [Artifact(), "--devices", "none", "--test-batch", batchPath],
+            cancellationToken: TestContext.Current.CancellationToken,
+            input: string.Empty,
+            timeout: TimeSpan.FromSeconds(value: 30)
+        );
+
+        Assert.Equal(expected: 1, actual: process.ExitCode);
+        Assert.Equal(expected: "1", actual: File.ReadAllText(path: Path.Combine(path1: leg0, path2: "exit-code")));
+        Assert.Contains(
+            expectedSubstring: "timing.json",
+            actualString: File.ReadAllText(path: Path.Combine(path1: leg0, path2: "stderr.log")),
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
+        Assert.Equal(expected: "1", actual: File.ReadAllText(path: Path.Combine(path1: leg1, path2: "exit-code")));
+        Assert.Contains(
+            expectedSubstring: "host-boots",
+            actualString: File.ReadAllText(path: Path.Combine(path1: leg1, path2: "stderr.log")),
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        );
     }
 
     private static string Artifact() => (File.Exists(path: Path.GetFullPath(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "../../Puck.World/release/Puck.World.dll")))

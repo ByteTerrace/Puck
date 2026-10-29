@@ -216,37 +216,46 @@ internal sealed class WorldTestBatch {
                     });
                 } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
 
-                results.Add(item: new { world = name, divergence });
+                results.Add(item: new { world = name, divergence, hashes = probe.Hashes });
                 if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}"); }
             }
             if (leg.Reproduce) { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "reproduction.json"), JsonSerializer.Serialize(results)); }
+            var replayTicks = (Stopwatch.GetTimestamp() - replayStarted);
+            var run = Get<WorldTestRun>();
+
+            static double Milliseconds(long ticks) => ((1000.0 * ticks) / Stopwatch.Frequency);
+            File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
+                authorityTicks = run.AuthorityTicks,
+                bootMilliseconds = Milliseconds(m_bootTicks),
+                restoreMilliseconds = Milliseconds(m_restoreTicks),
+                authoredMilliseconds = Milliseconds(m_authoredTicks),
+                exportMilliseconds = Milliseconds(run.ExportTicks),
+                replayMilliseconds = Milliseconds(replayTicks),
+                otherMilliseconds = Milliseconds((((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
+            }));
+            var boots = (m_host.Boots - m_reportedBoots);
+
+            m_reportedBoots = m_host.Boots;
+            File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "host-boots"), boots.ToString(provider: CultureInfo.InvariantCulture));
             File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "exit-code"), "0");
         } catch (Exception exception) {
             Console.Error.WriteLine(value: $"[test.batch: {exception}]");
-            File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "exit-code"), "1");
+            try { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "exit-code"), "1"); } catch { }
             m_failed = true;
         }
         m_probes.Clear();
-        var replayTicks = (Stopwatch.GetTimestamp() - replayStarted);
-        var run = Get<WorldTestRun>();
-
-        static double Milliseconds(long ticks) => ((1000.0 * ticks) / Stopwatch.Frequency);
-        File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
-            authorityTicks = run.AuthorityTicks,
-            bootMilliseconds = Milliseconds(m_bootTicks),
-            restoreMilliseconds = Milliseconds(m_restoreTicks),
-            authoredMilliseconds = Milliseconds(m_authoredTicks),
-            exportMilliseconds = Milliseconds(run.ExportTicks),
-            replayMilliseconds = Milliseconds(replayTicks),
-            otherMilliseconds = Milliseconds((((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
-        }));
-        File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "host-boots"), (m_host.Boots - m_reportedBoots).ToString(provider: CultureInfo.InvariantCulture));
-        m_reportedBoots = m_host.Boots;
         m_output.Flush(); m_error.Flush();
         m_index++;
         if ((m_index == m_legs.Length) || !m_reusable || (m_legs[m_index].BootShape != m_bootShape)) {
             Get<IHostApplicationLifetime>().StopApplication();
-        } else { OpenLeg(); StartLeg(); }
+        } else {
+            try { OpenLeg(); StartLeg(); } catch (Exception exception) {
+                Console.Error.WriteLine(value: $"[test.batch: {exception}]");
+                m_error.Flush();
+                m_failed = true;
+                Get<IHostApplicationLifetime>().StopApplication();
+            }
+        }
         return true;
     }
     private void ArchiveStateFiles(string directory) {
