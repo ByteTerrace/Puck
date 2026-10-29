@@ -315,7 +315,9 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
     }
     private bool InsideAnother(WorldDiagnosticCollider subject, Vector3 point, double epsilon) {
         foreach (var other in server.Population.DiagnosticColliders) {
-            if (!ReferenceEquals(objA: subject, objB: other) && (WorldDiagnosticGeometry.SignedDistance(collider: other.Collider, point: point) < -epsilon)) {
+            if (!ReferenceEquals(objA: subject, objB: other) &&
+                ((WorldDiagnosticGeometry.SignedDistance(collider: other.Collider, point: point) < -epsilon) ||
+                WorldDiagnosticGeometry.SharedInteriorFace(subject.Collider, other.Collider, point, epsilon))) {
                 return true;
             }
         }

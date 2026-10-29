@@ -7,6 +7,14 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed class WorldDiagnosticReportTests {
+    [Fact]
+    public void TouchingBoxesHideTheirSharedFaceButKeepTheOuterEdge() {
+        var left = FixedStaticCollider.Box(FixedVector3.Zero, FixedQuaternion.Identity, FixedVector3.FromVector3(Vector3.One));
+        var right = FixedStaticCollider.Box(FixedVector3.FromVector3(new Vector3(2, 0, 0)), FixedQuaternion.Identity, FixedVector3.FromVector3(Vector3.One));
+        Assert.True(WorldDiagnosticGeometry.SharedInteriorFace(left, right, Vector3.UnitX, 0.001));
+        Assert.False(WorldDiagnosticGeometry.SharedInteriorFace(left, right, new Vector3(1, 1, 0), 0.001));
+        Assert.False(WorldDiagnosticGeometry.SharedInteriorFace(left, left, Vector3.UnitX, 0.001));
+    }
     private static WorldDiagnosticFinding Finding(double separation, ulong tick = 1) => new("", "colliders", "red",
         "analytic/box/node", "collider-outside-authored-solid", "boundary agrees", separation, new(0.01, 0, 0.001),
         new Vector3(x: ((float)separation), y: 0, z: 0), Vector3.UnitX,
@@ -52,7 +60,12 @@ public sealed class WorldDiagnosticReportTests {
                     ["collision-versus-baked-mesh"] = new(Clean: 0, Red: 0, Unknown: 3),
                 },
             });
+        var covered = unknown with { Coverage = report.Coverage };
+        report = report with { Findings = [covered, covered] };
         using var json = JsonDocument.Parse(report.ToJson());
+        Assert.False(condition: json.RootElement.GetProperty(propertyName: "findings")[0].TryGetProperty(propertyName: "coverage", value: out _));
+        using var picked = JsonDocument.Parse(covered.ToJson());
+        Assert.True(condition: picked.RootElement.TryGetProperty(propertyName: "coverage", value: out _));
 
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty(propertyName: "findings")[0].GetProperty(propertyName: "observed").ValueKind);
         Assert.False(condition: json.RootElement.GetProperty(propertyName: "coverage").GetProperty(propertyName: "complete").GetBoolean());
@@ -61,7 +74,7 @@ public sealed class WorldDiagnosticReportTests {
         Assert.Equal(0, samples.GetProperty(propertyName: "red").GetInt32());
         Assert.Equal(0, samples.GetProperty(propertyName: "clean").GetInt32());
         Assert.Equal(3, samples.GetProperty(propertyName: "unknown").GetInt32());
-        Assert.Contains("unknown=1", report.Summary());
+        Assert.Contains("unknown=2", report.Summary());
         Assert.Contains("tested=0/3", report.Summary());
     }
     [Fact]

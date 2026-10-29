@@ -72,7 +72,8 @@ public sealed record SweepSignalResult(string Name, string Leg, string Line, str
 /// <param name="Reasons">Why it is not clean.</param>
 /// <param name="ChangedFraction">The fraction of its pixels changed against the baseline beyond the level tolerance,
 /// or <see langword="null"/> without a comparable baseline still.</param>
-public sealed record SweepStillResult(string Name, string Group, string? Note, string? File, string Capture, string Status, IReadOnlyList<string> Reasons, double? ChangedFraction);
+/// <param name="Motion">The held body's authoritative pose and presentation rig at capture, when measured.</param>
+public sealed record SweepStillResult(string Name, string Group, string? Note, string? File, string Capture, string Status, IReadOnlyList<string> Reasons, double? ChangedFraction, string? Motion = null);
 /// <summary>The tour's stills and sheets.</summary>
 /// <param name="LevelTolerance">The channel difference beyond which a pixel counts as changed.</param>
 /// <param name="AmberFraction">The changed fraction beyond which a still is amber.</param>

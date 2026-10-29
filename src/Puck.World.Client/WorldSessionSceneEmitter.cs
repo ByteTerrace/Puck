@@ -127,6 +127,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public ISdfPickMap? PickMap => m_picks.Snapshot(pool: m_pool.PickMeshTargets);
 
     private readonly WorldCreationInstances m_pool = new();
+    /// <summary>The scene's body presentation registrations, shared by routed rig reads and animation reseeding.</summary>
+    public WorldCreationInstances BodyStamps => m_pool;
 
     private readonly WorldSessionStampSource m_source;
 
