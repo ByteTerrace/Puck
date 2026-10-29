@@ -6,6 +6,7 @@ starting work, and tick or remove an item in the same change that closes it.
 
 ## The debug world is the test world
 
+- [ ] Boot-once never reuses a boot in practice: every `puck test` run on the trimmed scenario set prints one worker process but `host-boots` equal to `world-runs` (28/28 hall, 24/24 chess, 20/20 go, every file), because a worker restores a checkpoint only between scenarios whose boot shape is identical and each generated test world differs. Every scenario still pays a 2-4 s host boot plus about 3 s of authored-phase overhead even at a few ticks, which is now the larger share of scenario time. Reuse one host across differing scenarios (boot the shared base once, restore its checkpoint, then apply each scenario's own rows, rules and state), keeping determinism and `--reproduce` exact. (from: scenario-trim lane)
 The debug world is the engine's instrument ([decision](../decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
 
 - [x] The sweep. `puck sweep` ([CLI reference](../reference/cli.md#puck-sweepthe-debug-worlds-sweep)) runs the plan in `worlds/debug/sweep.json` through each World's Operator attachment: the tools for a bounded span, every signal with red and amber rules, and a `puck.sweep.v1` report that `--baseline` compares with.
