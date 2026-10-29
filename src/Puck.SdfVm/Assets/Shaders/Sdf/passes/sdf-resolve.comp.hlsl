@@ -18,6 +18,8 @@
 // - surviving history is clipped to the 3x3's YCoCg, coverage and transport box, its weight lowered by the reactivity,
 //   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through, and a
 //   reactive pixel shows it by its reactivity;
+// - a stationary, nonreactive receiver with a complete phase window instead shows that window's fixed-order mean,
+//   replacing each phase within a period and retaining the samples this phase's neighborhood misses;
 // - a sub-pixel feature (sdfResolveFeature) the footprint showed within the last jitter period widens the box to its
 //   color while the surface stands still, so the mean the jitter gathers over the feature survives the frames that miss
 //   it, as a supersampled image holds it, and the history saturates at SDF_HISTORY_FEATURE_WEIGHT_CAP rather than one

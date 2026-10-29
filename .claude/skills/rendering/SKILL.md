@@ -252,6 +252,20 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   a still surface. `SdfReprojectionDeviceLawTests` includes this thin-triangle
   witness on both backends. Check the static `motion` view when history fails
   to accumulate; unchanged geometry must show valid, zero object motion.
+- **Stationary reconstruction keeps a complete jitter window.** The resolve's
+  history surface retains each phase's color, coverage, transport and weight.
+  Replacing one phase and summing in fixed order removes periodic newest-phase
+  bias and keeps samples the current neighborhood misses. Moving and reactive
+  pixels use the clipped resolve while their window fills. The package owns
+  `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
+  HLSL. A layout change needs a host with the matching history allocation before
+  loading its kernels. Account for this output-sized history in GPU memory.
+- **Coincident exposed faces cannot accumulate a stable receiver.** Check
+  `world.debug-view material-id` when a static patch changes identity or never
+  completes its phase window. Separate meshes sharing an exposed plane can
+  alternate winners as jitter or a refresh changes rasterization. Fix the
+  authored overlap, rather than weakening receiver rejection. A slab owns its
+  horizontal finish; a wall or lintel meeting it ends at the slab's underside.
 - **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
   a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
   fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.

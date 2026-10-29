@@ -849,12 +849,13 @@ prototypes {
       hallBox(label: "shaft-jamb-west", x0: 14.4, x1: 15, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
       hallBox(label: "shaft-jamb-east", x0: 16.8, x1: 17.4, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
       for k in range(0, 4) {
+        // The slab owns the horizontal finish: a lintel lid at its top z-fights with the landing's floor.
         hallBox(
           label: $"shaft-lintel-{k}",
           x0: 15,
           x1: 16.8,
           y0: ((storey * k) + 2.65),
-          y1: ((k == 3) ? hallTop : ((storey * (k + 1)) + 0.05)),
+          y1: ((storey * (k + 1)) - 0.25),
           z0: 36.1,
           z1: 36.4,
           slot: hallTrim
