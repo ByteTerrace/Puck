@@ -1931,7 +1931,7 @@ checkpoint and the tape's input stream, restores that checkpoint in place, then
 replays the input through the ordinary replay doors. Every completed tick's authority
 hash, final machine cores and final canonical state export must match. A mismatch
 names the authority and recorded tick. The authored
-schedule runs once: its outcomes, edit echoes and sampled hashes remain in
+schedule runs once: its outcomes and edit echoes remain in
 `test-run.json`; replay consumes the resulting inputs instead of executing console
 commands again. External input is captured once, so this checks deterministic
 continuation rather than agreement between two samples of an external source.

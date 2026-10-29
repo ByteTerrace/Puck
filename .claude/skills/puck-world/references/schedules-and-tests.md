@@ -278,9 +278,10 @@ hash, final machine cores and final canonical export. It never boots a second
 host or re-submits the schedule. Its manifest describes the authored run;
 `reproduction.json` records the replay verdict per authority. The input tape's
 `WorldReplayProbe` owns the per-tick hashes and their comparison; the test manifest
-contains only exports and command outcomes. Do not collect a second hash list in
-`WorldTestRun`: no verdict reader consumes it, and it duplicates the probe's most
-expensive work during reproduction. Each batch leg also writes `timing.json`
+contains only exports and command outcomes. A second hash list in `WorldTestRun`
+duplicates the probe's most expensive work during reproduction; a check that needs
+per-tick hashes outside `--reproduce` (the fresh-boot versus reused-worker law) takes
+them from a probe in each process, not from the manifest. Each batch leg also writes `timing.json`
 beside its transcripts: boot, restore/arming, authored execution (including export),
 export, reproduction and other overhead in milliseconds, plus the authority-tick
 observations across running instances. These are diagnostic readings, kept outside
