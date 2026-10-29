@@ -20,15 +20,6 @@ public static class BaselinesCommand {
 
     /// <summary>Every recorded artifact, in the order <c>--help</c> lists them.</summary>
     public static IReadOnlyList<BaselineArtifact> Artifacts { get; } = [
-        new(
-            CommittedDirectory: "tests/Puck.State.Rebuild.Corpus",
-            Description: "The author-expression corpus inventory, inventory.md.",
-            Inputs: ["worlds/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
-            Name: "corpus-inventory",
-            Project: "Puck.State.Rebuild.Corpus",
-            RunArguments: CliTestRun.Class(fullName: "Puck.State.Rebuild.Corpus.CorpusInventoryTests"),
-            Runs: 1
-        ),
         // The wasm harness (engine-wasm.test.cjs) reads the same file to prove the published engine prices the fixture
         // document exactly as the native engine does.
         new(
