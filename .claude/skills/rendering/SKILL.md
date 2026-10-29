@@ -256,7 +256,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   history surface retains each phase's color, coverage, transport and weight.
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
-  pixels use the clipped resolve while their window fills. The package owns
+  pixels use the clipped resolve while their window fills. A stationary window
+  keeps its validated receiver while the footprint still sees it; choosing a
+  new thin adjoining face each phase can reject the window on the next phase.
+  The package owns
   `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
   HLSL. A layout change needs a host with the matching history allocation before
   loading its kernels. Account for this output-sized history in GPU memory.

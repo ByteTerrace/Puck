@@ -328,6 +328,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint historyWord = 0u;
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
+    uint receiverIdentity = 0u;
+    float receiverT = 0.0;
     // The feature the history remembers for this pixel, with the frames it has left, and how far, in output pixels, the
     // history moved to reach the pixel.
     float3 featureYCoCg = float3(0.0, 0.0, 0.0);
@@ -386,9 +388,14 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
                 featureYCoCg = float3(f16tof32(featureWordA & 0xFFFFu), f16tof32(featureWordA >> 16u), f16tof32(featureWordB & 0xFFFFu));
                 featureLife = (featureWordB >> 16u);
                 [unroll] for (uint tap = 0u; tap < 9u; tap++) {
-                    accepted = (accepted || ((identities[tap] == 0u)
+                    bool matches = ((identities[tap] == 0u)
                         ? (historyIdentity == 0u)
-                        : sdfHistoryReceiverMatches(identities[tap], historyIdentity, (distances[tap] + shift), historyT)));
+                        : sdfHistoryReceiverMatches(identities[tap], historyIdentity, (distances[tap] + shift), historyT));
+                    if (matches && (!accepted || (abs((distances[tap] + shift) - historyT) < abs((receiverT + shift) - historyT)))) {
+                        receiverIdentity = identities[tap];
+                        receiverT = distances[tap];
+                    }
+                    accepted = (accepted || matches);
                 }
             }
         }
@@ -436,6 +443,13 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint fullMask = ((1u << SDF_TEMPORAL_PERIOD) - 1u);
     uint maskWord = (SDF_HISTORY_WINDOW_OFFSET - 1u);
     bool stationary = (accepted && (travel <= SdfResolveFeatureTravel) && (reactive <= 0.0));
+    // Keep the receiver that carries a stationary window while the footprint still sees it. Picking the nearest
+    // non-feature anew every phase can switch to a thin adjoining surface that the following phase misses entirely,
+    // rejecting a valid window at an otherwise stationary edge.
+    if (stationary) {
+        centerIdentity = receiverIdentity;
+        centerT = receiverT;
+    }
     bool sampleValid = ((reactive <= 0.0) && (weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
     uint mask = (stationary ? (historySurface[historyWord + maskWord] & fullMask) : 0u);
     mask = (sampleValid ? (mask | (1u << phase)) : 0u);
