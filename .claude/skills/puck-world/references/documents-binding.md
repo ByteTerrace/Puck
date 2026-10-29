@@ -218,8 +218,8 @@ authors it today.
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
-bar draws. The live example is `worlds/debug/controls.puck`, which the debug world
-and the garden import: it refines the Moth basis's `bare` row with a `bindingBar`
+bar draws. The live example is `worlds/standard/controls.puck`, which the debug world
+refines and the garden imports: it refines the Moth basis's `bare` row with a `bindingBar`
 (the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
 right stick's press, an `iconRow` keyed by entry id, and one bank per page of the trigger-held pages with
 `modelCell` reading `single`, so the bar swaps pages in place; `modifiers`, `declaredModifiersOnly` and `pageLabel` draw
@@ -477,12 +477,12 @@ The newest mouse or axis selection wins; axis switch hysteresis never locks
 out a later mouse selection. Losing the pointer ends its hover.
 
 Axis selection, ring navigation, commit, and cancel sources are ordinary entries
-on each hold page. `worlds/debug/controls.puck`'s `play-primary` is the live
+on each hold page. `worlds/standard/controls.puck`'s `play-primary` is the live
 example: two hold pages (Tab, LB) that inherit the resting page and step the ring
 with `player.wheel.ring` (Up and Down, a constant Axis1D value of +1 outward and -1
 inward, `activateOn: Started`), and rings whose labels and icons read
 `state.wheelLabels`/`state.wheelIcons`. The garden's wheel has two rings (Act,
-View); `worlds/debug/pad.puck` declares the wheel again with a third (Places, which
+View); `worlds/debug/controls.puck` declares the wheel again with a third (Places, which
 names `debug.go`), since a later layer's wheel replaces the earlier one whole. A
 fourth ring is refused at validation.
 
@@ -502,7 +502,7 @@ boot admits the document and drops that entry from the seat's composition with o
 already does for any command a leaner shape lacks. The bar's Debug and Tour pages bind the render levers
 (`world.quality next`, `world.rates toggle`), `world.screenshot`, `world.history on` and `world.debug-view` directly. An
 imported module's state rows are private, so a binding in another module that reads one
-(`pad.puck`'s wheel names `wheelLabels`) needs the owner's `exports { bindings [...] }`.
+(`worlds/debug/controls.puck`'s wheel names `wheelLabels`) needs the owner's `exports { bindings [...] }`.
 `WorldWheelFeed` owns presentation;
 its drawn labels, icons and hub label come from `WorldWheelRings`
 (`Puck.World.Client`), which reads the label and icon rows through the seat's

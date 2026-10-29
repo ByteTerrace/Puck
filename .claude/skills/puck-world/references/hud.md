@@ -45,7 +45,7 @@ a world-level kill switch plus the drawn pointer cursor's per-world policy —
 units, ring radius in px, the bare cursor's core theme role (`WorldThemeRole`), an
 optional visibility predicate; null draws no cursor at all, since the engine
 has none of its own and the live policy is authored in
-`worlds/debug/controls.puck`; whole-row replace semantics on
+`worlds/standard/controls.puck`; whole-row replace semantics on
 `SetHudDefaults`, so a defaults row authored without it clears the cursor). Validated by `hud.CursorInvalid`;
 echoed RESOLVED by `world.hud`; the live pointer state (position, visibility
 verdict, hover target) echoes through `world.view.pointer`
@@ -430,7 +430,7 @@ its style under `theme.styles` (`glow`, `keycap`, `bar`, `console`, `cursor`,
 `wheel`, `toast`, `hud`), whose colors take a core role (`{ role: Accent }`) or
 their own (`{ color: "#RRGGBB" }`), resolved by `WorldThemeResolve` into the
 token slab's component slots (`OverlayColorRole.ConsoleEcho`, `KeycapBadge`,
-`KeycapBadgeInk`). The debug world's look is `worlds/debug/skin.puck`.
+`KeycapBadgeInk`). The standard skin is `worlds/standard/skin.puck`.
 
 Inline JSON is reconstructed from the raw command text (the tokenizer would
 destroy quotes) and parsed through `WorldJsonPayload.TryParse` against
