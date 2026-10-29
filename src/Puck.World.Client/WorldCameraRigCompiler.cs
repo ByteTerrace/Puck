@@ -98,6 +98,8 @@ public static class WorldCameraRigCompiler {
     /// list's reference across deliveries; anything that clones one unconditionally defeats this check.</summary>
     public sealed class Cache {
         private IReadOnlyList<WorldCamera>? m_cameras;
+        // The code the rig compiled under: a hot-reload edit to the compiler recompiles every rig on its next resolve.
+        private int m_codeRevision;
         private IReadOnlyList<WorldCurveRow>? m_curves;
         private WorldValueDomainGuard? m_domains;  // unset until the first compile
         private IReadOnlyList<DynamicsRow>? m_dynamics;
@@ -131,6 +133,7 @@ public static class WorldCameraRigCompiler {
             if (
                 (m_rig is { } rig) &&
                 (m_interactive == interactive) &&
+                (m_codeRevision == Puck.Abstractions.CodeRevision.Current) &&
                 ReferenceEquals(
                 objA: m_domains,
                 objB: domains
@@ -166,6 +169,7 @@ public static class WorldCameraRigCompiler {
             }
 
             Revision++;
+            m_codeRevision = Puck.Abstractions.CodeRevision.Current;
             m_cameras = definition.Cameras;
             m_curves = definition.Curves;
             m_domains = domains;

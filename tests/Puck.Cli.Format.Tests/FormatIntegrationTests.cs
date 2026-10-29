@@ -29,6 +29,57 @@ public sealed class FormatIntegrationTests {
         Assert.Contains(actualString: result, comparisonType: StringComparison.Ordinal, expectedSubstring: "message:");
         Assert.Contains(actualString: result, comparisonType: StringComparison.Ordinal, expectedSubstring: "public Exec Compiler");
     }
+    [Fact]
+    public void SourceReplacementPreservesAnExistingReadersMappedView() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-format-mapped-");
+        var root = scratch.RootPath;
+        var path = Path.Combine(
+            path1: root,
+            path2: "Source.cs"
+        );
+
+        File.WriteAllText(
+            contents: "old source",
+            path: path
+        );
+        using var stream = new FileStream(
+            access: FileAccess.Read,
+            mode: FileMode.Open,
+            path: path,
+            share: FileShare.ReadWrite | FileShare.Delete
+        );
+        using var mapping = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateFromFile(
+            stream,
+            null,
+            0,
+            System.IO.MemoryMappedFiles.MemoryMappedFileAccess.Read,
+            HandleInheritability.None,
+            leaveOpen: true
+        );
+        using var view = mapping.CreateViewStream(
+            0,
+            stream.Length,
+            System.IO.MemoryMappedFiles.MemoryMappedFileAccess.Read
+        );
+
+        RewriteIo.WriteText(
+            file: path,
+            text: "new source\n"
+        );
+        Assert.Equal(
+            "new source\n",
+            File.ReadAllText(path: path)
+        );
+        using var reader = new StreamReader(stream: view);
+
+        Assert.Equal(
+            "old source",
+            reader.ReadToEnd()
+        );
+        Assert.Single(collection: Directory.EnumerateFiles(path: root));
+    }
+}
+public sealed class FormatStandaloneAppIntegrationTests {
     /// <summary>
     /// A root is formatted as the selection of every file under it, so a file-based app found there goes through its
     /// disposable project, rather than being parsed without its directives and reported as a syntax error and a file no
@@ -75,6 +126,8 @@ public sealed class FormatIntegrationTests {
             expectedSubstring: "message:"
         );
     }
+}
+public sealed class FormatSelectionIntegrationTests {
     [Fact]
     public void FormattingASelectedFileLeavesItsSiblingAndLinkedSourceUntouched() {
         using var scratch = new TemporaryDirectory(prefix: "puck-format-integration-");
@@ -169,54 +222,5 @@ public sealed class FormatIntegrationTests {
                 check: true
             )
         );
-    }
-    [Fact]
-    public void SourceReplacementPreservesAnExistingReadersMappedView() {
-        using var scratch = new TemporaryDirectory(prefix: "puck-format-mapped-");
-        var root = scratch.RootPath;
-        var path = Path.Combine(
-            path1: root,
-            path2: "Source.cs"
-        );
-
-        File.WriteAllText(
-            contents: "old source",
-            path: path
-        );
-        using var stream = new FileStream(
-            access: FileAccess.Read,
-            mode: FileMode.Open,
-            path: path,
-            share: FileShare.ReadWrite | FileShare.Delete
-        );
-        using var mapping = System.IO.MemoryMappedFiles.MemoryMappedFile.CreateFromFile(
-            stream,
-            null,
-            0,
-            System.IO.MemoryMappedFiles.MemoryMappedFileAccess.Read,
-            HandleInheritability.None,
-            leaveOpen: true
-        );
-        using var view = mapping.CreateViewStream(
-            0,
-            stream.Length,
-            System.IO.MemoryMappedFiles.MemoryMappedFileAccess.Read
-        );
-
-        RewriteIo.WriteText(
-            file: path,
-            text: "new source\n"
-        );
-        Assert.Equal(
-            "new source\n",
-            File.ReadAllText(path: path)
-        );
-        using var reader = new StreamReader(stream: view);
-
-        Assert.Equal(
-            "old source",
-            reader.ReadToEnd()
-        );
-        Assert.Single(collection: Directory.EnumerateFiles(path: root));
     }
 }

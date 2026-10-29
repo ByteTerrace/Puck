@@ -1047,50 +1047,41 @@ of the world reads the same volume.
 [The handbook](../rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 owns its layout, costs and limits.
 
-**It is presentation and bounds no leak by proof.** The volume holds back light
-through walls with its back-face weight, its inside-geometry test, the read's
-preference for the probes in front of a surface and the first-hit planes of its
-26 neighbour directions. The receiver blends the four planes about its direction;
-a finite blocker affects its sampled directions rather than an infinite half-space.
-These are sampled visibility, not an exact ray to every surface. A wall or slab's
-plane stays in the same place at oblique angles, and a point a few centimetres past
-it takes nothing from the probe, because a point where a wall meets a floor
-lies level with the floor's surface, only the floor's thickness from a probe
-under it. A point every probe about it stands across a wall or slab from is
-enclosed and takes no indirect light. An untraced point has no measured
-indirect light either: missing coverage says nothing about sky visibility.
-Outside the camera's window the lookup clamps to boundary probes, while their
-plane tests use the actual receiver position. This extends their light only
-as far as their visibility supports, without a transition to unoccluded sky.
-Each ray retains its first hit. Separation closes admissions through rays that
-clear a roof edge or a doorway: an answering probe's blocked neighbour
-ray supplies a separating plane. That plane extends the sampled blocker as a
-half-space, so separation can over-darken beside a finite occluder
-([open items](../plans/open-items.md#review-findings)). An initial pass
-measures each probe's separation; the final pass weights a separator's veto by
-its survival of that pass and the candidate's suspect share, so a fully
-separated probe vetoes nothing, two probes that separate each other leave each
-other standing, and a probe that vetoes another fully is unseparated itself,
-which is why the gather never empties. Both passes weight a separator by its
-share of the answering probes' weight, at full strength from an eighth of the
-total (`SdfMeshIrradianceProbe.SeparatorShare`), so a probe entering the
-eight-corner set at a cell boundary with no trilinear weight vetoes nothing and
-the gather is continuous across the lattice planes. Both passes read the weights
-before any veto, so the result does not depend on corner order. A suspect share uses
-perpendicular distance to the hit plane, so a ray meeting the receiver's own
-surface supplies evidence even at grazing angles. Front eligibility precedes
-separation. Equal surface confidence does not disable a room-side separator:
-every probe may be uncertain about a moving body's untraced surface. The CPU
-exposure meter traces visibility from the camera
-to each probe so a thin partition cannot import another room's meter reading.
-A probe also gives way to the other probes about a point in
-proportion to how few of them it sees, by the neighbour sight lines the trace
-already casts for the filter, so a probe outside a wall whose axis looks in
-through a window lights nothing inside. Each probe's cubes are averaged with the
-neighbouring probes its centre sees, since a probe's rays are few beside the
-contrast of a sunlit patch and the raw lattice showed as bands along a room's
-walls; a neighbour behind a wall takes no part. Moving bodies receive its light
-and cast none into it.
+**Visibility is measured in each receiver direction.** Each probe holds an
+octahedral first-hit depth map (mean distance and mean-squared distance).
+The gather bilinearly samples those moments in the receiver's direction and
+uses a one-sided Chebyshev visibility weight. A finite blocker affects its
+angular footprint, rather than extending a first-hit plane as an infinite
+half-space. Plane separation, its neighbour veto and suspect share are deleted.
+The same rule lives in the CPU bounce gather and views shader; the
+[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) owns its
+sampling, packing and cross-language details.
+
+Weight is trilinear share times positive normal cosine squared times depth
+visibility. The continuous hemisphere term excludes probes behind a surface,
+without switching the whole gather between front and back sets. A fixed
+5 cm normal bias stays inside thin walls. The boundary lookup clamps to its
+probes, but visibility tests the actual biased receiver; no answering probe
+means no measured light, never invented sky. Depth moments are sampled support,
+not proof against geometry below their angular resolution.
+
+Relocation supplies coverage and conditions the depth map: move an embedded or
+too-near centre to a clear quarter-cell candidate, preferring fewer close hits
+among nearby candidates and charging for displacement. Retain that openness
+score with depth visibility: it keeps origins clear of surfaces. A nearest-clear-only
+experiment did not eliminate grazing marks, but still had neighbour filtering,
+so it does not isolate placement as their cause.
+Depth moments, cubes and light masks use that same relocated origin. The volume
+publishes only each probe's own measured cubes. Neighbour cube
+filtering is deleted: visibility between probe origins through a doorway does
+not establish another probe's sky visibility at this receiver. The depth rays
+also measure sky with cosine and solid-angle weights, avoiding that borrowing.
+Moving bodies receive this presentation light and cast none into the static
+volume. The exposure meter keeps its exact camera-to-probe scene tests.
+
+`world.probe` marks changing or unpublished reads unsettled and names the
+published and replacement windows. Lighting comparisons use settled bakes and
+irradiance, fixed matching cameras, and both Direct3D 12 and Vulkan.
 
 **Considered, and set aside.**
 

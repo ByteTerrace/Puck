@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Maths;
 
 namespace Puck.SignedDistance;
 
@@ -30,14 +29,16 @@ public static class SdfWallpaperFold {
 
     private const float Sqrt3 = 1.7320508f;
 
-    private static readonly bool[] Continuity = MeasureContinuity();
-
-    /// <summary>Whether <paramref name="group"/>'s fold is continuous everywhere in its lattice, measured at type
-    /// initialization by folding pairs of points a thousandth of a cell apart across a spread of three cells each way:
-    /// a continuous fold moves the pair no farther apart than they were, a jump moves it by about a cell.</summary>
+    /// <summary>Whether <paramref name="group"/>'s fold is continuous everywhere in its lattice: the four kaleidoscope
+    /// groups, whose every cell wall and in-cell seam is a mirror. Every other group has a translation wall, a glide or a
+    /// rotation seam, where the fold jumps. This is a property of the group, so it is stated rather than measured on every
+    /// boot; <c>SdfWallpaperFoldLawTests</c> measures every group's fold against it.</summary>
     /// <param name="group">The wallpaper group.</param>
     /// <returns><see langword="true"/> when every cell wall and in-cell seam of the group is a mirror.</returns>
-    public static bool IsContinuous(SdfWallpaperGroup group) => Continuity[((int)group)];
+    public static bool IsContinuous(SdfWallpaperGroup group) => group switch {
+        SdfWallpaperGroup.Pmm or SdfWallpaperGroup.P4M or SdfWallpaperGroup.P3M1 or SdfWallpaperGroup.P6M => true,
+        _ => false,
+    };
     /// <summary>Returns the reciprocal cell extents the kernels read (an instruction's Data0.zw): 1 / cell for a square
     /// lattice, and 1 / pitch and 2 / (√3 pitch) for the hex lattice, whose pitch is <paramref name="cell"/>.X. The
     /// reciprocal of the cell the fold subtracts is never floored: the lattice round and the cell displacement must
@@ -237,29 +238,4 @@ public static class SdfWallpaperFold {
         return r;
     }
     private static float FloorMod(float x, float y) => (x - (y * MathF.Floor(x: (x / y))));
-    // Unit cells, an unbounded lattice, and pairs a thousandth apart along the R2 sequence's points and directions:
-    // a reflection keeps the pair's distance, a jump multiplies it by about a thousand.
-    private static bool[] MeasureContinuity() {
-        var groups = Enum.GetValues<SdfWallpaperGroup>();
-        var continuity = new bool[groups.Length];
-        var cell = Vector2.One;
-        var limit = new Vector2(value: UnboundedLimit);
-
-        foreach (var group in groups) {
-            var stretch = 0f;
-
-            for (var index = 1; (index <= 65536); index++) {
-                var point = new Vector2(x: ((VectorFunctions.Fract(x: (index * 0.7548777f)) * 6f) - 3f), y: ((VectorFunctions.Fract(x: (index * 0.5698403f)) * 6f) - 3f));
-                var angle = (VectorFunctions.Fract(x: (index * 0.6180340f)) * (2f * MathF.PI));
-                var step = (0.001f * new Vector2(x: MathF.Cos(x: angle), y: MathF.Sin(x: angle)));
-                var a = Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: point);
-                var b = Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: (point + step));
-
-                stretch = MathF.Max(x: stretch, y: (Vector2.Distance(value1: a, value2: b) / step.Length()));
-            }
-            continuity[((int)group)] = (stretch < 1.01f);
-        }
-
-        return continuity;
-    }
 }

@@ -75,29 +75,10 @@ public sealed partial class SdfTapePredictionLawTests {
 
             return Around(centre: primitive, extent: error);
         }
-
-        public string Budget(BallDomain ball) {
-            if (!Domain(ball: ball, magnitude: out var magnitude, radius: out var radius, rejection: out var rejection)) {
-                return $"rejected={rejection}";
-            }
-            var centre = Primitive(point: V.Of(value: ball.Centre));
-            var reach = (I(value: Certificate.Lipschitz) * I(value: radius));
-            var slope = (I(value: Certificate.ErrorSlope) * (I(value: magnitude) + I(value: radius)));
-            var offset = I(value: Certificate.ErrorOffset);
-            var error = Error(magnitude: magnitude, radius: radius);
-            var normAllowance = NormAllowance(error: error, ideal: centre);
-
-            return (((string)$"primitive={Show(value: centre)} L={Certificate.Lipschitz:R} radius={radius:R} Lr={Show(value: reach)} errorSlope={Show(value: slope)} errorOffset={Show(value: offset)} threeBaseError={Show(value: (error * I(value: 3)))}")
-                + $" normAllowance={Show(value: normAllowance)} aabb={Show(value: DirectBounds(ball: ball))}");
-        }
     }
 
     private static FixedInterval Around(FixedInterval centre, FixedInterval extent) =>
         FixedInterval.Union(first: (centre - extent), second: (centre + extent));
-    private static string Show(FixedInterval value) => (value.IsUnbounded ? "entire"
-        : $"[{((double)value.Lower):R},{((double)value.Upper):R}]");
-    private static string Show(Range value) =>
-        $"[{(value.Lower.HasValue ? ((double)value.Lower.Value).ToString(format: "R") : "-inf")},{(value.Upper.HasValue ? ((double)value.Upper.Value).ToString(format: "R") : "+inf")}]";
     private void DiagnoseTiles(CameraSnapshot camera, float far, Entry[] entries, InstanceBound[] bounds, int instructions) {
         output.WriteLine(message: "Diagnostic only: fixed quartic slab0 centres, ordinary radius versus zero radius and direct certified ball-AABB intersection; these rows do not change the exhaustive production-model counts above.");
         var retained = new bool[instructions];
@@ -119,17 +100,6 @@ public sealed partial class SdfTapePredictionLawTests {
             var box = Walk(entries: selected, ball: ball, retained: retained, tighten: true);
 
             output.WriteLine(message: $"diagnostic tile=({x},{y}) centre={ball.Centre} radius={ball.Radius:R} considered={ordinary.Considered} dropped=(ordinary:{ordinary.Dropped},zeroRadius:{point.Dropped},aabb:{box.Dropped})");
-            foreach (var zeroRadius in new[] { false, true }) {
-                var count = 0;
-                var domain = (zeroRadius ? ball with { Radius = 0 } : ball);
-
-                Walk(entries: selected, ball: domain, retained: retained, trace: (entry, current, candidate) => {
-                    if ((entry.Candidate is not { } shape) || (shape.Instruction.Shape != ((uint)SdfShapeType.Superellipsoid))
-                        || (shape.Instruction.Data0.W != 2.05f) || (count >= 3)) { return; }
-                    count++;
-                    output.WriteLine(message: $"budget tile=({x},{y}) zeroRadius={zeroRadius} instruction={entry.Index} incumbent={Show(value: current)} candidate={Show(value: candidate)} {shape.Budget(ball: domain)}");
-                });
-            }
         }
     }
 }

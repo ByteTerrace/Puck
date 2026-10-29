@@ -4,7 +4,9 @@ using Xunit;
 
 namespace Puck.Cli.Laws.Tests;
 
-public sealed partial class LawProofLawTests {
+/// <summary>Grouped law selectors sharing one build per phase while requiring each selector's own red and green
+/// evidence.</summary>
+public sealed class LawProofSelectionLawTests : LawProofLaws {
     private sealed class SelectionRunner(Func<string, string, LawRun> report) : ILawRunner {
         public List<string> Builds { get; } = [];
         public List<(string Law, string Directory)> Runs { get; } = [];
@@ -66,7 +68,6 @@ public sealed partial class LawProofLawTests {
                 cancellationToken: TestContext.Current.CancellationToken
             ));
 
-            AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
             return (captured.ExitCode, captured.Output, captured.Error, runner);
         }
 
@@ -86,6 +87,7 @@ public sealed partial class LawProofLawTests {
         Assert.Equal(expected: 4, actual: proven.Runner.Runs.Select(selector: static run => run.Directory).Distinct(comparer: StringComparer.Ordinal).Count());
         Assert.Contains(actualString: proven.Output, expectedSubstring: $"Selector: {Law}");
         Assert.Contains(actualString: proven.Output, expectedSubstring: $"Selector: {SECOND}");
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
 
         foreach (var scenario in new[] { "empty", "skipped", "changed", "overlap", "restored fails" }) {
             var refused = Run(scenario: scenario);
@@ -109,5 +111,6 @@ public sealed partial class LawProofLawTests {
         Assert.Equal(actual: mismatch.Exit, expected: CliExit.Refused);
         Assert.Empty(collection: mismatch.Runner.Builds);
         Assert.Contains(actualString: mismatch.Error, expectedSubstring: "must share one project");
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
 }
