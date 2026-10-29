@@ -13,6 +13,13 @@ public sealed class CommandRegistryTests {
         var registry = new CommandRegistry(modules: [new BindingOnlyModule(seen: seen)]);
         Assert.DoesNotContain(collection: registry.Definitions, filter: row => (row.Name == "binding.probe"));
         Assert.Equal(string.Empty, registry.BuildHelpText(prefix: "binding.probe"));
+        Assert.False(condition: registry.TryGetMetadata(name: "binding.probe", metadata: out _));
+        Assert.Null(@object: registry.MetadataForDocument(name: "binding.probe"));
+        var errors = new List<string>();
+        var authored = AuthoredCommand.TryCreate(name: "probe.public", help: "Probe.", parameters: [], lines: ["binding.probe"], errors: errors);
+        Assert.Empty(collection: errors);
+        registry.CheckAuthored(set: new AuthoredCommandSet(commands: [authored!]), errors: errors);
+        Assert.Single(collection: errors);
         Assert.True(condition: registry.Submit(line: "binding.probe").IsError);
         Assert.True(condition: registry.Submit(line: "\"binding.probe\"").IsError);
         var router = new InputRouter(registry: registry, bindings: new FixedBindings(command: "binding.probe", mode: BindingEntryMode.Toggle), principalResolver: new ConsolePrincipal());

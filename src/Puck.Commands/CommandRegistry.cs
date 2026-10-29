@@ -1810,11 +1810,11 @@ public sealed partial class CommandRegistry {
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
     /// <see cref="BindingVocabularyCheck"/> consumers resolve a binding document's <c>Command</c> strings through.
-    /// Covers exactly the names <see cref="Submit"/> can dispatch — every module-registered command and its aliases,
+    /// Covers exactly the names <see cref="Submit"/> can dispatch — public module-registered commands and aliases,
     /// AND the registry's own <c>help</c>/<c>wire.ack</c>/<c>wire.errors</c>, which answer here as
     /// <see cref="CommandBindability.Unbindable"/>. A vocabulary check therefore refuses a binding row naming one of
     /// them by its bindability, with a message about what it is, rather than calling a verb the registry dispatches
-    /// unknown.</summary>
+    /// unknown. Internal compiled destinations remain available by interned id only.</summary>
     /// <param name="name">The command name or alias to resolve.</param>
     /// <param name="metadata">When this method returns, the command's declared facts, or the default when the name
     /// is unknown.</param>
@@ -1826,7 +1826,7 @@ public sealed partial class CommandRegistry {
         if (m_idByName.TryGetValue(
             key: name,
             value: out var id
-        )) {
+        ) && !m_definitionById[id].BindingOnly) {
             metadata = m_metadataById[id];
 
             return true;

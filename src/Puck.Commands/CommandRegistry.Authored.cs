@@ -58,7 +58,7 @@ public sealed partial class CommandRegistry {
             errors: errors,
             refuseUnknown: true,
             registered: name => (m_byName.TryGetValue(key: name, value: out var definition)
-                ? definition.Metadata
+                ? (definition.BindingOnly ? null : definition.Metadata)
                 : m_verbCatalog?.Invoke(arg: name))
         );
     }
