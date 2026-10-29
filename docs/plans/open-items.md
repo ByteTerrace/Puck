@@ -641,6 +641,8 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
 
+- [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
+
 - A companion that crosses lands autonomous under Idle (its addon driver stays
   in the world it left), so in the night field nothing moves it, and a return
   home lands it Idle and no longer an inhabitant, where its addon's Drive is
