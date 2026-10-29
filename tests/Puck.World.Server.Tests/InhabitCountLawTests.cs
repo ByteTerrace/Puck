@@ -204,7 +204,7 @@ public sealed class InhabitCountLawTests {
         var population = fixture.Server.Population;
 
         // Marks the last-admitted inhabitant as a connected remote human's own body: a hard disconnect (grace 0,
-        // authored above) fully tears the slot down, and re-admitting it as IntentSource.Live at the same index sets
+        // authored above) fully tears the slot down, and re-admitting it as a remote human at the same index sets
         // Entry.IsRemoteHuman — the same field IsHumanOccupied reads for a live federated seat's own claimed body —
         // while restoring its inhabited PlacementId, so the population still counts it toward the court's census.
         Assert.True(condition: population.TryCaptureTransferredEntity(
@@ -220,7 +220,7 @@ public sealed class InhabitCountLawTests {
         Assert.False(condition: population.IsActive(index: lastAdmitted));
 
         population.ApplyPeerAdmitted(
-            peer: (captured with { Source = IntentSource.Live, PlacementId = CourtPlacementId }),
+            peer: (captured with { Source = IntentSource.Live, PlacementId = CourtPlacementId, RemoteHuman = true }),
             grantTemplates: []
         );
 

@@ -521,6 +521,9 @@ simulation thread and its snapshot handoff, then build it.
 Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
 facing and reversal items, then a sitting.
 
+- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible engine defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Today the bindable mouse surface is `mouse.left`, `mouse.right`, `mouse.button1/2` and `mouse.motion`: the wheel as a camera input and the middle button need adding to the device input path and its names.
+- A dash for the Moth (the owner's request): a short, nicely animated burst along the move direction (or facing when idle), bound to the gamepad's west face button (`gamepad.buttonWest`: X on Xbox, Square on PlayStation, Y on Switch Pro; the owner's ruling) on the Move page, whose current West action (the bar shows it as `»`) moves to another slot, with a keyboard equivalent, with a cooldown, a rig animation (lean, trail or thruster flare from the Moth's back thrusters) and deterministic simulation (fixed-point impulse, input from the command snapshot). Rule 7: build it on the existing locomotion and rig drivers, not beside them.
+
 - Make the debug world's dual-stick action play fluid. In: the seat camera
   presents its look at the fraction the body is drawn at, so camera and steered
   body turn together between 30 Hz ticks; `ComputePlanarTargetVelocity` takes
@@ -649,9 +652,9 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
 
-- [high] The `networkPlayers` cap trusts the sender's `RemoteHuman` flag: federation accepts `RemoteHuman=false` without verifying the exemption, so an admitted federation authority can reserve and commit a Live human into a full or zero-cap instance, receive Drive grants and submit commands without spending the cap (`src/Puck.World.Server/WorldFederationCodec.cs:315`). The receiving side must classify from what it can verify, never from a sender's claim. (owner: companion-cap follow-up; from: companion-cap review)
-- [medium] A non-Live landing ignores `RemoteHuman=true` and admits the traveller as an autonomous entity: a human whose control source is set to Idle before the transfer arrives at `networkPlayers: 0` and loses its human classification permanently (`src/Puck.World.Server/WorldTransferEscrow.cs:973`). (owner: companion-cap follow-up; from: companion-cap review)
+- [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
+- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (the same pin, a substituted driver, or nothing); refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -780,11 +783,7 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
-- A typing tutor in the gallery (the owner's request), on C5 and C6: a station
-  whose engagement enters a text-focus mode, lessons from the home row to words
-  and sentences on a prompt screen, live per-character feedback, words per
-  minute, per-key accuracy, streaks and a run timer, judged from input history so
-  a replay reproduces every keystroke.
+- The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).
@@ -1064,6 +1063,25 @@ Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two me
 
 - [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
 - [medium] The lift door threshold also blinks with temporal off: pairs of frames about 11 presentations apart change about 3 % with max |dY| 26, then hold still, a cadence-driven refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh) independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). (from: owner walkthrough)
+
+### Panes: split screens the player drives
+
+Owner: specialist lane (puck-world views, rendering graphs, input) · ordinary · Next: after the bars-and-pick lane lands (it touches pane listing and pick), a machine-screen source for a pane. The owner's direction: a player can run as the Moth in one pane with the desktop in another, the HGD in a third and a fourth camera angle in another.
+
+- What exists: `views` layouts of normalized `slots`, each the owning seat's view, a named authored `camera`, or a `views.graphs` `instance` (the studio's 2x2 `motion` layouts; `desktop.puck`'s `desktop` layout shows the `source.capture` graph in a pane); `view.override layout <name>` switches.
+- A machine's screen as a pane source: the machines render as `source$machine$<id>` graph nodes, but the source packages a `views.graphs` row can name are `source.capture`, `source.passthrough` (with pointer and scroll) and `source.qr`, so no pane can show the HGD's picture. Add the package (find the existing machine-screen producer first, rule 7).
+- Switching layouts as a player: a binding or controller-bar action that cycles or selects the world's layouts, not only the `view.override` console verb.
+- Pane focus: one pane holds input focus and receives it (the seat's pad and keys drive the Moth until the player focuses the desktop pane, which then takes mouse and keyboard as passthrough, or the HGD pane, which takes the pad); focus is shown on the pane, moves by a binding or a click, and the in-world computer's programs (desktop and typing tutor) use the same focus.
+- Arranging panes at runtime (moving, resizing, choosing a pane's content) beyond the world's authored layouts: decide once focus and switching land.
+
+### Screens on curved and general SDF surfaces
+
+Owner: specialist lane (rendering, sdf-authoring, puck-world) · ordinary · Next: spherical, cylindrical and cube projections. The owner asked for screens on a sphere's surface and on general SDF shapes.
+
+- Today a screen is a flat slab: a rectangle with right and up axes (`ScreenSlab`, `WorldScreenMappings.Normalized`, the screen validator's orthogonal basis); the CRT face kind only shades a curved look on that slab.
+- Projection kinds beside the planar one: spherical (latitude and longitude), cylindrical and cube, so any shape's surface (a globe, a curved display, a pillar, a dome) shows a screen through an authored projection frame; the renderer already has the exact hit and normal on any shape.
+- Pointer input on such a screen uses the same projection in fixed point in the simulation (a screen hit for input is computed there, never trusted from the host), so a click on a globe lands on the same picture point live and in replay.
+- General shapes: a frame-projected decal first (gentle curvature); a UV atlas from the mesh bake only if projection proves not enough.
 
 ### Debug world content
 

@@ -36,15 +36,29 @@ or the `$parked:` reserved rule channel.
 ruling).** Companions are not networked players: a census bot, an inhabitant
 and an authority-transferred autonomous traveler (the debug world's companion,
 body 42, following the player through a painting) never spend the cap, so an
-instance with `networkPlayers: 0` still admits them. Only an admission with
-`remoteHuman` set (`TryAdmitRemotePeerAt`: a connection or a human's transfer)
-checks `CountRemoteHumans() >= m_remoteCap`; a parked human still counts. A
-transfer reservation member carries `RemoteHuman` (read from the source body at
-reserve, on the federation and checkpoint wires), because a companion reads a
-Live intent source and arrives through the peer door like a human does. The
-census ceiling (`SimulatedCeiling`) is the free peer slots, not the cap. Replay
-(`ApplyPeerAdmitted`) and checkpoint restore re-apply recorded admissions and
-check no cap.
+instance with `networkPlayers: 0` still admits them. Every body the peer door
+admits (`TryAdmitRemotePeerAt`: a connection or a human's transfer) is a remote
+human and checks `CountRemoteHumans() >= m_remoteCap`; a parked human still
+counts.
+
+The receiving instance decides who is a human from what it hands out, never from
+a sender's claim (a federation sender's signature proves who speaks, not that it
+is honest). A traveler lands as a human
+(`WorldTransferReservationMember.LandsHuman`) when it carries the Live source,
+whatever the sender says, or the sender states `RemoteHuman`: a claim can add a
+human and never exempt one. A human lands through the peer door with its carried
+control source, so a human set Idle before it left still counts and stays a
+human. Every other traveler lands autonomous: authored by the destination, with
+no Drive grant, and `IsLiveTransferredPrincipal` refuses everything its sender
+forwards for it, so it gives an outside party nothing to drive. Reserve checks
+the cap over the admitted humans plus every human a live lease holds
+(`NetworkPlayersRefusal`), so a reservation never binds a human its commit must
+refuse. The sender classifies from its own population: a seat or an admitted
+remote human travels as a human, and anything else (a companion its addon
+drives, a census bot) crosses autonomous, its Live source sent as Idle since its
+driver stays behind. The census ceiling (`SimulatedCeiling`) is the free peer
+slots, not the cap. Replay (`ApplyPeerAdmitted`) and checkpoint restore
+re-apply recorded admissions and check no cap.
 
 ## Park-with-grace
 
