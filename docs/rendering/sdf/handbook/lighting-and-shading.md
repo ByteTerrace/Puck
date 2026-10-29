@@ -191,7 +191,7 @@ in the frame.
   tap cannot extend a finite block over the opening. There are no whole-sphere
   lattice-ray planes, front/back fallback or neighbour separation vetoes.
   Gather multiplies visibility by trilinear share and a smooth distance fade from
-  zero on/behind the receiver's tangent plane to one 10 cm in front. A squared
+  zero on/behind the receiver's tangent plane to one half a probe spacing in front. A squared
   cosine concentrated near-floor probes into repeated spots. Normal bias is 5 cm;
   surface fade is 2 cm, independent of spacing.
   Support ends at 1.5 times the spacing diagonal plus normal bias, while sky

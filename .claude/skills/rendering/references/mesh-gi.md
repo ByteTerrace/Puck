@@ -41,7 +41,12 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Visibility is a per-probe 12×12 octahedral first-hit surface map. Each texel
   traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
   full in-window receiver support including relocation. Each word holds an FP16
-  ray distance and two signed octahedral normal bytes. A
+  ray distance and two signed octahedral normal bytes. A second word holds the
+  hit triangle's finite projected rectangle as four outward-rounded signed bytes,
+  scaled by the map's receiver-support reach. Drop the quantized normal's dominant
+  axis in both implementations. Pad by one angular footprint plus surface fade;
+  a local plane may block only inside this rectangle. Without that bound, a sign
+  near a probe incorrectly extended its shadow onto the sphere below its edge. A
   negative distance explicitly marks a miss and its reach. Receivers beyond
   that measured support receive nothing. Depth is traced on the first sweep
   and reused for later bounces; sky still uses the full-reach radiance rays.
@@ -64,7 +69,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   seam reflection, patch compatibility, gaps and coverage. Projection/addressing
   reuse `SdfOctahedral` / `field/sdf-octahedral.hlsli`.
 - Gather weight is the cell's trilinear share times
-  `smoothstep(0, 2 * NormalBias, dot(normal, probe - receiver))` times depth visibility. This continuous
+  `smoothstep(0, spacing / 2, dot(normal, probe - receiver))` times depth visibility. This continuous
   positive-hemisphere weight excludes probes behind a surface without switching
   the whole gather between front and back sets. It also prevents grazing depth
   uncertainty behind a thin wall from admitting a bright exterior probe.
@@ -126,9 +131,12 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   old coordinates** until every new slot has a measured sample. Never publish
   unwritten cells as darkness or initialize them to unoccluded sky. Before the
   first scene has supplied any volume, there is no measured indirect light.
-- A record is 163 words (652 bytes): 19 header/cube/light/origin words and 144
-  packed first-hit surface words. Medium's 12,288 probes use 7.640625 MiB;
-  High's 36,864 use 22.921875 MiB. The table starts at one inert record and both
+- A record is 308 words (1,232 bytes): 19 header/cube/light/origin words, 144
+  packed first-hit surface words, 144 finite-footprint words and one reach word.
+  Medium's 12,288 probes use 14.4375 MiB; High's 36,864 use 43.3125 MiB.
+  Finite footprints cost more per probe than the former 1,100-byte moments;
+  tier fitting removes the former fixed High reservation at Medium and in empty
+  residencies. Report that tradeoff when measuring memory. The table starts at one inert record and both
   it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
   existing frame-ring retirement; increment the binding revision when its buffer
   changes. Keep the old table and coordinates until every new slot is measured.
@@ -150,15 +158,14 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   Later bounces recompute the two radiance cubes together and reuse only the
   geometry-only surface map. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
 - A probe stands in the open (`SdfMeshIrradiance.Place`). A centre inside geometry
-  or within `max(Clearance, spacing / 4)` first tries the nearest surface's clear exit, then
+  or within `Clearance` (0.1 m) first tries the nearest surface's clear exit, then
   the cell's quarter-spacing lattice nearest-first. Every candidate must stand
   clear of all surfaces and pass the back-face validity test; a short 32-ray
   local rejection precedes a full radiance trace. The former openness score is
   deleted: it moved a probe one metre off a 10 cm slab, and neighbouring floor
-  cells could choose different storeys. A quarter spacing of clearance gives the
-  angular map room around nearby finite edges; minimum 0.1 m clearance alone
-  reproduced the sphere patch beside the hanging sign. The thin-slab witness
-  takes the nearest safe exit (0.675 m at Medium), rather than the openness winner.
+  cells could choose different storeys. Increasing clearance did not fix the
+  sphere's false shadow: finite surface support does. The thin-slab witness takes
+  the nearest safe exit (0.175 m at Medium), rather than the openness winner.
   Later sweeps keep the first origin. Offset XYZ rides the record and every
   gather/meter read uses the relocated origin; trilinear share stays the cell's.
   A cell no surface reaches within its half diagonal is wholly inside or outside

@@ -15,6 +15,26 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
+    public void AHangingPanelDoesNotExtendItsPlaneBelowItsFiniteEdge() {
+        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(x: 0.15f, y: -0.4f, z: -2f), new Vector3(x: 0.17f, y: 0.2f, z: 2f)))]);
+        var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
+
+        _ = SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 5.25f, depth);
+        for (var x = 0.2f; (x <= 1f); x += 0.025f) {
+            for (var y = -3f; (y <= -1f); y += 0.1f) {
+                for (var z = -1f; (z <= 1f); z += 0.1f) {
+                    var receiver = new Vector3(x: x, y: y, z: z);
+
+                    if (((0.15f * y) / x) >= -0.55f) { continue; }
+                    Assert.True(condition: scene.Unblocked(Vector3.Zero, Vector3.Normalize(value: receiver), receiver.Length()));
+                    var visibility = SdfMeshProbeDepth.Visibility(surfaces: depth, toward: receiver);
+
+                    Assert.True(condition: (visibility > 0.95f), userMessage: $"panel extends below its edge at {receiver}: {visibility}");
+                }
+            }
+        }
+    }
+    [Fact]
     public void AProbeInsideAThinSlabTakesTheNearestExit() {
         var frame = Frame() with {
             TickLocked = true,
@@ -28,9 +48,7 @@ public sealed class SdfMeshIrradianceLawTests {
         var offset = new Vector3(x: Half(probe[SdfMeshIrradianceProbe.OffsetWord], false),
             y: Half(probe[SdfMeshIrradianceProbe.OffsetWord], true), z: Half(probe[(SdfMeshIrradianceProbe.OffsetWord + 1)], false));
 
-        // Quarter-spacing clearance gives the angular map room to see around a nearby edge. Take that nearest
-        // safe exit, rather than the previous openness winner a full metre from this ten-centimetre slab.
-        Assert.InRange(offset.Length(), 0.65f, 0.7f);
+        Assert.InRange(offset.Length(), 0.15f, 0.2f);
     }
     [Fact]
     public void AHomogeneousCeilingDoesNotStampTheProbeLatticeIntoItsLight() {

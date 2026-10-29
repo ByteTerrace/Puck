@@ -62,6 +62,10 @@ float3 sdfMeshProbeOffset(uint address) {
 }
 // First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
 // KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
+float2 sdfMeshProbeSurfaceProject(float3 position, float3 normal) {
+    float3 a = abs(normal);
+    return (a.x >= a.y && a.x >= a.z) ? position.yz : ((a.y >= a.z) ? position.xz : position.xy);
+}
 float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
@@ -70,6 +74,9 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float2 fraction = texel - (float2)base;
     float3 points[4];
     float3 normals[4];
+    float4 footprints[4];
+    uint texels = SDF_MESH_IRRADIANCE_DEPTH_SIZE * SDF_MESH_IRRADIANCE_DEPTH_SIZE;
+    float footprintScale = asfloat(sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + 2u * texels]) / 127.0;
     float4 weights = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
         points[corner] = 0.0;
@@ -89,6 +96,9 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
         normals[corner] = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
         points[corner] = depth * sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
         weights[corner] = weight;
+        uint bounds = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + texels + (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y)];
+        int4 codes = int4((int)(bounds << 24u) >> 24, (int)(bounds << 16u) >> 24, (int)(bounds << 8u) >> 24, (int)bounds >> 24);
+        footprints[corner] = (float4)codes * footprintScale;
     }
     float blocked = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
@@ -105,7 +115,17 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
             normal += weights[neighbour] * normals[neighbour];
             total += weights[neighbour];
         }
-        float gap = dot(normalize(normal), toward - meanPoint / total);
+        meanPoint /= total;
+        normal = normalize(normal);
+        float gap = dot(normal, toward - meanPoint);
+        if (gap >= 0.0) { continue; }
+        float denominator = dot(normal, toward);
+        if (abs(denominator) < 1e-8) { continue; }
+        float along = dot(normal, meanPoint) / denominator;
+        if (along < 0.0 || along > 1.0) { continue; }
+        float2 projected = sdfMeshProbeSurfaceProject(toward * along, normals[corner]);
+        float4 bounds = footprints[corner];
+        if (projected.x < bounds.x || projected.x > bounds.y || projected.y < bounds.z || projected.y > bounds.w) { continue; }
         blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
     float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
@@ -163,7 +183,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float facing = smoothstep(0.0, 2.0 * SDF_MESH_IRRADIANCE_NORMAL_BIAS, dot(toward, normal));
+        float facing = smoothstep(0.0, 0.5 * spacing, dot(toward, normal));
         float weight = (((axes.x * axes.y * axes.z) * facing) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
 
         if (weight <= 0.0) {
