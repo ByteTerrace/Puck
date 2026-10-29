@@ -78,9 +78,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   probes' weight, at full strength from `SeparatorShare` (an eighth, an equal
   corner's share at a cell's centre) of the total, so a probe entering the
   eight-corner set at a cell boundary with no trilinear weight vetoes nothing
-  and the gather is continuous across the lattice planes (the SPHERE exhibit
-  stands on one, x = 23, where a weight-blind veto splits it); and by how much
-  of A survives the same
+  and the gather is continuous across the lattice planes; and by how much of A
+  survives the same
   test, so a fully separated probe vetoes nothing and two probes that separate
   each other stand. Both are read from the weights before any veto, and the
   gather never empties. Equal surface confidence must not disable separation: a
@@ -92,7 +91,16 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   separating plane is the blocker's whole half-space, with no finite extent.
   `SdfMeshIrradiance.TryGather` reads the gather's cells and weights at a
   receiver on the CPU, as the pixel gather computes them; a continuity law
-  compares them a hair either side of a lattice plane.
+  compares them a hair either side of a lattice plane. A hard step along a
+  lattice plane that survives every weight-blind term's fade is a column whose
+  probes all lie inside geometry (the SPHERE exhibit at x = 23: the plinth's
+  sphere holds the y = 1 probe and nothing of that column answers over its
+  upper half), so the two neighbouring columns' vanishing trilinear weights
+  normalize to each column's whole light either side of the plane; only a probe
+  relocated out of the geometry closes it. Read the answering weight before
+  normalization with a scratch edit of the `indirect` debug view
+  (`world.shaders.reload`): a near-zero total with answering corners is that
+  case, not a veto.
 - Judge every gather change at the `gather-*` stops of the sweep tour
   (`worlds/debug/sweep.json`), in `indirect` and the final image: the
   Wonderland room's south doorway and its floor under the roof edge, the
