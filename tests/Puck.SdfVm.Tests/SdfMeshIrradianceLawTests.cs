@@ -15,6 +15,17 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
+    public void AProbeInsideAThinSlabTakesTheNearestExit() {
+        var frame = Frame() with { TickLocked = true, IndirectBounces = 0, Lights = new SdfLights(),
+            MeshDraws = [Draw(Box(new Vector3(-50f, 0.95f, -50f), new Vector3(50f, 1.05f, 50f)))] };
+        var (parameters, words) = Trace(new SdfMeshIrradiance(), frame, SdfIndirectTier.Medium);
+        var probe = Probe(words, parameters, 0, 0, 0);
+        var offset = new Vector3(Half(probe[SdfMeshIrradianceProbe.OffsetWord], false),
+            Half(probe[SdfMeshIrradianceProbe.OffsetWord], true), Half(probe[SdfMeshIrradianceProbe.OffsetWord + 1], false));
+        Assert.InRange(offset.Length(), 0.15f, 0.2f);
+    }
+
+    [Fact]
     public void AHomogeneousCeilingDoesNotStampTheProbeLatticeIntoItsLight() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Emissive: 1f));
