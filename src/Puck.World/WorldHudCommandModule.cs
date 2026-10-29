@@ -22,8 +22,14 @@ namespace Puck.World;
 /// <see cref="HudBindingVocabulary"/> and the live document's own <c>state</c> section, resolved on demand and never
 /// stored — the console-only twin of what a <see cref="WorldHudElement.Template"/> row does when authored.
 /// </summary>
-internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts) : ICommandModule {
+internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts, OverlayToastStore toasts) : ICommandModule {
     private const string SeatFilterPrefix = "seat:";
+    private const string ToastFilter = "toast";
+
+    // The latest toast the overlay holds, whether or not a window draws it: the state a toast policy decision leaves.
+    private CommandResult DescribeToast() => new(Output: (toasts.TrySnapshot(frame: out var frame)
+        ? $"[world.hud toast: #{frame.Sequence} {(frame.IsError ? "error" : "ok")} '{frame.Message}']"
+        : "[world.hud toast: none]"));
 
     private string DescribeElement(string panelId, WorldHudElement element, int slot) {
         var bindingToken = (element.Binding ?? "(none)");
@@ -145,6 +151,10 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             return new CommandResult(Output: DescribeHud());
         }
 
+        if ((args.Count == 1) && string.Equals(a: args[0].ToString(), b: ToastFilter, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            return DescribeToast();
+        }
+
         if (
             (args.Count == 1) &&
             TryParseSeatFilter(
@@ -155,7 +165,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             return DescribeSeatHud(seat: seat);
         }
 
-        return CommandResult.Error(output: "[world.hud: expected no arguments, or seat:<n> (1..4)]");
+        return CommandResult.Error(output: "[world.hud: expected no arguments, toast, or seat:<n> (1..4)]");
     }
     private CommandResult DescribeSeatHud(int seat) {
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
@@ -314,7 +324,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
-            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
             handler: (_, args) => DescribeHudHandler(args: args),
             routing: CommandRouting.Immediate
         );
