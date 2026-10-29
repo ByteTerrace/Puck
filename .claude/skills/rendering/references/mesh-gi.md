@@ -64,11 +64,14 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   seam reflection, patch compatibility, gaps and coverage. Projection/addressing
   reuse `SdfOctahedral` / `field/sdf-octahedral.hlsli`.
 - Gather weight is the cell's trilinear share times
-  `max(0, dot(normal, directionToProbe))²` times depth visibility. This continuous
+  `smoothstep(0, 2 * NormalBias, dot(normal, probe - receiver))` times depth visibility. This continuous
   positive-hemisphere weight excludes probes behind a surface without switching
   the whole gather between front and back sets. It also prevents grazing depth
   uncertainty behind a thin wall from admitting a bright exterior probe.
-  The CPU bounce read and the pixel read use the same rule.
+  Squared angular cosines gave probes relocated close to a floor a strong pole
+  directly above each lattice centre; the distance fade removes those repeated
+  floor spots without changing the stored lighting. The CPU bounce read and the
+  pixel read use the same rule.
 - At the volume boundary clamp the lookup, then test the actual receiver,
   pushed `NormalBias` (0.05 m) along its normal, against depth. Never bias by
   spacing or test the clamped position: either can carry a receiver through a
@@ -147,13 +150,15 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   Later bounces recompute the two radiance cubes together and reuse only the
   geometry-only surface map. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
 - A probe stands in the open (`SdfMeshIrradiance.Place`). A centre inside geometry
-  or within `Clearance` (0.1 m) first tries the nearest surface's clear exit, then
+  or within `max(Clearance, spacing / 4)` first tries the nearest surface's clear exit, then
   the cell's quarter-spacing lattice nearest-first. Every candidate must stand
   clear of all surfaces and pass the back-face validity test; a short 32-ray
   local rejection precedes a full radiance trace. The former openness score is
-  deleted: it moved a probe one metre off a 10 cm slab despite a 0.175 m clear
-  exit, and neighbouring floor cells could choose different storeys. Grazing
-  surfaces are handled by reconstruction, not by moving probes farther away.
+  deleted: it moved a probe one metre off a 10 cm slab, and neighbouring floor
+  cells could choose different storeys. A quarter spacing of clearance gives the
+  angular map room around nearby finite edges; minimum 0.1 m clearance alone
+  reproduced the sphere patch beside the hanging sign. The thin-slab witness
+  takes the nearest safe exit (0.675 m at Medium), rather than the openness winner.
   Later sweeps keep the first origin. Offset XYZ rides the record and every
   gather/meter read uses the relocated origin; trilinear share stays the cell's.
   A cell no surface reaches within its half diagonal is wholly inside or outside

@@ -282,7 +282,7 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
   The sky cube comes from the same full-reach radiance rays as bounced light.
   Surface support stays within the angular taps; no neighbour vetoes or suspect sets return.
-  Gather weights are trilinear share × positive normal cosine squared × depth
+  Gather weights are trilinear share × a 10 cm smooth distance fade in front of the receiver × depth
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.
   A zero-weight gather supplies no measured indirect or traced static light.

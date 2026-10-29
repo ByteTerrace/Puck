@@ -46,7 +46,7 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
 }
 
 // KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
-// max(0, dot(receiver normal, direction to relocated probe)) squared times angular surface visibility.
+// a short distance fade in front of the receiver times angular surface visibility.
 // Continuous hemisphere weighting excludes probes behind a surface without a discrete front/back fallback.
 // Unwritten, invalid and invisible probes take no part; no answering probe means no measured indirect light.
 static const uint SdfMeshProbeNone = 0xffffffffu;
@@ -163,9 +163,8 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float distance = length(toward);
-        float facing = ((distance > 0.0) ? max(0.0, dot((toward / distance), normal)) : 1.0);
-        float weight = (((axes.x * axes.y * axes.z) * (facing * facing)) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
+        float facing = smoothstep(0.0, 2.0 * SDF_MESH_IRRADIANCE_NORMAL_BIAS, dot(toward, normal));
+        float weight = (((axes.x * axes.y * axes.z) * facing) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
 
         if (weight <= 0.0) {
             continue;

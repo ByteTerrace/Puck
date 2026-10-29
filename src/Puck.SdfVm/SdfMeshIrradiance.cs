@@ -968,7 +968,7 @@ public sealed class SdfMeshIrradiance {
     // off thin floors and made neighbouring cells choose different storeys. Surface reconstruction handles grazing.
     private bool Place(Vector3 centre, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene,
         Span<float> sky, Span<Vector3> radiance, out Vector3 offset, out float inside) {
-        var clearance = SdfMeshIrradianceProbe.Clearance;
+        var clearance = MathF.Max(x: SdfMeshIrradianceProbe.Clearance, y: (0.25f * layout.Spacing));
         var reach = (0.5f * layout.Spacing);
 
         offset = Vector3.Zero;
@@ -1291,11 +1291,14 @@ public sealed class SdfMeshIrradiance {
             // KEEP IN SYNC with sdfMeshProbesAt: continuous positive-hemisphere weight, then depth visibility.
             var probePoint = ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * layout.Spacing) + probe.Offset);
             var toward = (probePoint - point);
-            var length = toward.Length();
-            var facing = ((length > 0f) ? MathF.Max(x: 0f, y: Vector3.Dot(vector1: (toward / length), vector2: normal)) : 1f);
+            // A distance fade rejects probes behind the receiver without the angular pole that a close, relocated
+            // probe's squared cosine stamped into flat floors. Irradiance is already evaluated along the normal.
+            var facing = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (2f * SdfMeshIrradianceProbe.NormalBias)), 0f, 1f);
+
+            facing = ((facing * facing) * (3f - (2f * facing)));
             var trilinear = ((weights.X * weights.Y) * weights.Z);
             var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(surfaces: probe.Depth, toward: (pushed - probePoint)));
-            var weight = ((trilinear * (facing * facing)) * visibility);
+            var weight = ((trilinear * facing) * visibility);
             var front = (facing > 0f);
 
             if (!reports.IsEmpty) {

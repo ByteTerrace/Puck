@@ -28,7 +28,9 @@ public sealed class SdfMeshIrradianceLawTests {
         var offset = new Vector3(x: Half(probe[SdfMeshIrradianceProbe.OffsetWord], false),
             y: Half(probe[SdfMeshIrradianceProbe.OffsetWord], true), z: Half(probe[(SdfMeshIrradianceProbe.OffsetWord + 1)], false));
 
-        Assert.InRange(offset.Length(), 0.15f, 0.2f);
+        // Quarter-spacing clearance gives the angular map room to see around a nearby edge. Take that nearest
+        // safe exit, rather than the previous openness winner a full metre from this ten-centimetre slab.
+        Assert.InRange(offset.Length(), 0.65f, 0.7f);
     }
     [Fact]
     public void AHomogeneousCeilingDoesNotStampTheProbeLatticeIntoItsLight() {
