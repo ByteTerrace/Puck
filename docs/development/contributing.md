@@ -358,7 +358,9 @@ dotnet watch --project src/Puck.World --non-interactive run -c Release --no-rest
 
 `PuckHotReload` names the projects, comma-separated
 (`--property:PuckHotReload=Puck.World.Client,Puck.SdfVm`), that build without
-optimization; every other project stays optimized. Spell it `--property:`, not
+optimization; every other project stays optimized. Unoptimized code costs frame
+time (an unoptimized `Puck.World.Client` adds about 3 ms to each produced frame
+of the debug world, measured below), so list only the projects you are editing. Spell it `--property:`, not
 `-p:`, which `dotnet watch` reads as `--project`. Saving a file then does one of
 two things, and the watch output says which:
 
@@ -435,7 +437,8 @@ What the C# loop costs:
   bakes its own groups alone.
 
 **HLSL** (an SDF kernel module under `src/Puck.SdfVm/Assets/Shaders/Sdf`): keep
-the World running, save the file, and type in its console or stdin:
+the World running (a World under the hot-reload watch too: an HLSL save
+restarts nothing), save the file, and type in its console or stdin:
 
 ```text
 world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
@@ -470,6 +473,8 @@ rows on the reference machine (i5-8400, RTX 2060), the rest on the lead machine
 | C#, body edit in `Puck.World.Client` | hot reload, save to applied | 45–54 ms; 14.3 s for the first edit after the watch starts (75–100% load) |
 | | `dotnet run` to `world.status`, headless | 30.5–42.4 s, about 22 s of it the build (100% load) |
 | C#, rude edit | save to the rebooted World's `Application started` | 28 s (heavy load) |
+| HLSL, a constant in `passes/sdf-light-stage.hlsli` | save to `[shaders.reload: request=1 applied … pipelines=1]` (`sdf-world-views` alone), windowed | 11.8 s (loaded) |
+| Frame cost of `PuckHotReload=Puck.World.Client` | windowed, standing, 600 iterations after bakes settle | produce 9.50–10.12 ms average against 6.49 ms optimized; produce+simulate p99 20.2–20.6 ms against 17.4 ms (loaded) |
 | Headless boot | process start to `world.status` | 4.6–4.8 s, CPU 4.6–4.9 s (7–79% load) |
 
 The render-capacity probe is measured from its emission
