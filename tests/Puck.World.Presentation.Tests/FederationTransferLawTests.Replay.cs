@@ -316,7 +316,7 @@ public sealed partial class FederationTransferLawTests {
             condition: (fixture.Server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     Profile: null,
-                    HasMappedArrival: mapped,
+                    Arrival: (mapped ? WorldTransferArrival.Mapped : WorldTransferArrival.Spawn),
                     BodyMotionProgramName: "grounded",
                     Position: new FixedVector3(
                         X: FixedQ4816.FromInteger(value: 3),

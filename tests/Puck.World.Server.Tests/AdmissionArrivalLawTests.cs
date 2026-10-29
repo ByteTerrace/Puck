@@ -101,7 +101,7 @@ public sealed partial class AdmissionArrivalLawTests {
                 transferId: transferId,
                 members: [new WorldTransferCommitMember(
                         Profile: null,
-                        HasMappedArrival: false,
+                        Arrival: WorldTransferArrival.Spawn,
                         BodyMotionProgramName: "grounded",
                         Position: default,
                         YawRadians: default,

@@ -184,6 +184,15 @@ the authoritative hash folds a body's credential every recorded tick and the
 tape records no reservation. A refused and retried reservation, an abort
 before the detach, an in-doubt restore and a reused body slot each replay tick
 for tick (`CrossingTapeOrderLawTests`).
+A queued transfer that means one traveller names it by that incarnation, never
+by its slot: transfers drained ahead of it can move the traveller on and refill
+the slot. `body.pose spawn:<id>` carrying a seat home
+(`WorldInstanceHost.TryEnqueuePoseHome`) reads the incarnation from the route's
+generation-addressed entity, and the drain finds the traveller wherever it then
+stands (`PoseHomeTransferLawTests`). A commit member's `WorldTransferArrival`
+says how it lands: `Spawn` (the destination's own spawn), `Mapped` (pose and
+motion carried, so the destination must declare its motion program) or `Posed`
+(standing at the pose on the destination's own program).
 An exact committed retry includes action-continuity collection order and every
 register value, not just profile and motion. Escrow retains detached
 continuity values at commit and checkpoint restore; mutating a caller's original

@@ -11,7 +11,7 @@ namespace Puck.World.Presentation.Tests;
 public sealed partial class FederationTransferLawTests {
     private static WorldTransferCommitMember Turned(FixedQ4816 travelTurn) => new(
         Profile: null,
-        HasMappedArrival: true,
+        Arrival: WorldTransferArrival.Mapped,
         BodyMotionProgramName: "grounded",
         Position: default,
         YawRadians: default,
@@ -89,7 +89,7 @@ public sealed partial class FederationTransferLawTests {
         var encodedCommit = WorldFederationCodec.EncodeCommit(
             members: [new WorldTransferCommitMember(
                 Profile: null,
-                HasMappedArrival: true,
+                Arrival: WorldTransferArrival.Mapped,
                 BodyMotionProgramName: "grounded",
                 Position: arrival.Position,
                 YawRadians: arrival.YawRadians,

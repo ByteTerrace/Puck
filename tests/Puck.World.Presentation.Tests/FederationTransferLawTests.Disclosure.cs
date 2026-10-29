@@ -198,7 +198,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,

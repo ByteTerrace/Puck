@@ -67,7 +67,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
             ),
             BodyMotionProgramName: "walk",
             Continuum: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             PlanarVelocity: new FixedVector3(
                 X: FixedQ4816.FromInteger(value: 1),
                 Y: FixedQ4816.Zero,

@@ -101,7 +101,7 @@ public sealed partial class WorldInstanceHost {
         transferId: transferId,
         // Inactive slots are absent from population checkpoints and can be reused while recovery waits, so the
         // departure turn is recovered from the retained commit, undoing only this attempted arrival.
-        travelTurn: (commit.HasMappedArrival
+        travelTurn: ((commit.Arrival != WorldTransferArrival.Spawn)
             ? WorldFrameIsometry.AccumulateTurn(
                 travelTurn: commit.TravelTurn,
                 departureYaw: commit.YawRadians,

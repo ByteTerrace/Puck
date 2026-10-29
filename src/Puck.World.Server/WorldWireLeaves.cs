@@ -245,7 +245,7 @@ public static class WorldWireLeaves {
     /// each carrier records in its own form (a checkpoint and a federation commit its identity projection, a tape its
     /// pinned rates). It is the one encoding of a member's motion every carrier uses.</summary>
     public static void WriteCommitMemberMotion(WireWriter writer, WorldTransferCommitMember member) {
-        writer.WriteBoolean(value: member.HasMappedArrival);
+        writer.WriteByte(value: (byte)member.Arrival);
         writer.WriteString(value: member.BodyMotionProgramName);
         writer.WriteFixedVector(value: member.Position);
         writer.WriteFixed(value: member.YawRadians);
@@ -263,7 +263,18 @@ public static class WorldWireLeaves {
     }
     /// <summary>Reads what <see cref="WriteCommitMemberMotion"/> writes, as a member with no profile.</summary>
     public static WorldTransferCommitMember ReadCommitMemberMotion(ref WireReader reader) {
-        var hasMappedArrival = reader.ReadBoolean();
+        var arrival = ((WorldTransferArrival)reader.ReadByte());
+
+        if (
+            !reader.Failed &&
+            !Enum.IsDefined(value: arrival)
+        ) {
+            reader.Fail(
+                detail: $"commit member carries unknown arrival kind {(byte)arrival}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
         var bodyMotionProgramName = reader.ReadString(
             field: "commit member body motion program",
             maxBytes: WireLimits.MaxStringBytes
@@ -285,7 +296,7 @@ public static class WorldWireLeaves {
             ActionContinuity: actionContinuity,
             BodyMotionProgramName: bodyMotionProgramName,
             Continuum: continuum,
-            HasMappedArrival: hasMappedArrival,
+            Arrival: arrival,
             PlanarVelocity: planarVelocity,
             Position: position,
             Profile: null,

@@ -1067,6 +1067,36 @@ public sealed partial class WorldPopulation {
 
         return true;
     }
+    /// <summary>Sets an already-active seat, freshly embodied by the destination's own join, down at an explicit pose:
+    /// the posed half of a transfer that carries a seat to a spawn point (<see cref="WorldTransferArrival.Posed"/>).
+    /// The body keeps the destination's own kit, motion program and initial action registers, stands still, and is
+    /// hard-teleported (<see cref="WorldBody.Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/>) level at the
+    /// pose. A no-op returning <see langword="false"/> for an inactive slot.</summary>
+    /// <param name="slot">The seat index (0-based) the destination's join just activated.</param>
+    /// <param name="position">The arrival position, fixed point.</param>
+    /// <param name="yawRadians">The arrival yaw, fixed-point radians.</param>
+    /// <returns><see langword="true"/> when the seat was active and its body was posed.</returns>
+    public bool ApplyPosedArrival(int slot, FixedVector3 position, FixedQ4816 yawRadians) {
+        var entry = m_entries[slot];
+
+        if (
+            !entry.Active ||
+            (entry.Body is not { } body)
+        ) {
+            return false;
+        }
+
+        m_actionStateLane.Input?.ResetBody(body: slot);
+        body.ResetArrivalInput();
+        body.Pose(
+            position: position,
+            yawRadians: yawRadians,
+            pitchRadians: FixedQ4816.Zero,
+            rollRadians: FixedQ4816.Zero
+        );
+
+        return true;
+    }
     /// <summary>Applies entity-directed effect outputs after every body has advanced, then exposes player-keyed durable
     /// writes for the completed tick.</summary>
     public void CompleteStep(ulong tick) {
