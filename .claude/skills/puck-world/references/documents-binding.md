@@ -307,17 +307,35 @@ put epoch, source rearming, or mapping synchronization only in
 `WorldSimulation.PublishSeats`: a headless host must receive every boundary too,
 including boundaries which do not change its authority route.
 
-Every rendered slot's `Pressed` state reflects the PHYSICAL control's live carry
-(`BindingBarSeatComposer.IsPhysicallyPressed`, resolved once from the seat's
-ACTIVE page view by input source id and reused across every bank showing that
-control — a control's momentary press state does not depend on which bank/page is
-drawing it). Badge content comes from `icons.badges`, keyed by the SAME input
+Every rendered slot's `Pressed` state reflects the physical source in
+`InputRouter.IsSourcePressed`, independently of a destination's toggle latch.
+`WorldSeatInput.ActionStatus` supplies current-mode eligibility, awaiting-neutral,
+toggle and retained-level state; the bar dims disabled or rearming actions and
+keeps their state separate from physical depression. Only the active bank shows
+physical depression; every bank may show an action's latch. Badge content comes
+from `icons.badges`, keyed by the same input
 source id: `WorldIconTable.ResolveBadge` is the one door a slot, a modifier
 indicator, and a chord hint all go through, checking the row's per-family
 override (`Puck.Input.Devices.GamepadType` member name) before its default icon.
 A source with no badge row simply draws no badge, so badging a control the
 gamepad vocabulary never named (`mouse.button1`) is an authoring act, not a code
 change.
+
+`body.rig` reads input without presentation; `body.channels` adds its existing
+contribution fold. Both name the body's selected tuple and epoch, action shapes,
+values, inactive actions, source rearming and held origins. Prefixed help for
+`body.press`, `body.rig` and `body.channels` appends that current input vocabulary.
+`world.affordances` returns an object with `commands`, `channels` (including
+`active` and `value`), and the primary body's `input` read-back. Compiled binding
+handles have no console/help/vocabulary surface. Replay names accepted input
+from each re-driven tick's definition, including barriers and cancelled holds;
+a segment's raw bank is never labelled using a fixed or later mapping.
+
+The input genre demonstrations are ordinary sweeps; their five plans and exact
+invocations are in [the input-channel decision](../../../../docs/decisions/input-channels.md#genre-check).
+Run each with a fresh boot. C7 found that `world.load` can lose the program's
+seeded Edit grant, leaving authored state-writing rules refused; that separate
+boot/reload finding is recorded in the open items.
 
 **Overlay visibility (`visible`).** Every overlay element — a `hud.panels` row, a
 seat's player-scope panel, `hud.defaults` (the gate over every world panel),

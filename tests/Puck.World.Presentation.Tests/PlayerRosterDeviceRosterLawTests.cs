@@ -30,7 +30,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         roster.ObserveDeviceKind(device: pad, kind: InputDeviceKind.Gamepad);
         roster.ObserveDevice(device: pad, kind: InputDeviceKind.Gamepad, name: "SteamControllerTriton");
         Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=unassigned]", roster.DescribeDevices());
-        Assert.False(roster.IsJoined(slot: 1));
+        Assert.False(condition: roster.IsJoined(slot: 1));
         roster.Confirm(device: pad, actingPrincipal: Principal.Console);
         Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=p1*]", roster.DescribeDevices());
     }
@@ -339,8 +339,8 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         });
 
         Assert.Equal(
-            expected: [pad, bare],
-            actual: asked
+            actual: asked,
+            expected: [pad, bare]
         );
         Assert.Contains(
             actualString: line,

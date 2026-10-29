@@ -11,16 +11,16 @@ public sealed class ParserTests {
         var report = new byte[54];
         report[0] = 0x42;
         report[2] = 1; // South, in a synthetic state report.
-        Assert.True(parser.TryParse(report, out var before));
+        Assert.True(condition: parser.TryParse(report: report, state: out var before));
         report[0] = 0x7b;
-        Array.Fill<byte>(report, 0xff, 1, report.Length - 1);
-        Assert.True(parser.IsIgnoredReport(report));
-        Assert.False(parser.TryParse(report, out _));
+        Array.Fill<byte>(report, 0xff, 1, (report.Length - 1));
+        Assert.True(condition: parser.IsIgnoredReport(report: report));
+        Assert.False(condition: parser.TryParse(report: report, state: out _));
         report[0] = 0x43;
-        Assert.True(parser.TryParse(report, out var after));
+        Assert.True(condition: parser.TryParse(report: report, state: out var after));
         Assert.Equal(before.Buttons, after.Buttons);
-        Assert.False(parser.IsIgnoredReport([]));
-        Assert.False(parser.IsIgnoredReport([0x7c]));
+        Assert.False(condition: parser.IsIgnoredReport(report: []));
+        Assert.False(condition: parser.IsIgnoredReport(report: [0x7c]));
     }
     [InlineData(HidTransport.Usb, 48)]
     [InlineData(HidTransport.Bluetooth, 78)]

@@ -21,7 +21,7 @@ public sealed class WorldSeatInput {
 
     /// <summary>Reads a named action's authority-published eligibility, rearming and continuation.</summary>
     public WorldInputActionStatus ActionStatus(string name) {
-        if (!m_catalog.TryGetLogicalId(name: name, id: out var logical)) { return default; }
+        if (!m_catalog.TryGetLogicalId(id: out var logical, name: name)) { return default; }
         var waiting = false;
         var toggled = false;
         var retained = false;
@@ -29,11 +29,11 @@ public sealed class WorldSeatInput {
         foreach (var source in m_producer.Sources) {
             if (source.Source.Channel != logical) { continue; }
             waiting |= source.AwaitingNeutral;
-            held |= source.RawValue != 0;
-            toggled |= (source.Source.Kind == WorldInputContributionKind.Toggle) && (source.RawValue != 0);
+            held |= (source.RawValue != 0);
+            toggled |= ((source.Source.Kind == WorldInputContributionKind.Toggle) && (source.RawValue != 0));
         }
         foreach (var decision in m_boundary.Decisions.Span) {
-            if (decision.Channel == logical) { retained |= (decision.Reason == WorldInputContinuationReason.Kept) && (decision.CurrentRaw != 0); }
+            if (decision.Channel == logical) { retained |= ((decision.Reason == WorldInputContinuationReason.Kept) && (decision.CurrentRaw != 0)); }
         }
         return new(Active: m_producer.Mapping.IsLive(logicalId: logical), AwaitingNeutral: waiting, Toggled: toggled, Retained: (retained && held));
     }

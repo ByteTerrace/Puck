@@ -1,0 +1,108 @@
+{
+  "tools": [
+    {
+      "name": "twin-stick-shooter",
+      "lines": [
+        "world.wait 4",
+        "player.signal keyboard.u press at:0.001",
+        "player.signal keyboard.i press at:0.002",
+        "player.signal keyboard.o press at:0.003",
+        "world.wait 2",
+        "player.mode activity ability",
+        "world.wait 2"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "shooter",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    },
+    {
+      "name": "fps",
+      "lines": [
+        "player.signal keyboard.u release",
+        "player.signal keyboard.i release",
+        "player.signal keyboard.o release",
+        "player.mode activity fps",
+        "world.wait 2",
+        "player.signal keyboard.o press",
+        "world.wait 2",
+        "player.signal mouse.motion 8 0",
+        "world.wait 2",
+        "player.mode activity weapon",
+        "world.wait 2"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "fps",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    },
+    {
+      "name": "menu-panels",
+      "lines": [
+        "player.signal keyboard.o release",
+        "player.mode activity menu",
+        "world.wait 2",
+        "player.signal keyboard.j press",
+        "player.signal keyboard.k press",
+        "world.wait 2",
+        "player.mode activity panel",
+        "world.wait 2"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "menu",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    }
+  ],
+  "scenarios": [],
+  "signals": [
+    {
+      "red": [
+        "shooter != 1",
+        "fps != 1",
+        "menu != 1"
+      ],
+      "parse": "cells",
+      "name": "controls",
+      "line": "world.state genreChecks"
+    },
+    {
+      "red": [
+        "value != 2"
+      ],
+      "parse": "text",
+      "name": "no-fabricated-shot",
+      "line": "world.state firePresses",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    }
+  ],
+  "tour": {
+    "prelude": [],
+    "reset": [],
+    "frame": [],
+    "settle": 0,
+    "levelTolerance": 0,
+    "amberFraction": 0,
+    "columns": 1,
+    "cellWidth": 1,
+    "stops": []
+  },
+  "note": "Executable rows of the input-channel genre table. No sample game or new interpreter: ordinary worlds, input signals, mode commands and rule read-backs. Exact clock, checkpoint, ring and cancellation invariants remain the input-*-tests.puck scenarios."
+}

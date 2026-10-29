@@ -1,0 +1,85 @@
+{
+  "tools": [
+    {
+      "name": "typing-and-chat-text",
+      "lines": [
+        "world.wait 4",
+        "player.signal keyboard.w press",
+        "player.mode focus text",
+        "world.wait 3",
+        "player.signal keyboard.text a at:0.001",
+        "world.wait 30",
+        "player.signal keyboard.text \" b\" at:0.001",
+        "world.wait 3"
+      ],
+      "until": {
+        "line": "world.state keyAccuracy",
+        "metric": "$value",
+        "in": [
+          "100"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    }
+  ],
+  "scenarios": [],
+  "signals": [
+    {
+      "name": "typed-order",
+      "line": "world.state textOrder",
+      "parse": "text",
+      "red": [
+        "value != 6415075"
+      ],
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "name": "typed-accuracy",
+      "line": "world.state keyAccuracy",
+      "parse": "text",
+      "red": [
+        "value != 100"
+      ],
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "name": "rig-current-mode",
+      "line": "body.rig",
+      "parse": "text",
+      "metrics": {
+        "textMode": "mode='(focus=text)'"
+      },
+      "red": [
+        "textMode != focus=text"
+      ]
+    },
+    {
+      "name": "help-current-mode",
+      "line": "help body.press",
+      "parse": "text",
+      "metrics": {
+        "textAction": "(typed):Text=event-only"
+      },
+      "red": [
+        "textAction != typed"
+      ]
+    }
+  ],
+  "tour": {
+    "prelude": [],
+    "reset": [],
+    "frame": [],
+    "settle": 0,
+    "levelTolerance": 0,
+    "amberFraction": 0,
+    "columns": 1,
+    "cellWidth": 1,
+    "stops": []
+  },
+  "note": "Executable rows of the input-channel genre table. No sample game or new interpreter: ordinary worlds, input signals, mode commands and rule read-backs. Exact clock, checkpoint, ring and cancellation invariants remain the input-*-tests.puck scenarios."
+}

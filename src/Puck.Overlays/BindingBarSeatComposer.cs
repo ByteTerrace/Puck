@@ -97,10 +97,10 @@ public static class BindingBarSeatComposer {
             var latched = ((binding is { Toggle: true }) && (isCommandHeld is not null) && isCommandHeld(binding.Command));
             // A control the page leaves unbound but whose hold opens a deeper page (a shoulder that opens the play wheel)
             // reads as that page's opener: bright, and wearing the icon the bar's icon row names for the page's id.
-            var opener = ((binding is null) && (view.Openers is { } openers) && openers.TryGetValue(
+            var opener = (((binding is null) && (view.Openers is { } openers) && openers.TryGetValue(
                 key: source,
                 value: out var opens
-            )
+            ))
                 ? opens
                 : null
             );
@@ -301,25 +301,5 @@ public static class BindingBarSeatComposer {
         }
 
         return false;
-    }
-    /// <summary>Answers whether a physical control is currently held, from the seat's ACTIVE page view — only the
-    /// active page's routed command carries a live held sample, and only the active bank draws it (a stacked wing
-    /// renders a page that is not live, so it shows no press).</summary>
-    /// <param name="activeView">The seat's currently active page view.</param>
-    /// <param name="source">The physical control's input source id.</param>
-    /// <param name="isCommandHeld">Answers whether a named command is currently carried held for this seat.</param>
-    /// <returns><see langword="true"/> when the control is bound on the active page AND that binding's command is
-    /// held.</returns>
-    public static bool IsPhysicallyPressed(BindingPageView activeView, string source, Func<string, bool> isCommandHeld) {
-        ArgumentNullException.ThrowIfNull(argument: activeView);
-        ArgumentNullException.ThrowIfNull(argument: isCommandHeld);
-
-        return (
-            activeView.ButtonsBySource.TryGetValue(
-            key: source,
-            value: out var binding
-        ) &&
-            isCommandHeld(binding.Command)
-        );
     }
 }

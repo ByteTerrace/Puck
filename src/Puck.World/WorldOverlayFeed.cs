@@ -12,7 +12,7 @@ namespace Puck.World;
 /// <see cref="Puck.Commands.BindingPageView"/> through <see cref="WorldSeatBindings"/>, joins the resolved
 /// binding-bar policy's authored slot set against EVERY authored bank's own named page for the connected controller
 /// family — chips lit from the router's carried PHYSICAL button state, the same fact reused across every bank
-/// showing that button's slot (<see cref="BindingBarSeatComposer.IsPhysicallyPressed"/>) — scopes it into that
+/// showing that button's slot (<see cref="InputRouter.IsSourcePressed"/>) — scopes it into that
 /// seat's published viewport rect (<see cref="WorldSeatViewports.Seat(int)"/>, the exact region
 /// <c>WorldFramePresenter</c> resolved this frame, authored layout included), and publishes one
 /// <see cref="OverlayBindingBarFrame"/>. Zero steady-state allocation: the per-seat arrays and
@@ -25,10 +25,6 @@ internal sealed class WorldOverlayFeed {
     // Per-SEAT parsed-slot-set cache: re-parses the authored button-name strings only when the resolved
     // WorldBindingBarAuthoring instance changes (a document delivery or profile switch), never every frame — the
     // resolved document graph is reference-stable while nothing changes, so reference equality is the change key.
-    // This tick's active page view per seat — the ONE mutable cell m_pressedBySource's preallocated (per-seat,
-    // ctor-time) closures read, so a physical-press probe threads through every bank's ComposeBank call with no
-    // per-frame delegate allocation.
-    private readonly BindingPageView?[] m_activeBarView;
     private readonly WorldBindingBarControl m_bindingBar;
     private readonly WorldEditorSeats m_editor;
     private readonly WorldSeatBindings m_bindings;
@@ -135,7 +131,6 @@ internal sealed class WorldOverlayFeed {
         m_slots = new OverlayBindingSlot[PlayerRoster.MaxSlots][];
         m_modifiers = new OverlayBindingModifier[PlayerRoster.MaxSlots][];
         m_pressedBySlot = new Func<string, bool>[PlayerRoster.MaxSlots];
-        m_activeBarView = new BindingPageView?[PlayerRoster.MaxSlots];
         m_pressedBySource = new Func<string, bool>[PlayerRoster.MaxSlots];
 
         for (var index = 0; (index < PlayerRoster.MaxSlots); index++) {
@@ -149,11 +144,7 @@ internal sealed class WorldOverlayFeed {
                 command: command,
                 slot: slot
             );
-            m_pressedBySource[index] = source => ((m_activeBarView[slot] is { } activeView) && BindingBarSeatComposer.IsPhysicallyPressed(
-                activeView: activeView,
-                isCommandHeld: m_pressedBySlot[slot],
-                source: source
-            ));
+            m_pressedBySource[index] = source => router.IsSourcePressed(slot: slot, source: source);
         }
     }
 
@@ -214,8 +205,6 @@ internal sealed class WorldOverlayFeed {
             var banks = authoring.Banks;
             var destination = m_slots[viewIndex];
             var writeOffset = 0;
-
-            m_activeBarView[slot] = view;
 
             if (
                 (slotSet.Count > 0) &&
@@ -314,7 +303,7 @@ internal sealed class WorldOverlayFeed {
                     if (m_roster.Seat(slot: slot)?.Input is { } input) {
                         for (var entry = 0; (entry < slotCount); entry++) {
                             if (!bankView.ButtonsBySource.TryGetValue(key: slotSet[entry], value: out var binding) ||
-                                (binding.Action is null) || !binding.Command.StartsWith(value: "channel.logical.", comparisonType: StringComparison.Ordinal)) { continue; }
+                                (binding.Action is null) || !binding.Command.StartsWith(comparisonType: StringComparison.Ordinal, value: "channel.logical.")) { continue; }
                             var status = input.ActionStatus(name: binding.Action);
                             var at = (writeOffset + entry);
                             destination[at] = destination[at] with {

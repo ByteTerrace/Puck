@@ -18,9 +18,7 @@ public sealed partial class WorldInputRuntime {
             var channel = Catalog.Channels[logical];
             var address = mapping.Address(logicalId: logical);
             text.Append(value: channel.Name).Append(value: ':').Append(value: channel.Shape).Append(value: '=');
-            if (!mapping.IsLive(logicalId: logical)) { text.Append(value: "inactive(selected mode)"); }
-            else if (channel.Shape == ChannelShape.Text) { text.Append(value: "event-only"); }
-            else { text.Append(value: mapping.Channels.DescribeValue(intent: target.ChannelReadComposed, ordinal: address)); }
+            if (!mapping.IsLive(logicalId: logical)) { text.Append(value: "inactive(selected mode)"); } else if (channel.Shape == ChannelShape.Text) { text.Append(value: "event-only"); } else { text.Append(value: mapping.Channels.DescribeValue(intent: target.ChannelReadComposed, ordinal: address)); }
         }
         text.Append(value: ']');
         if (!m_bodyOwners.TryGetValue(key: body, value: out var owners)) { return text.ToString(); }
@@ -35,7 +33,8 @@ public sealed partial class WorldInputRuntime {
                     .Append(value: Catalog.Mappings[boundary.To].Name).Append(value: "')");
                 foreach (var decision in boundary.Decisions.Span) {
                     text.Append(value: ' ').Append(value: Catalog.Channels[decision.Channel].Name).Append(value: '=')
-                        .Append(value: decision.Reason).Append(value: " hold=").Append(value: decision.HoldPress)
+                        .Append(value: ((decision.Reason == WorldInputContinuationReason.Kept) ? "retained" : "cancelled"))
+                        .Append(value: '(').Append(value: decision.Reason).Append(value: ") hold=").Append(value: decision.HoldPress)
                         .Append(value: " since=").Append(value: decision.HeldSince);
                 }
             }

@@ -1629,7 +1629,7 @@ public sealed partial class CommandRegistry {
     public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false) {
         var registered = m_root.Subcommands.Where(predicate: command => !m_byTextCommand[command].BindingOnly)
             .Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty), Details: m_byTextCommand[command].HelpDetails));
-        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description, Details: (Func<int, string>?)null));
+        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description, Details: ((Func<int, string>?)null)));
 
         return string.Join(
             separator: '\n',
@@ -1653,11 +1653,11 @@ public sealed partial class CommandRegistry {
     // A description's first sentence, cut at a word boundary within SynopsisCharacters; a line that left words out ends
     // in " ..." so a reader knows `help --full` holds the rest.
     private static string Synopsis(string description) {
-        var end = description.IndexOf(value: ". ", comparisonType: StringComparison.Ordinal);
+        var end = description.IndexOf(comparisonType: StringComparison.Ordinal, value: ". ");
         var sentence = ((end < 0) ? description : description[..(end + 1)]);
 
         if (sentence.Length > SynopsisCharacters) {
-            var cut = sentence.LastIndexOf(value: ' ', startIndex: (SynopsisCharacters - 1));
+            var cut = sentence.LastIndexOf(startIndex: (SynopsisCharacters - 1), value: ' ');
 
             sentence = sentence[..((cut > 0) ? cut : SynopsisCharacters)];
         }

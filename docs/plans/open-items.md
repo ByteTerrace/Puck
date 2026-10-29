@@ -327,6 +327,14 @@ findings by cluster, starting with the hall stairs.
 
 ### Edit to running, hot reload and boot
 
+- [medium] A `world.load` from debug into a same-capacity input fixture leaves
+  authored state-writing rules refused with `the live edit grant refuses
+  state:blink` (and the fixture's counters stay zero); a fresh boot of that
+  fixture runs them. Reproduced in C7 with `input-genre-controls.puck` temporarily
+  set to the debug world's capacity. The seeded `World` Edit grant appears lost
+  across load; that cause is an inference, not yet confirmed. Owner: boot/reload
+  lane. C7's genre sweeps boot each source fresh.
+
 Owner: hot-reload follow-up (boot and build) · two medium, the rest ordinary ·
 Next: the two review findings, then a reboot for an edit outside `PuckHotReload`.
 
@@ -768,13 +776,10 @@ hang, then the embeddings round trip.
 
 ### Input channels
 
-Owner: input lane · ordinary · Next: C7's read-back. The
+Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
-step's completion criteria; C1 to C6 are in.
+step's completion criteria; C1 to C7 are in.
 
-- C7 read-back and cleanup: current-mode action names in `body.rig`,
-  `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
-  ordinal surfaces removed, and executable checks of the genre table.
 - A typing tutor in the gallery (the owner's request), on C5 and C6: a station
   whose engagement enters a text-focus mode, lessons from the home row to words
   and sentences on a prompt screen, live per-character feedback, words per
@@ -783,12 +788,11 @@ step's completion criteria; C1 to C6 are in.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).
-- The Steam Controller (Triton, receiver `0x28de:0x1304`) drives player 1 in a
-  windowed World, but `world.devices` lists only the camera, and the parser logs
-  `SteamControllerTriton unparsed report id=0x7b len=54`. List every streaming
-  pad in the device roster, and parse or deliberately ignore report 0x7b.
 - Hardware runs owed (note what each shows in its commit;
   [device input](../reference/input.md#limits-and-hardware-evidence)): the
+  Triton receiver's live streaming roster (including while neutral) and deliberate
+  `0x7b` ignore policy, shown synthetically in C7 but with no attached hardware;
+  the
   DualSense and Switch Pro over Bluetooth, the DualSense Edge, one DualSense on
   USB and Bluetooth at once, the classic Steam Controller, the Triton's reports
   `0x45`/`0x47`, its pairing events, its wired, Bluetooth and Nereid transports,
