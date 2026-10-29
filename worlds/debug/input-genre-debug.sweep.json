@@ -1,0 +1,102 @@
+{
+  "tools": [
+    {
+      "name": "third-person-action",
+      "lines": [
+        "world.wait 30",
+        "player.signal keyboard.n press",
+        "world.wait 2",
+        "player.signal keyboard.n release",
+        "player.signal keyboard.z press",
+        "world.wait 2",
+        "player.signal keyboard.n press",
+        "world.wait 2",
+        "player.signal keyboard.n release",
+        "player.signal keyboard.z release",
+        "body.press suit 1 0.2 0",
+        "world.wait 15"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "action",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    },
+    {
+      "name": "turn-based-board",
+      "lines": [
+        "player.signal keyboard.n press",
+        "player.signal keyboard.n release",
+        "player.signal keyboard.z press",
+        "player.signal keyboard.n press",
+        "player.signal keyboard.n release",
+        "player.signal keyboard.z release",
+        "body.press suit 1 0.2 0",
+        "world.wait 15",
+        "body.pose 56.5 9.25 21.1 0 0 0 0",
+        "world.wait 150",
+        "player.signal keyboard.z press",
+        "world.wait 2",
+        "player.signal keyboard.n press",
+        "world.wait 2",
+        "body.press interact",
+        "world.wait 3"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "board",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    },
+    {
+      "name": "release-board-keys",
+      "lines": [
+        "player.signal keyboard.n release",
+        "player.signal keyboard.z release",
+        "world.wait 3"
+      ],
+      "until": {
+        "line": "world.state genreChecks",
+        "metric": "board",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    }
+  ],
+  "scenarios": [],
+  "signals": [
+    {
+      "red": [
+        "action != 1",
+        "board != 1",
+        "leak != 0"
+      ],
+      "parse": "cells",
+      "name": "action-and-board",
+      "line": "world.state genreChecks"
+    }
+  ],
+  "tour": {
+    "prelude": [],
+    "reset": [],
+    "frame": [],
+    "settle": 0,
+    "levelTolerance": 0,
+    "amberFraction": 0,
+    "columns": 1,
+    "cellWidth": 1,
+    "stops": []
+  },
+  "note": "Executable rows of the input-channel genre table. No sample game or new interpreter: ordinary worlds, input signals, mode commands and rule read-backs. Exact clock, checkpoint, ring and cancellation invariants remain the input-*-tests.puck scenarios."
+}

@@ -40,6 +40,17 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**The standard is authored.** `worlds/standard/standard.puck` composes the
+optional controls and skin. Shared cursor, icons, binding-bar designs, pages
+and wheel belong there; the debug world's Go/Tour pages and Places ring refine
+it in `worlds/debug/controls.puck`. The garden and night field import the
+standard directly. Add mechanisms to the engine and concrete design to the
+standard, with avatar tuning and rig animation in the avatar document. Authors
+override rows by id in the importing document's own body, or replace/omit the
+package through the existing composition path; do not copy a second standard
+into a world. [The package README](../../../worlds/standard/README.md) owns the
+import and override examples.
+
 **Replay one scope while the world lives on.** An authored `replays` row names its
 document rows, stable body ordinals, input principals, control row and timed
 input program. `WorldScopedReplayRuntime` captures its starting arena columns and
@@ -115,7 +126,8 @@ view. `world.view.pick primary finding <id>` reads a retained causal record
 even while its diagnostic view is off or another is active; run `report` first
 to populate findings. `primary` resolves to the first seat's rendered instance
 (`world` before presentation); explicit instance names and the normalized
-`<view-or-instance> <x> <y>` pick form work too.
+`[<view-or-instance>] <x> <y>` pick form work too, and a pick with no view
+addresses `primary` (`world.view.panes` names the presented view).
 `world.debug-view goto <id>` requests an operator camera pose only. Reports
 share stable cause IDs, current measurements, precision budgets, source
 stamp/creation/node/operation and tick lifetimes. Changed reports enter
@@ -353,6 +365,13 @@ is legitimate for the actor. Client code never mutates local state before the
 server's verdict. Trace the acting principal stamped at ingress when debugging
 a refusal; constructing a `Principal` in a test bypasses the path under investigation.
 [references/authority.md](references/authority.md)
+
+**A toast narrates a player's own act.** `WorldToastPolicy` decides from the
+echo's acting principal: a `Console`-stamped write or grant (stdin, an MCP or
+control attachment, a sweep or schedule prelude, a session screen's admission
+grants) reports through the console row, stderr and `host.log`, never the
+toast. `world.hud toast` reads the toast store in any shape
+([HUD](references/hud.md#verbs)).
 
 **Read through the caller's disclosure.** A console read-back reads the
 `WorldStateReadView` its acting principal is minted

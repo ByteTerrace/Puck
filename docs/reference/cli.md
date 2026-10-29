@@ -87,7 +87,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
-| [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the corpus inventory, the shipped-world state baselines, the Maths law ledger, the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
+| [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
 | [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
@@ -983,10 +983,9 @@ against the merge base of `HEAD` and `--merge-base` (default
 12. `shaders generate`: `puck shaders generate --check`.
 13. `branding`: `puck branding --check`.
 14. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-15. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-16. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-17. `parity`: `puck parity` when selected, only with `--gpu`.
-18. `Puck.World.Tests`: device suite, only with `--gpu`.
+15. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+16. `parity`: `puck parity` when selected, only with `--gpu`.
+17. `Puck.World.Tests`: device suite, only with `--gpu`.
 19. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
 20. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
 21. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
@@ -4118,7 +4117,6 @@ baseline is what a recording replaces; a run that does not write its records, or
 
 | Artifact | Committed files | Owning tests |
 |---|---|---|
-| `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
 | `browser-parity` | `tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
 
 The `state` baseline and its tests, and the tictactoe state hashes `browser-parity`
@@ -4315,11 +4313,11 @@ can be found. The authoritative asset map and variant rationale live in
 
 ## puck lease—exclusive machine work
 
-Run `puck lease gpu --holder <lane> [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
+Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
 
-The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the lane name, UTC acquisition time, process ID and process start ticks on four lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
+The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
-Admission is first come, first served. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same four metadata lines as a holder. Only the oldest live ticket may take the guard, so a holder that exits and immediately acquires again queues behind every waiter already there, and a newcomer cannot overtake a long wait. The wait message names the holder and how many tickets are ahead. A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
+Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`probe-depth-fix timing run` is lane `probe-depth-fix`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently, and a lane never served ranks first, so a lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
 
 Heavy suites in `gate` and `affected` use this same lease through admission
 and execution. When a live ancestor already holds it, verified process ancestry

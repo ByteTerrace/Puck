@@ -14,6 +14,7 @@ contracts belong in the subsystem guides; proposed changes belong in
   state substrate, its ceilings as prices, the language as a projection with
   modules, records, pools, and tests as worlds, the costing model, and the
   acceptance games.
+- [Companions across instances](companions.md): a companion is the player's; code never crosses, the destination accepts the visitor's pinned driver, runs its own, or refuses it, a refused or separated companion goes home and the player is told, and home re-adopts it by incarnation.
 - [Input channels](input-channels.md): typed packed input, shared action names,
   authoritative modes and slot allocation, authored switch continuity, timed input
   history, and the live-document migration.

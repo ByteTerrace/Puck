@@ -141,6 +141,10 @@ the guard. Its metadata readers permit deletion, and an unreadable queue ticket
 counts as occupied until it can be read or disappears. Let the verb recover;
 never unlink the guard or infer ownership from the absence of a World alone.
 
+A scratch repository for CLI experiments needs its own `Puck.slnx` (and a
+`git init`), or the verb silently uses the shared `.claude/leases` and joins
+the live queue.
+
 Judge a performance change by code, disassembly and load-independent counts;
 only counts gate it. Wall-clock and GPU timing are evidence read beside those
 counts, never alone, and run on a quiet machine: the lead keeps every agent's

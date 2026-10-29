@@ -129,14 +129,16 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 // A latch shown on a bank that is not live keeps the held LOOK but takes the bank's REST coverage: the
                 // held tier fills solid where a rest plate fills at the chip rest opacity, so scaling a wing's latch
                 // by that same opacity makes it fade with its neighbours instead of standing at full strength.
-                alpha: (slot.Latched
+                alpha: ((slot.Inactive || slot.AwaitingNeutral)
+                ? (slot.Alpha * bar.QuietAlpha)
+                : (slot.Latched
                 ? (slot.Alpha * styles.Keycap.RestOpacity)
                 : (slot.Bound
                     ? slot.Alpha
-                    : (slot.Alpha * bar.QuietAlpha))),
+                    : (slot.Alpha * bar.QuietAlpha)))),
                 badgeGlyph0: slot.BadgeGlyph0,
                 badgeGlyph1: slot.BadgeGlyph1,
-                bound: slot.Bound,
+                bound: (slot.Bound && !slot.Inactive && !slot.AwaitingNeutral),
                 centerX: centerX,
                 centerY: centerY,
                 glyphHalf: glyphHalf,
@@ -145,7 +147,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 iconGlyph0: slot.IconGlyph0,
                 iconGlyph1: slot.IconGlyph1,
                 plateHalf: plateHalf,
-                pressed: slot.Pressed,
+                pressed: (slot.Pressed || slot.Toggled || slot.Retained),
                 toggled: slot.Toggled,
                 togglePhase: togglePhase
             );

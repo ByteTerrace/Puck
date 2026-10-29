@@ -28,6 +28,21 @@ agent works in that mode by default, without asking:
   default, are such leaks. A feature's look is that feature's material, style
   or skin, opted into where it is used. A leak is fixed when it is found, not
   recorded for later.
+- The Puck standard is authored, never baked in (the owner's ruling). The
+  engine provides mechanisms (layout and model switching, slot tables, anchors,
+  camera ops, input names, generic motion primitives); every concrete design
+  (binding bar layouts and sizes, wheels, cursors, icons, camera feel and zoom
+  limits, abilities such as a dash) is `.puck` data in the standard package
+  (`worlds/standard/`), which the debug world imports and develops, and which any
+  author imports, overrides by id, or replaces. Debug-world-only content (its
+  places, tours, exhibits) stays in `worlds/debug/`. Building a design into
+  engine code, or only into the debug world, builds it twice.
+- Puck is independent work (the owner's ruling). For an external protocol,
+  format or device, consult several independent sources as second opinions
+  (vendor documentation, kernel drivers, community reverse engineering, other
+  open implementations), cite each, note where they disagree, and verify on
+  hardware where possible. No single library is the specification, and Puck is
+  never a port or clone of one.
 - The proper fix is always preferred (the owner's ruling). When a stopgap and a
   fix at the cause both exist, do the fix; never put a choice between stopgaps
   to the owner.

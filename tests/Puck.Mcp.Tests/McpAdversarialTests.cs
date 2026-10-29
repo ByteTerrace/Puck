@@ -397,7 +397,7 @@ public sealed class McpAdversarialTests {
             createSession: () => new ScriptedSession(entered: null),
             directory: scratch.RootPath,
             launch: new OperatorWorldLaunch(
-                AcquireGpuLease: static (_, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
+                AcquireGpuLease: static (_, _, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
                 Checkout: scratch.RootPath,
                 ResolveBuild: (checkout, spirv, budget, _) => {
                     asked.Add(item: (checkout, spirv, budget));

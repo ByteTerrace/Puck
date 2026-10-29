@@ -12,7 +12,7 @@ typed packed values, shared action names, composable simulation modes, authored
 continuity across mode switches, and deterministic input history with sub-tick
 timing. The representation and algorithms below refine that direction.
 
-**Implementation status:** C1 through C6 are implemented: 32 numeric slots (Q48.16
+**Implementation status:** C1 through C7 are implemented: 32 numeric slots (Q48.16
 levels or Q32.32 relative displacement), 64 packed buttons, independent target-register
 reach, and shared debug declarations with separate `confirm` and `cancel`.
 Relative input has authored units, sensitivity and bounds, consumes once, and
@@ -20,9 +20,12 @@ conserves fractional scalar conversion residue. Authoritative finite modes alloc
 live storage and govern continuity; Q48.16 timed events, Unicode text, bounded
 history, patterns and historical clocks share one required ingress batch across
 local, remote and federated producers. Checkpoints and replay retain admitted
-history and source state. The [implementation steps](#implementation-steps) and
-[open items](../plans/open-items.md#input-channels) track C7's remaining combined
-inspection and authoring work.
+history and source state. Current-mode names, inactivity, rearming and continuation
+read back through rig/channel inspection, affordances, help and the controller
+bar. Replay reads names from the re-driven captured definition. The executable
+[genre checks](#genre-check) exercise the combined model; the
+[open items](../plans/open-items.md#input-channels) retain the typing/chat exhibits
+and hardware runs still owed.
 
 ## Semantic names and typed values
 
@@ -524,11 +527,9 @@ cannot bypass history, epoch checks, or release rules. Pure snapshot producers
 synthesize transitions at the interval boundary. Repeated reads of one device
 sample cannot create repeated presses.
 
-The first typed-storage step uses one mapping for all declared channels and
-does not add unimplemented event fields. Its current leaf writes 32 numeric
-raw words, the packed button word, and the pointer-ray presence/payload. The
-264-byte level payload needs no document to decode. The used-extent prefix and
-mapping metadata arrive with modes. Compiled addresses 0–31 select numeric
+The current leaf uses the selected mapping's numeric extent and the packed
+button word, alongside required provenance and timed events as listed above.
+Compiled addresses 0–31 select numeric
 slots and 32–95 select button bits; declaration indices are not addresses.
 
 Source weighting sums in fixed-point scratch and thresholds binary values once
@@ -537,8 +538,7 @@ maximum-then-threshold result. The server's contribution pool still evaluates
 its fixed-point ceiling and terminal threshold before writing the packed result.
 Channel support masks carry independent numeric and button banks. Drive reach
 also carries a separate 64-bit target-register bank, so target registers never
-spend input capacity. Later steps change the current leaf
-directly. There is one current format, no dual decoder or retired aliases.
+spend input capacity. There is one current format, no dual decoder or retired aliases.
 Tapes affected by a format change are re-recorded by the recording verbs or
 deleted if no longer useful. Generated schema/vocabulary outputs come from
 their verbs. No committed shape fingerprint or layout hash is added.
@@ -707,8 +707,8 @@ package's basis, garden, night field, and standalone test compositions must
 resolve that owner without redeclaring channels. Confirm and cancel are reusable
 semantic names even before modal packing lands.
 
-Binding migration covers the Moth's base layer, `controls.puck`, `pad.puck`,
-`pad-kit.puck` templates, chess's tabletop context/page, device and desktop
+Binding migration covers the Moth's base layer, the standard controls and
+pad-kit library, the debug control refinement, chess's tabletop context/page, device and desktop
 overlays, identity binding overlays, and live rebind validation. Preserve source
 lists, modifiers, held/chord ordering, inheritance, toggle ownership, label/icon
 resolution, and command grants. Update semantic destinations; do not turn page
@@ -789,7 +789,34 @@ Inactive bindings cannot dispatch even if a UI page still displays them.
 
 ## Genre check
 
-These are design checks, not claims of implemented sample games.
+These model checks run as the ordinary sweeps below; they do not introduce sample
+games or genre-specific engine opcodes. Each sweep boots its named source fresh,
+drives the existing input verbs, and reads authored state. The text row demonstrates
+ordered committed input and per-key judgement; the gallery tutor and chat prompt
+remain content work in the input packet.
+
+Each check reads its channels in the epoch after the switch it covers: a kept
+hold reads live with no press edge in the current epoch, a released action reads
+neutral while its key is still down, and the board sweep keeps the locomotion keys
+held through entry and records a `leak` if either reads live there.
+
+Run `puck sweep --plan worlds/debug/<plan>.sweep.json --world <source>`:
+
+| Plan | Source | Rows demonstrated |
+|---|---|---|
+| `input-genre-debug` | `worlds/debug/input-genre-debug.puck` | Third-person run/autorun continuity and neutral board entry. |
+| `input-genres` | `worlds/debug/input-genre-controls.puck` | Independent twin-stick aim, held fire across ability/weapon switches without a new edge, relative look consumed once, 64 live buttons, and menu navigation kept while confirm releases. |
+| `input-genre-patterns` | `worlds/debug/input-pattern-tests.puck` | Fighting motion and buffered attack. |
+| `input-genre-continuity` | `worlds/debug/input-continuity-tests.puck` | Rhythm hold and fighting charge with original origins and one real release. |
+| `input-genre-history` | `worlds/debug/input-history-tests.puck` | Typed/pasted text in order, per-key accuracy, and text-mode rig/help read-back. |
+
+`SessionPrincipalLawTests.ABodylessMenuCanSelectPanelsAtZeroRateWithoutDevicesOrMotionRoles`
+checks administrative panel selection without a body, device, motion role or
+gameplay step; the local player console cannot drive an unembodied session.
+`BodylessTimedInputRetainsBothEdgesAndResetsItsPointerImage` checks that session's
+timed gameplay ingress. The existing `input-*-tests.puck` scenarios remain the
+exact timing, replay/checkpoint, overflow and cancellation checks and run with
+`puck test --reproduce --jobs 1`.
 
 | World | Values and modes | Timing and rule requirement | Model check |
 |---|---|---|---|
