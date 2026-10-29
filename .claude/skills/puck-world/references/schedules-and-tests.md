@@ -16,9 +16,10 @@ a quoted literal or another Text row. Equality is ordinal and case sensitive;
 missing live cells satisfy neither comparison. Test verdicts retain the actual
 text in a Text witness row and print it as a quoted value. The debug addon tests
 read the guide's title/note and the watchdog log directly.
-Rows whose kinds are only known after basis/import composition still evaluate
-but currently have no witness values; this reporting gap is recorded in
-[open items](../../../../docs/plans/open-items.md#addon-system).
+Test lowering reads row kinds from the source's composed state (its basis and
+document imports), so rows a test inherits keep their numeric and Text
+witnesses in `puck test` and `world.verdicts`, and a sibling document a test
+expects verdicts from resolves its own inherited rows the same way.
 
 Verdict rows reserve room for `$firedTick` at load but mint it only when a rule
 fires. Do not group expectations to evade a verdict-count cutoff: a stamp must
@@ -135,7 +136,7 @@ What repeats, and what to compare:
 
 Run the full scenario set after any fix: a passing isolated script does not
 qualify the bench's form and layout transitions. The
-[open item](../../../../docs/plans/open-items.md#standalone) records the remaining
+[open item](../../../../docs/plans/open-items.md#dual-stick-play-and-the-moths-motion) records the remaining
 per-render residue and any full-bench failure beyond its bound.
 The tick list and both hashes are necessary; repeatability additionally requires
 every still to pass the pixel bound. Anything beyond it is a presentation

@@ -1,5 +1,6 @@
 {
   "note": "The debug world's sweep (puck sweep): the tools it runs for a bounded span, the signals it reads, and the capture tour. Rules name a metric, an operator and a value; a red rule makes the signal red, an amber rule amber, and a rule whose metric the answer lacks leaves the signal unmeasured, which fails the run like red. compare says how a metric is judged against a previous report: exact (any change is named), relative:<fraction> (a change beyond that fraction of the old value is named) or none. The headless leg boots paused before its first tick and steps only inside waits, so ticks and tick-counted metrics repeat; only wall-clock metrics (host.frames, host.memory) are not compared exactly. Only cache-independent world.boot counts are compared exactly. Windowed authority is held between calls and advances only over explicit tick waits and pinned captures. A signal marked recheck is read again after the tour.",
+  "scenarios": ["worlds/debug/*-tests.puck"],
   "tools": [
     {
       "name": "fuzzer",
@@ -44,7 +45,7 @@
     { "name": "chess-scope", "line": "replay.scope chess-demo", "parse": "words", "leg": "headless", "red": ["status == -1"], "compare": { "inputs": "exact" } },
     { "name": "rule-failures", "line": "world.rule.failures", "parse": "text", "recheck": true, "amber": ["text != [world.rule.failures: none]"], "compare": { "text": "exact" } },
     { "name": "colliders", "line": "world.debug-view report colliders --json", "parse": "report", "timeoutSeconds": 120, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "comparisons.*": "exact", "coverage.tested": "exact" } },
-    { "name": "contacts", "line": "world.debug-view report contacts", "parse": "text", "timeoutSeconds": 120, "metrics": { "findings.red": "^\\[contacts: red=(\\d+)", "findings.amber": "^\\[contacts: red=\\d+ amber=(\\d+)", "findings.unknown": "^\\[contacts: red=\\d+ amber=\\d+ unknown=(\\d+)", "coverage.tested": "^\\[contacts: [^\\]]* tested=(\\d+)/", "coverage.eligible": "^\\[contacts: [^\\]]* tested=\\d+/(\\d+)", "coverage": "^\\[contacts: [^\\]]* coverage=(\\w+)" }, "red": ["findings.red > 0"], "amber": ["coverage == incomplete", "findings.unknown > 0"], "compare": { "findings.*": "exact", "coverage*": "exact" } },
+    { "name": "contacts", "line": "world.debug-view report contacts --json", "parse": "report", "timeoutSeconds": 120, "red": ["findings.red > 0"], "amber": ["coverage.complete == false", "findings.unknown > 0"], "compare": { "findings.*": "exact", "coverage.tested": "exact" } },
     {
       "name": "budget",
       "line": "world.budget",
@@ -71,7 +72,7 @@
     { "name": "bakes", "line": "world.wait bakes 110", "parse": "text", "leg": "windowed", "timeoutSeconds": 115, "red": ["text ~ not settled"], "compare": { "text": "none" } },
     { "name": "bake-counters", "line": "world.counters sdf.mesh-settle", "parse": "counters", "leg": "windowed", "red": ["sdf.mesh-settle.refused > 0"], "compare": { "*": "relative:0.25" } },
     { "name": "gi-counters", "line": "world.counters sdf.mesh-gi", "parse": "counters", "leg": "windowed", "compare": { "*": "relative:0.25" } },
-    { "name": "indirect", "line": "world.indirect", "parse": "pairs", "leg": "windowed", "compare": { "*": "exact" } },
+    { "name": "indirect", "line": "world.indirect", "parse": "text", "metrics": { "tier": "^\\[world\\.indirect: (off|medium|high)\\]$" }, "leg": "windowed", "compare": { "tier": "exact" } },
     { "name": "gpu-counters", "line": "world.counters gpu summary", "parse": "counters", "leg": "windowed", "compare": { "*": "relative:0.25" } },
     { "name": "frames-standing", "line": "host.frames reset\nworld.wait 150\nhost.frames 150", "parse": "frames", "leg": "windowed", "red": ["p99 > 16.7"], "amber": ["max > 16.7"], "compare": { "p50": "relative:0.2", "p99": "relative:0.2" } },
     { "name": "frames-walking", "line": "debug.go gallery-level-0\nbody.fly 1 0 0 0 0 0 4\nhost.frames reset\nworld.wait 120\nhost.frames 120", "parse": "frames", "leg": "windowed", "red": ["p99 > 16.7"], "amber": ["max > 16.7"], "compare": { "p50": "relative:0.2", "p99": "relative:0.2" } },
@@ -81,7 +82,7 @@
     "note": "Each stop starts from the reset lines, runs its own, waits for the bakes, and takes a settled capture pinned to a named tick: a start tick a fixed lead after the held tick, plus the stop's settle ticks. Authority stays paused across bake waits and coordinator calls, and pauses again at the capture tick. The frame lines (camera recenter and animation reseed) run at the start tick, and a stop's steps are pinned after it (world.at). Lockstep presentation follows those ticks, so a motion still shows the same tick whatever the bakes cost. Images are compared with the baseline's by changed pixels: a pixel changes when any channel differs by more than the level tolerance, and a still whose changed fraction exceeds the amber fraction is amber.",
     "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
     "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
-    "frame": ["player.look.recenter", "view.reseed 0"],
+    "frame": ["view.recenter 1", "view.reseed 0"],
     "settle": 45,
     "levelTolerance": 16,
     "amberFraction": 0.02,
@@ -150,7 +151,8 @@
       { "name": "jump", "group": "motion", "note": "The jump press lands 30 ticks after the start tick and the still is taken 9 ticks later, on the tick it names whatever the bakes cost.", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press jump 1 0.6" }], "settle": 39 },
       { "name": "flight", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press flight 1 0.2" }, { "at": 40, "run": "body.fly 0 0 1 0 0 0 1.5" }], "settle": 90, "after": ["body.press flight 1 0.2", "world.wait 120"] },
       { "name": "noclip", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press noclip 1 0.2 0" }, { "at": 40, "run": "body.press rise 1 1 0" }], "settle": 65, "after": ["body.press noclip 1 0.2 0", "world.wait 60"] },
-      { "name": "garden", "group": "outdoor", "note": "Through the garden painting, last: once she stands in the garden, debug.go's places are the debug world's and the garden refuses them by name, so no later stop could pose her.", "lines": ["debug.go portal-garden", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] }
+      { "name": "garden", "group": "outdoor", "note": "Cross toward +Z, then walk fully into the garden, clear of its return plane at z=-8. The motion must prove both the destination and z<=-10.", "lines": ["debug.go portal-garden", "world.wait 2", "view.recenter 1", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0", "view.recenter 1", "body.fly 1 0 0 0 0 0 2", "world.wait 90", "body.stop 0"], "expectedMotion": "pos=\\([^)]*, -[0-9]{2,}\\.[0-9]+\\).*instance:[^\\s]*~garden\\b" },
+      { "name": "night-field", "group": "outdoor", "note": "Return from the garden, cross the night painting toward +Z and walk clear of its return plane at z=-6. Prove the destination and z<=-10.", "lines": ["debug.go portal-night", "world.wait 2", "view.recenter 1", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0", "view.recenter 1", "body.fly 1 0 0 0 0 0 2", "world.wait 90", "body.stop 0"], "expectedMotion": "pos=\\([^)]*, -[0-9]{2,}\\.[0-9]+\\).*instance:[^\\s]*~night\\b" }
     ]
   }
 }

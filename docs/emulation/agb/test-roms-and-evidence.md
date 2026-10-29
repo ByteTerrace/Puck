@@ -25,7 +25,7 @@ No test or battery stage reads a commercial ROM or a retail BIOS. A commercial
 game or retail BIOS is a local, by-hand input to a diagnostic such as `--render`
 or `--lockstep`, and is never committed. The open gaps this leaves (retail
 hardware conformance, commercial link-game behavior) are in
-[open items](../../plans/open-items.md#machines-and-cartridges).
+[open items](../../plans/machines-and-cartridges.md#open-items).
 
 ## Running the optional suites
 

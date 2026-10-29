@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
+using Puck.Abstractions;
+
 namespace Puck.Cli.Sweep;
 
 /// <summary>
@@ -28,7 +30,8 @@ public static partial class SweepCommand {
         var attachOption = new Option<string>(name: "--attach") { Description = "Run the windowed leg on this running World (process id, attachment id or attachment file) instead of booting one; implies --tour." };
         var noHeadlessOption = new Option<bool>(name: "--no-headless") { Description = "Skip the headless leg (its tools and signals)." };
         var stopOption = new Option<string[]>(name: "--stop") { AllowMultipleArgumentsPerToken = true, Description = "Run only the named tour stops (repeat or list several)." };
-        var scenariosOption = new Option<string[]>(name: "--scenarios") { AllowMultipleArgumentsPerToken = true, Description = "Run these test files with puck test --jobs 1 and read their verdicts; none when omitted." };
+        var scenariosOption = new Option<string[]>(name: "--scenarios") { AllowMultipleArgumentsPerToken = true, Description = "Override the plan's scenario sources with these paths or file patterns; run serially with puck test --jobs 1." };
+        var noScenariosOption = new Option<bool>(name: "--no-scenarios") { Description = "Skip the plan's scenario set for a focused tools or tour run." };
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
@@ -36,7 +39,7 @@ public static partial class SweepCommand {
         var command = new Command(
             description: "Sweep the debug world: run its tools, read every signal, take the capture tour, and write a report a later sweep compares with.",
             name: Verb
-        ) { planOption, outputOption, baselineOption, tourOption, attachOption, noHeadlessOption, stopOption, scenariosOption, worldOption, artifactOption, cacheOption, timeoutOption };
+        ) { planOption, outputOption, baselineOption, tourOption, attachOption, noHeadlessOption, stopOption, scenariosOption, noScenariosOption, worldOption, artifactOption, cacheOption, timeoutOption };
 
         command.Detail(detail: $"""
             Runs the plan ({DefaultPlan}) against the debug world through its Operator attachment, so every line is an
@@ -53,8 +56,8 @@ public static partial class SweepCommand {
             stop poses the body and camera, waits, and takes a settled capture. Each group of stills becomes a contact
             sheet; against a baseline, a compare- sheet sets each baseline still above its current one.
 
-            --scenarios runs the named test files with puck test --jobs 1 and reads their verdicts. The whole set
-            (worlds/debug/*-tests.puck) boots the world once per scenario, so the plan runs none by default.
+            The plan's scenarios run serially with puck test --jobs 1, reusing compatible boots within each source.
+            --scenarios overrides the sources; --no-scenarios skips them for a focused tools or tour run.
 
             The output directory holds report.json (every signal with its colour, metrics and answer file; every tool,
             still and sheet), the answers under headless/ and windowed/, and the stills and sheets under tour/.
@@ -77,6 +80,7 @@ public static partial class SweepCommand {
             cacheDirectory: parseResult.GetValue(option: cacheOption),
             cancellation: cancellationToken,
             noHeadless: parseResult.GetValue(option: noHeadlessOption),
+            noScenarios: parseResult.GetValue(option: noScenariosOption),
             output: parseResult.GetValue(option: outputOption),
             planPath: parseResult.GetValue(option: planOption),
             scenarios: (parseResult.GetValue(option: scenariosOption) ?? []),
@@ -89,7 +93,7 @@ public static partial class SweepCommand {
         return command;
     }
 
-    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, int timeoutMinutes, CancellationToken cancellation) {
+    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, int timeoutMinutes, CancellationToken cancellation) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -116,6 +120,11 @@ public static partial class SweepCommand {
         }
 
         var windowed = (tour || (attach is not null));
+
+        if (noScenarios && (scenarios.Length > 0)) {
+            return CliExit.Refuse(verb: Verb, what: "--scenarios", why: "cannot be combined with --no-scenarios");
+        }
+        scenarios = (noScenarios ? [] : ((scenarios.Length > 0) ? scenarios : (plan.Scenarios?.ToArray() ?? [])));
 
         if (noHeadless && !windowed && (scenarios.Length == 0)) {
             return CliExit.Refuse(verb: Verb, what: "the run", why: "no leg or scenario was selected; the run would read nothing");
@@ -270,7 +279,7 @@ public static partial class SweepCommand {
             Baseline: baseline?.Path.Replace(newChar: '/', oldChar: '\\'),
             Commit: (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var commit, revision: "HEAD") ? commit : "unknown"),
             Legs: legs,
-            Scenarios: Scenarios(budget: budget, directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
+            Scenarios: Scenarios(artifact: artifact, budget: budget, cacheDirectory: cacheDirectory, directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
             Schema: SweepReport.SchemaName,
             Seconds: clock.Elapsed.TotalSeconds,
             Signals: signals,
@@ -298,18 +307,55 @@ public static partial class SweepCommand {
         "--world", world,
         .. WorldDevices.NoneArguments,
         "--state-dir", state,
-        .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
+        .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", PuckPaths.Normalize(path: cacheDirectory)]),
         "--exit-after-seconds", (((int)deadline.TotalSeconds) + 120).ToString(provider: CultureInfo.InvariantCulture),
         .. extra,
     ];
     // Each file through this CLI's own puck test, one worker at a time, read from its "test <name>:" and
     // "<passed>/<total> verdict(s) passed" lines and its exit code.
-    private static SweepScenarioResult Scenarios(SweepBudget budget, string directory, string[] files, string repositoryRoot) {
-        var command = $"puck test {((files.Length == 0) ? "worlds/debug/*-tests.puck" : string.Join(separator: " ", values: files))} --jobs 1";
-
+    private static SweepScenarioResult Scenarios(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string[] files, string repositoryRoot) {
+        var worlds = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
+        var reasons = new List<string>();
+        var status = SweepStatus.Clean;
+        var command = $"puck test {string.Join(separator: " ", values: files)} --jobs 1";
         if (files.Length == 0) {
-            return new SweepScenarioResult(Command: command, Reasons: ["not run: the whole set boots the world once per scenario (pass --scenarios to run files)"], Status: SweepStatus.Skipped, Worlds: new Dictionary<string, string>());
+            return new SweepScenarioResult(Command: command, Reasons: ["not selected"], Status: SweepStatus.Skipped, Worlds: worlds);
         }
+        var expanded = new SortedSet<string>(comparer: PuckPaths.Comparer);
+        foreach (var file in files) {
+            try {
+                var path = PuckPaths.Normalize(path: Path.GetFullPath(path: file, basePath: repositoryRoot));
+                var pattern = Path.GetFileName(path: path);
+                var matches = ((pattern.Contains(value: '*') || pattern.Contains(value: '?'))
+                    ? Directory.GetFiles(path: Path.GetDirectoryName(path: path)!, searchPattern: pattern)
+                    : [path]);
+                if (matches.Length == 0) {
+                    reasons.Add(item: $"no scenario source matches {file}");
+                    status = SweepStatus.Red;
+                }
+                expanded.UnionWith(other: matches.Select(selector: PuckPaths.Normalize));
+            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
+                reasons.Add(item: $"cannot read scenario sources {file}: {exception.Message.Replace(oldChar: Path.DirectorySeparatorChar, newChar: '/')}");
+                status = SweepStatus.Red;
+            }
+        }
+        var ordinal = 0;
+        foreach (var file in expanded) {
+            var folder = Path.Combine(path1: directory, path2: "scenarios", path3: (ordinal++).ToString(provider: CultureInfo.InvariantCulture));
+            _ = Directory.CreateDirectory(path: folder);
+            Console.Error.WriteLine(value: $"sweep: scenarios {CliPaths.ToDisplay(fullPath: file)}");
+            var result = ScenarioFile(artifact: artifact, budget: budget, cacheDirectory: cacheDirectory, directory: folder, file: file, repositoryRoot: repositoryRoot);
+            status = SweepStatus.Worse(left: status, right: result.Status);
+            reasons.AddRange(collection: result.Reasons.Select(selector: reason => $"{CliPaths.ToDisplay(fullPath: file)}: {reason}"));
+            foreach (var (name, value) in result.Worlds) {
+                worlds[$"{CliPaths.ToDisplay(fullPath: file)}::{name}"] = value;
+            }
+        }
+        return new SweepScenarioResult(Command: command, Reasons: reasons, Status: status, Worlds: worlds);
+    }
+    private static SweepScenarioResult ScenarioFile(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string file, string repositoryRoot) {
+        var command = $"puck test {file} --jobs 1";
+
         if (budget.Reason is { } over) {
             return new SweepScenarioResult(Command: command, Reasons: [$"not run: {over}"], Status: SweepStatus.Unknown, Worlds: new Dictionary<string, string>());
         }
@@ -322,17 +368,26 @@ public static partial class SweepCommand {
             WorkingDirectory = repositoryRoot,
         };
 
-        startInfo.ArgumentList.Add(item: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll"));
+        startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: typeof(SweepCommand).Assembly.Location.Replace(newValue: "Puck.Cli.dll", oldValue: "Puck.Cli.Runs.dll")));
         startInfo.ArgumentList.Add(item: "test");
 
-        foreach (var file in files) {
-            startInfo.ArgumentList.Add(item: file);
-        }
+        startInfo.ArgumentList.Add(item: file);
 
         startInfo.ArgumentList.Add(item: "--jobs");
         startInfo.ArgumentList.Add(item: "1");
+        startInfo.ArgumentList.Add(item: "--keep");
+        startInfo.ArgumentList.Add(item: Path.Combine(path1: directory, path2: "run"));
+        if (artifact is not null) {
+            startInfo.ArgumentList.Add(item: "--world-artifact");
+            startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: artifact));
+        }
+        if (cacheDirectory is not null) {
+            startInfo.ArgumentList.Add(item: "--cache-dir");
+            startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: cacheDirectory));
+        }
 
         using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
+        Console.Error.WriteLine(value: $"sweep: scenario process {process.Id.ToString(provider: CultureInfo.InvariantCulture)}");
         var error = process.StandardError.ReadToEndAsync();
         var output = process.StandardOutput.ReadToEndAsync();
         string? unfinished = null;

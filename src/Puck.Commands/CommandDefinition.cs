@@ -70,6 +70,9 @@ public sealed record CommandDefinition {
     /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
     /// </remarks>
     public bool AcknowledgementOnly { get; init; }
+    /// <summary>Gets whether help lists this generated command only when a prefix is requested. Dispatch and
+    /// vocabulary discovery still expose the complete command.</summary>
+    public bool HelpRequiresPrefix { get; init; }
     /// <summary>Gets who the command answers. Defaults to <see cref="CommandAudience.Anyone"/>; an
     /// <see cref="CommandAudience.Operator"/> command is refused by the registry for every principal but the
     /// console, before its handler runs.</summary>

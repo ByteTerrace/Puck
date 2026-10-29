@@ -33,6 +33,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     public string? DescribeShadowSlots(WorldDefinition definition) => m_emitter.DescribeShadowSlots(definition: definition);
 
     private readonly WorldSessionSceneEmitter m_emitter;
+    /// <summary>The body presentation registrations of this routed authority.</summary>
+    public WorldCreationInstances BodyStamps => m_emitter.BodyStamps;
     private readonly Func<SdfFrame?> m_hostFrame;
     private readonly List<SdfViewSnapshot> m_views = [];
     private readonly List<WorldRoutedWindow> m_windows = [];

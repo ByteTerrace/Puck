@@ -495,7 +495,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         }
 
         foreach (var command in ChannelVerbs()) {
-            yield return Route(command: command);
+            yield return Route(command: command with { HelpRequiresPrefix = true });
         }
 
         foreach (var command in ModeVerbs()) {

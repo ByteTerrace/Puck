@@ -746,10 +746,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         ((slot * SdfWorldTables.FrameRingSize) + tables.CurrentSlot);
     private void RecordMesh(in RenderGraphPackageRecording recording, SdfWorldTables tables, int cascadeTexels, in SdfMeshCull cull, in SdfMeshDetail detail, bool occlude) {
         var draws = tables.MeshDraws;
-        var count = ((draws is null) ? 0u : tables.MeshDrawCount);
+        var count = (uint)draws.Length;
 
         if (count > 0) {
-            Choose(boxes: tables.MeshDrawBoxes, count: count, cull: in cull, detail: in detail, draws: draws!, held: tables.HoldsFrame);
+            Choose(boxes: tables.MeshDrawBoxes, count: count, cull: in cull, detail: in detail, draws: draws, held: tables.HoldsFrame);
         }
         var slot = recording.Slot;
         var recorder = recording.Recorder;
@@ -883,7 +883,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Marks the draws the part's cull keeps and chooses each one's level and the vertices it draws of it
     // (SdfMeshRegion.LevelOf): the level the draw took last frame stands while its error shows within the view's band,
     // except in a frame held for a settled capture, whose still owes nothing to earlier frames.
-    private void Choose(IReadOnlyList<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, uint count, in SdfMeshCull cull, in SdfMeshDetail detail, bool held) {
+    private void Choose(ReadOnlySpan<SdfMeshDraw> draws, ReadOnlySpan<SdfMeshBox?> boxes, uint count, in SdfMeshCull cull, in SdfMeshDetail detail, bool held) {
         if (m_kept.Length < count) {
             var capacity = (int)System.Numerics.BitOperations.RoundUpToPowerOf2(value: count);
 

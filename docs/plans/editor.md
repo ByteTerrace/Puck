@@ -1038,3 +1038,65 @@ scenes the document never sees, with an orbit camera whose rates are baked
 constants. Everything it shows is expressible as a world document plus the
 editor's own tools. The directory is deleted only once E12's parity table
 holds, so no capability is lost on the way.
+
+## Open items
+
+- Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring.
+
+What the plan still owes. A line is deleted when its work lands, never ticked;
+the [open items](open-items.md#next) rank the work packets drawn from it. E1,
+E5, E9, E10 and E14's recording and scrubbing are in.
+
+- [E2](#e2--selection-picking-and-highlight): the identity map and GPU hover
+  picking are in place through P13; the line primitive, `world.select`,
+  `world.selection`, the highlight and verbs on a selection are open.
+- [E3](#e3--undo-redo-duplicate-delete-and-measure) undo, redo, duplicate,
+  delete and measure.
+- [E4](#e4--debug-views-everywhere) debug views everywhere (startable today),
+  which also wires the `DisableScreenLights` lever: it reaches the pass block
+  and the kernels, and no World setting or verb sets it.
+- [E6](#e6--why-is-this-dark-or-invisible) why is this dark or invisible.
+- [E7](#e7--gizmos-and-pointer-dragging): pointer dragging on a tabletop is in
+  place (a seated seat's pointer ray meets the board's playing surface in fixed
+  point, `board(pointer, …)`, `WorldTabletopFrame.TryPointerCell`, and the debug
+  world's chess rules lift a piece on press and put it down on a click or a
+  release elsewhere); the gizmos and the placement drag remain.
+- [E8](#e8--editor-camera) editor camera.
+- [E11](#e11--save-edits-back-to-source): source-preserving save for authored
+  rows has landed, with named generated-row refusals; E3's live duplicate and
+  rename workflow remains.
+- [E12](#e12--the-shape-gallery-as-a-world), the shape gallery as a world:
+  - `world.slice` on the GPU: on Direct3D 12 the sampler's answered field stops
+    rising about 0.13 m from the surfaces of `shape-capsule-xz` (|grad d| near
+    zero beyond), which the slice reports as `clipped=` and paints magenta.
+    Find what holds the bake sampler's far field there (an instance bound, a
+    glyph or sampled-region band, or the unowned segments, which `world=` tells
+    apart), and run it on Vulkan.
+  - The slice is a file, not a view: drawing the sampled plane in the frame (a
+    textured quad the mesh pass draws, or the views pass reading the slice's
+    samples where a ray crosses the plane) would show it live in place. No pixel
+    kernel may walk the field for it.
+  - Primitives that still lower to a bound or worse, which `creation.shape`
+    reports and the gallery shows: a capsule, cone or torus scaled apart in X
+    and Z, a round cone scaled apart at all, and a polygon prism of more than
+    eight sides scaled apart in X and Y ride the generic `Scale` (gain min/max,
+    refused by the fixed-point evaluator and so by solid contact; the gallery's
+    `shape-*-xz`, `shape-round-cone-xyz` and `shape-polygon-12-xy` read 0.5 to
+    0.33); an ellipsoid or sphere scaled apart is the exponent-2 superellipsoid
+    gauge (gain about the smallest radius over the largest, contact admits it);
+    a `Path` profile and a sweep certify no gain. Whether to iterate an exact
+    distance, change the zero set or refuse such scales at authoring is the
+    owner's call.
+- [E13](#e13--carving-and-the-brick-bake): a carve brush whose dabs are document
+  rows, which gives the GPU brick bake (`RequestBrickBake` and its kernel) its
+  live producer and a live `sdf.bricks` instance.
+- [E14](#e14--scrub-the-recorded-past) remainder:
+  - Prove the rest of its laws red with `puck laws prove`: the four
+    `HistoryScrubLawTests`, and `ReplayArmingLawTests.ATapeWhoseCheckpointWasTakenAtTheWrongTickReportsMismatchAtItsFirstTick`
+    and `ARecordingArmedBeforeTheFirstStepReDrivesToEveryRecordedState`. No
+    canary presses a physical mouse button onto the scrubber row.
+  - A live coupled machine link still refuses a checkpoint by name; ordinary
+    console machine operations are refused while a recording is armed (no tape
+    entry), while receipt-pinned addon-derived operations are re-derived by
+    their guest. `content.insert` reads a content folder at apply time, so a
+    re-driven tape diverges if the folder changed.

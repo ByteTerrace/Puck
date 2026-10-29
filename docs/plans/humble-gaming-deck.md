@@ -406,6 +406,23 @@ while recording.
   GamingBricks dual licence names the brick projects, and widening it is a
   licensing change of its own.
 
+## Open items
+
+What the plan still owes. A line is deleted when its work lands, never ticked.
+The shared-layer rename to `Puck.Machines`, the neutral contracts (rational
+clock rates and multi-port input), the CPU and the bus, and a complete NTSC
+machine are in.
+
+- NTSC accuracy: AccuracyCoin reports each test's own result, and 35 of its 144
+  tests fail.
+- Common boards: MMC1 and MMC3 are in; UxROM, CNROM, AxROM, MMC6, bus
+  conflicts, the public board test ROMs and the co-simulation remain. Then
+  regional hardware, long-tail boards and expansion audio.
+- World cabinets: the engine, its extension, port-naming routes and two shipped
+  test cartridges are in; ordered operations while recording, replay receipts
+  and the canary remain.
+- The Famicom Disk System; peripherals.
+
 ---
 
 [Machines and cartridges](machines-and-cartridges.md) · [Plans](README.md)

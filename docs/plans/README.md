@@ -1,6 +1,6 @@
 # Plans
 
-This directory holds the work that remains to be scheduled. Current architecture lives in the owner documents under `docs/architecture/`, and the reasoning behind each choice lives in [the decision registers](../decisions/README.md); a plan here holds packages, each with what it owns, what it delivers, and the check that closes it. [Open items](open-items.md) is the checklist of those packages.
+This directory holds the work that remains to be scheduled. Current architecture lives in the owner documents under `docs/architecture/`, and the reasoning behind each choice lives in [the decision registers](../decisions/README.md); a plan here holds packages, each with what it owns, what it delivers, and the check that closes it, and its own open items name what each package still owes. [Open items](open-items.md) holds the work packets ready to schedule, ranked in its Next list, the owner's open decisions, and a pointer to each plan's open items.
 
 The work is six programmes. Each has one forcing artifact, and the artifacts overlap: the forcing world is built by the first programme, shipped by the second, filled by the third, played by the fourth, and laid out by hand in the sixth, so one build proves several plans. Each programme is one page and opens with an implementation status; treat it as evidence about the code it was written against, and recheck the code before scheduling work from it.
 

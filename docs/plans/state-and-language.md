@@ -1481,6 +1481,91 @@ The shipped rule is one line of four nested conditionals over `rw * 8`, where
 `rw` is a `local`, and every name carries a `snake` prefix because the source
 declares no module.
 
+## Open items
+
+What the programme still owes. A line is deleted when its work lands, never
+ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
+
+- C1 ceilings as prices: the reference schedule's kernel, helper and
+  memory-service prices; synchronous edit-cycle bounds; and reference-cycle
+  admission. Every reachable operation is registered with its size parameters
+  and an explicit unmodeled reason, and `puck bench state-evidence` reports that
+  coverage, so the blocking set is a command's output.
+  `puck bench state-evidence --capture <dir>` compiles both pinned Native AOT
+  lowerings, walks each declared kernel's maximum permitted path under its
+  declared loop bounds, renders the manifest sections it establishes and names
+  every difference from what is pinned. The unary, binary, bit-field and
+  bit-insert expression operations are priced. The function kernel needs its
+  remaining loop bounds and its nested dispatch tables read; the evaluator,
+  effect, transform, generator and search vocabularies need focused reference
+  kernels with declared cold-path exclusions, because a whole-closure walk of the
+  evaluator names thousands of unbounded runtime loops; and the memory profile
+  needs published measurements.
+- Recapture the state evidence (`puck bench state-evidence --capture`) under the
+  pinned toolchain. `src/Puck.State/ReferenceSchedule.json`'s schedules were
+  captured under SDK 10.0.402 and runtime packs 10.0.13, while its manifest now
+  pins SDK 11.0.100-rc.2.26504.105 and runtime 11.0.0-rc.2.26504.105 with
+  `global.json`, so each reference target owes a capture under that toolchain,
+  on a machine with the `llvm-mca` its `analysis` entries record.
+  `FusedArithmetic.cs`'s digest was re-pinned by hand after an
+  accessibility-only edit, which moves no kernel path; the capture proves it.
+- S7 pools: records, generation-aware handles, pair storage, snapshots, typed
+  field references, advancing fields, logical body carriers, identity transfer,
+  and the Arena and Paddleball migrations are implemented, and the rulepush
+  scenario is met by the [rulepush package](../../experimental/worlds/rulepush/README.md).
+  The remaining acceptance gates are listed in [records and pools](records-and-pools.md).
+- S6: the five `experimental/tests/Puck.World.Canaries/four-corners-sharded`
+  documents declare the aliased-`use` machine `arcade$agb-screen`, which prints
+  back from no document, so they stay JSON until they are authored as `.puck`
+  over the module ([S6](#s6--modules-and-the-forcing-world)). The remainder: the
+  forcing world, and the island, districts and shards onto its modules.
+- Namespace the remaining module declarations. A module used under an alias
+  namespaces its rows, rules, placements, prototypes and look sources as
+  `alias$name`, but spawn points, kits, look names, cameras, navigation domains
+  and property names stay flat, so two uses of one module declaring the same
+  spawn point declare it twice. A JSON import with `as` has no dotted
+  `alias.name` form in `.puck`; a hand-written JSON composition can make an
+  aliased pool's rows collide with a host pool named after the alias, which only
+  the `.puck` door refuses (PUCK117); and the export check does not look inside a
+  deal's variant map.
+- Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense,
+  Ribbon. When the quarantined games return: Snake grows past six segments
+  (`history(row, age)` takes an expression age, and an age outside the ring
+  reads the empty value, per `HistoryAgeLawTests`, but
+  [`snake.puck`](../../experimental/src/Puck.World/Assets/worlds/games/snake.puck)
+  still reads four fixed ages, clears its tail through a branch per length and
+  caps `snakeLength` at six), and Wordspy's recorded baseline plays a round (its
+  state export stays at stage 1 with an empty clue log, so the baseline never
+  exercises the clue-word copy the
+  [baselines README](../../experimental/tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/README.md)
+  describes).
+- S10 the state review ([S10](#s10--the-state-review)):
+  - Charge what is used.
+  - One live store and one write door. Deals as projections remain: the deal
+    sweep still upserts and removes runtime children as placement mutations
+    (`WorldTick.Deals.cs`), and contribution tenure stamps runtime deadlines into
+    placements (`WorldTick.Contributions.cs`).
+  - Everything that steers the future hashed and checkpointed, running addons
+    included.
+  - Rewind as a complete continuation. Chess allows undo (the owner's ruling): a
+    player takes back a move through gameplay rewind over the complete
+    continuation, the first consumer of this step.
+  - Entities as records in pools; seats as entities.
+  - Edges as values, versioned facets, explicit order, key reclamation, facets,
+    one work allowance.
+- S9 the authoring consensus ([S9](#s9--the-authoring-consensus)):
+  - Wave 2: every condition as an expression (HUD visibility, placement
+    responses, element text); the noise fields that remain (`mode: Level`
+    written in rule bodies where it is the default, and one hash spelling for
+    `hash: "auto"`, `"sha256-64/…"` and a bare digest); `function`.
+  - Wave 3: names for bodies and identities, one composition construct, typed
+    test steps with `eventually`.
+  - Wave 4: complete state sugar, one rule grammar for cartridges, one
+    authorization declaration, creation axes and rotations.
+- A decision cannot sweep `$bodies` (refused by name); its `forEach` names a
+  keyed row. The browser rule host serves no bodies, so it refuses a `$bodies`
+  rule at admission as `ILiveBodies`.
+
 ---
 
 [Plans](README.md) · [Decisions](../decisions/state-and-language.md) ·
