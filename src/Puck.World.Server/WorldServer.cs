@@ -233,7 +233,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>
     /// cannot publish colliding addresses; a loopback-only authority uses its process-local instance identity, or the
     /// lifetime-qualified identity its host started it under when the name ran before.</summary>
-    public string AuthorityIdentity { get; }
+    public string AuthorityIdentity { get; internal set; }
     /// <summary>Gets the derived-face screen slots this instance's boot document reserved. The presentation binder
     /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may lower
     /// <see cref="WorldPlacementPolicyDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by

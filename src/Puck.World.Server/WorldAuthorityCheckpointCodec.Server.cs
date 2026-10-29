@@ -507,6 +507,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteNullableString(value: entry.State.Reason);
             }
         );
+        writer.WriteNullableString(value: section.AuthorityIdentity);
 
         return writer.ToArray();
     }
@@ -714,6 +715,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         }
 
+        var authorityIdentity = reader.ReadNullableString(
+            field: "server authority identity",
+            maxBytes: MaxStringBytes
+        );
+
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
             reason = $"server section: {failure}";
@@ -723,6 +729,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldServerCheckpoint(
             Arena: arena,
+            AuthorityIdentity: authorityIdentity,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
             Decisions: decisions,

@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Testing;
 using Xunit;
 
 using Puck.World.Protocol;
@@ -388,5 +389,117 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
             ),
             userMessage: DeepEqual.LastMismatchPath
         );
+    }
+    /// <summary>A row stopped and started again under the same name carries its lifetime-qualified authority identity
+    /// (<c>row-a~1</c>) through checkpoint capture and restore, so <see cref="WorldInstanceHost.RestoreRow"/> accepts
+    /// the forwarding record it minted after the restart and a subsequent restart advances to <c>row-a~2</c>.</summary>
+    [Fact]
+    public void Host_roundtrip_restores_restarted_row_lifetime_authority_and_accepts_its_forwarding_record() {
+        var machineId = Guid.NewGuid();
+        using var stateRoot = new TemporaryDirectory(prefix: "puck-host-roundtrip-lifetime-tests-");
+        using var boot = HostRow.Build(name: WorldInstanceHost.BootInstanceName);
+        using var host = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None,
+            admitsSpawn: true,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: machineId,
+            resolver: new WorldSessionResolver(),
+            seats: WorldEmbodiedSeats.None,
+            stateRoot: new WorldStateRoot(path: stateRoot.RootPath)
+        );
+
+        host.Admit(row: boot.Instance);
+
+        var document = Fixtures.BuildDocument() with {
+            PopulationRaw = Fixtures.BuildDocument().Population with {
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
+                NetworkPlayers = 1,
+            },
+            Admission = [Fixtures.AnyAuthorityArrivals()],
+        };
+        var documentPath = stateRoot.WriteBytes(
+            bytes: WorldDefinitionSerialization.Serialize(definition: document),
+            name: "lifetime.world.json"
+        );
+
+        Assert.True(condition: host.TryStart(instance: out _, name: "row-a", path: documentPath, reason: out var startReason), userMessage: startReason);
+        Assert.True(condition: host.TryStop(name: "row-a", reason: out var stopReason), userMessage: stopReason);
+        Assert.True(condition: host.TryStart(instance: out var restartedA, name: "row-a", path: documentPath, reason: out startReason), userMessage: startReason);
+        Assert.True(condition: host.TryStart(instance: out var rowB, name: "row-b", path: documentPath, reason: out startReason), userMessage: startReason);
+        Assert.Equal(expected: "row-a~1", actual: restartedA!.Server.AuthorityIdentity);
+
+        const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
+
+        Assert.True(condition: restartedA.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+        Assert.True(condition: restartedA.Server.ExecuteAuthorityOperation(operation: () => restartedA.Server.Population.TryAdmitRemotePeerAt(
+            slot: PeerSlot,
+            source: IntentSource.Live,
+            grantTemplates: [],
+            identityDomain: "example.test",
+            identitySubject: "traveler-lifetime",
+            admitted: out _,
+            refusal: out _
+        )));
+
+        _ = host.EnqueueTransfer(
+            actingPrincipal: Principal.Console,
+            destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
+            scope: WorldInstanceHost.TransferScope.Body,
+            sourceInstance: "row-a",
+            sourceSlot: PeerSlot
+        );
+        host.DrainPendingTransfers();
+
+        Assert.Equal(
+            expected: "row-a~1",
+            actual: Assert.Single(collection: host.CaptureRow(row: restartedA).ForwardedBodies).SourceAuthority
+        );
+        Assert.True(
+            condition: restartedA.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpointA,
+                hostRow: host.CaptureRow(row: restartedA),
+                reason: out var reasonA
+            ),
+            userMessage: reasonA
+        );
+        Assert.True(
+            condition: rowB!.Server.TryCaptureCheckpoint(
+                checkpoint: out var checkpointB,
+                hostRow: host.CaptureRow(row: rowB),
+                reason: out var reasonB
+            ),
+            userMessage: reasonB
+        );
+
+        var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointA!);
+        var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB!);
+        var (restoredHost, restoredA, restoredB, restoredStateRoot) = HostRoundtripFixture.RestoreBoth(
+            machineId: machineId,
+            checkpointA: decodedA,
+            checkpointB: decodedB,
+            documentDirectory: stateRoot.RootPath
+        );
+        using var restoredHostScope = restoredHost;
+        using var restoredAScope = restoredA;
+        using var restoredBScope = restoredB;
+        using var restoredStateRootScope = restoredStateRoot;
+
+        Assert.Equal(expected: "row-a~1", actual: restoredA.Server.AuthorityIdentity);
+        Assert.Equal(
+            expected: "row-a~1",
+            actual: Assert.Single(collection: restoredHost.CaptureRow(row: restoredA.Instance).ForwardedBodies).SourceAuthority
+        );
+
+        using var restoredBoot = HostRow.Build(name: WorldInstanceHost.BootInstanceName);
+
+        restoredHost.Admit(row: restoredBoot.Instance);
+        Assert.True(condition: restoredHost.TryStop(name: "row-a", reason: out stopReason), userMessage: stopReason);
+        Assert.True(condition: restoredHost.TryStart(instance: out var thirdA, name: "row-a", path: documentPath, reason: out startReason), userMessage: startReason);
+        Assert.Equal(expected: "row-a~2", actual: thirdA!.Server.AuthorityIdentity);
     }
 }

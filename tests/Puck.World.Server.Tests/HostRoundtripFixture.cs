@@ -264,14 +264,16 @@ internal static class HostRoundtripFixture {
     /// arm's <c>sourceAuthority</c> text is machine-id-derived (see <see cref="WorldInstanceHost.RestoreRow"/>), so a
     /// different id here would diverge a byte-identity comparison on a field the law itself introduces, never one the
     /// checkpoint completeness rule is about.</summary>
-    public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, TemporaryDirectory StateRoot) RestoreBoth(Guid machineId, WorldAuthorityCheckpoint checkpointA, WorldAuthorityCheckpoint checkpointB) {
+    public static (WorldInstanceHost Host, HostRow RowA, HostRow RowB, TemporaryDirectory StateRoot) RestoreBoth(Guid machineId, WorldAuthorityCheckpoint checkpointA, WorldAuthorityCheckpoint checkpointB, string? documentDirectory = null) {
         var (host, stateRoot) = BuildHost(
             machineId: machineId,
             tempPrefix: "puck-host-roundtrip-restore-tests-"
         );
 
-        static HostRow RestoredRow(WorldAuthorityCheckpoint checkpoint, string name) {
-            var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
+        HostRow RestoredRow(WorldAuthorityCheckpoint checkpoint, string name) {
+            var definition = (WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson) with {
+                DocumentDirectory = documentDirectory,
+            });
             var machines = new WorldMachineHost(
                 engines: [],
                 screens: definition.Screens
@@ -285,6 +287,7 @@ internal static class HostRoundtripFixture {
 
             var (server, _) = WorldServer.FromCheckpoint(
                 checkpoint: checkpoint,
+                documentDirectory: documentDirectory,
                 instanceIdentity: name,
                 machines: machines,
                 profiles: new WorldOwnedWorlds(

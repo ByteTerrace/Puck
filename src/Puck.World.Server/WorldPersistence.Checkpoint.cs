@@ -526,7 +526,7 @@ public sealed partial class WorldPersistence {
         var population = new WorldPopulation(definition: definition);
         var server = new WorldServer(
             admission: admission,
-            authorityIdentity: authorityIdentity,
+            authorityIdentity: (authorityIdentity ?? checkpoint.Server.AuthorityIdentity),
             definition: definition,
             envelope: new WorldRenderEnvelope(),
             instanceIdentity: instanceIdentity,
@@ -537,7 +537,7 @@ public sealed partial class WorldPersistence {
 
         server.Adjacencies = adjacencies;
 
-        server.Persistence.RestoreCheckpointCore(admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+        server.Persistence.RestoreCheckpointCore(admission: admission, authorityIdentity: authorityIdentity, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
 
         return (server, population);
     }
@@ -703,6 +703,7 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
+                AuthorityIdentity: Host.AuthorityIdentity,
                 Input: Host.Input.Capture(),
                 ScopedReplays: Host.ScopedReplays.Select(selector: scope => scope.Checkpoint()).ToArray(),
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
@@ -810,7 +811,7 @@ public sealed partial class WorldPersistence {
             )),
         });
     }
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false) {
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null) {
         var server = checkpoint.Server;
 
         Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
@@ -860,6 +861,13 @@ public sealed partial class WorldPersistence {
             }
         } else if ((checkpoint.Machines is { } machines) && ((machines.Instances.Count != 0) || machines.AnyEverPumped)) {
             throw new InvalidOperationException(message: "checkpoint contains machine state that this host cannot restore");
+        }
+
+        if ((authorityIdentity ?? server.AuthorityIdentity) is { Length: > 0 } restoredAuthority) {
+            Host.AuthorityIdentity = ((restoredDefinition.Host.Authority is { Length: > 0 } declaredAuthority)
+                ? declaredAuthority
+                : restoredAuthority
+            );
         }
 
         Host.Document.AdoptDefinition(definition: restoredDefinition);

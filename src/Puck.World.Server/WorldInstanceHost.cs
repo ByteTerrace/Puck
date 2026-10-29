@@ -1466,6 +1466,25 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         row.Server.TransferForwarder = this;
         m_instances[row.Name] = row;
         _ = m_issuedAuthorities.Add(item: row.Server.AuthorityIdentity);
+        if (
+            row.Server.AuthorityIdentity.StartsWith(
+                value: $"{row.Name}{GeneratedName.FileJoiner}",
+                comparisonType: StringComparison.Ordinal
+            ) &&
+            int.TryParse(
+                s: row.Server.AuthorityIdentity.AsSpan(start: (row.Name.Length + 1)),
+                style: System.Globalization.NumberStyles.None,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var lifetime
+            ) &&
+            (lifetime > 0)
+        ) {
+            _ = m_issuedAuthorities.Add(item: row.Name);
+            m_startedLifetimes[row.Name] = Math.Max(
+                val1: m_startedLifetimes.GetValueOrDefault(key: row.Name),
+                val2: lifetime
+            );
+        }
         ForgetResolvedDocuments();
         _ = EndpointFor(instance: row);
         ResolveForwardedRecoveries();
