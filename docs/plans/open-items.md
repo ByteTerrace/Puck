@@ -57,9 +57,7 @@ resolves their edits to this file at merge.
    isolate the temporal-off cadence blink first, then why history never
    resolves the jitter.
 10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    the catch-up burst bounded by wall time and the wake margin derived from the
-    contact skin, both confirmed in the code and cheap; the thread itself is a
-    design consensus the owner has yet to queue.
+    the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
 
@@ -491,11 +489,8 @@ then the diagnostics' windowed checks, then the three developer exhibits.
 
 ### Simulation tick off the frame thread
 
-Owner: specialist or Astra design lane · two medium, the rest ordinary · Next:
-the catch-up burst bounded by the wall time it has spent and the wake margin
-derived from the contact skin, both confirmed in the code (`FixedStepPump.Advance`,
-`WorldPopulation.Sleep.cs:154`); then the thread's design consensus, once the
-owner queues it.
+Owner: specialist or Astra design lane · ordinary · Next: the thread's design
+consensus, once the owner queues it.
 
 - The thread itself is an idea discussed with the owner and not yet queued:
   a design consensus across the families, which the owner's ruling says starts
@@ -509,9 +504,6 @@ owner queues it.
   console, MCP and live-edit commands marshal through the pump's existing
   queue; lifetime and bounded backpressure are settled before any lock-free
   claim, since a collection pauses both threads.
-
-- [medium] The localized wake around a moving carrier uses a fixed 1 m margin that ignores the configurable contact skin: with a valid `contactSkin` of 2 m, a sleeping sphere resting at skin distance above a lift misses the wake box during small car movements and stays asleep instead of riding (`src/Puck.World.Server/WorldPopulation.Sleep.cs:154`). Derive the margin from the contact skin (and the body's own broadphase radius). (owner: next simulation batch; from: lift-lag review)
-
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
@@ -556,20 +548,6 @@ owner queues it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
-- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
-  host frame clamps its wall delta to a quarter second
-  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
-  then runs every step that delta owes, so once a tick costs more than its
-  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
-  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
-  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
-  burst by the wall time it has spent (drop the rest, rebasing the capture pin
-  as a clamp does), so an over-budget tick slows the World instead of the frame.
-  Two more readings of the same multiplier: eight catch-up steps cost roughly
-  400 ms a frame on a slow gallery boot, where pausing the boot instance took a
-  frame from about 366 ms to 19 ms; and a cold-bake windowed Vulkan boot (nine
-  lanes loading the machine) read simulate peaks of 1.2-2.1 s in 7 or 8
-  catch-up steps over 600 frames averaging 232 ms.
 - [low] Every rigid advance zero-fills the step's capture snapshot
   (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
   body's advance in an EventPipe sample of a lift ride).
