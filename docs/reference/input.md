@@ -158,8 +158,9 @@ that has produced no bound action. Discovery does not join a player: it reads
 classification also records the device before an action is bound.
 
 Triton receiver report `0x7b` is deliberately ignored. The owner's receiver
-`0x28de:0x1304` reports it in a 54-byte HID read; its payload is undocumented in
-the [SDL Triton driver](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_steam_triton.c),
+`0x28de:0x1304` reports it in a 54-byte HID read; community reverse engineering
+reports it as a periodic vendor report sent only through the puck, about 12 bytes
+long, and it is absent from the [SDL Triton driver](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_steam_triton.c),
 which handles control state (`0x42`, `0x45`, `0x47`), battery (`0x43`) and pairing
 separately. We assign no control, power or pairing meaning to `0x7b` without a
 verified layout. It publishes no sample, changes no held state, does not refresh
