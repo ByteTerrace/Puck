@@ -81,6 +81,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   a chase view without recentering can face the opposite way after teleporting.
   Include the boardroom's far doorway, stairwell flight B and teal roof/floor.
   Compare the settled GPU volume, exposure and frame time as well as pixels.
+  Settlement means the configured sweeps finished, not global convergence of
+  every cached cell. Match the visit order and record the published window:
+  completed cells retain their measurements when a move adds new cells, and
+  bounce reads use the current cache clamped to that window. A full tour and a
+  direct teleport need not have the same bounce history.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
@@ -115,7 +120,12 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - A record is 275 words (1,100 bytes): 19 words of key, cubes, light visibility
   and origin, then 256 packed moment pairs. Medium's 12,288 active probes use
   12.890625 MiB; High's 36,864 use 38.671875 MiB. The table and CPU staging
-  reserve the High capacity per residency; upload and cache storage are additional.
+  reserve the High capacity per residency. The staged `GpuRegion` has one
+  38.671875 MiB device buffer, two host upload buffers of that capacity plus
+  copy headers, and a native shadow; `m_volume` adds another capacity-sized
+  CPU array. Those five payloads total 193.359375 MiB before cache and batch
+  storage. A cache block holds 284 words (1,136 bytes) per probe, including its
+  uncompressed cubes; retained cells and previous-generation blocks add to it.
   Neighbour masks, their 26 rays and cross-probe cube filtering are deleted.
 - Each published probe contains its own measured cubes, exactly as the CPU
   bounce lookup reads them. Averaging neighbouring cubes imports another probe's

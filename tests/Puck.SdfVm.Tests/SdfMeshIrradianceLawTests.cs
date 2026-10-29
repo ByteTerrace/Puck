@@ -165,10 +165,9 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.False(condition: volume.Settling);
     }
     /// <summary>THE LAW: the gather is continuous across a lattice plane. A probe enters the eight-corner set at a cell
-    /// boundary with no trilinear weight, so the gather it joins reads as the gather it left. A plinth top between the
-    /// probe above and west of the receiver's column and the probe below the column makes the one a separator of the
-    /// other, and an untraced receiver in the air beside the column, which both probes admit only for want of a hit,
-    /// reads the same weights a hair either side of the column's lattice plane.</summary>
+    /// boundary with no trilinear weight, so the gather it joins reads as the gather it left. A finite plinth gives
+    /// nearby probes different directional depths; an untraced receiver beside it still reads continuous weights a
+    /// hair either side of the column's lattice plane.</summary>
     [Fact]
     public void AReceiverCrossingACellBoundaryReadsAContinuousGather() {
         // A floor, and a plinth 0.75 m high between x 0.1 and 0.3, clear of the probe at (0.5, 0.5, 0.5) by twice the
@@ -189,8 +188,8 @@ public sealed class SdfMeshIrradianceLawTests {
         var west = Gather(volume: volume, point: new Vector3(x: 0.549f, y: 1f, z: 0.5f));
         var east = Gather(volume: volume, point: new Vector3(x: 0.551f, y: 1f, z: 0.5f));
 
-        // The probe below the column answers on both sides, and the upper west probe, which separates it, is the one
-        // leaving the set: west of the plane the gather reads as it does east of it.
+        // The probe below the column answers on both sides, while the upper west probe leaves the set with zero
+        // trilinear share: west of the plane the gather reads as it does east of it.
         Assert.True(condition: (west[(0, 0, 0)] > 0f));
         Assert.True(condition: (west[(-1, 1, 0)] > 0f));
         Assert.False(condition: east.ContainsKey(key: (-1, 1, 0)));
@@ -204,7 +203,7 @@ public sealed class SdfMeshIrradianceLawTests {
     /// wall's receivers, where an invalid probe would leave them the next column alone; a centre inside a pillar moves
     /// out of it; a centre buried farther than its cell reaches stays at its centre, invalid, with no offset. A probe
     /// beyond the wall's end whose ray runs along the face's plane traces through along it, since the coplanar ray meets
-    /// none of that face's triangles: the neighbour cell on the face is seen, and the ray's plane stays open.</summary>
+    /// none of that face's triangles, and its depth read stays open.</summary>
     [Fact]
     public void AProbeOnAWallFaceOrInsideGeometryMovesIntoTheOpenAndABuriedOneStaysInvalid() {
         // A wall whose +X face lies on x = 0.5, the plane of cell 0's centres, from z = 0 to z = 6: the probe at
