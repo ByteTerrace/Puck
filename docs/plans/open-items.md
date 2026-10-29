@@ -784,9 +784,8 @@ failover witness.
 
 ### MCP and the operator attachment
 
-Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
-only a start's terminal outcome), then the per-swap state load, then the
-schema switch.
+Owner: MCP lane (specialist) · medium · Next: the schema switch, then the pick
+answer.
 
 - [medium] Investigate a GPU lease held by an older operator worker while no
   World is advertised and the worker has no direct child process. During the
@@ -797,35 +796,16 @@ schema switch.
   and the `OperatorWorlds.WatchAsync`/`Stop` lifecycle, then release it through
   that session. Evidence and start ids are in the controls hand-back.
 
-- [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The lease-rotation change counts an undeletable ticket as live on the new CLI; check the start path (the MCP adapter's lease delegate) handles the same error rather than failing the start. Also from the same lane: `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
-
-- [medium] `puck_exec` returns every line's full answer, so `world.affordances` and `world.grants` overflow an agent's token limit. Add an output filter to the tool (selected `lines` or `fields`, a byte cap with an explicit truncation mark) so the agents' own instrument stays usable on large answers. (from: c7-findings lane)
+- [low] `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
 
 - [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
 
-- An invalid wait argument on a pending operator MCP start caches the argument
-  refusal as the start's completed result: `OperatorMcpFront.Record`
-  (`src/Puck.Mcp/OperatorMcpFront.cs:101-108`) stores any non-pending
-  `puck_world_start_wait` answer under its `startId` and drops the start, so
-  later corrected waits and cancellation return that refusal while the World
-  keeps starting. Read in the source from one headless boot and by two
-  reviewers; run a minimal reproduction, then cache only a start's terminal
-  outcome.
 - A connected Claude Code session keeps a tool's old output schema when the MCP
   front switches to a backend whose schemas changed: the first `puck_adapter`
   call after the switch failed with "Structured content does not match the
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
-- [medium] An attached operator session costs the tick a whole state load on
-  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
-  tier) discloses the definition again from the arena, so its mirror's
-  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
-  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
-  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
-  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
-  change to the session without a fresh disclosure of state, or make the load
-  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a
