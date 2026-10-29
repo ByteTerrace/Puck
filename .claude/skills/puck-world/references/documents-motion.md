@@ -629,3 +629,22 @@ presentation-only ease on the boom; a program with no `dynamics` op passes
 the boom through with no ease — a different mechanism from
 `WorldAnchor.Group.SmoothRate`'s exponential ease, which is unrelated and
 still authored separately for a group-centroid establishing shot.
+
+## Timed planar impulses
+
+`planarImpulse` adds an authored-speed displacement for an exact engine-tick
+duration. `bodyDirection` is the unit fallback in the body frame;
+`useMoveDirection: true` first takes the accepted tick's movement resultant,
+projected onto the same surface as locomotion and normalized in fixed point.
+An idle command falls back to `bodyDirection`. The overlay integrates inside
+the motion program before ordinary swept contact, never after contact or as a
+persistent addition to the locomotion velocity. Its accumulator, remaining
+ticks and velocity are already part of the body continuation and replay hash.
+`body.where` includes the overlay in `vel` and reports declared body timers in
+seconds as `timers=(name:value,...)`.
+
+The reusable `dashAbility` template is authored in
+`worlds/standard/abilities.puck`. The Moth's avatar import `moth-dash.puck`
+instantiates it for her walker kit; her binding is West or J on Move, while
+run remains Shift held or N/left-stick press toggled. Her `dashPose` cell drives
+the torso lean and the existing back-pod burn lanes.

@@ -607,7 +607,7 @@ bindingOverlays [
           buttonSize: 0.075
           glyphOffsetRatio: 0.4375
           glyphSizeRatio: 0.5333333
-          anchor { edge: Bottom, inset: 1.5 }
+          anchor { edge: Bottom, inset: 4.8888889 }
           tables {
             left [
               { source: "gamepad.dpadUp", x: -4.333333, y: 1, badge [0, 1] }
@@ -626,10 +626,20 @@ bindingOverlays [
               { source: "gamepad.rightStickPress", x: 4.333333, y: 0, badge [0, 0] }
             ]
           }
+          // The three-bank union bottoms at -2.5 pitches: inset + half + 2.5 = 220/45.
           banks {
-            move { pieces [{ table: "left", at [0, 0] }, { table: "right", at [0, 0] }] }
-            view { pieces [{ table: "left", at [-3, -2] }, { table: "right", at [3, -2] }] }
-            debug { pieces [{ table: "left", at [-6, -4] }, { table: "right", at [6, -4] }] }
+            move {
+              pieces [{ table: "left", at [0, 0] }, { table: "right", at [0, 0] }]
+              anchor { edge: Bottom, inset: 1.8888889 }
+            }
+            view {
+              pieces [{ table: "left", at [-3, -0.75] }, { table: "right", at [3, -0.75] }]
+              anchor { edge: Bottom, inset: 1.8888889 }
+            }
+            debug {
+              pieces [{ table: "left", at [-6, -1.5] }, { table: "right", at [6, -1.5] }]
+              anchor { edge: Bottom, inset: 1.8888889 }
+            }
           }
         }
         // A bottom action strip flanked by page columns on independent viewport anchors.

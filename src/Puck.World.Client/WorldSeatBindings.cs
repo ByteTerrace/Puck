@@ -589,8 +589,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         }
     }
     private static byte[] SerializeEffectiveDocument(BindingProfileDocument document) {
+        // Look preferences do not change input meaning. Keep held controls and chord gestures alive when only
+        // the bar changes; m_composed still retains the complete document for preference reads and saving.
         return JsonSerializer.SerializeToUtf8Bytes(
-            value: document,
+            value: document with { BindingBar = null },
             jsonTypeInfo: WorldJsonContext.Default.BindingProfileDocument
         );
     }
@@ -1142,6 +1144,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         definition = m_definitions[slot];
         state = m_states[slot];
     }
+    /// <inheritdoc/>
+    public object? ContextToken(int slot) => (((uint)slot) < SeatCount) ? m_seats[slot].ContextToken(slot: slot) : null;
     /// <inheritdoc/>
     public bool HoldsSource(int slot, string source) {
         return (

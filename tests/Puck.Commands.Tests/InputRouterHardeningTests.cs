@@ -722,6 +722,47 @@ public sealed class InputRouterHardeningTests {
         );
     }
 
+    [Fact]
+    public void RelativeSamplesCannotEscapeAClosedAndReopenedPageInterval() {
+        var profile = Compile(
+            modifiers: [new BindingModifierDefinition(Id: "menu", Sources: ["key.menu"])],
+            rows: [
+                new BindingChordDefinition(Group: "play", Chord: [], Page: new BindingPageDefinition(
+                    Id: "base", Entries: [new BindingPageEntryDefinition(Sources: ["axis.scroll"], Command: ChannelCommand)])),
+                new BindingChordDefinition(Group: "play", Chord: ["menu"], Page: new BindingPageDefinition(
+                    Id: "menu", Entries: [new BindingPageEntryDefinition(Sources: ["axis.scroll"], Command: ChannelCommand)])),
+            ]);
+        var bindings = new PagedInputBindings(profile: profile);
+        var router = Router(bindings: bindings);
+        static InputSignal Scroll() => new(Source: "axis.scroll", DeviceId: default,
+            Value: CommandValue.Axis(value: 1f), Phase: CommandPhase.Active, CaptureTick: 0, Transient: true);
+
+        // The context token is stable during ordinary source resolution; relative input keeps its value.
+        var resting = bindings.ContextToken(slot: 0);
+        router.Capture(signal: Scroll());
+        var stable = Assert.Single(collection: router.SnapshotForTick(tick: 1, windowEndTick: ulong.MaxValue).Lanes);
+        Assert.Single(collection: stable.Entries);
+        Assert.Same(expected: resting, actual: bindings.ContextToken(slot: 0));
+
+        // All three relative samples cross a boundary in this one fold, even though its final page
+        // is the identical resting-page object. None may act as a later page's command at dispatch.
+        router.Capture(signal: Scroll());
+        router.Capture(signal: InputSignal.Press(source: "key.menu"));
+        router.Capture(signal: Scroll());
+        router.Capture(signal: InputSignal.Release(source: "key.menu"));
+        router.Capture(signal: Scroll());
+        router.Capture(signal: InputSignal.Press(source: "key.menu"));
+        router.Capture(signal: InputSignal.Release(source: "key.menu"));
+        Assert.All(collection: router.SnapshotForTick(tick: 2, windowEndTick: ulong.MaxValue).Lanes,
+            action: static lane => Assert.DoesNotContain(collection: lane.Entries, filter: static entry => entry.Value.IsActive && entry.Dispatch));
+        Assert.Same(expected: resting, actual: bindings.ContextToken(slot: 0));
+
+        // A later gesture resumes normally; the boundary never becomes a sticky input block.
+        router.Capture(signal: Scroll());
+        var resumed = Assert.Single(collection: router.SnapshotForTick(tick: 3, windowEndTick: ulong.MaxValue).Lanes);
+        Assert.Contains(collection: resumed.Entries, filter: static entry => entry.Value.IsActive && entry.Dispatch);
+    }
+
     private sealed class ConsolePrincipal : IPrincipalResolver {
         public Principal PrincipalOf(int slot) => Principal.Console;
     }

@@ -65,7 +65,7 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 
 ## Drivers
 
-`drivers` is up to 16 named `{ name, signal, cadence, when, blendInSeconds,
+`drivers` is up to 32 named `{ name, signal, cadence, when, blendInSeconds,
 blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
 They advance in declaration order, and a driver reads only drivers declared
 before it, the rule a shape's `parent` follows.

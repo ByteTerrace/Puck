@@ -266,9 +266,19 @@ bindingOverlays [
           }
         }
         wings {
+          // Five banks bottom at -4 pitches, keeping the primary at the standard 220/600 lift.
           banks {
-            go { pieces [{ table: "left", at [-9, -6] }, { table: "right", at [9, -6] }] }
-            tour { pieces [{ table: "left", at [-12, -8] }, { table: "right", at [12, -8] }] }
+            move { anchor { edge: Bottom, inset: 0.3888889 } }
+            view { anchor { edge: Bottom, inset: 0.3888889 } }
+            debug { anchor { edge: Bottom, inset: 0.3888889 } }
+            go {
+              pieces [{ table: "left", at [-9, -2.25] }, { table: "right", at [9, -2.25] }]
+              anchor { edge: Bottom, inset: 0.3888889 }
+            }
+            tour {
+              pieces [{ table: "left", at [-12, -3] }, { table: "right", at [12, -3] }]
+              anchor { edge: Bottom, inset: 0.3888889 }
+            }
           }
         }
         sidebars {

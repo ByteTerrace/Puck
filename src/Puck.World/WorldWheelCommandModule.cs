@@ -15,12 +15,8 @@ namespace Puck.World;
 /// authority of its own. A separate module from <see cref="WorldViewCommandModule"/> to keep every class under its
 /// analyzer ceilings.
 /// </summary>
-/// <remarks>Core-registered for command-vocabulary parity (the document validators must see the same committed
-/// vocabulary in every boot shape — <see cref="RingCommand"/>/<see cref="CommitCommand"/> are stock wheel-hold-page
-/// rows every group's wheel carries): <see cref="WorldWheelFeed"/> is genuinely presentation-only (it reads the
-/// mouse/pointer and viewport state <see cref="WorldBootComposition.AddWorldPresentation"/> alone registers), so it is optional here
-/// (default <see langword="null"/> — DI supplies the default rather than throwing headless) and every handler
-/// refuses by name at use when it is absent, rather than the module going unregistered.</remarks>
+/// <remarks>Core-registered: authored bindings, ring selection and directional commits work without a
+/// renderer. The feed's optional pointer, viewport and overlay adapters add spatial presentation.</remarks>
 internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFeed? feed = null) : ICommandModule {
     /// <summary>The author-bindable explicit cancel act.</summary>
     public const string CancelCommand = Puck.World.Client.WorldWheelCommandNames.CancelCommand;
@@ -33,12 +29,15 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
     /// <summary>The author-bindable Axis2D radial selection act.</summary>
     public const string SelectCommand = Puck.World.Client.WorldWheelCommandNames.SelectCommand;
 
+    /// <summary>The relative Axis2D ring-scroll act; vertical motion is measured in notches.</summary>
+    public const string ScrollCommand = "player.wheel.scroll";
+
     private readonly WorldWheelFeed? m_feed = feed;
     private readonly PlayerRoster m_roster = roster;
 
     private CommandResult CancelHandler(CommandContext context, WireArgs args) {
         if (m_feed is not { } feed) {
-            return RequiresWindowed(verb: CancelCommand);
+            return RequiresFeed(verb: CancelCommand);
         }
 
         var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
@@ -59,7 +58,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
     }
     private CommandResult CommitHandler(CommandContext context, WireArgs args) {
         if (m_feed is not { } feed) {
-            return RequiresWindowed(verb: CommitCommand);
+            return RequiresFeed(verb: CommitCommand);
         }
 
         var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
@@ -118,13 +117,13 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             : " (unanchored)")}]"
         );
     }
-    // The headless refusal shared by every handler below — named per verb so a scripted caller reads exactly which
+    // The missing-feed refusal shared by every handler below — named per verb so a scripted caller reads which
     // act was refused, never a generic "unavailable".
-    private CommandResult RequiresWindowed(string verb) =>
-        CommandResult.Error(output: $"[{verb}: requires a windowed boot — headless registers this verb for vocabulary parity only]");
+    private CommandResult RequiresFeed(string verb) =>
+        CommandResult.Error(output: $"[{verb}: wheel input feed is unavailable]");
     private CommandResult RingHandler(CommandContext context, WireArgs args) {
         if (m_feed is not { } feed) {
-            return RequiresWindowed(verb: RingCommand);
+            return RequiresFeed(verb: RingCommand);
         }
 
         int slot;
@@ -197,7 +196,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
     }
     private CommandResult SelectHandler(CommandContext context, WireArgs args) {
         if (m_feed is not { } feed) {
-            return RequiresWindowed(verb: SelectCommand);
+            return RequiresFeed(verb: SelectCommand);
         }
 
         if (context.Origin != CommandOrigin.Binding) {
@@ -214,7 +213,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
     }
     private CommandResult ViewHandler(CommandContext context, WireArgs args) {
         if (m_feed is not { } feed) {
-            return RequiresWindowed(verb: "world.view.wheel");
+            return RequiresFeed(verb: "world.view.wheel");
         }
 
         if (args.Count == 0) {
@@ -241,6 +240,19 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: ScrollCommand,
+            description: "Feeds relative Axis2D vertical notches to the open radial's explicit ring selector. Fractional notches accumulate for this gesture; a closed wheel consumes nothing.",
+            handler: (context, args) => {
+                if (context.Origin != CommandOrigin.Binding) {
+                    return CommandResult.Error(output: "[player.wheel.scroll: driven by an authored Axis2D binding]");
+                }
+                m_feed?.Scroll(slot: context.Slot, notches: context.Value.AsAxis2D.Y);
+                return CommandResult.None;
+            },
+            valueKind: CommandValueKind.Axis2D
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SelectCommand,

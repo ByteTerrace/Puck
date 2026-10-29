@@ -737,6 +737,8 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         pageId: pageId,
         view: out view
     );
+    /// <inheritdoc/>
+    public object ContextToken(int slot) => ViewFor(slot: slot);
     /// <summary>Gets the immutable view of the page a slot's active group and held chord currently select.</summary>
     /// <param name="slot">The logical player slot.</param>
     /// <returns>The active page's precomputed view.</returns>
