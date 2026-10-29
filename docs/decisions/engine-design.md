@@ -309,7 +309,7 @@ plainly; as built:
   bar, cursor, wheel, toast and HUD chrome) is its style under `theme.styles`,
   which takes a core role or its own color. A document that authors no theme
   draws the engine's neutral `WorldThemeSection.Default`; the debug world's look
-  is its own skin (`worlds/debug/skin.puck`). No document refuses a translucent
+  is an authored skin (`worlds/standard/skin.puck`). No document refuses a translucent
   scrim: a player's high-contrast preference (`world.theme contrast high`)
   raises every scrim to a near-opaque backplate.
 - **Screens.** A screen shows its picture as its source made it, filling its
