@@ -9,7 +9,7 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>A worker retains its native host while consecutive scenarios have identical boot state.</summary>
+/// <summary>A worker retains its native host while consecutive scenarios share its boot composition.</summary>
 internal sealed class WorldTestBatch {
     private sealed record Leg(string World, string Directory, int ExitAfterSeconds, string BootShape, bool Reproduce = false, string? CacheDirectory = null);
 

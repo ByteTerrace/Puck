@@ -12,8 +12,10 @@ public sealed partial class WorldPersistence {
         bytes => WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: Host.Configuration.DocumentDirectory,
             utf8Json: bytes, machines: Host.Machines.ValidationCatalog));
 
-    /// <summary>A computed identity for the entire boot state; only the command schedule may differ.</summary>
-    public static string ScenarioBootShape(byte[] json) {
+    /// <summary>A computed identity for the host composition. Scenario rows, rules and commands are installed after restore.</summary>
+    public static string ScenarioBootShape(byte[] json) => ScenarioShape(json, includeScenario: false);
+
+    private static string ScenarioShape(byte[] json, bool includeScenario) {
         using var document = JsonDocument.Parse(json);
         using var hash = SHA256.Create();
         using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: hash);
@@ -21,7 +23,11 @@ public sealed partial class WorldPersistence {
         using (var writer = new Utf8JsonWriter(stream)) {
             writer.WriteStartObject();
             foreach (var property in document.RootElement.EnumerateObject()) {
-                if (property.Name != "schedule") { property.WriteTo(writer: writer); }
+                if (property.Name == "schedule") { continue; }
+                if (!includeScenario && (property.Name == "rules")) { continue; }
+                if (!includeScenario && (property.Name == "state")) {
+                    WriteStateComposition(writer, property.Value, document.RootElement);
+                } else { property.WriteTo(writer: writer); }
             }
             writer.WriteEndObject();
         }
@@ -29,29 +35,69 @@ public sealed partial class WorldPersistence {
         return Convert.ToHexStringLower(inArray: hash.Hash!);
     }
 
+    // Body registers, enums and field lattices belong to the composed population. Ordinary document rows are
+    // scenario seeds, except cells that choose the boot census: changing those requires a different population.
+    private static void WriteStateComposition(Utf8JsonWriter writer, JsonElement state, JsonElement root) {
+        var census = new HashSet<string>(StringComparer.Ordinal);
+        if (root.TryGetProperty("placements", out var placements)) {
+            foreach (var placement in placements.EnumerateArray()) {
+                if (placement.TryGetProperty("inhabit", out var inhabit) && inhabit.ValueKind == JsonValueKind.Object &&
+                    inhabit.TryGetProperty("count", out var count) && count.ValueKind == JsonValueKind.Object &&
+                    count.TryGetProperty("row", out var row) && row.GetString() is { } name) { census.Add(name); }
+            }
+        }
+        writer.WritePropertyName("state");
+        writer.WriteStartObject();
+        foreach (var section in state.EnumerateObject()) {
+            if (section.Name != "world") { section.WriteTo(writer); continue; }
+            writer.WriteStartArray("world");
+            foreach (var row in section.Value.EnumerateArray()) {
+                if (row.TryGetProperty("name", out var name) && census.Contains(name.GetString()!)) { row.WriteTo(writer); }
+            }
+            writer.WriteEndArray();
+        }
+        writer.WriteEndObject();
+    }
+
     private readonly ConditionalWeakTable<byte[], BootShape> m_bootShapes = new();
     private readonly ConditionalWeakTable<WorldDefinition, BootShape> m_definitionShapes = new();
 
     private sealed record BootShape(string Value);
 
-    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(Value: ScenarioBootShape(json: bytes))).Value;
+    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(Value: ScenarioShape(json: bytes, includeScenario: true))).Value;
 
-    /// <summary>Reuses a complete boot checkpoint only for an identical world with a different schedule.</summary>
+    private readonly ConditionalWeakTable<WorldAuthorityCheckpoint, StateArena> m_bootArenas = new();
+
+    /// <summary>Installs scenario seeds and programs over the pristine host checkpoint, never over the preceding scenario.</summary>
     public WorldAuthorityCheckpoint ScenarioCheckpoint(WorldAuthorityCheckpoint boot, WorldDefinitionAdmission admission) {
         var json = WorldDefinitionSerialization.Serialize(definition: admission.Definition);
 
-        if (CachedBootShape(json: json) != CachedBootShape(json: boot.Server.DefinitionJson)) {
+        if (ScenarioBootShape(json: json) != ScenarioBootShape(json: boot.Server.DefinitionJson)) {
             var expected = JsonNode.Parse(boot.Server.DefinitionJson)!.AsObject();
             var actual = JsonNode.Parse(json)!.AsObject();
             var changed = expected.Select(selector: pair => pair.Key).Union(second: actual.Select(selector: pair => pair.Key))
-                .Where(predicate: key => ((key != "schedule") && !JsonNode.DeepEquals(node1: expected[key], node2: actual[key])));
+                .Where(predicate: key => ((key is not ("schedule" or "rules")) && !JsonNode.DeepEquals(node1: expected[key], node2: actual[key])));
 
             throw new InvalidOperationException(message: $"Scenario changes boot configuration ({string.Join(separator: ", ", values: changed)}); it requires its own worker.");
         }
         m_checkpointAdmissions.Add(key: json, value: admission);
         _ = m_definitionShapes.GetValue(admission.Definition, _ => new BootShape(Value: CachedBootShape(json: json)));
+        var arena = boot.Server.Arena;
+        if (CachedBootShape(json: json) != CachedBootShape(json: boot.Server.DefinitionJson)) {
+            var pristine = m_bootArenas.GetValue(boot, image => PrepareCheckpointArena(image.Server,
+                CheckpointAdmission(image.Server.DefinitionJson).Compilation));
+            var definition = admission.Definition;
+            var time = new ArenaTime(Tick: 0, EngineTick: 0, TicksPerSecond: definition.SimulationRateHz, Dynamics: definition.Dynamics);
+
+            if (!StateArena.TryCreate(catalog: definition.StateCatalog, section: definition.StateRaw,
+                options: WorldSlotLanes.Options(definition: definition), time: in time, arena: out var seeded, reason: out var reason)) {
+                throw new InvalidOperationException(message: reason);
+            }
+            pristine.CopyLanesTo(target: seeded);
+            arena = seeded.CaptureSnapshot();
+        }
         return boot with {
-            Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json },
+            Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json, Arena = arena },
         };
     }
     /// <summary>Restarts module memory and restores a checkpoint into an already composed compatible authority.</summary>
@@ -62,9 +108,10 @@ public sealed partial class WorldPersistence {
             // A scenario may edit a kit, screen, input policy or collision row. Restore the derived products
             // before validating and loading their checkpointed continuation into the same authority.
             var currentShape = m_definitionShapes.GetValue(Host.Configuration,
-                current => new BootShape(Value: ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: current)))).Value;
+                current => new BootShape(Value: ScenarioShape(json: WorldDefinitionSerialization.Serialize(definition: current), includeScenario: true))).Value;
 
-            if (currentShape != CachedBootShape(json: checkpoint.Server.DefinitionJson)) {
+            if ((currentShape != CachedBootShape(json: checkpoint.Server.DefinitionJson)) &&
+                (ScenarioBootShape(WorldDefinitionSerialization.Serialize(Host.Configuration)) != ScenarioBootShape(checkpoint.Server.DefinitionJson))) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }

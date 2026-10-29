@@ -5,8 +5,8 @@ using System.Security.Cryptography;
 namespace Puck.Cli.Test;
 
 public static partial class TestCommand {
-    // A boot owns a cohort, not just its root document. Include every staged companion and asset copied
-    // into the worker, so two scenarios cannot share a companion's state or rules from another package.
+    // A boot owns a cohort, not just its root document. Compare the composition of every staged companion
+    // and the bytes of every asset; each authority restores its own scenario rows and programs.
     private static string BatchShape(TestWorld world) => ((Path.GetFileName(path: world.Path) + "\n") + string.Join(separator: "\n",
         values: Directory.EnumerateFiles(path: Path.GetDirectoryName(path: world.Path)!, searchPattern: "*", searchOption: SearchOption.AllDirectories).Order(comparer: StringComparer.Ordinal).Select(selector: path => {
             var bytes = File.ReadAllBytes(path: path);
@@ -19,7 +19,7 @@ public static partial class TestCommand {
         })));
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
-    // A worker retains its process across boots, and restores checkpoints only while the complete boot shape matches.
+    // A worker retains its native host across compatible compositions, replacing scenario state and programs.
     private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory) {
         var legs = new List<object>();
 
