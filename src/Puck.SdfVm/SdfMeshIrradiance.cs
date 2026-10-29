@@ -945,7 +945,7 @@ public sealed class SdfMeshIrradiance {
             } else {
                 // The farthest in-window receiver is a spacing diagonal plus relocation and the normal bias.
                 depthRays = SdfMeshProbeDepth.Trace(scene: scene, origin: origin,
-                    reach: (((1.5f * MathF.Sqrt(x: 3f)) * layout.Spacing) + SdfMeshIrradianceProbe.NormalBias), moments: depthMoments);
+                    reach: (((1.5f * MathF.Sqrt(x: 3f)) * layout.Spacing) + SdfMeshIrradianceProbe.NormalBias), surfaces: depthMoments);
             }
         }
 
@@ -1118,7 +1118,7 @@ public sealed class SdfMeshIrradiance {
     // The light a surface receives from the cached probes about it, as the views pass reads the volume
     // (sdfMeshProbesAt, shade/sdf-mesh-irradiance.hlsli): the eight probes about the point pushed along its normal,
     // clamped to the window's boundary, each weighted trilinearly, by how far it lies in front of the surface and by
-    // how far the probe's directional depth moments admit the pushed point. No answering probe means no measured
+    // how far the probe's angular surface support admit the pushed point. No answering probe means no measured
     // incoming light. It reads each probe's own cubes, exactly as the published volume does.
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low) {
         var squared = (normal * normal);
@@ -1301,7 +1301,7 @@ public sealed class SdfMeshIrradiance {
             var length = toward.Length();
             var facing = ((length > 0f) ? MathF.Max(x: 0f, y: Vector3.Dot(vector1: (toward / length), vector2: normal)) : 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
-            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(moments: probe.Depth, toward: (pushed - probePoint)));
+            var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * (facing * facing)) * visibility);
             var front = (facing > 0f);
 
@@ -1381,10 +1381,10 @@ public sealed class SdfMeshIrradiance {
         ));
     }
 
-    // One probe: its sky visibility and radiance cubes, its directional depth moments, the traced lights its origin
+    // One probe: its sky visibility and radiance cubes, its angular surface support, the traced lights its origin
     // sees (one bit a lights-table index), the sweeps
     // it holds, where it stands relative to its cell's centre (Offset, zero unless the trace moved it out of geometry or off
-    // a face), the share of its rays that met back faces (Inside) and whether it lies inside geometry. Its cubes and depth moments
+    // a face), the share of its rays that met back faces (Inside) and whether it lies inside geometry. Its cubes and surface support
     // are a slice of the floats of the batch it was traced in (ProbeBlock), its lights among them, so a batch allocates one
     // block rather than four arrays a probe, in the large object heap, where a collection of the young generations never
     // copies it.

@@ -149,7 +149,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   nearest surface along its normal, then over a lattice a quarter of the
   spacing apart out to the cell's faces. Among nearby candidates, prefer fewer
   first hits within a spacing, charging for distance from the centre. Keep this
-  openness score with depth moments to condition the map near surfaces. The
+  openness score with surface support to condition the map near surfaces. The
   nearest-clear-only experiment did not eliminate grazing marks; those captures
   also still had neighbour cube filtering, so they do not isolate placement as
   the cause of light leaks. Later sweeps stand where the first did.

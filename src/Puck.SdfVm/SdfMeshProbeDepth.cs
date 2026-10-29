@@ -14,9 +14,9 @@ public static class SdfMeshProbeDepth {
     /// <param name="scene">The existing static mesh hierarchy.</param>
     /// <param name="origin">The relocated probe position.</param>
     /// <param name="reach">The receiver support radius, in metres.</param>
-    /// <param name="moments">Receives the packed surface map.</param>
+    /// <param name="surfaces">Receives the packed surface map.</param>
     /// <returns>The number of closest-hit rays issued.</returns>
-    public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> moments) {
+    public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> surfaces) {
         var rays = 0;
 
         for (var texel = 0; (texel < Directions.Length); texel++) {
@@ -26,7 +26,7 @@ public static class SdfMeshProbeDepth {
 
             rays++;
             if (!hit) {
-                moments[texel] = BitConverter.HalfToUInt16Bits(value: ((Half)(-reach)));
+                surfaces[texel] = BitConverter.HalfToUInt16Bits(value: ((Half)(-reach)));
                 continue;
             }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { normal = -normal; }
@@ -39,7 +39,7 @@ public static class SdfMeshProbeDepth {
             var decoded = Normal(word: packed);
             var perpendicular = MathF.Max(x: 0f, y: (-Vector3.Dot(vector1: decoded, vector2: direction) * distance));
 
-            moments[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)perpendicular));
+            surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)perpendicular));
         }
         return rays;
     }
@@ -54,10 +54,10 @@ public static class SdfMeshProbeDepth {
     /// <summary>Tests signed surface gaps only in the four reflected angular taps. Coplanar receivers stay visible
     /// at grazing angles. A missed ray supplies no fictitious far blocker. KEEP IN SYNC with
     /// <c>sdfMeshProbeDepthVisibility</c>; there are no cross-probe or whole-sphere plane vetoes.</summary>
-    /// <param name="moments">The packed surface map of one probe.</param>
+    /// <param name="surfaces">The packed surface map of one probe.</param>
     /// <param name="toward">Receiver minus probe position, after normal bias.</param>
     /// <returns>Visibility from zero to one; no support beyond a measured miss radius.</returns>
-    public static float Visibility(ReadOnlySpan<uint> moments, Vector3 toward) {
+    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward) {
         var distance = toward.Length();
 
         if (!(distance > 0f)) { return 1f; }
@@ -75,7 +75,7 @@ public static class SdfMeshProbeDepth {
 
             if (weight <= 0f) { continue; }
             var tap = SdfOctahedral.BorderSource(borderedX: ((x + highX) + 1), borderedY: ((y + highY) + 1), interiorTexels: Size);
-            var word = moments[(tap.X + (Size * tap.Y))];
+            var word = surfaces[(tap.X + (Size * tap.Y))];
             var depth = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)word)));
 
             if (depth < 0f) {

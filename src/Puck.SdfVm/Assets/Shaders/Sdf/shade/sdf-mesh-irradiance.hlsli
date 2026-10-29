@@ -46,7 +46,7 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
 }
 
 // KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
-// max(0, dot(receiver normal, direction to relocated probe)) squared times depth-moment visibility.
+// max(0, dot(receiver normal, direction to relocated probe)) squared times angular surface visibility.
 // Continuous hemisphere weighting excludes probes behind a surface without a discrete front/back fallback.
 // Unwritten, invalid and invisible probes take no part; no answering probe means no measured indirect light.
 static const uint SdfMeshProbeNone = 0xffffffffu;
@@ -118,7 +118,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
     // Extend the boundary probes only as far as their visibility permits. The pushed receiver, never the clamped
-    // lookup, is tested against their depth moments, so leaving the window cannot invent open sky.
+    // lookup, is tested against their surface samples, so leaving the window cannot invent open sky.
     float3 lattice = clamp(((pushed / spacing) - 0.5), (float3)low, (float3)(low + dims - 1));
     float3 base = floor(lattice);
     float3 fraction = (lattice - base);
@@ -156,7 +156,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 }
 // The sky visibility and reflected radiance the gathered probes hold, seen along `direction` (the normal for the light a
 // surface receives, the mirror direction for the light it reflects). A point with no answering probe has no measured
-// incoming light. The boundary gather extrapolates only the light its probes' depth moments permit.
+// incoming light. The boundary gather extrapolates only the light its probes' surface samples permit.
 void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVisibility, out float3 radiance) {
     float sky = 0.0;
     float3 reflected = 0.0;
