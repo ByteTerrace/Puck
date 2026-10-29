@@ -79,6 +79,7 @@ internal sealed record WorldTestRunManifest(
 internal sealed class WorldTestRun {
     public int AuthorityTicks { get; private set; }
     public long ExportTicks { get; private set; }
+
     public event Action? FirstTick;
 
     private sealed record Landed(string PrincipalLabel, WorldTickScript.Line Line);

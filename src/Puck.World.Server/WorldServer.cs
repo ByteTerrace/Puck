@@ -243,7 +243,16 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the phases this world's state clocks read as it was admitted at boot
     /// (<see cref="WorldClockAnchors.Seeds"/>): what a presentation-tier recipient that joins while a clock's row holds
     /// no number seeds the clock from.</summary>
-    public IReadOnlyDictionary<string, ulong> ClockSeeds { get; }
+    public IReadOnlyDictionary<string, ulong> ClockSeeds => m_clockSeeds;
+
+    private readonly Dictionary<string, ulong> m_clockSeeds = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Rebinds a restored scenario's boot phases while preserving the table held by projection sinks.</summary>
+    public void ResetClockSeeds(WorldDefinition definition) {
+        m_clockSeeds.Clear();
+        foreach (var (name, phase) in WorldClockAnchors.Seeds(definition: definition)) { m_clockSeeds.Add(key: name, value: phase); }
+    }
+
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
     public ulong CompletedEngineTicks => m_tick.CompletedEngineTicks;
     /// <summary>Gets the authoritative tick a delivery stands at: the tick and engine tick the step in progress
@@ -547,7 +556,7 @@ public sealed partial class WorldServer : IWorldServerHost {
                 : instanceIdentity)
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
-        ClockSeeds = WorldClockAnchors.Seeds(definition: definition);
+        ResetClockSeeds(definition: definition);
         m_machines = machines;
         if (!machines.TryPrepare(
             admission: admission,

@@ -34,25 +34,25 @@ public sealed partial class WorldPersistence {
         stream.FlushFinalBlock();
         return Convert.ToHexStringLower(inArray: hash.Hash!);
     }
-
     // Body registers, enums and field lattices belong to the composed population. Ordinary document rows are
     // scenario seeds, except cells that choose the boot census: changing those requires a different population.
     private static void WriteStateComposition(Utf8JsonWriter writer, JsonElement state, JsonElement root) {
-        var census = new HashSet<string>(StringComparer.Ordinal);
-        if (root.TryGetProperty("placements", out var placements) && placements.TryGetProperty("rows", out var rows)) {
+        var census = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        if (root.TryGetProperty(propertyName: "placements", value: out var placements) && placements.TryGetProperty(propertyName: "rows", value: out var rows)) {
             foreach (var placement in rows.EnumerateArray()) {
-                if (placement.TryGetProperty("inhabit", out var inhabit) && inhabit.ValueKind == JsonValueKind.Object &&
-                    inhabit.TryGetProperty("count", out var count) && count.ValueKind == JsonValueKind.Object &&
-                    count.TryGetProperty("row", out var row) && row.GetString() is { } name) { census.Add(name); }
+                if (placement.TryGetProperty(propertyName: "inhabit", value: out var inhabit) && (inhabit.ValueKind == JsonValueKind.Object) &&
+                    inhabit.TryGetProperty(propertyName: "count", value: out var count) && (count.ValueKind == JsonValueKind.Object) &&
+                    count.TryGetProperty(propertyName: "row", value: out var row) && (row.GetString() is { } name)) { census.Add(item: name); }
             }
         }
-        writer.WritePropertyName("state");
+        writer.WritePropertyName(propertyName: "state");
         writer.WriteStartObject();
         foreach (var section in state.EnumerateObject()) {
-            if (section.Name != "world") { section.WriteTo(writer); continue; }
-            writer.WriteStartArray("world");
+            if (section.Name != "world") { section.WriteTo(writer: writer); continue; }
+            writer.WriteStartArray(propertyName: "world");
             foreach (var row in section.Value.EnumerateArray()) {
-                if (row.TryGetProperty("name", out var name) && census.Contains(name.GetString()!)) { row.WriteTo(writer); }
+                if (row.TryGetProperty(propertyName: "name", value: out var name) && census.Contains(item: name.GetString()!)) { row.WriteTo(writer: writer); }
             }
             writer.WriteEndArray();
         }
@@ -64,7 +64,7 @@ public sealed partial class WorldPersistence {
 
     private sealed record BootShape(string Value);
 
-    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(Value: ScenarioShape(json: bytes, includeScenario: true))).Value;
+    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(Value: ScenarioShape(includeScenario: true, json: bytes))).Value;
 
     private readonly ConditionalWeakTable<WorldAuthorityCheckpoint, StateArena> m_bootArenas = new();
 
@@ -83,9 +83,10 @@ public sealed partial class WorldPersistence {
         m_checkpointAdmissions.Add(key: json, value: admission);
         _ = m_definitionShapes.GetValue(admission.Definition, _ => new BootShape(Value: CachedBootShape(json: json)));
         var arena = boot.Server.Arena;
+
         if (CachedBootShape(json: json) != CachedBootShape(json: boot.Server.DefinitionJson)) {
             var pristine = m_bootArenas.GetValue(boot, image => PrepareCheckpointArena(image.Server,
-                CheckpointAdmission(image.Server.DefinitionJson).Compilation));
+                CheckpointAdmission(json: image.Server.DefinitionJson).Compilation));
             var definition = admission.Definition;
             var time = new ArenaTime(Tick: 0, EngineTick: 0, TicksPerSecond: definition.SimulationRateHz, Dynamics: definition.Dynamics);
 
@@ -111,7 +112,7 @@ public sealed partial class WorldPersistence {
                 current => new BootShape(Value: ScenarioShape(json: WorldDefinitionSerialization.Serialize(definition: current), includeScenario: true))).Value;
 
             if ((currentShape != CachedBootShape(json: checkpoint.Server.DefinitionJson)) &&
-                (ScenarioBootShape(WorldDefinitionSerialization.Serialize(Host.Configuration)) != ScenarioBootShape(checkpoint.Server.DefinitionJson))) {
+                (ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) != ScenarioBootShape(json: checkpoint.Server.DefinitionJson))) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
@@ -125,6 +126,10 @@ public sealed partial class WorldPersistence {
                 if (plan is not null) { addons.Commit(plan: plan); addons.Finish(plan: plan); }
             }
             RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true);
+            // The checkpoint carries the shared boot's gate lookup; its scenario rows may declare different
+            // gates or seeds. Commands arrive before the first tick can reconcile a changed cell.
+            Host.GrantTable.SyncState(definition: definition, arena: Host.Arena);
+            Host.ResetClockSeeds(definition: definition);
         }
     }
 }
