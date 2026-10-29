@@ -177,7 +177,7 @@ public sealed partial class WorldReplayInspector {
 
         return [.. poses];
     }
-    private static string DescribeTick(int tick, ulong hash, IReadOnlyList<WorldReplayEntry> authority, WorldChannelTable channels, StringBuilder edges, string[]? poses, bool posesRequested, bool diverged) {
+    private static string DescribeTick(int tick, ulong hash, IReadOnlyList<WorldReplayEntry> authority, StringBuilder edges, string[]? poses, bool posesRequested, bool diverged) {
         var line = new StringBuilder();
 
         line.Append(value: Prefix);
@@ -198,7 +198,6 @@ public sealed partial class WorldReplayInspector {
                 }
 
                 line.Append(value: WorldReplayEntryDescriber.Describe(
-                    channels: channels,
                     entry: authority[index]
                 ));
             }
@@ -266,7 +265,14 @@ public sealed partial class WorldReplayInspector {
                         }
 
                         if (includePoses) { poses[index] = CapturePoses(population: population); }
-                        inputs[index] = CaptureInputs(cursors: inputCursors, server: server);
+                        var accepted = new StringBuilder();
+                        foreach (var entry in recording.Ticks[index].Authority) {
+                            if (accepted.Length != 0) { accepted.Append(value: "; "); }
+                            accepted.Append(value: WorldReplayEntryDescriber.Describe(entry: entry));
+                        }
+                        var semantic = CaptureInputs(cursors: inputCursors, server: server);
+                        if ((accepted.Length != 0) && (semantic.Length != 0)) { accepted.Append(value: "; "); }
+                        inputs[index] = accepted.Append(value: semantic).ToString();
                         observed[index] = WorldReplaySnapshot.HashState(population: population);
                         observedCount = Math.Max(
                             val1: observedCount,
@@ -310,18 +316,16 @@ public sealed partial class WorldReplayInspector {
     /// <param name="lines">The line sink.</param>
     /// <param name="ticks">The tape's per-tick input.</param>
     /// <param name="hashes">The tape's recorded per-tick population hashes (one per tick).</param>
-    /// <param name="channels">The recorded world's compiled channel table — what names an intent ordinal.</param>
     /// <param name="from">The first tick to print (inclusive).</param>
     /// <param name="to">The last tick to print (inclusive; clamped to the tape).</param>
     /// <param name="all">Whether to print every tick in range rather than only ticks carrying an edge.</param>
     /// <param name="poses">Per-tick re-driven poses to print beside each line, or <see langword="null"/>.</param>
     /// <param name="divergedAt">The first tick the re-driven trace disagrees with the recorded one, or <c>-1</c>.</param>
     /// <param name="acceptedInputs">Per-tick semantic input observations from the authority re-drive.</param>
-    public static void AppendTicks(List<string> lines, IReadOnlyList<WorldReplayTickInput> ticks, IReadOnlyList<ulong> hashes, WorldChannelTable channels, int from, int to, bool all, IReadOnlyList<string[]?>? poses, int divergedAt, IReadOnlyList<string>? acceptedInputs = null) {
+    public static void AppendTicks(List<string> lines, IReadOnlyList<WorldReplayTickInput> ticks, IReadOnlyList<ulong> hashes, int from, int to, bool all, IReadOnlyList<string[]?>? poses, int divergedAt, IReadOnlyList<string>? acceptedInputs = null) {
         ArgumentNullException.ThrowIfNull(argument: lines);
         ArgumentNullException.ThrowIfNull(argument: ticks);
         ArgumentNullException.ThrowIfNull(argument: hashes);
-        ArgumentNullException.ThrowIfNull(argument: channels);
 
         var last = Math.Min(
             val1: to,
@@ -364,8 +368,7 @@ public sealed partial class WorldReplayInspector {
             }
 
             lines.Add(item: DescribeTick(
-                authority: input.Authority,
-                channels: channels,
+                authority: ((acceptedInputs is null) ? input.Authority : []),
                 diverged: (tick == divergedAt),
                 edges: edges,
                 hash: hashes[tick],
@@ -433,17 +436,11 @@ public sealed partial class WorldReplayInspector {
             ? "on"
             : "off")}]");
 
-        var channels = WorldChannelTable.For(definition: WorldDefinitionSerialization.Deserialize(
-            documentDirectory: recording.DocumentDirectory,
-            utf8Json: recording.DefinitionJson
-        ));
-
         var (drivenPoses, acceptedInputs, trace) = DriveObservations(includePoses: poses, recording: recording);
         var divergedAt = HashTrace.FirstDivergence(left: recording.RecordedHashes, right: trace);
 
         AppendTicks(
             all: all,
-            channels: channels,
             divergedAt: divergedAt,
             from: from,
             hashes: recording.RecordedHashes,

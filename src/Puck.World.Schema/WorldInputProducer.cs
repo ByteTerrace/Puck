@@ -74,6 +74,8 @@ public sealed class WorldInputProducer {
     public uint Revision { get; private set; }
     /// <summary>The last authority-published epoch.</summary>
     public ulong Epoch { get; private set; }
+    /// <summary>Current reconciled source state for read-back; callers cannot mutate it.</summary>
+    public ReadOnlySpan<WorldInputSourceState> Sources => m_sources;
     /// <summary>A capture overflow requires an authority reset; no truncated batch is published.</summary>
     public bool CaptureLost { get; private set; }
 

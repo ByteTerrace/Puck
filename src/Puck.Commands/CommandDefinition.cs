@@ -70,9 +70,9 @@ public sealed record CommandDefinition {
     /// registration shape: every argument-bearing verb is wire-native, so wire-nativeness distinguishes nothing.
     /// </remarks>
     public bool AcknowledgementOnly { get; init; }
-    /// <summary>Gets whether help lists this generated command only when a prefix is requested. Dispatch and
-    /// vocabulary discovery still expose the complete command.</summary>
-    public bool HelpRequiresPrefix { get; init; }
+    /// <summary>Gets whether only compiled bindings may dispatch this internal destination. Text commands,
+    /// help and author-facing vocabulary do not expose it.</summary>
+    public bool BindingOnly { get; init; }
     /// <summary>Gets who the command answers. Defaults to <see cref="CommandAudience.Anyone"/>; an
     /// <see cref="CommandAudience.Operator"/> command is refused by the registry for every principal but the
     /// console, before its handler runs.</summary>
@@ -81,6 +81,8 @@ public sealed record CommandDefinition {
     public CommandBindability Bindability { get; init; }
     /// <summary>Gets the human-readable description shown in help output.</summary>
     public string Description { get; internal init; }
+    /// <summary>Optional current state read-back appended by full or prefixed help for the asking seat.</summary>
+    public Func<int, string>? HelpDetails { get; init; }
     /// <summary>Gets whether this is a HELD verb: the handler reads the phase (active on Started/Active, released
     /// on Completed/Canceled), so a plain-bound entry — no <c>activateOn</c> — delivers both edges, exactly as a
     /// channel destination does. An author binds it once; only an explicit <c>activateOn</c> narrows to one edge.</summary>

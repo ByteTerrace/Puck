@@ -34,4 +34,9 @@ public interface IGamepadParser {
     /// <paramref name="state"/> was populated; otherwise <see langword="false"/> (the report should be ignored).
     /// </returns>
     bool TryParse(ReadOnlySpan<byte> report, out GamepadState state);
+
+    /// <summary>Whether a non-state report is deliberately ignored. It neither publishes input nor refreshes
+    /// stream liveness; unknown reports still receive a diagnostic.</summary>
+    /// <param name="report">The raw report bytes.</param>
+    bool IsIgnoredReport(ReadOnlySpan<byte> report) => false;
 }

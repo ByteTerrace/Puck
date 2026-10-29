@@ -353,6 +353,14 @@ surviving red findings by cluster, starting with the hall stairs.
 
 ### Edit to running, hot reload and boot
 
+- [medium] A `world.load` from debug into a same-capacity input fixture leaves
+  authored state-writing rules refused with `the live edit grant refuses
+  state:blink` (and the fixture's counters stay zero); a fresh boot of that
+  fixture runs them. Reproduced in C7 with `input-genre-controls.puck` temporarily
+  set to the debug world's capacity. The seeded `World` Edit grant appears lost
+  across load; that cause is an inference, not yet confirmed. Owner: boot/reload
+  lane. C7's genre sweeps boot each source fresh.
+
 Owner: hot-reload follow-up (boot and build) · two medium, the rest ordinary ·
 Next: the hot-reload code revision as one invalidation contract (the
 compositor's emitter revisions and the static-field rebuild), then the
@@ -840,23 +848,19 @@ hang, then the pre-`main` language findings.
 
 ### Input channels
 
-Owner: input lane · ordinary · Next: C7's read-back. The
+Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
-step's completion criteria; C1 to C6 are in.
+step's completion criteria; C1 to C7 are in.
 
-- C7 read-back and cleanup: current-mode action names in `body.rig`,
-  `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
-  ordinal surfaces removed, and executable checks of the genre table.
 - The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).
-- The Steam Controller (Triton, receiver `0x28de:0x1304`) drives player 1 in a
-  windowed World, but `world.devices` lists only the camera, and the parser logs
-  `SteamControllerTriton unparsed report id=0x7b len=54`. List every streaming
-  pad in the device roster, and parse or deliberately ignore report 0x7b.
 - Hardware runs owed (note what each shows in its commit;
   [device input](../reference/input.md#limits-and-hardware-evidence)): the
+  Triton receiver's live streaming roster (including while neutral) and deliberate
+  `0x7b` ignore policy, shown synthetically in C7 but with no attached hardware;
+  the
   DualSense and Switch Pro over Bluetooth, the DualSense Edge, one DualSense on
   USB and Bluetooth at once, the classic Steam Controller, the Triton's reports
   `0x45`/`0x47`, its pairing events, its wired, Bluetooth and Nereid transports,

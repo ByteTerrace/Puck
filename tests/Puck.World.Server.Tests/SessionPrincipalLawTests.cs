@@ -20,6 +20,28 @@ namespace Puck.World.Server.Tests;
 /// </summary>
 public sealed class SessionPrincipalLawTests {
     [Fact]
+    public void ABodylessMenuCanSelectPanelsAtZeroRateWithoutDevicesOrMotionRoles() {
+        var document = new WorldDefinition {
+            Admission = [Admission()],
+            ChannelsRaw = [new("navigate", ChannelShape.Bipolar, Composition: true), new("confirm", ChannelShape.Binary, Composition: true)],
+            PopulationRaw = new WorldBodiesDefaults(LocalSeatsRaw: 0, CapacityRaw: 0, NetworkPlayers: 0),
+            Simulation = new WorldSimulationDefaults(RateHz: 0),
+            SeatModesRaw = [new(Name: "panel", DefaultState: "first", States: [new("first"), new("second")])],
+            InputModes = new([], [new("panel", new(WorldInputModeSelectorKind.SeatState, Name: "panel"), "first", [
+                new("first", ["navigate", "confirm"], ["first"]), new("second", ["navigate", "confirm"], ["second"]),
+            ], Transitions: [new("first", "second", ["navigate"])])]),
+        };
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var session = AdmitSession(fixture: fixture);
+        var owner = fixture.Server.Input.Admit(bodyIndex: -1, principal: session, sources: []);
+        var tick = fixture.Server.NextInputTick;
+        Assert.True(condition: fixture.Server.Input.TrySetSeatState(principal: session, family: "panel", state: "second", activation: 1, reason: out var reason), userMessage: reason);
+        Assert.Equal("panel=second", owner.Mapping.Name);
+        Assert.Equal(tick, fixture.Server.NextInputTick);
+        Assert.Null(@object: fixture.Server.Body(index: 0));
+        Assert.All(document.Channels, channel => Assert.Null(value: channel.Role));
+    }
+    [Fact]
     public void LiveRestoreKeepsSessionsRetiredAfterTheSaveRetired() {
         using var fixture = Fixtures.FreshServer(definition: Document());
 

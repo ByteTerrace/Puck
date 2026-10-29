@@ -1,0 +1,97 @@
+{
+  "tools": [
+    {
+      "name": "rhythm-hold-and-fighting-charge",
+      "lines": [
+        "world.wait 4",
+        "player.signal keyboard.u press at:0.001",
+        "player.signal keyboard.i press at:0.002",
+        "world.wait 12",
+        "player.signal keyboard.o press",
+        "world.wait 24",
+        "player.signal keyboard.u release at:0.001",
+        "player.signal keyboard.i release at:0.002",
+        "world.wait 3"
+      ],
+      "until": {
+        "line": "world.state chargedRelease",
+        "metric": "$value",
+        "in": [
+          "1"
+        ]
+      },
+      "everyTicks": 1,
+      "maxTicks": 0
+    }
+  ],
+  "scenarios": [],
+  "signals": [
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "keptNote",
+      "line": "world.state keptNote",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "keptCharge",
+      "line": "world.state keptCharge",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "notePresses",
+      "line": "world.state notePresses",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "noteReleases",
+      "line": "world.state noteReleases",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    },
+    {
+      "red": [
+        "value != 1"
+      ],
+      "parse": "text",
+      "name": "chargedRelease",
+      "line": "world.state chargedRelease",
+      "metrics": {
+        "value": "value=([0-9.-]+)"
+      }
+    }
+  ],
+  "tour": {
+    "prelude": [],
+    "reset": [],
+    "frame": [],
+    "settle": 0,
+    "levelTolerance": 0,
+    "amberFraction": 0,
+    "columns": 1,
+    "cellWidth": 1,
+    "stops": []
+  },
+  "note": "Executable rows of the input-channel genre table. No sample game or new interpreter: ordinary worlds, input signals, mode commands and rule read-backs. Exact clock, checkpoint, ring and cancellation invariants remain the input-*-tests.puck scenarios."
+}

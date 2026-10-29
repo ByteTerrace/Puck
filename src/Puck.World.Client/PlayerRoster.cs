@@ -1727,6 +1727,7 @@ public sealed partial class PlayerRoster : IInputSlotResolver, IPrincipalResolve
         if (!m_deviceKind.ContainsKey(key: device)) {
             m_deviceKind[device] = kind;
         }
+        TrackDeviceOrder(device: device);
     }
     /// <inheritdoc/>
     public int ResolveSlot(InputDeviceId device) {
