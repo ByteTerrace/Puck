@@ -1208,10 +1208,13 @@ public sealed class SdfMeshIrradiance {
 
         return ((skyIrradiance * (sky / total)) + (bounce / total));
     }
-    // Only answering probes surviving the original separation can separate another admission. Compute both passes
-    // from unchanged weights so mutual vetoes do not empty the gather. The sampled neighbour plane still has no finite
-    // blocker extent: the rendering follow-up finding remains open for that part.
-    // KEEP IN SYNC with sdfMeshProbeSeparate.
+    // A probe's 26 rays are one line wide each, so a probe across a roof, floor or wall from the point still admits it
+    // through the rays that cleared the blocker's edge or passed a doorway in it (its suspect share, PlaneVisibility).
+    // Where another answering probe cannot see it (their neighbour bit is clear), that probe's plane toward it is the
+    // blocker between them, and a point on the near side of that plane lies across it from the far probe, which gives
+    // way by its suspect share; a probe whose rays met the point's own surface keeps lighting it, so a stair flight
+    // between two probes separates neither from the walls beside it. The separating plane has no finite extent: it is
+    // the blocker's whole half-space. KEEP IN SYNC with sdfMeshProbeSeparate.
     private static void Separate(in Corners probes, ReadOnlySpan<uint> neighbours, ReadOnlySpan<float> suspect, Span<float> weights, Vector3 first, float spacing, Vector3 pushed) {
         Span<float> support = stackalloc float[64];
 
@@ -1240,16 +1243,20 @@ public sealed class SdfMeshIrradiance {
         Separate(support: support, suspect: suspect, weights: weights);
     }
 
-    /// <summary>Applies supported separation simultaneously to the eight answering probe weights. A separator is
-    /// weighted by its survival of the original separation; zero weights and fully separated probes never veto another
-    /// answer. KEEP IN SYNC with <c>sdfMeshProbeSeparate</c>.</summary>
-    /// <param name="support">The 8×8 directional separation scores, receiver probe first, separator second.</param>
+    /// <summary>Scales each of the eight answering probes' weights by the separation the other answering probes
+    /// supply. A separator's veto is weighted by how much of it survives the same test, read from the weights before
+    /// any veto, so a fully separated probe vetoes nothing and two probes that separate each other leave each other
+    /// standing; a probe that vetoes another fully is therefore unseparated itself, and the gather never empties.
+    /// KEEP IN SYNC with <c>sdfMeshProbeSeparate</c>.</summary>
+    /// <param name="support">For each candidate probe <c>c</c> and separator <c>s</c>, at index <c>8 * c + s</c>: how
+    /// far the receiver lies on the separator's side of the separator's first-hit plane toward the candidate, from one
+    /// (the receiver lies across that blocker from the candidate) to zero (it lies past the blocker, on the candidate's
+    /// side); zero wherever the separator sees the candidate or either does not answer.</param>
     /// <param name="suspect">Each probe's suspect share from <see cref="PlaneVisibility"/>.</param>
     /// <param name="weights">The eight weights after front eligibility; zero for each non-answering probe.</param>
     public static void Separate(ReadOnlySpan<float> support, ReadOnlySpan<float> suspect, Span<float> weights) {
         Span<float> shares = stackalloc float[8];
         Span<float> separated = stackalloc float[8];
-        var kept = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
             separated[corner] = 0f;
@@ -1271,11 +1278,8 @@ public sealed class SdfMeshIrradiance {
                 veto = MathF.Max(x: veto, y: ((suspect[corner] * support[((8 * corner) + other)]) * (1f - separated[other])));
             }
             shares[corner] = (1f - veto);
-            kept += (weights[corner] * shares[corner]);
         }
-        if (kept > 0f) {
-            for (var corner = 0; (corner < 8); corner++) { weights[corner] *= shares[corner]; }
-        }
+        for (var corner = 0; (corner < 8); corner++) { weights[corner] *= shares[corner]; }
     }
 
     // Scales each of the eight corner probes' weights (zero for one that does not answer) by how much of the other

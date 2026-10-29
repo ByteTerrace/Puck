@@ -198,14 +198,15 @@ in the frame.
   or beside a doorway still admits a point past that roof or wall through the
   rays that cleared its edge or passed the doorway. Where another of the eight
   answering probes cannot see it (their neighbour bit is clear), its neighbour
-  plane tests the receiver's side. Its finite extent is still unknown, and this
-  separation can over-darken beside a finite blocker; the corresponding review
-  finding remains open. Only a probe
-  surviving an initial separation pass may separate another, weighted by that
-  survival and the candidate's suspect share. A share uses perpendicular plane distance:
+  plane tests the receiver's side. Its finite extent is unknown, so this
+  separation can over-darken beside a finite blocker
+  ([open items](../../../plans/open-items.md#review-findings)). A separator's
+  veto is weighted by its own survival of the same test and by the candidate's
+  suspect share, so a fully separated probe vetoes nothing and the gather never
+  empties. A share uses perpendicular plane distance:
   a hit on the receiver's own surface is evidence at every angle, while open
   space or a plane far beyond it is suspect. Front eligibility precedes
-  separation; shares read unchanged weights and never empty the gather
+  separation, and both passes read the weights before any veto
   (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`). Each
   answering probe's weight also
   fades out as the share of the other answering probes' weight it sees and is
