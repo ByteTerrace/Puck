@@ -383,6 +383,10 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   later arrival. A waiter that is killed leaves a ticket the next waiter drops;
   a stale `<name>.queue` entry needs no manual cleanup
   ([CLI reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work)).
+- A check that needs the owner present (their hardware, their eyes on a window)
+  goes ahead of the GPU queue for its short run: the owner's time is the scarcest
+  resource. The lead keeps it to a minute or two and discounts any lane timing
+  it overlapped.
 - On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
   step only with more free memory than the capacity threshold and more free
   disk than the pressure threshold, so a running agent waits rather than being
