@@ -456,6 +456,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     float4 windowColor = 0.0;
     float4 windowTransport = 0.0;
     float windowWeight = 0.0;
+    float4 windowMin = 3.402823e+38;
+    float4 windowMax = -windowMin;
 
     [unroll] for (uint sample = 0u; sample < SDF_TEMPORAL_PERIOD; sample++) {
         uint offset = (SDF_HISTORY_WINDOW_OFFSET + (sample * SDF_HISTORY_SAMPLE_WORDS));
@@ -464,6 +466,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
         if (present && (sample == phase)) {
             float4 color = clamp((sum / weightSum), -65504.0, 65504.0);
+            color.a = clamp(color.a, coverageMin, coverageMax);
             uint2 transport = sdfPackTransport(transportSum / weightSum);
             packed[0] = (f32tof16(color.r) | (f32tof16(color.g) << 16u));
             packed[1] = (f32tof16(color.b) | (f32tof16(color.a) << 16u));
@@ -480,6 +483,8 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float4 color = float4(f16tof32(packed[0] & 0xFFFFu), f16tof32(packed[0] >> 16u),
                 f16tof32(packed[1] & 0xFFFFu), f16tof32(packed[1] >> 16u));
             float weight = f16tof32(packed[4]);
+            windowMin = min(windowMin, color);
+            windowMax = max(windowMax, color);
             windowColor += (weight * color);
             windowTransport += (weight * sdfUnpackTransport(uint2(packed[2], packed[3])));
             windowWeight += weight;
@@ -491,7 +496,9 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     complete = ((mask == fullMask) && (windowWeight > 1.0e-6));
     if (complete) {
         total = windowWeight;
-        accumulated = (windowColor / windowWeight);
+        // A convex mean stays inside its samples' bounds. Preserve a constant component exactly even when the
+        // division's approximate reciprocal rounds just below it before half-float storage (notably full coverage).
+        accumulated = clamp((windowColor / windowWeight), windowMin, windowMax);
         accumulatedTransport = (windowTransport / windowWeight);
     }
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
