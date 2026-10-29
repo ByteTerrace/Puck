@@ -58,16 +58,15 @@ public sealed partial class WorldGrants {
     /// was decided against.</param>
     /// <returns>The admission verdict.</returns>
     /// <param name="occupant">What the traveler brings, which the admitted event records.</param>
-    /// <param name="remoteHuman">Whether a human occupies the traveler's body; only a human is counted against
-    /// the <c>networkPlayers</c> admission cap.</param>
-    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant, bool remoteHuman) {
+    /// <param name="source">The traveler's carried intent source. A human keeps its human classification, and its
+    /// count against the <c>networkPlayers</c> cap, whatever its control source.</param>
+    internal SessionReply AdmitTransferredPeer(int slot, WorldAdmissionVerdict? verdict, WorldTransferredOccupant occupant, IntentSource source) {
         if (!TryAdmitVerifiedParticipant(
             verdict: verdict,
             reservedSlot: slot,
-            source: IntentSource.Live,
+            source: source,
             authorityTransferred: true,
             occupant: occupant,
-            remoteHuman: remoteHuman,
             admitted: out _,
             refusal: out var refusal
         )) {
@@ -172,9 +171,8 @@ public sealed partial class WorldGrants {
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
     /// <param name="occupant">What a transferred traveler brings; <see langword="null"/> for a connection.</param>
-    /// <param name="remoteHuman">Whether a human occupies the admitted body; a connection always does.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    private bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal, WorldTransferredOccupant? occupant = null, bool remoteHuman = true) {
+    private bool TryAdmitVerifiedParticipant(WorldAdmissionVerdict? verdict, int? reservedSlot, IntentSource source, bool authorityTransferred, out WorldPeerEventEntry admitted, out string refusal, WorldTransferredOccupant? occupant = null) {
         if (verdict is not { } decision) {
             admitted = default;
             refusal = "admission carries no door verdict — nothing authorizes this ingress";
@@ -224,8 +222,7 @@ public sealed partial class WorldGrants {
                 admitted: out admitted,
                 refusal: out refusal,
                 authorityTransferred: authorityTransferred,
-                occupant: occupant,
-                remoteHuman: remoteHuman
+                occupant: occupant
             )
             : Host.Population.TryAdmitRemotePeer(
                 source: source,

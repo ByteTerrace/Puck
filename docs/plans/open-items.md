@@ -621,8 +621,12 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
 
-- [high] The `networkPlayers` cap trusts the sender's `RemoteHuman` flag: federation accepts `RemoteHuman=false` without verifying the exemption, so an admitted federation authority can reserve and commit a Live human into a full or zero-cap instance, receive Drive grants and submit commands without spending the cap (`src/Puck.World.Server/WorldFederationCodec.cs:315`). The receiving side must classify from what it can verify, never from a sender's claim. (owner: companion-cap follow-up; from: companion-cap review)
-- [medium] A non-Live landing ignores `RemoteHuman=true` and admits the traveller as an autonomous entity: a human whose control source is set to Idle before the transfer arrives at `networkPlayers: 0` and loses its human classification permanently (`src/Puck.World.Server/WorldTransferEscrow.cs:973`). (owner: companion-cap follow-up; from: companion-cap review)
+- A companion that crosses lands autonomous under Idle (its addon driver stays
+  in the world it left), so in the night field nothing moves it, and a return
+  home lands it Idle and no longer an inhabitant, where its addon's Drive is
+  not expected to steer it (unconfirmed). Decide how a companion's driver
+  follows it: the destination world declaring the companion's addon, or the
+  arrival re-adopting its home placement and source.
 
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
