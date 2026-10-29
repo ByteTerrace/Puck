@@ -418,7 +418,10 @@ Route each brief to the cheapest role that fits it (the owner's ruling): a
 brief with a known cause or a specified result, such as content, a document
 change, a world edit or a fix with a repro, goes to `implementer`, even when it
 is large. `specialist` is for an unknown cause or a design call across projects.
-`principal` is for the problems the table names and nothing else. When a lane on
+`principal` is for the problems the table names and nothing else, and its usage
+is conserved (the owner's ruling): an unknown cause starts on `specialist` or
+Astra, and `principal` takes a problem only after one of them has failed to
+crack it. When a lane on
 a cheaper role stalls, escalate that lane; never start on the expensive role
 because a brief is long. Codex is part of the same lineup: Sol is a peer of
 `implementer` and takes the same briefs, and Astra is comparable to `principal`

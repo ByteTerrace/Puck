@@ -15,11 +15,19 @@ public sealed class SdfWallpaperFoldLawTests {
     private const float Tolerance = 0.001f;
     private const float Window = 1.2f;
 
+    // The declaration is the group's property; the fold itself is what proves it, group by group.
     [Fact]
-    public void TheMirrorGroupsAreTheContinuousOnes() => Assert.Equal(
-        actual: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous).ToHashSet(),
-        expected: [SdfWallpaperGroup.Pmm, SdfWallpaperGroup.P4M, SdfWallpaperGroup.P3M1, SdfWallpaperGroup.P6M]
-    );
+    public void TheMirrorGroupsAreTheContinuousOnes() {
+        Assert.Equal(
+            actual: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous).ToHashSet(),
+            expected: [SdfWallpaperGroup.Pmm, SdfWallpaperGroup.P4M, SdfWallpaperGroup.P3M1, SdfWallpaperGroup.P6M]
+        );
+        foreach (var group in Enum.GetValues<SdfWallpaperGroup>()) {
+            var stretch = Stretch(cell: Vector2.One, group: group, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit));
+
+            Assert.True(condition: (SdfWallpaperFold.IsContinuous(group: group) == (stretch <= 1.01f)), userMessage: $"{group} folds a pair {stretch} times farther apart");
+        }
+    }
     [Fact]
     public void EveryAcceptedGroupReadsNoLongerThanItsGeometryAndExactlyWhenContained() {
         var failures = new List<string>();

@@ -24,4 +24,22 @@ float3 sdfOctDecode(float2 p) {
     return normalize(n);
 }
 
+// Maps a bilinear tap at most one texel past an edge back across the octahedron's identified edge.
+// KEEP IN SYNC with SdfOctahedral.BorderSource (whose input includes a one-texel border).
+int2 sdfOctBorderSource(int2 tap, int size) {
+    int last = size - 1;
+    bool mirrorX = (tap.x < 0) || (tap.x > last);
+    bool mirrorY = (tap.y < 0) || (tap.y > last);
+    int2 texel = tap;
+    if (mirrorY) {
+        texel = int2(last - clamp(tap.x, 0, last), (tap.y < 0) ? 0 : last);
+    } else if (mirrorX) {
+        texel = int2((tap.x < 0) ? 0 : last, last - clamp(tap.y, 0, last));
+    }
+    if (mirrorX && mirrorY) {
+        texel = int2((tap.x < 0) ? last : 0, (tap.y < 0) ? last : 0);
+    }
+    return texel;
+}
+
 #endif

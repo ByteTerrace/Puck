@@ -154,15 +154,20 @@ public static partial class WorldDefinitionLoader {
             return false;
         }
 
+        return TrySettleBootValues(documentDirectory: definition.DocumentDirectory, drawn: drawn!, overrides: overrides, reason: out reason, resolved: out resolved, sourceName: sourceName);
+    }
+
+    private static bool TrySettleBootValues(WorldDefinition drawn, string? documentDirectory, string sourceName,
+        out WorldDefinition? resolved, out string reason, Func<WorldDefinition, WorldDefinition>? overrides) {
         // A host override rewrites the document before it is proved, never after: an overridden boot is admitted
         // and compiled exactly once, for the document it will run.
         if (overrides is not null) {
-            drawn = (overrides(arg: drawn!) ?? throw new InvalidOperationException(message: $"{sourceName} boot override returned no document."));
+            drawn = (overrides(arg: drawn) ?? throw new InvalidOperationException(message: $"{sourceName} boot override returned no document."));
         }
 
         // The last step before the one admission: the rows the server installs are the rows validation reads.
         // A draw may rebuild the document from its JSON, which carries no directory; the one the load read is kept.
-        resolved = (WorldStateSettlement.SettleBeforeAdmission(definition: drawn!) with { DocumentDirectory = definition.DocumentDirectory });
+        resolved = (WorldStateSettlement.SettleBeforeAdmission(definition: drawn) with { DocumentDirectory = documentDirectory });
         reason = string.Empty;
 
         return true;

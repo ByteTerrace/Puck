@@ -52,22 +52,34 @@ internal sealed partial class ShaderBuildFixture : IDisposable {
     public string[] CompiledSources() => (File.Exists(path: PathOf(path: "compiles.txt"))
         ? [.. File.ReadAllLines(path: PathOf(path: "compiles.txt")).Where(predicate: static line => (line.Length != 0)).Select(selector: static line => Path.GetFileName(path: line.Trim()))]
         : []);
+    partial void ConfigureFastBuild(XElement project, ref bool configuredTask);
+    partial void TryWriteFastCompiler(ref string? compilerPath);
+
     public void ShaderProject(string body, string buildDependencies = "ResolveProjectReferences", string dxc = FakeDxc) {
         var project = XElement.Parse(text: $"<Project>{body}</Project>");
 
         WriteCompiler(mode: dxc);
+        var toolPath = RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{Configuration}/net11.0/Puck.Shaders.Generator.dll");
         // The output items are evaluated by the import, so the compiler, the backends and the fixture's own cache are
         // selected before it. The SDK sets an intermediate directory the import writes its build record under; this
         // project imports no SDK, so it names the SDK's.
-        project.AddFirst(content: new XElement("PropertyGroup",
+        var properties = new XElement("PropertyGroup",
             new XElement(content: "obj/", name: "IntermediateOutputPath"),
             new XElement(content: "false", name: "PuckComputeShaderDxilEnabled"),
             new XElement(content: "true", name: "PuckShaderSpirvEnabled"),
             new XElement("DxcCommand", CompilerPath),
-            new XElement("PuckShaderCacheDirectory", PathOf(path: "cache"))));
+            new XElement("PuckShaderCacheDirectory", PathOf(path: "cache")));
+        if (File.Exists(path: toolPath)) {
+            properties.Add(content: new XElement(name: "PuckShaderBuildTool", content: [toolPath, new XAttribute(name: "Condition", value: "'$(PuckShaderBuildTool)' == ''")]));
+        }
+        project.AddFirst(content: properties);
         // The shader build runs as an operation of the repository's one inline task, which Directory.Build.targets declares
         // for every project; this project imports neither, so it declares the task itself.
-        project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/PuckBuildTasks.targets"))));
+        var configuredTask = false;
+        ConfigureFastBuild(project: project, configuredTask: ref configuredTask);
+        if (!configuredTask) {
+            project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/PuckBuildTasks.targets"))));
+        }
         project.Add(content: new XElement(name: "Import", content: new XAttribute(name: "Project", value: RepositoryPaths.Resolve(relativePath: "build/Shaders.targets"))));
         project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
         Write(path: "fixture.proj", text: project.ToString());
@@ -110,11 +122,17 @@ internal sealed partial class ShaderBuildFixture : IDisposable {
     public void Dispose() => m_directory?.Dispose();
 
     private void WriteCompiler(string mode) {
+        Write(path: "compiler-mode.txt", text: mode);
+        _ = Directory.CreateDirectory(path: PathOf(path: "started"));
+        string? fastCompiler = null;
+        TryWriteFastCompiler(compilerPath: ref fastCompiler);
+        if (fastCompiler is not null) {
+            CompilerPath = fastCompiler;
+            return;
+        }
         var compiler = (OperatingSystem.IsWindows() ? "fixture-dxc.cmd" : "fixture-dxc.sh");
 
         CompilerPath = Puck.Abstractions.PuckPaths.Normalize(path: PathOf(path: compiler));
-        Write(path: "compiler-mode.txt", text: mode);
-        _ = Directory.CreateDirectory(path: PathOf(path: "started"));
         if (OperatingSystem.IsWindows()) {
             Write(path: "fixture-dxc.cmd", text: "@echo off\r\n\"%SystemRoot%/System32/WindowsPowerShell/v1.0/powershell.exe\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%~dp0fixture-dxc.ps1\" %*\r\nexit /b %errorlevel%\r\n");
             Write(path: "fixture-dxc.ps1", text: WindowsCompiler);

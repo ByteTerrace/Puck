@@ -15,7 +15,6 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
     private const int Height = 810;
     private const int Tile = 16;
     private const int Slabs = 8;
-    private const int Partitions = 3;
 
     private static readonly FixedInterval Zero = I(value: 0);
     private static readonly FixedInterval One = I(value: 1);
@@ -34,7 +33,6 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
         var bounds = Instances(frame: frame);
         var shapes = model.Count(predicate: static entry => (entry.Candidate is not null));
         var certified = model.Count(predicate: static entry => ((entry.Candidate is { } candidate) && ((candidate.Certificate.Flags & SdfTapeCertificate.Certified) != 0)));
-        var studyPartitions = StudyPartitions();
         var rows = ((Height + (Tile - 1)) / Tile);
         var perRow = new TileRowTotals[rows];
 
@@ -44,15 +42,14 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
         try {
             Parallel.For(
                 body: row => perRow[row] = TileRow(camera: camera, bounds: bounds, far: far, instructions: frame.Program.InstructionCount, model: model,
-                    shapes: shapes, studyPartitions: studyPartitions, y: (row * Tile)),
+                    shapes: shapes, y: (row * Tile)),
                 fromInclusive: 0,
                 toExclusive: rows
             );
         } catch (AggregateException failure) when ((failure.InnerExceptions.Count > 0)) {
             ExceptionDispatchInfo.Capture(source: failure.InnerExceptions[0]).Throw();
         }
-        var totals = new Totals[Partitions, Slabs];
-        var studyTotals = new StudyTotals[studyPartitions.Length];
+        var totals = new Totals[Slabs];
         var radiusTotals = new RadiusTotals[Slabs];
         var tiles = 0;
         var maskRejected = 0L;
@@ -64,57 +61,43 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
             maskRejected += row.MaskRejected;
             belowThreshold += row.BelowThreshold;
             foreach (var kind in row.MaskedKinds) { maskedKinds[kind.Key] = (maskedKinds.GetValueOrDefault(key: kind.Key) + kind.Value); }
-            for (var partition = 0; (partition < Partitions); partition++) {
-                for (var slab = 0; (slab < Slabs); slab++) { totals[partition, slab].Merge(other: row.Totals[partition, slab]); }
+            for (var slab = 0; (slab < Slabs); slab++) {
+                totals[slab].Merge(other: row.Totals[slab]);
+                radiusTotals[slab].Add(other: row.Radius[slab]);
             }
-            for (var experiment = 0; (experiment < studyTotals.Length); experiment++) { studyTotals[experiment].Merge(other: row.Study[experiment]); }
-            for (var slab = 0; (slab < Slabs); slab++) { radiusTotals[slab].Add(other: row.Radius[slab]); }
         }
 
         output.WriteLine(message: $"{workload}: camera=(0,2.5,7)->(0,0.8,0) extent={Width}x{Height} tiles={tiles} slabs={Slabs} far={far} shapes={shapes} certified={certified} maskRejected={maskRejected} belowThresholdTiles={belowThreshold}");
         output.WriteLine(message: "Coverage: every tile and slab; certified cone mask; near-plane entry and authored far fallback. No GPU beam outputs are assumed. Counts are exact for these CPU enclosures, not a backend-bit prediction or a march-weighted counter projection.");
-        output.WriteLine(message: "The production partition is quartic; uniform and quadratic partitions are diagnostic comparisons.");
         output.WriteLine(message: "Every quartic slab also walks its identical centre at radius zero. radiusOnlyLive counts normal retained shapes absent from that point mask; remainingOverlap excludes both those shapes and unsupported candidates.");
         foreach (var kind in maskedKinds) { output.WriteLine(message: $"masked {kind.Value}: {kind.Key}"); }
-        var droppedByPartition = new long[Partitions];
+        var sum = new Totals();
+        var radiusSum = new RadiusTotals();
 
-        for (var partition = 0; (partition < Partitions); partition++) {
-            var sum = new Totals();
-            var radiusSum = new RadiusTotals();
+        for (var slab = 0; (slab < Slabs); slab++) {
+            var count = totals[slab];
+            var radiusCount = radiusTotals[slab];
 
-            for (var slab = 0; (slab < Slabs); slab++) {
-                var count = totals[partition, slab];
-
-                sum.Add(other: count);
-                output.WriteLine(message: $"{PartitionName(partition: partition)} slab={slab} considered={count.Considered} finite={count.Finite} dropped={count.Dropped} unsupportedLive={count.UnsupportedLive} overlapLive={count.OverlapLive} radius=[{count.MinRadius:R},{count.MaxRadius:R}] rejects=(certificate:{count.NoCertificate},transform:{count.NoTransform},domain:{count.DomainRejected},primitive:{count.PrimitiveRejected})");
-                if (partition == 2) {
-                    var radiusCount = radiusTotals[slab];
-
-                    radiusSum.Add(other: radiusCount);
-                    ReportRadius(label: $"quartic slab={slab}", normal: count, radius: radiusCount);
-                }
-            }
-            output.WriteLine(message: $"{PartitionName(partition: partition)} total considered={sum.Considered} finite={sum.Finite} dropped={sum.Dropped} certifiedFraction={(((double)sum.Dropped) / sum.Considered):P6} undecidable={sum.OverlapLive} unsupported={sum.UnsupportedLive} possibleFraction=[{(((double)sum.Dropped) / sum.Considered):P6},{(((double)(sum.Dropped + sum.OverlapLive)) / sum.Considered):P6}]");
-            Assert.Equal(actual: ((sum.Dropped + sum.OverlapLive) + sum.UnsupportedLive), expected: sum.Considered);
-            Assert.Equal(actual: (sum.Finite + sum.UnsupportedLive), expected: sum.Considered);
-            Assert.Equal(actual: (((sum.NoCertificate + sum.NoTransform) + sum.DomainRejected) + sum.PrimitiveRejected), expected: sum.UnsupportedLive);
-            if (partition == 2) {
-                ReportRadius(label: "quartic total", normal: sum, radius: radiusSum);
-                Assert.True(condition: (radiusSum.RadiusOnlyLive > 0), userMessage: "The exhaustive camera coverage must exercise candidates retained only by ball radius.");
-            }
-            droppedByPartition[partition] = sum.Dropped;
+            sum.Add(other: count);
+            output.WriteLine(message: $"quartic slab={slab} considered={count.Considered} finite={count.Finite} dropped={count.Dropped} unsupportedLive={count.UnsupportedLive} overlapLive={count.OverlapLive} radius=[{count.MinRadius:R},{count.MaxRadius:R}] rejects=(certificate:{count.NoCertificate},transform:{count.NoTransform},domain:{count.DomainRejected},primitive:{count.PrimitiveRejected})");
+            radiusSum.Add(other: radiusCount);
+            ReportRadius(label: $"quartic slab={slab}", normal: count, radius: radiusCount);
         }
-        ReportStudy(program: frame.Program, tiles: tiles, partitions: studyPartitions, totals: studyTotals);
+        output.WriteLine(message: $"quartic total considered={sum.Considered} finite={sum.Finite} dropped={sum.Dropped} certifiedFraction={(((double)sum.Dropped) / sum.Considered):P6} undecidable={sum.OverlapLive} unsupported={sum.UnsupportedLive} possibleFraction=[{(((double)sum.Dropped) / sum.Considered):P6},{(((double)(sum.Dropped + sum.OverlapLive)) / sum.Considered):P6}]");
+        Assert.Equal(actual: ((sum.Dropped + sum.OverlapLive) + sum.UnsupportedLive), expected: sum.Considered);
+        Assert.Equal(actual: (sum.Finite + sum.UnsupportedLive), expected: sum.Considered);
+        Assert.Equal(actual: (((sum.NoCertificate + sum.NoTransform) + sum.DomainRejected) + sum.PrimitiveRejected), expected: sum.UnsupportedLive);
+        ReportRadius(label: "quartic total", normal: sum, radius: radiusSum);
+        Assert.True(condition: (radiusSum.RadiusOnlyLive > 0), userMessage: "The exhaustive camera coverage must exercise candidates retained only by ball radius.");
         DiagnoseTiles(camera: camera, far: far, entries: model, bounds: bounds, instructions: frame.Program.InstructionCount);
-        Assert.True(condition: (droppedByPartition[2] > 0), userMessage: "No certified candidate lost in the production quartic partition's exhaustive camera coverage.");
+        Assert.True(condition: (sum.Dropped > 0), userMessage: "No certified candidate lost in the production quartic partition's exhaustive camera coverage.");
         Assert.Equal(actual: tiles, expected: 4590);
     }
 
-    // One row of tiles, walked the way a single thread walks the whole extent: the instance mask, then every partition's
-    // slabs, the zero-radius comparison of the production partition, and the diagnostic partition experiments.
-    private static TileRowTotals TileRow(CameraSnapshot camera, InstanceBound[] bounds, float far, int instructions, Entry[] model, int shapes,
-        StudyPartition[] studyPartitions, int y) {
-        var row = new TileRowTotals(partitions: studyPartitions.Length);
+    // One row of tiles, walked the way a single thread walks the whole extent: the instance mask, then the production
+    // quartic partition's slabs and their zero-radius comparison.
+    private static TileRowTotals TileRow(CameraSnapshot camera, InstanceBound[] bounds, float far, int instructions, Entry[] model, int shapes, int y) {
+        var row = new TileRowTotals();
         var mask = new bool[instructions];
         var retained = new bool[instructions];
         var zeroRadiusRetained = new bool[instructions];
@@ -144,51 +127,30 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
                 row.BelowThreshold++;
                 continue;
             }
-            for (var partition = 0; (partition < Partitions); partition++) {
-                for (var slab = 0; (slab < Slabs); slab++) {
-                    var ball = Ball(camera: camera, cone: cone, depthPower: (1 << partition), far: far, slab: slab);
-                    var sample = Walk(entries: selected, ball: ball, retained: retained);
+            for (var slab = 0; (slab < Slabs); slab++) {
+                var ball = Ball(camera: camera, cone: cone, depthPower: 4, far: far, slab: slab);
+                var sample = Walk(entries: selected, ball: ball, retained: retained);
+                var zeroRadius = Walk(entries: selected, ball: ball with { Radius = 0 }, retained: zeroRadiusRetained);
 
-                    row.Totals[partition, slab].Add(sample: sample, radius: ball.Radius);
-                    row.Study[partition].Add(sample: sample, depthUnits: studyPartitions[partition].Width(slab: slab));
-                    if (partition == 2) {
-                        var zeroRadius = Walk(entries: selected, ball: ball with { Radius = 0 }, retained: zeroRadiusRetained);
-
-                        row.Radius[slab].Add(other: CompareRadius(entries: selected, normal: sample,
-                            retained: retained, zeroRadius: zeroRadius, zeroRadiusRetained: zeroRadiusRetained));
-                    }
-                }
-            }
-            for (var experiment = Partitions; (experiment < studyPartitions.Length); experiment++) {
-                var partition = studyPartitions[experiment];
-
-                for (var slab = 0; (slab < partition.SlabCount); slab++) {
-                    var ball = Ball(camera: camera, cone: cone, far: far,
-                        s0: (((float)partition.DepthUnits[slab]) / StudyDepthUnits),
-                        s1: (((float)partition.DepthUnits[(slab + 1)]) / StudyDepthUnits));
-                    var sample = Walk(entries: selected, ball: ball, retained: retained);
-
-                    row.Study[experiment].Add(sample: sample, depthUnits: partition.Width(slab: slab));
-                }
+                row.Totals[slab].Add(sample: sample, radius: ball.Radius);
+                row.Radius[slab].Add(other: CompareRadius(entries: selected, normal: sample,
+                    retained: retained, zeroRadius: zeroRadius, zeroRadiusRetained: zeroRadiusRetained));
             }
         }
         return row;
     }
 
-    private sealed class TileRowTotals(int partitions) {
+    private sealed class TileRowTotals {
         public int Tiles;
         public long MaskRejected;
         public int BelowThreshold;
 
         public readonly SortedDictionary<string, long> MaskedKinds = new(comparer: StringComparer.Ordinal);
-        public readonly Totals[,] Totals = new Totals[Partitions, Slabs];
-        public readonly StudyTotals[] Study = new StudyTotals[partitions];
+        public readonly Totals[] Totals = new Totals[Slabs];
         public readonly RadiusTotals[] Radius = new RadiusTotals[Slabs];
     }
 
-    private static string PartitionName(int partition) => partition switch { 0 => "uniform", 1 => "quadratic", _ => "quartic" };
-    private static Sample Walk(Entry[] entries, BallDomain ball, bool[] retained, bool tighten = false,
-        Action<Entry, Range, FixedInterval>? trace = null) {
+    private static Sample Walk(Entry[] entries, BallDomain ball, bool[] retained, bool tighten = false) {
         Array.Clear(array: retained);
         var current = Range.Point(value: 1e9f);
         var saved = Range.Unknown;
@@ -241,7 +203,6 @@ public sealed partial class SdfTapePredictionLawTests(ITestOutputHelper output) 
             var candidate = shape.Bounds(ball: ball, rejection: out var rejection);
 
             if (tighten && !candidate.IsUnbounded) { candidate = shape.Tighten(ball: ball, centred: candidate); }
-            trace?.Invoke(arg1: entry, arg2: current, arg3: candidate);
 
             rejections[((int)rejection)]++;
             var known = !candidate.IsUnbounded;

@@ -70,9 +70,10 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// file the held compile read still holds the bytes it read.</summary>
     public static WorkKind PuckCacheHits { get; } = new(name: "world.boot.puck-cache-hits", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting strict document parses: one per composed JSON text bound to a
-    /// <see cref="WorldDefinition"/>. A compiled world's <c>DEFN</c> load parses the drawn definition as the work of
-    /// a <see cref="CompiledHits"/> and counts none, so a boot counts the same parses whether or not it finds a
-    /// compiled world.</summary>
+    /// <see cref="WorldDefinition"/>. A boot whose compiled world is keyed by its composed bytes parses only the drawn
+    /// definition, and that <c>DEFN</c> load counts the one parse; a boot that parses its authored definition counts that
+    /// parse and not its <c>DEFN</c> load. Either way a boot counts the same parses whether or not it finds a compiled
+    /// world.</summary>
     public static WorkKind Parses { get; } = new(name: "world.boot.parses", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting whole-document validations: one per run of the validator over a
     /// <see cref="WorldDefinition"/>, local or with its adjacency proofs. One admitted load counts one; an environment
