@@ -1590,7 +1590,8 @@ that entry's own authored grant templates. Each door refuses by its OWN named
 spelling (`version-mismatch: …` vs `identity-refused: …`)—the two are never
 conflated. Only once BOTH doors pass does population admission run
 (`WorldServer.TryAdmitPeerConnection`, refused by name when the entity table
-has no free slot or the document's `networkPlayers` admission cap is already met); every
+has no free slot or the document's `networkPlayers` admission cap, which counts remote
+humans only, is already met); every
 subsequent frame
 (decoded through the SAME `WorldFrameCodec`/`WorldSubmissionCodec` leaves the
 loopback and tape use), and disconnect
