@@ -87,7 +87,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
-| [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the corpus inventory, the shipped-world state baselines, the Maths law ledger, the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
+| [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
 | [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
@@ -983,10 +983,9 @@ against the merge base of `HEAD` and `--merge-base` (default
 12. `shaders generate`: `puck shaders generate --check`.
 13. `branding`: `puck branding --check`.
 14. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-15. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
-16. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-17. `parity`: `puck parity` when selected, only with `--gpu`.
-18. `Puck.World.Tests`: device suite, only with `--gpu`.
+15. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+16. `parity`: `puck parity` when selected, only with `--gpu`.
+17. `Puck.World.Tests`: device suite, only with `--gpu`.
 19. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
 20. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
 21. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
@@ -4118,7 +4117,6 @@ baseline is what a recording replaces; a run that does not write its records, or
 
 | Artifact | Committed files | Owning tests |
 |---|---|---|
-| `corpus-inventory` | `tests/Puck.State.Rebuild.Corpus/inventory.md` | `CorpusInventoryTests` |
 | `browser-parity` | `tests/Puck.World.Browser.Tests/Fixtures/browser-parity/expected.json` | `BrowserParityRecordingTests` |
 
 The `state` baseline and its tests, and the tictactoe state hashes `browser-parity`

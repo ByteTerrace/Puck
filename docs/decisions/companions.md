@@ -45,6 +45,20 @@ it from home makes it a Live traveller, which counts as a human under the cap
 rule, ties its movement to the link and needs the link's deliveries on the
 replay tape.
 
+### Open question for the owner: should the driver travel with the body?
+
+Two of the three families, reviewing the open items after this decision
+landed, would instead let the companion's driver travel as part of its
+continuation and run at the destination under that world's grants, so a
+destination never has to declare a visitor's addon and a companion is never
+refused for want of a declaration. Their strongest argument is that the
+declaration rule makes every world that wants companions duplicate a
+particular addon's pin, and leaves a companion inert or refused in any world
+whose author did not; the decision above answers that no world runs behaviour
+its author never chose, and that migrating code needs a checkpoint of add-on
+memory that ordinary checkpoints refuse. The decision stands as written until
+the owner rules on the dissent.
+
 ## A world that does not take it sends it home
 
 A companion is only ever where a world has said it may be; otherwise it is

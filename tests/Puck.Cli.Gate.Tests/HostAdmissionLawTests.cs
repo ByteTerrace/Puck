@@ -86,7 +86,7 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("baselines corpus-inventory", false, false, () => Sample(gpu: "Puck.World.Tests 7"), clock, _ => Assert.Fail(message: "a CPU step must not wait on the GPU"), error, CancellationToken.None, Thresholds));
+        Assert.True(condition: HostAdmission.Wait("baselines browser-parity", false, false, () => Sample(gpu: "Puck.World.Tests 7"), clock, _ => Assert.Fail(message: "a CPU step must not wait on the GPU"), error, CancellationToken.None, Thresholds));
         Assert.Equal(expected: "", actual: error.ToString());
 
         var calls = 0;
