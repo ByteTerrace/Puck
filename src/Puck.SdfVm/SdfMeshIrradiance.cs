@@ -1152,6 +1152,30 @@ public sealed class SdfMeshIrradiance {
             return true;
         }
     }
+    /// <summary>Reads a traced static light's visibility using the published gather, as the views shader does.</summary>
+    /// <param name="point">The receiver position.</param>
+    /// <param name="normal">The receiver's unit normal.</param>
+    /// <param name="lightIndex">The lights-table index.</param>
+    /// <returns>The weighted visible share.</returns>
+    public float LightVisibility(Vector3 point, Vector3 normal, int lightIndex) {
+        if ((uint)lightIndex >= (32u * SdfMeshIrradianceProbe.LightWords)) { return 1f; }
+        lock (m_gate) {
+            Span<(int X, int Y, int Z)> cells = stackalloc (int, int, int)[8];
+            Span<float> weights = stackalloc float[8];
+            var probes = new Corners();
+            Gather(point: point, normal: normal, layout: m_layout, low: m_low, readable: true,
+                cells: cells, cornerWeights: weights, cornerProbes: ref probes);
+            var visible = 0f;
+            var total = 0f;
+            for (var corner = 0; corner < 8; corner++) {
+                if (weights[corner] <= 0f) { continue; }
+                if ((probes[corner].Lights[lightIndex >> 5] & (1u << (lightIndex & 31))) != 0u) { visible += weights[corner]; }
+                total += weights[corner];
+            }
+            return (total > 0f) ? (visible / total) : 1f;
+        }
+    }
+
     /// <summary>Describes the eight probes about a receiver as the views pass gathers them: the volume's spacing and
     /// window, then one line a corner with its cell, where its probe stands (its centre plus the offset the trace moved
     /// it by), the share of its rays that met back faces, whether it is valid, its sweeps, and the terms of its weight at the receiver (trilinear share, facing, the depth visibility, whether it lies in front) with the weight it answers with.</summary>

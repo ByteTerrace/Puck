@@ -15,6 +15,42 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
+    public void AReceiverBehindAnOccluderBesideAnOpenEdgeStaysDark() {
+        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(1f, -10f, -10f), new Vector3(1.1f, 0.11f, 10f)))]);
+        var depth = new uint[SdfMeshIrradianceProbe.DepthSize * SdfMeshIrradianceProbe.DepthSize];
+        var sky = new float[6];
+        SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 60f, depth, sky);
+        var toward = new Vector3(2f, 0.19f, 0f);
+        Assert.False(scene.Unblocked(Vector3.Zero, Vector3.Normalize(toward), toward.Length()));
+        var visibility = SdfMeshProbeDepth.Visibility(depth, toward);
+        Assert.True(visibility < 0.05f, $"silhouette visibility={visibility}");
+    }
+
+    [Fact]
+    public void ASealedEnclosureWithALightBeyondItsWallStaysDark() {
+        var frame = Frame() with { TickLocked = true, IndirectBounces = 0 };
+        // No lattice centre fits in this sealed 18-cm enclosure; the light is above its roof.
+        frame = frame with { MeshDraws = [.. frame.MeshDraws,
+            Draw(mesh: Box(new Vector3(-10f, 0f, -10f), new Vector3(-0.09f, 4f, 10f))),
+            Draw(mesh: Box(new Vector3(0.09f, 0f, -10f), new Vector3(10f, 4f, 10f))),
+            Draw(mesh: Box(new Vector3(-0.09f, 0f, -10f), new Vector3(0.09f, 4f, -0.09f))),
+            Draw(mesh: Box(new Vector3(-0.09f, 0f, 0.09f), new Vector3(0.09f, 4f, 10f))),
+        ] };
+        var volume = new SdfMeshIrradiance();
+        _ = Trace(volume, frame);
+        Assert.Equal(0f, volume.LightVisibility(new Vector3(0f, 2f, 0f), Vector3.UnitY, 0));
+    }
+
+    [Fact]
+    public void DepthTracingUsesAtMostOneRayPerTexelPerProbe() {
+        var volume = new SdfMeshIrradiance();
+        var (parameters, _) = Trace(volume, Frame() with { TickLocked = true, IndirectBounces = 0, MeshDraws = [] }, SdfIndirectTier.Medium);
+        var description = volume.Describe();
+        var count = long.Parse(description.Split("depth-rays=")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(count, 1L, (long)parameters.Dims.X * parameters.Dims.Y * parameters.Dims.Z * 256L);
+    }
+
+    [Fact]
     public void AProbesPublishedSkyIsItsOwnMeasuredVisibility() {
         var volume = new SdfMeshIrradiance();
 
