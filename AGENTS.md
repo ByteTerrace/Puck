@@ -28,6 +28,9 @@ agent works in that mode by default, without asking:
   default, are such leaks. A feature's look is that feature's material, style
   or skin, opted into where it is used. A leak is fixed when it is found, not
   recorded for later.
+- The proper fix is always preferred (the owner's ruling). When a stopgap and a
+  fix at the cause both exist, do the fix; never put a choice between stopgaps
+  to the owner.
 - The owner decides only what the engine should do, how it should look, and
   the owner-only actions (pushing `main`, deploying, anything outside the
   repository). Everything else is yours: decide it, do it, and report what you
