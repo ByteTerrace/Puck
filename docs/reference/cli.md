@@ -2459,7 +2459,9 @@ only arming. A reseed that restarts zero registrations fails. Authority stays
 paused during bake waits and coordinator calls; explicit tick waits resume and
 pause within one call, and each pinned timeline pauses at its capture tick.
 Missing or refused prelude, reset, frame, motion and after lines
-fail the stop. A tool is unmeasured when it did not finish within its
+fail the stop. A stop's optional `expectedMotion` regular expression must match
+its held body pose and rig; the outdoor stops require the destination instance,
+so a capture before a portal crossing completes fails. A tool is unmeasured when it did not finish within its
 ticks; a stop is unmeasured when the sweep could not reach it. Unmeasured fails
 the run like red. A signal the plan marks `recheck` (the watchdog, the rule
 failures, the addons) is read again after the tour as `<name>.after-tour`.
