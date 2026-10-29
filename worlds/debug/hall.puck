@@ -790,6 +790,18 @@ prototypes {
           z1: landingSouth,
           slot: hallTrim
         )
+        // Flight B's east side between the flight's foot and the lift shaft's west wall (which begins at z 36.1): the
+        // stairwell is walled where no flight or landing opens, and the storey's exit stays at z below stairStart.
+        hallBox(
+          label: $"east-{k}",
+          x0: 14.1,
+          x1: 14.4,
+          y0: ((storey * k) + 0.05),
+          y1: ((storey * (k + 1)) + 0.05),
+          z0: stairStart,
+          z1: 36.1,
+          slot: hallTrim
+        )
       }
       // Level 3's floor is holed over the whole stairwell, as every level's is, so the Moth (2.06 m tall) keeps her
       // headroom on the last landing; a rail stands round the well where no flight arrives.
@@ -801,6 +813,16 @@ prototypes {
         y1: 14.55,
         z0: stairStart,
         z1: landingSouth,
+        slot: hallTrim
+      )
+      hallBox(
+        label: "rail-3-east",
+        x0: 14.1,
+        x1: 14.4,
+        y0: 13.55,
+        y1: 14.55,
+        z0: stairStart,
+        z1: 36.1,
         slot: hallTrim
       )
       hallBox(

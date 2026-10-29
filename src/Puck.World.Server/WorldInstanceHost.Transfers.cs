@@ -659,11 +659,23 @@ public sealed partial class WorldInstanceHost {
                         BoundaryEvents: boundaryEvents
                     );
                 }
+            } else if (transfer.ArrivalPose is { } arrivalPose) {
+                // An explicit pose (body.pose spawn:<id> from inside another instance) lands the member standing still
+                // where the destination's spawn point is, through the same landing a mapped arrival uses.
+                arrivalPosition = arrivalPose.Position;
+                arrivalYaw = arrivalPose.YawRadians;
+                arrivalPlanarVelocity = default;
+                arrivalVerticalVelocity = default;
+                arrivalTurn = WorldFrameIsometry.AccumulateTurn(
+                    arrivalYaw: arrivalYaw,
+                    departureYaw: yaw,
+                    travelTurn: departureTurn
+                );
             }
 
             commitMembers.Add(item: new WorldTransferCommitMember(
                 Profile: profile?.Project(),
-                HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped),
+                HasMappedArrival: ((transfer.Arrival == WorldPortalArrival.Mapped) || (transfer.ArrivalPose is not null)),
                 BodyMotionProgramName: dynamicState.BodyMotionProgramName,
                 Position: arrivalPosition,
                 YawRadians: arrivalYaw,
@@ -1690,10 +1702,12 @@ public sealed partial class WorldInstanceHost {
     /// <param name="partyAllOrNothing">Whether the cohort binds as one transaction.</param>
     /// <param name="borderCapacity">The optional capacity authored on the crossed border.</param>
     /// <param name="border">The stable border identity used for destination admission accounting.</param>
+    /// <param name="arrivalPose">The pose each landed member takes at the destination, standing still, in place of its
+    /// spawn arrival; omit for the destination's ordinary seat spawn. Not combined with a mapped <paramref name="arrival"/>.</param>
     /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
     /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
     /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null, FixedSpawnPoint? arrivalPose = null) {
         var transferId = (explicitTransferId ?? MintTransferId(sourceInstance: sourceInstance));
 
         m_pendingTransfers.Enqueue(item: new PendingTransfer(
@@ -1718,7 +1732,8 @@ public sealed partial class WorldInstanceHost {
             FullPolicy: fullPolicy,
             PartyAllOrNothing: partyAllOrNothing,
             BorderCapacity: borderCapacity,
-            Border: (border ?? "transfer")
+            Border: (border ?? "transfer"),
+            ArrivalPose: arrivalPose
         ));
 
         return transferId;
@@ -1916,6 +1931,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="Attempt">How many times a retryable capacity refusal has already re-queued this crossing.</param>
     /// <param name="RecoveryDestinationName">The captured resolver destination used only for outcome narration
     /// after restart. Recovery never resolves or re-enqueues this already-detached crossing.</param>
+    /// <param name="ArrivalPose">The pose each landed member takes at the destination, standing still, in place of its
+    /// spawn arrival, or <see langword="null"/> for the ordinary arrival.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -1941,7 +1958,8 @@ public sealed partial class WorldInstanceHost {
         string Border,
         bool ScopeProofAlreadyVerified = false,
         int Attempt = 0,
-        string? RecoveryDestinationName = null
+        string? RecoveryDestinationName = null,
+        FixedSpawnPoint? ArrivalPose = null
     );
     // One landed member's captured state — enough to restore it exactly at the source if the transfer
     // aborts after it already joined the destination. Body color/position/yaw/dynamic state/designations are all

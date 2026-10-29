@@ -23,7 +23,7 @@ let traversalGalleryGoals = [
   { x: 11.2, y: 0.05, z: 32.5 } // gallery stairwell approach
   { x: 11.2, y: 2.3, z: 38.5 } // flight A and half landing
   { x: 13.2, y: 2.3, z: 38.5 } // cross landing around divider
-  { x: 13.2, y: 4.55, z: 33.8 } // flight B to first floor
+  { x: 13.7, y: 4.55, z: 33.2 } // flight B to first floor, clear of the stairwell wall's south end at z 34.5
   { x: 15.9, y: 4.55, z: 35.3 } // call lift on level 1
   { x: 15.9, y: 4.55, z: 38.05 } // enter car, then request ground
   { x: 15.9, y: 0.05, z: 38.05 } // ride down
