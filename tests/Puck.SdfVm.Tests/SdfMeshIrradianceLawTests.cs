@@ -225,6 +225,30 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.True(condition: (inland[(-1, 1, 0)] > 0.1f));
         Assert.True(condition: (inland.GetValueOrDefault(key: (0, 0, 0)) < (0.5f * west[(0, 0, 0)])));
     }
+    /// <summary>A lattice centre on a wall's face is rejected: the face under the origin is never a ray's first hit
+    /// (a hit under 0.1 mm is ignored), so the rays into the wall meet its far face from inside, past the inside share.
+    /// A probe beyond the wall's end whose ray runs along the face's plane traces through along it, since the coplanar
+    /// ray meets none of that face's triangles: the neighbour on the face is seen, and the ray's plane stays open.</summary>
+    [Fact]
+    public void AProbeOnAWallFaceIsRejectedAndARayAlongTheFacePlaneTracesThrough() {
+        // A wall whose +X face lies on x = 0.5, the plane of cell 0's centres, from z = 0 to z = 6: the probe at
+        // (0.5, 0.5, 0.5) stands on the face, and the probe at (0.5, 0.5, -0.5) beyond its south end.
+        var frame = Frame() with {
+            IndirectBounces = 0,
+            MeshDraws = [
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: 10f, y: 0f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: 0f), high: new Vector3(x: 0.5f, y: 3f, z: 6f))),
+            ],
+        };
+        var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
+        var onFace = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: 0, y: 0, z: 0) * SdfMeshIrradianceProbe.ProbeWords));
+        var beyondEnd = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: -1);
+        var plusZ = NeighbourIndex(x: 0, y: 0, z: 1);
+
+        Assert.Equal(expected: SdfMeshIrradianceProbe.InvalidFlag, actual: (onFace[0] & SdfMeshIrradianceProbe.InvalidFlag));
+        Assert.Equal(expected: Vector4.Zero, actual: Plane(index: plusZ, probe: beyondEnd));
+        Assert.Equal(expected: 1u, actual: ((beyondEnd[SdfMeshIrradianceProbe.NeighboursWord] >> plusZ) & 1u));
+    }
     // The answering probes about an untraced receiver facing west, by cell.
     private static Dictionary<(int X, int Y, int Z), float> Gather(SdfMeshIrradiance volume, Vector3 point) {
         var cells = new (int X, int Y, int Z)[8];
