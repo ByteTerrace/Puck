@@ -105,6 +105,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   completed cells retain their measurements when a move adds new cells, and
   bounce reads use the current cache clamped to that window. A full tour and a
   direct teleport need not have the same bounce history.
+  Match the executed camera commands too: replacing an unanswered input recenter
+  with `view.recenter 1` resets the authored orbit/boom and can reverse a chase
+  view. Recapture the baseline with the same measured commands before attributing
+  those image differences to lighting. Explicit camera eyes/targets avoid this.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.

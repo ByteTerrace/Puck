@@ -134,8 +134,8 @@ GPU), compared stop by stop.
 
 ### Lighting and GI
 
-Owner: next lighting batch (rendering, principal-grade review) · one high, six
-medium, lows · Next: the high silhouette leak, in flight in probe-depth-fix.
+Owner: next lighting batch (rendering, principal-grade review) · Next: measured
+GI cost and the remaining enclosure, corner and exposure findings.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
