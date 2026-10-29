@@ -165,7 +165,10 @@ which handles control state (`0x42`, `0x45`, `0x47`), battery (`0x43`) and pairi
 separately. We assign no control, power or pairing meaning to `0x7b` without a
 verified layout. It publishes no sample, changes no held state, does not refresh
 stream liveness, and does not consume the unknown-report diagnostic. Synthetic
-54-byte reports exercise that policy; live receiver verification remains owed.
+54-byte reports exercise that policy, and the owner's receiver confirms it live: over
+about 75 seconds streaming, `world.devices` read `gamepad1 'SteamControllerTriton'=unassigned
+battery 94%` before any press, and no unknown-report diagnostic fired for `0x7b`. The
+receiver exposes four controller slots, each dormant until a controller streams.
 
 ### Motion fusion
 

@@ -32,11 +32,11 @@ action registers, and the identity of its preferred driver (an addon pinned by
 hash). It never carries executable code, add-on memory, or a stream of control
 from home.
 
-The destination decides from its own document. If it mounts the same pinned
-driver for that role, that driver runs the companion, and the companion behaves
-exactly as at home. If its author declares a different driver for the role, that
-one runs instead, by the author's choice. If it declares nothing for the role, it
-refuses the companion at reservation.
+The destination decides from its own document. If it accepts visiting drivers
+for the role, or mounts the same pinned driver, that driver runs the companion,
+and the companion behaves exactly as at home. If its author declares a different
+driver for the role, that one runs instead, by the author's choice. If it
+declares nothing for the role, it refuses the companion at reservation.
 
 All three drafts rejected the alternatives: migrating the driver's code puts
 code from another machine in a world that never chose it and needs a
@@ -45,19 +45,22 @@ it from home makes it a Live traveller, which counts as a human under the cap
 rule, ties its movement to the link and needs the link's deliveries on the
 replay tape.
 
-### Open question for the owner: should the driver travel with the body?
+### A world may accept visiting drivers by policy
 
-Two of the three families, reviewing the open items after this decision
-landed, would instead let the companion's driver travel as part of its
-continuation and run at the destination under that world's grants, so a
-destination never has to declare a visitor's addon and a companion is never
-refused for want of a declaration. Their strongest argument is that the
-declaration rule makes every world that wants companions duplicate a
-particular addon's pin, and leaves a companion inert or refused in any world
-whose author did not; the decision above answers that no world runs behaviour
-its author never chose, and that migrating code needs a checkpoint of add-on
-memory that ordinary checkpoints refuse. The decision stands as written until
-the owner rules on the dissent.
+Two of the three families, reviewing the open items after the first draft,
+argued that the driver should travel with the body: otherwise every world that
+wants companions duplicates a particular addon's pin, and a companion is inert
+or refused wherever an author did not. The lead settled the dissent (the owner
+deferred the design to the team) by keeping both halves: a world's role
+declaration has a fourth choice, `accept`. A world that accepts runs the
+visitor's own pinned driver, resolved by its hash from the content store and
+verified, mounted in the world's own addon runtime under that world's fuel,
+budget and grants (Drive over the arriving companion only). The author still
+chooses, so no world runs behaviour it never agreed to; a companion is welcome
+in every world that accepts, with nothing duplicated; and because lasting state
+lives in registers, not in add-on memory, nothing new has to be checkpointed.
+The Puck standard package (`worlds/standard/`) declares `accept` for the
+companion role, so every world that imports it takes companions as they are.
 
 ## A world that does not take it sends it home
 
@@ -104,7 +107,8 @@ a full world refuses at reservation.
 The work, in the "Transfers, federation and server" packet of the
 [open items](../plans/open-items.md#transfers-federation-and-server): the role
 and preferred-driver fields on the reservation member; the destination's role
-declaration (a driver pin, a substituted driver, or nothing); refusal at
+declaration (`accept`, a driver pin, a substituted driver, or nothing), with
+`worlds/standard/` declaring `accept` for the companion role; refusal at
 reservation with the player's notice; home re-adoption by incarnation with the
 away placement counted as present (which also fixes a returning companion
 landing detached at its destination slot); placement- or group-keyed driver
