@@ -510,8 +510,11 @@ public sealed partial class WorldPersistence {
     /// <see langword="null"/> for a document that names none.</param>
     /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A replay tape's start
     /// checkpoint carries no owned documents, so its re-drive keeps every seat on the projection the tape pinned.</param>
+    /// <param name="authorityIdentity">The namespace the restored authority mints entity addresses under, or
+    /// <see langword="null"/> for <paramref name="instanceIdentity"/> (see the <see cref="WorldServer"/>
+    /// constructor).</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -523,6 +526,7 @@ public sealed partial class WorldPersistence {
         var population = new WorldPopulation(definition: definition);
         var server = new WorldServer(
             admission: admission,
+            authorityIdentity: authorityIdentity,
             definition: definition,
             envelope: new WorldRenderEnvelope(),
             instanceIdentity: instanceIdentity,

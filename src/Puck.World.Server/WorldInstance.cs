@@ -119,6 +119,9 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>This row's own next transfer id counter — advances by exactly one per transfer this row
     /// SOURCES, a pure function of enqueue order, never wall-clock, RNG, or tick-of-entry.</summary>
     public ulong NextTransferId { get; set; }
+    /// <summary>Gets the ids of the transfers this row has sourced and drained — the duplicate check every queued transfer
+    /// from this lifetime of the row passes before it touches anything.</summary>
+    public WorldDrainedTransferIds DrainedTransfers { get; } = new();
     /// <summary>This row's own document origin.</summary>
     public WorldDocumentOrigin Origin { get; set; }
     /// <summary>The machine host this instance owns and disposes, or <see langword="null"/> when the container

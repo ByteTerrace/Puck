@@ -23,15 +23,21 @@ public sealed partial class WorldInstanceHost {
         // copied to ordinary locals once, up front, for every narration below to close over.
         var transferId = transfer.TransferId;
         var sourceInstanceName = transfer.SourceInstance;
-        var appliedKey = (transfer.SourceInstance, transfer.TransferId);
-        var hadAppliedHighWater = m_appliedTransferHighWater.TryGetValue(
+        // The lifetime that queued the transfer, never whatever runs under its name now: a name started again is
+        // another authority, and its slots hold other bodies.
+        var source = ((m_instances.TryGetValue(
             key: transfer.SourceInstance,
-            value: out var previousAppliedHighWater
-        );
+            value: out var running
+        ) && ((transfer.Source is null) || ReferenceEquals(
+            objA: running,
+            objB: transfer.Source
+        )))
+            ? running
+            : null);
 
         if (
-            (hadAppliedHighWater && (transfer.TransferId <= previousAppliedHighWater)) ||
-            !m_appliedTransferIds.Add(item: appliedKey)
+            (source is not null) &&
+            !source.DrainedTransfers.TryDrain(transferId: transfer.TransferId)
         ) {
             if (m_narration.HasNarrationSink) {
                 m_narration.Narrate(
@@ -42,23 +48,13 @@ public sealed partial class WorldInstanceHost {
 
             return;
         }
-        m_appliedTransferHighWater[transfer.SourceInstance] = transfer.TransferId;
-        var appliedSource = transfer.SourceInstance;
-        var appliedTransferId = transfer.TransferId;
-
-        foreach (var old in m_appliedTransferIds.Where(predicate: candidate => (string.Equals(
-            a: candidate.SourceInstance,
-            b: appliedSource,
-            comparisonType: StringComparison.Ordinal
-        ) && (candidate.TransferId < appliedTransferId))).ToArray()) {
-            _ = m_appliedTransferIds.Remove(item: old);
-        }
 
         // A pose carrying a seat home moves its traveller, not its old slot: a transfer drained ahead of it can have
-        // carried the traveller on and landed another body in the slot it left.
+        // carried the traveller on, stopped the instance it left, and landed another body in the slot it left.
         if (
             (transfer.Posed is { } posedTraveller) &&
             !FollowPosedTraveller(
+                source: source,
                 transfer: in transfer,
                 traveller: posedTraveller.Incarnation
             )
@@ -66,14 +62,13 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        if (!m_instances.TryGetValue(
-            key: transfer.SourceInstance,
-            value: out var source
-        )) {
+        if (source is null) {
             if (m_narration.HasNarrationSink) {
                 m_narration.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} refused (no instance named '{sourceInstanceName}')]"
+                    text: ((running is null)
+                        ? $"[world.transfer: transfer={transferId} refused (no instance named '{sourceInstanceName}')]"
+                        : $"[world.transfer: transfer={transferId} refused ('{sourceInstanceName}' stopped after queuing it; the instance running under that name now is another lifetime)]")
                 );
             }
 
@@ -200,6 +195,20 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // Each member is still the traveller it was when the transfer was queued: a transfer drained ahead of this one
+        // can have carried it on and left its slot empty or landed another body there, which this transfer never
+        // meant. A non-atomic party checks each member as it splits.
+        if (
+            (transfer.PartyAllOrNothing || (members.Length == 1)) &&
+            !MembersAreTheirTravellers(
+                members: members,
+                source: source,
+                transfer: in transfer
+            )
+        ) {
+            return;
+        }
+
         if (!TryResolveWorldPeerCall(
             authority: out var targetAuthority,
             reason: out var destinationReason,
@@ -261,11 +270,14 @@ public sealed partial class WorldInstanceHost {
                 var member = members[ordinal];
 
                 ApplyTransfer(transfer: transfer with {
-                    TransferId = MintUnappliedTransferId(sourceInstance: transfer.SourceInstance),
+                    TransferId = MintTransferId(source: source),
                     Scope = TransferScope.Body,
                     SourceSlot = member,
                     Destination = splitDestination,
                     FrozenCohortSlots = [member],
+                    Travellers = (((transfer.Travellers is { } named) && (ordinal < named.Count))
+                        ? [named[ordinal]]
+                        : null),
                     PartyAllOrNothing = true,
                     TestForceJoinRefusalOrdinal = ((transfer.TestForceJoinRefusalOrdinal == ordinal)
                     ? 0
@@ -393,12 +405,7 @@ public sealed partial class WorldInstanceHost {
             );
 
             if (willRetry) {
-                _ = m_appliedTransferIds.Remove(item: appliedKey);
-                if (hadAppliedHighWater) {
-                    m_appliedTransferHighWater[transfer.SourceInstance] = previousAppliedHighWater;
-                } else {
-                    _ = m_appliedTransferHighWater.Remove(key: transfer.SourceInstance);
-                }
+                source.DrainedTransfers.Undrain(transferId: transfer.TransferId);
                 m_pendingTransfers.Enqueue(item: (transfer with { Attempt = (transfer.Attempt + 1) }));
             } else {
                 CloseAdjacencyAfterRefusal(
@@ -1230,11 +1237,17 @@ public sealed partial class WorldInstanceHost {
         var held = new Dictionary<int, ulong>();
 
         void Hold(in PendingTransfer transfer) {
-            if (!string.Equals(
+            if (
+                !string.Equals(
                 a: transfer.SourceInstance,
                 b: instance.Name,
                 comparisonType: StringComparison.Ordinal
-            )) {
+            ) ||
+                ((transfer.Source is not null) && !ReferenceEquals(
+                objA: transfer.Source,
+                objB: instance
+            ))
+            ) {
                 return;
             }
 
@@ -1311,68 +1324,59 @@ public sealed partial class WorldInstanceHost {
             site: site
         );
     }
-    // Deterministic, resolver-ordered — the ONE place a transfer id is minted, scoped to the SOURCE ROW's own
-    // counter (ids are already scoped (SourceInstance, TransferId) in m_appliedTransferIds and by sourceAuthority on
-    // the wire, so a per-row counter loses nothing and keeps a row's checkpoint self-contained).
-    // Returns whether a posed transfer's own source slot still holds its traveller. Otherwise the traveller is sought,
-    // by its mobility incarnation, in every instance this host runs in name order; found away from home it is carried
-    // from there under a fresh id of that source, and found at home or nowhere the pose is refused by name. Either way
-    // this transfer is then spent.
-    private bool FollowPosedTraveller(in PendingTransfer transfer, WorldEntityAddress traveller) {
+    // Returns whether a posed transfer's own source slot, in the lifetime that queued it, still holds its traveller.
+    // Otherwise the traveller is sought by its mobility incarnation, which names one body among every instance this host
+    // runs. Found away from home it is carried from there under a fresh id of the instance it stands in, which leaves
+    // every id that instance queued earlier to drain in its turn (WorldDrainedTransferIds); found at home, nowhere, or in
+    // more than one body, the pose is refused by name. Either way this transfer is then spent.
+    private bool FollowPosedTraveller(WorldInstance? source, in PendingTransfer transfer, WorldEntityAddress traveller) {
         if (
-            m_instances.TryGetValue(
-            key: transfer.SourceInstance,
-            value: out var source
-        ) &&
-            (FindTraveller(
+            (source is not null) &&
+            (OccupantIncarnation(
             instance: source,
-            traveller: traveller,
-            onlySlot: transfer.SourceSlot
-        ) >= 0)
+            slot: transfer.SourceSlot
+        ) == traveller)
         ) {
             return true;
         }
 
         var transferId = transfer.TransferId;
         var sourceName = transfer.SourceInstance;
-        string? foundName = null;
-        var foundSlot = -1;
-
-        foreach (var name in m_instances.Keys.Order(comparer: StringComparer.Ordinal)) {
-            foundSlot = FindTraveller(
-                instance: m_instances[name],
-                traveller: traveller,
-                onlySlot: null
-            );
-
-            if (foundSlot >= 0) {
-                foundName = name;
-                break;
-            }
-        }
+        var carriers = LocateTraveller(
+            found: out var found,
+            foundSlot: out var foundSlot,
+            traveller: traveller
+        );
 
         if (
-            (foundName is null) ||
+            (found is null) ||
+            (carriers != 1) ||
             string.Equals(
-            a: foundName,
+            a: found.Name,
             b: BootInstanceName,
             comparisonType: StringComparison.Ordinal
         )
         ) {
             if (m_narration.HasNarrationSink) {
+                var why = carriers switch {
+                    0 => $"left '{sourceName}' for no instance this host runs; pose it again",
+                    1 => $"left '{sourceName}' and is already home; pose it again",
+                    _ => $"is carried by {carriers} bodies this host runs, and an incarnation names one traveller",
+                };
+
                 m_narration.Narrate(
                     channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} refused (the traveller {traveller} the pose names left '{sourceName}' {((foundName is null) ? "for no instance this host runs" : "and is already home")}; pose it again)]"
+                    text: $"[world.transfer: transfer={transferId} refused (the traveller {traveller} the pose names {why})]"
                 );
             }
 
             return false;
         }
 
-        var followedId = MintUnappliedTransferId(sourceInstance: foundName);
+        var followedId = MintTransferId(source: found);
 
         if (m_narration.HasNarrationSink) {
-            var followedName = foundName;
+            var followedName = found.Name;
             var followedSlot = foundSlot;
 
             m_narration.Narrate(
@@ -1382,53 +1386,96 @@ public sealed partial class WorldInstanceHost {
         }
 
         ApplyTransfer(transfer: transfer with {
-            SourceInstance = foundName,
+            Source = found,
+            SourceInstance = found.Name,
             SourceSlot = foundSlot,
             TransferId = followedId,
+            Travellers = [traveller],
         });
 
         return false;
     }
-    // Returns the slot of one instance holding the traveller with this mobility incarnation (only onlySlot, when
-    // given), or -1.
-    private static int FindTraveller(WorldInstance instance, WorldEntityAddress traveller, int? onlySlot) => instance.Server.ExecuteAuthorityOperation(operation: () => {
-        var population = instance.Server.Population;
-        var first = (onlySlot ?? 0);
-        var end = ((onlySlot is { } only)
-            ? (only + 1)
-            : population.Capacity);
+    // Counts the bodies, across every instance this host runs, whose mobility incarnation is this traveller's, and
+    // returns the first of them in instance-name then slot order.
+    private int LocateTraveller(WorldEntityAddress traveller, out WorldInstance? found, out int foundSlot) {
+        var carriers = 0;
 
-        for (var slot = first; (slot < end); slot++) {
-            if (population.ResolveIncarnation(
-                authority: instance.Server.AuthorityIdentity,
-                index: slot
-            ) == traveller) {
-                return slot;
+        found = null;
+        foundSlot = -1;
+
+        foreach (var name in Names) {
+            var instance = m_instances[name];
+
+            for (var slot = 0; (slot < instance.Server.Population.Capacity); slot++) {
+                if (OccupantIncarnation(
+                    instance: instance,
+                    slot: slot
+                ) != traveller) {
+                    continue;
+                }
+
+                if (carriers++ == 0) {
+                    found = instance;
+                    foundSlot = slot;
+                }
             }
         }
 
-        return -1;
-    });
-    private ulong MintTransferId(string sourceInstance) {
-        if (!m_instances.TryGetValue(
-            key: sourceInstance,
-            value: out var row
-        )) {
-            throw new InvalidOperationException(message: $"cannot mint a transfer id for unknown source instance '{sourceInstance}'");
+        return carriers;
+    }
+    // Returns whether every member slot holds a body and, where the transfer named one as it was queued, that traveller;
+    // otherwise narrates the first that does not and returns false.
+    private bool MembersAreTheirTravellers(int[] members, WorldInstance source, in PendingTransfer transfer) {
+        for (var ordinal = 0; (ordinal < members.Length); ordinal++) {
+            var slot = members[ordinal];
+            var occupant = OccupantIncarnation(
+                instance: source,
+                slot: slot
+            );
+            var named = (((transfer.Travellers is { } travellers) && (ordinal < travellers.Count))
+                ? travellers[ordinal]
+                : null);
+
+            if (
+                (occupant is not null) &&
+                ((named is null) || (occupant == named))
+            ) {
+                continue;
+            }
+
+            if (m_narration.HasNarrationSink) {
+                var traveller = TravellerName(
+                    index: slot,
+                    localSeatCount: source.Server.Population.LocalSeatCount
+                );
+
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: ((named is { } left)
+                        ? $"[world.transfer: transfer={transfer.TransferId} refused (the traveller {left} it names has left {traveller} in '{transfer.SourceInstance}' since it was queued)]"
+                        : $"[world.transfer: transfer={transfer.TransferId} refused ({traveller} is not active in '{transfer.SourceInstance}')]")
+                );
+            }
+
+            return false;
         }
 
-        return row.NextTransferId++;
+        return true;
     }
-    private ulong MintUnappliedTransferId(string sourceInstance) {
+    // The mobility incarnation of the body one slot of an instance holds, or null for an empty or out-of-range slot.
+    private static WorldEntityAddress? OccupantIncarnation(WorldInstance instance, int slot) => instance.Server.ExecuteAuthorityOperation(operation: () => instance.Server.Population.ResolveIncarnation(
+        authority: instance.Server.AuthorityIdentity,
+        index: slot
+    ));
+    // The one place a transfer id is minted: the source lifetime's own counter, in enqueue order, skipping an id an
+    // explicitly supplied id already drained. Ids are scoped by source authority on the wire, so a per-row counter loses
+    // nothing and keeps a row's checkpoint self-contained.
+    private static ulong MintTransferId(WorldInstance source) {
         ulong transferId;
 
         do {
-            transferId = MintTransferId(sourceInstance: sourceInstance);
-        } while (m_appliedTransferIds.Contains(item: (sourceInstance, transferId)) ||
-            (m_appliedTransferHighWater.TryGetValue(
-            key: sourceInstance,
-            value: out var highWater
-        ) && (transferId <= highWater)));
+            transferId = source.NextTransferId++;
+        } while (source.DrainedTransfers.IsDrained(transferId: transferId));
 
         return transferId;
     }
@@ -1766,6 +1813,8 @@ public sealed partial class WorldInstanceHost {
                 WorldNarrationScope.Current = null;
             }
         }
+
+        ReapDeferred();
     }
     /// <summary>Queues a same-process transfer for this host's next <see cref="DrainPendingTransfers"/> call —
     /// <c>world.transfer</c> is the only caller today. Enqueuing never fails: every check that can refuse (an
@@ -1910,9 +1959,25 @@ public sealed partial class WorldInstanceHost {
         return true;
     }
     private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, ulong? explicitTransferId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed) {
-        var transferId = (explicitTransferId ?? MintTransferId(sourceInstance: sourceInstance));
+        var source = m_instances.GetValueOrDefault(key: sourceInstance);
+        var transferId = (explicitTransferId ?? ((source is not null)
+            ? MintTransferId(source: source)
+            : throw new InvalidOperationException(message: $"cannot mint a transfer id for unknown source instance '{sourceInstance}'")));
+        // The travellers the transfer means, read as it is queued, so the drain moves them or refuses by name rather
+        // than moving whatever body then holds their slots.
+        var meant = (frozenCohortSlots ?? ((scope == TransferScope.Body)
+            ? [sourceSlot]
+            : null));
+        IReadOnlyList<WorldEntityAddress?>? travellers = (((source is not null) && (meant is not null))
+            ? [.. meant.Select(selector: slot => OccupantIncarnation(
+                instance: source,
+                slot: slot
+            ))]
+            : null);
 
         m_pendingTransfers.Enqueue(item: new PendingTransfer(
+            Source: source,
+            Travellers: travellers,
             SourceInstance: sourceInstance,
             Scope: scope,
             SourceSlot: sourceSlot,
@@ -2100,8 +2165,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="TransferId">The transfer id this particular queued crossing carries — minted deterministically at
     /// enqueue time (docs/architecture/worlds.md) unless a caller supplied one explicitly (console
     /// <c>world.transfer</c>'s <c>transfer:&lt;id&gt;</c> token, the retry/idempotence verification seam). Threaded
-    /// through every echo this transfer produces and checked against <see cref="m_appliedTransferIds"/> before
-    /// anything else at drain time.</param>
+    /// through every echo this transfer produces and checked against its source lifetime's
+    /// <see cref="WorldInstance.DrainedTransfers"/> before it touches anything at drain time.</param>
     /// <param name="TestForceJoinRefusalOrdinal">Test-only (see <see cref="ApplyTransfer"/>'s own remarks on why a
     /// live document-authored join refusal is unreachable once reservation pre-checks capacity and destination Drive
     /// standing): when set, the N-th (1-based, in <see cref="FrozenCohortSlots"/>/member order) member's destination
@@ -2135,6 +2200,12 @@ public sealed partial class WorldInstanceHost {
     /// after restart. Recovery never resolves or re-enqueues this already-detached crossing.</param>
     /// <param name="Posed">The traveller a pose carries home and the pose it lands at, or <see langword="null"/> for
     /// every other transfer.</param>
+    /// <param name="Source">The lifetime of <paramref name="SourceInstance"/> that queued the transfer: the drain
+    /// applies it only while that lifetime runs, and checks its id against that lifetime's drained ids.
+    /// <see langword="null"/> for a transfer recovery reconstructs, which never drains again.</param>
+    /// <param name="Travellers">The mobility incarnation of each member as the transfer was queued, in
+    /// <paramref name="FrozenCohortSlots"/> order (or the one <paramref name="SourceSlot"/>), an entry
+    /// <see langword="null"/> for a slot that held no body then; <see langword="null"/> for a live-read party.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2161,7 +2232,9 @@ public sealed partial class WorldInstanceHost {
         bool ScopeProofAlreadyVerified = false,
         int Attempt = 0,
         string? RecoveryDestinationName = null,
-        PosedTraveller? Posed = null
+        PosedTraveller? Posed = null,
+        WorldInstance? Source = null,
+        IReadOnlyList<WorldEntityAddress?>? Travellers = null
     );
     // The traveller a pose carries home, by the mobility incarnation it keeps through every handoff, and the pose it
     // lands at standing still.

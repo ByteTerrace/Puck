@@ -125,6 +125,7 @@ public sealed partial class WorldReplaySnapshot {
 
         if (StartCheckpoint is { } start) {
             (server, population) = WorldServer.FromCheckpoint(
+                authorityIdentity: Authority,
                 checkpoint: start,
                 documentDirectory: DocumentDirectory,
                 instanceIdentity: Instance,
@@ -137,6 +138,7 @@ public sealed partial class WorldReplaySnapshot {
             // A fresh, unconfigured render envelope reads as "fits" — the replay applies no render-growing edits, and
             // the authoritative simulation never consults GPU capacity, so no probe is needed offline.
             server = new WorldServer(
+                authorityIdentity: Authority,
                 definition: definition,
                 envelope: new WorldRenderEnvelope(),
                 instanceIdentity: Instance,
