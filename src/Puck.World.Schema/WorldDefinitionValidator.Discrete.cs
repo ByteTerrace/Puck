@@ -211,7 +211,7 @@ public static partial class WorldDefinitionValidator {
     // rather than against a second reading of the same rule. One arena serves a whole validation pass, and is built
     // on the first board that actually carries authored cells.
     private sealed class BoardDerivation(WorldDefinition definition) {
-        private IReadOnlyList<StateRow>? m_rows;
+        private StateArena? m_arena;
         private bool m_loaded;
         private string m_reason = string.Empty;
 
@@ -234,7 +234,7 @@ public static partial class WorldDefinitionValidator {
                         section: definition.StateRaw,
                         time: ArenaTime.Origin
                     )) {
-                        m_rows = arena.ToRows();
+                        m_arena = arena;
                     } else {
                         m_reason = reason;
                     }
@@ -243,13 +243,15 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            return ((m_rows is null)
-                ? null
-                : (StateRows.FindStateRow(
-                    rows: m_rows,
-                    name: name.Value
-                )?.Cells ?? [])
-            );
+            // Only the board asked for is read back: exporting every row of a large world costs far more than the
+            // derivation it checks.
+            if (m_arena is not { } built) {
+                return null;
+            }
+
+            return (built.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)
+                ? (built.ToRow(rowOrdinal: handle.Ordinal).Cells ?? [])
+                : []);
         }
     }
 
