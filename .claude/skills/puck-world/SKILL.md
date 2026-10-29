@@ -40,6 +40,17 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**The standard is authored.** `worlds/standard/standard.puck` composes the
+optional controls and skin. Shared cursor, icons, binding-bar designs, pages
+and wheel belong there; the debug world's Go/Tour pages and Places ring refine
+it in `worlds/debug/controls.puck`. The garden and night field import the
+standard directly. Add mechanisms to the engine and concrete design to the
+standard, with avatar tuning and rig animation in the avatar document. Authors
+override rows by id in the importing document's own body, or replace/omit the
+package through the existing composition path; do not copy a second standard
+into a world. [The package README](../../../worlds/standard/README.md) owns the
+import and override examples.
+
 **Replay one scope while the world lives on.** An authored `replays` row names its
 document rows, stable body ordinals, input principals, control row and timed
 input program. `WorldScopedReplayRuntime` captures its starting arena columns and
