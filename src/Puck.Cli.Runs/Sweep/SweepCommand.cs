@@ -279,7 +279,7 @@ public static partial class SweepCommand {
             Baseline: baseline?.Path.Replace(newChar: '/', oldChar: '\\'),
             Commit: (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var commit, revision: "HEAD") ? commit : "unknown"),
             Legs: legs,
-            Scenarios: Scenarios(budget: budget, directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
+            Scenarios: Scenarios(artifact: artifact, budget: budget, cacheDirectory: cacheDirectory, directory: directory, files: scenarios, repositoryRoot: repositoryRoot),
             Schema: SweepReport.SchemaName,
             Seconds: clock.Elapsed.TotalSeconds,
             Signals: signals,
@@ -307,13 +307,13 @@ public static partial class SweepCommand {
         "--world", world,
         .. WorldDevices.NoneArguments,
         "--state-dir", state,
-        .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
+        .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", PuckPaths.Normalize(path: cacheDirectory)]),
         "--exit-after-seconds", (((int)deadline.TotalSeconds) + 120).ToString(provider: CultureInfo.InvariantCulture),
         .. extra,
     ];
     // Each file through this CLI's own puck test, one worker at a time, read from its "test <name>:" and
     // "<passed>/<total> verdict(s) passed" lines and its exit code.
-    private static SweepScenarioResult Scenarios(SweepBudget budget, string directory, string[] files, string repositoryRoot) {
+    private static SweepScenarioResult Scenarios(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string[] files, string repositoryRoot) {
         var worlds = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
         var reasons = new List<string>();
         var status = SweepStatus.Clean;
@@ -344,7 +344,7 @@ public static partial class SweepCommand {
             var folder = Path.Combine(path1: directory, path2: "scenarios", path3: (ordinal++).ToString(provider: CultureInfo.InvariantCulture));
             _ = Directory.CreateDirectory(path: folder);
             Console.Error.WriteLine(value: $"sweep: scenarios {CliPaths.ToDisplay(fullPath: file)}");
-            var result = ScenarioFile(budget: budget, directory: folder, file: file, repositoryRoot: repositoryRoot);
+            var result = ScenarioFile(artifact: artifact, budget: budget, cacheDirectory: cacheDirectory, directory: folder, file: file, repositoryRoot: repositoryRoot);
             status = SweepStatus.Worse(left: status, right: result.Status);
             reasons.AddRange(collection: result.Reasons.Select(selector: reason => $"{CliPaths.ToDisplay(fullPath: file)}: {reason}"));
             foreach (var (name, value) in result.Worlds) {
@@ -353,7 +353,7 @@ public static partial class SweepCommand {
         }
         return new SweepScenarioResult(Command: command, Reasons: reasons, Status: status, Worlds: worlds);
     }
-    private static SweepScenarioResult ScenarioFile(SweepBudget budget, string directory, string file, string repositoryRoot) {
+    private static SweepScenarioResult ScenarioFile(string? artifact, SweepBudget budget, string? cacheDirectory, string directory, string file, string repositoryRoot) {
         var command = $"puck test {file} --jobs 1";
 
         if (budget.Reason is { } over) {
@@ -377,6 +377,14 @@ public static partial class SweepCommand {
         startInfo.ArgumentList.Add(item: "1");
         startInfo.ArgumentList.Add(item: "--keep");
         startInfo.ArgumentList.Add(item: Path.Combine(path1: directory, path2: "run"));
+        if (artifact is not null) {
+            startInfo.ArgumentList.Add(item: "--world-artifact");
+            startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: artifact));
+        }
+        if (cacheDirectory is not null) {
+            startInfo.ArgumentList.Add(item: "--cache-dir");
+            startInfo.ArgumentList.Add(item: PuckPaths.Normalize(path: cacheDirectory));
+        }
 
         using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: "Failed to start dotnet."));
         Console.Error.WriteLine(value: $"sweep: scenario process {process.Id.ToString(provider: CultureInfo.InvariantCulture)}");

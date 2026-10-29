@@ -2452,6 +2452,8 @@ workload. Selecting no leg or scenario is refused; a report with no measurements
 motion`; fresh Worlds can share one writable scratch cache. Omitted, it keeps
 the per-user cache. Cache-dependent boot counters are recorded but excluded
 from exact comparison.
+Scenario workers receive the same `--cache-dir` and explicit `--world-artifact`,
+so an isolated cache or a chosen engine build applies to the entire sweep.
 
 Each signal is red when a red rule of the plan holds or its line was refused,
 amber when an amber rule holds, and clean otherwise. Silence is never success:
