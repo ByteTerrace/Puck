@@ -535,7 +535,12 @@ not a spiral:
 - Retry a failing step (a build, test, boot, start, review or restart) once. If
   it fails again, stop, record what failed and what was tried, and take the next
   item.
-- Every poll has a deadline.
+- Every poll has a deadline and a spacing that fits the work. A lane waits on a
+  run of minutes by starting it in the background and checking every few
+  minutes (or blocking on its exit), never by re-running a status script every
+  few seconds: each check is a model turn, and a boot-once run of 40 file legs
+  polled that way spent hours of tokens and wrote a 2 MB log saying "still
+  running". A brief with a long run says how to wait for it.
 - Findings never bounce between a reviewer and an author: a finding goes to the
   pile with its owner and is not argued back and forth.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30
