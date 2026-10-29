@@ -296,14 +296,17 @@ void sdfSurfaceStage(SdfPixel p) {
         }
         if (!worldSoftShadowsDisabled() && (passGroup.meshShadowCount > 0u)) {
             // The cascades look along the key light; a surface facing away from it is in its own shadow, which the
-            // light's cosine already darkens, so only a lit side queries them.
+            // light's cosine already darkens, so only a lit side queries them. A side that does not leaves the slot
+            // unqueried (a negative visibility, SDF_SHADOW_UNQUERIED in the record): it measured nothing, so the views
+            // filter keeps it out of its neighbours' averages.
             float4 parameters = passGroup.meshShadowParameters;
             float3 key = -sdfMeshCascadeAt(0u).forward;
-            value.shadows.x = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, face, 0u, passGroup.meshShadowCount, parameters.x) : 1.0);
+            value.shadows = float4(-1.0, -1.0, -1.0, -1.0);
+            value.shadows.x = ((dot(normal, key) > 0.0) ? sdfMeshShadow(p, surfacePoint, face, 0u, passGroup.meshShadowCount, parameters.x) : -1.0);
             // The second shadow slot's light, from its one cascade.
             if (parameters.w > 0.0) {
                 float3 fill = -sdfMeshCascadeAt(2u).forward;
-                value.shadows.y = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, face, 2u, 3u, parameters.w) : 1.0);
+                value.shadows.y = ((dot(normal, fill) > 0.0) ? sdfMeshShadow(p, surfacePoint, face, 2u, 3u, parameters.w) : -1.0);
             }
         }
     }
