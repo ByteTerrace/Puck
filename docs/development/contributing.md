@@ -1005,6 +1005,15 @@ unverified when no device run exists.
 - Direct3D 12 compute descriptor slots are packed in binding order. Derive
   pool sizes with `GpuDescriptorPoolSizes.ForSets`; do not treat a binding
   number as a heap offset.
+- RenderDoc hands a destroyed Vulkan object's wrapped handle value to the next
+  creation at once, and a driver may too, so anything keyed by a handle value
+  (the memory arenas' ranges) releases its entry before the handle is destroyed
+  and keys by handle and kind, since a layer may give a buffer and an image one
+  value. A graph that never installs under a capture tool, with no build thread
+  alive, is the signature of an entry outliving its handle.
+- PowerShell's redirection of a native process's output can hold it until the
+  process exits. `Puck.World` flushes standard error on every line, so log lines
+  that appear only at exit come from the harness, not the World.
 - Full GPU removal can wedge the in-process NVIDIA Vulkan ICD. TDR recovery is
   supported; physical removal may require a new process.
 - On a variable-refresh display, a window's pacing depends on whether it is in

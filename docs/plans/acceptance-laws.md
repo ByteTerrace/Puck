@@ -43,9 +43,8 @@ its own, so the six laws are written against the fixed contracts:
   (`MachineBindingCheckpointLawTests`).
 
 Each law, once written, also confirms its gap's fix on the integration head.
-G6 is held by law 6, which enumerates the classification the refusals declare in code. G7 is the return seam held by law 4: releasing a displayed source rebinds the existing view to the root. The law variants still unstarted remain in the plan checklist.
-
-The open items are in [the plan checklist](open-items.md#cross-plan-maintenance).
+G6 is held by law 6, which enumerates the classification the refusals declare in code. G7 is the return seam held by law 4: releasing a displayed source rebinds the existing view to the root. The law variants and arrangements still unstarted are this page's
+[open items](#open-items).
 
 ## How each law is stated
 
@@ -710,3 +709,30 @@ through it.
    there. Law 4 lands with G7's return seam.
 2. Land G6's classification and law 6 together, the law enumerating the
    classified set.
+
+## Open items
+
+All six laws are written on the integration head, each proved red by
+withholding the behaviour it guards, and gaps G1 to G7 are fixed in code with
+laws of their own (G6 as `RefusalAttribute.Unsupported`). A line is deleted when
+its arrangement lands, never ticked.
+
+- Law 6: arrange `HudRefusal.SeatPanelReplaceRefused`, which refuses only
+  through `identity.hud`, so the twins must join a seat's roster profile.
+- Law 6: arrange `AddonMutateRefusal.NotRequested`, which needs a guest addon
+  whose manifest never requested `Mutate`.
+- Law 6: give codes and arrangements to the checkpoint refusals (addons, screen
+  operations, coupled links, rewind history).
+- Law 6: give codes and arrangements to the closed rewind group's external
+  transfer, the undeclared producer's, the rigid body's and the carrying
+  traveller's transfers.
+- Law 6: give codes and arrangements to a history seek while a session is live,
+  and to the op-id-preserving mutation on a basic link.
+- Law 6: arrange `WorldRuleEffectRefusal.IdentityUnbound`, which refuses inside
+  a rule firing whose scope rewinds it, so it needs a gate the twins can hold
+  apart.
+- Law 2: the federated, rollback and shared-identity variants of the crossing
+  replay.
+- Law 3: the load-door and `replay.drive` doors.
+- Law 4 and law 5: the GPU canary `displayed-source-render-root` and law 5's
+  federated leg, owed on a GPU host with QUIC.

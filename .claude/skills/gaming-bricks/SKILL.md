@@ -117,7 +117,7 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
   micro-ROMs poll IF with IME off. Implementing the bits adds a stage for it:
   derive them from the modeled `AgbLinkCable` partner, never from ambient state,
   update the reference, and close the gap in
-  [open items](../../../docs/plans/open-items.md#machines-and-cartridges).
+  [open items](../../../docs/plans/machines-and-cartridges.md#open-items).
 - **Tests never depend on a commercial ROM or a retail BIOS** (owner ruling). A
   stage, test or CI step runs on committed sources and the fetched homebrew and
   test-cartridge corpora, and a stage whose only input is a licensed image is
@@ -146,7 +146,7 @@ Each is detailed in [references/hardware-and-oracles.md](references/hardware-and
    Add a self-checking stage only where running cannot show the behavior.
    No file records an expected outcome: a corpus ROM that fails today fails its
    stage on every run until the emulator is corrected, and
-   [open-items](../../../docs/plans/open-items.md) tracks them.
+   [the machines plan](../../../docs/plans/machines-and-cartridges.md#open-items) tracks them.
 5. Report the exact commands, selected stages and asset-gated skips.
 
 ## Test a hosted machine with the debugger

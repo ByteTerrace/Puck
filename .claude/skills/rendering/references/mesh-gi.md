@@ -190,7 +190,7 @@ no visible probe. Keep the authored exposure bounds and world headroom intact.
 A cold Vulkan boot shows a near-black shaft with no meter until the static draws
 are ready and the three-sweep GI completes; capture only after that, and
 compare Vulkan with Direct3D on the same source state with all geometry settled
-([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
+([open items](../../../../docs/plans/open-items.md#cross-backend-parity-and-gpu-robustness)
 records the remaining shaft difference).
 
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
@@ -220,7 +220,7 @@ without a split or patch from the plinth or hanging sign. The floor is shadowed 
 no measured light.
 The SPIN dotted ceiling seam reproduces in
 beauty but not in `indirect`, `normals` or `shadow`
-([open items](../../../../docs/plans/open-items.md#debug-world-walkthrough-findings)
+([open items](../../../../docs/plans/open-items.md#lighting-and-gi)
 records the experiments).
 
 COAT's authored `specular: 0.35` is dielectric F0, not coat strength: it
