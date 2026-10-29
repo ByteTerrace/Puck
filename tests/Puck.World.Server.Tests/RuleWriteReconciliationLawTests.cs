@@ -28,7 +28,7 @@ public sealed class RuleWriteReconciliationLawTests {
             server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: admission, boot: boot!));
             Assert.Equal((value != 0), server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
             Assert.Same(clockSeeds, server.ClockSeeds);
-            Assert.Equal((value == 0 ? 1UL : 3UL) << 62, clockSeeds["quiet"]);
+            Assert.Equal((((value == 0) ? 1UL : 3UL) << 62), clockSeeds["quiet"]);
             Assert.Equal(1UL, server.NextInputTick);
         }
     }

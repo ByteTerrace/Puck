@@ -15,7 +15,7 @@ public sealed partial class WorldPersistence {
     /// <summary>A computed identity for the host composition. Scenario rows, rules and commands are installed after restore.</summary>
     public static string ScenarioBootShape(byte[] json) => ScenarioShape(json, includeScenario: false);
 
-    private static string ScenarioShape(byte[] json, bool includeScenario) {
+    private static string ScenarioShape(byte[] json, bool includeScenario, bool includeHoldings = false) {
         using var document = JsonDocument.Parse(json);
         using var hash = SHA256.Create();
         using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: hash);
@@ -25,7 +25,16 @@ public sealed partial class WorldPersistence {
             foreach (var property in document.RootElement.EnumerateObject()) {
                 if (property.Name == "schedule") { continue; }
                 if (!includeScenario && (property.Name == "rules")) { continue; }
-                if (!includeScenario && (property.Name == "state")) {
+                if (!includeScenario && !includeHoldings && (property.Name == "placements")) {
+                    // Admission derives these bits from scenario seeds. They change colliders, not native lifetimes.
+                    var placements = JsonNode.Parse(property.Value.GetRawText())!.AsObject();
+
+                    if (placements["rows"] is JsonArray rows) {
+                        foreach (var row in rows) { row!.AsObject().Remove(propertyName: "holding"); }
+                    }
+                    writer.WritePropertyName(propertyName: property.Name);
+                    placements.WriteTo(writer);
+                } else if (!includeScenario && (property.Name == "state")) {
                     WriteStateComposition(writer, property.Value, document.RootElement);
                 } else { property.WriteTo(writer: writer); }
             }
@@ -112,7 +121,8 @@ public sealed partial class WorldPersistence {
                 current => new BootShape(Value: ScenarioShape(json: WorldDefinitionSerialization.Serialize(definition: current), includeScenario: true))).Value;
 
             if ((currentShape != CachedBootShape(json: checkpoint.Server.DefinitionJson)) &&
-                (ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) != ScenarioBootShape(json: checkpoint.Server.DefinitionJson))) {
+                (ScenarioShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration), includeScenario: false, includeHoldings: true) !=
+                    ScenarioShape(json: checkpoint.Server.DefinitionJson, includeScenario: false, includeHoldings: true))) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }

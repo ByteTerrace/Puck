@@ -74,7 +74,10 @@ checkpoint's session lanes; no preceding scenario's values or key ledger enter i
 Compatibility includes every staged companion and asset, the population's body
 registers and field lattices, and state cells that choose the boot inhabitant census.
 Generated verdict rows and expectation rules do not require another native host.
-Restoration rebuilds geometry and population only when their configuration changed. The reset
+Responsive placement holdings are derived from each scenario's seeds; they do not
+split a worker's boot, but restoration recomposes their changed geometry before the
+first command. Drive gates and presentation clock seeds are rebound at the same
+boundary. Restoration rebuilds geometry and population only when their configuration changed. The reset
 cancels live tape drives as well as recordings. Session epochs reset only in this
 isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
