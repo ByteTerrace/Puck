@@ -9,15 +9,19 @@ public sealed class WorldReplayProbe : IDisposable {
     private readonly WorldReplayTape m_tape;
     private readonly WorldServer m_server;
     private readonly WorldAuthorityCheckpoint m_start;
+
     private readonly List<WorldReplayTickInput> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
+
     private readonly ulong[] m_startComponents;
 
     private int m_skipAuthority;
     private int m_skipIntents;
+
     private bool m_attached = true;
     private byte[] m_finalExport = [];
     private IReadOnlyList<WorldReplayMachineDigest> m_finalMachines = [];
+    private WorldReplayTickInput m_tail = new(Authority: [], Intents: []);
 
     internal WorldReplayProbe(WorldReplayTape tape, WorldServer server, int skipAuthority, int skipIntents) {
         m_tape = tape;
@@ -69,6 +73,10 @@ public sealed class WorldReplayProbe : IDisposable {
                 }
                 progress?.Invoke((tick + 1));
             }
+            // The export can fall between this authority's ticks. Session/transfer events have already
+            // applied, while queued input still awaits a step: replay that boundary without advancing it.
+            WorldReplaySnapshot.ApplyRecordedTick(m_server, m_server.Population, m_tail, [], outcomes,
+                static rebuild => (null, rebuild.ContentHash));
             return ((m_finalExport.AsSpan().SequenceEqual(other: WorldStateExport.ToCanonicalJson(server: m_server)) &&
                 m_finalMachines.SequenceEqual(second: WorldReplaySnapshot.MachineDigests(machines: m_server.Machines))) ? -1 : m_inputs.Count);
         } finally { m_tape.ResumeCapture(); }
@@ -77,6 +85,7 @@ public sealed class WorldReplayProbe : IDisposable {
     public void Dispose() {
         if (!m_attached) { return; }
         m_attached = false;
+        m_tail = m_tape.CaptureOpenTick(skipAuthority: m_skipAuthority, skipIntents: m_skipIntents);
         m_finalExport = WorldStateExport.ToCanonicalJson(server: m_server);
         m_finalMachines = WorldReplaySnapshot.MachineDigests(machines: m_server.Machines);
         m_tape.DetachProbe(probe: this);
@@ -84,6 +93,9 @@ public sealed class WorldReplayProbe : IDisposable {
 }
 public sealed partial class WorldReplayTape {
     private readonly List<WorldReplayProbe> m_probes = [];
+
+    internal WorldReplayTickInput CaptureOpenTick(int skipAuthority, int skipIntents) => new(
+        Authority: [.. m_currentAuthority.Skip(count: skipAuthority)], Intents: [.. m_currentIntents.Skip(count: skipIntents)]);
 
     /// <summary>Observes the same input stream as history and operator recording, starting at this settled boundary.</summary>
     public WorldReplayProbe ObserveReplay() {

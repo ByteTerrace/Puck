@@ -109,7 +109,7 @@ internal sealed class WorldTestBatch {
         m_bootFiles = (Directory.Exists(path: stateRoot) ? Directory.EnumerateFiles(path: stateRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*")
             .ToDictionary(path => Path.GetRelativePath(path: path, relativeTo: stateRoot), File.ReadAllBytes) : []);
         m_control = Get<TextCommandSource>().CreateSession(Principal.Console);
-        Get<WorldTestRun>().Exported += () => { _ = m_control.InvokeAsync(operation: CompleteLeg); };
+        Get<WorldTestRun>().Exported += FreezeLeg;
         Get<WorldTestRun>().Progress += tick => Console.WriteLine(value: $"[test.batch: tick {tick}]");
         instances.Admitted += Observe;
         StartLeg(freshHost: true);
@@ -176,6 +176,12 @@ internal sealed class WorldTestBatch {
         }
         Get<WorldTestRun>().ArmInstances();
     }
+    private void FreezeLeg() {
+        m_observing = false;
+        foreach (var (_, probe) in m_probes) { probe.Dispose(); }
+        try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_reproductionFailure = $"cannot archive authored state: {exception.Message}"; }
+        _ = m_control.InvokeAsync(operation: CompleteLeg);
+    }
     private bool CompleteLeg() {
         var leg = m_legs[m_index];
 
@@ -183,8 +189,6 @@ internal sealed class WorldTestBatch {
         try {
             var results = new List<object>();
 
-            foreach (var (_, probe) in m_probes) { probe.Dispose(); }
-            ArchiveStateFiles(directory: leg.Directory);
             if (m_reproductionFailure is not null) { throw new InvalidOperationException(message: m_reproductionFailure); }
             foreach (var (name, probe) in m_probes) {
                 int divergence;
