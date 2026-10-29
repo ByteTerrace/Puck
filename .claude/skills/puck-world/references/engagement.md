@@ -15,6 +15,11 @@ storage), `src/Puck.World.Machines/WorldMachineHost.cs` (plus its
 
 ## Contents
 
+World staging copies cross-volume content folders into a namespace per world,
+then per machine and folder slot. Missing source folders stay missing, including
+when a world is restaged into an existing directory; no other world's files or
+`folder.json` can supply their content or default.
+
 - The primitive: a set of `(target, kit)` applications
 - One kit vocabulary, two destinations
 - The command kinds

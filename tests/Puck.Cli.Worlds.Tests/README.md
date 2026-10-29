@@ -18,7 +18,8 @@ of its own Release output, so the suite builds that project first; nothing here 
 one of those that boots a verdict world, a game or a `worlds/` package, with `ScheduledStepVocabularyLawTests`,
 `WorldListenRefusalLawTests`, `SkyBaselineFixtureLawTests` and the shipped-world laws of
 `WorldDocumentOutputLawTests`, lives in `experimental/tests/Puck.Cli.Worlds.Tests/`;
-`TestCommandLawTests` keeps only its usage-error law here.
+`TestCommandLawTests` keeps runner isolation, sibling export and refusal-reporting
+invariants here, including scoped inputs denied authority.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 

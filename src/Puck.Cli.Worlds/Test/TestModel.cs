@@ -46,7 +46,7 @@ public sealed record TestVerdict(string Name, string Gate, long Status, ulong? F
         : WorldVerdict.NotEvaluated
     );
 }
-/// <summary>One local edit verdict the run's test-run manifest recorded.</summary>
+/// <summary>One local edit verdict or scoped-replay refusal the run's test-run manifest recorded.</summary>
 /// <param name="Rejected">Whether the edit was refused.</param>
 /// <param name="Message">The server's own reason or confirmation.</param>
 public sealed record TestEcho(bool Rejected, string Message);
@@ -83,7 +83,7 @@ public sealed record TestWorldExport(string World, byte[] ExportBytes, ulong Exp
 /// <param name="Worlds">Every world this leg exported: the booted one first, then each armed sibling in the order
 /// the document declared it.</param>
 /// <param name="Submissions">One entry per declared scheduled row, in declaration order.</param>
-/// <param name="Echoes">Every local edit verdict the run recorded.</param>
+/// <param name="Echoes">Every local edit verdict and scoped-replay refusal the run recorded.</param>
 public sealed record TestReading(
     byte[] ExportBytes,
     byte[] ManifestBytes,

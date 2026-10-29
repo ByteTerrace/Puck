@@ -15,7 +15,7 @@ internal sealed record WorldTestRunManifestEntry(
     string Outcome,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Detail
 );
-/// <summary>One local edit verdict the run produced, as the server's own echo reported it.</summary>
+/// <summary>One local edit verdict or scoped-replay refusal, as the server's own echo reported it.</summary>
 /// <remarks>Carries no tick. An echo reaches this type when the server narrates it, which is not the tick coordinate
 /// the edit applied on: the manifest records only facts a rerun of the same document reproduces exactly, so
 /// fresh-boot equivalence checks can compare manifests byte for byte.</remarks>
@@ -54,7 +54,7 @@ internal sealed record WorldTestRunManifestWorld(
 /// declaration order.</param>
 /// <param name="Submissions">One entry per DECLARED row, in declaration order, whether or not its tick was ever
 /// reached; a row the run never published records <see cref="WorldScheduleSection.OutcomeUnreached"/>.</param>
-/// <param name="Echoes">Every local edit verdict the run recorded.</param>
+/// <param name="Echoes">Every local edit verdict and scoped-replay refusal the run recorded.</param>
 /// <param name="Hashes">The authoritative replay hashes at every completed tick through the export.</param>
 internal sealed record WorldTestRunManifest(
     string Schema,
@@ -412,7 +412,7 @@ internal sealed class WorldTestRun {
             truncated: true
         );
     }
-    /// <summary>Records one local edit verdict the server echoed — the door a buffered mutation's accept or
+    /// <summary>Records one local edit verdict or scoped-replay refusal the server echoed — the door a buffered mutation's accept or
     /// refuse arrives through, which no command result carries.</summary>
     /// <param name="rejected">Whether the edit was refused.</param>
     /// <param name="message">The server's own reason or confirmation.</param>

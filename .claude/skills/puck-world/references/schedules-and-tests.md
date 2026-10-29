@@ -260,7 +260,7 @@ applies at `tick + 1`. At `max(rows[].tick) + settleTicks` the host writes
 `puck.world.test-run.v1` `test-run.json` into the armed directory.
 The manifest carries one entry per DECLARED row (a row whose tick the run
 never reached reads `outcome: "unreached"`, never an absent entry), every
-local edit echo including refusals, and `authoredExportTick`/`truncated`
+local edit echo and scoped-replay refusal, and `authoredExportTick`/`truncated`
 beside `exportTick` — a run that ended early records a truncated run rather
 than presenting what it reached as the export, and `puck test` refuses such a
 leg with exit 2. A `state` row may

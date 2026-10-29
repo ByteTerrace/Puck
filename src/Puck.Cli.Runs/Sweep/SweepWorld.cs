@@ -98,7 +98,7 @@ public sealed class SweepWorld : IDisposable {
             );
 
             if (line is null) {
-                error = $"the World never published its Operator attachment; its output is in {logDirectory}";
+                error = (budget.Reason ?? $"the World never published its Operator attachment; its output is in {logDirectory}");
 
                 return false;
             }
@@ -106,6 +106,9 @@ public sealed class SweepWorld : IDisposable {
             attached = TryConnect(budget: budget, error: out error, lease: lease, path: line.Text[AttachmentLine.Length..].TrimEnd(trimChar: ']'), process: process, session: out session);
 
             return attached;
+        } catch (OperationCanceledException) {
+            error = (budget.Reason ?? "the start was cancelled");
+            return false;
         } finally {
             if (!attached) {
                 process?.Dispose();
@@ -183,11 +186,14 @@ public sealed class SweepWorld : IDisposable {
                 }
 
                 _ = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 30));
-                process.Dispose();
             }
         } finally {
-            m_client.Dispose();
-            m_lease?.Dispose();
+            try {
+                m_process?.Dispose();
+            } finally {
+                m_client.Dispose();
+                m_lease?.Dispose();
+            }
         }
     }
 
@@ -224,7 +230,7 @@ public sealed class SweepWorld : IDisposable {
 
         return true;
     }
-    private static bool IsAttachmentFailure(Exception exception) => (exception is IOException or ObjectDisposedException or OperationCanceledException or InvalidOperationException);
+    private static bool IsAttachmentFailure(Exception exception) => (exception is IOException or InvalidDataException or System.Text.Json.JsonException or ObjectDisposedException or OperationCanceledException or InvalidOperationException);
     // The call's deadline in milliseconds: at most the attachment's ceiling, and at most what the sweep has left.
     private int Milliseconds(int seconds) => Milliseconds(budget: m_budget, seconds: seconds);
     private static int Milliseconds(int seconds, SweepBudget budget) => ((int)Math.Clamp(max: 120_000d, min: 1d, value: Math.Min(val1: (seconds * 1000d), val2: budget.Remaining.TotalMilliseconds)));

@@ -300,7 +300,8 @@ public static class WorldPostBuildWiring {
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
             // A scheduled command's own mutation verdict arrives here and nowhere else, so a test world that
             // schedules a command the world must refuse has that refusal recorded in the schedule manifest.
-            if (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) {
+            if ((echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) ||
+                ((echo.ConnectionId == SubmissionEnvelope.ScopedReplayConnectionId) && echo.Rejected)) {
                 scheduleRunner.NoteEcho(
                     message: echo.Message,
                     rejected: echo.Rejected

@@ -160,8 +160,8 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         _ = Directory.CreateDirectory(path: folder);
 
-        foreach (var line in (tour.Prelude ?? [])) {
-            var answer = world.Run(script: line);
+        foreach (var line in new[] { "world.rate pause" }.Concat(second: (tour.Prelude ?? []))) {
+            var answer = TourLine(line: line);
 
             if (!answer.Ok) {
                 prelude.Add(item: $"tour prelude refused: {string.Join(separator: "; ", values: answer.Refusals)}");
@@ -179,7 +179,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             foreach (var line in (tour.Reset ?? []).Concat(second: (stop.Lines ?? []))) {
-                var answer = world.Run(script: line, timeoutSeconds: 120);
+                var answer = TourLine(line: line);
 
                 if (!answer.Ok) {
                     reasons.AddRange(collection: answer.Refusals);
@@ -187,8 +187,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 }
             }
 
-            // The bakes settle first, then the stop's motion runs on ticks counted from the tick they settled at, so
-            // a slow bake moves neither the motion nor the capture.
+            // Authority stays held while bakes settle. Only the pinned timeline advances the stop's clock.
             var bakes = world.Run(script: "world.wait bakes 60", timeoutSeconds: 70);
 
             if (!bakes.Ok) {
@@ -245,7 +244,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             foreach (var line in (stop.After ?? [])) {
-                var answer = world.Run(script: line, timeoutSeconds: 120);
+                var answer = TourLine(line: line);
 
                 if (!answer.Ok) {
                     reasons.Add(item: $"after the capture: {string.Join(separator: "; ", values: answer.Refusals)}");
@@ -292,10 +291,11 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         var steps = (tour.Frame ?? []).Select(selector: line => new SweepStep(At: 0, Run: line)).Concat(second: (stop.Steps ?? [])).ToArray();
 
+        steps = [.. steps, new SweepStep(At: (stop.Settle ?? tour.Settle), Run: "world.rate pause")];
         expected = steps.Select(selector: step => ((start + ((ulong)step.At)), step.Run)).ToArray();
-        if (steps.Length > 0) {
+        {
             var script = JsonSerializer.Serialize(value: new { start, steps = steps.Select(selector: static step => new { at = step.At, run = step.Run }) });
-            var armed = world.Run(script: $"world.at {script}");
+            var armed = world.Run(script: $"world.at {script}\nworld.rate resume");
 
             if (!armed.Ok) {
                 reasons.AddRange(collection: armed.Refusals);
@@ -310,6 +310,11 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     }
     // Why the World can no longer be driven, or null while it can.
     private string? Stopped() => (world.Gone ? "the World's attachment closed" : world.Budget.Reason);
+    // Tick waits advance a bounded interval; readiness waits and coordinator round trips leave authority held.
+    private SweepAnswer TourLine(string line) => world.Run(script: TickWaits(script: line), timeoutSeconds: 120);
+    private static string TickWaits(string script) => string.Join(separator: '\n', values: script.Split('\n').Select(selector: static line =>
+        ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait ") && (ulong.TryParse(line[11..], out _) || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait until ")))
+            ? $"world.rate resume\n{line}\nworld.rate pause" : line)));
     private List<SweepSignalResult> Read(IEnumerable<SweepSignal> signals, string suffix) {
         var results = new List<SweepSignalResult>();
         var answers = Path.Combine(path1: directory, path2: world.Leg);
@@ -326,7 +331,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 continue;
             }
 
-            var answer = world.Run(script: signal.Line, timeoutSeconds: signal.TimeoutSeconds);
+            var answer = world.Run(script: ((world.Leg == SweepLegs.Windowed) ? TickWaits(script: signal.Line) : signal.Line), timeoutSeconds: signal.TimeoutSeconds);
             var file = Path.Combine(path1: answers, path2: $"{name}.txt");
 
             File.WriteAllText(contents: answer.Output, path: file);
@@ -339,6 +344,11 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             var changes = (baseline?.Changes(leg: world.Leg, metrics: metrics, signal: (signal with { Name = name }), status: status) ?? []);
+
+            if (changes.Count > 0) {
+                reasons.AddRange(collection: changes.Select(selector: static change => $"baseline: {change}"));
+                status = SweepStatus.Worse(left: status, right: SweepStatus.Red);
+            }
 
             progress.WriteLine(value: $"sweep: {world.Leg} {name} {status}");
             results.Add(item: new SweepSignalResult(

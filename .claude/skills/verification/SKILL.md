@@ -190,6 +190,12 @@ once started, the World runs from the store and no longer locks the checkout.
 
 ## Build before you test
 
+When a brief isolates build outputs with `--artifacts-path`, give semantic
+formatting that same closure: set `ArtifactsPath` to its absolute directory and
+`UseArtifactsOutput=true` in the environment of `puck format`. Otherwise its
+MSBuild query can skip built projects as having an untrustworthy Release closure
+because it looks in the default `bin` and `obj` directories.
+
 - A failed build leaves the previous binaries in place, so a test or run after
   it measures old code. Run only after a build that exited 0 following your
   last edit; never pass `--no-build` otherwise.

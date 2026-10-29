@@ -584,7 +584,10 @@ check the flag: the owner may be holding the pad.
   and the capture tour (each still pinned to a named tick, lockstep on,
   framing and reseeding pinned beside the motion with `world.at`, and every
   eventual answer checked), and a new signal or tour stop is a row of
-  `worlds/debug/sweep.json`. Whatever it could not measure
+  `worlds/debug/sweep.json`. `--cache-dir` lets fresh owned Worlds share a
+  writable lane scratch cache; omitted, it uses the per-user cache. Cache work
+  counts are recorded, while exact boot comparisons select cache-independent
+  counters. Whatever it could not measure
   (a closed attachment, a spent `--timeout`, a metric a rule reads that the
   answer lacks) is reported unmeasured and fails the run like red
   ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
