@@ -98,8 +98,10 @@
 #define SDF_MESH_IRRADIANCE_WRITTEN     0x40000000u
 #define SDF_MESH_IRRADIANCE_NORMAL_BIAS 0.05
 
-// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
-#define SDF_HISTORY_SURFACE_WORDS      6u
+// The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
+#define SDF_HISTORY_SURFACE_WORDS      47u
+#define SDF_HISTORY_WINDOW_OFFSET      7u
+#define SDF_HISTORY_SAMPLE_WORDS       5u
 #define SDF_TEMPORAL_PERIOD            8u
 #define SDF_HISTORY_WEIGHT_CAP         8.0
 #define SDF_HISTORY_FEATURE_WEIGHT_CAP 32.0
