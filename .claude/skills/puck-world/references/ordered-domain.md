@@ -175,7 +175,10 @@ A scoped replay submits its timed inputs and recorded tape under
 `SubmissionEnvelope.ScopedReplayConnectionId`, so the `EchoTap` subscriber
 tells them from the seat's own submissions (which share the principal): an
 applied one is neither narrated on stderr nor sent to a toast, console row
-or cue (`replay.scope` reads its progress), while a refusal still is.
+or cue (`replay.scope` reads its progress), while a refusal still is. The toast
+half of that rule is `WorldToastPolicy`, which also withholds the toast from every
+`Console`-stamped (operator) echo, applied or refused
+([HUD](hud.md#verbs)).
 
 ## The link
 

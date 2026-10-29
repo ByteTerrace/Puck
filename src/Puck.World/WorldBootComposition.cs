@@ -165,6 +165,8 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
         // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
+        // The bodies each tick steps, and the parked rigid bodies a contact-field change wakes.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBodyWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
@@ -772,11 +774,14 @@ public static class WorldBootComposition {
             history: sp.GetRequiredService<WorldHistory>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
+        // The toast store is core so a headless World keeps the latest toast `world.hud toast` reads back.
+        services.AddSingleton<OverlayToastStore>();
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
             server: sp.GetRequiredService<WorldServer>(),
             bindings: sp.GetRequiredService<IHudBindingResolver>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
-            facts: sp.GetRequiredService<WorldOverlayFacts>()
+            facts: sp.GetRequiredService<WorldOverlayFacts>(),
+            toasts: sp.GetRequiredService<OverlayToastStore>()
         ));
 
         // The genre-neutral state section's FINE-GRAIN verb surface — world.state.cell.set (one cell, dispatching
@@ -1493,7 +1498,6 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<WorldServer>(),
             theme: sp.GetRequiredService<WorldThemeResolve>()
         ));
-        services.AddSingleton<OverlayToastStore>();
         services.AddSingleton(implementationFactory: static sp => new ConsoleInputSink(
             sessions: sp.GetRequiredService<ConsoleSessionBank>(),
             slotResolver: sp.GetRequiredService<IInputSlotResolver>()

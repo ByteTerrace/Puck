@@ -147,6 +147,9 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     /// <inheritdoc />
     public GamepadType Type => GamepadType.SteamControllerTriton;
 
+    /// <inheritdoc />
+    public bool IsIgnoredReport(ReadOnlySpan<byte> report) => (!report.IsEmpty && (report[0] == 0x7b));
+
     void IGamepadStreamReset.ResetStreamState() {
         m_hasSensorTimestamp = false;
         m_hasState = false;
@@ -248,7 +251,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     // delta across a wrap of the clock's width, and the tracker clamps a first or implausible sample.
     private float SensorDeltaSeconds(uint sensorTimestamp, uint mask, float secondsPerUnit) {
         var delta = (m_hasSensorTimestamp
-            ? (unchecked((sensorTimestamp - m_lastSensorTimestamp)) & mask)
+            ? unchecked((sensorTimestamp - m_lastSensorTimestamp)) & mask
             : 0u
         );
 

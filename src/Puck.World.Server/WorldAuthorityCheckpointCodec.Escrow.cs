@@ -50,6 +50,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: member.Mobility,
             writeValue: WorldWireLeaves.WriteMobility
         );
+        writer.WriteBoolean(value: member.RemoteHuman);
     }
     private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader) {
         var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
@@ -61,6 +62,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var mobility = reader.ReadOptional(
             readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
+        var remoteHuman = reader.ReadBoolean();
 
         return new WorldTransferReservationMember(
             BodyColor: bodyColor,
@@ -69,6 +71,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Mobility: mobility,
             PreferredSlot: preferredSlot,
             Principal: principal,
+            RemoteHuman: remoteHuman,
             Source: source
         );
     }

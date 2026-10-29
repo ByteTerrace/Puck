@@ -83,7 +83,7 @@ public sealed partial class InputRouter : IDisposable {
     // Physical first-down truth is shared by focused and focus-exempt capture. A console-opening press can move its
     // device between those routes before the OS emits repeats or the release; one latch must still recognize them as
     // the same press.
-    private readonly HashSet<HeldControlId> m_pressedControls = [];
+    private readonly Dictionary<HeldControlId, int> m_pressedControls = [];
     // A BindingEntryMode.Toggle latch, keyed by (slot, commandId) — the destination's flip state, independent of
     // which physical control (or device) toggled it. Lives here, not in Puck.World.Server: the sim reads a plain
     // held channel either way (see BindingEntryMode's remarks).
@@ -509,12 +509,14 @@ public sealed partial class InputRouter : IDisposable {
             // opening a console between the first event and a repeat must not make that repeat look like a new press.
             if (
                 latchesPress &&
-                !m_pressedControls.Add(item: physicalControl)
+                !m_pressedControls.TryAdd(key: physicalControl, value: slot)
             ) {
                 return;
             }
-        } else if (signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) {
-            _ = m_pressedControls.Remove(item: physicalControl);
+        } else if ((signal.Phase is CommandPhase.Completed or CommandPhase.Canceled) || !signal.Value.IsActive) {
+            _ = m_pressedControls.Remove(key: physicalControl);
+        } else if (latchesPress && (signal.Phase == CommandPhase.Active)) {
+            m_pressedControls[physicalControl] = slot;
         }
 
         // A control going inactive is a RELEASE — the one shape that must reach the resolver even under focus
@@ -1328,7 +1330,9 @@ public sealed partial class InputRouter : IDisposable {
         var toDrop = new List<HeldCommand>();
 
         if (!preservePressedControls) {
-            m_pressedControls.RemoveWhere(match: control => (control.Device == device));
+            foreach (var control in m_pressedControls.Keys) {
+                if (control.Device == device) { m_pressedControls.Remove(key: control); }
+            }
         }
 
         foreach (var (slot, held) in m_heldBySlot) {
@@ -1981,6 +1985,15 @@ public sealed partial class InputRouter : IDisposable {
         ) &&
             state.IsHeld
         );
+    }
+
+    /// <summary>Whether this seat's physical source is depressed, independently of a command's toggle or
+    /// authoritative continuation. Reads the router's existing repeat/release state on the pump thread.</summary>
+    public bool IsSourcePressed(int slot, string source) {
+        foreach (var (control, owner) in m_pressedControls) {
+            if ((owner == slot) && string.Equals(a: control.Source, b: source, comparisonType: StringComparison.OrdinalIgnoreCase)) { return true; }
+        }
+        return false;
     }
     /// <summary>Determines whether a registered command map is active for a logical slot.</summary>
     /// <param name="slot">The logical player slot.</param>

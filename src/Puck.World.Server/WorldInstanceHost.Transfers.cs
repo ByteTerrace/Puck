@@ -337,6 +337,10 @@ public sealed partial class WorldInstanceHost {
 
                 return (Identity: body?.Profile?.Project(), Source: (body?.Source ?? IntentSource.Idle), BodyColor: source.Server.Population.BodyColor(index: sourceSlot), CatalogRig: source.Server.Population.CatalogRig(index: sourceSlot), Mobility: mobility);
             });
+            // A human is a seat or an admitted remote human, never read from its control source. Anything else (a
+            // companion an addon drives, a census bot) crosses autonomous: its driver stays here, so a Live source
+            // crosses as Idle, which the destination authors itself without spending its networkPlayers cap.
+            var human = ((sourceSlot < source.Server.Population.LocalSeatCount) || source.Server.Population.IsAdmittedPeer(bodyIndex: sourceSlot));
 
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
                 Principal: MemberTravelPrincipal(
@@ -346,10 +350,11 @@ public sealed partial class WorldInstanceHost {
                 ),
                 PreferredSlot: sourceSlot,
                 Identity: traveler.Identity,
-                Source: traveler.Source,
+                Source: ((!human && traveler.Source.IsLive) ? IntentSource.Idle : traveler.Source),
                 BodyColor: traveler.BodyColor,
                 CatalogRig: traveler.CatalogRig,
-                Mobility: traveler.Mobility
+                Mobility: traveler.Mobility,
+                RemoteHuman: human
             );
         }
 

@@ -129,17 +129,11 @@ public sealed partial class WorldPopulation {
     /// leaving, or recoloring, or the simulated count moving), never on a per-frame pose write. The frame source combines
     /// it with the roster's revision to decide when to rebuild the avatar program.</summary>
     public int Revision => m_revision;
-    /// <summary>The largest census <see cref="SetSimulatedCount"/> will actually grant right now — the tighter of the
-    /// remaining remote admission budget (<c>networkPlayers</c>) and eligible slots (<see cref="MaxSimulated"/>). A request
-    /// above it is clamped to it, so the <c>world.population</c> echo names both the granted count and this ceiling
-    /// rather than letting a script read a success for a crowd it never got.</summary>
-    public int SimulatedCeiling => Math.Min(
-        val1: Math.Max(
-            val1: 0,
-            val2: (m_remoteCap - CountExternalNetworkPlayers())
-        ),
-        val2: MaxSimulated
-    );
+    /// <summary>The largest census <see cref="SetSimulatedCount"/> will actually grant right now: the eligible slots
+    /// (<see cref="MaxSimulated"/>). The <c>networkPlayers</c> admission cap counts remote humans only, so a census bot
+    /// never spends it. A request above the ceiling is clamped to it, so the <c>world.population</c> echo names both the
+    /// granted count and this ceiling rather than letting a script read a success for a crowd it never got.</summary>
+    public int SimulatedCeiling => MaxSimulated;
     /// <summary>The number of active simulated stand-ins (indices <c>4..</c>).</summary>
     public int SimulatedCount => m_simulatedCount;
     /// <summary>The boot-built SDF contact field when the definition selects the field provider, else
@@ -267,9 +261,9 @@ public sealed partial class WorldPopulation {
     // Refreshed by CompileFixedTables on a swap/rebuild, on the SAME "boot-time constant, live for future
     // disconnects only" terms the rest of this section already reads under.
     private CompiledTickDuration m_reconnectGraceTicks;
-    // The remote-principal admission cap (the document's networkPlayers): the most census/remote peers world.population
-    // may raise. It is a CEILING, never a boot reservation — at boot the census stands at zero (only the joined seats are
-    // live) so the peer slice is entirely free for inhabitants. Refreshed by CompileFixedTables on a swap/rebuild.
+    // The remote-human admission cap (the document's networkPlayers): the most remote humans the instance admits. It
+    // counts humans only, never a census bot, inhabitant or companion, and is a CEILING, never a boot reservation.
+    // Refreshed by CompileFixedTables on a swap/rebuild.
     private int m_remoteCap;
     // The lowest slot index a live inhabited body occupies (Capacity = none). Inhabited bodies claim the top of the
     // entity table (capacity minus one downward); the census ceiling reads this floor so census peers never reach an inhabitant.
@@ -354,8 +348,8 @@ public sealed partial class WorldPopulation {
 
     /// <summary>Initializes a new instance of the <see cref="WorldPopulation"/> class: the four local slots reserved for
     /// session joins, every peer slot seeded with its deterministic color, kit, activity phase, and spawn pose. The census
-    /// stands at zero at boot — <c>networkPlayers</c> is the remote admission cap, not a static reservation, so the whole
-    /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for every
+    /// stands at zero at boot — <c>networkPlayers</c> is the remote-human admission cap, not a static reservation, so the
+    /// whole peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for every
     /// from frame 1, since the program's material capacity is probed from a worst-case all-avatars build. An entry
     /// receives its <see cref="WorldBody"/> when activated.</summary>
     /// <param name="definition">The world definition supplying the kit rows, producer parameters, and the profileless
@@ -436,8 +430,8 @@ public sealed partial class WorldPopulation {
             SeedSimulated(index: index);
         }
 
-        // No boot census: the peer slice stays free until world.population raises it or an inhabitant joins. m_remoteCap
-        // (set by CompileFixedTables above) caps a later raise; m_simulatedCount stays 0.
+        // No boot census: the peer slice stays free until world.population raises it or an inhabitant joins;
+        // m_simulatedCount stays 0.
     }
 
     // One entity-table entry. A mutable class; Kind and KitIndex are fixed at construction. SpawnYaw is the
