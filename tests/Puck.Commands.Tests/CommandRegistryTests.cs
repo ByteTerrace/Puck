@@ -11,18 +11,21 @@ public sealed class CommandRegistryTests {
     public void InternalBindingDestinationsDispatchButHaveNoTextOrHelpSurface() {
         var seen = new List<(CommandPhase Phase, CommandValue Value)>();
         var registry = new CommandRegistry(modules: [new BindingOnlyModule(seen: seen)]);
+
         Assert.DoesNotContain(collection: registry.Definitions, filter: row => (row.Name == "binding.probe"));
         Assert.Equal(string.Empty, registry.BuildHelpText(prefix: "binding.probe"));
-        Assert.False(condition: registry.TryGetMetadata(name: "binding.probe", metadata: out _));
+        Assert.False(condition: registry.TryGetMetadata(metadata: out _, name: "binding.probe"));
         Assert.Null(@object: registry.MetadataForDocument(name: "binding.probe"));
         var errors = new List<string>();
-        var authored = AuthoredCommand.TryCreate(name: "probe.public", help: "Probe.", parameters: [], lines: ["binding.probe"], errors: errors);
+        var authored = AuthoredCommand.TryCreate(errors: errors, help: "Probe.", lines: ["binding.probe"], name: "probe.public", parameters: []);
+
         Assert.Empty(collection: errors);
         registry.CheckAuthored(set: new AuthoredCommandSet(commands: [authored!]), errors: errors);
         Assert.Single(collection: errors);
         Assert.True(condition: registry.Submit(line: "binding.probe").IsError);
         Assert.True(condition: registry.Submit(line: "\"binding.probe\"").IsError);
         var router = new InputRouter(registry: registry, bindings: new FixedBindings(command: "binding.probe", mode: BindingEntryMode.Toggle), principalResolver: new ConsolePrincipal());
+
         router.Capture(signal: InputSignal.Press(source: "key.a"));
         registry.ApplySnapshot(snapshot: router.SnapshotForTick(tick: 1, windowEndTick: ulong.MaxValue));
         Assert.Single(collection: seen);
@@ -42,6 +45,7 @@ public sealed class CommandRegistryTests {
                 }) with { BindingOnly = true };
         }
     }
+
     // help, run, wire.ack and wire.errors: the registry's own verbs, registered like a module's and interned like a
     // module's, so they take four of the 16-bit ids a snapshot entry can name.
     private const int BuiltInCommandCount = 4;

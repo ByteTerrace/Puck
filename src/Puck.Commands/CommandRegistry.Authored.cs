@@ -12,7 +12,9 @@ public sealed partial class CommandRegistry {
     // therefore holds per command: two keys bound to two authored commands are two buttons.
     private readonly Dictionary<string, ushort> m_authoredIdByName = new(comparer: StringComparer.OrdinalIgnoreCase);
     private readonly List<string> m_authoredNameById = [];
+
     private readonly CommandDefinition m_runner;
+
     private Func<int, AuthoredCommandSet>? m_authoredSource;
     private Func<string, CommandMetadata?>? m_verbCatalog;
 
@@ -28,7 +30,6 @@ public sealed partial class CommandRegistry {
     /// <remarks>Read on every resolution, so a source that follows a live document (a reload, a row edit) changes
     /// what the registry answers without rebuilding it.</remarks>
     public AuthoredCommandSet AuthoredCommandsFor(int slot) => (m_authoredSource?.Invoke(arg: slot) ?? AuthoredCommandSet.Empty);
-
     /// <summary>Returns the facts every authored command declares: a bindable, Simulation-routed, wire-argument verb
     /// that answers anyone, carrying a digital press when bound.</summary>
     /// <param name="name">The authored command's name.</param>
@@ -156,7 +157,6 @@ public sealed partial class CommandRegistry {
 
         return true;
     }
-
     // A line submitted by a macro dispatches in the phase a typed line of its routing would carry when it runs: a
     // Simulation verb applies as the Started edge its queued injection carries, an Immediate one as Completed.
     private static CommandPhase InlinePhase(CommandDefinition definition, bool queue) => ((!queue && (definition.Routing == CommandRouting.Simulation))
@@ -175,7 +175,7 @@ public sealed partial class CommandRegistry {
         var verb = LeadingVerb(line: line);
         var first = 0;
 
-        if (verb.Equals(other: RunCommandName, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (verb.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, other: RunCommandName)) {
             if (args.Count == 0) {
                 return CommandResult.Usage(form: "run <command> [args…]", verb: RunCommandName);
             }

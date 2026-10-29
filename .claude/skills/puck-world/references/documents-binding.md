@@ -333,9 +333,9 @@ a segment's raw bank is never labelled using a fixed or later mapping.
 
 The input genre demonstrations are ordinary sweeps; their five plans and exact
 invocations are in [the input-channel decision](../../../../docs/decisions/input-channels.md#genre-check).
-Run each with a fresh boot. C7 found that `world.load` can lose the program's
-seeded Edit grant, leaving authored state-writing rules refused; that separate
-boot/reload finding is recorded in the open items.
+Run each with a fresh boot. C7 observed authored state-writing rules refused
+after `world.load`, while a fresh boot runs them. Loss of the seeded Edit grant
+is an unconfirmed inference; the boot/reload finding is recorded in the open items.
 
 **Overlay visibility (`visible`).** Every overlay element — a `hud.panels` row, a
 seat's player-scope panel, `hud.defaults` (the gate over every world panel),

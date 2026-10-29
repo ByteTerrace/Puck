@@ -1664,7 +1664,6 @@ public sealed partial class CommandRegistry {
 
         return ((sentence.Length < description.Length) ? $"{sentence.TrimEnd(trimChar: '.')} ..." : sentence);
     }
-
     // help [--full|--names] [<prefix>]: bare help lists the names index; --full or a prefix prints name - description,
     // and --names keeps names alone even with a prefix. A prefix that matches nothing is refused by name, so a mistyped
     // one never answers an empty success.
