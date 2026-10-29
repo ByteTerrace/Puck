@@ -17,7 +17,7 @@ public sealed class FederatedInputLawTests {
         using var fixture = Fixtures.FreshServer(definition);
         const int Body = WorldBodiesLimits.LocalSeatCount;
 
-        fixture.Server.Population.ApplyPeerAdmitted(new(Body, 1, IntentSource.Live, Principal.Console, "test", "input", false, null, 0, default), []);
+        fixture.Server.Population.ApplyPeerAdmitted(new(Body, 1, IntentSource.Live, Principal.Console, "test", "input", false, null, 0, default, true), []);
         var actor = fixture.Server.Population.PeerPrincipal(index: Body);
 
         fixture.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(index: Body), false, Budget: 8,

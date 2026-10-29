@@ -999,7 +999,7 @@ public sealed partial class WorldPopulation {
         entry.BodyColor = profile.Color;
     }
     /// <summary>Activates the first <paramref name="count"/> census stand-ins (indices <c>4..</c>), clamped to
-    /// <c>0..min(networkPlayers cap, </c><see cref="MaxSimulated"/><c>)</c>, and deactivates the rest. A newly-activated
+    /// <c>0..</c><see cref="MaxSimulated"/>, and deactivates the rest. A newly-activated
     /// entry is re-seeded to a fresh spawn and given its own <see cref="WorldBody"/> (a server-authoritative spawn at that
     /// pose); a deactivated entry drops its body; entries already active keep running their producers. Bumps the revision only when an
     /// occupancy flips.</summary>
@@ -1008,7 +1008,7 @@ public sealed partial class WorldPopulation {
     /// <param name="disconnected">Optional sink for the peer generations disconnected by the census change.</param>
     /// <returns>The clamped count actually applied.</returns>
     public int SetSimulatedCount(int count, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
-        // Clamp against the shared networkPlayers budget and every non-census occupant's physical slot.
+        // Clamp against every non-census occupant's physical slot; the networkPlayers cap counts humans only.
         var clamped = Math.Clamp(
             value: count,
             min: 0,

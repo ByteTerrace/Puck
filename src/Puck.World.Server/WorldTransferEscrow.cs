@@ -16,7 +16,19 @@ namespace Puck.World.Server;
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
 /// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
-public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
+/// <param name="RemoteHuman">The sender's statement that a human holds the traveler whatever its control source (a
+/// human set Idle before it left). It can only add a human: the destination lands as a human every traveler that
+/// carries the Live source or this statement (<see cref="LandsHuman"/>), so no sender can exempt a body from the
+/// <c>networkPlayers</c> cap.</param>
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, bool RemoteHuman = false) {
+    /// <summary>Gets whether the destination lands this traveler as a remote human: through the peer door, with the
+    /// arrival's Drive grants and its control following it, counted against the <c>networkPlayers</c> cap. The
+    /// destination decides it from what it hands out, never from a sender's claim of autonomy: a traveler that keeps
+    /// the Live source keeps an outside driver, so it is a human whatever the sender says. Every other traveler lands
+    /// autonomous, authored by the destination with no Drive grant and no route, which gives an outside party
+    /// nothing to drive and so needs no cap (the owner's ruling: a companion is not a networked player).</summary>
+    public bool LandsHuman => (Source.IsLive || RemoteHuman);
+}
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -968,10 +980,11 @@ public sealed partial class WorldTransferEscrow {
                 TravelTurn: member.TravelTurn
             );
 
-            reply = (reservationMember.Source.IsLive
+            reply = (reservationMember.LandsHuman
                 ? m_server.GrantTable.AdmitTransferredPeer(
                     occupant: occupant,
                     slot: slot,
+                    source: reservationMember.Source,
                     verdict: verdict
                 )
                 : m_server.GrantTable.AdmitTransferredEntity(
@@ -1333,6 +1346,9 @@ public sealed partial class WorldTransferEscrow {
             ) is { } arrivalRefusal) {
                 return WorldTransferReservationReply.Refused(reason: $"no admission entry authorizes arrivals from '{request.SourceAuthority}' ({arrivalRefusal})");
             }
+            if (NetworkPlayersRefusal(request: request) is { } capRefusal) {
+                return WorldTransferReservationReply.Refused(reason: capRefusal);
+            }
         }
 
         PruneDepartedAdmissions();
@@ -1400,19 +1416,23 @@ public sealed partial class WorldTransferEscrow {
                 ) is { IsAllowed: false } standing) {
                     return WorldTransferReservationReply.Refused(reason: $"{member.Principal.Describe()} cannot enter body:{slot} — {standing.DescribeDenial()}");
                 }
-            } else if (member.Source.IsLive) {
-                if (!ArrivalDrives(
+            } else {
+                if (
+                    member.LandsHuman &&
+                    !ArrivalDrives(
                     arrival: arrival,
                     slot: slot
-                )) {
+                )
+                ) {
                     return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — '{request.SourceAuthority}' is admitted but its authored admission grants confer no Drive over the body an arrival is assigned");
                 }
-            } else if (!m_server.Population.SupportsSource(
-                index: slot,
-                source: member.Source,
-                refusal: out var sourceRefusal
-            )) {
-                return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — {sourceRefusal}");
+                if (!m_server.Population.SupportsSource(
+                    index: slot,
+                    source: member.Source,
+                    refusal: out var sourceRefusal
+                )) {
+                    return WorldTransferReservationReply.Refused(reason: $"traveler {(index + 1)} cannot enter body:{slot} — {sourceRefusal}");
+                }
             }
 
             consumed[slot] = true;
@@ -1428,6 +1448,24 @@ public sealed partial class WorldTransferEscrow {
         );
     }
 
+    // Refuses a peer cohort whose humans would exceed the networkPlayers cap once every human already admitted and every
+    // human another live lease holds a body for has landed, so a reservation never binds a human its commit must refuse.
+    private string? NetworkPlayersRefusal(WorldTransferReservationRequest request) {
+        var arriving = request.Members.Count(predicate: static member => member.LandsHuman);
+
+        if (arriving == 0) {
+            return null;
+        }
+
+        var held = m_leases.Values
+            .Where(predicate: static lease => lease.Request.PeerAdmission)
+            .Sum(selector: static lease => lease.Request.Members.Count(predicate: static member => member.LandsHuman));
+        var cap = m_server.Population.NetworkPlayers;
+
+        return ((((long)m_server.Population.RemoteHumanCount + held) + arriving) > cap)
+            ? $"the networkPlayers admission cap ({cap}) is already met"
+            : null;
+    }
     // Refuses a cohort whose travelers cannot hold a lease: a catalog rig outside the catalog, no stable mobility
     // identity, an incarnation repeated within the cohort or already leased to another transfer, or a mobility epoch
     // this destination has already consumed.

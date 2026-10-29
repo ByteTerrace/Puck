@@ -5,6 +5,12 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
+    // The principal that owns a body's consent: a local seat below the seat count, the population's peer identity above
+    // it. Its authored pool ceilings bound what untrusted contributors may pull the body away from its own submission.
+    private Principal OccupantPrincipal(int bodyIndex) => ((bodyIndex < Host.Population.LocalSeatCount)
+        ? Principal.Seat(slot: bodyIndex)
+        : Host.Population.PeerPrincipal(index: bodyIndex)
+    );
     // Resets one seat's per-tick contribution accumulator (the two sums and the contributed held image) — called only
     // when it was actually touched this tick, so an uncontended body's fold phase never pays for a clear it does not
     // need. No ceiling accumulator to clear: the ceiling is durable grant-table state the seat authored, never a
@@ -35,8 +41,8 @@ public sealed partial class WorldTick {
     }
     /// <summary>Runs the fold phase (<see cref="FixedContributionFold"/>) once per tick,
     /// after every seat submission and every mounted addon's contribution has landed (see <see cref="Step"/>) and
-    /// before the population advances. For each human-occupied local seat that received at least one contribution
-    /// this tick, folds its owning seat's own base <c>h</c> (zero when the seat submitted nothing this tick) with the
+    /// before the population advances. For each human-occupied body (a local seat or an admitted peer) that received at least one contribution
+    /// this tick, folds its owning participant's own base <c>h</c> (zero when the seat submitted nothing this tick) with the
     /// tick's pooled untrusted sum and unpooled trusted sum, per channel, and calls <see cref="WorldBody.SubmitIntent"/>
     /// once with the composed result — replacing the pass-through write <see cref="ApplyIntentSubmission"/> already
     /// made for the owning seat's own submission. The held-device image is composed the same pass by
@@ -52,7 +58,7 @@ public sealed partial class WorldTick {
     /// cref="ApplyIntentSubmission"/>'s own direct writes already stand, so this method costs one bool check per
     /// seat.</summary>
     private void FoldChannelContributions() {
-        for (var seat = 0; (seat < Host.Population.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < Host.Population.Capacity); seat++) {
             if (
                 m_hasContribution[seat] &&
                 Host.Population.IsHumanOccupied(bodyIndex: seat) &&
@@ -74,7 +80,7 @@ public sealed partial class WorldTick {
                 // when the seat authored none; StageContribution already refused every untrusted delta in that case,
                 // so an empty vector can only be reached with a trusted-only (unpooled) contribution set.
                 var ceilings = Host.GrantTable.PoolCeilings(
-                    seat: Principal.Seat(slot: seat),
+                    seat: OccupantPrincipal(bodyIndex: seat),
                     subject: GrantSubject.Body(index: seat)
                 );
 
@@ -287,7 +293,7 @@ public sealed partial class WorldTick {
         // trusted addon's own declared Reach is the whole gate; there is no seat consent for it to consult.
         var ceilings = ((!isConsoleOrSeat && !isAddon)
             ? Host.GrantTable.PoolCeilings(
-                seat: Principal.Seat(slot: bodyIndex),
+                seat: OccupantPrincipal(bodyIndex: bodyIndex),
                 subject: subject
             )
             : default
