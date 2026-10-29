@@ -437,7 +437,10 @@ model.
 
 Writers run in their own worktree (`isolation: worktree`), branched from the
 lead's HEAD (`worktree.baseRef` in `.claude/settings.json`), so their edits
-never touch the checkout the owner is pairing in. Every agent reaches the live
+never touch the checkout the owner is pairing in. A Claude agent writes only
+inside its own worktree: the harness refuses its writes to another one. To
+continue a branch another lane holds (a Codex branch, say), brief the agent to
+fast-forward its own branch to that branch first, then land its branch. Every agent reaches the live
 World through the session's `puck` MCP server. That World runs the main
 checkout's build and sources, so a lane sees its own edits running only after
 the lead merges and reloads, or in a World of its own, named by `world` on
