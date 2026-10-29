@@ -147,6 +147,9 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     /// <inheritdoc />
     public GamepadType Type => GamepadType.SteamControllerTriton;
 
+    /// <inheritdoc />
+    public bool IsIgnoredReport(ReadOnlySpan<byte> report) => !report.IsEmpty && (report[0] == 0x7b);
+
     void IGamepadStreamReset.ResetStreamState() {
         m_hasSensorTimestamp = false;
         m_hasState = false;

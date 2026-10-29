@@ -4,6 +4,24 @@ using Puck.Input.Hid;
 namespace Puck.Input.Tests;
 
 public sealed class ParserTests {
+    [Fact]
+    public void Triton_receiver_status_is_ignored_without_publishing_or_changing_a_control_sample() {
+        using var hid = new TestHidDevice();
+        using var parser = new SteamControllerTriton(device: hid);
+        var report = new byte[54];
+        report[0] = 0x42;
+        report[2] = 1; // South, in a synthetic state report.
+        Assert.True(parser.TryParse(report, out var before));
+        report[0] = 0x7b;
+        Array.Fill<byte>(report, 0xff, 1, report.Length - 1);
+        Assert.True(parser.IsIgnoredReport(report));
+        Assert.False(parser.TryParse(report, out _));
+        report[0] = 0x43;
+        Assert.True(parser.TryParse(report, out var after));
+        Assert.Equal(before.Buttons, after.Buttons);
+        Assert.False(parser.IsIgnoredReport([]));
+        Assert.False(parser.IsIgnoredReport([0x7c]));
+    }
     [InlineData(HidTransport.Usb, 48)]
     [InlineData(HidTransport.Bluetooth, 78)]
     [Theory]

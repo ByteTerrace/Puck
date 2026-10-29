@@ -716,7 +716,7 @@ public sealed class GamepadDevice : IGamepadConnection {
                             firstParsed = false;
                             streamingDeadline = (m_time.GetTimestamp() + m_streamingDeadlineTicks);
                             m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot unpaired; parking");
-                        } else if (!loggedUnparsed) {
+                        } else if (!m_parser.IsIgnoredReport(report: buffer.AsSpan(start: 0, length: read)) && !loggedUnparsed) {
                             // Data is arriving but not in the expected report shape — e.g. the report-mode
                             // subcommand didn't take and the controller is still sending its simple (0x3F) report.
                             loggedUnparsed = true;

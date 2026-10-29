@@ -22,6 +22,18 @@ namespace Puck.World.Presentation.Tests;
 /// whichever was assigned to it most recently.
 /// </summary>
 public sealed class PlayerRosterDeviceRosterLawTests {
+    [Fact]
+    public void AStreamingPadIsListedBeforeActivity_AndCanBeNamedAfterRouterClassification() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var pad = InputDeviceId.FromKey(key: "synthetic:28de:1304");
+        roster.ObserveDeviceKind(device: pad, kind: InputDeviceKind.Gamepad);
+        roster.ObserveDevice(device: pad, kind: InputDeviceKind.Gamepad, name: "SteamControllerTriton");
+        Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=unassigned]", roster.DescribeDevices());
+        Assert.False(roster.IsJoined(slot: 1));
+        roster.Confirm(device: pad, actingPrincipal: Principal.Console);
+        Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=p1*]", roster.DescribeDevices());
+    }
     private static PlayerRoster BuildRoster(WorldFixture fixture) => new(
         definition: fixture.Server.Definition,
         link: new LoopbackTransport(server: fixture.Server),
