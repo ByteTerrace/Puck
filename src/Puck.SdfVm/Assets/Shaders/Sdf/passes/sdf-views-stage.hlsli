@@ -56,17 +56,19 @@ void sdfViewsGatherFilter(SdfPixel p, bool shadows) {
 // The pixel's occlusion and shadow visibilities averaged over the 4x4 window at offsets -2 to 1 around it, which holds
 // each of the surface pass's sixteen tap patterns once (sdfMeshPattern in sdf-surface-stage.hlsli). A pixel joins the
 // average only while its surface point lies within two pixel footprints of this pixel's tangent plane, so neither
-// crosses a depth edge or a silhouette; the pixel itself always joins. A pixel joins the shadows' average only while its
-// normal also turns little from this pixel's: across a crease, where a wall meets the ceiling, the side turned from a
-// light holds the full visibility the surface pass leaves on a side it does not query, which would light a band of the
-// side it does.
+// crosses a depth edge or a silhouette; the pixel itself always joins. A slot's shadow average takes only the pixels
+// whose slot the surface pass queried: a side turned from a light holds no measurement, and its decoded full visibility
+// would light the band beside it on the side that faces the light (on a curved surface, along the whole terminator),
+// with the light's whole illuminance under a cosine just above zero wherever the cascades shadow it. A pixel joins the
+// shadows' average only while its normal also turns little from this pixel's, so a crease's two lit faces keep their
+// own shadows. A slot no pixel of the window queried reads fully visible.
 void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out float ambient, out float4 shadows) {
     uint2 lane = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
     float tolerance = (2.0 * (p.pixelFootprint * t));
     float ambientSum = 0.0;
     float4 shadowSum = float4(0.0, 0.0, 0.0, 0.0);
     float weight = 0.0;
-    float shadowWeight = 0.0;
+    float4 shadowWeight = float4(0.0, 0.0, 0.0, 0.0);
 
     [unroll]
     for (uint y = 0u; (y < 4u); y++) {
@@ -77,17 +79,22 @@ void sdfViewsFilter(SdfPixel p, float3 surfacePoint, float3 normal, float t, out
             float w = ((entry.w < 0.0) ? 0.0 : saturate(1.0 - (abs(dot((entry.xyz - surfacePoint), normal)) / tolerance)));
 
             float turn = dot(sdfVisibilityUnpackNormal(sdfViewsFilterNormals[index]), normal);
-            float ws = (w * saturate((turn - SdfViewsShadowNormalLow) / (SdfViewsShadowNormalHigh - SdfViewsShadowNormalLow)));
+            uint word = sdfViewsFilterShadows[index];
+            float4 ws = ((w * saturate((turn - SdfViewsShadowNormalLow) / (SdfViewsShadowNormalHigh - SdfViewsShadowNormalLow))) * sdfShadowQueried(word));
 
             ambientSum += (w * entry.w);
-            shadowSum += (ws * sdfUnpackShadowVisibility(sdfViewsFilterShadows[index]));
+            shadowSum += (ws * sdfUnpackShadowVisibility(word));
             weight += w;
             shadowWeight += ws;
         }
     }
 
     ambient = (ambientSum / max(weight, 1.0e-4));
-    shadows = (shadowSum / max(shadowWeight, 1.0e-4));
+    shadows = float4(
+        ((shadowWeight.x > 0.0) ? (shadowSum.x / shadowWeight.x) : 1.0),
+        ((shadowWeight.y > 0.0) ? (shadowSum.y / shadowWeight.y) : 1.0),
+        ((shadowWeight.z > 0.0) ? (shadowSum.z / shadowWeight.z) : 1.0),
+        ((shadowWeight.w > 0.0) ? (shadowSum.w / shadowWeight.w) : 1.0));
 }
 
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
