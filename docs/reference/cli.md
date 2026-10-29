@@ -2418,11 +2418,12 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   inside the calls that wait for ticks, so a plan takes the same ticks however
   long the coordinator takes; the signals then read one frozen tick. The
   wall-clock metrics (`host.frames`, `host.memory`) are not compared exactly;
-  every `world.boot` count is, including cache work.
+  only cache-independent `world.boot` counts are compared exactly.
 - **The windowed leg** (`--tour`) boots a windowed World under the GPU lease,
   or drives the running World `--attach` names (a process id, attachment id or
-  attachment file; a World `puck_world_start` started, say). It waits for the
-  renderer and the bakes, reads the rendered signals (the bake and mesh-GI
+  attachment file; a World `puck_world_start` started, say). It boots paused
+  before its first tick (or pauses the attachment), enables lockstep, waits for
+  the renderer and bakes, advances a fixed warmup, and reads the signals (bake and mesh-GI
   counters, `world.indirect`, GPU counters, `host.frames` standing and walking,
   memory), then takes the tour: each stop runs the tour's reset lines and its
   own, waits for the bakes, arms its pinned steps a fixed lead after the tick
@@ -2436,6 +2437,9 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
   CLI's `puck test … --jobs 1`); the whole `worlds/debug/*-tests.puck` set boots
   the world once per scenario, so a default sweep reports it as unrun.
 
+The plan refuses unknown JSON members at every level and refuses an empty
+workload. Selecting no leg or scenario is refused; a report with no measurements fails.
+
 Each signal is red when a red rule of the plan holds or its line was refused,
 amber when an amber rule holds, and clean otherwise. Silence is never success:
 a signal is unmeasured when the World's attachment closed before it, the
@@ -2443,7 +2447,10 @@ sweep's time passed, the answer held no metric of its parser, or a rule reads a
 metric the answer lacks. One evidence check covers every script line, signal
 and recheck, including empty text and truncated output. A tour checks each
 `world.at` result by tick and command after capture; an arm receipt proves
-only arming. Missing or refused prelude, reset, frame, motion and after lines
+only arming. A reseed that restarts zero registrations fails. Authority stays
+paused during bake waits and coordinator calls; explicit tick waits resume and
+pause within one call, and each pinned timeline pauses at its capture tick.
+Missing or refused prelude, reset, frame, motion and after lines
 fail the stop. A tool is unmeasured when it did not finish within its
 ticks; a stop is unmeasured when the sweep could not reach it. Unmeasured fails
 the run like red. A signal the plan marks `recheck` (the watchdog, the rule
@@ -2468,7 +2475,7 @@ changed under the plan's compare mode for each metric (`exact`,
 pixel counts as changed when a colour channel differs by more than the tour's
 `levelTolerance` (16 levels), and a still whose fraction exceeds
 `amberFraction` (2%) is amber; a `compare-<group>.png` sheet then sets each
-baseline still above its current one. The report is a derived product: keep it
+baseline still above its current one. A signal difference outside its compare tolerance is red; a baseline signal missing from a selected leg is unmeasured. The report is a derived product: keep it
 outside the repository.
 
 Exit codes: 0 nothing red or unmeasured, 1 something red or unmeasured, 2 a

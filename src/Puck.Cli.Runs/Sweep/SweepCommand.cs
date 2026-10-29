@@ -114,6 +114,10 @@ public static partial class SweepCommand {
         }
 
         var windowed = (tour || (attach is not null));
+
+        if (noHeadless && !windowed && (scenarios.Length == 0)) {
+            return CliExit.Refuse(verb: Verb, what: "the run", why: "no leg or scenario was selected; the run would read nothing");
+        }
         var directory = Path.GetFullPath(path: (output ?? RunDirectory.CreatePath(prefix: "puck-sweep-")));
         var world = Path.GetFullPath(path: (worldPath ?? Path.Combine(path1: repositoryRoot, path2: DefaultWorld)));
 
@@ -166,7 +170,7 @@ public static partial class SweepCommand {
                     session: out var booted,
                     workingDirectory: repositoryRoot
                 )) {
-                    return CliExit.Refuse(verb: Verb, what: "the headless World", why: bootError);
+                    return cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the headless World", why: bootError);
                 }
 
                 using (var headless = booted!) {
@@ -185,14 +189,14 @@ public static partial class SweepCommand {
 
                 if (attach is not null) {
                     if (!SweepWorld.TryAttach(budget: budget, error: out var attachError, session: out rendered, world: attach)) {
-                        return CliExit.Refuse(verb: Verb, what: $"--attach {attach}", why: attachError);
+                        return (cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: $"--attach {attach}", why: attachError));
                     }
                 } else if (budget.Reason is { } over) {
                     signals.Add(item: WindowedNotRun(reason: over));
                 } else {
                     logs = Path.Combine(path1: directory, path2: SweepLegs.Windowed);
 
-                    var arguments = Arguments(deadline: deadline, extra: ["--headless", "false"], state: Path.Combine(path1: logs, path2: "state"), world: world);
+                    var arguments = Arguments(deadline: deadline, extra: ["--headless", "false", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world);
                     CliLease? gpu = null;
 
                     try {
@@ -220,7 +224,7 @@ public static partial class SweepCommand {
                         session: out rendered,
                         workingDirectory: repositoryRoot
                     )) {
-                        return CliExit.Refuse(verb: Verb, what: "the windowed World", why: bootError);
+                        return cancellation.IsCancellationRequested ? CliExit.Cancelled : CliExit.Refuse(verb: Verb, what: "the windowed World", why: bootError);
                     }
                 }
 
@@ -232,6 +236,11 @@ public static partial class SweepCommand {
                     }
 
                     var run = new SweepRun(baseline: baseline, directory: directory, plan: plan, progress: Console.Error, world: shown);
+                    var held = shown.Run(script: "world.rate pause\nworld.lockstep on");
+
+                    if (!held.Ok) {
+                        signals.Add(item: WindowedNotRun(reason: held.Output));
+                    }
 
                     Console.Error.WriteLine(value: $"{Verb}: windowed World {shown.ProcessId.ToString(provider: CultureInfo.InvariantCulture)} attached");
 
@@ -239,6 +248,11 @@ public static partial class SweepCommand {
                         signals.Add(item: unsettled);
                     }
 
+                    var warmed = shown.Run(script: "world.rate resume\nworld.wait 300\nworld.rate pause", timeoutSeconds: 120);
+
+                    if (!warmed.Ok) {
+                        signals.Add(item: WindowedNotRun(reason: warmed.Output));
+                    }
                     signals.AddRange(collection: run.Signals());
                     tourResult = run.Tour(names: stops);
                     signals.AddRange(collection: run.Recheck());
@@ -247,6 +261,9 @@ public static partial class SweepCommand {
             }
         }
 
+        if (baseline is not null) {
+            signals.AddRange(collection: baseline.MissingSignals(current: signals, legs: legs).ToArray());
+        }
         var report = new SweepReport(
             Baseline: baseline?.Path.Replace(newChar: '/', oldChar: '\\'),
             Commit: (CliGit.TryResolveCommit(repository: repositoryRoot, resolved: out var commit, revision: "HEAD") ? commit : "unknown"),
@@ -279,6 +296,7 @@ public static partial class SweepCommand {
         "--world", world,
         .. WorldDevices.NoneArguments,
         "--state-dir", state,
+        "--cache-dir", Path.Combine(path1: state, path2: "cache"),
         "--exit-after-seconds", (((int)deadline.TotalSeconds) + 120).ToString(provider: CultureInfo.InvariantCulture),
         .. extra,
     ];

@@ -161,7 +161,8 @@ public sealed record SweepReport(
         return text.ToString();
     }
 
-    private IEnumerable<string> Everything() => Tools.Select(selector: static tool => tool.Status)
+    private IEnumerable<string> Everything() => (((Tools.Count == 0) && (Signals.Count == 0) && ((Tour?.Stills.Count ?? 0) == 0) && (Scenarios.Status == SweepStatus.Skipped)) ? new[] { SweepStatus.Unknown } : [])
+        .Concat(second: Tools.Select(selector: static tool => tool.Status))
         .Concat(second: Signals.Select(selector: static signal => signal.Status))
         .Concat(second: [Scenarios.Status])
         .Concat(second: (Tour?.Stills.Select(selector: static still => still.Status) ?? []));
@@ -235,7 +236,18 @@ public sealed class SweepBaseline {
     /// <summary>Returns the baseline's still for a stop.</summary>
     /// <param name="name">The stop.</param>
     /// <returns>The still's path, or <see langword="null"/> when the baseline has none.</returns>
-    public string? StillFor(string name) => (m_stills.TryGetValue(key: name, value: out var path) && File.Exists(path: path) ? path : null);
+    public string? StillFor(string name) => ((m_stills.TryGetValue(key: name, value: out var path) && File.Exists(path: path)) ? path : null);
+    /// <summary>Names signals lost from a leg that this run selected.</summary>
+    public IEnumerable<SweepSignalResult> MissingSignals(IReadOnlyList<SweepSignalResult> current, IReadOnlyList<SweepLegResult> legs) {
+        var present = current.Select(selector: static signal => Key(leg: signal.Leg, name: signal.Name)).ToHashSet(comparer: StringComparer.Ordinal);
+
+        foreach (var leg in legs.Select(selector: static leg => leg.Leg).Distinct()) {
+            foreach (var key in m_metrics.Keys.Where(predicate: key => (key.StartsWith(comparisonType: StringComparison.Ordinal, value: (leg + "/")) && !present.Contains(item: key)))) {
+                yield return new SweepSignalResult(key[(leg.Length + 1)..], leg, string.Empty, SweepStatus.Unknown,
+                    ["baseline signal missing from this run"], new Dictionary<string, string>(), string.Empty, ["signal gone"]);
+            }
+        }
+    }
     /// <summary>Names what changed in a signal against the baseline, by the signal's compare modes.</summary>
     /// <param name="leg">The leg.</param>
     /// <param name="signal">The signal.</param>
