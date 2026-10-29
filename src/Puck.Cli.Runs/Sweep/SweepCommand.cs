@@ -335,7 +335,7 @@ public static partial class SweepCommand {
                 }
                 expanded.UnionWith(other: matches.Select(selector: PuckPaths.Normalize));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
-                reasons.Add(item: $"cannot read scenario sources {file}: {exception.Message}");
+                reasons.Add(item: $"cannot read scenario sources {file}: {exception.Message.Replace(oldChar: Path.DirectorySeparatorChar, newChar: '/')}");
                 status = SweepStatus.Red;
             }
         }
