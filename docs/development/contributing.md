@@ -348,14 +348,53 @@ The target is under 30 seconds from saving an engine C# or HLSL file to seeing
 it in the running debug world (the package `worlds/debug/`, booted with
 `--world worlds/debug`), on Direct3D 12, the World's default backend on Windows.
 
-**C#**: build and boot in one command, restore skipped:
+**C#**: run the World under `dotnet watch`, with the projects you are editing
+built unoptimized, and keep it running:
+
+```powershell
+$env:DOTNET_WATCH_RESTART_ON_RUDE_EDIT = '1'
+dotnet watch --project src/Puck.World --non-interactive run -c Release --no-restore --property:PuckHotReload=Puck.World.Client -- --world worlds/debug --devices all
+```
+
+`PuckHotReload` names the projects, comma-separated
+(`--property:PuckHotReload=Puck.World.Client,Puck.SdfVm`), that build without
+optimization; every other project stays optimized. Spell it `--property:`, not
+`-p:`, which `dotnet watch` reads as `--project`. Saving a file then does one of
+two things, and the watch output says which:
+
+- **A method-body edit, or an added method or member, in a listed project**
+  applies to the running World: `dotnet watch : C# and Razor changes applied in
+  45ms`, and the World prints `[world.hot-reload] applied revision N: <types>`.
+  The first edit after the watch starts pays for loading the compiler
+  workspace (14 s under load); later ones take well under a second. A cache
+  holding a product of code compares `CodeRevision.Current`
+  (`src/Puck.Abstractions/CodeRevision.cs`, the process's
+  `MetadataUpdateHandler`) and derives again when it moved: every compiled
+  camera rig (`WorldCameraRigCompiler.Cache`) and everything the frame presenter
+  derives from a delivered definition (cameras and faces, screens, speakers,
+  text, decals, the emitted scene and the static field) rebuild on the next
+  frame, so an edit to that code shows without a reload. Simulation state,
+  baked meshes and installed shader pipelines are untouched.
+- **A rude edit** (a new field or a changed layout in a struct) prints `Restart
+  is needed to apply the changes.`, and the watch rebuilds and reboots the
+  World: 28 s from saving to `Application started` under heavy load. A build
+  error stops there with `Fix the error to continue` until the next save.
+- **An edit to a project not listed** is refused by the runtime (`The assembly
+  can not be edited or changed. Further changes won't be applied to this
+  process.`), and nothing reboots: stop the watch and start it again with that
+  project in `PuckHotReload`.
+
+An agent passes `--devices none`; a run the owner plays in passes `--devices all`
+([devices](#game-changes)). `dotnet watch` watches the repository root, so a
+World whose `--state-dir` or `--cache-dir` lies under the checkout overflows its
+file watcher (`Too many changes at once`) while it writes; the per-user
+defaults lie outside it.
+
+Without hot reload, one command builds and boots:
 
 ```powershell
 dotnet run --project src/Puck.World -c Release --no-restore -- --world worlds/debug --devices none
 ```
-
-An agent passes `--devices none`; a run the owner plays in passes `--devices all`
-([devices](#game-changes)).
 
 A Windows build of one project builds DXIL alone, so a Vulkan run
 (`-- --backend vulkan`), which such a build refuses at boot, needs
