@@ -11,7 +11,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>Visibility reprojection agrees with ViewProjection for camera motion over a still mesh and for a nonuniformly
-/// scaled mesh that moves. Invalid history, background, and a point behind the prior camera are refused. Both hardware
+/// scaled mesh that moves. A still triangle whose aspect ratio defeats float barycentric reconstruction retains exact
+/// zero object motion. Invalid history, background, and a point behind the prior camera are refused. Both hardware
 /// backends read the shipped shader module.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
@@ -36,6 +37,8 @@ public sealed class SdfReprojectionDeviceLawTests {
     private static readonly Matrix4x4 BehindMesh = Matrix4x4.CreateTranslation(xPosition: 0f, yPosition: 0f, zPosition: -10f);
     private static readonly SdfMesh Mesh = new(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY },
         indices: new uint[] { 0, 1, 2 });
+    private static readonly SdfMesh Sliver = new(positions: new Vector3[] { Vector3.Zero, new(64f, 0f, 0f), new(64f, (1f / 4096f), 0f) },
+        indices: new uint[] { 0, 1, 2 });
 
     private readonly record struct MotionCase(Vector3 Current, Vector3 Previous, uint Identity, bool History, bool Valid);
 
@@ -43,6 +46,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         var point = new Vector3(x: 0.3f, y: 0.5f, z: 0f);
         var still = Vector3.Transform(matrix: StillMesh, position: point);
         var behind = Vector3.Transform(matrix: BehindMesh, position: point);
+        var sliver = Vector3.Transform(matrix: StillMesh, position: new Vector3(32f, (1f / 16384f), 0f));
         uint Draw(int draw) => (SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)draw)));
 
         return [
@@ -52,6 +56,7 @@ public sealed class SdfReprojectionDeviceLawTests {
             new(Current: still, Previous: still, Identity: Draw(draw: 1), History: false, Valid: false),
             new(Current: still, Previous: still, Identity: 0, History: true, Valid: false),
             new(Current: behind, Previous: behind, Identity: Draw(draw: 2), History: true, Valid: false),
+            new(Current: sliver, Previous: sliver, Identity: Draw(draw: 3), History: true, Valid: true),
         ];
     }
 
@@ -96,6 +101,7 @@ public sealed class SdfReprojectionDeviceLawTests {
             new(Identity: "moving", Material: 0, Mesh: Mesh, ObjectToWorld: CurrentMesh),
             new(Identity: "still", Material: 0, Mesh: Mesh, ObjectToWorld: StillMesh),
             new(Identity: "behind", Material: 0, Mesh: Mesh, ObjectToWorld: BehindMesh),
+            new(Identity: "still-sliver", Material: 0, Mesh: Sliver, ObjectToWorld: StillMesh),
         ];
         var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var meshLayout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
@@ -124,6 +130,7 @@ public sealed class SdfReprojectionDeviceLawTests {
             draws[0] with { ObjectToWorld = PreviousMesh },
             draws[1],
             draws[2],
+            draws[3],
         ];
         var previousRecords = new uint[(previousDraws.Length * SdfMeshRecord.DrawWords)];
 
