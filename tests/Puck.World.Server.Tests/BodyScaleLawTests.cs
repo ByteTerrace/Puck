@@ -330,7 +330,7 @@ public sealed class BodyScaleLawTests {
             condition: (fixture.Server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     Profile: null,
-                    HasMappedArrival: true,
+                    Arrival: WorldTransferArrival.Mapped,
                     BodyMotionProgramName: "grounded",
                     Position: default,
                     YawRadians: default,

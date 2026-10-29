@@ -80,7 +80,7 @@ public sealed class WorldTransferTurnRecoveryLawTests {
         var pending = Assert.Single(collection: host.CaptureRow(row: rowA.Instance).InDoubtTransfers);
         var commit = Assert.Single(collection: pending.CommitMembers);
 
-        Assert.Equal(expected: mapped, actual: commit.HasMappedArrival);
+        Assert.Equal(expected: mapped, actual: (commit.Arrival == WorldTransferArrival.Mapped));
         if (mapped) {
             Assert.NotEqual(expected: departureTurn, actual: commit.TravelTurn);
         }

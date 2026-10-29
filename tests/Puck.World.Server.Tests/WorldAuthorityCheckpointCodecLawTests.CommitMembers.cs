@@ -25,7 +25,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         ActionContinuity: continuity,
         BodyMotionProgramName: "walk",
         Continuum: Segment,
-        HasMappedArrival: true,
+        Arrival: WorldTransferArrival.Mapped,
         PlanarVelocity: new FixedVector3(X: FixedQ4816.FromInteger(value: 1), Y: FixedQ4816.Zero, Z: FixedQ4816.FromDouble(value: 0.5)),
         Position: new FixedVector3(X: FixedQ4816.FromInteger(value: 2), Y: FixedQ4816.FromDouble(value: 0.25), Z: FixedQ4816.FromInteger(value: 3)),
         Profile: null,

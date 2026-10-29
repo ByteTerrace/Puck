@@ -45,7 +45,7 @@ public sealed class CrossingHandoffTokenLawTests {
 
     private static readonly WorldTransferCommitMember Member = new(
         Profile: null,
-        HasMappedArrival: false,
+        Arrival: WorldTransferArrival.Spawn,
         BodyMotionProgramName: "grounded",
         Position: default,
         YawRadians: default,

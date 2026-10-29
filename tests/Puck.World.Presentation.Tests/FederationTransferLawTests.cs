@@ -128,7 +128,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -230,7 +230,7 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(condition: fixture.Server.ReserveTransfer(request: later).Accepted);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -274,7 +274,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -309,7 +309,7 @@ public sealed partial class FederationTransferLawTests {
             userMessage: replayReason
         );
 
-        var altered = member with { HasMappedArrival = true };
+        var altered = member with { Arrival = WorldTransferArrival.Mapped };
 
         Assert.True(condition: (fixture.Server.CommitTransfer(
             sourceAuthority: request.SourceAuthority,
@@ -342,7 +342,7 @@ public sealed partial class FederationTransferLawTests {
         var profile = fixture.Server.Profiles.BootProfile;
         var expected = new WorldTransferCommitMember(
             Profile: profile.Project(),
-            HasMappedArrival: true,
+            Arrival: WorldTransferArrival.Mapped,
             BodyMotionProgramName: "free",
             Position: new FixedVector3(
                 X: FixedQ4816.One,
@@ -435,7 +435,7 @@ public sealed partial class FederationTransferLawTests {
         var defaults = fixture.Server.Definition.PlayerDefaults;
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -500,7 +500,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: true,
+            Arrival: WorldTransferArrival.Mapped,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -560,7 +560,7 @@ public sealed partial class FederationTransferLawTests {
         );
         var member = new WorldTransferCommitMember(
             null,
-            false,
+            WorldTransferArrival.Spawn,
             "grounded",
             default,
             default,
@@ -652,7 +652,7 @@ public sealed partial class FederationTransferLawTests {
         );
         var member = new WorldTransferCommitMember(
             null,
-            false,
+            WorldTransferArrival.Spawn,
             "grounded",
             default,
             default,
@@ -731,7 +731,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -827,7 +827,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -984,7 +984,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -1485,7 +1485,7 @@ public sealed partial class FederationTransferLawTests {
         var mobility = Mobility(index: 0);
         var commit = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -1574,7 +1574,7 @@ public sealed partial class FederationTransferLawTests {
         var reservation = fixture.Server.ReserveTransfer(request: request);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: true,
+            Arrival: WorldTransferArrival.Mapped,
             BodyMotionProgramName: "not-declared",
             Position: default,
             YawRadians: default,
@@ -1598,6 +1598,63 @@ public sealed partial class FederationTransferLawTests {
             expectedSubstring: "unavailable destination motion program 'not-declared'"
         );
         Assert.False(condition: fixture.Server.Population.IsActive(index: Assert.Single(collection: reservation.BodyIndices)));
+    }
+    // A posed arrival carries no motion, so the program the traveller left under needs no counterpart here: it lands
+    // on the destination's own program, standing at the pose.
+    [Fact]
+    public void PosedCommit_LandsAtThePoseWhateverMotionProgramItLeftUnder() {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.PeerPopulationDocument(networkPlayers: 2));
+        var request = Reservation(
+            border: "up",
+            sourceAuthority: "source/world",
+            transferId: 19
+        ) with {
+            PeerAdmission = true,
+            Members = [new WorldTransferReservationMember(
+                Principal: Principal.Console,
+                PreferredSlot: 4,
+                Identity: null,
+                Source: IntentSource.Live,
+                BodyColor: default,
+                CatalogRig: 4,
+                Mobility: Mobility(index: 4)
+            )],
+        };
+        var reservation = fixture.Server.ReserveTransfer(request: request);
+        var pose = new FixedVector3(
+            X: FixedQ4816.FromDouble(value: 3.5),
+            Y: FixedQ4816.Zero,
+            Z: FixedQ4816.FromDouble(value: -2.25)
+        );
+        var yaw = FixedQ4816.FromDegrees(degrees: 90.0);
+        var member = new WorldTransferCommitMember(
+            Profile: null,
+            Arrival: WorldTransferArrival.Posed,
+            BodyMotionProgramName: "not-declared",
+            Position: pose,
+            YawRadians: yaw,
+            PlanarVelocity: default,
+            VerticalVelocity: default
+        );
+
+        Assert.True(
+            condition: reservation.Accepted,
+            userMessage: reservation.Reason
+        );
+        Assert.True(
+            condition: (fixture.Server.CommitTransfer(
+                sourceAuthority: request.SourceAuthority,
+                transferId: request.TransferId,
+                members: [member],
+                reason: out var reason
+            ) == WorldTransferStatus.Committed),
+            userMessage: reason
+        );
+        var body = fixture.Server.Population.EntryBody(index: Assert.Single(collection: reservation.BodyIndices))!;
+
+        Assert.Equal(expected: pose, actual: body.FixedPosition);
+        Assert.Equal(expected: yaw, actual: body.FixedYaw);
+        Assert.NotEqual(expected: "not-declared", actual: body.BodyMotionProgram);
     }
     [Fact]
     public void MobilityCredential_ChurnIsBounded_AndGenerationBound() {
@@ -1629,7 +1686,7 @@ public sealed partial class FederationTransferLawTests {
             );
             var commit = new WorldTransferCommitMember(
                 Profile: null,
-                HasMappedArrival: false,
+                Arrival: WorldTransferArrival.Spawn,
                 BodyMotionProgramName: "grounded",
                 Position: default,
                 YawRadians: default,
@@ -1754,7 +1811,7 @@ public sealed partial class FederationTransferLawTests {
         );
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,

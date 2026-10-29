@@ -69,7 +69,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -208,7 +208,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
@@ -259,7 +259,7 @@ public sealed class ArrivalAdmissionMintAtomicityLawTests {
         var bodyIndex = Assert.Single(collection: reservation.BodyIndices);
         var member = new WorldTransferCommitMember(
             Profile: null,
-            HasMappedArrival: false,
+            Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "grounded",
             Position: default,
             YawRadians: default,
