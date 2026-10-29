@@ -621,8 +621,6 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
 
-- [medium] Companions are not networked players (the owner's ruling): an instance's `networkPlayers` admission cap counts remote humans only. Today the night instance's cap of 0 counts the companion (body 42), so its `painting-night` transfer is refused ("the networkPlayers admission cap (0) is already met") and it returns to the gallery instead of following the player. (from: owner walkthrough)
-
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;

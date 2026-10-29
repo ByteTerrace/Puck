@@ -349,7 +349,8 @@ public sealed partial class WorldInstanceHost {
                 Source: traveler.Source,
                 BodyColor: traveler.BodyColor,
                 CatalogRig: traveler.CatalogRig,
-                Mobility: traveler.Mobility
+                Mobility: traveler.Mobility,
+                RemoteHuman: ((sourceSlot < source.Server.Population.LocalSeatCount) || source.Server.Population.IsAdmittedPeer(bodyIndex: sourceSlot))
             );
         }
 

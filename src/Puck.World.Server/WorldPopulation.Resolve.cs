@@ -124,8 +124,7 @@ public sealed partial class WorldPopulation {
             spawnPoints: definition.SpawnPoints
         );
         m_lookAssignment = definition.LookAssignment;
-        // The remote admission cap moves with the live document (a swap can raise or lower networkPlayers); the running
-        // census count is re-clamped against it by ReconcileInhabitants' trailing SetSimulatedCount.
+        // The remote-human admission cap moves with the live document (a swap can raise or lower networkPlayers).
         m_remoteCap = definition.Population.NetworkPlayers;
     }
     // What the solid rows compile into: the contact field the definition selects (the ONE derivation both a fresh
