@@ -20,7 +20,7 @@ public static partial class TestCommand {
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
     // A worker retains its process across boots, and restores checkpoints only while the complete boot shape matches.
-    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce) {
+    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory) {
         var legs = new List<object>();
 
         foreach (var index in indices) {
@@ -39,6 +39,7 @@ public static partial class TestCommand {
                 World = world.Path,
                 BootShape = BatchShape(world: world),
                 Reproduce = reproduce,
+                CacheDirectory = ((cacheDirectory is null) ? null : Path.GetFullPath(path: cacheDirectory)),
                 Directory = legDirectory,
                 ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule!.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),
             });

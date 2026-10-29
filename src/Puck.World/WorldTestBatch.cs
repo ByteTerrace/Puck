@@ -11,7 +11,7 @@ namespace Puck.World;
 
 /// <summary>A worker retains its native host while consecutive scenarios have identical boot state.</summary>
 internal sealed class WorldTestBatch {
-    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, string BootShape, bool Reproduce = false);
+    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, string BootShape, bool Reproduce = false, string? CacheDirectory = null);
 
     private readonly Leg[] m_legs;
     private readonly Output m_output;
@@ -81,15 +81,18 @@ internal sealed class WorldTestBatch {
                 "--devices", "none", "--world", batch.WorkingWorld, "--headless", "true", "--unpaced", "true",
                 "--exit-after-seconds", "0",
                 "--state-dir", stateDirectory,
-                "--cache-dir", (batch.m_workingDirectory + "-cache"),
+                .. ((first.CacheDirectory is { } cache) ? new[] { "--cache-dir", cache } : []),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
                 batch.m_legDeadline?.Dispose();
                 batch.m_control?.Dispose();
-                if ((exit != 0) || (batch.m_index == startingIndex)) { break; }
+                if ((exit != 0) || batch.m_failed || (batch.m_index == startingIndex)) { break; }
             }
 
             return (((exit == 0) && !batch.m_failed && (batch.m_index == legs.Length)) ? 0 : 1);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            try { previousError.WriteLine(value: $"[test.batch: {exception}]"); } catch (Exception) { }
+            return 1;
         } finally {
             foreach (var (_, probe) in batch.m_probes) { probe.Dispose(); }
             batch.m_legDeadline?.Dispose();
@@ -195,7 +198,16 @@ internal sealed class WorldTestBatch {
         m_observing = false;
         foreach (var (_, probe) in m_probes) { probe.Dispose(); }
         try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_reproductionFailure = $"cannot archive authored state: {exception.Message}"; }
-        _ = m_control.InvokeAsync(operation: CompleteLeg);
+        _ = m_control.InvokeAsync(operation: CompleteLegSafely);
+    }
+    // The session owns the returned task. No reporting failure may escape it and strand an unpaced worker
+    // after its index has advanced beyond the old deadline.
+    private bool CompleteLegSafely() {
+        try { return CompleteLeg(); } catch (Exception exception) {
+            m_failed = true;
+            try { Console.Error.WriteLine(value: $"[test.batch: {exception}]"); } catch (Exception) { } finally { Get<IHostApplicationLifetime>().StopApplication(); }
+            return true;
+        }
     }
     private bool CompleteLeg() {
         var leg = m_legs[m_index];
@@ -226,12 +238,12 @@ internal sealed class WorldTestBatch {
             static double Milliseconds(long ticks) => ((1000.0 * ticks) / Stopwatch.Frequency);
             File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
                 authorityTicks = run.AuthorityTicks,
-                bootMilliseconds = Milliseconds(m_bootTicks),
-                restoreMilliseconds = Milliseconds(m_restoreTicks),
-                authoredMilliseconds = Milliseconds(m_authoredTicks),
-                exportMilliseconds = Milliseconds(run.ExportTicks),
-                replayMilliseconds = Milliseconds(replayTicks),
-                otherMilliseconds = Milliseconds((((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
+                bootMilliseconds = Milliseconds(ticks: m_bootTicks),
+                restoreMilliseconds = Milliseconds(ticks: m_restoreTicks),
+                authoredMilliseconds = Milliseconds(ticks: m_authoredTicks),
+                exportMilliseconds = Milliseconds(ticks: run.ExportTicks),
+                replayMilliseconds = Milliseconds(ticks: replayTicks),
+                otherMilliseconds = Milliseconds(ticks: (((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
             }));
             var boots = (m_host.Boots - m_reportedBoots);
 
@@ -250,10 +262,11 @@ internal sealed class WorldTestBatch {
             Get<IHostApplicationLifetime>().StopApplication();
         } else {
             try { OpenLeg(); StartLeg(); } catch (Exception exception) {
-                Console.Error.WriteLine(value: $"[test.batch: {exception}]");
-                m_error.Flush();
                 m_failed = true;
-                Get<IHostApplicationLifetime>().StopApplication();
+                try {
+                    Console.Error.WriteLine(value: $"[test.batch: {exception}]");
+                    m_error.Flush();
+                } finally { Get<IHostApplicationLifetime>().StopApplication(); }
             }
         }
         return true;
@@ -290,7 +303,15 @@ internal sealed class WorldTestBatch {
 
         public override Encoding Encoding => Encoding.UTF8;
 
-        public void Open(string path) { lock (m_gate) { m_transcript?.Dispose(); m_transcript = new StreamWriter(path, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)); } }
+        public void Open(string path) {
+            lock (m_gate) {
+                var replacement = new StreamWriter(path, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                var previous = m_transcript;
+
+                m_transcript = replacement;
+                previous?.Dispose();
+            }
+        }
         public override void Write(char value) { lock (m_gate) { m_transcript?.Write(value: value); progress?.Write(value: value); } }
         public override void Write(string? value) { lock (m_gate) { m_transcript?.Write(value: value); progress?.Write(value: value); } }
         public override void WriteLine(string? value) { lock (m_gate) { m_transcript?.WriteLine(value: value); progress?.WriteLine(value: value); } }

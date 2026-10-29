@@ -516,14 +516,13 @@ public static partial class WorldWireCodec {
     /// <exception cref="ArgumentNullException"><paramref name="writer"/> is <see langword="null"/>.</exception>
     public static void WriteIntent(WireWriter writer, PlayerIntent intent) => WriteInputImage(intent: intent, numericCount: ChannelLimits.MaxAxes, writer: writer);
 
-    private static void WriteInputImage(WireWriter writer, PlayerIntent intent, int numericCount) {
+    private static void WriteInputImage(WireWriter writer, in PlayerIntent intent, int numericCount) {
         ArgumentNullException.ThrowIfNull(argument: writer);
+        var channels = intent.Channels;
+        ReadOnlySpan<long> axes = channels.Axes;
 
-        for (var ordinal = 0; (ordinal < numericCount); ordinal++) {
-            writer.WriteInt64(value: intent.Channels.Axes[ordinal]);
-        }
-
-        writer.WriteUInt64(value: intent.Channels.Buttons);
+        writer.WriteInt64s(values: axes[..numericCount]);
+        writer.WriteUInt64(value: channels.Buttons);
         if (intent.SourceRay is not { } ray) {
             writer.WriteByte(value: 0);
 
