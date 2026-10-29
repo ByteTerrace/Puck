@@ -101,6 +101,13 @@ public static class SdfMeshProbeDepth {
         Span<Vector3> normals = stackalloc Vector3[4];
         Span<float> weights = stackalloc float[4];
         Span<float> curvatures = stackalloc float[4];
+        var firstCode = uint.MaxValue;
+        var firstNormal = Vector3.Zero;
+        var planar = true;
+        var planeLow = float.PositiveInfinity;
+        var planeHigh = float.NegativeInfinity;
+        var planeSum = 0f;
+        var planeWeight = 0f;
 
         weights.Clear();
 
@@ -120,13 +127,32 @@ public static class SdfMeshProbeDepth {
                 continue;
             }
             points[corner] = (Directions[index] * depth);
-            normals[corner] = Normal(word: word);
             var packedCurvature = surfaces[(Directions.Length + (index >> 1))];
             var curvature = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)(packedCurvature >> (16 * (index & 1))))));
 
             if (!float.IsFinite(f: curvature)) { continue; }
+            var code = (word >> 16);
+
+            if (firstCode == uint.MaxValue) {
+                firstCode = code;
+                firstNormal = Normal(word: word);
+            }
+            normals[corner] = ((code == firstCode) ? firstNormal : Normal(word: word));
             curvatures[corner] = curvature;
             weights[corner] = weight;
+            planar &= ((curvature == 0f) && (code == firstCode));
+            var plane = Vector3.Dot(vector1: firstNormal, vector2: points[corner]);
+
+            planeLow = MathF.Min(x: planeLow, y: plane);
+            planeHigh = MathF.Max(x: planeHigh, y: plane);
+            planeSum += (weight * plane);
+            planeWeight += weight;
+        }
+        // This is the exact planar form of the quadratic. Flat walls dominate CPU bounce reads and pixels.
+        if (planar && (planeWeight > 0f) && ((planeHigh - planeLow) <= (0.5f * SdfMeshIrradianceProbe.DepthSurfaceJoinGap))) {
+            var gap = (Vector3.Dot(vector1: firstNormal, vector2: toward) - (planeSum / planeWeight));
+
+            return FromCoverage(blocked: (planeWeight * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade))));
         }
         var blocked = 0f;
 
@@ -173,12 +199,15 @@ public static class SdfMeshProbeDepth {
 
             blocked += (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
         }
+        return FromCoverage(blocked: blocked);
+    }
+
+    private static float FromCoverage(float blocked) {
         var coverage = Math.Clamp(max: 1f, min: 0f, value: ((blocked - SdfMeshIrradianceProbe.DepthCoverageStart) * SdfMeshIrradianceProbe.DepthCoverageScale));
 
         coverage = ((coverage * coverage) * (3f - (2f * coverage)));
         return (1f - coverage);
     }
-
     private static Vector3[] BuildDirections() {
         var directions = new Vector3[(Size * Size)];
 

@@ -60,6 +60,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   for an exact-segment-visible receiver in the small-curve witness. An unsupported
   tap casts no blocker; a distinct local hit supports the normal-gradient fit.
   Curvature zero retains the exact plane intersection. Fade a patch over `DepthSurfaceFade`
+  (the common-plane fast path reduces that same quadratic to one signed gap and
+  reuses the decoded normal, avoiding four general fits in CPU bounce reads and pixels)
   (2 cm, less than normal bias), then combine its blocked angular coverage.
   The flat-surface law also rejects radial-distance interpolation: it returned
   48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.

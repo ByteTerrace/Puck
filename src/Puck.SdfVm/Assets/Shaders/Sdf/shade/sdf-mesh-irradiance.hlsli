@@ -62,6 +62,11 @@ float3 sdfMeshProbeOffset(uint address) {
 }
 // First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
 // KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
+float sdfMeshProbeCoverageVisibility(float blocked) {
+    float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
+    coverage = coverage * coverage * (3.0 - 2.0 * coverage);
+    return 1.0 - coverage;
+}
 float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
@@ -72,6 +77,13 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float3 normals[4];
     float curvatures[4];
     float4 weights = 0.0;
+    uint firstCode = 0xffffffffu;
+    float3 firstNormal = 0.0;
+    bool planar = true;
+    float planeLow = 3.402823466e+38;
+    float planeHigh = -3.402823466e+38;
+    float planeSum = 0.0;
+    float planeWeight = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
         points[corner] = 0.0;
         normals[corner] = 0.0;
@@ -87,14 +99,29 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
             continue;
         }
         int2 encoded = int2((int)(word << 8u) >> 24, (int)word >> 24);
-        normals[corner] = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
         points[corner] = depth * sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
         uint index = (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y);
         uint packedCurvature = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + SDF_MESH_IRRADIANCE_DEPTH_SIZE * SDF_MESH_IRRADIANCE_DEPTH_SIZE + (index >> 1u)];
         float curvature = sdfMeshIrradianceHalf(packedCurvature, index & 1u);
         if (!isfinite(curvature)) { continue; }
+        uint code = word >> 16u;
+        if (firstCode == 0xffffffffu) {
+            firstCode = code;
+            firstNormal = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
+        }
+        normals[corner] = code == firstCode ? firstNormal : sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
         curvatures[corner] = curvature;
         weights[corner] = weight;
+        planar = planar && curvature == 0.0 && code == firstCode;
+        float plane = dot(firstNormal, points[corner]);
+        planeLow = min(planeLow, plane);
+        planeHigh = max(planeHigh, plane);
+        planeSum += weight * plane;
+        planeWeight += weight;
+    }
+    if (planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
+        float gap = dot(firstNormal, toward) - planeSum / planeWeight;
+        return sdfMeshProbeCoverageVisibility(planeWeight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE));
     }
     float blocked = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
@@ -133,9 +160,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
         float gap = dot(normalize(gradient), toward - hit);
         blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
-    float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
-    coverage = coverage * coverage * (3.0 - 2.0 * coverage);
-    return 1.0 - coverage;
+    return sdfMeshProbeCoverageVisibility(blocked);
 }
 struct SdfMeshProbes {
     uint address[8];
