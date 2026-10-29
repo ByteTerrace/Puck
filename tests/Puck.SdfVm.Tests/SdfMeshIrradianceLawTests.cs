@@ -193,14 +193,14 @@ public sealed class SdfMeshIrradianceLawTests {
     /// reads the same weights a hair either side of the column's lattice plane.</summary>
     [Fact]
     public void AReceiverCrossingACellBoundaryReadsAContinuousGather() {
-        // A floor, and a plinth 0.7 m high between x 0.2 and 0.4: the probe at (-0.5, 1.5, 0.5) looking down toward
-        // the probe at (0.5, 0.5, 0.5) meets its top, so neither sees the other, and the receiver at y 1 lies on the
-        // upper probe's side of that top.
+        // A floor, and a plinth 0.75 m high between x 0.1 and 0.3, clear of the probe at (0.5, 0.5, 0.5) by twice the
+        // clearance so that probe stands at its centre: the probe at (-0.5, 1.5, 0.5) looking down toward it meets
+        // the plinth's top, so neither sees the other, and the receiver at y 1 lies on the upper probe's side of that top.
         var frame = Frame() with {
             IndirectBounces = 0,
             MeshDraws = [
                 Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: 10f, y: 0f, z: 10f))),
-                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: -5f), high: new Vector3(x: 0.4f, y: 0.7f, z: 5f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.1f, y: 0f, z: -5f), high: new Vector3(x: 0.3f, y: 0.75f, z: 5f))),
             ],
         };
         var volume = new SdfMeshIrradiance();
@@ -225,12 +225,15 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.True(condition: (inland[(-1, 1, 0)] > 0.1f));
         Assert.True(condition: (inland.GetValueOrDefault(key: (0, 0, 0)) < (0.5f * west[(0, 0, 0)])));
     }
-    /// <summary>A lattice centre on a wall's face is rejected: the face under the origin is never a ray's first hit
-    /// (a hit under 0.1 mm is ignored), so the rays into the wall meet its far face from inside, past the inside share.
-    /// A probe beyond the wall's end whose ray runs along the face's plane traces through along it, since the coplanar
-    /// ray meets none of that face's triangles: the neighbour on the face is seen, and the ray's plane stays open.</summary>
+    /// <summary>THE LAW: a probe stands in the open. A lattice centre on a wall's face (where the face under the origin is
+    /// never a ray's first hit, so the rays into the wall meet its far face from inside) moves off the face into the room
+    /// by at least <see cref="SdfMeshIrradianceProbe.Clearance"/>, carries that offset in its record, and answers for the
+    /// wall's receivers, where an invalid probe would leave them the next column alone; a centre inside a pillar moves
+    /// out of it; a centre buried farther than its cell reaches stays at its centre, invalid, with no offset. A probe
+    /// beyond the wall's end whose ray runs along the face's plane traces through along it, since the coplanar ray meets
+    /// none of that face's triangles: the neighbour cell on the face is seen, and the ray's plane stays open.</summary>
     [Fact]
-    public void AProbeOnAWallFaceIsRejectedAndARayAlongTheFacePlaneTracesThrough() {
+    public void AProbeOnAWallFaceOrInsideGeometryMovesIntoTheOpenAndABuriedOneStaysInvalid() {
         // A wall whose +X face lies on x = 0.5, the plane of cell 0's centres, from z = 0 to z = 6: the probe at
         // (0.5, 0.5, 0.5) stands on the face, and the probe at (0.5, 0.5, -0.5) beyond its south end.
         var frame = Frame() with {
@@ -240,15 +243,63 @@ public sealed class SdfMeshIrradianceLawTests {
                 Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: 0f), high: new Vector3(x: 0.5f, y: 3f, z: 6f))),
             ],
         };
-        var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
-        var onFace = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: 0, y: 0, z: 0) * SdfMeshIrradianceProbe.ProbeWords));
+        var volume = new SdfMeshIrradiance();
+        var (parameters, words) = Trace(volume: volume, frame: frame);
+        var onFace = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
         var beyondEnd = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: -1);
         var plusZ = NeighbourIndex(x: 0, y: 0, z: 1);
+        var offset = Offset(probe: onFace);
 
-        Assert.Equal(expected: SdfMeshIrradianceProbe.InvalidFlag, actual: (onFace[0] & SdfMeshIrradianceProbe.InvalidFlag));
+        Assert.Equal(expected: 0u, actual: (onFace[0] & SdfMeshIrradianceProbe.InvalidFlag));
+        // Into the room, never into the wall, and within the cell; the open preference may also lift it off the floor.
+        Assert.InRange(actual: offset.X, high: 0.5f, low: SdfMeshIrradianceProbe.Clearance);
+        Assert.InRange(actual: offset.Y, high: 0.5f, low: 0f);
+        Assert.InRange(actual: MathF.Abs(x: offset.Z), high: 0.5f, low: 0f);
+        Assert.InRange(actual: Inside(probe: onFace), high: 0.25f, low: 0f);
         Assert.Equal(expected: Vector4.Zero, actual: Plane(index: plusZ, probe: beyondEnd));
         Assert.Equal(expected: 1u, actual: ((beyondEnd[SdfMeshIrradianceProbe.NeighboursWord] >> plusZ) & 1u));
+
+        // The wall's own face reads the moved probe, and the report names where it stands.
+        var reports = new SdfMeshProbeReport[8];
+
+        Assert.True(condition: volume.TryGather(cells: new (int X, int Y, int Z)[8], normal: Vector3.UnitX, point: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f), reports: reports, weights: new float[8]));
+        var moved = Assert.Single(collection: reports, predicate: static report => (report.Cell == (0, 0, 0)));
+
+        Assert.True(condition: moved.Present);
+        Assert.False(condition: moved.Invalid);
+        Assert.Equal(expected: (new Vector3(x: 0.5f, y: 0.5f, z: 0.5f) + offset), actual: moved.Position);
+        Assert.True(condition: (moved.Weight > 0f));
+        Assert.Contains(expectedSubstring: "moved", actualString: moved.Describe());
+
+        // A pillar 0.4 m square about the centre of cell (0, 0, 0): the probe moves out of it, clear of its faces.
+        var pillar = frame with {
+            MeshDraws = [frame.MeshDraws[0], Draw(mesh: Box(low: new Vector3(x: 0.3f, y: 0f, z: 0.3f), high: new Vector3(x: 0.7f, y: 3f, z: 0.7f)))],
+        };
+        (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: pillar);
+        var inPillar = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: 0);
+        var outward = Offset(probe: inPillar);
+
+        Assert.Equal(expected: 0u, actual: (inPillar[0] & SdfMeshIrradianceProbe.InvalidFlag));
+        Assert.True(condition: ((MathF.Abs(x: outward.X) >= (0.2f + SdfMeshIrradianceProbe.Clearance)) || (MathF.Abs(x: outward.Z) >= (0.2f + SdfMeshIrradianceProbe.Clearance))));
+        Assert.InRange(actual: MathF.Max(x: MathF.Abs(x: outward.X), y: MathF.Max(x: MathF.Abs(x: outward.Y), y: MathF.Abs(x: outward.Z))), high: 0.5f, low: 0f);
+
+        // A block 3 m thick over the whole floor: no point of cell (0, 0, 0) stands clear, so its probe stays put, invalid.
+        var buried = frame with {
+            MeshDraws = [frame.MeshDraws[0], Draw(mesh: Box(low: new Vector3(x: -10f, y: 0f, z: -10f), high: new Vector3(x: 10f, y: 3f, z: 10f)))],
+        };
+        (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: buried);
+        var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: 0, y: 0, z: 0);
+        var deep = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
+
+        Assert.Equal(expected: SdfMeshIrradianceProbe.InvalidFlag, actual: (deep[0] & SdfMeshIrradianceProbe.InvalidFlag));
+        Assert.Equal(expected: Vector3.Zero, actual: Offset(probe: deep));
+        Assert.True(condition: (Inside(probe: deep) > 0.25f));
     }
+    // The probe's offset from its cell's centre, as its record carries it.
+    private static Vector3 Offset(ReadOnlySpan<uint> probe) =>
+        new(x: Half(high: false, word: probe[SdfMeshIrradianceProbe.OffsetWord]), y: Half(high: true, word: probe[SdfMeshIrradianceProbe.OffsetWord]), z: Half(high: false, word: probe[(SdfMeshIrradianceProbe.OffsetWord + 1)]));
+    // The share of the probe's rays that met back faces, as its record carries it.
+    private static float Inside(ReadOnlySpan<uint> probe) => Half(high: true, word: probe[(SdfMeshIrradianceProbe.OffsetWord + 1)]);
     // The answering probes about an untraced receiver facing west, by cell.
     private static Dictionary<(int X, int Y, int Z), float> Gather(SdfMeshIrradiance volume, Vector3 point) {
         var cells = new (int X, int Y, int Z)[8];
@@ -528,10 +579,11 @@ public sealed class SdfMeshIrradianceLawTests {
             IndirectBounces = 0,
             TickLocked = true,
             Exposure = new SdfExposure(Adaptation: 0f, Compensation: 0f, Ev100: 15f, Local: 0.5f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
-            // A 40-cm gap contains the camera and light but no lattice centres (x = +/- 0.5).
+            // An 18-cm gap contains the camera and light but no lattice centres (x = +/- 0.5), and is narrower than twice
+            // the clearance, so no probe of the cells about it can move into it either.
             MeshDraws = [.. frame.MeshDraws,
-                Draw(mesh: Box(low: new Vector3(x: -10f, y: 0f, z: -10f), high: new Vector3(x: -0.2f, y: 4f, z: 10f))),
-                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: -10f), high: new Vector3(x: 10f, y: 4f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: 0f, z: -10f), high: new Vector3(x: -0.09f, y: 4f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.09f, y: 0f, z: -10f), high: new Vector3(x: 10f, y: 4f, z: 10f))),
             ],
         };
         var volume = new SdfMeshIrradiance();

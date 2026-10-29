@@ -7,11 +7,25 @@ namespace Puck.SdfVm;
 /// visibility cube as six halves, the radiance cube as eighteen (red, green and blue of +X, -X, +Y, -Y, +Z and -Z), the
 /// visibility of each light of the lights table from the probe, one bit a record from <see cref="LightsWord"/>, at
 /// <see cref="NeighboursWord"/> which of its 26 neighbouring probes its centre sees, and at <see cref="PlanesWord"/> the
-/// first blocking plane along each of those 26 lattice directions, which bound what the probe lights.
+/// first blocking plane along each of those 26 lattice directions, which bound what the probe lights, and at
+/// <see cref="OffsetWord"/> where the probe stands in its cell: its offset from the cell's centre, which the trace
+/// moves it by when the centre lies inside geometry or within <see cref="Clearance"/> of a surface, and the share of
+/// its rays that met back faces.
 /// </summary>
 public static class SdfMeshIrradianceProbe {
     /// <summary>The words one probe takes in the volume table.</summary>
-    public const int ProbeWords = 70;
+    public const int ProbeWords = 72;
+    /// <summary>Two words holding where the probe stands: three halves of its offset from its cell's centre, in metres
+    /// (x and y in the first word, z low in the second), and a half of the share of its rays that met back faces (high
+    /// in the second), from zero in the open to one buried. Every position the gather reads (the receiver's direction
+    /// and distance, the plane tests, the separator's plane) is the centre plus this offset; a probe the trace could
+    /// not move into the open keeps a zero offset and the <see cref="InvalidFlag"/>.</summary>
+    public const int OffsetWord = 70;
+    /// <summary>The least distance, in metres, a probe keeps from every surface. A lattice centre inside geometry or
+    /// nearer a surface than this (a centre on a wall's face, the lattice at odd metres meeting a partition at an odd
+    /// metre) moves to the nearest open point of its cell that keeps it, so a probe never stands on the face it must
+    /// light from one side; it is twice <see cref="NormalBias"/>, so a receiver's pushed point never reaches it.</summary>
+    public const float Clearance = 0.1f;
     /// <summary>Two words per lattice direction holding the first hit's plane relative to the probe: four halves
     /// (normal XYZ and plane distance). A zero plane means the ray reached open space. The normal faces away from
     /// the probe, so a receiver beyond the plane is occluded. Directions use the neighbour mask's order, and the 26

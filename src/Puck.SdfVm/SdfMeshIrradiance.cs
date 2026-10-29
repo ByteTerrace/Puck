@@ -390,7 +390,7 @@ public sealed class SdfMeshIrradiance {
 
                 if (probe.Invalid) { continue; }
 
-                var probePoint = (new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing);
+                var probePoint = ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing) + probe.Offset);
                 var toward = (probePoint - position);
                 var distance = toward.Length();
 
@@ -465,7 +465,7 @@ public sealed class SdfMeshIrradiance {
         var sky = new float[6];
         var radiance = new Vector3[6];
         var valid = TraceRadiance(origin: position, rotation: Quaternion.Identity, layout: m_layout, lighting: lighting,
-            low: m_low, scene: scene, sweep: (m_layout.Sweeps - 1), sky: sky, radiance: radiance);
+            low: m_low, scene: scene, sweep: (m_layout.Sweeps - 1), sky: sky, radiance: radiance, inside: out _);
         var traced = new CameraSample(Cell: cell, Generation: m_generation, Invalid: !valid, Position: position,
             Radiance: radiance, Settled: !m_owed, Sky: sky);
 
@@ -710,6 +710,9 @@ public sealed class SdfMeshIrradiance {
             words[(SdfMeshIrradianceProbe.LightsWord + word)] = probe.Lights[word];
         }
         words[SdfMeshIrradianceProbe.NeighboursWord] = probe.Neighbours;
+        // KEEP IN SYNC with sdfMeshProbeOffset.
+        words[SdfMeshIrradianceProbe.OffsetWord] = Pack(high: probe.Offset.Y, low: probe.Offset.X);
+        words[(SdfMeshIrradianceProbe.OffsetWord + 1)] = Pack(high: probe.Inside, low: probe.Offset.Z);
         for (var index = 0; (index < probe.Planes.Length); index++) {
             var plane = probe.Planes[index];
 
@@ -994,17 +997,29 @@ public sealed class SdfMeshIrradiance {
     // the first adding the light the hit reflects from the cached probes about it; then which traced lights and which
     // neighbouring probes its centre sees.
     private ProbeData TraceProbe((int X, int Y, int Z) cell, int generation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene, int sweep, ProbeBlock block, int index) {
-        var origin = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
+        var centre = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * layout.Spacing);
         var rotation = RotationOf(cell: cell);
-        var valid = TraceRadiance(layout: layout, lighting: lighting, low: low, origin: origin, radiance: block.Radiance(index: index),
-            rotation: rotation, scene: scene, sky: block.Sky(index: index), sweep: sweep);
+        bool valid;
+        Vector3 offset;
+        float inside;
 
+        if ((sweep > 0) && m_cache.TryGetValue(key: cell, value: out var cached)) {
+            // Every sweep stands where the first did, so one origin owns the probe's cubes, planes and neighbours.
+            offset = cached.Current.Offset;
+            valid = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: (centre + offset), radiance: block.Radiance(index: index),
+                rotation: rotation, scene: scene, sky: block.Sky(index: index), sweep: sweep);
+        } else {
+            valid = Place(centre: centre, inside: out inside, layout: layout, lighting: lighting, low: low, offset: out offset, radiance: block.Radiance(index: index),
+                rotation: rotation, scene: scene, sky: block.Sky(index: index));
+        }
+
+        var origin = (centre + offset);
         var lights = block.Lights(index: index);
         var planes = block.Planes(index: index);
         var neighbours = 0u;
 
         if (valid) {
-            // A light past its range lights nothing here and stays unseen; one at the probe's centre is seen.
+            // A light past its range lights nothing here and stays unseen; one at the probe's origin is seen.
             foreach (var point in lighting.Points) {
                 var toward = (point.Position - origin);
                 var distance = toward.Length();
@@ -1012,9 +1027,11 @@ public sealed class SdfMeshIrradiance {
                 if ((distance >= point.Range) || ((distance > LightBias) && !scene.Unblocked(direction: (toward / distance), maximum: (distance - LightBias), origin: origin))) { continue; }
                 lights[(point.Index >> 5)] |= (1u << (point.Index & 31));
             }
+            // The rays aim at the neighbours' centres from where this probe stands, so a moved probe still asks whether
+            // it sees each neighbour's cell.
             for (var neighbour = 0; (neighbour < NeighbourOffsets.Length); neighbour++) {
-                var offset = NeighbourOffsets[neighbour];
-                var toward = (new Vector3(x: offset.X, y: offset.Y, z: offset.Z) * layout.Spacing);
+                var neighbourOffset = NeighbourOffsets[neighbour];
+                var toward = ((new Vector3(x: neighbourOffset.X, y: neighbourOffset.Y, z: neighbourOffset.Z) * layout.Spacing) - offset);
                 var distance = toward.Length();
 
                 var direction = (toward / distance);
@@ -1030,15 +1047,100 @@ public sealed class SdfMeshIrradiance {
             }
         }
 
-        return new ProbeData(Block: block, Generation: generation, Index: index, Invalid: !valid, Neighbours: neighbours, Sweeps: (sweep + 1));
+        return new ProbeData(Block: block, Generation: generation, Index: index, Inside: inside, Invalid: !valid, Neighbours: neighbours, Offset: offset, Sweeps: (sweep + 1));
+    }
+    // Where a probe stands in its cell, traced at its first sweep: its centre when that lies in the open at least
+    // SdfMeshIrradianceProbe.Clearance from every surface, else a point of its cell that does. The candidates are the
+    // centre pushed off the nearest surface along its normal and a lattice a quarter of the spacing apart out to the
+    // cell's faces (Candidates); one is kept only when it stands clear and its rays mostly meet front faces. Among the
+    // candidates nearest the centre (the pushed point, the inner shell and the axis points on the cell's faces) the one
+    // whose rays meet the fewest surfaces within a spacing wins, each quarter of the spacing from the centre costing a
+    // sixteenth of its rays: a probe pushed a hand's breadth off a floor or a sign sees furniture and that surface at
+    // grazing angles in most directions, and each such first hit's plane cuts a half-space through the cell, where a
+    // point a step farther into the open sees past them. Farther candidates are tried in order of
+    // distance only when none of those stands. A cell no surface reaches lies wholly inside or wholly outside, so no
+    // candidate is tried; a probe no candidate frees stays at its centre, invalid. Returns whether the probe is valid,
+    // with its offset and the back-face share of its rays where it stands, and its cubes traced there.
+    private bool Place(Vector3 centre, Quaternion rotation, Layout layout, Lighting lighting, (int X, int Y, int Z) low, SdfMeshIrradianceScene scene,
+        Span<float> sky, Span<Vector3> radiance, out Vector3 offset, out float inside) {
+        var clearance = SdfMeshIrradianceProbe.Clearance;
+        var reach = (0.5f * layout.Spacing);
+
+        offset = Vector3.Zero;
+
+        var near = scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out var normal, point: centre, radius: clearance, surface: out var surface);
+        var valid = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0);
+
+        if (valid && !near) { return true; }
+        if (!near && !scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out normal, point: centre, radius: ((reach * MathF.Sqrt(x: 3f)) + clearance), surface: out surface)) { return false; }
+
+        var pushed = ((surface + (normal * (1.25f * clearance))) - centre);
+        var best = Vector3.Zero;
+        var bestScore = float.PositiveInfinity;
+
+        for (var candidate = -1; (candidate < Candidates.Length); candidate++) {
+            var trial = ((candidate < 0) ? pushed : (Candidates[candidate] * layout.Spacing));
+            var scored = (candidate < ScoredCandidates);
+
+            if (!scored && float.IsFinite(f: bestScore)) { break; }
+            if ((MathF.Abs(x: trial.X) > reach) || (MathF.Abs(x: trial.Y) > reach) || (MathF.Abs(x: trial.Z) > reach)) { continue; }
+
+            var origin = (centre + trial);
+
+            if (scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: origin, radius: clearance, surface: out _)) { continue; }
+            if (Blocked(lighting: lighting, near: out var nearby, origin: origin, reach: layout.Spacing, rotation: rotation, scene: scene)) { continue; }
+            if (scored) {
+                var score = (nearby + ((0.25f * trial.Length()) / layout.Spacing));
+
+                if (score < bestScore) {
+                    best = trial;
+                    bestScore = score;
+                }
+                continue;
+            }
+            if (!TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: origin, radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0)) { continue; }
+
+            offset = trial;
+            return true;
+        }
+        if (float.IsFinite(f: bestScore) && TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: (centre + best), radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0)) {
+            offset = best;
+            return true;
+        }
+
+        // Nothing in the cell stands clear: the centre's own measurement is kept, as an invalid probe's.
+        _ = TraceRadiance(inside: out inside, layout: layout, lighting: lighting, low: low, origin: centre, radiance: radiance, rotation: rotation, scene: scene, sky: sky, sweep: 0);
+        return false;
+    }
+    // Whether a point's rays mostly meet back faces, read with a few rays before a candidate is traced in full; `near`
+    // receives the share of them that meet any surface within `reach`.
+    private static bool Blocked(Vector3 origin, Quaternion rotation, SdfMeshIrradianceScene scene, Lighting lighting, float reach, out float near) {
+        const int Rays = 32;
+        var backFaces = 0;
+        var nearby = 0;
+
+        for (var ray = 0; (ray < Rays); ray++) {
+            var direction = Vector3.Transform(value: Fibonacci(index: ray, count: Rays), rotation: rotation);
+
+            if (!scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out _, normal: out var normal)) { continue; }
+            if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { backFaces++; }
+            if (distance <= reach) { nearby++; }
+        }
+        near = (nearby / ((float)Rays));
+
+        return (backFaces > (InsideShare * Rays));
     }
     // The same hemispherical radiance measurement serves lattice probes and a camera in a gap between them. This
     // reads the existing scene and bounce cache; a camera sample is never written back into the irradiance volume.
+    // `inside` receives the share of the rays that met back faces; the measurement is valid while it is at most
+    // InsideShare. The cubes are written from zero.
     private bool TraceRadiance(Vector3 origin, Quaternion rotation, Layout layout, Lighting lighting, (int X, int Y, int Z) low,
-        SdfMeshIrradianceScene scene, int sweep, Span<float> sky, Span<Vector3> radiance) {
+        SdfMeshIrradianceScene scene, int sweep, Span<float> sky, Span<Vector3> radiance, out float inside) {
         Span<float> total = stackalloc float[6];
         var backFaces = 0;
 
+        sky.Clear();
+        radiance.Clear();
         for (var ray = 0; (ray < layout.Rays); ray++) {
             var direction = Vector3.Transform(value: Fibonacci(index: ray, count: layout.Rays), rotation: rotation);
             var hit = scene.Intersect(origin: origin, direction: direction, maximum: lighting.Reach, distance: out var distance, material: out var material, normal: out var normal);
@@ -1065,8 +1167,9 @@ public sealed class SdfMeshIrradiance {
             sky[axis] /= total[axis];
             radiance[axis] /= total[axis];
         }
+        inside = (backFaces / ((float)layout.Rays));
 
-        return (backFaces <= (InsideShare * layout.Rays));
+        return (inside <= InsideShare);
     }
     // The radiance a hit sends back along its ray, in the views pass's units (albedo times the light a surface receives):
     // the directional lights' bounce under a traced shadow, the traced point and spot lights' under their windowed
@@ -1164,7 +1267,17 @@ public sealed class SdfMeshIrradiance {
     /// c &gt;&gt; 2)</c> from the lookup's first cell; at least eight long.</param>
     /// <param name="weights">Receives the eight corners' weights; at least eight long.</param>
     /// <returns><see langword="false"/> while the volume holds no window to read.</returns>
-    public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights) {
+    public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights) =>
+        TryGather(cells: cells, normal: normal, point: point, reports: default, weights: weights);
+    /// <summary>Reads the eight probes about a receiver as <see cref="TryGather(Vector3, Vector3, Span{ValueTuple{int, int, int}}, Span{float})"/>
+    /// does, and reports each corner's record and the terms of its weight.</summary>
+    /// <param name="point">The receiver's position, in world units.</param>
+    /// <param name="normal">The receiver's unit surface normal.</param>
+    /// <param name="cells">Receives the eight corners' cells; at least eight long.</param>
+    /// <param name="weights">Receives the eight corners' weights; at least eight long.</param>
+    /// <param name="reports">Receives each corner's report; at least eight long.</param>
+    /// <returns><see langword="false"/> while the volume holds no window to read.</returns>
+    public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights, Span<SdfMeshProbeReport> reports) {
         Layout layout;
         (int X, int Y, int Z) low;
 
@@ -1176,14 +1289,56 @@ public sealed class SdfMeshIrradiance {
 
         var probes = new Corners();
 
-        Gather(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: layout, low: low, normal: normal, point: point, readable: true);
+        Gather(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: layout, low: low, normal: normal, point: point, readable: true, reports: reports);
 
         return true;
     }
+    /// <summary>Describes the eight probes about a receiver as the views pass gathers them: the volume's spacing and
+    /// window, then one line a corner with its cell, where its probe stands (its centre plus the offset the trace moved
+    /// it by), the share of its rays that met back faces, whether it is valid, its sweeps, how many of its 26 neighbours
+    /// it sees, and the terms of its weight at the receiver (trilinear share, facing, the four-plane visibility and its
+    /// suspect share, whether it lies in front) with the weight it answers with after separation and mutual shares.</summary>
+    /// <param name="point">The receiver's position, in world units.</param>
+    /// <param name="normal">The receiver's unit surface normal.</param>
+    /// <returns>The lines; one line while the volume holds no window to read.</returns>
+    public IReadOnlyList<string> DescribeProbes(Vector3 point, Vector3 normal) {
+        var cells = new (int X, int Y, int Z)[8];
+        var weights = new float[8];
+        var reports = new SdfMeshProbeReport[8];
+        Layout layout;
+        (int X, int Y, int Z) low;
+
+        lock (m_gate) {
+            layout = m_layout;
+            low = m_low;
+        }
+        if (!TryGather(cells: cells, normal: normal, point: point, reports: reports, weights: weights)) {
+            return [$"[world.probe: no volume at ({point.X:0.##}, {point.Y:0.##}, {point.Z:0.##}); {Describe()}]"];
+        }
+
+        var lines = new List<string>(capacity: 9);
+        var total = 0f;
+        var answering = 0;
+
+        foreach (var weight in weights) {
+            if (weight > 0f) {
+                total += weight;
+                answering++;
+            }
+        }
+        lines.Add(item: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
+            $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) spacing={layout.Spacing:0.##} window=({low.X}, {low.Y}, {low.Z})+{layout.Dims.X}x{layout.Dims.Y}x{layout.Dims.Z} answering={answering} weight={total:0.####}]"));
+        foreach (var report in reports) {
+            lines.Add(item: report.Describe());
+        }
+
+        return lines;
+    }
     // The eight probes about a receiver: each corner's cell, probe and weight after front eligibility, separation and
     // mutual shares, zero where the corner does not answer. The bounce read gathers the probes the trace is landing
-    // (Current); a viewer's read gathers the ones views read (Readable).
-    private void Gather(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool readable, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes) {
+    // (Current); a viewer's read gathers the ones views read (Readable). A nonempty `reports` receives each corner's
+    // record and the terms of its weight.
+    private void Gather(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool readable, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
         var pushed = (point + (normal * SdfMeshIrradianceProbe.NormalBias));
         var sample = Vector3.Clamp(
             value1: ((pushed / layout.Spacing) - new Vector3(value: 0.5f)),
@@ -1204,6 +1359,7 @@ public sealed class SdfMeshIrradiance {
 
             cells[corner] = cell;
             cornerWeights[corner] = 0f;
+            if (!reports.IsEmpty) { reports[corner] = new SdfMeshProbeReport(Cell: cell, Position: ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * layout.Spacing))); }
             if (
                 (cell.Item1 < low.X) || (cell.Item1 >= (low.X + layout.Dims.X)) ||
                 (cell.Item2 < low.Y) || (cell.Item2 >= (low.Y + layout.Dims.Y)) ||
@@ -1214,29 +1370,42 @@ public sealed class SdfMeshIrradiance {
             }
 
             var probe = (readable ? Readable(probe: entry) : entry.Current);
-
-            if (probe.Invalid) { continue; }
-
             var weights = new Vector3(
                 x: ((offset.X > 0f) ? fraction.X : (1f - fraction.X)),
                 y: ((offset.Y > 0f) ? fraction.Y : (1f - fraction.Y)),
                 z: ((offset.Z > 0f) ? fraction.Z : (1f - fraction.Z))
             );
-            var probePoint = (new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * layout.Spacing);
+            // The trilinear share is the cell's; the direction, the distance and the plane tests are the probe's own position.
+            var probePoint = ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * layout.Spacing) + probe.Offset);
             var toward = (probePoint - point);
             var length = toward.Length();
             var facing = ((length > 0f) ? ((Vector3.Dot(vector1: (toward / length), vector2: normal) + 1f) * 0.5f) : 1f);
-            var weight = ((((weights.X * weights.Y) * weights.Z) * ((facing * facing) + 0.2f)) * PlaneVisibility(planes: probe.Planes, spacing: layout.Spacing, suspect: out var unseen, toward: (pushed - probePoint)));
+            var trilinear = ((weights.X * weights.Y) * weights.Z);
+            var unseen = 0f;
+            var visibility = (probe.Invalid ? 0f : PlaneVisibility(planes: probe.Planes, spacing: layout.Spacing, suspect: out unseen, toward: (pushed - probePoint)));
+            var weight = ((trilinear * ((facing * facing) + 0.2f)) * visibility);
+            var front = (Vector3.Dot(vector1: toward, vector2: normal) >= (-SdfMeshIrradianceProbe.Behind * layout.Spacing));
 
-            if (weight <= 0f) { continue; }
+            if (!reports.IsEmpty) {
+                var sky = 0f;
+                var luminance = 0f;
+
+                for (var axis = 0; (axis < 6); axis++) {
+                    sky += (probe.Sky[axis] / 6f);
+                    luminance += (SdfPhotometry.LuminanceOf(color: probe.Radiance[axis]) / 6f);
+                }
+                reports[corner] = new SdfMeshProbeReport(Cell: cell, Facing: facing, Front: front, Inside: probe.Inside, Invalid: probe.Invalid, Luminance: luminance, Neighbours: BitOperations.PopCount(value: probe.Neighbours),
+                    Offset: probe.Offset, Position: probePoint, Present: true, Sky: sky, Suspect: unseen, Sweeps: probe.Sweeps, Trilinear: trilinear, Visibility: visibility);
+            }
+            if (probe.Invalid || (weight <= 0f)) { continue; }
 
             cornerSuspect[corner] = unseen;
             cornerProbes[corner] = probe;
             cornerHas[corner] = true;
             cornerNeighbours[corner] = probe.Neighbours;
             cornerWeights[corner] = weight;
-            cornerFront[corner] = (Vector3.Dot(vector1: toward, vector2: normal) >= (-SdfMeshIrradianceProbe.Behind * layout.Spacing));
-            anyFront |= cornerFront[corner];
+            cornerFront[corner] = front;
+            anyFront |= front;
         }
 
         // The probes in front of the surface answer, and apart those behind it, which answer only where none lies in
@@ -1246,6 +1415,11 @@ public sealed class SdfMeshIrradiance {
         }
         Separate(first: floor, neighbours: cornerNeighbours, probes: in cornerProbes, pushed: pushed, spacing: layout.Spacing, suspect: cornerSuspect, weights: cornerWeights);
         MutualShares(neighbours: cornerNeighbours, weights: cornerWeights);
+        if (!reports.IsEmpty) {
+            for (var corner = 0; (corner < 8); corner++) {
+                reports[corner] = (reports[corner] with { Weight = cornerWeights[corner] });
+            }
+        }
     }
     // A probe's 26 rays are one line wide each, so a probe across a roof, floor or wall from the point still admits it
     // through the rays that cleared the blocker's edge or passed a doorway in it (its suspect share, PlaneVisibility).
@@ -1271,7 +1445,7 @@ public sealed class SdfMeshIrradiance {
 
                 if (((neighbours[other] >> index) & 1u) != 0u) { continue; }
 
-                var otherPoint = ((first + new Vector3(x: ((other & 1) + 0.5f), y: (((other >> 1) & 1) + 0.5f), z: (((other >> 2) & 1) + 0.5f))) * spacing);
+                var otherPoint = (((first + new Vector3(x: ((other & 1) + 0.5f), y: (((other >> 1) & 1) + 0.5f), z: (((other >> 2) & 1) + 0.5f))) * spacing) + probes[other].Offset);
 
                 var plane = probes[other].Planes[index];
                 var past = (Vector3.Dot(vector1: new Vector3(x: plane.X, y: plane.Y, z: plane.Z), vector2: (pushed - otherPoint)) - plane.W);
@@ -1384,6 +1558,27 @@ public sealed class SdfMeshIrradiance {
 
     private static readonly Vector3[] Axes = [Vector3.UnitX, -Vector3.UnitX, Vector3.UnitY, -Vector3.UnitY, Vector3.UnitZ, -Vector3.UnitZ];
 
+    // Where a probe may stand in its cell apart from its centre, as shares of the spacing: a lattice a quarter of the
+    // spacing apart out to the cell's faces, nearest the centre first (Place). The first ScoredCandidates are the inner
+    // shell (26 at a quarter of the spacing or less along each axis) and the six axis points on the cell's faces.
+    private static readonly Vector3[] Candidates = BuildCandidates();
+    private const int ScoredCandidates = 32;
+
+    private static Vector3[] BuildCandidates() {
+        var candidates = new List<Vector3>(capacity: 124);
+
+        for (var x = -2; (x <= 2); x++) {
+            for (var y = -2; (y <= 2); y++) {
+                for (var z = -2; (z <= 2); z++) {
+                    if ((x == 0) && (y == 0) && (z == 0)) { continue; }
+                    candidates.Add(item: new Vector3(x: (0.25f * x), y: (0.25f * y), z: (0.25f * z)));
+                }
+            }
+        }
+        // A stable sort: equal lengths keep their lexicographic order.
+        return [.. candidates.OrderBy(keySelector: static candidate => candidate.LengthSquared())];
+    }
+
     // The 26 offsets in lexicographic order of (x, y, z) over -1, 0 and 1 with the origin left out, so the offset at
     // 25 - n is the negation of the one at n.
     private static (int X, int Y, int Z)[] BuildNeighbourOffsets() {
@@ -1438,12 +1633,14 @@ public sealed class SdfMeshIrradiance {
         ));
     }
 
-    // One probe: its sky visibility and radiance cubes, the planes of the neighbours' blockers, the traced lights its centre
+    // One probe: its sky visibility and radiance cubes, the planes of the neighbours' blockers, the traced lights its origin
     // sees (one bit a lights-table index), the neighbouring probes it sees (one bit an entry of NeighbourOffsets), the sweeps
-    // it holds and whether it lies inside geometry. Its cubes and planes are a slice of the floats of the batch it was traced
-    // in (ProbeBlock), its lights among them, so a batch allocates one block rather than four arrays a probe, in the large
-    // object heap, where a collection of the young generations never copies it.
-    private readonly record struct ProbeData(ProbeBlock Block, int Index, uint Neighbours, int Sweeps, int Generation, bool Invalid) {
+    // it holds, where it stands relative to its cell's centre (Offset, zero unless the trace moved it out of geometry or off
+    // a face), the share of its rays that met back faces (Inside) and whether it lies inside geometry. Its cubes and planes
+    // are a slice of the floats of the batch it was traced in (ProbeBlock), its lights among them, so a batch allocates one
+    // block rather than four arrays a probe, in the large object heap, where a collection of the young generations never
+    // copies it.
+    private readonly record struct ProbeData(ProbeBlock Block, int Index, uint Neighbours, int Sweeps, int Generation, bool Invalid, Vector3 Offset, float Inside) {
         public Span<float> Sky => Block.Sky(index: Index);
         public Span<Vector3> Radiance => Block.Radiance(index: Index);
         public Span<Vector4> Planes => Block.Planes(index: Index);
