@@ -707,8 +707,8 @@ package's basis, garden, night field, and standalone test compositions must
 resolve that owner without redeclaring channels. Confirm and cancel are reusable
 semantic names even before modal packing lands.
 
-Binding migration covers the Moth's base layer, `controls.puck`, `pad.puck`,
-`pad-kit.puck` templates, chess's tabletop context/page, device and desktop
+Binding migration covers the Moth's base layer, the standard controls and
+pad-kit library, the debug control refinement, chess's tabletop context/page, device and desktop
 overlays, identity binding overlays, and live rebind validation. Preserve source
 lists, modifiers, held/chord ordering, inheritance, toggle ownership, label/icon
 resolution, and command grants. Update semantic destinations; do not turn page
