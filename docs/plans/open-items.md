@@ -775,11 +775,7 @@ step's completion criteria; C1 to C6 are in.
 - C7 read-back and cleanup: current-mode action names in `body.rig`,
   `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
   ordinal surfaces removed, and executable checks of the genre table.
-- A typing tutor in the gallery (the owner's request), on C5 and C6: a station
-  whose engagement enters a text-focus mode, lessons from the home row to words
-  and sentences on a prompt screen, live per-character feedback, words per
-  minute, per-key accuracy, streaks and a run timer, judged from input history so
-  a replay reproduces every keystroke.
+- The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).
