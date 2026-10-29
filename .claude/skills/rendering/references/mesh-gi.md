@@ -93,14 +93,16 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   receiver on the CPU, as the pixel gather computes them; a continuity law
   compares them a hair either side of a lattice plane. A hard step along a
   lattice plane that survives every weight-blind term's fade is a column whose
-  probes all lie inside geometry (the SPHERE exhibit at x = 23: the plinth's
-  sphere holds the y = 1 probe and nothing of that column answers over its
-  upper half), so the two neighbouring columns' vanishing trilinear weights
-  normalize to each column's whole light either side of the plane; only a probe
-  relocated out of the geometry closes it. Read the answering weight before
-  normalization with a scratch edit of the `indirect` debug view
-  (`world.shaders.reload`): a near-zero total with answering corners is that
-  case, not a veto.
+  probes in front of the receiver all lie inside geometry (the SPHERE exhibit
+  at x = 23: the hanging PRIMITIVES sign held both y = 3 probes, `inside=1`,
+  and the y = 1 probes beside the sphere were behind its upper half), so the
+  two neighbouring columns' vanishing trilinear weights normalize to each
+  column's whole light either side of the plane; relocation
+  (`SdfMeshIrradiance.Place`) moves such a probe out and closes it. Read the
+  gather at a point with `world.probe <x> <y> <z> [<nx> <ny> <nz>]`: each
+  corner's position, offset, inside share, validity, neighbours, cubes and
+  weight terms, and the answering total. A near-zero total with answering
+  corners is that case, not a veto.
 - Judge every gather change at the `gather-*` stops of the sweep tour
   (`worlds/debug/sweep.json`), in `indirect` and the final image: the
   Wonderland room's south doorway and its floor under the roof edge, the
@@ -151,9 +153,29 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   lies toward, bilinear in the face's two minor components, which the CPU and
   the shader arrange the same way). Plane distance, rather than ray distance,
   keeps a flat blocker in the same place as the receiver's direction changes.
-  The record is 70 words (280 bytes), including 52 words of half-precision
-  planes. The neighbour rays trace to the lighting reach and their first hit
-  also determines the neighbour mask; no second scene is built.
+  The record is 72 words (288 bytes), including 52 words of half-precision
+  planes and two words of where the probe stands (its offset from the cell's
+  centre and its back-face share, `SdfMeshIrradianceProbe.OffsetWord`). The
+  neighbour rays trace to the lighting reach and their first hit also determines
+  the neighbour mask; no second scene is built. They aim at the neighbours'
+  cell centres from where the probe stands.
+- A probe stands in the open (`SdfMeshIrradiance.Place`). A lattice centre
+  inside geometry (the PRIMITIVES sign at x = 23, y ≈ 3; a stair flight) or
+  within `Clearance` (0.1 m) of a surface (a partition face at an odd metre)
+  moves to the nearest point of its cell that stands at least `Clearance` from
+  every surface with its rays mostly meeting front faces: first pushed off the
+  nearest surface along its normal, then over a lattice a quarter of the
+  spacing apart out to the cell's faces. Later sweeps stand where the first did.
+  The offset rides the record, and the gather (`sdfMeshProbesAt`, `Gather`),
+  the separator's plane (`sdfMeshProbeSeparate`, `Separate`) and the meter
+  (`TryMeter`) read the centre plus the offset; the trilinear share stays the
+  cell's. A cell no surface reaches within its half diagonal is wholly inside
+  or wholly outside and tries no candidate; a probe no candidate frees stays
+  invalid at its centre, and the invalid flag makes the shader's written-key
+  test fail, so its share goes to the corners that answer. An enclosure
+  narrower than twice the clearance still holds no probe and meters by camera
+  trace. `SdfMeshIrradianceLawTests.AProbeOnAWallFaceOrInsideGeometryMovesIntoTheOpenAndABuriedOneStaysInvalid`
+  pins the on-face, pillar and buried cases.
 - Directional planes and neighbour visibility are coarse spatial support, not
   exact receiver visibility. Inspect corners and openings with
   `world.debug-view indirect`, separately from `ao` and `shadow`, and compare

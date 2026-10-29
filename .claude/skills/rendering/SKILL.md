@@ -280,7 +280,11 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   separation test itself can separate another's suspect admission
   (`sdfMeshProbeSeparate`), and the separating plane is the blocker's whole
   half-space, so a finite blocker between two probes can over-darken what both
-  see. See [mesh GI](references/mesh-gi.md).
+  see. A probe stands in the open: a lattice centre inside geometry or within
+  `SdfMeshIrradianceProbe.Clearance` of a surface moves to the nearest clear
+  point of its cell (`SdfMeshIrradiance.Place`) and carries the offset in its
+  record, which every position read uses; one no point frees is invalid and
+  gives its share to the corners that answer. See [mesh GI](references/mesh-gi.md).
   Without separation a probe just above a roof or beside a
   doorway lights the room's upper walls in jagged patches through the rays
   that cleared the edge. Never use an axis-depth half-space for initial visibility, which
@@ -289,9 +293,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   planes' fade (`DepthFade`) are metres under the thinnest wall and floor,
   since a wall pixel where it meets a floor is level with that surface and a
   surface facing a near wall must not read the room beyond it. Debug a
-  probe artefact by splitting the gather in a scratch edit of the `indirect`
-  case in `debug/sdf-debug-views.hlsli` (each corner's share, or magenta where
-  no probe answers) and `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in
+  probe artefact with `world.probe <x> <y> <z> [<nx> <ny> <nz>]` first (each
+  corner's position, offset, inside share, validity, neighbours, cubes and
+  weight terms at a receiver), and only then by splitting the gather in a
+  scratch edit of the `indirect` case in `debug/sdf-debug-views.hlsli` (each
+  corner's share, or magenta where no probe answers) and
+  `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in
   `sdfLightStage`) reads the same gather's indirect light as part of each
   surface's illumination, so a surface lit wrongly by the volume is also
   exposed wrongly by it. A nested

@@ -167,7 +167,15 @@ in the frame.
   emission, and, from the second sweep, the light it reflects from the probes
   about it, its sky included, which is the Feedback source. The sources mask
   and gains of `render.indirect.sources` apply as described above. A probe
-  whose rays mostly meet back faces lies inside geometry and is never read.
+  stands at its cell's centre unless that lies inside geometry or within
+  `SdfMeshIrradianceProbe.Clearance` (0.1 m) of a surface: then the trace moves
+  it to the nearest point of its cell that stands clear, carries the offset in
+  its record, and every read (direction, distance, plane tests) uses where it
+  stands while its trilinear share stays the cell's. A probe no point of its
+  cell frees (its rays mostly meet back faces wherever they start) is invalid and
+  never read; its share goes to the corners that answer. `world.probe <x> <y>
+  <z> [<nx> <ny> <nz>]` reads the eight probes about a point: where each stands,
+  its inside share, validity, neighbours, cubes and the terms of its weight.
   The volume a view reads holds each probe's cubes averaged with the
   neighbouring probes its centre sees (one half across a face, a quarter
   across an edge, an eighth across a corner, `SdfMeshIrradiance.FilterWeights`),
