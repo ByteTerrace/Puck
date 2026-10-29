@@ -457,8 +457,9 @@ The engine's build compiles no world: the debug world boots from its source
 package (`--world worlds/debug`), compiled in memory and cached per user, so a
 world edit is a `world.reload` and an engine edit rebuilds only the engine.
 
-Measured on the reference machine (i5-8400, RTX 2060), with other builds holding
-the CPU at the stated load:
+Measured with other work holding the CPU at the stated load: the `Puck.SdfVm`
+rows on the reference machine (i5-8400, RTX 2060), the rest on the lead machine
+(16 threads, RTX 4070):
 
 | Loop | Phase | Time |
 |---|---|---|
@@ -466,13 +467,34 @@ the CPU at the stated load:
 | | of which `dotnet build`, nothing else changed | 10.6–14.3 s (44–54% load) |
 | | of which the build after the edit | 12.7–15.3 s (12–65% load) |
 | | of which boot to `world.wait ready` | 10.2–12.2 s |
-A `Puck.World.Client` edit (one project, no world compile) and a light-stage
-reload of the views kernel have no reading on the current code yet. The last boot reading was about 4 s of process start before the
-document loads, 2.5 s of the render-capacity probe, and 4 to 5 s of window,
-device, pipelines and first frames. The probe is measured from its emission
+| C#, body edit in `Puck.World.Client` | hot reload, save to applied | 45–54 ms; 14.3 s for the first edit after the watch starts (75–100% load) |
+| | `dotnet run` to `world.status`, headless | 30.5–42.4 s, about 22 s of it the build (100% load) |
+| C#, rude edit | save to the rebooted World's `Application started` | 28 s (heavy load) |
+| Headless boot | process start to `world.status` | 4.6–4.8 s, CPU 4.6–4.9 s (7–79% load) |
+
+The render-capacity probe is measured from its emission
 (`SdfProgramBuilder.MeasureCapacity`) and packs no program, so it allocates no
 worst-case stream (118 million words on the debug world) and runs none of the
 build's analysis.
+
+**Where a headless boot goes.** An EventPipe sample of a warm headless boot
+(`DOTNET_EnableEventPipe=1`,
+`DOTNET_EventPipeConfig=Microsoft-DotNETCore-SampleProfiler:0:5,Microsoft-Windows-DotNETRuntime:0x8:4`,
+converted with `dotnet-trace convert --format speedscope`) reads the main
+thread, since every other thread waits. Of 4.9 s sampled:
+
+| Phase | Share |
+|---|---|
+| Parsing the compiled world's drawn definition (`DEFN`): `System.Text.Json` configuring the `WorldDefinition` metadata, then the parse and its state references | 40% (22% the metadata, more than half of it JIT) |
+| Validating and admitting the drawn definition | 14% |
+| Post-build wiring: the portal destinations' screen sessions, their session sinks and destination loads | 18% |
+| Constructing the server: machine content (the cartridges compile again, 5%), rules, population | 15% |
+| Process start, extensions, host composition and start | 8% |
+
+JIT and type loading are 45% of the main thread. An unchanged `.puck` boot
+neither parses its authored document nor serializes it for the compiled
+world's header: the compiled world names its composed bytes
+([compiled worlds](../architecture/worlds.md)).
 
 ### Verify a change
 
