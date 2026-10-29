@@ -221,7 +221,7 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 
 The SPHERE (`finding-sphere-step`) must shade continuously across its front,
 without a split or patch from the plinth or hanging sign. The floor is shadowed in
-`shadow`; do not attribute an indirect-view line to sun cascades. Depth moments remain sampled support; a receiver all depth tests reject has
+`shadow`; do not attribute an indirect-view line to sun cascades. Angular surfaces remain sampled support; a receiver all depth tests reject has
 no measured light.
 The SPIN dotted ceiling seam reproduces in
 beauty but not in `indirect`, `normals` or `shadow`
