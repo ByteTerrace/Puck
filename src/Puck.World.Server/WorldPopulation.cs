@@ -157,13 +157,21 @@ public sealed partial class WorldPopulation {
     /// contact surface it sleeps against could now answer a query differently — an install (a document rebuild or an
     /// adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose
     /// (<see cref="WorldColliderSet.AttachedRevision"/>), or a field-lattice repaint/medium step
-    /// (<see cref="FieldLattice.Revision"/>). Every term only increases, so an unchanged sum proves none of them
-    /// changed since the value was last observed.</summary>
-    public ulong ContactFieldVersion => unchecked(
-        ((m_contactFieldInstallVersion +
-        ((m_baseContactField as WorldColliderSet)?.AttachedRevision ?? 0UL)) +
-        FieldRegionsRevision())
-    );
+    /// (<see cref="FieldLattice.Revision"/>). The counter advances on every read that finds any of those terms
+    /// different from the previous read and never moves backward, so an unchanged value proves none of them changed
+    /// since it was last observed, across a rebuild that restarts the attached revision. Equality with a body's last
+    /// observation is what a checkpoint keeps; the absolute value is process-local.</summary>
+    public ulong ContactFieldVersion {
+        get {
+            var terms = (m_contactFieldInstallVersion, ((m_baseContactField as WorldColliderSet)?.AttachedRevision ?? 0UL), FieldRegionsRevision());
+
+            if (terms != m_contactFieldTerms) {
+                m_contactFieldTerms = terms;
+                m_contactFieldVersion++;
+            }
+            return m_contactFieldVersion;
+        }
+    }
     /// <summary>Gets the authored idle floor (<c>bodies.sleepAfterSeconds</c>), in engine ticks, before a non-seat body's
     /// motion program and contact solve stop running — 0 means never sleep.</summary>
     public ulong SleepAfterTicks => m_sleepAfterTicks;
@@ -216,6 +224,11 @@ public sealed partial class WorldPopulation {
     // Bumped once per ComposeContactField call — every document rebuild and every adjacency-source (re)configure,
     // regardless of whether the resulting reference actually differs. Folds into ContactFieldVersion.
     private ulong m_contactFieldInstallVersion;
+    // The contact-field terms ContactFieldVersion last read and the count of reads that found them changed. A rebuilt
+    // collider set starts its attached revision at zero, so a sum of the terms can return to a value it held before
+    // the rebuild.
+    private (ulong Install, ulong Attached, ulong Fields) m_contactFieldTerms;
+    private ulong m_contactFieldVersion;
     // The compiled bodies.sleepAfterSeconds, in engine ticks — see ContactFieldVersion's own remarks and CompileFixedTables.
     private ulong m_sleepAfterTicks;
     // The authoritative body-frame policy compiled from the collision requirements. Contact providers report

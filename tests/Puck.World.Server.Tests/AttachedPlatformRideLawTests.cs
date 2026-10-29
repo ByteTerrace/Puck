@@ -1,7 +1,9 @@
 using System.Numerics;
 
+using Puck.Commands;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
+using Puck.World.Protocol;
 
 using Xunit;
 
@@ -148,6 +150,30 @@ public sealed class AttachedPlatformRideLawTests {
                 actual: ((float)rider.FixedPosition.Y),
                 tolerance: 0.001f
             );
+        }
+    }
+    // A sleeping body and a checkpoint's "observation current" bit compare the version by equality, so a rebuild that
+    // brings it back to an earlier value would hide the rebuild from both.
+    [Fact]
+    public void TheContactFieldVersionNeverReturnsAcrossACollisionRebuild() {
+        using var fixture = Fixtures.FreshServer(definition: Document());
+        var population = fixture.Server.Population;
+        var seen = new List<ulong>();
+
+        _ = fixture.JoinSeat(slot: Carrier);
+        for (var tick = 1; (tick <= 4); tick++) {
+            Carry(fixture: fixture, height: (Climb * tick), yaw: 0f);
+            seen.Add(item: population.ContactFieldVersion);
+        }
+        Assert.True(condition: (seen[^1] > seen[0]), userMessage: "the moving platform never advanced the attached revision");
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.SetCollision(Collision: fixture.Server.Definition.Collision, Principal: Principal.Console));
+        for (var tick = 5; (tick <= 6); tick++) {
+            Carry(fixture: fixture, height: (Climb * tick), yaw: 0f);
+
+            var version = population.ContactFieldVersion;
+
+            Assert.True(condition: (version > seen.Max()), userMessage: $"version {version} after the rebuild repeats one of {string.Join(separator: ",", values: seen)}");
+            seen.Add(item: version);
         }
     }
 }

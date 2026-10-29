@@ -41,6 +41,18 @@ in place. A probe retains the final open tick's already-applied inputs without
 advancing that authority. Boot screen observations are reconstructed between
 scenarios, not retained from the preceding scenario.
 
+An in-place replay runs after the live scenario in the same process, so anything a
+checkpoint keeps only as equality with a process-local counter must come from a
+counter that never returns to an earlier value. A body's "contact field observation
+current" bit is one: `WorldPopulation.ContactFieldVersion` advances whenever any of
+its terms changes, because the attached-solid term restarts with every rebuilt
+collider set (a response swap such as the hall's lit and dark floors rebuilds it),
+and a plain sum of the terms can return to a value bodies already observed. Whether
+it does depends on the collider set the live run left behind, so such a sum
+diverges an in-place replay in `BodyContinuation` while two fresh processes agree.
+When a probe diverges in a component that holds such a bit, compare the counter's
+per-tick values in the live run and the replay before suspecting the tape.
+
 ## Contents
 
 - Format and development version
