@@ -47,6 +47,7 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
         var shapeName = ((instanceTarget.EffectiveCount == 2) ? args[1].ToString() : null);
+        var input = m_server.Input.DescribeBody(body: index);
         var pool = m_stamps;
         var bodyIndex = index;
         if ((index < PlayerRoster.MaxSlots) && (m_screens.Presenter is { } presenter) && presenter.TrySeatScene(index, out var scene, out _)) {
@@ -62,12 +63,12 @@ internal sealed partial class PlayerCommandModule {
         ) ||
             (state is null)
         ) {
-            return new CommandResult(Output: $"[body.rig: body:{index} no creation look — this body draws through the procedural catalog rig, which carries no drivers or effectors]");
+            return new CommandResult(Output: $"[body.rig: body:{index} {input} presentation=none]");
         }
 
         var line = new StringBuilder();
 
-        _ = line.Append(value: $"[body.rig: body:{index} creation={state.Creation} speed={Scalar(value: state.Speed)} drivers={state.Drivers.Count} effectors={state.Effectors.Count}");
+        _ = line.Append(value: $"[body.rig: body:{index} {input} creation={state.Creation} speed={Scalar(value: state.Speed)} drivers={state.Drivers.Count} effectors={state.Effectors.Count}");
 
         foreach (var driver in state.Drivers) {
             _ = line.Append(value: $" driver:{driver.Name} phase={Scalar(value: driver.Phase)} weight={Scalar(value: driver.Weight)}");

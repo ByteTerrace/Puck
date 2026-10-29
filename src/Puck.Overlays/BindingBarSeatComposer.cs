@@ -95,7 +95,6 @@ public static class BindingBarSeatComposer {
             // bank's own row (the wing's L3 may latch a different channel than the base's), faded with the bank.
             var livePress = ((isPressed is not null) && isPressed(source));
             var latched = ((binding is { Toggle: true }) && (isCommandHeld is not null) && isCommandHeld(binding.Command));
-            var pressed = (livePress || latched);
             // A control the page leaves unbound but whose hold opens a deeper page (a shoulder that opens the play wheel)
             // reads as that page's opener: bright, and wearing the icon the bar's icon row names for the page's id.
             var opener = ((binding is null) && (view.Openers is { } openers) && openers.TryGetValue(
@@ -125,7 +124,7 @@ public static class BindingBarSeatComposer {
                 IconGlyph1: icon.Glyph1,
                 PitchX: plate.Position.X,
                 PitchY: plate.Position.Y,
-                Pressed: pressed,
+                Pressed: livePress,
                 Visible: ((binding is not null) || (opener is not null) || !hideUnbound),
                 Frame: frame,
                 BadgeX: plate.Badge.X,

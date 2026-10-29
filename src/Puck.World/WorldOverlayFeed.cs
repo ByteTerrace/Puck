@@ -310,6 +310,22 @@ internal sealed class WorldOverlayFeed {
                         view: bankView
                     );
 
+                    // A page describes bindings; only the authority decides whether their semantic actions apply.
+                    if (m_roster.Seat(slot: slot)?.Input is { } input) {
+                        for (var entry = 0; (entry < slotCount); entry++) {
+                            if (!bankView.ButtonsBySource.TryGetValue(key: slotSet[entry], value: out var binding) ||
+                                (binding.Action is null) || !binding.Command.StartsWith(value: "channel.logical.", comparisonType: StringComparison.Ordinal)) { continue; }
+                            var status = input.ActionStatus(name: binding.Action);
+                            var at = (writeOffset + entry);
+                            destination[at] = destination[at] with {
+                                Inactive = !status.Active,
+                                AwaitingNeutral = status.AwaitingNeutral,
+                                Toggled = status.Toggled,
+                                Retained = status.Retained,
+                            };
+                        }
+                    }
+
                     writeOffset += slotCount;
                 }
 

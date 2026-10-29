@@ -230,7 +230,7 @@ public sealed partial class CommandRegistry {
         m_wirePathAlt = m_wirePath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
         m_runner = m_byName[RunCommandName];
-        m_metadata = [.. m_byTextCommand.Values
+        m_metadata = [.. m_byTextCommand.Values.Where(predicate: static definition => !definition.BindingOnly)
             .Select(selector: static definition => definition.Metadata)
             .OrderBy(
                 keySelector: static metadata => metadata.Name,
@@ -290,7 +290,7 @@ public sealed partial class CommandRegistry {
                 throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) is already registered in another command registry. A module must yield a fresh CommandDefinition per registry; a definition's text command carries per-registry parser state.");
             }
 
-            m_root.Subcommands.Add(item: definition.TextCommand);
+            if (!definition.BindingOnly) { m_root.Subcommands.Add(item: definition.TextCommand); }
             m_byTextCommand[definition.TextCommand] = definition;
             ClaimName(
                 name: definition.Name,
@@ -1132,6 +1132,9 @@ public sealed partial class CommandRegistry {
     // on, or in a registry with no sink, so it dispatches inline rather than queueing behind a sink whose principal is
     // not its caller's.
     private CommandResult SubmitCore(string line, TextCommandSession? session, Principal principal, int slot, Func<CommandMetadata, bool>? authorize, bool queue) {
+        if (m_byNameAlt.TryGetValue(key: LeadingVerb(line: line), value: out var destination) && destination.BindingOnly) {
+            return UnknownCommand(verb: LeadingVerb(line: line));
+        }
         // A blank line is REFUSED rather than quietly answering None. wire.errors is advertised as the one number that
         // says whether any submitted line silently no-opped, and a blank line is the purest no-op there is; answering
         // success for it made the counter's own promise false. Nothing in the live drain path pays for this: a script's
@@ -1624,9 +1627,9 @@ public sealed partial class CommandRegistry {
     /// <returns>A newline-separated list of <c>name - description</c> entries, or of names; empty when nothing
     /// matches.</returns>
     public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false) {
-        var registered = m_root.Subcommands.Where(predicate: command => ((prefix is not null) || !m_byTextCommand[command].HelpRequiresPrefix))
-            .Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty)));
-        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description));
+        var registered = m_root.Subcommands.Where(predicate: command => !m_byTextCommand[command].BindingOnly)
+            .Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty), Details: m_byTextCommand[command].HelpDetails));
+        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description, Details: (Func<int, string>?)null));
 
         return string.Join(
             separator: '\n',
@@ -1640,7 +1643,7 @@ public sealed partial class CommandRegistry {
             )
                 .Select(selector: entry => (namesOnly
                     ? entry.Metadata.Name
-                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}"))
+                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}{((entry.Details is not null) ? ("\n  " + entry.Details(slot)) : string.Empty)}"))
         );
     }
 

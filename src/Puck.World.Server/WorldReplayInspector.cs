@@ -266,7 +266,16 @@ public sealed partial class WorldReplayInspector {
                         }
 
                         if (includePoses) { poses[index] = CapturePoses(population: population); }
-                        inputs[index] = CaptureInputs(cursors: inputCursors, server: server);
+                        var accepted = new StringBuilder();
+                        foreach (var entry in recording.Ticks[index].Authority) {
+                            if (accepted.Length != 0) { accepted.Append(value: "; "); }
+                            var channels = ((entry is WorldReplayEntry.Command command) && (server.Body(index: command.Value.EntityIndex) is { } target))
+                                ? target.Channels : server.Population.InputCatalog.DefaultMapping.Channels;
+                            accepted.Append(value: WorldReplayEntryDescriber.Describe(entry: entry, channels: channels));
+                        }
+                        var semantic = CaptureInputs(cursors: inputCursors, server: server);
+                        if ((accepted.Length != 0) && (semantic.Length != 0)) { accepted.Append(value: "; "); }
+                        inputs[index] = accepted.Append(value: semantic).ToString();
                         observed[index] = WorldReplaySnapshot.HashState(population: population);
                         observedCount = Math.Max(
                             val1: observedCount,
@@ -364,7 +373,7 @@ public sealed partial class WorldReplayInspector {
             }
 
             lines.Add(item: DescribeTick(
-                authority: input.Authority,
+                authority: ((acceptedInputs is null) ? input.Authority : []),
                 channels: channels,
                 diverged: (tick == divergedAt),
                 edges: edges,

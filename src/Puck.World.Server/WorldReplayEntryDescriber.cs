@@ -65,7 +65,7 @@ public static class WorldReplayEntryDescriber {
             }
 
             text.Append(value: ' ');
-            text.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
+            text.Append(value: (channels.Name(ordinal: ordinal) ?? throw new InvalidDataException(message: "segment has a nonzero value outside its recorded input mapping")));
             text.Append(value: '=');
             text.Append(value: ((channels.Shape(ordinal: ordinal) == ChannelShape.Relative)
                 ? intent.Channels.Relative(ordinal: ordinal).ToString()
