@@ -4,7 +4,7 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteBodyInputState(WireWriter writer, WorldBodyInputState state) {
+    private static void WriteBodyInputState(WireWriter writer, in WorldBodyInputState state) {
         WorldWireCodec.WriteIntent(writer, state.Submitted); writer.WriteBoolean(value: state.HasSubmitted);
         WorldWireCodec.WriteIntent(writer, state.Held);
         WorldWireCodec.WriteIntent(writer, state.Producer); writer.WriteBoolean(value: state.HasProducer);

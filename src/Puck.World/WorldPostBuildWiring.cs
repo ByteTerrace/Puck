@@ -297,59 +297,6 @@ public static class WorldPostBuildWiring {
         // The boot row is admitted by the time this runs, so a sibling world the armed document declares can start
         // beside it before the first step.
         if (armSchedule) {
-            if (scheduleRunner.IsArmed) {
-                var instances = services.GetRequiredService<WorldInstanceHost>();
-                var replayTape = services.GetRequiredService<WorldReplayTape>();
-                var observed = new HashSet<WorldInstance>();
-                var probes = new List<(string Name, WorldReplayProbe Probe)>();
-                var observing = true;
-
-                void ObserveInstance(WorldInstance instance) {
-                    if (observing && observed.Add(item: instance)) {
-                        try {
-                            probes.Add(item: (instance.Name, replayTape.ObserveReplay(instance: instance)));
-                        } catch (InvalidOperationException) {
-                        }
-                    }
-                }
-
-                foreach (var name in instances.Names) {
-                    if (instances.TryGet(instance: out var row, name: name) && (row is not null)) {
-                        ObserveInstance(instance: row);
-                    }
-                }
-                instances.Admitted += ObserveInstance;
-                scheduleRunner.Exported += () => {
-                    observing = false;
-                    foreach (var (_, probe) in probes) {
-                        probe.Dispose();
-                    }
-
-                    var scheduleDirectory = services.GetRequiredService<WorldScheduleRoot>().Directory;
-                    var reproductionDirectory = ((Path.GetDirectoryName(path: scheduleDirectory) is { Length: > 0 } parent)
-                        ? parent
-                        : scheduleDirectory
-                    );
-
-                    try {
-                        _ = Directory.CreateDirectory(path: reproductionDirectory);
-                        File.WriteAllText(
-                            contents: System.Text.Json.JsonSerializer.Serialize(
-                                value: probes.Select(selector: static entry => new {
-                                    world = entry.Name,
-                                    divergence = -1,
-                                    hashes = entry.Probe.Hashes,
-                                })
-                            ),
-                            path: Path.Combine(
-                                path1: reproductionDirectory,
-                                path2: "reproduction.json"
-                            )
-                        );
-                    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException)) {
-                    }
-                };
-            }
             scheduleRunner.ArmInstances();
         }
         services.GetRequiredService<WorldServer>().EchoTap = echo => {

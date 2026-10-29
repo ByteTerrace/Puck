@@ -31,10 +31,10 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         var writer = new WireWriter();
 
-        writer.WriteArray(
-            items: entries,
-            writeItem: WriteContinuationEntry
-        );
+        writer.WriteArrayCount(count: entries.Count);
+        for (var index = 0; (index < entries.Count); index++) {
+            WriteContinuationEntry(writer: writer, entry: entries[index]);
+        }
         hash.Add(values: writer.WrittenSpan);
     }
 
@@ -42,15 +42,15 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// appearance.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="entry">The entry.</param>
-    internal static void WriteContinuationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) => WritePopulationEntry(
-        entry: entry,
+    internal static void WriteContinuationEntry(WireWriter writer, in WorldPopulationEntryCheckpoint entry) => WritePopulationEntry(
+        entry: in entry,
         includeAppearance: false,
         writer: writer
     );
 
     private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) =>
         WritePopulationEntry(entry: entry, includeAppearance: true, writer: writer);
-    private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry, bool includeAppearance) {
+    private static void WritePopulationEntry(WireWriter writer, in WorldPopulationEntryCheckpoint entry, bool includeAppearance) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
         writer.WriteInt32(value: entry.SelectedKit);

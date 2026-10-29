@@ -23,7 +23,7 @@ public static partial class TestCommand {
 
     private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
-    private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce) {
+    private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             Console.Error.WriteLine(value: "ERROR: puck test must run inside the repository.");
 
@@ -49,6 +49,7 @@ public static partial class TestCommand {
 
             try {
                 return RunIn(
+                    cacheDirectory: cacheDirectory,
                     jobs: jobs,
                     path: path,
                     repositoryRoot: repositoryRoot,
@@ -64,6 +65,7 @@ public static partial class TestCommand {
         using var run = RunDirectory.Create(prefix: ScratchPrefix);
 
         return run.Conclude(exitCode: RunIn(
+            cacheDirectory: cacheDirectory,
             jobs: jobs,
             path: path,
             repositoryRoot: repositoryRoot,
@@ -74,7 +76,7 @@ public static partial class TestCommand {
     }
     // One run of the verb inside runDirectory: the --keep directory, or a run directory the caller concludes with the
     // exit code this returns.
-    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory) {
+    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory) {
         var preparation = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: preparation);
 
@@ -120,7 +122,7 @@ public static partial class TestCommand {
         Parallel.For(fromInclusive: 0, toExclusive: batches.Length,
             parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
             body: worker => batchPassed[worker] = RunBatch(artifact: artifact!, chunk: worker, indices: batches[worker],
-                reproduce: reproduce, runDirectory: runDirectory, worlds: worlds));
+                reproduce: reproduce, runDirectory: runDirectory, worlds: worlds, cacheDirectory: cacheDirectory));
         var boots = 0;
         var ticks = 0UL;
         var refused = batchPassed.Any(predicate: static passed => !passed);

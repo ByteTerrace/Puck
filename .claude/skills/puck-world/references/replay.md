@@ -41,6 +41,20 @@ in place. A probe retains the final open tick's already-applied inputs without
 advancing that authority. Boot screen observations are reconstructed between
 scenarios, not retained from the preceding scenario.
 
+Only `puck test --reproduce` attaches scenario probes and writes `reproduction.json`,
+after comparing each authority. An ordinary scheduled boot makes no reproduction
+claim. Reproduction consumes the host's already delivered authority inputs (session
+admissions, departures, arrivals and forwarded input); it does not rerun the host's
+crossing detector or transfer coordinator, which would deliver those inputs twice.
+It proves each authority's continuation from those inputs, not the host's choice of
+which transfer to initiate. Wonderland's garden round trip exercises this boundary.
+Continuation encoding passes large checkpoint records by readonly reference and writes
+contiguous numeric lanes in one reservation, preserving the scalar codec's bytes.
+The FNV accumulator folds a zero four/eight-byte lane with the corresponding
+power of its prime; this preserves every digest and avoids a dependent multiply
+per zero byte. Nonzero span blocks keep a local accumulator and direct byte folds:
+a nested shifting loop regressed dense inputs in the paired kernel check.
+
 An in-place replay runs after the live scenario in the same process, so anything a
 checkpoint keeps only as equality with a process-local counter must come from a
 counter that never returns to an earlier value. A body's "contact field observation
