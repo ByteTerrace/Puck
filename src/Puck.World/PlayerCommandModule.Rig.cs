@@ -7,9 +7,8 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <content>
-/// <c>body.rig</c> — the read-back for a body-rooted creation look's live animation state. Everything it echoes is
-/// presentation-side and lives only on <see cref="WorldCreationInstances"/>, so this reads the pool directly rather than
-/// routing a query: there is no server-side answer to route to, and a routed one would have to invent the values.
+/// <c>body.rig</c> names authoritative input alongside a body-rooted creation look's live animation state.
+/// Input answers headlessly too; animation reads the presentation's <see cref="WorldCreationInstances"/> pool.
 /// </content>
 internal sealed partial class PlayerCommandModule {
     private static string Scalar(float value) => value.ToString(
@@ -27,12 +26,6 @@ internal sealed partial class PlayerCommandModule {
             return tokenError!.Value;
         }
 
-        // No instance form: a spawned instance runs its own simulation but no client mirrors it, so there is no
-        // stamp pool holding its rig — saying so is the honest answer rather than echoing this world's values under
-        // its name.
-        if (instanceTarget.Instance is { } instance) {
-            return CommandResult.Error(output: $"[body.rig: instance '{instance.Name}' has no client presentation, so it stamps no creation look — body.rig reads this world only]");
-        }
         if (instanceTarget.EffectiveCount > 2) {
             return CommandResult.Error(output: "[body.rig: expected at most 2 values — an optional body index, then an optional shape name]");
         }
@@ -47,9 +40,18 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
         var shapeName = ((instanceTarget.EffectiveCount == 2) ? args[1].ToString() : null);
+        if (instanceTarget.Instance is { } instance) {
+            return new CommandResult(Output: $"[body.rig: body:{index} instance:{instance.Name} {instance.Server.Input.DescribeBody(body: index)} creation-rig=none]");
+        }
+        var input = m_server.Input.DescribeBody(body: index);
+        if ((index < PlayerRoster.MaxSlots) && (seatRouter.TryRoute(slot: index) is { } route) &&
+            !string.Equals(a: route.Endpoint.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal)) {
+            route.Endpoint.Submissions.Query(query: new Puck.World.Protocol.WorldQuery.PlayerChannels(Index: route.EntityIndex),
+                completion: answer => input = answer.Text);
+        }
         var pool = m_stamps;
         var bodyIndex = index;
-        if ((index < PlayerRoster.MaxSlots) && (m_screens.Presenter is { } presenter) && presenter.TrySeatScene(index, out var scene, out _)) {
+        if ((index < PlayerRoster.MaxSlots) && (m_screens.Presenter is { } presenter) && presenter.TrySeatScene(index: out _, scene: out var scene, slot: index)) {
             pool = scene.BodyStamps;
             bodyIndex = seatRouter.Route(slot: index).EntityIndex;
         }
@@ -62,12 +64,12 @@ internal sealed partial class PlayerCommandModule {
         ) ||
             (state is null)
         ) {
-            return new CommandResult(Output: $"[body.rig: body:{index} no creation look — this body draws through the procedural catalog rig, which carries no drivers or effectors]");
+            return new CommandResult(Output: $"[body.rig: body:{index} {input} creation-rig=none]");
         }
 
         var line = new StringBuilder();
 
-        _ = line.Append(value: $"[body.rig: body:{index} creation={state.Creation} speed={Scalar(value: state.Speed)} drivers={state.Drivers.Count} effectors={state.Effectors.Count}");
+        _ = line.Append(value: $"[body.rig: body:{index} {input} creation={state.Creation} speed={Scalar(value: state.Speed)} drivers={state.Drivers.Count} effectors={state.Effectors.Count}");
 
         foreach (var driver in state.Drivers) {
             _ = line.Append(value: $" driver:{driver.Name} phase={Scalar(value: driver.Phase)} weight={Scalar(value: driver.Weight)}");

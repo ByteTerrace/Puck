@@ -46,28 +46,17 @@ only shrinks. Two sources are exempt today, both because they expand to a
 document whose decompiled form is longer than the parser's source limit:
 `moth-courtyard.puck` and `worlds/genesis/cards.basis.puck`.
 
-The inventory below counts the first and third trees.
 The plan this serves is [the state system rebuild](../../docs/plans/state-rebuild.md).
 
-## Inventory
+## Game claims
 
-[inventory.md](inventory.md) counts every construct the corpus uses: each effect, predicate, transform and
-domain arm (every arm of each union is listed, so one no source uses reads zero), each row trait, overflow policy,
-draw source and draw mode, each rule-group shape, each reserved operand channel a rule reads, the pattern, set and
-table sections, and each syntax node type the parsed sources carry. `CorpusInventory` walks each compiled document
-by the position a construct occupies, never by text, so a discriminator two unions share is counted under the one
-its position belongs to. The page is generated, and `CorpusInventoryTests` fails when it disagrees with the corpus;
-re-record it with:
-
-```
-puck baselines corpus-inventory
-```
-
-Quarantined: the game-claims law moved to
-`experimental/tests/Puck.State.Rebuild.Corpus/CorpusInventoryTests.cs` with the tetromino source it reads. The same
-test holds each game package's claims: every construct a package names as what it proves must be counted
-in that package's own source. Tetromino claims a staged rule group, a scheduled deadline, a cycle trait, a pattern
-and its `match` read, a weighted draw that restarts on exhaustion, and a saturating row.
+Quarantined: the game-claims law lives at
+`experimental/tests/Puck.State.Rebuild.Corpus/CorpusInventoryTests.cs` with the tetromino source it reads. It
+holds each game package's claims: every construct a package names as what it proves must be counted in that
+package's own source. Tetromino claims a staged rule group, a scheduled deadline, a cycle trait, a pattern and
+its `match` read, a weighted draw that restarts on exhaustion, and a saturating row. The live corpus keeps no
+construct inventory: a committed count of the corpus is a recorded ledger (AGENTS.md's no-recorded-ledgers
+ruling).
 
 ## Decisions the corpus informed
 

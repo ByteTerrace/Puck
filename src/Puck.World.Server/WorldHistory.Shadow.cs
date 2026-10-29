@@ -350,7 +350,6 @@ public sealed partial class WorldHistory {
         }
 
         var described = new List<string>(capacity: edits.Length);
-        var channels = m_server.Population.Channels;
         var mutationIndex = 0;
 
         foreach (var edit in edits) {
@@ -363,7 +362,7 @@ public sealed partial class WorldHistory {
                 mutationIndex++;
             }
 
-            described.Add(item: $"{WorldReplayEntryDescriber.Describe(channels: channels, entry: edit)}{outcome}");
+            described.Add(item: $"{WorldReplayEntryDescriber.Describe(entry: edit)}{outcome}");
         }
 
         report = new WorldHistoryReplayEditReport(

@@ -56,6 +56,10 @@ public sealed partial class WorldReplayInspector {
                     }
                 }
                 foreach (var channel in owner.Mapping.Live) {
+                    var address = owner.Mapping.Address(logicalId: channel);
+                    text.Append(value: " action.").Append(value: catalog.Channels[channel].Name).Append(value: ':')
+                        .Append(value: catalog.Channels[channel].Shape).Append(value: '=')
+                        .Append(value: ((address < 0) ? "event-only" : owner.Mapping.Channels.DescribeValue(intent: owner.Image, ordinal: address)));
                     if (!owner.TryHeld(channel: channel, hold: out var held)) { continue; }
                     text.Append(value: " held.").Append(value: catalog.Channels[channel].Name).Append(value: "(press=").Append(value: held.Press)
                         .Append(value: " since=").Append(value: ExactTime(value: held.Origin.Time(policy: WorldInputJudgement.Capture)))

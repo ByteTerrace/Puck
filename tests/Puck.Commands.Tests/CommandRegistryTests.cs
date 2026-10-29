@@ -7,6 +7,45 @@ namespace Puck.Commands.Tests;
 /// <summary>Exercises the text-dispatch surface: the wire-native fast path and its argument parsing, rejection
 /// accounting, quiet acknowledgements, interned command identity, and command-map gating.</summary>
 public sealed class CommandRegistryTests {
+    [Fact]
+    public void InternalBindingDestinationsDispatchButHaveNoTextOrHelpSurface() {
+        var seen = new List<(CommandPhase Phase, CommandValue Value)>();
+        var registry = new CommandRegistry(modules: [new BindingOnlyModule(seen: seen)]);
+
+        Assert.DoesNotContain(collection: registry.Definitions, filter: row => (row.Name == "binding.probe"));
+        Assert.Equal(string.Empty, registry.BuildHelpText(prefix: "binding.probe"));
+        Assert.False(condition: registry.TryGetMetadata(metadata: out _, name: "binding.probe"));
+        Assert.Null(@object: registry.MetadataForDocument(name: "binding.probe"));
+        var errors = new List<string>();
+        var authored = AuthoredCommand.TryCreate(errors: errors, help: "Probe.", lines: ["binding.probe"], name: "probe.public", parameters: []);
+
+        Assert.Empty(collection: errors);
+        registry.CheckAuthored(set: new AuthoredCommandSet(commands: [authored!]), errors: errors);
+        Assert.Single(collection: errors);
+        Assert.True(condition: registry.Submit(line: "binding.probe").IsError);
+        Assert.True(condition: registry.Submit(line: "\"binding.probe\"").IsError);
+        var router = new InputRouter(registry: registry, bindings: new FixedBindings(command: "binding.probe", mode: BindingEntryMode.Toggle), principalResolver: new ConsolePrincipal());
+
+        router.Capture(signal: InputSignal.Press(source: "key.a"));
+        registry.ApplySnapshot(snapshot: router.SnapshotForTick(tick: 1, windowEndTick: ulong.MaxValue));
+        Assert.Single(collection: seen);
+        Assert.True(condition: router.IsSourcePressed(slot: 0, source: "key.a"));
+        router.Capture(signal: InputSignal.Release(source: "key.a"));
+        registry.ApplySnapshot(snapshot: router.SnapshotForTick(tick: 2, windowEndTick: ulong.MaxValue));
+        Assert.False(condition: router.IsSourcePressed(slot: 0, source: "key.a"));
+        Assert.True(condition: router.IsCommandHeld(command: "binding.probe", slot: 0));
+    }
+
+    private sealed class BindingOnlyModule(List<(CommandPhase Phase, CommandValue Value)> seen) : ICommandModule {
+        public IEnumerable<CommandDefinition> GetCommands() {
+            yield return CommandDefinition.Verb(name: "binding.probe", description: "Internal compiled destination.", valueKind: CommandValueKind.Digital,
+                bindability: CommandBindability.Bindable, handler: context => {
+                    seen.Add(item: (context.Phase, context.Value));
+                    return CommandResult.None;
+                }) with { BindingOnly = true };
+        }
+    }
+
     // help, run, wire.ack and wire.errors: the registry's own verbs, registered like a module's and interned like a
     // module's, so they take four of the 16-bit ids a snapshot entry can name.
     private const int BuiltInCommandCount = 4;
@@ -1290,10 +1329,11 @@ public sealed class CommandRegistryTests {
             );
         }
     }
-    private sealed class FixedBindings(string command, string? text = null) : IInputBindings {
+    private sealed class FixedBindings(string command, string? text = null, BindingEntryMode mode = BindingEntryMode.Hold) : IInputBindings {
         private readonly CommandBinding[] m_bindings = [new CommandBinding(
                 Command: command,
-                Text: text
+                Text: text,
+                Mode: mode
             )];
 
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => m_bindings;

@@ -350,6 +350,13 @@ server's verdict. Trace the acting principal stamped at ingress when debugging
 a refusal; constructing a `Principal` in a test bypasses the path under investigation.
 [references/authority.md](references/authority.md)
 
+**A toast narrates a player's own act.** `WorldToastPolicy` decides from the
+echo's acting principal: a `Console`-stamped write or grant (stdin, an MCP or
+control attachment, a sweep or schedule prelude, a session screen's admission
+grants) reports through the console row, stderr and `host.log`, never the
+toast. `world.hud toast` reads the toast store in any shape
+([HUD](references/hud.md#verbs)).
+
 **Read through the caller's disclosure.** A console read-back reads the
 `WorldStateReadView` its acting principal is minted
 (`IWorldConsoleAuthority.ReadView`), never `WorldServer.Definition` directly.
@@ -727,6 +734,11 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - An attached placement can also `respond` to state: the shown prototype and
   its colliders swap while its attachment stays intact. The lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.
+- A moving carrier or a solid response swap wakes only the parked rigid bodies
+  whose bounds meet the box its changed colliders cover; any other contact-field
+  change wakes every one. A ride or a door that lags the tick shows as
+  `world.counters physics.bodies` advances per tick far above the idle count
+  ([server README](../../../src/Puck.World.Server/README.md)).
 
 ## Route adjacent work
 

@@ -1,0 +1,132 @@
+// Runnable input-model demonstrations; the sweep drives these ordinary rules and reads their results.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "input-genre-controls"
+channels: concat([
+  { name: "moveX", shape: Bipolar, composition: true },
+  { name: "moveY", shape: Bipolar, composition: true },
+  { name: "aimX", shape: Bipolar, composition: true },
+  { name: "aimY", shape: Bipolar, composition: true },
+  {
+    name: "lookX"
+    shape: Relative
+    composition: true
+    relative { unit: "radians", sensitivity: 0.25, maximumPerStep: 4 }
+  },
+  {
+    name: "lookY"
+    shape: Relative
+    composition: true
+    relative { unit: "radians", sensitivity: 0.25, maximumPerStep: 4 }
+  },
+  { name: "fire", shape: Binary, composition: true },
+  { name: "navigate", shape: Bipolar, composition: true }
+], map(range(0, 63), i => { name: $"weaponButton{i}", shape: Binary, composition: true }))
+seatModes [{name: "activity", defaultState: "shooter", states [
+      { name: "shooter" }, { name: "ability" }, { name: "fps" }, { name: "weapon" }, { name: "menu" }, { name: "panel" }
+    ]
+  }
+]
+inputModes {
+  global []
+  families [{
+      name: "activity"
+      selector { kind: SeatState, name: "activity" }
+      default: "shooter"
+      states [
+        { name: "shooter", values ["shooter"], channels ["moveX", "moveY", "aimX", "aimY", "fire"] }
+        { name: "ability", values ["ability"], channels ["moveX", "moveY", "aimX", "aimY", "fire"] }
+        {
+          name: "fps"
+          values ["fps"]
+          channels: concat(["moveX", "moveY", "lookX", "lookY", "fire"], map(range(0, 63), i => $"weaponButton{i}"))
+        }
+        {
+          name: "weapon"
+          values ["weapon"]
+          channels: concat(["moveX", "moveY", "lookX", "lookY", "fire"], map(range(0, 63), i => $"weaponButton{i}"))
+        }
+        { name: "menu", values ["menu"], channels ["navigate", "confirm", "cancel"] }
+        { name: "panel", values ["panel"], channels ["navigate", "confirm", "cancel"] }
+      ]
+      transitions [
+        { from: "shooter", to: "ability", keep ["moveX", "moveY", "aimX", "aimY", "fire"] }
+        { from: "fps", to: "weapon", keep ["fire"] }
+        { from: "menu", to: "panel", keep ["navigate"] }
+      ]
+    }
+  ]
+}
+bindingOverlays [{id: "genre-controls", document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { channel: "moveX", sources ["keyboard.u"] }
+              { channel: "aimY", sources ["keyboard.i"] }
+              { channel: "fire", sources ["keyboard.o"] }
+              { channel: "lookX", sources ["mouse.motion.x"] }
+              { channel: "navigate", sources ["keyboard.j"] }
+              { channel: "confirm", sources ["keyboard.k"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+inputPatterns [{ name: "fire-buffer", bufferTicks: 8, steps [{ channel: "fire" }] }]
+inputHistory {
+  eventCapacity: 16
+  maximumEventsPerStep: 16
+}
+state {
+  world {
+    table genreChecks {
+      shooter = 0
+      fps = 0
+      menu = 0
+    }
+    row {
+      name: "firePresses"
+      kind: Int
+      value: 0
+    }
+    row {
+      name: "deltaTotal"
+      kind: Fixed
+      value: "0"
+    }
+  }
+}
+rule "fire-edges" {
+  forEach: $inputEvents:1
+  when inputEdge(1, fire, Press, each)
+  mode: Level
+  firePresses += 1
+}
+rule "relative-look" {
+  when channel(1, lookX)
+  mode: Level
+  deltaTotal += channel(1, lookX)
+}
+rule "shooter-demonstrated" {
+  when (channel(1, moveX) == 1 and
+    channel(1, moveY) == 0 and
+    channel(1, aimX) == 0 and
+    channel(1, aimY) == 1 and
+    channel(1, fire) == 1 and
+    firePresses == 1 and
+    not inputMatch(1, `fire-buffer`))
+  mode: Edge
+  genreChecks["shooter"] = 1
+}
+rule "fps-demonstrated" {
+  when deltaTotal == 2 and firePresses == 2 and channel(1, fire) == 1 and not inputMatch(1, `fire-buffer`)
+  mode: Edge
+  genreChecks["fps"] = 1
+}
+rule "menu-demonstrated" {
+  when channel(1, navigate) == 1 and channel(1, confirm) == 0
+  mode: Edge
+  genreChecks["menu"] = 1
+}

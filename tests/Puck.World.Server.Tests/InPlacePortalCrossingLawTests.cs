@@ -50,7 +50,6 @@ public sealed class InPlacePortalCrossingLawTests {
     private const string Face = "glass";
     private const int LoopBound = 600;
 
-    private static readonly WorldChannelTable Channels = WorldChannelTable.Compile(channels: Fixtures.BuildDocument().Channels);
 
     // A square door creation whose glass is shape 0, turned by `rotation` in engine terms: a quarter turn about +X lays
     // the glass (its +Z face) flat. Converted to the author frame the engine door converts back from.
@@ -406,7 +405,6 @@ public sealed class InPlacePortalCrossingLawTests {
 
         Assert.Equal(
             actual: tape.Ticks.Sum(selector: tick => tick.Authority.Count(predicate: entry => WorldReplayEntryDescriber.Describe(
-                channels: Channels,
                 entry: entry
             ).Equals(
                 comparisonType: StringComparison.Ordinal,

@@ -274,11 +274,13 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             value: 1
         ) == 0) { m_server.ReleaseFederatedIntents(leaseId: m_leaseId); }
     }
-    /// <summary>Reports whether a transferred principal still owns its body. MUST be called inside
-    /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>, paired with the act it authorizes.</summary>
+    /// <summary>Reports whether a transferred principal still owns its body as a remote human. An autonomous traveler
+    /// is authored by this authority and has no outside driver, so nothing a sender forwards reaches it. MUST be
+    /// called inside <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>, paired with the act it authorizes.</summary>
     /// <param name="server">The authority holding the population.</param>
     /// <param name="principal">The principal to test.</param>
-    /// <returns><see langword="true"/> when the principal is the live owner of its body index.</returns>
+    /// <returns><see langword="true"/> when the principal is the live owner of its body index and that body is a
+    /// remote human.</returns>
     public static bool IsLiveTransferredPrincipal(WorldServer server, Principal principal) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
@@ -286,6 +288,7 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             (principal.Kind == PrincipalKind.Peer) &&
             (((uint)principal.Index) < ((uint)server.Population.Capacity)) &&
             server.Population.IsActive(index: principal.Index) &&
+            server.Population.IsAdmittedPeer(bodyIndex: principal.Index) &&
             (server.Population.PeerPrincipal(index: principal.Index) == principal)
         );
     }

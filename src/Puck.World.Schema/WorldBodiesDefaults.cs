@@ -25,7 +25,9 @@ public enum SeatActivationPolicy : byte {
 /// <see cref="NetworkPlayers"/> and <see cref="ReconnectGraceSeconds"/> is optional; the resolved (non-"Raw")
 /// property of each field's own name states its ABSENT semantics. Seat 0 (player 1) must be
 /// <see cref="SeatActivationPolicy.Eager"/> when any local seat is declared — the session always needs a first
-/// player. <see cref="ReconnectGraceSeconds"/>: how long a disconnected body stays parked — retained in the
+/// player. <see cref="NetworkPlayers"/> is the admission cap on remote humans (the owner's ruling): it counts the
+/// remote humans an instance admits and never a census bot, inhabitant or companion, which cost a body slot and
+/// nothing against the cap. <see cref="ReconnectGraceSeconds"/>: how long a disconnected body stays parked — retained in the
 /// sim/collider set at its last pose, still counted <c>IsHumanOccupied</c> — before the deferred teardown (body
 /// drop, and for a peer, its generation's grants) actually fires. <c>0</c> disables the grace window outright: a
 /// disconnect tears the body down immediately, the pre-park behavior. A positive value authored against a world

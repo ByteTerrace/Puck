@@ -152,7 +152,9 @@ Three echo models — do not conflate them:
    service — valid only because loopback delivers synchronously.
 3. **Mutation verbs** return `CommandResult.None` with NO synchronous echo;
    the accept/reject narration arrives at the tick boundary through
-   `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection of a
+   `WorldServer.EchoTap` (stderr + mirror, and a toast only when
+   `WorldToastPolicy` finds a player's own act behind it: a console, control
+   attachment or schedule line is `Console`-stamped and never toasts), and a rejection of a
    local console connection's line increments `wire.errors` via
    `NoteDeferredRejection` (`WorldDeferredVerbAnswers`); a remote peer's
    refusal and an unregistered rebuild (the silo's reload) do not. A mutation the World

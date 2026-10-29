@@ -19,15 +19,13 @@ public static class VerbsCommand {
     // The affordance echo's command array, the engine's own verbs alone.
     private static List<CommandMetadata>? ReadAffordances(string stdout) {
         var line = stdout.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n').FirstOrDefault(predicate: static candidate => candidate.StartsWith(comparisonType: StringComparison.Ordinal, value: AffordancesPrefix));
-        var end = (line?.IndexOf(comparisonType: StringComparison.Ordinal, value: ",\"channels\":") ?? -1);
-
-        if (end < 0) {
+        if ((line is null) || !line.EndsWith(value: ']')) {
             return null;
         }
 
-        using var json = JsonDocument.Parse(json: line![AffordancesPrefix.Length..end]);
+        using var json = JsonDocument.Parse(json: line[AffordancesPrefix.Length..^1]);
 
-        return [.. json.RootElement.EnumerateArray()
+        return [.. json.RootElement.GetProperty(propertyName: "commands").EnumerateArray()
             .Where(predicate: static verb => !(verb.TryGetProperty(propertyName: "authored", value: out var authored) && authored.GetBoolean()))
             .Select(selector: static verb => new CommandMetadata(
                 AcceptsWireArgs: verb.GetProperty(propertyName: "wireArgs").GetBoolean(),
@@ -49,7 +47,7 @@ public static class VerbsCommand {
                 "--headless", (headless ? "true" : "false"),
                 "--exit-after-seconds", "60",
                 "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
-                .. (cacheDirectory is null ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
+                .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
             ],
             fileName: "dotnet",
             input: $"world.affordances{Environment.NewLine}quit{Environment.NewLine}",
@@ -92,7 +90,7 @@ public static class VerbsCommand {
 
             using (world) {
                 foreach (var headless in (headlessOnly ? new[] { true } : new[] { true, false })) {
-                    if (Boot(artifact: artifact, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory, cacheDirectory: cacheDirectory) is not { } shape) {
+                    if (Boot(artifact: artifact, cacheDirectory: cacheDirectory, headless: headless, repositoryRoot: repositoryRoot, runDirectory: runDirectory) is not { } shape) {
                         return 1;
                     }
 
@@ -110,6 +108,8 @@ public static class VerbsCommand {
                     using var existing = JsonDocument.Parse(json: File.ReadAllText(path: path));
 
                     foreach (var (name, verb) in WorldConsoleVerbCatalog.Parse(json: existing)) {
+                        // Compiled binding handles are internal destinations, never authored console vocabulary.
+                        if (name.StartsWith(comparisonType: StringComparison.Ordinal, value: "channel.logical.")) { continue; }
                         _ = verbs.TryAdd(key: name, value: verb);
                     }
                 }
