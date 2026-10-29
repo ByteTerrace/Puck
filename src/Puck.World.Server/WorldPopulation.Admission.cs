@@ -143,7 +143,8 @@ public sealed partial class WorldPopulation {
             AuthorityTransferred: entry.IsAuthorityTransferred,
             PlacementId: entry.PlacementId,
             CatalogRig: entry.CatalogRig,
-            TravelTurn: entry.TravelTurn
+            TravelTurn: entry.TravelTurn,
+            RemoteHuman: entry.IsRemoteHuman
         );
     }
     // Retire an inhabited peer slot back to an inactive census peer (its body dropped, its placement tag cleared). The
@@ -275,8 +276,8 @@ public sealed partial class WorldPopulation {
     /// <summary>Re-applies one recorded admission through the population door. A live event reaches this after the
     /// point of effect and is idempotent (<see cref="TryAdmitRemotePeer"/> already set every field this touches);
     /// replay reaches it before the effect and reconstructs the body — including the <see cref="Entry.IsRemoteHuman"/>
-    /// marker, inferred from <see cref="WorldPeerEventEntry.Source"/> being <see cref="IntentSource.Live"/> (the
-    /// document-authored census/inhabitant defaults are never <see cref="IntentSource.Live"/>).</summary>
+    /// marker, read from <see cref="WorldPeerEventEntry.RemoteHuman"/>. The source cannot stand in for it: a census or
+    /// inhabitant body reads <see cref="IntentSource.Live"/> under the default peer source without being a human.</summary>
     /// <param name="peer">The recorded peer entry.</param>
     /// <param name="grantTemplates">The admission templates reconstructed from this event's concrete minted grant
     /// rows. Empty for a document-authored/simulated peer and for a legitimately zero-grant remote identity.</param>
@@ -296,7 +297,7 @@ public sealed partial class WorldPopulation {
                 source: peer.Source
             );
             entry.Active = true;
-            entry.IsRemoteHuman = (peer.Source == IntentSource.Live);
+            entry.IsRemoteHuman = peer.RemoteHuman;
             m_revision++;
         }
         // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an

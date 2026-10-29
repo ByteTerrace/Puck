@@ -762,7 +762,6 @@ public sealed partial class WorldTick {
 
         var bodyIndex = applied.EntityIndex;
         var isOwningParticipant = (((applied.Principal.Kind == PrincipalKind.Seat) || (applied.Principal.Kind == PrincipalKind.Peer)) && (applied.Principal.Index == bodyIndex));
-        var isOwningSeat = ((applied.Principal.Kind == PrincipalKind.Seat) && (applied.Principal.Index == bodyIndex));
         var occupied = Host.Population.IsHumanOccupied(bodyIndex: bodyIndex);
 
         if (
@@ -778,7 +777,7 @@ public sealed partial class WorldTick {
             body.SubmitIntent(intent: submitted);
             body.SetHeldChannels(channels: applied.HeldChannels);
 
-            if (isOwningSeat) {
+            if (isOwningParticipant) {
                 // This tick's `h` and its held-device image — never the ladder's winner (a tape still outranks the
                 // former; see WorldBody.NextIntent). Recorded even when nothing ends up contributing this tick, so
                 // FoldChannelContributions's common-case check (m_hasContribution) stays the only extra cost an
