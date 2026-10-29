@@ -89,7 +89,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   the board room; the lift panel's look and reach boxes; the gallery inspection
   lever's values; first-person feel in the lift and stairwell; the glass
   exhibit on both backends.
-- Whether the companion follows the player through paintings: the night instance's `networkPlayers` admission cap is 0 and counts the companion, so its transfer is refused and it returns to the gallery (the refusal no longer crashes the World). If it should follow, only human players count against the cap.
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
 ## Work packets
@@ -621,6 +620,8 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
+
+- [medium] Companions are not networked players (the owner's ruling): an instance's `networkPlayers` admission cap counts remote humans only. Today the night instance's cap of 0 counts the companion (body 42), so its `painting-night` transfer is refused ("the networkPlayers admission cap (0) is already met") and it returns to the gallery instead of following the player. (from: owner walkthrough)
 
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
