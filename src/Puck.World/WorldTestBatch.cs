@@ -45,6 +45,7 @@ internal sealed class WorldTestBatch {
     private long m_bootTicks;
     private long m_restoreTicks;
     private long m_authoredTicks;
+    private long m_firstTickTicks;
 
     private string WorkingWorld => Path.Combine(path1: m_workingDirectory, path2: Path.GetFileName(path: m_legs[m_index].World));
 
@@ -121,6 +122,7 @@ internal sealed class WorldTestBatch {
             .ToDictionary(path => Path.GetRelativePath(path: path, relativeTo: stateRoot), File.ReadAllBytes) : []);
         m_control = Get<TextCommandSource>().CreateSession(Principal.Console);
         Get<WorldTestRun>().Exported += FreezeLeg;
+        Get<WorldTestRun>().FirstTick += () => m_firstTickTicks = (Stopwatch.GetTimestamp() - m_runStarted);
         Get<WorldTestRun>().Progress += tick => Console.WriteLine(value: $"[test.batch: tick {tick}]");
         instances.Admitted += Observe;
         StartLeg(freshHost: true);
@@ -241,6 +243,7 @@ internal sealed class WorldTestBatch {
                 bootMilliseconds = Milliseconds(ticks: m_bootTicks),
                 restoreMilliseconds = Milliseconds(ticks: m_restoreTicks),
                 authoredMilliseconds = Milliseconds(ticks: m_authoredTicks),
+                firstTickMilliseconds = Milliseconds(ticks: m_firstTickTicks),
                 exportMilliseconds = Milliseconds(ticks: run.ExportTicks),
                 replayMilliseconds = Milliseconds(ticks: replayTicks),
                 otherMilliseconds = Milliseconds(ticks: (((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
