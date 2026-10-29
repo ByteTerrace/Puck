@@ -19,17 +19,14 @@ public static class SdfMeshProbeDepth {
     public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> surfaces) {
         var rays = 0;
 
-        surfaces[(2 * Directions.Length)] = BitConverter.SingleToUInt32Bits(value: reach);
-
         for (var texel = 0; (texel < Directions.Length); texel++) {
             var direction = Directions[texel];
-            var hit = scene.IntersectSurface(direction: direction, distance: out var distance,
-                high: out var high, low: out var low, material: out _, maximum: reach, normal: out var normal, origin: origin);
+            var hit = scene.Intersect(direction: direction, distance: out var distance,
+                material: out _, maximum: reach, normal: out var normal, origin: origin);
 
             rays++;
             if (!hit) {
                 surfaces[texel] = BitConverter.HalfToUInt16Bits(value: ((Half)(-reach)));
-                surfaces[(Directions.Length + texel)] = 0;
                 continue;
             }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { normal = -normal; }
@@ -40,18 +37,6 @@ public static class SdfMeshProbeDepth {
             var packed = (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
 
             surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)distance));
-            // A finite hit must not extend its plane below a sign or past a wall's end. Store the triangle's
-            // projected rectangle, padded by one angular footprint, rounded outward to signed bytes.
-            var padding = (((2f * distance) / Size) + SdfMeshIrradianceProbe.DepthSurfaceFade);
-            var minimum = (Project((low - origin), Normal(word: packed)) - new Vector2(value: padding));
-            var maximum = (Project((high - origin), Normal(word: packed)) + new Vector2(value: padding));
-            var scaleBounds = (127f / reach);
-
-            static uint Code(float value) => ((byte)((sbyte)Math.Clamp(max: 127f, min: -127f, value: value)));
-            surfaces[(Directions.Length + texel)] = Code(value: MathF.Floor(x: (minimum.X * scaleBounds))) |
-                (Code(value: MathF.Ceiling(x: (maximum.X * scaleBounds))) << 8) |
-                (Code(value: MathF.Floor(x: (minimum.Y * scaleBounds))) << 16) |
-                (Code(value: MathF.Ceiling(x: (maximum.Y * scaleBounds))) << 24);
         }
         return rays;
     }
@@ -61,13 +46,6 @@ public static class SdfMeshProbeDepth {
             y: (((sbyte)((byte)(word >> 24))) / ((double)SdfMeshIrradianceProbe.DepthNormalScale)));
 
         return new Vector3(x: ((float)normal.X), y: ((float)normal.Y), z: ((float)normal.Z));
-    }
-    // Drop the normal's dominant axis. CPU and shader choose from the same quantized normal.
-    private static Vector2 Project(Vector3 point, Vector3 normal) {
-        var absolute = Vector3.Abs(value: normal);
-
-        return (((absolute.X >= absolute.Y) && (absolute.X >= absolute.Z)) ? new Vector2(x: point.Y, y: point.Z) :
-            ((absolute.Y >= absolute.Z) ? new Vector2(x: point.X, y: point.Z) : new Vector2(x: point.X, y: point.Y)));
     }
 
     /// <summary>Tests signed surface gaps only in the four reflected angular taps. Coplanar receivers stay visible
@@ -88,8 +66,6 @@ public static class SdfMeshProbeDepth {
         Span<Vector3> points = stackalloc Vector3[4];
         Span<Vector3> normals = stackalloc Vector3[4];
         Span<float> weights = stackalloc float[4];
-        Span<Vector4> footprints = stackalloc Vector4[4];
-        var footprintScale = (BitConverter.UInt32BitsToSingle(value: surfaces[(2 * Directions.Length)]) / 127f);
 
         weights.Clear();
 
@@ -111,10 +87,6 @@ public static class SdfMeshProbeDepth {
             points[corner] = (Directions[index] * depth);
             normals[corner] = Normal(word: word);
             weights[corner] = weight;
-            var bounds = surfaces[(Directions.Length + index)];
-
-            footprints[corner] = (new Vector4(w: ((sbyte)((byte)(bounds >> 24))), x: ((sbyte)((byte)bounds)),
-                y: ((sbyte)((byte)(bounds >> 8))), z: ((sbyte)((byte)(bounds >> 16)))) * footprintScale);
         }
         var blocked = 0f;
 
@@ -134,21 +106,7 @@ public static class SdfMeshProbeDepth {
                 normal += (weights[neighbour] * normals[neighbour]);
                 total += weights[neighbour];
             }
-            point /= total;
-            normal = Vector3.Normalize(value: normal);
-            var gap = Vector3.Dot(vector1: normal, vector2: (toward - point));
-
-            if (gap >= 0f) { continue; }
-            var denominator = Vector3.Dot(vector1: normal, vector2: toward);
-
-            if (MathF.Abs(x: denominator) < 1e-8f) { continue; }
-            var along = (Vector3.Dot(vector1: normal, vector2: point) / denominator);
-
-            if ((along < 0f) || (along > 1f)) { continue; }
-            var projected = Project((toward * along), normals[corner]);
-            var bounds = footprints[corner];
-
-            if ((projected.X < bounds.X) || (projected.X > bounds.Y) || (projected.Y < bounds.Z) || (projected.Y > bounds.W)) { continue; }
+            var gap = Vector3.Dot(vector1: Vector3.Normalize(value: normal), vector2: (toward - (point / total)));
 
             blocked += (weights[corner] * Math.Clamp(max: 1f, min: 0f, value: (-gap / SdfMeshIrradianceProbe.DepthSurfaceFade)));
         }

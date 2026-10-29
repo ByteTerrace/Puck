@@ -8,8 +8,8 @@ public static class SdfMeshIrradianceProbe {
     /// <summary>The first surface word: FP16 ray distance and two signed octahedral normal bytes.
     /// A negative distance means a miss to that reach.</summary>
     public const int DepthWord = 19;
-    /// <summary>The surface/finite-footprint words, two per texel, followed by their quantization reach.</summary>
-    public const int DepthWords = (((2 * DepthSize) * DepthSize) + 1);
+    /// <summary>The number of packed surface words, one texel per word.</summary>
+    public const int DepthWords = (DepthSize * DepthSize);
     /// <summary>The signed octahedral normal byte's scale; axis normals remain exact.</summary>
     public const float DepthNormalScale = 127f;
     /// <summary>The surface gap over which an angular tap closes, in metres, smaller than normal bias.</summary>
