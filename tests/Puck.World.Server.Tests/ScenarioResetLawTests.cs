@@ -7,6 +7,28 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>A scenario's terminal tape and input mask never cross the next scenario's boot boundary.</summary>
 public sealed class ScenarioResetLawTests {
+    [Fact]
+    public void AProbeRetainsInputAfterTheProducerReusesItsBorrowedBuffers() {
+        using var run = new WorldHistoryHarness(on: false);
+        var submission = Fixtures.Input(server: run.Fixture.Server, link: run.Transport, body: 0,
+            image: run.Channels.RoleOrdinals.Intent(moveAdvance: Puck.Maths.FixedQ4816.One),
+            actor: Principal.Seat(slot: 0), tick: run.Fixture.Server.NextInputTick);
+        var contributions = submission.Input.Contributions.ToArray();
+        var events = submission.Input.Events.ToArray();
+
+        Assert.NotEmpty(contributions);
+        Assert.NotEmpty(events);
+        submission = submission with { Input = submission.Input with { Contributions = contributions, Events = events } };
+        using var probe = run.Tape.ObserveReplay();
+
+        run.Transport.SubmitIntent(submission);
+        run.StepWithoutInput();
+        Array.Clear(contributions);
+        Array.Clear(events);
+        run.StepWithoutInput();
+        probe.Dispose();
+        Assert.Equal(-1, probe.Verify());
+    }
     [InlineData(0)]
     [InlineData(1)]
     [Theory]

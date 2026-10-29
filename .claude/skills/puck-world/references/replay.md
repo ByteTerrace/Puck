@@ -30,13 +30,16 @@ sleeping island a tick early. Restore scoped replay images after compiling their
 final bindings. An addon restart cancels its old input controllers, so capture the
 recording's start after that commit, with a preflight capture before committing.
 An independent test/history capture records that restart as an ordered tape entry.
-Session allocators and awake/sleeping work sets replace their discarded timeline;
-retaining later generations or work-set membership breaks in-place reproduction.
+Isolated scenario restores replace session allocators and awake/sleeping work sets
+with their captured timeline; live checkpoint loads retain retired session epochs
+so an ended principal cannot be minted again.
 
 `WorldReplayProbe` consumes the tape's existing input capture independently of
-operator recording. Scenario workers detach all probes at the completed host-step
-boundary, then restore and replay each authority in place. Boot screen observations
-are reconstructed between scenarios, not retained from the preceding scenario.
+operator recording. Scenario workers freeze all probes synchronously at export,
+before the host finishes its post-step work, then restore and replay each authority
+in place. A probe retains the final open tick's already-applied inputs without
+advancing that authority. Boot screen observations are reconstructed between
+scenarios, not retained from the preceding scenario.
 
 ## Contents
 
@@ -827,13 +830,15 @@ Console) is time travel over the running boot world; the mechanism is in
 The contracts a change must keep:
 
 - **One capture.** The tape's taps (`WorldReplayTape.Capture.cs`) attach while
-  a recording is armed or a history is on, never during a live drive, and never
+  a recording, history or independent probe needs them, never during a live drive, and never
   while a history re-simulation suspends them. `NoteTick` closes one
-  `WorldReplayTickInput` and hands it to both; the recording's first tick alone
+  `WorldReplayTickInput` and hands it to every consumer; the recording's first tick alone
   carries the arm-time session prefix. A new tap belongs in the capture, so the
   history records it too; a new entry kind owes `ApplyRecordedTick` its arm and,
   if its consequence lives at another authority, the history's unrewindable
-  list.
+  list. Input batches borrow their event and contribution buffers only through
+  synchronous admission: the intent tap copies those buffers before retaining a
+  submission, otherwise a later press can overwrite an earlier recorded press.
 - **Proof, not trust.** Every seek proves the restored keyframe against the hash
   its tick recorded and every re-simulated tick against its recorded hash and
   mutation outcomes. A disagreement is reported by tick and fails the verb.

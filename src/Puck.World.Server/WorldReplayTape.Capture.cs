@@ -4,9 +4,8 @@ using Puck.World.Server;
 namespace Puck.World;
 
 // The per-tick capture: the loopback and server taps that turn one live tick's server input into one
-// WorldReplayTickInput. One capture serves two consumers — the recording a replay.record armed and the in-session
-// WorldHistory — so the two never disagree about what a tick's input was, and the history stores the tape's own
-// entries rather than a second format.
+// WorldReplayTickInput. Recording, in-session history and scenario probes share this capture and own the same
+// immutable input image, so later producer activity cannot change an earlier tick's recorded input.
 public sealed partial class WorldReplayTape {
     // The current tick's accumulating input, closed into one tick group at each NoteTick. One authority list, not one
     // per kind: a command and a grant that crossed the link in a given order must replay in that order, and parallel
@@ -52,7 +51,14 @@ public sealed partial class WorldReplayTape {
 
     // Attaches every capture tap over the current per-tick accumulators.
     private void AttachTaps() {
-        m_transport.IntentTap = submission => m_currentIntents.Add(item: submission);
+        // Input producers lend these buffers only through synchronous admission. Capture owns the image
+        // before the producer can reuse it, for recordings, history and scenario probes alike.
+        m_transport.IntentTap = submission => m_currentIntents.Add(item: submission with {
+            Input = submission.Input with {
+                Contributions = submission.Input.Contributions.ToArray(),
+                Events = submission.Input.Events.ToArray(),
+            },
+        });
         m_transport.CommandTap = command => m_currentAuthority.Add(item: new WorldReplayEntry.Command(Value: command));
         m_transport.DesignationTap = (designation, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Designation(
             Actor: actor,
