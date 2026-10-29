@@ -86,6 +86,13 @@ agent works in that mode by default, without asking:
   - Every project stays in the build.
   - Every push to `main` keeps deploying, through a pipeline made as fast as
     possible.
+  - The work comes first. Usage is worth keeping in mind, never a limit: a
+    stronger model is used wherever it pays for itself. Parallelism is pushed
+    smartly, and review, integration and fixing never run serially behind
+    one lane: a lane lands when its evidence holds, its review runs while
+    other lanes work, and findings are fixed in batches. How much review a
+    change gets is decided per change, by what it risks; no rule fits every
+    change ([orchestration](.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)).
   - Self-modification is explicitly approved: agents edit AGENTS.md, the
     skills and their evals as part of ordinary work.
   - Removing or changing gate steps, CI steps and the tests that pin them is
