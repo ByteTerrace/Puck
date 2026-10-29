@@ -152,6 +152,118 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.Equal(expected: 0.2f, actual: weights[1]);
         Assert.Equal(expected: 0.2f, actual: weights[2]);
     }
+    /// <summary>A separator's veto fades in with its share of the answering probes' weight: from
+    /// <see cref="SdfMeshIrradianceProbe.SeparatorShare"/> of the total (an equal corner's share at a cell's centre) it
+    /// vetoes at full strength, below it by its share of that, so a probe entering the eight-corner set at a cell
+    /// boundary with no trilinear weight vetoes nothing; its own separation fades the same way, so the probe it would
+    /// have separated keeps its veto.</summary>
+    [Fact]
+    public void ASeparatorVetoesByItsShareOfTheAnsweringWeight() {
+        var support = Enumerable.Repeat(count: 64, element: 1f).ToArray();
+        // Probe 1's rays met the receiver (suspect 0) and probe 0's did not; every pair is blocked.
+        float[] suspect = [1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f];
+        float[] weights = [0.6f, 0.03f, 0f, 0f, 0f, 0f, 0f, 0f];
+
+        // Three hundredths beside six tenths is 0.03 / (0.125 * 0.63) of a full veto.
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.Equal(expected: (0.6f * (1f - (0.03f / (SdfMeshIrradianceProbe.SeparatorShare * 0.63f)))), actual: weights[0], precision: 5);
+        Assert.Equal(expected: 0.03f, actual: weights[1]);
+
+        // At the share, the full veto, as a separator of equal weight gives.
+        weights[0] = 0.6f;
+        weights[1] = 0.1f;
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.Equal(expected: 0f, actual: weights[0]);
+        Assert.Equal(expected: 0.1f, actual: weights[1]);
+
+        // Two probes that separate each other: the one entering with next to no weight is separated by the other at
+        // full strength and separates it next to nothing, so the standing probe keeps its weight and the entrant has
+        // none to speak of, where equal weights leave both standing.
+        suspect[1] = 1f;
+        weights[0] = 0.6f;
+        weights[1] = 0.0001f;
+        SdfMeshIrradiance.Separate(support: support, suspect: suspect, weights: weights);
+        Assert.InRange(actual: weights[0], high: 0.6f, low: 0.599f);
+        Assert.InRange(actual: weights[1], high: 0.000001f, low: 0f);
+    }
+    /// <summary>THE LAW: the gather is continuous across a lattice plane. A probe enters the eight-corner set at a cell
+    /// boundary with no trilinear weight, so the gather it joins reads as the gather it left. A plinth top between the
+    /// probe above and west of the receiver's column and the probe below the column makes the one a separator of the
+    /// other, and an untraced receiver in the air beside the column, which both probes admit only for want of a hit,
+    /// reads the same weights a hair either side of the column's lattice plane.</summary>
+    [Fact]
+    public void AReceiverCrossingACellBoundaryReadsAContinuousGather() {
+        // A floor, and a plinth 0.7 m high between x 0.2 and 0.4: the probe at (-0.5, 1.5, 0.5) looking down toward
+        // the probe at (0.5, 0.5, 0.5) meets its top, so neither sees the other, and the receiver at y 1 lies on the
+        // upper probe's side of that top.
+        var frame = Frame() with {
+            IndirectBounces = 0,
+            MeshDraws = [
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: 10f, y: 0f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: -5f), high: new Vector3(x: 0.4f, y: 0.7f, z: 5f))),
+            ],
+        };
+        var volume = new SdfMeshIrradiance();
+
+        _ = Trace(frame: frame, volume: volume);
+
+        // The receiver faces west, so the lookup reads it pushed 5 cm west: these straddle the plane at x 0.5.
+        var west = Gather(volume: volume, point: new Vector3(x: 0.549f, y: 1f, z: 0.5f));
+        var east = Gather(volume: volume, point: new Vector3(x: 0.551f, y: 1f, z: 0.5f));
+
+        // The probe below the column answers on both sides, and the upper west probe, which separates it, is the one
+        // leaving the set: west of the plane the gather reads as it does east of it.
+        Assert.True(condition: (west[(0, 0, 0)] > 0.1f));
+        Assert.True(condition: (west[(-1, 1, 0)] > 0f));
+        Assert.False(condition: east.ContainsKey(key: (-1, 1, 0)));
+        foreach (var cell in west.Keys.Union(second: east.Keys)) {
+            Assert.InRange(actual: MathF.Abs(x: (west.GetValueOrDefault(key: cell) - east.GetValueOrDefault(key: cell))), high: 0.005f, low: 0f);
+        }
+        // Where the same separator holds a real share of the gather, it vetoes the probe below the column.
+        var inland = Gather(volume: volume, point: new Vector3(x: 0.15f, y: 1f, z: 0.5f));
+
+        Assert.True(condition: (inland[(-1, 1, 0)] > 0.1f));
+        Assert.True(condition: (inland.GetValueOrDefault(key: (0, 0, 0)) < (0.5f * west[(0, 0, 0)])));
+    }
+    /// <summary>A lattice centre on a wall's face is rejected: the face under the origin is never a ray's first hit
+    /// (a hit under 0.1 mm is ignored), so the rays into the wall meet its far face from inside, past the inside share.
+    /// A probe beyond the wall's end whose ray runs along the face's plane traces through along it, since the coplanar
+    /// ray meets none of that face's triangles: the neighbour on the face is seen, and the ray's plane stays open.</summary>
+    [Fact]
+    public void AProbeOnAWallFaceIsRejectedAndARayAlongTheFacePlaneTracesThrough() {
+        // A wall whose +X face lies on x = 0.5, the plane of cell 0's centres, from z = 0 to z = 6: the probe at
+        // (0.5, 0.5, 0.5) stands on the face, and the probe at (0.5, 0.5, -0.5) beyond its south end.
+        var frame = Frame() with {
+            IndirectBounces = 0,
+            MeshDraws = [
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: 10f, y: 0f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: 0.2f, y: 0f, z: 0f), high: new Vector3(x: 0.5f, y: 3f, z: 6f))),
+            ],
+        };
+        var (parameters, words) = Trace(volume: new SdfMeshIrradiance(), frame: frame);
+        var onFace = words.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: 0, y: 0, z: 0) * SdfMeshIrradianceProbe.ProbeWords));
+        var beyondEnd = Probe(parameters: in parameters, words: words, x: 0, y: 0, z: -1);
+        var plusZ = NeighbourIndex(x: 0, y: 0, z: 1);
+
+        Assert.Equal(expected: SdfMeshIrradianceProbe.InvalidFlag, actual: (onFace[0] & SdfMeshIrradianceProbe.InvalidFlag));
+        Assert.Equal(expected: Vector4.Zero, actual: Plane(index: plusZ, probe: beyondEnd));
+        Assert.Equal(expected: 1u, actual: ((beyondEnd[SdfMeshIrradianceProbe.NeighboursWord] >> plusZ) & 1u));
+    }
+    // The answering probes about an untraced receiver facing west, by cell.
+    private static Dictionary<(int X, int Y, int Z), float> Gather(SdfMeshIrradiance volume, Vector3 point) {
+        var cells = new (int X, int Y, int Z)[8];
+        var weights = new float[8];
+
+        Assert.True(condition: volume.TryGather(cells: cells, normal: -Vector3.UnitX, point: point, weights: weights));
+
+        var result = new Dictionary<(int X, int Y, int Z), float>();
+
+        for (var corner = 0; (corner < 8); corner++) {
+            if (weights[corner] > 0f) { result[cells[corner]] = weights[corner]; }
+        }
+
+        return result;
+    }
 
     // A box between two corners, its faces wound outward, as the bake winds them.
     private static SdfMesh Box(Vector3 low, Vector3 high) {
