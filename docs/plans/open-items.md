@@ -314,6 +314,12 @@ findings by cluster, starting with the hall stairs.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
+- [low] The presentation query field (camera clearance, surface effectors)
+  excludes the solid placement `desk-chair`: its evaluator refuses a
+  `RepeatPolar` fold (`[world.presentation-field: excluded placement
+  'desk-chair' ... RepeatPolar]`, now narrated once per placement), so the chase
+  camera and limb probes see no chair. Give the fixed-point query twin the
+  fold, or bound the folded shape.
 - The bake-side causes live in the [rendering plan's](rendering.md#open-items)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
@@ -439,6 +445,8 @@ developer exhibits, then the diagnostics' windowed checks.
 Owner: specialist or Astra design lane · ordinary · Next: design the
 simulation thread and its snapshot handoff, then build it.
 
+- [medium] The localized wake around a moving carrier uses a fixed 1 m margin that ignores the configurable contact skin: with a valid `contactSkin` of 2 m, a sleeping sphere resting at skin distance above a lift misses the wake box during small car movements and stays asleep instead of riding (`src/Puck.World.Server/WorldPopulation.Sleep.cs:154`). Derive the margin from the contact skin (and the body's own broadphase radius). (owner: next simulation batch; from: lift-lag review)
+
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
@@ -483,6 +491,18 @@ simulation thread and its snapshot handoff, then build it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
+- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
+  host frame clamps its wall delta to a quarter second
+  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
+  then runs every step that delta owes, so once a tick costs more than its
+  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
+  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
+  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
+  burst by the wall time it has spent (drop the rest, rebasing the capture pin
+  as a clamp does), so an over-budget tick slows the World instead of the frame.
+- [low] Every rigid advance zero-fills the step's capture snapshot
+  (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
+  body's advance in an EventPipe sample of a lift ride).
 - Pacing at 120 Hz with Windows' Dynamic Refresh Rate (the lead machine's
   display now runs 120 Hz with DRR on, VRR 48 to 120 Hz): confirm the 60 FPS bar
   and VRR pacing hold in front of and behind another window, and that
@@ -687,6 +707,15 @@ schema switch.
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
+- [medium] An attached operator session costs the tick a whole state load on
+  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
+  tier) discloses the definition again from the arena, so its mirror's
+  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
+  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
+  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
+  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
+  change to the session without a fresh disclosure of state, or make the load
+  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a
@@ -750,11 +779,7 @@ step's completion criteria; C1 to C6 are in.
 - C7 read-back and cleanup: current-mode action names in `body.rig`,
   `replay.inspect`, `world.affordances`, the controller bar and help, obsolete
   ordinal surfaces removed, and executable checks of the genre table.
-- A typing tutor in the gallery (the owner's request), on C5 and C6: a station
-  whose engagement enters a text-focus mode, lessons from the home row to words
-  and sentences on a prompt screen, live per-character feedback, words per
-  minute, per-key accuracy, streaks and a run timer, judged from input history so
-  a replay reproduces every keystroke.
+- The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
   submits through the existing `chat.whisper`/`chat.log` verbs and inbox grants
   (`ChatCommandModule`).

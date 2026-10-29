@@ -137,6 +137,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
     // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
     private Task<SdfFieldEvaluator>? m_staticFieldBuild;
+    // Each placement exclusion the presentation field has narrated, so a rebuild repeats none of them.
+    private readonly HashSet<(string Placement, string Reason)> m_reportedFieldExclusions = [];
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
     // so a later departure re-narrates instead of staying silent forever.
@@ -473,7 +475,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 placements: WorldPlacementStamper.Queryable(
                     definition: definition,
                     placements: [.. definition.Placements.Where(predicate: static placement => (placement.Solid is not null))],
-                    excluded: static (placement, reason) => Console.Error.WriteLine(value: $"[world.presentation-field: excluded placement '{placement.Id}': {reason}]")
+                    excluded: ReportFieldExclusion
                 ),
                 colors: m_queryColors,
                 palettes: m_queryPalettes
@@ -503,6 +505,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // The program and its evaluator build off the frame thread; a refusal from either reaches AdoptStaticField.
         m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: builder.Build()));
         AdoptStaticField(wait: TickLocked);
+    }
+    private void ReportFieldExclusion(WorldPlacement placement, string reason) {
+        if (m_reportedFieldExclusions.Add(item: (placement.Id, reason))) {
+            Console.Error.WriteLine(value: $"[world.presentation-field: excluded placement '{placement.Id}': {reason}]");
+        }
     }
     // Publishes the presentation field's evaluator once its build has finished, or waits for it.
     private void AdoptStaticField(bool wait) {
@@ -1672,13 +1679,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // leaves it as it was.
             if (
                 (m_client.DefinitionRevision != m_staticFieldDefinition) ||
-                (m_client.ResponseRevision != m_staticFieldResponses) ||
+                (m_client.SolidResponseRevision != m_staticFieldResponses) ||
                 (m_adjacencies.NeighbourRevision != m_staticFieldNeighbours) ||
                 (m_builtCodeRevision != m_staticFieldCode)
             ) {
                 m_staticFieldCode = m_builtCodeRevision;
                 m_staticFieldDefinition = m_client.DefinitionRevision;
-                m_staticFieldResponses = m_client.ResponseRevision;
+                m_staticFieldResponses = m_client.SolidResponseRevision;
                 m_staticFieldNeighbours = m_adjacencies.NeighbourRevision;
                 RebuildStaticField();
             }
