@@ -14,7 +14,23 @@ namespace Puck.World;
 /// (<see cref="WorldDefinitionSerialization.Serialize"/>), the same <c>sha256-64</c> pin every other door computes over
 /// a definition.</param>
 /// <param name="InstanceIdentity">The instance identity the draws were seeded for.</param>
-public sealed record CompiledWorldHeader(string EngineBuild, string CatalogFingerprint, AssetContentHash DefinitionHash, string InstanceIdentity);
+/// <param name="SourceHash">The content hash of the composed document bytes the authored definition was parsed from, or
+/// <see langword="null"/> when the writer had no such bytes. Equal bytes parse to an equal definition under one engine
+/// build, so a boot holding the same bytes takes the compiled world without parsing the authored definition to compute
+/// <paramref name="DefinitionHash"/>.</param>
+public sealed record CompiledWorldHeader(string EngineBuild, string CatalogFingerprint, AssetContentHash DefinitionHash, string InstanceIdentity, AssetContentHash? SourceHash = null) {
+    /// <summary>Returns whether this header and <paramref name="other"/> key compiled worlds for the same build, catalog
+    /// and instance, whatever definition either names.</summary>
+    /// <param name="other">The header to compare.</param>
+    /// <returns><see langword="true"/> when the engine build, catalog fingerprint and instance identity are equal.</returns>
+    public bool SharesBuild(CompiledWorldHeader other) {
+        ArgumentNullException.ThrowIfNull(argument: other);
+
+        return (string.Equals(a: EngineBuild, b: other.EngineBuild, comparisonType: StringComparison.Ordinal) &&
+            string.Equals(a: CatalogFingerprint, b: other.CatalogFingerprint, comparisonType: StringComparison.Ordinal) &&
+            string.Equals(a: InstanceIdentity, b: other.InstanceIdentity, comparisonType: StringComparison.Ordinal));
+    }
+}
 /// <summary>
 /// A compiled world: one world's derived products, stored as a <see cref="ChunkContainer"/> with the magic
 /// <c>PWLD</c> beside the document it was derived from (<c>&lt;name&gt;.puckb</c>) or in a boot's cache. Its header is
@@ -31,7 +47,7 @@ public static class CompiledWorld {
     public const string Extension = ".puckb";
     /// <summary>The version of the compiled-world format: its header layout and the rule that each code appears at
     /// most once.</summary>
-    public const uint FormatVersion = 1;
+    public const uint FormatVersion = 2;
 
     private const int MaximumTextBytes = 4096;
 
@@ -89,6 +105,13 @@ public static class CompiledWorld {
         writer.WriteUInt64(value: header.DefinitionHash.Value);
         writer.WriteText(value: header.InstanceIdentity);
 
+        if (header.SourceHash is { } sourceHash) {
+            writer.WriteByte(value: 1);
+            writer.WriteUInt64(value: sourceHash.Value);
+        } else {
+            writer.WriteByte(value: 0);
+        }
+
         return new ChunkContainer(
             chunks: chunks,
             formatVersion: FormatVersion,
@@ -101,15 +124,18 @@ public static class CompiledWorld {
     /// <param name="authored">The parsed, composed, undrawn definition.</param>
     /// <param name="catalogFingerprint">The composition fingerprint of the host's machine catalog.</param>
     /// <param name="instanceIdentity">The instance identity the draws are seeded for.</param>
+    /// <param name="sourceHash">The content hash of the composed bytes <paramref name="authored"/> was parsed from, or
+    /// <see langword="null"/> when there were none.</param>
     /// <returns>The header.</returns>
-    public static CompiledWorldHeader HeaderFor(WorldDefinition authored, string catalogFingerprint, string instanceIdentity) {
+    public static CompiledWorldHeader HeaderFor(WorldDefinition authored, string catalogFingerprint, string instanceIdentity, AssetContentHash? sourceHash = null) {
         ArgumentNullException.ThrowIfNull(argument: authored);
 
         return new CompiledWorldHeader(
             CatalogFingerprint: catalogFingerprint,
             DefinitionHash: AssetContentHash.Compute(content: WorldDefinitionSerialization.Serialize(definition: authored)),
             EngineBuild: EngineBuild,
-            InstanceIdentity: instanceIdentity
+            InstanceIdentity: instanceIdentity,
+            SourceHash: sourceHash
         );
     }
     /// <summary>Derives every registered chunk fresh and encodes the compiled world: what <c>puck compile</c> and the
@@ -122,9 +148,12 @@ public static class CompiledWorld {
     /// <param name="reason">The derivation's named refusal, or empty on success.</param>
     /// <param name="chunks">The registered derivations, or <see langword="null"/> for
     /// <see cref="CompiledWorldChunks.Standard"/>.</param>
+    /// <param name="sourceHash">The content hash of the composed bytes <paramref name="authored"/> was parsed from, which
+    /// lets a boot holding the same bytes take the compiled world unparsed, or <see langword="null"/> when there were
+    /// none.</param>
     /// <returns><see langword="true"/> when every chunk derived.</returns>
     public static bool TryCompile(WorldDefinition authored, string catalogFingerprint, string instanceIdentity, string sourceName,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? bytes, out string reason, CompiledWorldChunks? chunks = null) {
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out byte[]? bytes, out string reason, CompiledWorldChunks? chunks = null, AssetContentHash? sourceHash = null) {
         bytes = null;
         chunks ??= CompiledWorldChunks.Standard;
 
@@ -153,7 +182,8 @@ public static class CompiledWorld {
             header: HeaderFor(
                 authored: authored,
                 catalogFingerprint: catalogFingerprint,
-                instanceIdentity: instanceIdentity
+                instanceIdentity: instanceIdentity,
+                sourceHash: sourceHash
             )
         );
         reason = string.Empty;
@@ -196,13 +226,19 @@ public static class CompiledWorld {
             var catalogFingerprint = reader.ReadText(maximumByteCount: MaximumTextBytes);
             var definitionHash = new AssetContentHash(Value: reader.ReadUInt64());
             var instanceIdentity = reader.ReadText(maximumByteCount: MaximumTextBytes);
+            AssetContentHash? sourceHash = reader.ReadByte() switch {
+                0 => null,
+                1 => new AssetContentHash(Value: reader.ReadUInt64()),
+                _ => throw new InvalidDataException(message: "the header's source-hash presence byte is invalid"),
+            };
 
             reader.ExpectEnd();
             header = new CompiledWorldHeader(
                 CatalogFingerprint: catalogFingerprint,
                 DefinitionHash: definitionHash,
                 EngineBuild: engineBuild,
-                InstanceIdentity: instanceIdentity
+                InstanceIdentity: instanceIdentity,
+                SourceHash: sourceHash
             );
             container = decoded;
             reason = string.Empty;

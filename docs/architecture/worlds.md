@@ -149,10 +149,12 @@ omits test lowering. Both entry kinds stream their bytes and checksum into the
 atomic file writer.
 
 **The file.** A compiled world is a [chunk container](../reference/assets.md#chunk-containers)
-with the magic `PWLD` and format version 1, named `<name>.puckb` after its
+with the magic `PWLD` and format version 2, named `<name>.puckb` after its
 document (`moth.puck` maps to `moth.puckb`, and `puck.world.json` to `puck.puckb`). Its header
-holds, in order, four keys, and a boot whose own four keys differ ignores the
-whole file:
+holds, in order, five keys. A boot whose engine build, catalog fingerprint or
+instance identity differs ignores the whole file; otherwise it takes the file
+when its source hash names the bytes the boot composed, and else when its
+definition hash names the boot's parsed definition:
 
 | Key | Holds |
 |---|---|
@@ -160,6 +162,7 @@ whole file:
 | Catalog fingerprint | The composition fingerprint of the machine catalog the document composed under. |
 | Definition hash | The 64-bit content hash of the composed, undrawn definition's canonical JSON (`WorldDefinitionSerialization.Serialize`), the same `sha256-64` pin every other door computes over a definition. A `.puck` source and the document it compiles to key one compiled world. |
 | Instance identity | The instance the definition's draws were seeded for; the desktop boot and `puck compile` use `boot`. |
+| Source hash | The 64-bit content hash of the composed document bytes the definition was parsed from, or absent when the writer had none (a `.world.json` boot). Equal bytes parse to an equal definition at one engine build, so a `.puck` boot holding them reads its drawn definition from `DEFN` without parsing the authored one. |
 
 Each chunk is one registered derivation's product, and each code appears once.
 A chunk records the content hash of every input it read beyond the definition,
@@ -209,14 +212,18 @@ Both depend on what a boot finds on disk, so both are pacing-class. Each
 composition count, document read, source compile/cache count and curve compile
 is also pacing-class because persisted images can answer that work. Every
 deterministic-class count reads the same whether or not a boot finds a compiled
-world: the `DEFN` load's parse belongs to the hit and is not a
-`world.boot.parses`. `puck counters` relies on that, because its two backend
-legs share one per-user cache and only the first can miss it.
+world: a boot that parses its authored document counts that parse and not its
+`DEFN` load, and a boot keyed by its composed bytes, which parses only `DEFN`,
+counts that load as its one `world.boot.parses`. `puck counters` relies on that,
+because its two backend legs share one per-user cache and only the first can
+miss it.
 
 A boot from a compiled world still validates the definition and compiles its
-rules, and still parses and serializes the authored document to compute the
-definition hash. A held composition saves the merge, `DEFN` saves the draw, and
-`CURV` saves the spline derivations. The hosted
+rules. A `.puck` boot whose composed bytes the compiled world names parses only
+the drawn definition; a `.world.json` boot, or a compiled world keyed by another
+spelling of the same definition, parses and serializes the authored document to
+compute the definition hash. A held composition saves the merge, `DEFN` saves
+the parse and the draw, and `CURV` saves the spline derivations. The hosted
 asynchronous load and the replay drive draw without a compiled world. The work
 still open, and the chunks that follow, are in
 [the runtime and delivery plan](../plans/runtime-and-delivery.md#compiled-worlds).

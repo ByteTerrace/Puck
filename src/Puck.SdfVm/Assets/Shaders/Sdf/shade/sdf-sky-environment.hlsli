@@ -50,19 +50,7 @@ float3 sdfSkyEnvironmentUnpack(uint2 words) {
 // The texel a filter tap at most one texel past the map reads: inside, itself; past an edge, the texel the octahedral fold
 // puts there, mirrored along that edge, and past a corner the opposite corner (SdfOctahedral.BorderSource).
 uint sdfSkyEnvironmentTap(int2 tap) {
-    int last = (SDF_SKY_ENVIRONMENT_SIZE - 1);
-    bool mirrorX = ((tap.x < 0) || (tap.x > last));
-    bool mirrorY = ((tap.y < 0) || (tap.y > last));
-    int2 texel = tap;
-
-    if (mirrorY) {
-        texel = int2((last - clamp(tap.x, 0, last)), ((tap.y < 0) ? 0 : last));
-    } else if (mirrorX) {
-        texel = int2(((tap.x < 0) ? 0 : last), (last - clamp(tap.y, 0, last)));
-    }
-    if (mirrorX && mirrorY) {
-        texel = int2(((tap.x < 0) ? last : 0), ((tap.y < 0) ? last : 0));
-    }
+    int2 texel = sdfOctBorderSource(tap, (int)SDF_SKY_ENVIRONMENT_SIZE);
 
     return ((uint)((texel.y * SDF_SKY_ENVIRONMENT_SIZE) + texel.x));
 }

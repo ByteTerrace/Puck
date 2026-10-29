@@ -89,19 +89,14 @@
 #define SDF_MESH_LEVEL_SHIFT            24u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
-#define SDF_MESH_IRRADIANCE_PROBE_WORDS     72u
-#define SDF_MESH_IRRADIANCE_LIGHTS_WORD     13u
-#define SDF_MESH_IRRADIANCE_LIGHT_WORDS     4u
-#define SDF_MESH_IRRADIANCE_PLANES_WORD     18u
-#define SDF_MESH_IRRADIANCE_DEPTH_FADE      0.04
-#define SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD 17u
-#define SDF_MESH_IRRADIANCE_OFFSET_WORD     70u
-#define SDF_MESH_IRRADIANCE_MUTUAL_LOW      0.25
-#define SDF_MESH_IRRADIANCE_MUTUAL_HIGH     0.75
-#define SDF_MESH_IRRADIANCE_SEPARATOR_SHARE 0.125
-#define SDF_MESH_IRRADIANCE_WRITTEN         0x40000000u
-#define SDF_MESH_IRRADIANCE_NORMAL_BIAS     0.05
-#define SDF_MESH_IRRADIANCE_BEHIND          0.1
+#define SDF_MESH_IRRADIANCE_PROBE_WORDS 275u
+#define SDF_MESH_IRRADIANCE_LIGHTS_WORD 13u
+#define SDF_MESH_IRRADIANCE_LIGHT_WORDS 4u
+#define SDF_MESH_IRRADIANCE_DEPTH_WORD  19u
+#define SDF_MESH_IRRADIANCE_DEPTH_SIZE  16u
+#define SDF_MESH_IRRADIANCE_OFFSET_WORD 17u
+#define SDF_MESH_IRRADIANCE_WRITTEN     0x40000000u
+#define SDF_MESH_IRRADIANCE_NORMAL_BIAS 0.05
 
 // The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).
 #define SDF_HISTORY_SURFACE_WORDS      6u

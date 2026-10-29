@@ -348,14 +348,55 @@ The target is under 30 seconds from saving an engine C# or HLSL file to seeing
 it in the running debug world (the package `worlds/debug/`, booted with
 `--world worlds/debug`), on Direct3D 12, the World's default backend on Windows.
 
-**C#**: build and boot in one command, restore skipped:
+**C#**: run the World under `dotnet watch`, with the projects you are editing
+built unoptimized, and keep it running:
+
+```powershell
+$env:DOTNET_WATCH_RESTART_ON_RUDE_EDIT = '1'
+dotnet watch --project src/Puck.World --non-interactive run -c Release --no-restore --property:PuckHotReload=Puck.World.Client -- --world worlds/debug --devices all
+```
+
+`PuckHotReload` names the projects, comma-separated
+(`--property:PuckHotReload=Puck.World.Client,Puck.SdfVm`), that build without
+optimization; every other project stays optimized. Unoptimized code costs frame
+time (an unoptimized `Puck.World.Client` adds about 3 ms to each produced frame
+of the debug world, measured below), so list only the projects you are editing. Spell it `--property:`, not
+`-p:`, which `dotnet watch` reads as `--project`. Saving a file then does one of
+two things, and the watch output says which:
+
+- **A method-body edit, or an added method or member, in a listed project**
+  applies to the running World: `dotnet watch : C# and Razor changes applied in
+  45ms`, and the World prints `[world.hot-reload] applied revision N: <types>`.
+  The first edit after the watch starts pays for loading the compiler
+  workspace (14 s under load); later ones take well under a second. A cache
+  holding a product of code compares `CodeRevision.Current`
+  (`src/Puck.Abstractions/CodeRevision.cs`, the process's
+  `MetadataUpdateHandler`) and derives again when it moved: every compiled
+  camera rig (`WorldCameraRigCompiler.Cache`) and everything the frame presenter
+  derives from a delivered definition (cameras and faces, screens, speakers,
+  text, decals, the emitted scene and the static field) rebuild on the next
+  frame, so an edit to that code shows without a reload. Simulation state,
+  baked meshes and installed shader pipelines are untouched.
+- **A rude edit** (a new field or a changed layout in a struct) prints `Restart
+  is needed to apply the changes.`, and the watch rebuilds and reboots the
+  World: 28 s from saving to `Application started` under heavy load. A build
+  error stops there with `Fix the error to continue` until the next save.
+- **An edit to a project not listed** is refused by the runtime (`The assembly
+  can not be edited or changed. Further changes won't be applied to this
+  process.`), and nothing reboots: stop the watch and start it again with that
+  project in `PuckHotReload`.
+
+An agent passes `--devices none`; a run the owner plays in passes `--devices all`
+([devices](#game-changes)). `dotnet watch` watches the repository root, so a
+World whose `--state-dir` or `--cache-dir` lies under the checkout overflows its
+file watcher (`Too many changes at once`) while it writes; the per-user
+defaults lie outside it.
+
+Without hot reload, one command builds and boots:
 
 ```powershell
 dotnet run --project src/Puck.World -c Release --no-restore -- --world worlds/debug --devices none
 ```
-
-An agent passes `--devices none`; a run the owner plays in passes `--devices all`
-([devices](#game-changes)).
 
 A Windows build of one project builds DXIL alone, so a Vulkan run
 (`-- --backend vulkan`), which such a build refuses at boot, needs
@@ -396,7 +437,8 @@ What the C# loop costs:
   bakes its own groups alone.
 
 **HLSL** (an SDF kernel module under `src/Puck.SdfVm/Assets/Shaders/Sdf`): keep
-the World running, save the file, and type in its console or stdin:
+the World running (a World under the hot-reload watch too: an HLSL save
+restarts nothing), save the file, and type in its console or stdin:
 
 ```text
 world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
@@ -418,8 +460,9 @@ The engine's build compiles no world: the debug world boots from its source
 package (`--world worlds/debug`), compiled in memory and cached per user, so a
 world edit is a `world.reload` and an engine edit rebuilds only the engine.
 
-Measured on the reference machine (i5-8400, RTX 2060), with other builds holding
-the CPU at the stated load:
+Measured with other work holding the CPU at the stated load: the `Puck.SdfVm`
+rows on the reference machine (i5-8400, RTX 2060), the rest on the lead machine
+(16 threads, RTX 4070):
 
 | Loop | Phase | Time |
 |---|---|---|
@@ -427,13 +470,36 @@ the CPU at the stated load:
 | | of which `dotnet build`, nothing else changed | 10.6–14.3 s (44–54% load) |
 | | of which the build after the edit | 12.7–15.3 s (12–65% load) |
 | | of which boot to `world.wait ready` | 10.2–12.2 s |
-A `Puck.World.Client` edit (one project, no world compile) and a light-stage
-reload of the views kernel have no reading on the current code yet. The last boot reading was about 4 s of process start before the
-document loads, 2.5 s of the render-capacity probe, and 4 to 5 s of window,
-device, pipelines and first frames. The probe is measured from its emission
+| C#, body edit in `Puck.World.Client` | hot reload, save to applied | 45–54 ms; 14.3 s for the first edit after the watch starts (75–100% load) |
+| | `dotnet run` to `world.status`, headless | 30.5–42.4 s, about 22 s of it the build (100% load) |
+| C#, rude edit | save to the rebooted World's `Application started` | 28 s (heavy load) |
+| HLSL, a constant in `passes/sdf-light-stage.hlsli` | save to `[shaders.reload: request=1 applied … pipelines=1]` (`sdf-world-views` alone), windowed | 11.8 s (loaded) |
+| Frame cost of `PuckHotReload=Puck.World.Client` | windowed, standing, 600 iterations after bakes settle | produce 9.50–10.12 ms average against 6.49 ms optimized; produce+simulate p99 20.2–20.6 ms against 17.4 ms (loaded) |
+| Headless boot | process start to `world.status` | 4.6–4.8 s, CPU 4.6–4.9 s (7–79% load) |
+
+The render-capacity probe is measured from its emission
 (`SdfProgramBuilder.MeasureCapacity`) and packs no program, so it allocates no
 worst-case stream (118 million words on the debug world) and runs none of the
 build's analysis.
+
+**Where a headless boot goes.** An EventPipe sample of a warm headless boot
+(`DOTNET_EnableEventPipe=1`,
+`DOTNET_EventPipeConfig=Microsoft-DotNETCore-SampleProfiler:0:5,Microsoft-Windows-DotNETRuntime:0x8:4`,
+converted with `dotnet-trace convert --format speedscope`) reads the main
+thread, since every other thread waits. Of 4.9 s sampled:
+
+| Phase | Share |
+|---|---|
+| Parsing the compiled world's drawn definition (`DEFN`): `System.Text.Json` configuring the `WorldDefinition` metadata, then the parse and its state references | 40% (22% the metadata, more than half of it JIT) |
+| Validating and admitting the drawn definition | 14% |
+| Post-build wiring: the portal destinations' screen sessions, their session sinks and destination loads | 18% |
+| Constructing the server: machine content (the cartridges compile again, 5%), rules, population | 15% |
+| Process start, extensions, host composition and start | 8% |
+
+JIT and type loading are 45% of the main thread. An unchanged `.puck` boot
+neither parses its authored document nor serializes it for the compiled
+world's header: the compiled world names its composed bytes
+([compiled worlds](../architecture/worlds.md)).
 
 ### Verify a change
 
@@ -827,7 +893,20 @@ unverified when no device run exists.
   whose session ends with the machine resumes from its worktree. LibreHardwareMonitor logs its sensors to a
   CSV each second beside its executable (the winget package's folder under
   `%LOCALAPPDATA%\Microsoft\WinGet\Packages`); after a trip, the last rows name
-  the sensor that ran away.
+  the sensor that ran away. It logs only once it runs elevated with Options →
+  Log Sensors, Run On Windows Startup and Start Minimized ticked (they persist
+  in `LibreHardwareMonitor.config` beside the executable; with no such file it
+  has never logged). System event 41 with `BugcheckCode=0`, no power-button
+  timestamp, no WHEA record and no minidump is the trip's signature. A trip
+  zero-fills files whose data had not reached the disk: in one, `.git/config`,
+  `.git/index`, the integration branch's ref file and every file of an
+  in-progress merge read as NUL bytes. Recovery: find them
+  (`head -c 64 <file> | tr -d '\0' | wc -c` reads 0), restore the branch ref
+  from the last line of its reflog (`logs/refs/heads/...`, NULs stripped),
+  rebuild `.git/config` (core settings including `longpaths = true`, `origin`, branch tracking), move the
+  zeroed index aside and `git reset`, restore zeroed tracked files with
+  `git checkout -- <paths>`, move aside a half-created worktree's metadata, and
+  confirm with `git fsck --no-dangling`.
 - A build cut off by a power loss or a killed session can leave a truncated
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build
