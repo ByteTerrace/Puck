@@ -584,9 +584,19 @@ Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
 reversal brake, then a sitting; the rate-limited facing op only if a
 movement-facing scheme returns.
 
+- [medium · owner: controls] Finish the standard extraction's windowed comparison
+  before extending it with zoom, dash or layouts. The shared design now lives in
+  `worlds/standard/`, with Go/Tour, Places and gallery icons refining it in
+  `worlds/debug/controls.puck`. Headless composition and the 23 input scenarios
+  reproduce; stills remain owed because both bounded GPU attempts expired on a
+  live foreign lease. The saved original and paired capture scripts are in the
+  controls worktree's `.claude/scratch/controls-evidence/`; the hand-back is
+  `.claude/scratch/controls-handback.md`. Batch the comparison into the lead's GPU
+  verification window, then resume the three owner items below.
+
 - Binding bar layouts again (the owner's request; with the controls work, which edits the same `controls.puck`). The engine has both switches (`WorldBindingBar.LayoutCell` names the live authored layout; `ModelCell` draws one bar when `single`, every page with the rest as wings otherwise); the debug world authors only `standard` and fixes `barModel.model` at `single`. Recover and author: (1) the linear strips `keys` and `pad` from `controls.puck` at commit `8962c3d5a7` (lines 304-384: `pad` one row, left stick and Back, right stick and press, the face diamond at the right end; `keys` a WASD cross and action keys in a row with camera and function keys above), which the play wheel switched through `state.bar.layout` (`player.state.cell.toggle ... bar layout keys pad`, about line 465); (2) the wings, the WoW addon's modulo layout (commit `e5841bfdad`, `experimental/Puck.Demo/BindingBar/BindingBarLayout.cs`: two mirrored six-slot diamonds, `BarCount` 1 to 5 pushing bars 1-4 outward and downward, at the addon's 600-line reference: button 45 px, centre gap 60 px, anchor 220 px, badge 24/45 at 0.4375) through `ModelCell`; (3) a classical bar with flanking sidebars, never authored, built on the schema's "strip with side columns" (three groups on three anchors); (4) a compact size, which was never a mode (August worlds set `buttonSize 0.075`, `scale 0.72` per world), as a player setting over the layout's scale. Switch layouts, wings and size from play-wheel sectors and a console verb, kept per seat.
 
-- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible engine defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Today the bindable mouse surface is `mouse.left`, `mouse.right`, `mouse.button1/2` and `mouse.motion`: the wheel as a camera input and the middle button need adding to the device input path and its names.
+- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible standard defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Input C7 now supplies the relative Axis2D source `mouse.wheel` (vertical `.y`) and the middle button `mouse.button3`; wire camera zoom and reset through those names and consolidate the existing ring-scroll path so each scroll has one destination.
 - A dash for the Moth (the owner's request): a short, nicely animated burst along the move direction (or facing when idle), bound to the gamepad's west face button (`gamepad.buttonWest`: X on Xbox, Square on PlayStation, Y on Switch Pro; the owner's ruling) on the Move page, whose current West action (the bar shows it as `»`) moves to another slot, with a keyboard equivalent, with a cooldown, a rig animation (lean, trail or thruster flare from the Moth's back thrusters) and deterministic simulation (fixed-point impulse, input from the command snapshot). Rule 7: build it on the existing locomotion and rig drivers, not beside them.
 
 - Make the debug world's dual-stick action play fluid. In: the seat camera
@@ -777,6 +787,15 @@ failover witness.
 Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
+
+- [medium] Investigate a GPU lease held by an older operator worker while no
+  World is advertised and the worker has no direct child process. During the
+  controls extraction, two 1200-second windowed starts expired waiting for that
+  lease; a normal machine process read confirmed the worker was alive, and an
+  exclusive probe confirmed its GPU guard remained held. No foreign process or
+  lease file was changed. The cause is unconfirmed; inspect the owning session
+  and the `OperatorWorlds.WatchAsync`/`Stop` lifecycle, then release it through
+  that session. Evidence and start ids are in the controls hand-back.
 
 - [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The lease-rotation change counts an undeletable ticket as live on the new CLI; check the start path (the MCP adapter's lease delegate) handles the same error rather than failing the start. Also from the same lane: `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
 
