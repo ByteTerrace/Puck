@@ -447,16 +447,11 @@ Owner: debug-world tools lane (specialist) · medium · Next: the pick
 `panes`, and answers under `world.rate pause`), qualified in one windowed pass;
 then the diagnostics' windowed checks, then the three developer exhibits.
 
-- [medium] Naming what is under a pixel fails on the owner's windowed World:
-  `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and
-  `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object
-  is (`primary` resolves to the seat's render instance,
-  `src/Puck.World/WorldViewCommandModule.Picking.cs:48`; `main` names nothing).
-  Make pick address the presented world view by default and list it in
-  `panes`. Under `world.rate pause` the pick has stayed pending with no answer;
+- [medium] Under `world.rate pause` the pick has stayed pending with no answer;
   the hold now claims a paused World answers, bounded by the call's deadline
-  (`Picking.cs:73-100`), which only a windowed run shows. (from: owner
-  walkthrough)
+  (`Picking.cs`), which only a windowed run shows. The default view and the
+  `panes` listing are done (`world.view.pick <x> <y>`, `view instance:<name>`);
+  the paused run is owed. (from: owner walkthrough)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
