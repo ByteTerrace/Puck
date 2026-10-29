@@ -201,7 +201,7 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
             Assert.Equal(expected: PeerSlot, actual: Assert.Single(collection: reservation.BodyIndices));
             Assert.Equal(expected: WorldTransferStatus.Committed, actual: source.Server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
-                    BodyMotionProgramName: "grounded", HasMappedArrival: false, PlanarVelocity: default,
+                    BodyMotionProgramName: "grounded", Arrival: WorldTransferArrival.Spawn, PlanarVelocity: default,
                     Position: default, Profile: null, VerticalVelocity: default, YawRadians: default
                 )],
                 reason: out _, sourceAuthority: Upstream, transferId: transferId

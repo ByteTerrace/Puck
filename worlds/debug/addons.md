@@ -297,7 +297,8 @@ hold lets it leave the floor again after an incidental landing. Evasions reflect
 an inward escape away from the Moth and preserve clearance from her whole capsule.
 Any leg that would pass within 1 m of her axis at her height, whether a curiosity,
 a loop, a breadcrumb or an evasion, is flown round that circle instead, so the
-companion never runs into her at speed.
+companion never runs into her at speed. The detour holds from outside the circle to inside it, until the leg points
+away from her; only directly over her axis does the capsule clearance (within 0.75 m) own the escape alone.
 
 ## Machine debugger
 

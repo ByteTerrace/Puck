@@ -54,6 +54,18 @@ public sealed partial class WorldInstanceHost {
             _ = m_appliedTransferIds.Remove(item: old);
         }
 
+        // A pose carrying a seat home moves its traveller, not its old slot: a transfer drained ahead of it can have
+        // carried the traveller on and landed another body in the slot it left.
+        if (
+            (transfer.Posed is { } posedTraveller) &&
+            !FollowPosedTraveller(
+                transfer: in transfer,
+                traveller: posedTraveller.Incarnation
+            )
+        ) {
+            return;
+        }
+
         if (!m_instances.TryGetValue(
             key: transfer.SourceInstance,
             value: out var source
@@ -659,11 +671,25 @@ public sealed partial class WorldInstanceHost {
                         BoundaryEvents: boundaryEvents
                     );
                 }
+            } else if (transfer.Posed is { } posed) {
+                arrivalPosition = posed.Pose.Position;
+                arrivalYaw = posed.Pose.YawRadians;
+                arrivalPlanarVelocity = default;
+                arrivalVerticalVelocity = default;
+                arrivalTurn = WorldFrameIsometry.AccumulateTurn(
+                    arrivalYaw: arrivalYaw,
+                    departureYaw: yaw,
+                    travelTurn: departureTurn
+                );
             }
 
             commitMembers.Add(item: new WorldTransferCommitMember(
                 Profile: profile?.Project(),
-                HasMappedArrival: (transfer.Arrival == WorldPortalArrival.Mapped),
+                Arrival: ((transfer.Arrival == WorldPortalArrival.Mapped)
+                    ? WorldTransferArrival.Mapped
+                    : ((transfer.Posed is not null)
+                        ? WorldTransferArrival.Posed
+                        : WorldTransferArrival.Spawn)),
                 BodyMotionProgramName: dynamicState.BodyMotionProgramName,
                 Position: arrivalPosition,
                 YawRadians: arrivalYaw,
@@ -1288,6 +1314,101 @@ public sealed partial class WorldInstanceHost {
     // Deterministic, resolver-ordered — the ONE place a transfer id is minted, scoped to the SOURCE ROW's own
     // counter (ids are already scoped (SourceInstance, TransferId) in m_appliedTransferIds and by sourceAuthority on
     // the wire, so a per-row counter loses nothing and keeps a row's checkpoint self-contained).
+    // Returns whether a posed transfer's own source slot still holds its traveller. Otherwise the traveller is sought,
+    // by its mobility incarnation, in every instance this host runs in name order; found away from home it is carried
+    // from there under a fresh id of that source, and found at home or nowhere the pose is refused by name. Either way
+    // this transfer is then spent.
+    private bool FollowPosedTraveller(in PendingTransfer transfer, WorldEntityAddress traveller) {
+        if (
+            m_instances.TryGetValue(
+            key: transfer.SourceInstance,
+            value: out var source
+        ) &&
+            (FindTraveller(
+            instance: source,
+            traveller: traveller,
+            onlySlot: transfer.SourceSlot
+        ) >= 0)
+        ) {
+            return true;
+        }
+
+        var transferId = transfer.TransferId;
+        var sourceName = transfer.SourceInstance;
+        string? foundName = null;
+        var foundSlot = -1;
+
+        foreach (var name in m_instances.Keys.Order(comparer: StringComparer.Ordinal)) {
+            foundSlot = FindTraveller(
+                instance: m_instances[name],
+                traveller: traveller,
+                onlySlot: null
+            );
+
+            if (foundSlot >= 0) {
+                foundName = name;
+                break;
+            }
+        }
+
+        if (
+            (foundName is null) ||
+            string.Equals(
+            a: foundName,
+            b: BootInstanceName,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused (the traveller {traveller} the pose names left '{sourceName}' {((foundName is null) ? "for no instance this host runs" : "and is already home")}; pose it again)]"
+                );
+            }
+
+            return false;
+        }
+
+        var followedId = MintUnappliedTransferId(sourceInstance: foundName);
+
+        if (m_narration.HasNarrationSink) {
+            var followedName = foundName;
+            var followedSlot = foundSlot;
+
+            m_narration.Narrate(
+                channel: "world.transfer",
+                text: $"[world.transfer: transfer={transferId} follows its traveller {traveller} from '{sourceName}' to '{followedName}' body:{followedSlot} as transfer={followedId}]"
+            );
+        }
+
+        ApplyTransfer(transfer: transfer with {
+            SourceInstance = foundName,
+            SourceSlot = foundSlot,
+            TransferId = followedId,
+        });
+
+        return false;
+    }
+    // Returns the slot of one instance holding the traveller with this mobility incarnation (only onlySlot, when
+    // given), or -1.
+    private static int FindTraveller(WorldInstance instance, WorldEntityAddress traveller, int? onlySlot) => instance.Server.ExecuteAuthorityOperation(operation: () => {
+        var population = instance.Server.Population;
+        var first = (onlySlot ?? 0);
+        var end = ((onlySlot is { } only)
+            ? (only + 1)
+            : population.Capacity);
+
+        for (var slot = first; (slot < end); slot++) {
+            if (population.ResolveIncarnation(
+                authority: instance.Server.AuthorityIdentity,
+                index: slot
+            ) == traveller) {
+                return slot;
+            }
+        }
+
+        return -1;
+    });
     private ulong MintTransferId(string sourceInstance) {
         if (!m_instances.TryGetValue(
             key: sourceInstance,
@@ -1693,7 +1814,102 @@ public sealed partial class WorldInstanceHost {
     /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
     /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
     /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) {
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) => EnqueuePending(
+        actingPrincipal: actingPrincipal,
+        adjacencyCounterpart: adjacencyCounterpart,
+        arrival: arrival,
+        border: border,
+        borderCapacity: borderCapacity,
+        continuum: continuum,
+        counterpart: counterpart,
+        destination: destination,
+        explicitTransferId: explicitTransferId,
+        frozenCohortSlots: frozenCohortSlots,
+        frozenGenerationId: frozenGenerationId,
+        frozenScopeKey: frozenScopeKey,
+        fullPolicy: fullPolicy,
+        holdSeconds: holdSeconds,
+        partyAllOrNothing: partyAllOrNothing,
+        posed: null,
+        resolvedDestinationRow: resolvedDestinationRow,
+        scope: scope,
+        sourceCrossingPoint: sourceCrossingPoint,
+        sourceFrame: sourceFrame,
+        sourceInstance: sourceInstance,
+        sourceSlot: sourceSlot,
+        testForceJoinRefusalOrdinal: testForceJoinRefusalOrdinal
+    );
+    /// <summary>Queues a transfer that carries one seat's traveller home to the boot instance and sets it down standing
+    /// at <paramref name="arrivalPose"/> (<c>body.pose spawn:&lt;id&gt;</c> naming a point only the home world declares).
+    /// The traveller is identified by its mobility incarnation, read here from the occupant the seat's route names, so
+    /// the drain moves that traveller from wherever it stands then, never whichever body occupies its old slot; like
+    /// <see cref="EnqueueTransfer"/>, every later refusal is narrated at drain time.</summary>
+    /// <param name="sourceInstance">The name of the local instance the seat's route names.</param>
+    /// <param name="traveller">The generation-addressed entity the seat's route names in that instance.</param>
+    /// <param name="arrivalPose">The pose the traveller takes in the boot instance.</param>
+    /// <param name="actingPrincipal">The principal that asked for the pose.</param>
+    /// <param name="transferId">The queued transfer's id, on success.</param>
+    /// <param name="reason">Why nothing was queued, on failure.</param>
+    /// <returns><see langword="false"/> when <paramref name="sourceInstance"/> is not an instance this host runs (a
+    /// federated authority owns the seat's body) or <paramref name="traveller"/> no longer occupies its slot there.</returns>
+    public bool TryEnqueuePoseHome(string sourceInstance, in WorldEntityAddress traveller, FixedSpawnPoint arrivalPose, Principal actingPrincipal, out ulong transferId, out string reason) {
+        transferId = 0UL;
+
+        if (!m_instances.TryGetValue(
+            key: sourceInstance,
+            value: out var source
+        )) {
+            reason = $"'{sourceInstance}' is a federated authority, not an instance this host runs; only that authority can send its body home (cross back through its portal)";
+            return false;
+        }
+
+        var address = traveller;
+        var incarnation = source.Server.ExecuteAuthorityOperation(operation: () => (
+            (source.Server.Population.Generation(index: address.Index) == address.Generation)
+                ? source.Server.Population.ResolveIncarnation(
+                    authority: source.Server.AuthorityIdentity,
+                    index: address.Index
+                )
+                : null
+        ));
+
+        if (incarnation is not { } identity) {
+            reason = $"body:{address.Index} in '{sourceInstance}' is no longer the occupant the seat's route names";
+            return false;
+        }
+
+        transferId = EnqueuePending(
+            actingPrincipal: actingPrincipal,
+            adjacencyCounterpart: null,
+            arrival: WorldPortalArrival.Spawn,
+            border: null,
+            borderCapacity: null,
+            continuum: null,
+            counterpart: null,
+            destination: TransferDestination.Existing(name: BootInstanceName),
+            explicitTransferId: null,
+            frozenCohortSlots: null,
+            frozenGenerationId: null,
+            frozenScopeKey: null,
+            fullPolicy: WorldTransferFullPolicy.Retry,
+            holdSeconds: 2.0,
+            partyAllOrNothing: true,
+            posed: new PosedTraveller(
+                Pose: arrivalPose,
+                Incarnation: identity
+            ),
+            resolvedDestinationRow: null,
+            scope: TransferScope.Body,
+            sourceCrossingPoint: default,
+            sourceFrame: null,
+            sourceInstance: sourceInstance,
+            sourceSlot: address.Index,
+            testForceJoinRefusalOrdinal: null
+        );
+        reason = string.Empty;
+        return true;
+    }
+    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, ulong? explicitTransferId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed) {
         var transferId = (explicitTransferId ?? MintTransferId(sourceInstance: sourceInstance));
 
         m_pendingTransfers.Enqueue(item: new PendingTransfer(
@@ -1718,7 +1934,8 @@ public sealed partial class WorldInstanceHost {
             FullPolicy: fullPolicy,
             PartyAllOrNothing: partyAllOrNothing,
             BorderCapacity: borderCapacity,
-            Border: (border ?? "transfer")
+            Border: (border ?? "transfer"),
+            Posed: posed
         ));
 
         return transferId;
@@ -1916,6 +2133,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="Attempt">How many times a retryable capacity refusal has already re-queued this crossing.</param>
     /// <param name="RecoveryDestinationName">The captured resolver destination used only for outcome narration
     /// after restart. Recovery never resolves or re-enqueues this already-detached crossing.</param>
+    /// <param name="Posed">The traveller a pose carries home and the pose it lands at, or <see langword="null"/> for
+    /// every other transfer.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -1941,8 +2160,12 @@ public sealed partial class WorldInstanceHost {
         string Border,
         bool ScopeProofAlreadyVerified = false,
         int Attempt = 0,
-        string? RecoveryDestinationName = null
+        string? RecoveryDestinationName = null,
+        PosedTraveller? Posed = null
     );
+    // The traveller a pose carries home, by the mobility incarnation it keeps through every handoff, and the pose it
+    // lands at standing still.
+    private readonly record struct PosedTraveller(FixedSpawnPoint Pose, WorldEntityAddress Incarnation);
     // One landed member's captured state — enough to restore it exactly at the source if the transfer
     // aborts after it already joined the destination. Body color/position/yaw/dynamic state/designations are all
     // captured before TryDetachSeatForTransfer runs (which discards them). See

@@ -170,7 +170,7 @@ public sealed class CrossingUncertaintyLawTests {
             actual: destination.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     Profile: null,
-                    HasMappedArrival: false,
+                    Arrival: WorldTransferArrival.Spawn,
                     BodyMotionProgramName: "grounded",
                     Position: default,
                     YawRadians: default,

@@ -309,8 +309,10 @@
     (local.set $px (i64.sub (global.get $selfX) (global.get $mothX)))
     (local.set $pz (i64.sub (global.get $selfZ) (global.get $mothZ)))
     (local.set $pp (i64.add (call $mul (local.get $px) (local.get $px)) (call $mul (local.get $pz) (local.get $pz))))
-    ;; Inside the circle the capsule clearance below owns the escape.
-    (if (i64.le_s (local.get $pp) (i64.const 65536)) (then (return)))
+    ;; Directly over her axis there is no bearing to skirt from: the capsule clearance below owns that escape. Anywhere
+    ;; else, inside the circle too, the detour holds until the leg points away from her, so it never lapses to the
+    ;; straight-through goal between the circle and the clearance's 0.75 m.
+    (if (i64.le_s (local.get $pp) (i64.const 4096)) (then (return)))
     (local.set $dx (i64.sub (local.get $gx) (global.get $selfX)))
     (local.set $dz (i64.sub (local.get $gz) (global.get $selfZ)))
     (local.set $pd (i64.add (call $mul (local.get $px) (local.get $dx)) (call $mul (local.get $pz) (local.get $dz))))

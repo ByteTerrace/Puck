@@ -480,7 +480,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         );
 
         Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
-        var member = new WorldTransferCommitMember(Profile: carried, HasMappedArrival: false,
+        var member = new WorldTransferCommitMember(Profile: carried, Arrival: WorldTransferArrival.Spawn,
             BodyMotionProgramName: "", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
         Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
@@ -1047,7 +1047,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
             Assert.True(condition: server.ReserveTransfer(request: arrival).Accepted);
             Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: arrival.SourceAuthority,
                 transferId: arrival.TransferId, reason: out _, members: [.. arrival.Members.Select(selector: static member => new WorldTransferCommitMember(
-                    Profile: member.Identity, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
+                    Profile: member.Identity, Arrival: WorldTransferArrival.Spawn, BodyMotionProgramName: "", Position: default, YawRadians: default,
                     PlanarVelocity: default, VerticalVelocity: default))]));
             if (separateArrivals) {
                 fixture.Step();
@@ -1418,7 +1418,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
         Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId, reason: out _, members: [.. request.Members.Select(selector: static member => new WorldTransferCommitMember(
-                Profile: member.Identity, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
+                Profile: member.Identity, Arrival: WorldTransferArrival.Spawn, BodyMotionProgramName: "", Position: default, YawRadians: default,
                 PlanarVelocity: default, VerticalVelocity: default))]));
         for (var tick = 0; (tick < 4); tick++) {
             fixture.Step();

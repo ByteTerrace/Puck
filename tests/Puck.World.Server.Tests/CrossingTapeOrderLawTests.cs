@@ -210,7 +210,7 @@ public sealed partial class CrossingTapeOrderLawTests {
             actual: scenario.Source.Server.CommitTransfer(
                 members: [new WorldTransferCommitMember(
                     Profile: null,
-                    HasMappedArrival: false,
+                    Arrival: WorldTransferArrival.Spawn,
                     BodyMotionProgramName: "grounded",
                     Position: default,
                     YawRadians: default,

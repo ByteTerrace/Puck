@@ -318,10 +318,10 @@ public sealed partial class WorldInstanceHost {
                     PublishSeatRoute();
                 }
 
-                // A mapped arrival turned the body by the turn between the landed member's departure yaw and the
-                // commit member's arrival yaw, at the same ordinal. The seat's view turns with it, so it looks along
-                // what the door's window showed.
-                if (commits[landedOrdinal].HasMappedArrival) {
+                // A mapped or posed arrival turned the body by the turn between the landed member's departure yaw and
+                // the commit member's arrival yaw, at the same ordinal. The seat's view turns with it, so it looks along
+                // what the door's window showed, or the way the spawn point faces.
+                if (commits[landedOrdinal].Arrival != WorldTransferArrival.Spawn) {
                     m_seats.CrossView(
                         slot: followedSlot,
                         yawDelta: WorldFrameIsometry.TurnBetween(
