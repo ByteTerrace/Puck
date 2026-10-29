@@ -100,26 +100,16 @@ public sealed partial class WorldPopulation {
         ClearDesignations(entry: entry);
         entry.Generation = (generation ?? checked((entry.Generation + 1)));
     }
-    private int CountExternalNetworkPlayers() {
+    // The networkPlayers admission cap counts remote humans only (the owner's ruling): a census bot, an inhabitant and
+    // an autonomous traveler such as a companion are never networked players. A parked human keeps its slot (it is
+    // still Active and IsRemoteHuman through the grace window), so it still counts.
+    private int CountRemoteHumans() {
         var count = 0;
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             if (
                 m_entries[index].Active &&
-                (m_entries[index].IsRemoteHuman || m_entries[index].IsAuthorityTransferred)
-            ) {
-                count++;
-            }
-        }
-        return count;
-    }
-    private int CountNetworkPlayers() {
-        var count = 0;
-
-        for (var index = LocalSeatCount; (index < Capacity); index++) {
-            if (
-                m_entries[index].Active &&
-                (m_entries[index].PlacementId is null)
+                m_entries[index].IsRemoteHuman
             ) {
                 count++;
             }
@@ -143,7 +133,8 @@ public sealed partial class WorldPopulation {
             AuthorityTransferred: entry.IsAuthorityTransferred,
             PlacementId: entry.PlacementId,
             CatalogRig: entry.CatalogRig,
-            TravelTurn: entry.TravelTurn
+            TravelTurn: entry.TravelTurn,
+            RemoteHuman: entry.IsRemoteHuman
         );
     }
     // Retire an inhabited peer slot back to an inactive census peer (its body dropped, its placement tag cleared). The
@@ -177,7 +168,10 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
-        if (CountNetworkPlayers() >= m_remoteCap) {
+        if (
+            remoteHuman &&
+            (CountRemoteHumans() >= m_remoteCap)
+        ) {
             admitted = default;
             refusal = $"the networkPlayers admission cap ({m_remoteCap}) is already met";
 
@@ -275,8 +269,8 @@ public sealed partial class WorldPopulation {
     /// <summary>Re-applies one recorded admission through the population door. A live event reaches this after the
     /// point of effect and is idempotent (<see cref="TryAdmitRemotePeer"/> already set every field this touches);
     /// replay reaches it before the effect and reconstructs the body — including the <see cref="Entry.IsRemoteHuman"/>
-    /// marker, inferred from <see cref="WorldPeerEventEntry.Source"/> being <see cref="IntentSource.Live"/> (the
-    /// document-authored census/inhabitant defaults are never <see cref="IntentSource.Live"/>).</summary>
+    /// marker, read from <see cref="WorldPeerEventEntry.RemoteHuman"/>. The source cannot stand in for it: a census or
+    /// inhabitant body reads <see cref="IntentSource.Live"/> under the default peer source without being a human.</summary>
     /// <param name="peer">The recorded peer entry.</param>
     /// <param name="grantTemplates">The admission templates reconstructed from this event's concrete minted grant
     /// rows. Empty for a document-authored/simulated peer and for a legitimately zero-grant remote identity.</param>
@@ -296,7 +290,7 @@ public sealed partial class WorldPopulation {
                 source: peer.Source
             );
             entry.Active = true;
-            entry.IsRemoteHuman = (peer.Source == IntentSource.Live);
+            entry.IsRemoteHuman = peer.RemoteHuman;
             m_revision++;
         }
         // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an
@@ -1093,8 +1087,8 @@ public sealed partial class WorldPopulation {
     /// slot (capacity minus one downward, via <see cref="HighestFreeSlot"/>) so it never renumbers an existing peer and never
     /// collides with the census's own upward allocation (<see cref="SetSimulatedCount"/> now skips any slot this
     /// method marks <see cref="Entry.IsRemoteHuman"/>). Refused by name on whichever bound fails: no free slot in the
-    /// 128-body table, or the document's <c>networkPlayers</c> admission cap already met (census bots and admitted
-    /// remote humans share that one cap — see <see cref="CountActiveCensus"/>).</summary>
+    /// 128-body table, or the document's <c>networkPlayers</c> admission cap already met (the cap counts admitted remote
+    /// humans only, never a census bot, inhabitant or companion).</summary>
     /// <param name="source">The intent source the body starts with (<see cref="IntentSource.Live"/> for a genuine
     /// remote human — a submitted intent/command fills its gaps, never a steering producer).</param>
     /// <param name="grantTemplates">The verified admission entry's own grant templates for this connection (see
@@ -1140,7 +1134,9 @@ public sealed partial class WorldPopulation {
     /// <returns><see langword="true"/> on success.</returns>
     /// <param name="occupant">What a transferred traveler brings, which the admitted event records; <see langword="null"/>
     /// for a connection.</param>
-    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null) {
+    /// <param name="remoteHuman">Whether a human occupies the body. Only a human counts against the
+    /// <c>networkPlayers</c> admission cap.</param>
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null, bool remoteHuman = true) {
         return TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: authorityTransferred,
@@ -1149,7 +1145,7 @@ public sealed partial class WorldPopulation {
             identitySubject: identitySubject,
             occupant: occupant,
             refusal: out refusal,
-            remoteHuman: true,
+            remoteHuman: remoteHuman,
             slot: slot,
             source: source
         );

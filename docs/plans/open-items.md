@@ -139,6 +139,8 @@ medium, lows · Next: the high silhouette leak, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+- Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
+
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the view's HDR output with a highlight clamp) as the auto-exposure driver, the probe meter kept for local adaptation.
 
 - Probe depth visibility (from the probe-depth review):
@@ -637,6 +639,9 @@ diegetic set and the CRT treatment out of the core sets, a neutral default).
 Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
 since a failover today leaves a doubt that never resolves.
 
+- [high] The `networkPlayers` cap trusts the sender's `RemoteHuman` flag: federation accepts `RemoteHuman=false` without verifying the exemption, so an admitted federation authority can reserve and commit a Live human into a full or zero-cap instance, receive Drive grants and submit commands without spending the cap (`src/Puck.World.Server/WorldFederationCodec.cs:315`). The receiving side must classify from what it can verify, never from a sender's claim. (owner: companion-cap follow-up; from: companion-cap review)
+- [medium] A non-Live landing ignores `RemoteHuman=true` and admits the traveller as an autonomous entity: a human whose control source is set to Idle before the transfer arrives at `networkPlayers: 0` and loses its human classification permanently (`src/Puck.World.Server/WorldTransferEscrow.cs:973`). (owner: companion-cap follow-up; from: companion-cap review)
+
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -682,6 +687,8 @@ since a failover today leaves a doubt that never resolves.
 
 Owner: MCP lane (specialist) · medium · Next: the cached wait refusal, then the
 schema switch.
+
+- [medium] Naming what is under a pixel fails on the owner's windowed World: `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object is. Make pick address the presented world view by default and list it in `panes`. (from: owner walkthrough)
 
 - An invalid wait argument on a pending operator MCP start appears to cache the
   argument refusal as the start's completed result (`OperatorMcpFront.Record`):
@@ -1039,10 +1046,25 @@ Owner: maths lane · ordinary · Next: the float duration fields' schema migrati
   checked against a deterministic Miller-Rabin oracle; Intel (Alder Lake) and
   Zen 2 timings are unmeasured.
 
+### Dynamic body scale and the mesh bake
+
+Owner: specialist lane (rendering, sdf-authoring) · one high from the owner's walkthrough · Next: bake a dynamic body in its own space and apply scale at draw.
+
+- [high] Crossing the Wonderland door (scale 0.25) misses the mesh cache for 180 groups of the Moth (`[sdf.mesh-bake] miss ... geometry new to its set`; 3679 dispatches, 13.4 M samples, 14.65 s) and the full-size meshes keep drawing until it finishes, so the Moth reads large and warped; after it the small Moth is visibly degraded: white slivers along every stripe edge of the back plates, lumpy squashed boots, ragged pads, because the bake's detail is set in world units and a 0.25-scale body gets a mesh four times coarser relative to itself. A dynamic body's bake must not depend on its world scale: bake in local space at its own detail, scale at draw, detail tier by screen size. Poses: `body.pose 6.16 0.07 30.43 23` at scale 0.25, orbit `view.override camera look 6.75 0.32 30.75 6.16 0.24 30.43` and `6.40 0.30 31.05 6.16 0.24 30.43`; captures w07-* in `.claude/scratch/walkthrough/` (the lead's machine). (from: owner walkthrough)
+
+### Temporal shimmer and cadence flicker
+
+Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two mediums from the owner's walkthrough · Next: find why the history never resolves the jitter on these surfaces.
+
+- [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
+- [medium] The lift door threshold also blinks with temporal off: pairs of frames about 11 presentations apart change about 3 % with max |dY| 26, then hold still, a cadence-driven refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh) independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). (from: owner walkthrough)
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: whichever the owner calls for.
+
+- [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and

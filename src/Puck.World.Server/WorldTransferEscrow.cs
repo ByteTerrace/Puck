@@ -16,7 +16,9 @@ namespace Puck.World.Server;
 /// <param name="CatalogRig">The source body's entity-owned procedural rig, preserved across ownership. Destination
 /// look authoring may deliberately override it; ordinary admission may not.</param>
 /// <param name="Mobility">The traveler's immutable incarnation and current committed ownership epoch.</param>
-public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null);
+/// <param name="RemoteHuman">Whether a human occupies the traveler's source body. Only a human spends the destination's
+/// <c>networkPlayers</c> admission cap; a companion or other bot that reads a live source does not.</param>
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, bool RemoteHuman = true);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -971,6 +973,7 @@ public sealed partial class WorldTransferEscrow {
             reply = (reservationMember.Source.IsLive
                 ? m_server.GrantTable.AdmitTransferredPeer(
                     occupant: occupant,
+                    remoteHuman: reservationMember.RemoteHuman,
                     slot: slot,
                     verdict: verdict
                 )

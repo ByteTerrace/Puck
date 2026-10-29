@@ -221,12 +221,12 @@ public sealed partial class WorldServer {
     /// <param name="bodyIndex">The 0-based body index already resolved to a live body.</param>
     /// <param name="body">The live body retaining the later held-overlay decision.</param>
     public string DescribeChannels(int bodyIndex, WorldBody body) {
-        // The fold — and this read-back — only ever exists over a HUMAN-OCCUPIED LOCAL SEAT
-        // (WorldPopulation.IsHumanOccupied; the whole per-seat retention above is sized WorldPopulation.LocalSeatCount).
-        // A peer-slice population entry (4 through capacity minus one) or an unoccupied local seat is a bot at full authority by construction — there
-        // is no base/pool/contributor to report, so say that rather than fabricating one.
+        // The fold — and this read-back — only ever exists over a human-occupied body (WorldPopulation.IsHumanOccupied:
+        // an active local seat or an admitted peer; the retention is sized to the population capacity). Any other
+        // body is a bot at full authority by construction — there is no base/pool/contributor to report, so say that
+        // rather than fabricating one.
         if (!m_population.IsHumanOccupied(bodyIndex: bodyIndex)) {
-            return $"[body.channels: body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";
+            return $"[body.channels: body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over a human-occupied body (see world.population); nothing folds here]";
         }
 
         // The application-set summary: every target this seat's channels reach, each with its kit and reach mask, so

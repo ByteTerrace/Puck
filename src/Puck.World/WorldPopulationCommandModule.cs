@@ -545,8 +545,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 // after a discarded synchronous return. An explicit idle/producer token sets the peer-source DEFAULT and
                 // sweeps ALL peers (4..4095) to it — last-writer-wins, so a per-entity body.control does not survive
                 // the global flip; a count alone leaves existing peers' sources be. A census beyond the live ceiling is
-                // CLAMPED, not refused — the ceiling is the tighter of the authored networkPlayers admission cap and
-                // the inhabitant floor, and shrinking to fit is the right behavior. The echo leads with
+                // CLAMPED, not refused — the ceiling is the free peer slots left by inhabitants,
+                // humans and travelers (networkPlayers caps remote humans only), and shrinking to fit is the right behavior. The echo leads with
                 // requested-vs-granted whenever the two differ, and a DENIED request is a THIRD, distinct
                 // outcome from "granted the full count" and "clamped to a lower one".
                 var actingPrincipal = context.Principal;
@@ -562,7 +562,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                             if (!reply.Accepted) {
                                 notice += $"[world.population: {actingPrincipal.Describe()} cannot set the census ({reply.Reason}) — see world.why]\n";
                             } else if (reply.AssignedIndex != resolvedCount) {
-                                notice += $"[world.population: requested {resolvedCount}, GRANTED {reply.AssignedIndex} — clamped to the live ceiling ({population.SimulatedCeiling}: the networkPlayers admission cap under {population.MaxSimulated} free peer slots)]\n";
+                                notice += $"[world.population: requested {resolvedCount}, GRANTED {reply.AssignedIndex} — clamped to the live ceiling ({population.SimulatedCeiling}: the free peer slots)]\n";
                             }
                         }
                     );

@@ -78,6 +78,7 @@ public static class WorldWireLeaves {
             field: "peer event entry travel turn",
             reader: ref reader
         );
+        var remoteHuman = reader.ReadBoolean();
 
         if (catalogRig >= WorldLookSource.Catalog.RigCount) {
             reader.Fail(
@@ -104,6 +105,7 @@ public static class WorldWireLeaves {
             IdentityDomain: identityDomain,
             IdentitySubject: identitySubject,
             PlacementId: placementId,
+            RemoteHuman: remoteHuman,
             Source: source,
             TravelTurn: travelTurn
         );
@@ -134,6 +136,7 @@ public static class WorldWireLeaves {
         writer.WriteNullableString(value: peer.PlacementId);
         writer.WriteByte(value: peer.CatalogRig);
         writer.WriteFixed(value: peer.TravelTurn);
+        writer.WriteBoolean(value: peer.RemoteHuman);
 
         return true;
     }

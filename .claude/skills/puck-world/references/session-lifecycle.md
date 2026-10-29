@@ -32,6 +32,20 @@ or the `$parked:` reserved rule channel.
   (`identityDomain`/`identitySubject`) is what a reconnecting peer is matched
   against for body-resume (below).
 
+**The `bodies.networkPlayers` cap counts remote humans only (the owner's
+ruling).** Companions are not networked players: a census bot, an inhabitant
+and an authority-transferred autonomous traveler (the debug world's companion,
+body 42, following the player through a painting) never spend the cap, so an
+instance with `networkPlayers: 0` still admits them. Only an admission with
+`remoteHuman` set (`TryAdmitRemotePeerAt`: a connection or a human's transfer)
+checks `CountRemoteHumans() >= m_remoteCap`; a parked human still counts. A
+transfer reservation member carries `RemoteHuman` (read from the source body at
+reserve, on the federation and checkpoint wires), because a companion reads a
+Live intent source and arrives through the peer door like a human does. The
+census ceiling (`SimulatedCeiling`) is the free peer slots, not the cap. Replay
+(`ApplyPeerAdmitted`) and checkpoint restore re-apply recorded admissions and
+check no cap.
+
 ## Park-with-grace
 
 When the compiled `definition.PopulationReconnectGraceTicks` (a
