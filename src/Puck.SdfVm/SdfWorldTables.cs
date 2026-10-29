@@ -280,7 +280,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         );
         m_brickPoolVoxelCapacity = Math.Max(
             val1: 0,
-            val2: Math.Min(options.BrickPoolVoxelCapacity, ((int)Math.Min(int.MaxValue, Math.Max(SdfBrickPoolLayout.VoxelsPerBrick, (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))))
+            val2: Math.Min(val1: options.BrickPoolVoxelCapacity, val2: ((int)Math.Min(val1: int.MaxValue, val2: Math.Max(val1: SdfBrickPoolLayout.VoxelsPerBrick, val2: (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))))
         );
         m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
 

@@ -15,20 +15,20 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the irradiance region's actual device and upload-buffer bytes.</summary>
     public GpuMemoryBytes MeshIrradianceBufferBytes => m_meshIrradianceRegion.OwnedBytes;
     /// <summary>Gets the irradiance region's native host shadow and managed copy-header bytes.</summary>
-    public ulong MeshIrradianceCpuBytes => (ulong)m_meshIrradianceRegion.ShadowBytes + m_meshIrradianceRegion.CpuScratchBytes;
+    public ulong MeshIrradianceCpuBytes => (((ulong)m_meshIrradianceRegion.ShadowBytes) + m_meshIrradianceRegion.CpuScratchBytes);
 
     /// <summary>Fits probe storage to the published window, retiring the replaced buffer through the tables' existing
     /// frame-ring retirement. The old window stays bound until its replacement is measured.</summary>
     /// <param name="wordCount">The words in the complete published window.</param>
     public void FitMeshIrradiance(int wordCount) {
         ArgumentOutOfRangeException.ThrowIfLessThan(wordCount, SdfMeshIrradianceProbe.ProbeWords);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(wordCount, MeshIrradianceBytes / sizeof(uint));
-        var bytes = (long)wordCount * sizeof(uint);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(wordCount, (MeshIrradianceBytes / sizeof(uint)));
+        var bytes = (((long)wordCount) * sizeof(uint));
+
         if (bytes == m_meshIrradianceRegion.ByteCount) { return; }
-        Retire(bytes > m_meshIrradianceRegion.ByteCount ? m_meshIrradianceRegion.Grow(bytes) : m_meshIrradianceRegion.Shrink(bytes));
+        Retire(replaced: ((bytes > m_meshIrradianceRegion.ByteCount) ? m_meshIrradianceRegion.Grow(byteCount: bytes) : m_meshIrradianceRegion.Shrink(byteCount: bytes)));
         m_bindingRevision++;
     }
-
     /// <summary>Writes the irradiance volume's probe slots from its first word; the upload of the frame sends what
     /// differs.</summary>
     /// <param name="words">The probe slots, <see cref="SdfMeshIrradianceProbe.ProbeWords"/> words each; at most the High
@@ -41,6 +41,6 @@ public sealed partial class SdfWorldTables {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: words.Length, other: ((MeshIrradianceBytes / sizeof(uint)) - wordOffset));
 
         if (words.IsEmpty) { return; }
-        _ = m_meshIrradianceRegion.Write(bytes: MemoryMarshal.AsBytes(span: words), offset: wordOffset * sizeof(uint));
+        _ = m_meshIrradianceRegion.Write(bytes: MemoryMarshal.AsBytes(span: words), offset: (wordOffset * sizeof(uint)));
     }
 }

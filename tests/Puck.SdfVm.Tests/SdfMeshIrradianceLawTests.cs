@@ -16,39 +16,44 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfMeshIrradianceLawTests {
     [Fact]
     public void AReceiverBehindAnOccluderBesideAnOpenEdgeStaysDark() {
-        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(1f, -10f, -10f), new Vector3(1.1f, 0.11f, 10f)))]);
+        var scene = SdfMeshIrradianceScene.Build([Draw(mesh: Box(new Vector3(x: 1f, y: -10f, z: -10f), new Vector3(x: 1.1f, y: 0.11f, z: 10f)))]);
         var depth = new uint[SdfMeshIrradianceProbe.DepthWords];
-        Assert.Equal(256, SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 2.65f, depth));
-        var toward = new Vector3(2f, 0.19f, 0f);
-        Assert.False(scene.Unblocked(Vector3.Zero, Vector3.Normalize(toward), toward.Length()));
-        var visibility = SdfMeshProbeDepth.Visibility(depth, toward);
-        Assert.True(visibility < 0.05f, $"silhouette visibility={visibility}");
-    }
 
+        Assert.Equal(256, SdfMeshProbeDepth.Trace(scene, Vector3.Zero, 2.65f, depth));
+        var toward = new Vector3(x: 2f, y: 0.19f, z: 0f);
+
+        Assert.False(condition: scene.Unblocked(Vector3.Zero, Vector3.Normalize(value: toward), toward.Length()));
+        var visibility = SdfMeshProbeDepth.Visibility(moments: depth, toward: toward);
+
+        Assert.True(condition: (visibility < 0.05f), userMessage: $"silhouette visibility={visibility}");
+    }
     [Fact]
     public void ASealedEnclosureWithALightBeyondItsWallStaysDark() {
         var frame = Frame() with { TickLocked = true, IndirectBounces = 0 };
         // No lattice centre fits in this sealed 18-cm enclosure; the light is above its roof.
-        frame = frame with { MeshDraws = [.. frame.MeshDraws,
-            Draw(mesh: Box(new Vector3(-10f, 0f, -10f), new Vector3(-0.09f, 4f, 10f))),
-            Draw(mesh: Box(new Vector3(0.09f, 0f, -10f), new Vector3(10f, 4f, 10f))),
-            Draw(mesh: Box(new Vector3(-0.09f, 0f, -10f), new Vector3(0.09f, 4f, -0.09f))),
-            Draw(mesh: Box(new Vector3(-0.09f, 0f, 0.09f), new Vector3(0.09f, 4f, 10f))),
-        ] };
+        frame = frame with {
+            MeshDraws = [.. frame.MeshDraws,
+            Draw(mesh: Box(new Vector3(x: -10f, y: 0f, z: -10f), new Vector3(x: -0.09f, y: 4f, z: 10f))),
+            Draw(mesh: Box(new Vector3(x: 0.09f, y: 0f, z: -10f), new Vector3(x: 10f, y: 4f, z: 10f))),
+            Draw(mesh: Box(new Vector3(x: -0.09f, y: 0f, z: -10f), new Vector3(x: 0.09f, y: 4f, z: -0.09f))),
+            Draw(mesh: Box(new Vector3(x: -0.09f, y: 0f, z: 0.09f), new Vector3(x: 0.09f, y: 4f, z: 10f))),
+        ],
+        };
         var volume = new SdfMeshIrradiance();
-        _ = Trace(volume, frame);
-        Assert.Equal(0f, volume.LightVisibility(new Vector3(0f, 2f, 0f), Vector3.UnitY, 0));
-    }
 
+        _ = Trace(volume, frame);
+        Assert.Equal(0f, volume.LightVisibility(new Vector3(x: 0f, y: 2f, z: 0f), Vector3.UnitY, 0));
+    }
     [Fact]
     public void DepthTracingUsesAtMostOneRayPerTexelPerProbe() {
         var volume = new SdfMeshIrradiance();
+
         var (parameters, _) = Trace(volume, Frame() with { TickLocked = true, IndirectBounces = 0, MeshDraws = [] }, SdfIndirectTier.Medium);
         var description = volume.Describe();
         var count = long.Parse(description.Split("depth-rays=")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
-        Assert.InRange(count, 1L, (long)parameters.Dims.X * parameters.Dims.Y * parameters.Dims.Z * 256L);
-    }
 
+        Assert.InRange(count, 1L, (((((long)parameters.Dims.X) * parameters.Dims.Y) * parameters.Dims.Z) * 256L));
+    }
     [Fact]
     public void AProbesPublishedSkyIsItsOwnMeasuredVisibility() {
         var volume = new SdfMeshIrradiance();

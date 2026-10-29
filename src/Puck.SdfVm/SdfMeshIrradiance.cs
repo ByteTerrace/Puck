@@ -207,14 +207,16 @@ public sealed class SdfMeshIrradiance {
     }
 
     private void WriteToTables(ReadOnlyMemory<uint> words) {
-        m_writeTables!.FitMeshIrradiance(words.Length);
+        m_writeTables!.FitMeshIrradiance(wordCount: words.Length);
         m_changedSlots.Sort();
-        for (var index = 0; index < m_changedSlots.Count;) {
+        for (var index = 0; (index < m_changedSlots.Count);) {
             var first = m_changedSlots[index++];
-            var end = first + 1;
-            while (index < m_changedSlots.Count && m_changedSlots[index] == end) { index++; end++; }
-            var offset = first * SdfMeshIrradianceProbe.ProbeWords;
-            m_writeTables!.WriteMeshIrradiance(words.Span.Slice(offset, (end - first) * SdfMeshIrradianceProbe.ProbeWords), offset);
+            var end = (first + 1);
+
+            while ((index < m_changedSlots.Count) && (m_changedSlots[index] == end)) { index++; end++; }
+            var offset = (first * SdfMeshIrradianceProbe.ProbeWords);
+
+            m_writeTables!.WriteMeshIrradiance(words.Span.Slice(length: ((end - first) * SdfMeshIrradianceProbe.ProbeWords), start: offset), offset);
         }
     }
     // The camera the window follows: the first view's. While another residency renders that view
@@ -295,8 +297,8 @@ public sealed class SdfMeshIrradiance {
                 m_windowValid = true;
                 m_owed = true;
                 if (resized) {
-                    m_volume = new uint[layout.Count * SdfMeshIrradianceProbe.ProbeWords];
-                    Array.Clear(m_dirtySlots);
+                    m_volume = new uint[(layout.Count * SdfMeshIrradianceProbe.ProbeWords)];
+                    Array.Clear(array: m_dirtySlots);
                     m_changedSlots.Clear();
                     m_cache.Clear();
                     m_generation++;
@@ -484,8 +486,9 @@ public sealed class SdfMeshIrradiance {
     /// <returns>One line.</returns>
     public string Describe() {
         lock (m_gate) {
-            var buffers = m_writeTables?.MeshIrradianceBufferBytes ?? default;
-            return $"[sdf.mesh-gi] spacing={m_layout.Spacing:0.##} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} rays={m_layout.Rays} sweeps={m_layout.Sweeps} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={m_cache.Count} traced={m_traced} traced-rays={m_rays} depth-rays={m_depthRays} record-bytes={SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)} volume-bytes={m_volume.LongLength * sizeof(uint)} table-device-bytes={buffers.DeviceLocal} table-upload-bytes={buffers.HostVisible} table-cpu-bytes={m_writeTables?.MeshIrradianceCpuBytes ?? 0}";
+            var buffers = (m_writeTables?.MeshIrradianceBufferBytes ?? default);
+
+            return $"[sdf.mesh-gi] spacing={m_layout.Spacing:0.##} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} rays={m_layout.Rays} sweeps={m_layout.Sweeps} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={m_cache.Count} traced={m_traced} traced-rays={m_rays} depth-rays={m_depthRays} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal} table-upload-bytes={buffers.HostVisible} table-cpu-bytes={(m_writeTables?.MeshIrradianceCpuBytes ?? 0)}";
         }
     }
 
@@ -696,11 +699,12 @@ public sealed class SdfMeshIrradiance {
     // A cell's slot words in the volume.
     private Span<uint> SlotWords((int X, int Y, int Z) cell) {
         var slot = SlotOf(x: cell.X, y: cell.Y, z: cell.Z, dims: m_layout.Dims);
+
         if (!m_dirtySlots[slot]) {
             m_dirtySlots[slot] = true;
-            m_changedSlots.Add(slot);
+            m_changedSlots.Add(item: slot);
         }
-        return m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: slot * SdfMeshIrradianceProbe.ProbeWords);
+        return m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
     }
     // Composes a cached cell's slot words from its own measured cubes, depth and light visibility;
     // false, writing nothing, when the cache holds no probe of it. It reads the cache alone, so it runs outside the gate.
@@ -941,7 +945,7 @@ public sealed class SdfMeshIrradiance {
             } else {
                 // The farthest in-window receiver is a spacing diagonal plus relocation and the normal bias.
                 depthRays = SdfMeshProbeDepth.Trace(scene: scene, origin: origin,
-                    reach: ((1.5f * MathF.Sqrt(3f) * layout.Spacing) + SdfMeshIrradianceProbe.NormalBias), moments: depthMoments);
+                    reach: (((1.5f * MathF.Sqrt(x: 3f)) * layout.Spacing) + SdfMeshIrradianceProbe.NormalBias), moments: depthMoments);
             }
         }
 
@@ -1011,7 +1015,7 @@ public sealed class SdfMeshIrradiance {
         for (var ray = 0; (ray < Rays); ray++) {
             var direction = Vector3.Transform(value: Fibonacci(count: Rays, index: ray), rotation: rotation);
 
-            if (!scene.Intersect(origin: origin, direction: direction, maximum: reach, distance: out var distance, material: out _, normal: out var normal)) { continue; }
+            if (!scene.Intersect(direction: direction, distance: out var distance, material: out _, maximum: reach, normal: out var normal, origin: origin)) { continue; }
             if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { backFaces++; }
             if (distance <= reach) { nearby++; }
         }
@@ -1183,24 +1187,25 @@ public sealed class SdfMeshIrradiance {
     /// <param name="lightIndex">The lights-table index.</param>
     /// <returns>The weighted visible share.</returns>
     public float LightVisibility(Vector3 point, Vector3 normal, int lightIndex) {
-        if ((uint)lightIndex >= (32u * SdfMeshIrradianceProbe.LightWords)) { return 1f; }
+        if (((uint)lightIndex) >= (32u * SdfMeshIrradianceProbe.LightWords)) { return 1f; }
         lock (m_gate) {
             Span<(int X, int Y, int Z)> cells = stackalloc (int, int, int)[8];
             Span<float> weights = stackalloc float[8];
             var probes = new Corners();
+
             Gather(point: point, normal: normal, layout: m_layout, low: m_low, readable: true,
                 cells: cells, cornerWeights: weights, cornerProbes: ref probes);
             var visible = 0f;
             var total = 0f;
-            for (var corner = 0; corner < 8; corner++) {
+
+            for (var corner = 0; (corner < 8); corner++) {
                 if (weights[corner] <= 0f) { continue; }
-                if ((probes[corner].Lights[lightIndex >> 5] & (1u << (lightIndex & 31))) != 0u) { visible += weights[corner]; }
+                if ((probes[corner].Lights[(lightIndex >> 5)] & (1u << (lightIndex & 31))) != 0u) { visible += weights[corner]; }
                 total += weights[corner];
             }
-            return (total > 0f) ? (visible / total) : 0f;
+            return ((total > 0f) ? (visible / total) : 0f);
         }
     }
-
     /// <summary>Describes the eight probes about a receiver as the views pass gathers them: the volume's spacing and
     /// window, then one line a corner with its cell, where its probe stands (its centre plus the offset the trace moved
     /// it by), the share of its rays that met back faces, whether it is valid, its sweeps, and the terms of its weight at the receiver (trilinear share, facing, the depth visibility, whether it lies in front) with the weight it answers with.</summary>
