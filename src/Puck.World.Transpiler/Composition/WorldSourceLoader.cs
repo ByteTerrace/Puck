@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Abstractions.Machines;
+using Puck.Assets;
 
 namespace Puck.World.Transpiler.Composition;
 
@@ -125,21 +126,29 @@ public static class WorldSourceLoader {
 
         compiledWorld = null;
 
-        return (TryReadAuthored(
-            authored: out var authored,
+        // The header records the composed bytes' hash, which a boot composing the same bytes keys the compiled world by
+        // before it parses anything.
+        return (TryCompose(
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             document: document,
+            json: out var json,
             path: path,
             reason: out reason,
             sourceCompilation: sourceCompilation
+        ) && WorldDefinitionFileSource.TryParseDocument(
+            definition: out var parsed,
+            json: Encoding.UTF8.GetString(bytes: json),
+            reason: out reason,
+            sourceName: path
         ) && CompiledWorld.TryCompile(
-            authored: authored,
+            authored: (parsed! with { DocumentDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path) }),
             bytes: out compiledWorld,
             catalogFingerprint: catalogFingerprint,
             chunks: CompiledWorldChunks.Standard,
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             reason: out reason,
+            sourceHash: AssetContentHash.Compute(content: json),
             sourceName: path
         ));
     }

@@ -170,68 +170,36 @@ in the frame.
   stands at its cell's centre unless that lies inside geometry or within
   `SdfMeshIrradianceProbe.Clearance` (0.1 m) of a surface: then the trace moves
   it to the nearest point of its cell that stands clear, carries the offset in
-  its record, and every read (direction, distance, plane tests) uses where it
+  its record, and every read (direction, distance, depth tests) uses where it
   stands while its trilinear share stays the cell's. A probe no point of its
   cell frees (its rays mostly meet back faces wherever they start) is invalid and
   never read; its share goes to the corners that answer. `world.probe <x> <y>
   <z> [<nx> <ny> <nz>]` reads the eight probes about a point: where each stands,
-  its inside share, validity, neighbours, cubes and the terms of its weight.
-  The volume a view reads holds each probe's cubes averaged with the
-  neighbouring probes its centre sees (one half across a face, a quarter
-  across an edge, an eighth across a corner, `SdfMeshIrradiance.FilterWeights`),
-  so a sunlit patch a few rays catch does not show as a band; a neighbour
-  behind a wall or inside geometry takes no part, and the light visibility bits
-  are each probe's own. A probe also stores the first-hit plane of its ray
-  toward each of its 26 neighbouring cells (normal and distance as four halves
-  each, the normal facing away from the probe; a zero plane is a ray that
-  reached open space). A plane tests the actual receiver, rather than comparing
-  its distance to a ray travelling in a different direction.
-- **A probe lights only what lies on its side of its blocking planes.** The
-  26 directions are the 3×3 directions of each face of the cube about the
-  probe, so a read blends, bilinearly, the planes of the four directions about
-  the receiver's own (`SdfMeshIrradiance.PlaneVisibility`,
-  `sdfMeshProbePlaneVisibility`), each admitting the point, pushed 5 cm off its
-  surface (`SdfMeshIrradianceProbe.NormalBias`, metres, less than the thinnest
-  wall), while it lies on the probe's side of the plane and fading it out over
-  4 cm past it (`DepthFade`). A wall or slab every ray toward it meets is that
-  plane, so a probe in the storey above a wall's top, the room beyond a
-  partition or the void under a floor lights nothing past it, whichever way the
-  receiver lies from the probe; a finite blocker, a plinth or a stair's nosing,
-  darkens only the directions whose rays meet it, and softly between them,
-  never the whole half-space beyond it. The fade stays thinner than the
-  thinnest floor, since a probe under a floor sees a point on the wall standing
-  on it only the floor's thickness past its plane. Where every probe about a
-  point stands across a wall or slab from it, or no probe has traced, the point
-  takes no indirect light. A ray is one line wide, so a probe just above a roof
-  or beside a doorway still admits a point past that roof or wall through the
-  rays that cleared its edge or passed the doorway. Where another of the eight
-  answering probes cannot see it (their neighbour bit is clear), its neighbour
-  plane tests the receiver's side. Its finite extent is unknown, so this
-  separation can over-darken beside a finite blocker
-  ([open items](../../../plans/open-items.md#review-findings)). A separator's
-  veto is weighted by its share of the answering probes' weight, at full
-  strength from an eighth of the total (`SdfMeshIrradianceProbe.SeparatorShare`),
-  so a probe entering the eight-corner set at a lattice plane with no trilinear
-  weight vetoes nothing and the gather is continuous across it; by its own
-  survival of the same test; and by the candidate's suspect share, so a fully
-  separated probe vetoes nothing and the gather never empties. A share uses
-  perpendicular plane distance:
-  a hit on the receiver's own surface is evidence at every angle, while open
-  space or a plane far beyond it is suspect. Front eligibility precedes
-  separation, and both passes read the weights before any veto
-  (`sdfMeshProbeSeparate`, `SdfMeshIrradiance.Separate`). Each
-  answering probe's weight also
-  fades out as the share of the other answering probes' weight it sees and is
-  seen by along the lattice falls from three quarters to a quarter (the
-  neighbour bits the trace records, `SdfMeshIrradianceProbe.NeighboursWord`,
-  `MutualLow`, `MutualHigh`, `sdfMeshProbeMutualShares`), so a probe outside a
-  room's corner, which sees in through a window above it and may hold the
-  sunlit day, gives way entirely to the probes inside. Architecture none of
-  the 26 sampled rays crosses still resolves at the lattice's coarseness.
+  its inside share, validity, cubes and the terms of its weight.
+  The published volume holds each probe's own measured sky and radiance cubes;
+  neighbours never supply its sky or radiance. The 1,024 depth rays also measure
+  sky, weighted by cosine and the octahedral solid-angle Jacobian. This reduces
+  sky variance without borrowing visibility through a doorway. Each probe stores
+  a 16×16 octahedral map of
+  first-hit depth moments (mean metres and mean-squared metres, as FP16 pairs).
+  Four subtexel rays per texel trace once per geometry/lighting generation;
+  later bounce sweeps reuse them.
+- **A probe lights receivers its depth supports.** Bilinear octahedral sampling
+  interpolates the moments in the receiver's direction, with reflected edge
+  taps. A one-sided Chebyshev bound, cubed and crushed at low weights, fades
+  receivers beyond the mean. The gather multiplies that visibility by the
+  cell's trilinear share and positive normal cosine squared; there is no
+  discrete front/back fallback or neighbour separation veto. A finite blocker
+  affects its angular footprint. Normal bias is 5 cm, independent of spacing;
+  depth misses end at the lighting trace reach (at most 128 m). Subtexel
+  geometry and grazing visibility remain sampling limits.
+  [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
+  exact CPU/HLSL rule and record. `world.probe` marks changing or pending
+  publication reads unsettled, naming the GPU and live windows separately.
 - **Reading it.** Views (`shade/sdf-mesh-irradiance.hlsli`) gather the eight
   probes about the shaded point once (`sdfMeshProbesAt`), pushed 5 cm along
   its normal, weighted trilinearly, by how far each lies in front of the
-  surface and by its blocking planes. The sky term is the live sky's irradiance over π under the
+  surface and by its depth visibility. The sky term is the live sky's irradiance over π under the
   volume's sky visibility, so the sky can change without a retrace; the
   reflected term adds as stored. The sum replaces the harmonic sky ambient and
   the authored fill, under the `apply` intensity, tint and contact. A static
@@ -239,7 +207,7 @@ in the frame.
   whose centre sees it (`sdfMeshLightVisibility`), which scales its direct
   term, so a fixture lights nothing through the slab under it; an anchored
   light is never traced and goes unoccluded. Outside the volume, the lookup
-  clamps to its boundary probes while their plane tests still use the pushed
+  clamps to its boundary probes while their depth tests still use the pushed
   receiver position. They extend only the light their visibility supports;
   the volume boundary adds no sky. `world.debug-view
   indirect` shows the volume's light alone. A window's view and a sky layer's
@@ -262,7 +230,7 @@ in the frame.
   as the gallery hall's light switches do) retraces them over the same scene; a
   body's palette coming or going, which no probe ray meets, retraces nothing
   (`SdfMeshIrradianceScene.Materials` names the ids the key reads). Old probes keep
-  drawing, and remain available to the exposure meter and neighbour filter,
+  drawing, and remain available to the exposure meter and viewers,
   until each cell completes its replacement sweeps. The tracer distinguishes
   generations instead of clearing those samples. A layout change clears the
   staging volume, but the GPU keeps its previous table and coordinates until

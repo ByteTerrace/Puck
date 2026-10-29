@@ -37,8 +37,13 @@ public static class WorldSourceIndex {
     /// <summary>The most parsed declarations the index holds; reading one more past it starts the hold afresh.</summary>
     public const int MaxHeldDeclarations = 4096;
 
+    private const string DeclarationExtension = ".declaration";
+    private const string DeclarationsDirectory = "declarations";
+    private static readonly Puck.Abstractions.CacheBound DeclarationRetention = new(MaxBytes: (4L << 20), MaxEntries: 4096);
+
     // A source's declaration by the digest of its bytes; null for bytes that do not parse.
     private static readonly ConcurrentDictionary<string, WorldSourceDeclaration?> Held = new(comparer: StringComparer.Ordinal);
+    private static int HeldRevision;
 
     /// <summary>Returns the names every carrying file directly in <paramref name="directory"/> claims, one entry per
     /// file in ordinal order of its path. A source that cannot be read or does not parse cannot say what it emits, so
@@ -130,11 +135,31 @@ public static class WorldSourceIndex {
         return Declaration(content: content);
     }
     /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
-    /// those bytes.</summary>
+    /// those bytes and persisted beside the process's compiles (<see cref="WorldCompileCache.Shared"/>) when it
+    /// persists them.</summary>
     /// <param name="content">The <c>.puck</c> source's bytes.</param>
     /// <returns>The declaration, or <see langword="null"/> when the bytes do not parse.</returns>
-    public static WorldSourceDeclaration? Declaration(byte[] content) {
+    public static WorldSourceDeclaration? Declaration(byte[] content) =>
+        Declaration(content: content, compilations: WorldCompileCache.Shared.Directory);
+    /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
+    /// those bytes. A declaration is a pure function of the bytes and the parser, so it is also kept in a
+    /// <c>declarations</c> directory under <paramref name="compilations"/>, named by the compiler's identity and the
+    /// digest: a later process resolving a name reads the declarations of the sources beside it rather than parsing
+    /// every one. A file that cannot be read or written costs the parse and nothing else.</summary>
+    /// <param name="content">The <c>.puck</c> source's bytes.</param>
+    /// <param name="compilations">The directory compiles persist in, or <see langword="null"/> to hold the declaration
+    /// in memory only.</param>
+    /// <returns>The declaration, or <see langword="null"/> when the bytes do not parse.</returns>
+    public static WorldSourceDeclaration? Declaration(byte[] content, string? compilations) {
         ArgumentNullException.ThrowIfNull(argument: content);
+
+        // A hot-reload edit to the parser makes every held declaration a product of code that no longer runs.
+        var revision = Puck.Abstractions.CodeRevision.Current;
+
+        if (Volatile.Read(location: ref HeldRevision) != revision) {
+            Held.Clear();
+            Volatile.Write(location: ref HeldRevision, value: revision);
+        }
 
         var key = ContentPin.Compute(content: content).Hex;
 
@@ -151,8 +176,73 @@ public static class WorldSourceIndex {
 
         return Held.GetOrAdd(
             key: key,
-            value: Parse(content: content)
+            // The compiler identity names the modules as built, which an applied update does not move, so a process
+            // running edited code neither reads nor writes persisted declarations.
+            value: (((compilations is null) || (revision != 0)) ? Parse(content: content) : ReadPersisted(content: content, key: key, root: compilations))
         );
+    }
+    /// <summary>Forgets every declaration held in memory, so the next read of each source reads its persisted
+    /// declaration or parses it.</summary>
+    public static void ForgetHeld() => Held.Clear();
+
+    private static WorldSourceDeclaration? ReadPersisted(byte[] content, string key, string root) {
+        var directory = System.IO.Path.Combine(path1: root, path2: DeclarationsDirectory);
+        var path = System.IO.Path.Combine(path1: directory, path2: $"{WorldCompileCache.CompilerIdentity[..16]}-{key}{DeclarationExtension}");
+
+        try {
+            if (File.Exists(path: path) && TryDecode(declaration: out var stored, text: File.ReadAllText(path: path))) {
+                Puck.Abstractions.CacheRetention.Stamp(path: path);
+                return stored;
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        }
+
+        var parsed = Parse(content: content);
+
+        if (parsed?.Worlds.Any(predicate: static world => world.Contains(value: '\n')) == true) {
+            return parsed;
+        }
+
+        try {
+            _ = System.IO.Directory.CreateDirectory(path: directory);
+            AtomicFile.WriteAllBytes(bytes: Encoding.UTF8.GetBytes(s: Encode(declaration: parsed)), path: path);
+            _ = Puck.Abstractions.CacheRetention.EnforceOnWrite(
+                bound: DeclarationRetention,
+                directory: directory,
+                inUse: path,
+                isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: DeclarationExtension)
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+        }
+
+        return parsed;
+    }
+    // One line naming whether the source emits a document ('1', '0', or '-' for bytes that do not parse), then one line
+    // per declared world, in declaration order. A declaration naming a world across lines is not persisted.
+    private static string Encode(WorldSourceDeclaration? declaration) => ((declaration is null)
+        ? "-\n"
+        : string.Concat(str0: (declaration.EmitsDocument ? "1\n" : "0\n"), str1: string.Concat(values: declaration.Worlds.Select(selector: static world => (world + "\n")))));
+    private static bool TryDecode(string text, out WorldSourceDeclaration? declaration) {
+        declaration = null;
+
+        var lines = text.Split(separator: '\n');
+
+        if ((lines.Length < 2) || (lines[^1].Length != 0)) {
+            return false;
+        }
+
+        switch (lines[0]) {
+            case "-":
+                return (lines.Length == 2);
+            case "0" or "1":
+                declaration = new WorldSourceDeclaration(
+                    EmitsDocument: (lines[0] == "1"),
+                    Worlds: lines[1..^1]
+                );
+                return true;
+            default:
+                return false;
+        }
     }
 
     // The parse a compile of the same bytes starts from (WorldCompiler.Compile), and nothing after it. Text is decoded

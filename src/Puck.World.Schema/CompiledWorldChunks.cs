@@ -43,6 +43,8 @@ public sealed record CompiledWorldProduct(ReadOnlyMemory<byte> Payload, IReadOnl
 /// keys, the instance its draws are seeded for, the document it stands for, and the products chunks have produced so
 /// far.</summary>
 public sealed class CompiledWorldContext {
+    private readonly Lazy<WorldDefinition> m_authored;
+
     /// <summary>Initializes a new instance of the <see cref="CompiledWorldContext"/> class.</summary>
     /// <param name="authored">The parsed, composed, undrawn definition.</param>
     /// <param name="instanceIdentity">The instance identity the draws are seeded for.</param>
@@ -52,14 +54,37 @@ public sealed class CompiledWorldContext {
     public CompiledWorldContext(WorldDefinition authored, string instanceIdentity, string sourceName, string? documentPath = null) {
         ArgumentNullException.ThrowIfNull(argument: authored);
 
-        Authored = authored;
+        m_authored = new Lazy<WorldDefinition>(value: authored);
+        DocumentDirectory = authored.DocumentDirectory;
+        DocumentPath = documentPath;
+        InstanceIdentity = instanceIdentity;
+        SourceName = sourceName;
+    }
+    /// <summary>Initializes a new instance of the <see cref="CompiledWorldContext"/> class whose authored definition is
+    /// parsed only when a chunk derives from it: a boot that keeps every chunk never parses it.</summary>
+    /// <param name="authored">Parses the composed, undrawn definition; called at most once.</param>
+    /// <param name="documentDirectory">The directory the authored definition's relative paths resolve beside.</param>
+    /// <param name="instanceIdentity">The instance identity the draws are seeded for.</param>
+    /// <param name="sourceName">The origin echoed in refusals.</param>
+    /// <param name="documentPath">The full path of the document a boot loads, or <see langword="null"/> when there is
+    /// none.</param>
+    public CompiledWorldContext(Func<WorldDefinition> authored, string? documentDirectory, string instanceIdentity, string sourceName, string? documentPath = null) {
+        ArgumentNullException.ThrowIfNull(argument: authored);
+
+        m_authored = new Lazy<WorldDefinition>(valueFactory: authored, mode: LazyThreadSafetyMode.ExecutionAndPublication);
+        DocumentDirectory = documentDirectory;
         DocumentPath = documentPath;
         InstanceIdentity = instanceIdentity;
         SourceName = sourceName;
     }
 
-    /// <summary>Gets the parsed, composed, undrawn definition.</summary>
-    public WorldDefinition Authored { get; }
+    /// <summary>Gets the parsed, composed, undrawn definition, parsing it on first read when it was deferred.</summary>
+    public WorldDefinition Authored => m_authored.Value;
+    /// <summary>Gets whether <see cref="Authored"/> has been parsed or was given.</summary>
+    public bool AuthoredRead => m_authored.IsValueCreated;
+    /// <summary>Gets the directory the authored definition's relative paths resolve beside
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>), or <see langword="null"/> for one that came from no file.</summary>
+    public string? DocumentDirectory { get; }
     /// <summary>Gets the full path of the document a boot loads, which a chunk's references to files beside it resolve
     /// against, or <see langword="null"/> when there is none.</summary>
     public string? DocumentPath { get; }
@@ -207,7 +232,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
             return false;
         }
 
-        context.Drawn = (drawn with { DocumentDirectory = context.Authored.DocumentDirectory });
+        context.Drawn = (drawn with { DocumentDirectory = context.DocumentDirectory });
         product = new CompiledWorldProduct(
             Inputs: [],
             Payload: WorldDefinitionSerialization.SerializeCompact(definition: drawn)
@@ -247,7 +272,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
             return false;
         }
 
-        context.Drawn = (drawn! with { DocumentDirectory = context.Authored.DocumentDirectory });
+        context.Drawn = (drawn! with { DocumentDirectory = context.DocumentDirectory });
         return true;
     }
 }
@@ -273,7 +298,7 @@ public sealed class AssetChunk : ICompiledWorldChunk {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         if (!WorldDocumentPaths.TryResolve(
-            documentDirectory: context.Authored.DocumentDirectory,
+            documentDirectory: context.DocumentDirectory,
             path: name,
             reason: out _,
             resolved: out var path

@@ -202,6 +202,34 @@ public sealed class WorldSourceIndexLawTests {
 
         Assert.NotSame(actual: Compile(cache: cache, path: child), expected: added);
     }
+    /// <summary>A declaration persisted beside the compiles is read back in place of a parse, a source that does not
+    /// parse persists as such, and a persisted file that does not decode is parsed and written again.</summary>
+    [Fact]
+    public void APersistedDeclarationIsReadBackAndAnUnreadableOneIsParsedAgain() {
+        using var directory = new TemporaryDirectory();
+        var unique = Guid.NewGuid().ToString(format: "N");
+        var source = Encoding.UTF8.GetBytes(s: $"{Module}world \"north-{unique}\" = room(1)\nworld south = room(2)\n");
+        var broken = Encoding.UTF8.GetBytes(s: $"world `{unique}` = (\n");
+        var written = WorldSourceIndex.Declaration(compilations: directory.RootPath, content: source);
+
+        Assert.Equal(expected: [$"north-{unique}", "south"], actual: written!.Worlds);
+        Assert.Null(@object: WorldSourceIndex.Declaration(compilations: directory.RootPath, content: broken));
+
+        var files = Directory.GetFiles(path: Path.Combine(path1: directory.RootPath, path2: "declarations"));
+
+        Assert.Equal(expected: 2, actual: files.Length);
+        WorldSourceIndex.ForgetHeld();
+        Assert.Equal(expected: written.Worlds, actual: WorldSourceIndex.Declaration(compilations: directory.RootPath, content: source)!.Worlds);
+        Assert.Null(@object: WorldSourceIndex.Declaration(compilations: directory.RootPath, content: broken));
+
+        foreach (var file in files) {
+            File.WriteAllText(path: file, contents: "?\n");
+        }
+
+        WorldSourceIndex.ForgetHeld();
+        Assert.Equal(expected: written.Worlds, actual: WorldSourceIndex.Declaration(compilations: directory.RootPath, content: source)!.Worlds);
+        Assert.Contains(collection: files, filter: file => File.ReadAllText(path: file).StartsWith(value: "1\n", comparisonType: StringComparison.Ordinal));
+    }
     /// <summary>A world declared inside another construct, or under a computed name, is refused by name: a parse would
     /// not find it, so no reader could resolve it.</summary>
     [Theory]

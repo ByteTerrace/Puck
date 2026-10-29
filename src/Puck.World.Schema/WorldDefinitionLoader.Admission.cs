@@ -24,12 +24,33 @@ public static partial class WorldDefinitionLoader {
         IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
         Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, string? documentDirectory = null) {
         admission = null;
-        if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8) ||
-            !WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json,
+        if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
+        if (compiled is null) {
+            if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json,
                 reason: out reason, sourceName: sourceName)) { return false; }
-        parsed = (parsed! with { DocumentDirectory = documentDirectory });
-        return TryPrepareAndAdmit(catalog: catalog, compiled: compiled, definition: parsed, instanceIdentity: instanceIdentity, neighbours: neighbours,
-            overrides: overrides, reason: out reason, resolved: out admission, sourceName: sourceName);
+            return TryPrepareAndAdmit(catalog: catalog, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, neighbours: neighbours,
+                overrides: overrides, reason: out reason, resolved: out admission, sourceName: sourceName);
+        }
+        // A compiled world keyed by these bytes answers the drawn definition, so the authored one is parsed only when
+        // the compiled world misses.
+        if (!compiled.TryResolve(
+            composed: utf8,
+            documentDirectory: documentDirectory,
+            drawn: out var drawn,
+            instanceIdentity: instanceIdentity,
+            parse: () => (WorldDefinitionFileSource.TryParseDocument(definition: out var authored, json: json, reason: out var parseReason, sourceName: sourceName)
+                ? ((authored! with { DocumentDirectory = documentDirectory }), string.Empty)
+                : (null, parseReason)),
+            reason: out reason,
+            sourceName: sourceName
+        ) || !TrySettleBootValues(documentDirectory: documentDirectory, drawn: drawn, overrides: overrides, reason: out reason, resolved: out var prepared, sourceName: sourceName)) {
+            return false;
+        }
+        if (!WorldDefinitionValidator.TryAdmitCore(admission: out admission, definition: prepared!, machines: catalog, neighbours: neighbours, proveNeighbours: true, reason: out var refusal)) {
+            reason = $"{sourceName} document validation refused: {refusal}";
+            return false;
+        }
+        return true;
     }
     /// <summary>Reads a composed definition a release publishes (<c>puck world prepare</c>, <c>puck world release</c>,
     /// the official package scan, a release bootstrap) and returns it undrawn: draws are instance state, filled when an

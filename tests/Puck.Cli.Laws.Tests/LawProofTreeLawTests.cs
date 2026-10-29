@@ -80,7 +80,7 @@ public sealed class LawProofTreeLawTests : LawProofLaws {
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
 }
-/// <summary>Leasing, reusing, refreshing and recloning the proof's persistent tree, over the shared fixtures of
+/// <summary>Leasing and sharing the proof's persistent tree, over the shared fixtures of
 /// <see cref="LawProofLaws"/>. It runs beside <see cref="LawProofTreeLawTests"/>, whose shader build is the slowest
 /// law here.</summary>
 public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
@@ -116,162 +116,38 @@ public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
         }
     }
     [Fact]
-    public void ATrackedLinkIsRefusedEvenWhenGitChecksItOutAsAnOrdinaryFile() {
-        using var checkout = Checkout(initial: "broken");
+    public void EveryOutcomeKeepsThePersistentTreeAndReleasesItsLease() {
+        using var checkout = FixedCheckout(fix: out _);
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
 
-        checkout.Write(name: FixPath, text: "fixed");
-        var fix = checkout.Commit(message: "lib: fix");
-        var runner = new FakeRunner();
-        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: runner, scratch: scratch);
+        foreach (var outcome in new[] { 0, 1, 2, 130, -1 }) {
+            Exception? failure = outcome switch {
+                130 => new OperationCanceledException(message: "cancelled build"),
+                -1 => new InvalidOperationException(message: "runner failed"),
+                _ => null,
+            };
+            var runner = new FakeRunner {
+                BeforeBuild = (_, _) => { if (failure is not null) { throw failure; } },
+                BuildResult = ((outcome == 2) ? new LawBuild(Succeeded: false, Errors: ["build failed"]) : null),
+                Report = content => new LawRun(Tests: ["Holds"], Failures: (((outcome == 1) || (content == "fixed")) ? [] : [new LawFailure(Message: "broken", Test: "Holds")]), Error: null),
+            };
+            var exitCode = -1;
+            var exception = Record.Exception(testCode: () => exitCode = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch).ExitCode);
 
-        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
-        Assert.Equal(expected: 0, actual: CliGit.Run(repository: runner.Builds[0], arguments: ["config", "core.symlinks", "false"]).ExitCode);
-        _ = checkout.Git("config", "core.symlinks", "false");
-        checkout.Write(name: "src/Lib/Link.cs", text: "Fix.cs");
-        var blob = checkout.Git("hash-object", "-w", "src/Lib/Link.cs").Trim();
+            Assert.Same(actual: exception, expected: failure);
+            Assert.Equal(actual: exitCode, expected: ((failure is null) ? outcome : -1));
+            Assert.True(condition: Directory.Exists(path: runner.Builds[0]));
+            using var lease = HoldTree(checkout: checkout);
 
-        _ = checkout.Git("update-index", "--add", "--cacheinfo", $"120000,{blob},src/Lib/Link.cs");
-        _ = checkout.Git("-c", "user.name=law", "-c", "user.email=law@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "--message", "lib: tracked link");
+            Assert.Equal(expected: lease.Tree, actual: runner.Builds[0]);
+        }
 
-        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: runner, scratch: scratch);
-
-        Assert.Equal(actual: second.ExitCode, expected: CliExit.Refused);
-        Assert.Contains(actualString: second.Error, expectedSubstring: "link in the proven tree");
-        Assert.Equal(expected: 2, actual: runner.Builds.Count);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
-    }
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(2)]
-    [InlineData(130)]
-    [InlineData(-1)]
-    [Theory]
-    public void EveryOutcomeKeepsThePersistentTreeAndReleasesItsLease(int outcome) {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
-        Exception? failure = outcome switch {
-            130 => new OperationCanceledException(message: "cancelled build"),
-            -1 => new InvalidOperationException(message: "runner failed"),
-            _ => null,
-        };
-        var runner = new FakeRunner {
-            BeforeBuild = (_, _) => { if (failure is not null) { throw failure; } },
-            BuildResult = ((outcome == 2) ? new LawBuild(Succeeded: false, Errors: ["build failed"]) : null),
-            Report = content => new LawRun(Tests: ["Holds"], Failures: (((outcome == 1) || (content == "fixed")) ? [] : [new LawFailure(Message: "broken", Test: "Holds")]), Error: null),
-        };
-        var exitCode = -1;
-        var exception = Record.Exception(testCode: () => exitCode = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch).ExitCode);
-
-        Assert.Same(actual: exception, expected: failure);
-        Assert.Equal(actual: exitCode, expected: ((failure is null) ? outcome : -1));
-        Assert.True(condition: Directory.Exists(path: runner.Builds[0]));
-        using var lease = HoldTree(checkout: checkout);
-
-        Assert.Equal(expected: lease.Tree, actual: runner.Builds[0]);
-        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
-    }
-    [Fact]
-    public void AReusedCloneNeverRunsItsOwnCheckoutHook() {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
-        var runner = new FakeRunner();
-        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
-        var tree = runner.Builds[0];
-        var hooks = Path.Combine(path1: tree, path2: ".git/proof-hooks");
-
-        _ = Directory.CreateDirectory(path: hooks);
-        var hook = Path.Combine(path1: hooks, path2: "post-checkout");
-
-        File.WriteAllText(contents: "#!/bin/sh\nprintf touched > \"$(git rev-parse --git-common-dir)/hook-ran\"\n", path: hook);
-        if (!OperatingSystem.IsWindows()) { File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, path: hook); }
-        Assert.Equal(expected: 0, actual: CliGit.Run(repository: tree, arguments: ["config", "core.hooksPath", hooks]).ExitCode);
-
-        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: tree, path2: ".git/hook-ran")));
-        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
-    }
-    [Fact]
-    public void ASecondProofReusesAnUnregisteredCloneAndItsOwnOutputs() {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
-        var runner = new FakeRunner();
-
-        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
-        var tree = runner.Builds[0];
-        var output = Path.Combine(path1: tree, path2: "src/Lib/obj/proof-output");
-
-        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: output)!);
-        File.WriteAllText(contents: "produced by this clone", path: output);
-        var unchanged = Path.Combine(path1: tree, path2: "src/Lib/Other.cs");
-        var written = File.GetLastWriteTimeUtc(path: unchanged);
-
-        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
-        Assert.Equal(expected: 4, actual: runner.Builds.Count);
-        Assert.All(collection: runner.Builds, action: built => Assert.Equal(actual: built, expected: tree));
-        Assert.StartsWith(expectedStartString: LawTreesRoot(checkout: checkout), actualString: tree);
-        Assert.Contains(actualString: second.Error, expectedSubstring: "reusing persistent proof tree");
-        Assert.Equal(expected: "produced by this clone", actual: File.ReadAllText(path: output));
-        Assert.Equal(expected: written, actual: File.GetLastWriteTimeUtc(path: unchanged));
-        Assert.True(condition: Directory.Exists(path: Path.Combine(path1: tree, path2: ".git")));
-        Assert.DoesNotContain(expectedSubstring: Puck.Abstractions.PuckPaths.Normalize(path: tree), actualString: checkout.Git("worktree", "list", "--porcelain"));
-        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
-    }
-    [InlineData(false)]
-    [InlineData(true)]
-    [Theory]
-    public void ASecondProofRefreshesChangedSourcesAndRemovesUntrackedStrays(bool commitChange) {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        var fix = checkout.Commit(message: "lib: fix");
-        var firstRunner = new FakeRunner();
-        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: firstRunner, scratch: scratch);
-
-        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
-        var stray = Path.Combine(path1: firstRunner.Builds[0], path2: "src/Lib/Stale.cs");
-
-        File.WriteAllText(contents: "stale source", path: stray);
-        checkout.Write(name: "src/Lib/Other.cs", text: "new source");
-        if (commitChange) { _ = checkout.Commit(message: "lib: another edit"); }
-        var runner = new FakeRunner {
-            BeforeBuild = (tree, _) => {
-                Assert.Equal(expected: "new source", actual: File.ReadAllText(path: Path.Combine(path1: tree, path2: "src/Lib/Other.cs")));
-                Assert.False(condition: File.Exists(path: stray));
-            },
-        };
-
-        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
-        Assert.Equal(expected: firstRunner.Builds[0], actual: runner.Builds[0]);
-        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: (commitChange ? string.Empty : " M src/Lib/Other.cs\n"));
     }
     [Fact]
     public void AConcurrentProofUsesAColdScratchWorktreeWithoutTakingTheLease() {
-        using var checkout = Checkout(initial: "broken");
+        using var checkout = FixedCheckout(fix: out _);
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
         using var lease = HoldTree(checkout: checkout);
         var runner = new FakeRunner();
 
@@ -282,85 +158,6 @@ public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
         Assert.Contains(actualString: result.Error, expectedSubstring: "falling back to a fresh scratch worktree (cold)");
         Assert.Null(@object: LawProofTree.TryAcquire(root: LawTreesRoot(checkout: checkout), repository: checkout.Root, reason: out _));
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
-    }
-    [InlineData("index")]
-    [InlineData("origin")]
-    [InlineData("missing")]
-    [Theory]
-    public void ABadPersistentTreeIsReclonedAndTheProofStillConcludes(string damage) {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
-        var runner = new FakeRunner();
-        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
-        var tree = runner.Builds[0];
-        var marker = Path.Combine(path1: tree, path2: "obj/old-output");
-
-        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: marker)!);
-        File.WriteAllText(contents: "discard this cache", path: marker);
-        if (damage == "index") { File.WriteAllText(path: Path.Combine(path1: tree, path2: ".git/index"), contents: "corrupt index"); } else if (damage == "origin") { Assert.Equal(expected: 0, actual: CliGit.Run(repository: tree, arguments: ["config", "remote.origin.url", scratch.RootPath]).ExitCode); } else { CliTreeFiles.DeleteTree(path: tree); }
-
-        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
-        Assert.Contains(actualString: second.Error, expectedSubstring: "rebuilding persistent proof tree cold");
-        Assert.DoesNotContain(actualString: second.Error, expectedSubstring: "falling back");
-        Assert.False(condition: File.Exists(path: marker));
-        Assert.Equal(expected: tree, actual: runner.Builds[2]);
-        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
-    }
-    [Fact]
-    public void EachSideReportsBuildWorkOnceForAllSelectedTests() {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
-        var runner = new FakeRunner {
-            BuildResult = new LawBuild(Succeeded: true, Errors: [], Counts: new LawBuildCounts(Compiled: 2, Targets: 101, UpToDate: 7)),
-            Report = content => new LawRun(Error: null, Tests: ["First", "Second"], Failures: ((content == "fixed") ? [] : [new LawFailure(Message: "broken", Test: "First")])),
-        };
-
-        var result = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
-        Assert.Equal(expected: 2, actual: runner.Builds.Count);
-        Assert.Equal(expected: 2, actual: runner.Runs.Count);
-        var counts = result.Error.Split(separator: '\n').Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "laws prove: built ")).Select(selector: static line => line.TrimEnd()).ToArray();
-
-        Assert.Equal(actual: counts, expected: ["laws prove: built with the fix withheld: 2 project(s) compiled, 7 up to date, 101 target(s)", "laws prove: built with the fix restored: 2 project(s) compiled, 7 up to date, 101 target(s)"]);
-    }
-    [Fact]
-    public void RestoredFilesAreNewerThanEvenFutureDatedOutputs() {
-        using var checkout = Checkout(initial: "broken");
-        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
-
-        checkout.Write(name: FixPath, text: "fixed");
-        _ = checkout.Commit(message: "lib: fix");
-        var builds = 0;
-        var future = DateTime.UtcNow.AddHours(value: 1);
-        var runner = new FakeRunner {
-            BeforeBuild = (tree, cancellationToken) => {
-                var output = Path.Combine(path1: tree, path2: "bin/output");
-
-                if (++builds == 1) {
-                    _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: output)!);
-                    File.WriteAllText(contents: "withheld binary", path: output);
-                    File.SetLastWriteTimeUtc(lastWriteTimeUtc: future, path: output);
-                } else {
-                    Assert.True(condition: (File.GetLastWriteTimeUtc(path: Path.Combine(path1: tree, path2: FixPath)) > File.GetLastWriteTimeUtc(path: output)));
-                }
-            },
-        };
-
-        var result = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
-
-        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
-        Assert.Equal(actual: builds, expected: 2);
     }
     [Fact]
     public void EveryWorktreeOfOneRepositorySharesOnePersistentTree() {
@@ -388,6 +185,63 @@ public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
         } finally {
             _ = checkout.Git("worktree", "remove", "--force", otherWorktree);
         }
+    }
+}
+/// <summary>Reusing an existing persistent proof tree without invoking clone hooks or rewriting unchanged files.</summary>
+public sealed class LawProofTreeReuseLawTests : LawProofLaws {
+    [Fact]
+    public void AReusedCloneNeverRunsItsOwnCheckoutHook() {
+        using var checkout = FixedCheckout(fix: out _);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var runner = new FakeRunner();
+        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
+        var tree = runner.Builds[0];
+        var hooks = Path.Combine(path1: tree, path2: ".git/proof-hooks");
+
+        _ = Directory.CreateDirectory(path: hooks);
+        var hook = Path.Combine(path1: hooks, path2: "post-checkout");
+
+        File.WriteAllText(contents: "#!/bin/sh\nprintf touched > \"$(git rev-parse --git-common-dir)/hook-ran\"\n", path: hook);
+        if (!OperatingSystem.IsWindows()) { File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, path: hook); }
+        Assert.Equal(expected: 0, actual: CliGit.Run(repository: tree, arguments: ["config", "core.hooksPath", hooks]).ExitCode);
+
+        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: tree, path2: ".git/hook-ran")));
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [Fact]
+    public void ASecondProofReusesAnUnregisteredCloneAndItsOwnOutputs() {
+        using var checkout = FixedCheckout(fix: out _);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var runner = new FakeRunner();
+
+        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
+        var tree = runner.Builds[0];
+        var output = Path.Combine(path1: tree, path2: "src/Lib/obj/proof-output");
+
+        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: output)!);
+        File.WriteAllText(contents: "produced by this clone", path: output);
+        var unchanged = Path.Combine(path1: tree, path2: "src/Lib/Other.cs");
+        var written = File.GetLastWriteTimeUtc(path: unchanged);
+
+        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
+        Assert.Equal(expected: 4, actual: runner.Builds.Count);
+        Assert.All(collection: runner.Builds, action: built => Assert.Equal(actual: built, expected: tree));
+        Assert.StartsWith(expectedStartString: LawTreesRoot(checkout: checkout), actualString: tree);
+        Assert.Contains(actualString: second.Error, expectedSubstring: "reusing persistent proof tree");
+        Assert.Equal(expected: "produced by this clone", actual: File.ReadAllText(path: output));
+        Assert.Equal(expected: written, actual: File.GetLastWriteTimeUtc(path: unchanged));
+        Assert.True(condition: Directory.Exists(path: Path.Combine(path1: tree, path2: ".git")));
+        Assert.DoesNotContain(expectedSubstring: Puck.Abstractions.PuckPaths.Normalize(path: tree), actualString: checkout.Git("worktree", "list", "--porcelain"));
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
     [Fact]
     public void AReusedCloneIsRecognizedWhenGitSpellsItsPathDifferently() {
@@ -444,5 +298,141 @@ public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
         Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
         Assert.Equal(actual: File.ReadAllText(path: other), expected: content);
         Assert.Equal(actual: File.GetLastWriteTimeUtc(path: other), expected: marked);
+    }
+}
+/// <summary>Refreshing changed sources, sweeping strays, refusing tracked links and advancing timestamps in the
+/// persistent proof tree.</summary>
+public sealed class LawProofTreeRefreshLawTests : LawProofLaws {
+    [Fact]
+    public void ATrackedLinkIsRefusedEvenWhenGitChecksItOutAsAnOrdinaryFile() {
+        using var checkout = FixedCheckout(fix: out var fix);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var runner = new FakeRunner();
+        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
+        Assert.Equal(expected: 0, actual: CliGit.Run(repository: runner.Builds[0], arguments: ["config", "core.symlinks", "false"]).ExitCode);
+        _ = checkout.Git("config", "core.symlinks", "false");
+        checkout.Write(name: "src/Lib/Link.cs", text: "Fix.cs");
+        var blob = checkout.Git("hash-object", "-w", "src/Lib/Link.cs").Trim();
+
+        _ = checkout.Git("update-index", "--add", "--cacheinfo", $"120000,{blob},src/Lib/Link.cs");
+        _ = checkout.Git("-c", "user.name=law", "-c", "user.email=law@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "--message", "lib: tracked link");
+
+        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: runner, scratch: scratch);
+
+        Assert.Equal(actual: second.ExitCode, expected: CliExit.Refused);
+        Assert.Contains(actualString: second.Error, expectedSubstring: "link in the proven tree");
+        Assert.Equal(expected: 2, actual: runner.Builds.Count);
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [Fact]
+    public void ASecondProofRefreshesChangedSourcesAndRemovesUntrackedStrays() {
+        using var checkout = FixedCheckout(fix: out var fix);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var firstRunner = new FakeRunner();
+        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: firstRunner, scratch: scratch);
+
+        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
+        var stray = Path.Combine(path1: firstRunner.Builds[0], path2: "src/Lib/Stale.cs");
+
+        foreach (var commitChange in new[] { false, true }) {
+            var expectedText = (commitChange ? "committed new source" : "new source");
+
+            File.WriteAllText(contents: "stale source", path: stray);
+            checkout.Write(name: "src/Lib/Other.cs", text: expectedText);
+            if (commitChange) { _ = checkout.Commit(message: "lib: another edit"); }
+            var runner = new FakeRunner {
+                BeforeBuild = (tree, _) => {
+                    Assert.Equal(expected: expectedText, actual: File.ReadAllText(path: Path.Combine(path1: tree, path2: "src/Lib/Other.cs")));
+                    Assert.False(condition: File.Exists(path: stray));
+                },
+            };
+
+            var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: runner, scratch: scratch);
+
+            Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
+            Assert.Equal(expected: firstRunner.Builds[0], actual: runner.Builds[0]);
+            AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: (commitChange ? string.Empty : " M src/Lib/Other.cs\n"));
+        }
+    }
+    [Fact]
+    public void EachSideReportsBuildWorkOnceForAllSelectedTests() {
+        using var checkout = FixedCheckout(fix: out _);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var runner = new FakeRunner {
+            BuildResult = new LawBuild(Succeeded: true, Errors: [], Counts: new LawBuildCounts(Compiled: 2, Targets: 101, UpToDate: 7)),
+            Report = content => new LawRun(Error: null, Tests: ["First", "Second"], Failures: ((content == "fixed") ? [] : [new LawFailure(Message: "broken", Test: "First")])),
+        };
+
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
+        Assert.Equal(expected: 2, actual: runner.Builds.Count);
+        Assert.Equal(expected: 2, actual: runner.Runs.Count);
+        var counts = result.Error.Split(separator: '\n').Where(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "laws prove: built ")).Select(selector: static line => line.TrimEnd()).ToArray();
+
+        Assert.Equal(actual: counts, expected: ["laws prove: built with the fix withheld: 2 project(s) compiled, 7 up to date, 101 target(s)", "laws prove: built with the fix restored: 2 project(s) compiled, 7 up to date, 101 target(s)"]);
+    }
+    [Fact]
+    public void RestoredFilesAreNewerThanEvenFutureDatedOutputs() {
+        using var checkout = FixedCheckout(fix: out _);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var builds = 0;
+        var future = DateTime.UtcNow.AddHours(value: 1);
+        var runner = new FakeRunner {
+            BeforeBuild = (tree, cancellationToken) => {
+                var output = Path.Combine(path1: tree, path2: "bin/output");
+
+                if (++builds == 1) {
+                    _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: output)!);
+                    File.WriteAllText(contents: "withheld binary", path: output);
+                    File.SetLastWriteTimeUtc(lastWriteTimeUtc: future, path: output);
+                } else {
+                    Assert.True(condition: (File.GetLastWriteTimeUtc(path: Path.Combine(path1: tree, path2: FixPath)) > File.GetLastWriteTimeUtc(path: output)));
+                }
+            },
+        };
+
+        var result = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (result.ExitCode == CliExit.Success), userMessage: result.Error);
+        Assert.Equal(actual: builds, expected: 2);
+    }
+}
+/// <summary>Recloning a damaged persistent proof tree and completing the proof.</summary>
+public sealed class LawProofTreeRecloneLawTests : LawProofLaws {
+    [Fact]
+    public void ABadPersistentTreeIsReclonedAndTheProofStillConcludes() {
+        using var checkout = FixedCheckout(fix: out _);
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var runner = new FakeRunner();
+        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
+        var tree = runner.Builds[0];
+        var marker = Path.Combine(path1: tree, path2: "obj/old-output");
+
+        foreach (var damage in new[] { "index", "origin", "missing" }) {
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: marker)!);
+            File.WriteAllText(contents: "discard this cache", path: marker);
+            if (damage == "index") {
+                File.WriteAllText(path: Path.Combine(path1: tree, path2: ".git/index"), contents: "corrupt index");
+            } else if (damage == "origin") {
+                Assert.Equal(expected: 0, actual: CliGit.Run(repository: tree, arguments: ["config", "remote.origin.url", scratch.RootPath]).ExitCode);
+            } else {
+                CliTreeFiles.DeleteTree(path: tree);
+            }
+
+            var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+            Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
+            Assert.Contains(actualString: second.Error, expectedSubstring: "rebuilding persistent proof tree cold");
+            Assert.DoesNotContain(actualString: second.Error, expectedSubstring: "falling back");
+            Assert.False(condition: File.Exists(path: marker));
+            Assert.Equal(expected: tree, actual: runner.Builds[^1]);
+        }
+
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
     }
 }

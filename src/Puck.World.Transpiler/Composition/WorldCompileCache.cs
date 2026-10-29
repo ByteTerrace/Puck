@@ -163,7 +163,9 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
     /// only.</summary>
     public string? Directory => Volatile.Read(location: ref m_directory);
 
-    private static string CompilerIdentity => Identity.Value;
+    // The pin over every Puck module the compiler reaches: a persisted product of the parser or compiler is valid only
+    // under the identity it was written by.
+    internal static string CompilerIdentity => Identity.Value;
 
     // The identity walks the compiler's reference graph from its own assembly. In a trimmed application a reference
     // the trimmer removed is code the compile cannot run, so its load failing and entering the identity as absent is

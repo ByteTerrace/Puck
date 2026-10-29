@@ -110,7 +110,7 @@ public sealed class CompiledWorldRequest {
     public string CatalogFingerprint { get; }
     /// <summary>Gets the document the boot loads.</summary>
     public string DocumentPath { get; }
-    /// <summary>Gets what the last <see cref="TryResolve"/> did, or <see langword="null"/> before it ran or after it
+    /// <summary>Gets what the last resolution did, or <see langword="null"/> before it ran or after it
     /// refused.</summary>
     public CompiledWorldResolution? Resolution { get; private set; }
 
@@ -140,17 +140,62 @@ public sealed class CompiledWorldRequest {
     public bool TryResolve(WorldDefinition authored, string sourceName, string instanceIdentity,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? drawn, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: authored);
+
+        return TryResolve(
+            authored: authored,
+            composed: null,
+            documentDirectory: authored.DocumentDirectory,
+            drawn: out drawn,
+            instanceIdentity: instanceIdentity,
+            parse: null,
+            reason: out reason,
+            sourceName: sourceName
+        );
+    }
+    /// <summary>Resolves the drawn definition of the document composed as <paramref name="composed"/>, parsing the
+    /// authored definition only when no compiled world keyed by those bytes holds every chunk: an unchanged document's
+    /// boot reads its drawn definition alone. A boot that never parses the authored definition counts the one
+    /// <see cref="WorldBootWork.Parses"/> its <c>DEFN</c> load stands for, so every boot of a document counts one
+    /// parse.</summary>
+    /// <param name="composed">The composed document's UTF-8 bytes, exactly as <paramref name="parse"/> reads them.</param>
+    /// <param name="documentDirectory">The directory the document's relative paths resolve beside.</param>
+    /// <param name="parse">Parses the composed bytes into the authored definition, or returns the named refusal.</param>
+    /// <param name="sourceName">The origin echoed in refusals.</param>
+    /// <param name="instanceIdentity">The instance identity the draws are seeded for.</param>
+    /// <param name="drawn">The drawn, resolved definition, or <see langword="null"/> on refusal.</param>
+    /// <param name="reason">The parse's or a derivation's named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the drawn definition resolved.</returns>
+    public bool TryResolve(ReadOnlyMemory<byte> composed, string? documentDirectory, Func<(WorldDefinition? Authored, string Reason)> parse,
+        string sourceName, string instanceIdentity, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? drawn, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: parse);
+
+        return TryResolve(
+            authored: null,
+            composed: composed,
+            documentDirectory: documentDirectory,
+            drawn: out drawn,
+            instanceIdentity: instanceIdentity,
+            parse: parse,
+            reason: out reason,
+            sourceName: sourceName
+        );
+    }
+
+    private bool TryResolve(WorldDefinition? authored, ReadOnlyMemory<byte>? composed, string? documentDirectory, Func<(WorldDefinition? Authored, string Reason)>? parse,
+        string sourceName, string instanceIdentity, out WorldDefinition? drawn, out string reason) {
         drawn = null;
         Resolution = null;
 
-        var header = CompiledWorld.HeaderFor(
-            authored: authored,
-            catalogFingerprint: CatalogFingerprint,
-            instanceIdentity: instanceIdentity
+        AssetContentHash? sourceHash = ((composed is { } bytes) ? AssetContentHash.Compute(content: bytes.Span) : null);
+        var build = new CompiledWorldHeader(
+            CatalogFingerprint: CatalogFingerprint,
+            DefinitionHash: default,
+            EngineBuild: CompiledWorld.EngineBuild,
+            InstanceIdentity: instanceIdentity,
+            SourceHash: sourceHash
         );
         var cached = m_cache.FileFor(documentPath: DocumentPath);
-        string? loadedFrom = null;
-        ChunkContainer? container = null;
+        var candidates = new List<(string Path, ChunkContainer Container, CompiledWorldHeader Header)>(capacity: 2);
 
         foreach (var candidate in ((string[])[CompiledWorld.Beside(documentPath: DocumentPath), cached])) {
             if (
@@ -164,23 +209,59 @@ public sealed class CompiledWorldRequest {
                 header: out var found,
                 reason: out _
             ) &&
-                (found == header)
+                found.SharesBuild(other: build)
             ) {
-                container = decoded;
-                loadedFrom = candidate;
-                if (string.Equals(a: candidate, b: cached, comparisonType: StringComparison.Ordinal)) {
-                    CacheRetention.Stamp(path: cached);
-                }
-                break;
+                candidates.Add(item: (candidate, decoded, found));
             }
         }
 
-        var context = new CompiledWorldContext(
-            authored: authored,
-            documentPath: DocumentPath,
-            instanceIdentity: instanceIdentity,
-            sourceName: sourceName
-        );
+        // Equal composed bytes are an equal authored definition at this build, so a compiled world keyed by them is
+        // taken before anything is parsed; otherwise the authored definition is parsed to compute its hash.
+        var match = candidates.FindIndex(match: entry => ((sourceHash is not null) && (entry.Header.SourceHash == sourceHash)));
+        CompiledWorldHeader? header = null;
+
+        if (match < 0) {
+            if (authored is null) {
+                (authored, reason) = parse!();
+                if (authored is null) {
+                    return false;
+                }
+            }
+            header = CompiledWorld.HeaderFor(authored: authored, catalogFingerprint: CatalogFingerprint, instanceIdentity: instanceIdentity, sourceHash: sourceHash);
+            match = candidates.FindIndex(match: entry => (entry.Header.DefinitionHash == header.DefinitionHash));
+        }
+
+        string? loadedFrom = null;
+        ChunkContainer? container = null;
+
+        if (match >= 0) {
+            (loadedFrom, container, _) = candidates[match];
+            if (string.Equals(a: loadedFrom, b: cached, comparisonType: StringComparison.Ordinal)) {
+                CacheRetention.Stamp(path: cached);
+            }
+        }
+
+        var given = authored;
+        string? parseRefusal = null;
+        var context = ((given is not null)
+            ? new CompiledWorldContext(
+                authored: given,
+                documentPath: DocumentPath,
+                instanceIdentity: instanceIdentity,
+                sourceName: sourceName
+            )
+            : new CompiledWorldContext(
+                authored: () => {
+                    var (parsed, refusal) = parse!();
+
+                    parseRefusal = refusal;
+                    return (parsed ?? throw new InvalidDataException(message: refusal));
+                },
+                documentDirectory: documentDirectory,
+                documentPath: DocumentPath,
+                instanceIdentity: instanceIdentity,
+                sourceName: sourceName
+            ));
         var chunks = new List<ContainerChunk>(capacity: m_cache.Chunks.Count);
         var kept = new List<ChunkCode>();
         var derived = new List<ChunkCode>();
@@ -209,12 +290,19 @@ public sealed class CompiledWorldRequest {
                 continue;
             }
 
-            if (!m_cache.Chunks.TryDerive(
-                chunk: chunk,
-                context: context,
-                derived: out var product,
-                reason: out reason
-            )) {
+            ContainerChunk? product;
+
+            try {
+                if (!m_cache.Chunks.TryDerive(
+                    chunk: chunk,
+                    context: context,
+                    derived: out product,
+                    reason: out reason
+                )) {
+                    return false;
+                }
+            } catch (InvalidDataException) when (parseRefusal is not null) {
+                reason = parseRefusal;
                 return false;
             }
 
@@ -224,6 +312,11 @@ public sealed class CompiledWorldRequest {
 
         if (kept.Contains(item: DefinitionChunk.Instance.Code)) {
             WorldBootWork.Count(kind: WorldBootWork.CompiledHits);
+        }
+        // The DEFN load stood for the authored parse this boot skipped, so the deterministic parse count reads the same
+        // whatever the cache held.
+        if (!context.AuthoredRead) {
+            WorldBootWork.Count(kind: WorldBootWork.Parses);
         }
 
         string? writtenTo = null;
@@ -235,7 +328,7 @@ public sealed class CompiledWorldRequest {
                 AtomicFile.WriteAllBytes(
                     bytes: CompiledWorld.Encode(
                         chunks: chunks,
-                        header: header
+                        header: (header ?? CompiledWorld.HeaderFor(authored: context.Authored, catalogFingerprint: CatalogFingerprint, instanceIdentity: instanceIdentity, sourceHash: sourceHash))
                     ),
                     path: cached
                 );

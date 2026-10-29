@@ -1,4 +1,18 @@
 <Project>
+    <!-- The hot-reload loop (docs/development/contributing.md#edit-to-running): a running World applies a method-body edit
+         only to an assembly built without optimization, so `-p:PuckHotReload=<Project>,<Project>` builds the named
+         projects unoptimized and leaves every other project optimized. An edit to a project outside the list is one the
+         runtime refuses, and `dotnet watch` rebuilds and reboots for it. -->
+    <PropertyGroup Condition="'$(PuckHotReload)' != '' AND $([System.String]::Copy(',$(PuckHotReload),').Contains(',$(MSBuildProjectName),'))">
+        <Optimize>false</Optimize>
+    </PropertyGroup>
+    <!-- The compiler's incremental check hashes the compile items and a few properties, not Optimize, so turning the switch
+         on or off would otherwise keep the assembly compiled the other way. -->
+    <Target Name="PuckOptimizeIsACompileInput" BeforeTargets="_GenerateCompileDependencyCache">
+        <ItemGroup>
+            <CoreCompileCache Include="Optimize=$(Optimize)" />
+        </ItemGroup>
+    </Target>
     <ItemGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR ('$(PuckKind)' == 'Tool' AND $(MSBuildProjectName.StartsWith('Puck.Cli')))">
         <!-- Repository-only executables resolve live files from their checkout,
              independently of deterministic compiler source-path mapping, and create every per-run directory

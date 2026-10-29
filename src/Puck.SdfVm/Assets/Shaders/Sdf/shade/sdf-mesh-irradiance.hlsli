@@ -6,6 +6,7 @@
 #ifndef SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #define SHADE_SDF_MESH_IRRADIANCE_HLSLI
 #include "../isa/sdf-render.hlsli"
+#include "../field/sdf-octahedral.hlsli"
 
 bool sdfMeshIrradianceEnabled() {
     return (passGroup.meshIrradianceVolume.x != 0u);
@@ -44,23 +45,12 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
     }
 }
 
-// The eight probes about a surface point, gathered once a pixel: each corner's slot address (SdfMeshProbeNone where the
-// probe takes no part) and weight, and whether it lies in front of the surface.
-// A corner's weight is its trilinear share times how far it lies in front of the surface times how far the pushed
-// point lies on the probe's side of its blocking planes (sdfMeshProbePlaneVisibility), times the share of the other
-// answering probes it sees (sdfMeshProbeMutualShares); a probe of another cell, an unwritten one or one inside geometry
-// (its key carries the invalid flag, so the written-key test fails) takes no part, and its share goes to the corners
-// that answer. The probes in front of the surface answer, and apart those behind it, which answer only where none
-// lies in front: a probe behind a wall or a slab sees the room beyond it, which may be lit many times as brightly.
+// KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
+// max(0, dot(receiver normal, direction to relocated probe)) squared times depth-moment visibility.
+// Continuous hemisphere weighting excludes probes behind a surface without a discrete front/back fallback.
+// Unwritten, invalid and invisible probes take no part; no answering probe means no measured indirect light.
 static const uint SdfMeshProbeNone = 0xffffffffu;
 
-// The neighbour bit of the lattice offset `d`, each component in -1, 0 and 1 and not all zero, so the bit of -d is 25
-// less it. KEEP IN SYNC with SdfMeshIrradiance.NeighbourIndex.
-uint sdfMeshProbeNeighbourIndex(int3 d) {
-    uint index = (uint)(((9 * (d.x + 1)) + (3 * (d.y + 1))) + (d.z + 1));
-
-    return ((index > 13u) ? (index - 1u) : index);
-}
 // Where the probe stands, relative to its cell's centre: the offset the trace moved it by out of geometry or off a
 // face it lay on, zero for a probe at its centre. Every position the gather reads is the centre plus this.
 // KEEP IN SYNC with SdfMeshIrradiance.Compose's offset words.
@@ -70,192 +60,41 @@ float3 sdfMeshProbeOffset(uint address) {
 
     return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
 }
-// The plane the probe's ray toward its neighbour at lattice offset `d` first hit, relative to where the probe stands: a
-// normal facing away from the probe and the distance along it; zero where the ray reached open space.
-float4 sdfMeshProbePlane(uint address, int3 d) {
-    uint word = (address + SDF_MESH_IRRADIANCE_PLANES_WORD + (2u * sdfMeshProbeNeighbourIndex(d)));
-    uint first = sdfMeshIrradiance[word];
-    uint second = sdfMeshIrradiance[word + 1u];
-
-    return float4(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u), sdfMeshIrradianceHalf(second, 1u));
-}
-// How far a plane admits a point at `toward` from the probe's centre: one on the probe's side of it, fading to nothing
-// over SDF_MESH_IRRADIANCE_DEPTH_FADE metres past it; a zero plane admits everything.
-float sdfMeshProbePlaneAdmits(float4 plane, float3 toward) {
-    return (1.0 - saturate((dot(plane.xyz, toward) - plane.w) / SDF_MESH_IRRADIANCE_DEPTH_FADE));
-}
-// How far a probe lets a point at `toward` from its centre take its light: the first-hit planes of its rays in the
-// four lattice directions about the point's direction (the 3x3 directions of the cube face the point lies toward,
-// blended bilinearly by where the point falls between them), each admitting the point while it lies on the probe's side
-// of the plane. A wall or slab the rays stop at is that plane, so a point past it takes nothing whichever way it lies
-// from the probe; a finite blocker (a plinth, a stair's nosing) darkens only the directions whose rays meet it, and
-// softly between them. `suspect` is the share of the admission the probe's rays did not see for themselves: a ray that
-// reached open space, or whose hit plane lies more than a quarter of the spacing beyond the point (fully suspect at
-// three quarters), admits the point only for want of a hit. Distance is perpendicular to the plane, so rays meeting
-// the point's own surface agree even at oblique or grazing angles. KEEP IN SYNC with SdfMeshIrradiance.PlaneVisibility.
-float sdfMeshProbePlaneVisibility(uint address, float3 toward, float spacing, out float suspect) {
-    float3 size = abs(toward);
-    float major = max(size.x, max(size.y, size.z));
-
-    suspect = 0.0;
-    if (!(major > 0.0)) {
-        return 1.0;
+// Octahedral depth moments: four bilinear taps, reflected at identified edges, and a one-sided Chebyshev bound.
+// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and SdfOctahedral. The CPU reads the same packed FP16 moments.
+float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
+    float distance = length(toward);
+    if (!(distance > 0.0)) { return 1.0; }
+    float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
+    int2 base = (int2)floor(texel);
+    float2 fraction = texel - (float2)base;
+    float mean = 0.0;
+    float squared = 0.0;
+    [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        int2 high = int2(corner & 1u, corner >> 1);
+        float2 axes = lerp(1.0 - fraction, fraction, (float2)high);
+        float weight = axes.x * axes.y;
+        int2 tap = sdfOctBorderSource(base + high, (int)SDF_MESH_IRRADIANCE_DEPTH_SIZE);
+        uint word = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y)];
+        mean += weight * sdfMeshIrradianceHalf(word, 0u);
+        squared += weight * sdfMeshIrradianceHalf(word, 1u);
     }
-
-    // The face is the major component's axis; the point's direction is arranged as (major, minor, minor).
-    bool xMajor = ((size.x >= size.y) && (size.x >= size.z));
-    bool yMajor = (!xMajor && (size.y >= size.z));
-    float3 arranged = (xMajor ? toward.xyz : (yMajor ? toward.yxz : toward.zxy)) / major;
-    int facing = ((arranged.x < 0.0) ? -1 : 1);
-    // The minor components, from -1 to 1, fall between the face's three texels at -1, 0 and 1.
-    float2 minor = (arranged.yz + 1.0);
-    float2 cell = min(floor(minor), 1.0);
-    float2 fraction = (minor - cell);
-    float visibility = 0.0;
-
-    [unroll] for (uint corner = 0u; (corner < 4u); corner++) {
-        int2 high = int2((corner & 1u), (corner >> 1));
-        float weight = (((high.x != 0) ? fraction.x : (1.0 - fraction.x)) * ((high.y != 0) ? fraction.y : (1.0 - fraction.y)));
-        int2 texel = ((int2)cell + high - 1);
-        int3 d = (xMajor ? int3(facing, texel.x, texel.y) : (yMajor ? int3(texel.x, facing, texel.y) : int3(texel.x, texel.y, facing)));
-        float4 plane = sdfMeshProbePlane(address, d);
-        float admits = (weight * sdfMeshProbePlaneAdmits(plane, toward));
-        float gap = (any(plane != 0.0) ? (plane.w - dot(plane.xyz, toward)) : 1.0e30);
-
-        visibility += admits;
-        suspect += (admits * saturate((gap - (0.25 * spacing)) / (0.5 * spacing)));
-    }
-    suspect = ((visibility > 0.0) ? (suspect / visibility) : 0.0);
-    return visibility;
+    if (distance <= mean) { return 1.0; }
+    float variance = max(0.0, squared - mean * mean);
+    float delta = distance - mean;
+    float probability = variance / max(1.0e-8, variance + delta * delta);
+    float visibility = probability * probability * probability;
+    return (visibility < 0.2) ? (visibility * visibility * visibility / 0.04) : visibility;
 }
 struct SdfMeshProbes {
     uint address[8];
     float weight[8];
-    bool front[8];
-    // Whether any probe lies in front; when none does, the probes behind answer.
-    bool anyFront;
 };
 
-// Whether a gathered probe answers: one in front of the surface, or one behind it when none lies in front.
+// Whether a gathered probe answers.
 bool sdfMeshProbeAnswers(SdfMeshProbes probes, uint corner) {
-    return ((probes.address[corner] != SdfMeshProbeNone) && (probes.front[corner] || !probes.anyFront));
+    return (probes.address[corner] != SdfMeshProbeNone);
 }
-// Scales each answering probe's weight by how much of the other answering probes' weight it sees and is seen by across
-// the lattice (each probe's neighbour bits), faded in from SDF_MESH_IRRADIANCE_MUTUAL_LOW to _HIGH of it, so a probe that
-// stands across a wall from the rest, which a window or doorway in one of its directions admits, gives way to
-// them; where that would leave no weight at all (no answering probe sees another) the weights stand. Every index is a
-// constant once the loops unroll. KEEP IN SYNC with SdfMeshIrradiance.MutualShares.
-void sdfMeshProbeMutualShares(inout SdfMeshProbes probes) {
-    uint neighbours[8];
-    float shares[8];
-    float kept = 0.0;
-
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        neighbours[corner] = (sdfMeshProbeAnswers(probes, corner) ? sdfMeshIrradiance[probes.address[corner] + SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD] : 0u);
-    }
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        shares[corner] = 1.0;
-
-        float others = 0.0;
-        float visible = 0.0;
-
-        [unroll] for (uint other = 0u; (other < 8u); other++) {
-            if ((other == corner) || !sdfMeshProbeAnswers(probes, other)) {
-                continue;
-            }
-            others += probes.weight[other];
-
-            int3 d = (int3((other & 1u), ((other >> 1) & 1u), ((other >> 2) & 1u)) - int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u)));
-            uint index = sdfMeshProbeNeighbourIndex(d);
-
-            if ((((neighbours[corner] >> index) & 1u) != 0u) && (((neighbours[other] >> (25u - index)) & 1u) != 0u)) {
-                visible += probes.weight[other];
-            }
-        }
-        if (sdfMeshProbeAnswers(probes, corner)) {
-            if (others > 0.0) {
-                shares[corner] = smoothstep(SDF_MESH_IRRADIANCE_MUTUAL_LOW, SDF_MESH_IRRADIANCE_MUTUAL_HIGH, (visible / others));
-            }
-            kept += (probes.weight[corner] * shares[corner]);
-        }
-    }
-    if (kept > 0.0) {
-        [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-            probes.weight[corner] *= shares[corner];
-        }
-    }
-}
-
-// A probe's 26 rays are one line wide each, so a probe across a roof, floor or wall from the point still admits it
-// through the rays that cleared the blocker's edge or passed a doorway in it (its suspect share,
-// sdfMeshProbePlaneVisibility). Where another answering probe cannot see it (their neighbour bit is clear), that
-// probe's plane toward it is the blocker between them, and a point on the near side of that plane lies across it from
-// the far probe, which gives way by its suspect share; a probe whose rays met the point's own surface keeps lighting
-// it, so a stair flight between two probes separates neither from the walls beside it. A separator's veto is weighted
-// by its share of the answering probes' weight, at full strength from SDF_MESH_IRRADIANCE_SEPARATOR_SHARE of the
-// total (an equal corner's share at a cell's centre), so a probe entering the eight-corner set at a cell boundary with
-// no trilinear weight vetoes nothing and the gather is continuous across the lattice planes; and by how much of it
-// survives the same test, so a fully separated probe vetoes nothing and two probes that separate each other leave each
-// other standing. Both are read from the weights before any veto; a probe that vetoes another fully is therefore
-// unseparated itself, and the gather never empties. The separating plane has no finite extent: it is the blocker's
-// whole half-space. Every index is a constant once the loops unroll. KEEP IN SYNC with SdfMeshIrradiance.Separate.
-void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 first, float spacing, float3 pushed) {
-    uint neighbours[8];
-    float share[8];
-    float separated[8];
-    float support[64];
-    float total = 0.0;
-
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        neighbours[corner] = (sdfMeshProbeAnswers(probes, corner) ? sdfMeshIrradiance[probes.address[corner] + SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD] : 0u);
-        total += (sdfMeshProbeAnswers(probes, corner) ? probes.weight[corner] : 0.0);
-    }
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        share[corner] = ((total > 0.0) ? saturate(probes.weight[corner] / (SDF_MESH_IRRADIANCE_SEPARATOR_SHARE * total)) : 0.0);
-    }
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
-        separated[corner] = 0.0;
-
-        [unroll] for (uint other = 0u; (other < 8u); other++) {
-            uint pair = ((8u * corner) + other);
-
-            support[pair] = 0.0;
-            if (!sdfMeshProbeAnswers(probes, corner) || (suspect[corner] <= 0.0) || (other == corner) || !sdfMeshProbeAnswers(probes, other)) {
-                continue;
-            }
-
-            int3 otherOffset = int3((other & 1u), ((other >> 1) & 1u), ((other >> 2) & 1u));
-            int3 d = (offset - otherOffset);
-
-            if (((neighbours[other] >> sdfMeshProbeNeighbourIndex(d)) & 1u) != 0u) {
-                continue;
-            }
-
-            float3 otherPoint = ((((float3)(first + otherOffset) + 0.5) * spacing) + sdfMeshProbeOffset(probes.address[other]));
-
-            support[pair] = sdfMeshProbePlaneAdmits(sdfMeshProbePlane(probes.address[other], d), (pushed - otherPoint));
-
-            separated[corner] = max(separated[corner], ((share[other] * suspect[corner]) * support[pair]));
-        }
-    }
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        if (!sdfMeshProbeAnswers(probes, corner)) {
-            continue;
-        }
-
-        float veto = 0.0;
-
-        [unroll] for (uint other = 0u; (other < 8u); other++) {
-            if ((other == corner) || !sdfMeshProbeAnswers(probes, other)) {
-                continue;
-            }
-            veto = max(veto, (((share[other] * suspect[corner]) * support[(8u * corner) + other]) * (1.0 - separated[other])));
-        }
-        probes.weight[corner] *= (1.0 - veto);
-    }
-}
-
 SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     SdfMeshProbes probes;
     uint4 volume = passGroup.meshIrradianceVolume;
@@ -265,11 +104,9 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     uint count, stride;
     sdfMeshIrradiance.GetDimensions(count, stride);
 
-    probes.anyFront = false;
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
-        probes.front[corner] = false;
     }
     if ((volume.x == 0u) || !(spacing > 0.0) || any(dims <= 0) || any(!isfinite(position))) {
         return probes;
@@ -277,17 +114,15 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
     // Extend the boundary probes only as far as their visibility permits. The pushed receiver, never the clamped
-    // lookup, is tested against their blocking planes, so leaving the window cannot invent open sky.
+    // lookup, is tested against their depth moments, so leaving the window cannot invent open sky.
     float3 lattice = clamp(((pushed / spacing) - 0.5), (float3)low, (float3)(low + dims - 1));
     float3 base = floor(lattice);
     float3 fraction = (lattice - base);
     int3 first = int3(base);
-    float suspect[8];
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
         int3 cell = (first + offset);
 
-        suspect[corner] = 0.0;
         if (any(cell < low) || any(cell >= (low + dims))) {
             continue;
         }
@@ -299,41 +134,25 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         }
 
         float3 axes = lerp((1.0 - fraction), fraction, float3(offset));
-        // The trilinear share is the cell's; the direction, the distance and the plane tests are the probe's own position.
+        // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
         float distance = length(toward);
-        float facing = ((distance > 0.0) ? ((dot((toward / distance), normal) + 1.0) * 0.5) : 1.0);
-        float unseen;
-        float weight = (((axes.x * axes.y * axes.z) * ((facing * facing) + 0.2)) * sdfMeshProbePlaneVisibility(address, (pushed - probePoint), spacing, unseen));
+        float facing = ((distance > 0.0) ? max(0.0, dot((toward / distance), normal)) : 1.0);
+        float weight = (((axes.x * axes.y * axes.z) * (facing * facing)) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
 
         if (weight <= 0.0) {
             continue;
         }
-
-        bool front = (dot(toward, normal) >= (-SDF_MESH_IRRADIANCE_BEHIND * spacing));
-
-        suspect[corner] = unseen;
         probes.address[corner] = address;
         probes.weight[corner] = weight;
-        probes.front[corner] = front;
-        probes.anyFront = (probes.anyFront || front);
     }
-
-    sdfMeshProbeSeparate(probes, suspect, first, spacing, pushed);
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        if ((probes.weight[corner] <= 0.0) || !sdfMeshProbeAnswers(probes, corner)) {
-            probes.address[corner] = SdfMeshProbeNone;
-            probes.front[corner] = false;
-        }
-    }
-    sdfMeshProbeMutualShares(probes);
 
     return probes;
 }
 // The sky visibility and reflected radiance the gathered probes hold, seen along `direction` (the normal for the light a
 // surface receives, the mirror direction for the light it reflects). A point with no answering probe has no measured
-// incoming light. The boundary gather extrapolates only the light its probes' blocking planes permit.
+// incoming light. The boundary gather extrapolates only the light its probes' depth moments permit.
 void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVisibility, out float3 radiance) {
     float sky = 0.0;
     float3 reflected = 0.0;

@@ -7,19 +7,14 @@ namespace Puck.Cli.Testing;
 /// relative name, every git call must succeed, and disposal clears the read-only bits git puts on its objects before
 /// deleting the whole directory.</summary>
 internal sealed class GitScratchCheckout : IDisposable {
-    private readonly TemporaryDirectory m_directory = new(prefix: "puck-git-law-");
+    internal sealed record TreeFile(string RelativePath, byte[] Bytes, DateTime LastWriteTimeUtc);
+    internal sealed record TreeSnapshot(IReadOnlyList<string> Directories, IReadOnlyList<TreeFile> Files);
 
-    /// <summary>Initializes a new instance of the <see cref="GitScratchCheckout"/> class: an empty repository on
-    /// branch <c>main</c> that git never maintains on its own.</summary>
-    public GitScratchCheckout() {
-        _ = Directory.CreateDirectory(path: Root);
-        Initialize(repository: Root);
-    }
+    private static readonly Lazy<TreeSnapshot> InitializedRepository = new(valueFactory: static () => {
+        using var directory = new TemporaryDirectory(prefix: "puck-git-template-");
+        var root = directory.PathOf(name: "checkout");
 
-    /// <summary>Makes <paramref name="repository"/> an empty git repository on branch <c>main</c> that git never
-    /// maintains on its own: the one way a law creates a scratch repository.</summary>
-    /// <param name="repository">The existing directory to initialize.</param>
-    public static void Initialize(string repository) {
+        _ = Directory.CreateDirectory(path: root);
         // A commit otherwise starts `git maintenance run --auto --detach`, which on recent git prunes worktree
         // registrations and repacks in the background: it changes what a law observes by git version and races the
         // directory's teardown.
@@ -32,13 +27,62 @@ internal sealed class GitScratchCheckout : IDisposable {
         foreach (var arguments in commands) {
             var result = CliGit.Run(
                 arguments: arguments,
-                repository: repository
+                repository: root
             );
 
             Assert.True(
                 condition: (result.ExitCode == 0),
                 userMessage: $"git {string.Join(separator: ' ', values: arguments)} exited {result.ExitCode}: {result.Stderr}"
             );
+        }
+
+        return CaptureSnapshot(root: root);
+    });
+
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-git-law-");
+
+    /// <summary>Initializes a new instance of the <see cref="GitScratchCheckout"/> class: an empty repository on
+    /// branch <c>main</c> that git never maintains on its own.</summary>
+    public GitScratchCheckout()
+        : this(snapshot: InitializedRepository.Value) {
+    }
+    internal GitScratchCheckout(TreeSnapshot snapshot) {
+        _ = Directory.CreateDirectory(path: Root);
+        RestoreSnapshot(root: Root, snapshot: snapshot);
+    }
+
+    /// <summary>Makes <paramref name="repository"/> an empty git repository on branch <c>main</c> that git never
+    /// maintains on its own: the one way a law creates a scratch repository.</summary>
+    /// <param name="repository">The existing directory to initialize.</param>
+    public static void Initialize(string repository) => RestoreSnapshot(root: repository, snapshot: InitializedRepository.Value);
+    internal static TreeSnapshot CaptureSnapshot(string root) {
+        var directories = Directory.EnumerateDirectories(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*")
+            .Select(selector: directory => Path.GetRelativePath(path: directory, relativeTo: root))
+            .Order(comparer: StringComparer.Ordinal)
+            .ToArray();
+        var files = Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*")
+            .Select(selector: file => new TreeFile(
+                Bytes: File.ReadAllBytes(path: file),
+                LastWriteTimeUtc: File.GetLastWriteTimeUtc(path: file),
+                RelativePath: Path.GetRelativePath(path: file, relativeTo: root)
+            ))
+            .OrderBy(keySelector: static file => file.RelativePath.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".git") ? 1 : 0)
+            .ThenBy(comparer: StringComparer.Ordinal, keySelector: static file => file.RelativePath)
+            .ToArray();
+
+        return new TreeSnapshot(Directories: directories, Files: files);
+    }
+    internal static void RestoreSnapshot(TreeSnapshot snapshot, string root) {
+        _ = Directory.CreateDirectory(path: root);
+        foreach (var directory in snapshot.Directories) {
+            _ = Directory.CreateDirectory(path: Path.Combine(path1: root, path2: directory));
+        }
+        foreach (var file in snapshot.Files) {
+            var path = Path.Combine(path1: root, path2: file.RelativePath);
+
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
+            File.WriteAllBytes(bytes: file.Bytes, path: path);
+            File.SetLastWriteTimeUtc(lastWriteTimeUtc: file.LastWriteTimeUtc, path: path);
         }
     }
 
@@ -54,6 +98,22 @@ internal sealed class GitScratchCheckout : IDisposable {
     public string Commit(string message) {
         _ = Git("add", "--all");
         _ = Git("-c", "user.name=law", "-c", "user.email=law@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "--message", message);
+        var headFile = Path.Combine(path1: Root, path2: ".git/HEAD");
+
+        if (File.Exists(path: headFile)) {
+            var head = File.ReadAllText(path: headFile).Trim();
+            var resolved = (head.StartsWith(comparisonType: StringComparison.Ordinal, value: "ref: ")
+                ? Path.Combine(path1: Root, path2: ".git", path3: head[5..])
+                : null);
+
+            if ((resolved is not null) && File.Exists(path: resolved)) {
+                var sha = File.ReadAllText(path: resolved).Trim();
+
+                if (sha.Length == 40) {
+                    return sha;
+                }
+            }
+        }
 
         return Git("rev-parse", "HEAD").Trim();
     }
