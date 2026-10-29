@@ -48,7 +48,7 @@ resolves their edits to this file at merge.
 6. [Debug tools](#debug-tools): the developer exhibits, the diagnostics views'
    windowed checks and a pick that never answers under pause.
 7. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-   the tick still sets the frame's p99; the design waits on the owner's go.
+   the tick still sets the frame's p99; design and build the simulation thread.
 8. [Dual-stick play and the Moth's motion](#dual-stick-play-and-the-moths-motion):
    fluid camera and body turning on the pad, then the owner's feel sitting.
 9. [Cross-backend parity and GPU robustness](#cross-backend-parity-and-gpu-robustness):
@@ -59,11 +59,8 @@ resolves their edits to this file at merge.
 
 ## Owner decisions
 
-Each waits on the owner; the packet named holds the evidence.
+Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Exposure: a GPU luminance meter (log-average of the view's HDR output with a
-  highlight clamp) as the auto-exposure driver, the probe meter kept for local
-  adaptation ([lighting](#lighting-and-gi)).
 - The coat layer's F0 semantic, and whether baked static copies occupy SDF
   instances at all ([lighting](#lighting-and-gi)).
 - What the chase camera does with its back to the stair wall: swing the boom,
@@ -71,23 +68,12 @@ Each waits on the owner; the packet named holds the evidence.
   ([motion](#dual-stick-play-and-the-moths-motion)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
-- Authored areas (an `areas` section of boxes and openings that would also drive
-  residency) against derived occlusion, and which groups may pop under
-  residency ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
   casters at a coarser snap; whether portal and session views render on the
   frame after a tick (each picture a frame late) to split the tick frame's cost;
   whether the 30 and 15 Hz update tiers become a continuous rate.
-- Primitives that lower to a distance bound under a non-uniform scale: iterate
-  an exact distance, change the zero set, or refuse such scales at authoring
-  ([editor plan](editor.md#open-items)).
-- The first crossing's 639 first-use JIT methods: a self-contained composite
-  ReadyToRun publish or a rehearsal transfer at boot
-  ([rendering plan](rendering.md#open-items)).
 - Whether the engine ships or requires the GameInput redistributable
   ([input](#input-channels)).
-- Production `IsPrime`: whether a hashed-witness table of about 32 KiB may decide
-  primes below 2^47 in one strong round ([maths](#maths)).
 - The test keep-list, and whether any of the deleted guards over non-code files
   return ([coverage](#coverage-and-test-suites)).
 - Whether proof of possession is a product requirement for Entra bearer tokens
@@ -152,6 +138,8 @@ Owner: next lighting batch (rendering, principal-grade review) · one high, six
 medium, lows · Next: the high silhouette leak, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
+
+- Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the view's HDR output with a highlight clamp) as the auto-exposure driver, the probe meter kept for local adaptation.
 
 - Probe depth visibility (from the probe-depth review):
   - [high] Depth visibility leaks at every silhouette: a ray that misses stores
@@ -334,6 +322,8 @@ findings by cluster, starting with the hall stairs.
 Owner: hot-reload follow-up (boot and build) · two medium, the rest ordinary ·
 Next: the two review findings, then a reboot for an edit outside `PuckHotReload`.
 
+- Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
+
 - [medium] A hot-reload code revision never invalidates the compositor's emitter
   revisions, and the static-field rebuild also needs a changed program, so
   hot-reloading scene emission with unchanged world revisions keeps the old
@@ -444,9 +434,8 @@ developer exhibits, then the diagnostics' windowed checks.
 
 ### Simulation tick off the frame thread
 
-Owner: principal design lane, after the owner's go (the idea is
-[awaiting review](#awaiting-the-owners-review)) · ordinary · Next: a design
-consensus for the owner.
+Owner: specialist or Astra design lane · ordinary · Next: design the
+simulation thread and its snapshot handoff, then build it.
 
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
@@ -967,6 +956,8 @@ development install grows 340 MB a CLI rebuild).
 ### Maths
 
 Owner: maths lane · ordinary · Next: the float duration fields' schema migration.
+
+- Decide (the lead's call): Production `IsPrime`: whether a hashed-witness table of about 32 KiB may decide primes below 2^47 in one strong round.
 
 - Classify the public Maths surface the retired ratchet grandfathered without a
   law or waiver (algebra wrappers, coordinates, continued-fraction certificates,

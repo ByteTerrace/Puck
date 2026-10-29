@@ -7873,6 +7873,8 @@ puck parity
 
 ## Open items
 
+- Decide (the lead's call): Authored areas (an `areas` section of boxes and openings that would also drive residency) against derived occlusion, and which groups may pop under residency.
+
 What the programme still owes, package by package, with the measurements and
 causes found so far. A line is deleted when its work lands, never ticked; a
 package whose check waits for a machine keeps its line until that check has run

@@ -1041,6 +1041,8 @@ holds, so no capability is lost on the way.
 
 ## Open items
 
+- Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring.
+
 What the plan still owes. A line is deleted when its work lands, never ticked;
 the [open items](open-items.md#next) rank the work packets drawn from it. E1,
 E5, E9, E10 and E14's recording and scrubbing are in.
