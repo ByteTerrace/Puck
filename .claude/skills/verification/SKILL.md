@@ -81,7 +81,9 @@ boundary. Restoration rebuilds geometry and population only when their configura
 Checkpoint restoration discards replay-only departure rollback bodies: a committed
 departure otherwise keeps its source-scoped transfer id and falsely refuses the next
 scenario's replay as a duplicate. The scenario reset
-cancels live tape drives as well as recordings. Session epochs reset only in this
+cancels queued seat-route edges after restoring boot claims; otherwise a prior crossing
+admits the next scenario's input before tick one and changes its first two hashes.
+It also cancels live tape drives as well as recordings. Session epochs reset only in this
 isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
 caller-owned instance disposal and child-scope singleton identity. Arbitrary factories

@@ -184,6 +184,9 @@ internal sealed class WorldTestBatch {
             Get<Puck.World.Client.WorldClient>().ResetInputTimeline();
             Get<WorldHistory>().Off();
             Get<WorldInstanceHost>().RestoreScenario(checkpoint: checkpoint);
+            // Restoring a crossed seat's boot claim is not a live handoff. Its queued edge would admit input
+            // before tick one, whereas a fresh host first admits it during ordinary post-step synchronization.
+            Get<Puck.World.Client.WorldSeatAuthorityRouter>().DiscardPendingRouteChanges();
             RestoreStateFiles();
         }
         Get<WorldTestRun>().Reset(WorkingWorld, Path.Combine(path1: leg.Directory, path2: "out"));
