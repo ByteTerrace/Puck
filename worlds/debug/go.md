@@ -93,8 +93,8 @@ separate ticks to bound the work on the frame thread.
 Search jobs take turns when other tables are thinking. Their admission prices
 their own dependency rows and reserves every job's input-stamp upkeep.
 
-[go-tests.puck](go-tests.puck) covers all-stone settlement, seated play,
-captures before suicide, group captures, ko and its release, illegal table
-arrangements (including an occupied-point stack), the far corner, reset, passes and area scoring, including a
-serpentine flood longer than 128 ticks. Run
+[go-tests.puck](go-tests.puck) covers seated play, atari, captures before
+suicide, group captures, ko and its release, the occupied-point arrangements
+the board projection cannot see, the far corner, one opponent move, reset,
+passes and area scoring, including a serpentine flood longer than 128 ticks. Run
 `puck test worlds/debug/go-tests.puck --reproduce --jobs 1`.

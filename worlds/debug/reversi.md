@@ -88,8 +88,7 @@ jobs ([search](../../docs/reference/state/search.md)).
 ## Tests
 
 [`reversi-tests.puck`](reversi-tests.puck) holds the table's scenarios, each
-booted in the whole debug world: the opening reaching the board, a seated
-player's move turning the bracketed disc over on the table, the computer's
-answer, a refused disc going back to its tray, one- and two-direction flips for
-each colour, and two passes ending the game. Run them with
+booted in the whole debug world: a seated player's move turning the bracketed
+disc over on the table, a refused disc going back to its tray, one- and
+two-direction flips, and two passes ending the game. Run them with
 `puck test worlds/debug/reversi-tests.puck`.
