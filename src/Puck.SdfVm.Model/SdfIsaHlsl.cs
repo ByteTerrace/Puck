@@ -330,6 +330,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PLANES_WORD", value: SdfMeshIrradianceProbe.PlanesWord);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_FADE", value: SdfMeshIrradianceProbe.DepthFade);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD", value: SdfMeshIrradianceProbe.NeighboursWord);
+        declarations.Count(name: "SDF_MESH_IRRADIANCE_OFFSET_WORD", value: SdfMeshIrradianceProbe.OffsetWord);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_MUTUAL_LOW", value: SdfMeshIrradianceProbe.MutualLow);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_MUTUAL_HIGH", value: SdfMeshIrradianceProbe.MutualHigh);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SEPARATOR_SHARE", value: SdfMeshIrradianceProbe.SeparatorShare);

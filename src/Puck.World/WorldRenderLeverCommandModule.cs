@@ -554,6 +554,28 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             }
         );
         yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.probe",
+            description: "Reads the irradiance volume's probes about a point: world.probe <x> <y> <z> [<nx> <ny> <nz>]. Echoes the volume's spacing and window, the answering corners and their total weight for a receiver at the point facing along the normal (up when none is given), then one line per corner of the gather: its cell, where its probe stands (the cell's centre plus the offset the trace moved it by out of geometry or off a face), the share of its rays that met back faces, whether it is valid, moved or invalid, its sweeps, how many of its 26 neighbours it sees, its own cubes' mean sky share and luminance, and the terms of its weight (trilinear share, facing, four-plane visibility and suspect share, front or behind) with the weight it answers with.",
+            handler: (_, args) => {
+                if (((args.Count != 3) && (args.Count != 6)) || !args.TryFloats(count: args.Count, start: 0, values: out var values) || values.Any(predicate: static value => !float.IsFinite(f: value))) {
+                    return CommandResult.Error(output: "[world.probe: expected <x> <y> <z> [<nx> <ny> <nz>], finite numbers]");
+                }
+
+                var normal = ((args.Count == 6) ? new System.Numerics.Vector3(x: values[3], y: values[4], z: values[5]) : System.Numerics.Vector3.UnitY);
+
+                if (normal.LengthSquared() <= 0f) {
+                    return CommandResult.Error(output: "[world.probe: the normal must not be zero]");
+                }
+                if (renderProbe.Residency is not { } node) {
+                    return new CommandResult(Output: "[world.probe: renderer not built yet]");
+                }
+
+                return new CommandResult(Output: string.Join(separator: Environment.NewLine,
+                    values: node.MeshIrradiance.DescribeProbes(normal: System.Numerics.Vector3.Normalize(value: normal), point: new System.Numerics.Vector3(x: values[0], y: values[1], z: values[2]))));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.render-scale",
             description: "Controls view resolution: world.render-scale [view] [<tier|fraction|percent>|floor <tier>|pin <scale>|auto [on|off]]. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",

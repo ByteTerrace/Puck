@@ -49,7 +49,8 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
 // A corner's weight is its trilinear share times how far it lies in front of the surface times how far the pushed
 // point lies on the probe's side of its blocking planes (sdfMeshProbePlaneVisibility), times the share of the other
 // answering probes it sees (sdfMeshProbeMutualShares); a probe of another cell, an unwritten one or one inside geometry
-// takes no part. The probes in front of the surface answer, and apart those behind it, which answer only where none
+// (its key carries the invalid flag, so the written-key test fails) takes no part, and its share goes to the corners
+// that answer. The probes in front of the surface answer, and apart those behind it, which answer only where none
 // lies in front: a probe behind a wall or a slab sees the room beyond it, which may be lit many times as brightly.
 static const uint SdfMeshProbeNone = 0xffffffffu;
 
@@ -60,7 +61,16 @@ uint sdfMeshProbeNeighbourIndex(int3 d) {
 
     return ((index > 13u) ? (index - 1u) : index);
 }
-// The plane the probe's ray toward its neighbour at lattice offset `d` first hit, relative to the probe's centre: a
+// Where the probe stands, relative to its cell's centre: the offset the trace moved it by out of geometry or off a
+// face it lay on, zero for a probe at its centre. Every position the gather reads is the centre plus this.
+// KEEP IN SYNC with SdfMeshIrradiance.Compose's offset words.
+float3 sdfMeshProbeOffset(uint address) {
+    uint first = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_OFFSET_WORD];
+    uint second = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_OFFSET_WORD + 1u];
+
+    return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
+}
+// The plane the probe's ray toward its neighbour at lattice offset `d` first hit, relative to where the probe stands: a
 // normal facing away from the probe and the distance along it; zero where the ray reached open space.
 float4 sdfMeshProbePlane(uint address, int3 d) {
     uint word = (address + SDF_MESH_IRRADIANCE_PLANES_WORD + (2u * sdfMeshProbeNeighbourIndex(d)));
@@ -222,7 +232,7 @@ void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 fir
                 continue;
             }
 
-            float3 otherPoint = (((float3)(first + otherOffset) + 0.5) * spacing);
+            float3 otherPoint = ((((float3)(first + otherOffset) + 0.5) * spacing) + sdfMeshProbeOffset(probes.address[other]));
 
             support[pair] = sdfMeshProbePlaneAdmits(sdfMeshProbePlane(probes.address[other], d), (pushed - otherPoint));
 
@@ -289,7 +299,8 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         }
 
         float3 axes = lerp((1.0 - fraction), fraction, float3(offset));
-        float3 probePoint = (((float3)cell + 0.5) * spacing);
+        // The trilinear share is the cell's; the direction, the distance and the plane tests are the probe's own position.
+        float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
         float distance = length(toward);
         float facing = ((distance > 0.0) ? ((dot((toward / distance), normal) + 1.0) * 0.5) : 1.0);
