@@ -168,7 +168,9 @@ stream liveness, and does not consume the unknown-report diagnostic. Synthetic
 54-byte reports exercise that policy, and the owner's receiver confirms it live: over
 about 75 seconds streaming, `world.devices` read `gamepad1 'SteamControllerTriton'=unassigned
 battery 94%` before any press, and no unknown-report diagnostic fired for `0x7b`. The
-receiver exposes four controller slots, each dormant until a controller streams.
+receiver exposes four controller slots, each dormant until a controller streams. Docked on the
+charging puck it keeps streaming through the receiver and the roster reads
+`charging 95%`; no unknown-report diagnostic fired there either.
 
 ### Motion fusion
 
