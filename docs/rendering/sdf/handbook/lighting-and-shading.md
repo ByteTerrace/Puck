@@ -177,22 +177,22 @@ in the frame.
   <z> [<nx> <ny> <nz>]` reads the eight probes about a point: where each stands,
   its inside share, validity, cubes and the terms of its weight.
   The published volume holds each probe's own measured sky and radiance cubes;
-  neighbours never supply its sky or radiance. The 1,024 depth rays also measure
-  sky, weighted by cosine and the octahedral solid-angle Jacobian. This reduces
-  sky variance without borrowing visibility through a doorway. Each probe stores
-  a 16×16 octahedral map of
-  first-hit depth moments (mean metres and mean-squared metres, as FP16 pairs).
-  Four subtexel rays per texel trace once per geometry/lighting generation;
-  later bounce sweeps reuse them.
-- **A probe lights receivers its depth supports.** Bilinear octahedral sampling
-  interpolates the moments in the receiver's direction, with reflected edge
-  taps. A one-sided Chebyshev bound, cubed and crushed at low weights, fades
-  receivers beyond the mean. The gather multiplies that visibility by the
-  cell's trilinear share and positive normal cosine squared; there is no
-  discrete front/back fallback or neighbour separation veto. A finite blocker
-  affects its angular footprint. Normal bias is 5 cm, independent of spacing;
-  depth misses end at the lighting trace reach (at most 128 m). Subtexel
-  geometry and grazing visibility remain sampling limits.
+  neighbours never supply its sky or radiance. Sky and surface radiance use the
+  same full-reach radiance rays. Each probe stores a 16×16 octahedral map of
+  first-hit distances, two FP16 texels per word; negative distances explicitly
+  mark misses to the receiver support radius. One bounded ray per texel traces
+  once per geometry/lighting generation, and later bounces reuse the map.
+- **A probe lights receivers its depth supports.** Four reflected octahedral
+  taps compute the hit-only mean and central variance in FP32; misses never
+  inflate a blocker's distance. The one-sided Chebyshev bound, cubed and
+  crushed at low weights, fades receivers beyond the mean. Angular coverage
+  keeps a minority hit tap from extending a finite block over an opening.
+  Gather multiplies visibility by trilinear share and positive normal cosine
+  squared. There is no front/back fallback or neighbour separation veto.
+  Normal bias is 5 cm, independent of spacing. Depth support ends at 1.5 times
+  the spacing diagonal plus normal bias; sky still traces to full lighting reach.
+  Subtexel geometry and grazing visibility remain sampling limits. Empty gathers
+  provide zero indirect and zero traced static-light visibility.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
   exact CPU/HLSL rule and record. `world.probe` marks changing or pending
   publication reads unsettled, naming the GPU and live windows separately.

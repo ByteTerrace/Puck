@@ -119,16 +119,19 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   first scene has supplied any volume, there is no measured indirect light.
 - A record is 147 words (588 bytes): 19 words of key, cubes, light visibility
   and origin, then 128 words packing 256 FP16 distances. Medium's 12,288 probes
-  use 6.890625 MiB; High's 36,864 use 20.671875 MiB. The table's staged region
-  still reserves High capacity: one device buffer, two host upload buffers and
-  a native shadow total 82.6875 MiB, before copy headers. `m_volume` allocates
-  the active tier (6.890625 or 20.671875 MiB), rather than High unconditionally.
-  Its five High payloads total 103.359375 MiB, down from 193.359375 MiB.
-  A cached probe block uses 156 words (624 bytes). Previous generations and
-  retained cells add to this. Only changed slots, coalesced into contiguous
-  runs, are compared/uploaded on publication; no full-table comparison per batch.
-  Tier-sized GPU capacity would require changing residency allocation, so the
-  remaining High reservation belongs to that separate resource-lifetime change.
+  use 6.890625 MiB; High's 36,864 use 20.671875 MiB. Both the table and CPU staging
+  fit the published tier. The table starts at one inert record and grows/shrinks
+  through `GpuRegion` and the existing frame-ring retirement; increment the
+  tables' binding revision whenever its buffer changes. A replacement window
+  keeps its previous allocation and coordinates until all new slots are measured.
+  Count one device buffer, two host uploads (their live size can shrink after a
+  small flush), a native shadow and the CPU volume: the five full payloads total
+  34.453125 MiB at Medium or 103.359375 MiB at High, before copy headers, cache
+  and batch storage. They previously reserved 193.359375 MiB at either tier.
+  A cached probe block uses 156 words (624 bytes); previous generations and
+  retained cells add to this. Publication compares/uploads changed slots only,
+  coalesced into contiguous runs. `world.probe`'s GI description reports actual
+  device/upload/native-shadow/header and CPU-volume bytes when unsettled.
 - Each published probe contains its own measured cubes, exactly as the CPU
   bounce lookup reads them. Its sky and surface radiance come from the same
   full-reach radiance rays, so a small opening cannot simultaneously count as

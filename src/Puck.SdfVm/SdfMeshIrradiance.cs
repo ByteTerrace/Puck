@@ -207,6 +207,7 @@ public sealed class SdfMeshIrradiance {
     }
 
     private void WriteToTables(ReadOnlyMemory<uint> words) {
+        m_writeTables!.FitMeshIrradiance(words.Length);
         m_changedSlots.Sort();
         for (var index = 0; index < m_changedSlots.Count;) {
             var first = m_changedSlots[index++];
@@ -483,7 +484,8 @@ public sealed class SdfMeshIrradiance {
     /// <returns>One line.</returns>
     public string Describe() {
         lock (m_gate) {
-            return $"[sdf.mesh-gi] spacing={m_layout.Spacing:0.##} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} rays={m_layout.Rays} sweeps={m_layout.Sweeps} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={m_cache.Count} traced={m_traced} traced-rays={m_rays} depth-rays={m_depthRays}";
+            var buffers = m_writeTables?.MeshIrradianceBufferBytes ?? default;
+            return $"[sdf.mesh-gi] spacing={m_layout.Spacing:0.##} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} rays={m_layout.Rays} sweeps={m_layout.Sweeps} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={m_cache.Count} traced={m_traced} traced-rays={m_rays} depth-rays={m_depthRays} record-bytes={SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)} volume-bytes={m_volume.LongLength * sizeof(uint)} table-device-bytes={buffers.DeviceLocal} table-upload-bytes={buffers.HostVisible} table-cpu-bytes={m_writeTables?.MeshIrradianceCpuBytes ?? 0}";
         }
     }
 
@@ -1235,6 +1237,7 @@ public sealed class SdfMeshIrradiance {
             }
             lines.Add(item: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
                 $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) spacing={layout.Spacing:0.##} window=({low.X}, {low.Y}, {low.Z})+{layout.Dims.X}x{layout.Dims.Y}x{layout.Dims.Z} answering={answering} weight={total:0.####}]"));
+            lines.Add(item: Describe());
             foreach (var report in reports) {
                 var description = report.Describe();
 
