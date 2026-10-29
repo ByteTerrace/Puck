@@ -244,6 +244,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
   (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
   the draw there.
+- **Reprojection interpolates displacement.** `sdfPreviousPoint` in
+  `frame/sdf-reprojection.hlsli` adds the triangle's weighted vertex movements
+  to the current hit. Unchanged vertices return that hit exactly before any
+  barycentric calculation: a long, thin triangle's float Gram determinant can
+  cancel to zero, and rebuilding a second world position can invent motion on
+  a still surface. `SdfReprojectionDeviceLawTests` includes this thin-triangle
+  witness on both backends. Check the static `motion` view when history fails
+  to accumulate; unchanged geometry must show valid, zero object motion.
 - **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
   a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
   fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.
