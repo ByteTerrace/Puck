@@ -261,6 +261,16 @@ the batch loop's break.
   with reproduction, go 546 against 1,357, hall 468 against 1,070, in
   single shared-machine samples). Boot reuse above lowers both legs; then
   measure what the replica itself spends.
+- [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
+  and night references admit a separate full `debug` authority. Its root's
+  stopped-machines import does not stop that companion's six machines;
+  each root tick advances four authorities. Reused Hall scenarios reach their
+  first completed tick in tens of milliseconds, and Alchemy's one-tick cases
+  spend 53–154 ms in authored work excluding export: the measured seconds are
+  not a fixed three-second authored startup delay. Have the scenario-fixture
+  lane remove the unintended companion workload while preserving the scenarios'
+  claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
+  from: boot-reuse profiling; the machine contribution is not isolated.)
 - [low] `WorldTestBatch`'s loop breaks on `batch.m_failed`, which stops the retry
   of a leg that failed to open but also every remaining leg after any earlier
   failure (a `--reproduce` divergence) wherever the next leg needs a fresh host,
