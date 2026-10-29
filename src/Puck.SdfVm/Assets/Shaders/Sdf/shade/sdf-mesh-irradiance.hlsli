@@ -182,18 +182,26 @@ void sdfMeshProbeMutualShares(inout SdfMeshProbes probes) {
 // probe's plane toward it is the blocker between them, and a point on the near side of that plane lies across it from
 // the far probe, which gives way by its suspect share; a probe whose rays met the point's own surface keeps lighting
 // it, so a stair flight between two probes separates neither from the walls beside it. A separator's veto is weighted
-// by how much of it survives the same test, read from the weights before any veto, so a fully separated probe vetoes
-// nothing and two probes that separate each other leave each other standing; a probe that vetoes another fully is
-// therefore unseparated itself, and the gather never empties. The separating plane has no finite extent: it is the
-// blocker's whole half-space. Every index is a constant once the loops unroll. KEEP IN SYNC with
-// SdfMeshIrradiance.Separate.
+// by its share of the answering probes' weight, at full strength from SDF_MESH_IRRADIANCE_SEPARATOR_SHARE of the
+// total (an equal corner's share at a cell's centre), so a probe entering the eight-corner set at a cell boundary with
+// no trilinear weight vetoes nothing and the gather is continuous across the lattice planes; and by how much of it
+// survives the same test, so a fully separated probe vetoes nothing and two probes that separate each other leave each
+// other standing. Both are read from the weights before any veto; a probe that vetoes another fully is therefore
+// unseparated itself, and the gather never empties. The separating plane has no finite extent: it is the blocker's
+// whole half-space. Every index is a constant once the loops unroll. KEEP IN SYNC with SdfMeshIrradiance.Separate.
 void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 first, float spacing, float3 pushed) {
     uint neighbours[8];
+    float share[8];
     float separated[8];
     float support[64];
+    float total = 0.0;
 
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         neighbours[corner] = (sdfMeshProbeAnswers(probes, corner) ? sdfMeshIrradiance[probes.address[corner] + SDF_MESH_IRRADIANCE_NEIGHBOURS_WORD] : 0u);
+        total += (sdfMeshProbeAnswers(probes, corner) ? probes.weight[corner] : 0.0);
+    }
+    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
+        share[corner] = ((total > 0.0) ? saturate(probes.weight[corner] / (SDF_MESH_IRRADIANCE_SEPARATOR_SHARE * total)) : 0.0);
     }
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
@@ -218,7 +226,7 @@ void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 fir
 
             support[pair] = sdfMeshProbePlaneAdmits(sdfMeshProbePlane(probes.address[other], d), (pushed - otherPoint));
 
-            separated[corner] = max(separated[corner], (suspect[corner] * support[pair]));
+            separated[corner] = max(separated[corner], ((share[other] * suspect[corner]) * support[pair]));
         }
     }
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
@@ -232,7 +240,7 @@ void sdfMeshProbeSeparate(inout SdfMeshProbes probes, float suspect[8], int3 fir
             if ((other == corner) || !sdfMeshProbeAnswers(probes, other)) {
                 continue;
             }
-            veto = max(veto, ((suspect[corner] * support[(8u * corner) + other]) * (1.0 - separated[other])));
+            veto = max(veto, (((share[other] * suspect[corner]) * support[(8u * corner) + other]) * (1.0 - separated[other])));
         }
         probes.weight[corner] *= (1.0 - veto);
     }

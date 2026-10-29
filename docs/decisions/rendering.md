@@ -1071,8 +1071,12 @@ measures each probe's separation; the final pass weights a separator's veto by
 its survival of that pass and the candidate's suspect share, so a fully
 separated probe vetoes nothing, two probes that separate each other leave each
 other standing, and a probe that vetoes another fully is unseparated itself,
-which is why the gather never empties. Both passes read the weights before any
-veto, so the result does not depend on corner order. A suspect share uses
+which is why the gather never empties. Both passes weight a separator by its
+share of the answering probes' weight, at full strength from an eighth of the
+total (`SdfMeshIrradianceProbe.SeparatorShare`), so a probe entering the
+eight-corner set at a cell boundary with no trilinear weight vetoes nothing and
+the gather is continuous across the lattice planes. Both passes read the weights
+before any veto, so the result does not depend on corner order. A suspect share uses
 perpendicular distance to the hit plane, so a ray meeting the receiver's own
 surface supplies evidence even at grazing angles. Front eligibility precedes
 separation. Equal surface confidence does not disable a room-side separator:

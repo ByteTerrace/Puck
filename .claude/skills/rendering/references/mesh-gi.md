@@ -74,19 +74,25 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   only for want of a hit. The gap is measured perpendicular to the plane, so
   oblique and nearly tangent rays hitting the receiver's own surface still
   count as evidence; never subtract the receiver's Euclidean distance from a
-  different ray's length. A's veto is weighted by how much of A survives the
-  same test, read from the weights before any veto, so a fully separated probe
-  vetoes nothing, two probes that separate each other stand, and the gather
-  never empties. Equal surface confidence must not disable separation: a
+  different ray's length. A's veto is weighted by A's share of the answering
+  probes' weight, at full strength from `SeparatorShare` (an eighth, an equal
+  corner's share at a cell's centre) of the total, so a probe entering the
+  eight-corner set at a cell boundary with no trilinear weight vetoes nothing
+  and the gather is continuous across the lattice planes (the SPHERE exhibit
+  stands on one, x = 23, where a weight-blind veto splits it); and by how much
+  of A survives the same
+  test, so a fully separated probe vetoes nothing and two probes that separate
+  each other stand. Both are read from the weights before any veto, and the
+  gather never empties. Equal surface confidence must not disable separation: a
   dynamic body has no trace surface, so every probe about it may be uncertain
   and a room-side probe must still reject sky light from across the wall. A
   stair flight between probes separates neither from the walls beside it,
-  because their rays met those walls. Two limits remain
+  because their rays met those walls. One limit remains
   ([open items](../../../../docs/plans/open-items.md#review-findings)): the
-  separating plane is the blocker's whole half-space, with no finite extent,
-  and a separator vetoes at full strength whatever its trilinear weight, so a
-  separator entering the eight-corner set at a cell boundary can step the
-  result along that lattice plane.
+  separating plane is the blocker's whole half-space, with no finite extent.
+  `SdfMeshIrradiance.TryGather` reads the gather's cells and weights at a
+  receiver on the CPU, as the pixel gather computes them; a continuity law
+  compares them a hair either side of a lattice plane.
 - Judge every gather change at the `gather-*` stops of the sweep tour
   (`worlds/debug/sweep.json`), in `indirect` and the final image: the
   Wonderland room's south doorway and its floor under the roof edge, the
