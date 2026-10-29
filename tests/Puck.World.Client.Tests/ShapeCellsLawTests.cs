@@ -112,12 +112,16 @@ public sealed class ShapeCellsLawTests {
             array: instructions,
             match: i => (i.Op == SdfOp.PopField)
         ) > cell));
+        // A static placement converts the relief into world units; the pool emits a body in its slots' own units,
+        // whose scale the slot carries.
+        var units = (pooled ? 1f : scale);
+
         Assert.Equal(
-            (Cells.Frequency / scale),
+            (Cells.Frequency / units),
             instructions[cell].Data0.X
         );
         Assert.Equal(
-            (Cells.Amplitude * scale),
+            (Cells.Amplitude * units),
             instructions[cell].Data0.Y
         );
         Assert.Equal(

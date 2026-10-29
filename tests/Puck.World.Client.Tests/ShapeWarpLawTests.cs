@@ -234,7 +234,8 @@ public sealed class ShapeWarpLawTests {
                 shape: shape
             );
 
-            Assert.True(condition: (pool.Instances[0].Radius >= (surfaceReach * scale)));
+            // The pool emits a body in its slots' own units, whatever its scale.
+            Assert.True(condition: (pool.Instances[0].Radius >= surfaceReach));
         }
     }
     // Sweep is not a closed solid: its curve facet refuses the warp facets by name (ShapeCurveLawTests), so this
