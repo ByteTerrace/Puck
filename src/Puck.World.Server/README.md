@@ -1420,6 +1420,20 @@ reports once; it cannot create another body or stop unrelated worlds.
 Non-atomic parties split before reservation, so a parent lease cannot block its
 own children. Each child has its own capacity verdict.
 
+A queued transfer is bound to the instance lifetime that queued it
+(`PendingTransfer.Source`) and to its members' mobility incarnations as queued;
+the drain refuses by name one whose lifetime stopped or whose member slot now
+holds another body or none, before any reservation. A name `TryStart` starts
+again takes a lifetime-qualified authority identity, so incarnations never
+repeat across lifetimes. Duplicate transfer ids are checked against the source
+lifetime's `WorldInstance.DrainedTransfers` (`WorldDrainedTransferIds`), not a
+high-water mark: a party split, a followed pose and a capacity retry apply ids
+out of enqueue order, and the watermark passes an id only once that id drained.
+The host-row checkpoint's `AppliedTransferHighWater` is that watermark and
+`AppliedTransferIds` the drained ids above it. An emptied instance a queued
+transfer is bound for is reaped only after the drain that leaves nothing queued
+for it (`QueuedTransferInterleavingLawTests`).
+
 Component stress and replay MATCH alone do not prove
 federated delivery; transport and host recovery require their own checks. The
 host retains unresolved destination identities, remote endpoints, and exact commit
