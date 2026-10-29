@@ -31,7 +31,7 @@ public static class SweepEvidence {
             reasons.Add(item: error);
             return (SweepStatus.Unknown, reasons, metrics);
         }
-        if ((signal.Parse != "text") && (metrics.Count == 1)) {
+        if ((signal.Parse != "text") && (SweepSignals.Read(signal.Parse, answer.Output, null).Count == 1)) {
             reasons.Add(item: $"unmeasured: the answer held no {signal.Parse} metric");
         }
         if (((signal.Parse == "cells") && !metrics.ContainsKey(key: "row.cells")) || ((signal.Parse == "frames") && !metrics.ContainsKey(key: "iterations"))) {
@@ -113,6 +113,9 @@ public static class SweepEvidence {
                     if ((matches.Length == 1) && matches[0].TryGetProperty(propertyName: "output", value: out var output) && (output.ValueKind == JsonValueKind.String)
                         && matches[0].TryGetProperty(propertyName: "status", value: out var outcome) && (outcome.ValueKind == JsonValueKind.String)) {
                         answer = Outcome(((outcome.GetString() == "ran") ? "completed" : outcome.GetString()!), output.GetString()!, (outcome.GetString() is "refused" or "faulted"), false);
+                        if (step.Command.StartsWith(comparisonType: StringComparison.Ordinal, value: "view.reseed") && output.GetString()!.Contains(comparisonType: StringComparison.Ordinal, value: "restarted 0 registration(s)")) {
+                            answer = new SweepAnswer(false, output.GetString()!, ["view.reseed restarted no registration"]);
+                        }
                     }
                 }
                 var evidence = Check(answer);

@@ -165,6 +165,7 @@ public static class WorldStaging {
         if (!TryStageUnrelatableContentFolders(
             directory: directory,
             document: document,
+            name: name,
             reason: out reason
         )) {
             return false;
@@ -208,9 +209,9 @@ public static class WorldStaging {
 
     // A machine's content folder that relocation could only spell rooted (a staging directory on another volume than
     // the source) would fail the validator's relative-folder rule. Its files are copied under the staging directory
-    // instead, as `content/<machine>-<folder>`, keeping the folder's position in the list because the first folder
+    // instead, as `content/<world>/<machine>-<folder>`, keeping the folder's position in the list because the first folder
     // naming a default decides it. A folder that is absent stays absent there too: a device's local folders may be.
-    private static bool TryStageUnrelatableContentFolders(JsonObject document, string directory, out string reason) {
+    private static bool TryStageUnrelatableContentFolders(JsonObject document, string name, string directory, out string reason) {
         reason = string.Empty;
 
         if (document["machines"] is not JsonArray machines) {
@@ -231,9 +232,14 @@ public static class WorldStaging {
                     continue;
                 }
 
-                var staged = $"content/{machineIndex}-{folderIndex}";
+                var staged = $"content/{WorldDocumentName.DocumentFile(name: name)}/{machineIndex}-{folderIndex}";
 
                 try {
+                    var destination = Path.Combine(path1: directory, path2: staged);
+
+                    if (Directory.Exists(path: destination)) {
+                        Directory.Delete(path: destination, recursive: true);
+                    }
                     if (Directory.Exists(path: folder)) {
                         var target = Directory.CreateDirectory(path: Path.Combine(
                             path1: directory,

@@ -41,6 +41,11 @@ public sealed class SweepEvidenceLawTests {
         // Neither a missing extra metric nor a missing numeric rule operand can turn into a colour alone.
         Assert.True(condition: SweepStatus.Fails(status: SweepEvidence.Check(answer: new(Ok: true, Output: "some text", Refusals: []), signal: new("extra", "read", Metrics: new Dictionary<string, string> { ["count"] = "count=(\\d+)" })).Status));
         Assert.True(condition: SweepStatus.Fails(status: SweepEvidence.Check(answer: new(Ok: true, Output: "count=2", Refusals: []), signal: new("rule", "read", "pairs", Red: ["count > ceiling"])).Status));
+        Assert.Equal(SweepStatus.Unknown, SweepEvidence.Check(answer: new(true, "unparsed=2", []),
+            signal: new("extra", "read", "counters", Metrics: new Dictionary<string, string> { ["extra"] = "unparsed=(\\d+)" })).Status);
+        Assert.False(condition: SweepEvidence.Scheduled(new(true,
+            """{"ran":[{"tick":50,"command":"view.reseed 0","status":"ran","output":"[view.reseed: body 0 restarted 0 registration(s)]"}]}""", []),
+            [(50UL, "view.reseed 0")]).Ok);
     }
     [Fact]
     public void EveryShippedCommandFormNeedsEachImmediateAndScheduledAnswer() {

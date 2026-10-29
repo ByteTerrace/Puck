@@ -90,6 +90,7 @@ public sealed partial class WorldHistory {
             );
 
             var (server, _) = WorldServer.FromCheckpoint(
+                authorityIdentity: m_server.AuthorityIdentity,
                 checkpoint: checkpoint,
                 documentDirectory: documentDirectory,
                 instanceIdentity: m_server.InstanceIdentity,

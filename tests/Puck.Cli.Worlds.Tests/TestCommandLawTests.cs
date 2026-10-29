@@ -9,6 +9,41 @@ namespace Puck.Cli.Worlds.Tests;
 /// build <c>Puck.World</c> again: the test project already depends on that build.</remarks>
 public sealed class TestCommandLawTests {
     [Fact]
+    public void AScopedInputDeniedAuthorityIsRecordedInTheManifestAndRefusalReport() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-scope-refusal-");
+
+        directory.WriteText(name: "scope.puck", text: """
+            schema: "puck.world.definition.v1"
+            state { world {
+              slot counter = 0
+              table control { request = 0, status = 0, cursor = 0, completed = 0 }
+            } }
+            replays [{
+              name: "scope", rows [counter], bodies [], seats ["seat1"], control: control, durationTicks: 6
+              inputs [{ tick: 1, principal: "seat1", cells [{ row: counter, key: $value, value: 7 }] }]
+            }]
+            rule "drive" {
+              when $tick == 3
+              control.request = 1
+            }
+            test "denied scope" {
+              given { control.request = 4 }
+              when { ticks 12 }
+              expect { counter == 0 }
+            }
+            """);
+        var kept = directory.PathOf(name: "kept");
+
+        var (exit, output) = RunTest(directory.PathOf(name: "scope.puck"), "--keep", kept);
+
+        Assert.True(condition: (exit == 0), userMessage: output);
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "refusal:");
+        var manifest = Directory.GetFiles(path: kept, searchOption: SearchOption.AllDirectories, searchPattern: "test-run.json").Single();
+        using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(path: manifest));
+
+        Assert.Contains(collection: json.RootElement.GetProperty(propertyName: "echoes").EnumerateArray(), filter: echo => echo.GetProperty(propertyName: "rejected").GetBoolean());
+    }
+    [Fact]
     public void ReusedWorkersIsolateDocumentsWithTheSameIdentityInOppositeOrders() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
 
@@ -37,12 +72,14 @@ public sealed class TestCommandLawTests {
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/test-run.json")), actual: fresh.ManifestBytes);
     }
 
-    private static string Artifact() => Path.Combine(
+    private static string Artifact() => (File.Exists(path: Path.GetFullPath(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "../../Puck.World/release/Puck.World.dll")))
+        ? Path.GetFullPath(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "../../Puck.World/release/Puck.World.dll"))
+        : Path.Combine(
         path1: RepositoryPaths.RequireRoot(),
         path2: "src",
         path3: "Puck.World",
         path4: "bin/Release/net11.0/Puck.World.dll"
-    );
+    ));
     private static (int ExitCode, string Output) RunTest(params string[] arguments) =>
         ConsoleCapture.Run(run: () => SuiteRoot.Invoke(args: [
             "test",

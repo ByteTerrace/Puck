@@ -8,11 +8,14 @@ namespace Puck.Cli.Sweep;
 /// <param name="Tools">The tools, run in order before the signals on the headless leg.</param>
 /// <param name="Signals">The signals, read in order on every leg they name.</param>
 /// <param name="Tour">The capture tour, run on the windowed leg.</param>
-public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<SweepSignal> Signals, SweepTour Tour) {
+/// <param name="Note">The plan's explanatory note.</param>
+public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<SweepSignal> Signals, SweepTour Tour, string? Note = null) {
     private static readonly JsonSerializerOptions Options = new() {
         AllowTrailingCommas = true,
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
+        RespectNullableAnnotations = true,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
     /// <summary>Parses a plan file's text.</summary>
@@ -37,15 +40,33 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
                 Tools = (parsed.Tools ?? []),
                 Tour = (parsed.Tour ?? SweepTour.Empty),
             };
+            plan = plan with { Tour = plan.Tour with { Stops = (plan.Tour.Stops ?? []) } };
         } catch (JsonException exception) {
             error = exception.Message;
 
             return false;
         }
 
+        if ((plan.Tools.Count == 0) && (plan.Signals.Count == 0) && (plan.Tour.Stops.Count == 0)) {
+            error = "the plan measures nothing: name a tool, signal or tour stop";
+            return false;
+        }
+
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
+        foreach (var tool in plan.Tools) {
+            if (string.IsNullOrWhiteSpace(value: tool.Name) || (tool.Lines is null) || ((tool.Lines.Count == 0) && (tool.Until is null)) || (tool.EveryTicks <= 0) || (tool.MaxTicks < 0) ||
+                ((tool.Until is { } until) && (string.IsNullOrWhiteSpace(value: until.Line) || string.IsNullOrWhiteSpace(value: until.Metric) || (until.In is not { Count: > 0 })))) {
+                error = "every tool needs a name, lines, a positive poll interval and a bounded, nonempty poll when present";
+                return false;
+            }
+        }
+
         foreach (var signal in plan.Signals) {
+            if (signal.TimeoutSeconds is <= 0 or > 120) {
+                error = $"signal '{signal.Name}' needs a timeout in 1..120 seconds, the attachment's call limit; split longer waits";
+                return false;
+            }
             if (string.IsNullOrWhiteSpace(value: signal.Name) || string.IsNullOrWhiteSpace(value: signal.Line)) {
                 error = "every signal names itself and the line it reads";
 
@@ -180,7 +201,8 @@ public sealed record SweepSignal(
 /// <param name="Columns">The stills in one row of a contact sheet.</param>
 /// <param name="CellWidth">The width a still is scaled to on a contact sheet.</param>
 /// <param name="Stops">The stops, in order.</param>
-public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<string>? Reset, IReadOnlyList<string>? Frame, int Settle, int LevelTolerance, double AmberFraction, int Columns, int CellWidth, IReadOnlyList<SweepStop> Stops) {
+/// <param name="Note">The tour's explanatory note.</param>
+public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<string>? Reset, IReadOnlyList<string>? Frame, int Settle, int LevelTolerance, double AmberFraction, int Columns, int CellWidth, IReadOnlyList<SweepStop> Stops, string? Note = null) {
     /// <summary>A tour with no stops.</summary>
     public static SweepTour Empty { get; } = new(AmberFraction: 0.02, CellWidth: 480, Columns: 4, Frame: [], LevelTolerance: 16, Prelude: [], Reset: [], Settle: 45, Stops: []);
 }
