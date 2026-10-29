@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 using Puck.Cli.Motion;
 
@@ -249,6 +250,10 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                     status = SweepStatus.Red;
                 } else {
                     motion = $"{pose.Output.Trim()}\n{rig.Output.Trim()}";
+                    if ((stop.ExpectedMotion is { } pattern) && !Regex.IsMatch(input: motion, pattern: pattern, options: RegexOptions.CultureInvariant, matchTimeout: TimeSpan.FromSeconds(value: 2))) {
+                        reasons.Add(item: $"motion did not match '{pattern}': {pose.Output.Trim()}");
+                        status = SweepStatus.Red;
+                    }
                 }
             }
 

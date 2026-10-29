@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace Puck.Cli.Sweep;
 
@@ -101,6 +102,14 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
         names.Clear();
 
         foreach (var stop in plan.Tour.Stops) {
+            if (stop.ExpectedMotion is { } pattern) {
+                try {
+                    _ = new Regex(pattern: pattern, options: RegexOptions.CultureInvariant, matchTimeout: TimeSpan.FromSeconds(value: 2));
+                } catch (ArgumentException exception) {
+                    error = $"the tour stop '{stop.Name}' has an invalid expectedMotion: {exception.Message}";
+                    return false;
+                }
+            }
             if (string.IsNullOrWhiteSpace(value: stop.Name) || (stop.Name.IndexOfAny(anyOf: Path.GetInvalidFileNameChars()) >= 0)) {
                 error = $"the tour stop '{stop.Name}' needs a name that is a file name";
 
@@ -217,7 +226,8 @@ public sealed record SweepTour(IReadOnlyList<string>? Prelude, IReadOnlyList<str
 /// <param name="Steps">Lines pinned to ticks after the start tick: the motion a still shows. The start tick is a fixed
 /// lead after the tick at which the stop's own lines and the bakes have settled, so the same stop captures the same
 /// motion tick whatever the bakes cost.</param>
-public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null);
+/// <param name="ExpectedMotion">An optional regular expression the held pose and rig must match.</param>
+public sealed record SweepStop(string Name, string? Group, string? Note, IReadOnlyList<string> Lines, int? Settle = null, IReadOnlyList<string>? After = null, IReadOnlyList<SweepStep>? Steps = null, string? ExpectedMotion = null);
 /// <summary>One console line pinned to a tick of a stop.</summary>
 /// <param name="At">The ticks after the stop's start tick.</param>
 /// <param name="Run">The console line; never a <c>world.wait</c>.</param>

@@ -151,8 +151,8 @@
       { "name": "jump", "group": "motion", "note": "The jump press lands 30 ticks after the start tick and the still is taken 9 ticks later, on the tick it names whatever the bakes cost.", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press jump 1 0.6" }], "settle": 39 },
       { "name": "flight", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press flight 1 0.2" }, { "at": 40, "run": "body.fly 0 0 1 0 0 0 1.5" }], "settle": 90, "after": ["body.press flight 1 0.2", "world.wait 120"] },
       { "name": "noclip", "group": "motion", "lines": ["debug.go stage"], "steps": [{ "at": 30, "run": "body.press noclip 1 0.2 0" }, { "at": 40, "run": "body.press rise 1 1 0" }], "settle": 65, "after": ["body.press noclip 1 0.2 0", "world.wait 60"] },
-      { "name": "garden", "group": "outdoor", "note": "Through the garden painting; the next debug.go returns the seat to the debug world before posing it.", "lines": ["debug.go portal-garden", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] },
-      { "name": "night-field", "group": "outdoor", "note": "Return from the garden and cross the night painting into its field.", "lines": ["debug.go portal-night", "body.fly -1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"] }
+      { "name": "garden", "group": "outdoor", "note": "Through the garden painting; settle the return pose and frame before driving, then prove the destination in the captured motion.", "lines": ["debug.go portal-garden", "world.wait 2", "view.recenter 1", "body.fly 1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"], "expectedMotion": "instance:[^\\s]*~garden\\b" },
+      { "name": "night-field", "group": "outdoor", "note": "Return from the garden and cross the night painting into its field, proving that the seat arrived.", "lines": ["debug.go portal-night", "world.wait 2", "view.recenter 1", "body.fly 1 0 0 0 0 0 4", "world.wait 150", "body.stop 0"], "expectedMotion": "instance:[^\\s]*~night\\b" }
     ]
   }
 }
