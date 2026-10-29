@@ -44,6 +44,9 @@ public sealed class ShaderBuildLifetimeLawTests : ShaderBuildTargetsLaws {
         Assert.Equal(expected: 0, actual: ((ShaderCoreEngine)firstEngine).Held);
         Assert.Equal(expected: 0, actual: ((ShaderCoreEngine)secondEngine).Held);
     }
+}
+/// <summary>The shader build task stops admission and joins its compiler children on cancellation.</summary>
+public sealed class ShaderBuildCancellationLawTests : ShaderBuildTargetsLaws {
     [Fact]
     public async Task CancellationStopsAdmissionAndJoinsTheActualCompilerChildren() {
         using var fixture = new ShaderBuildFixture();
@@ -78,6 +81,10 @@ public sealed class ShaderBuildLifetimeLawTests : ShaderBuildTargetsLaws {
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.Root, searchPattern: "*.tmp", searchOption: SearchOption.AllDirectories));
         Assert.Empty(collection: Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets"), searchPattern: "*.hash", searchOption: SearchOption.AllDirectories));
     }
+}
+/// <summary>The shader build task ends the generator on an initial core refusal, never makes an uncancellable second
+/// request of the build engine, and fails with an error when its generator exits nonzero without reporting one.</summary>
+public sealed class ShaderBuildCoreRefusalLawTests : ShaderBuildTargetsLaws {
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
