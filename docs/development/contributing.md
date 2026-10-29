@@ -903,7 +903,7 @@ unverified when no device run exists.
   in-progress merge read as NUL bytes. Recovery: find them
   (`head -c 64 <file> | tr -d '\0' | wc -c` reads 0), restore the branch ref
   from the last line of its reflog (`logs/refs/heads/...`, NULs stripped),
-  rebuild `.git/config` (core settings, `origin`, branch tracking), move the
+  rebuild `.git/config` (core settings including `longpaths = true`, `origin`, branch tracking), move the
   zeroed index aside and `git reset`, restore zeroed tracked files with
   `git checkout -- <paths>`, move aside a half-created worktree's metadata, and
   confirm with `git fsck --no-dangling`.
