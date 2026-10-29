@@ -337,7 +337,10 @@ classification and execution.
 A brief's finish line follows [the integration lane](#coding-lanes-and-the-integration-lane):
 a coding lane's brief names its touched projects and focused tests, never a
 whole-solution build, a full suite or a debug-world replay, which the
-integration lane (or the lead acting as it) runs one at a time. Writing the
+integration lane (or the lead acting as it) runs one at a time. A finish line
+shows a feature by running it or by a sweep signal; it asks for a `test`
+scenario only by naming the invariant running cannot show
+([puck-world](../puck-world/SKILL.md#running-it)), never one per demonstration. Writing the
 landing bar into every coding brief turns each lane into an integration lane:
 heavy jobs then run side by side and Claude Code reaps every background command
 when memory runs critically low. Reaped worktrees survive and Codex lanes resume

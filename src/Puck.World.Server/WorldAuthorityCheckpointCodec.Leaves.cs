@@ -2,23 +2,32 @@ using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.World.Protocol;
+using System.Runtime.InteropServices;
 
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteULongArray(WireWriter writer, IReadOnlyList<ulong> values) => writer.WriteArray(
-        items: values,
-        writeItem: static (w, v) => w.WriteUInt64(value: v)
-    );
+    private static void WriteULongArray(WireWriter writer, IReadOnlyList<ulong> values) {
+        if (values is ulong[] array) {
+            writer.WriteArrayCount(count: array.Length);
+            writer.WriteInt64s(values: MemoryMarshal.Cast<ulong, long>(span: array.AsSpan()));
+        } else {
+            writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteUInt64(value: v));
+        }
+    }
     private static ulong[] ReadULongArray(ref WireReader reader, string field) => reader.ReadArray(
         field: field,
         readItem: static (ref WireReader r) => r.ReadUInt64(),
         maximum: MaxCollectionCount
     );
-    private static void WriteLongArray(WireWriter writer, IReadOnlyList<long> values) => writer.WriteArray(
-        items: values,
-        writeItem: static (w, v) => w.WriteInt64(value: v)
-    );
+    private static void WriteLongArray(WireWriter writer, IReadOnlyList<long> values) {
+        if (values is long[] array) {
+            writer.WriteArrayCount(count: array.Length);
+            writer.WriteInt64s(values: array);
+        } else {
+            writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteInt64(value: v));
+        }
+    }
     private static long[] ReadLongArray(ref WireReader reader, string field) => reader.ReadArray(
         field: field,
         readItem: static (ref WireReader r) => r.ReadInt64(),
@@ -54,10 +63,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         ),
         maximum: MaxCollectionCount
     );
-    private static void WriteFixedArray(WireWriter writer, IReadOnlyList<FixedQ4816> values) => writer.WriteArray(
-        items: values,
-        writeItem: static (w, v) => w.WriteFixed(value: v)
-    );
+    private static void WriteFixedArray(WireWriter writer, IReadOnlyList<FixedQ4816> values) {
+        if (values is FixedQ4816[] array) {
+            writer.WriteArrayCount(count: array.Length);
+            writer.WriteInt64s(values: MemoryMarshal.Cast<FixedQ4816, long>(span: array.AsSpan()));
+        } else {
+            writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteFixed(value: v));
+        }
+    }
     private static FixedQ4816[] ReadFixedArray(ref WireReader reader, string field) => reader.ReadArray(
         field: field,
         readItem: static (ref WireReader r) => r.ReadFixed(),
@@ -73,10 +86,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             throw new InvalidOperationException(message: $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value");
         }
     }
-    private static Grantee ReadCheckpointGrantee(ref WireReader reader) => reader.ReadBoolean() ? Principal.World : WorldWireCodec.ReadGrantee(ref reader);
+    private static Grantee ReadCheckpointGrantee(ref WireReader reader) => (reader.ReadBoolean() ? Principal.World : WorldWireCodec.ReadGrantee(reader: ref reader));
     private static void WriteGrantee(WireWriter writer, Grantee grantee) {
-        var program = grantee.Kind == GranteeKind.Principal && grantee.Principal == Principal.World;
-        writer.WriteBoolean(program);
+        var program = ((grantee.Kind == GranteeKind.Principal) && (grantee.Principal == Principal.World));
+
+        writer.WriteBoolean(value: program);
         if (program) { return; }
         if (!WorldWireCodec.TryWriteGrantee(
             grantee: grantee,

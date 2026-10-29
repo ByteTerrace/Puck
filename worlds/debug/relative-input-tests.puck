@@ -2,6 +2,7 @@
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "relative-input-tests"
+import "stopped-machines"
 
 inputModes {
   global ["interact", "sampleDelta"]

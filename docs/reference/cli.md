@@ -1862,6 +1862,7 @@ puck test <path> --keep <dir>          run in <dir> and keep it: every generated
 puck test <path> --jobs <n>            run at most n worker processes concurrently (default: 2,
                                      or 1 on a machine with fewer than four logical CPUs)
 puck test <path> --reproduce           restore each authority's checkpoint and replay its recorded input
+puck test <path> --cache-dir <dir>     share this device-cache root across workers and runs
 puck test -h / --help                  this text
 ```
 
@@ -1875,6 +1876,10 @@ scenario. Each report names the source and artifact directory. The worker uses
 an isolated state root and restores the boot checkpoint between scenarios.
 `--reproduce` writes `reproduction.json` beside the transcript, one verdict per
 authority; it creates no second run directory. `process-id` identifies the worker.
+Ordinary scheduled boots attach no reproduction probe and write no reproduction
+claim. Workers share the ordinary per-user device caches unless `--cache-dir`
+overrides their root. Cache entries publish atomically; concurrent misses may
+derive the same entry, and eviction simply makes the next reader derive it again.
 
 A source compiles through the compile cache the game shares (`compilations` in
 the [per-user Puck directory](../development/contributing.md#per-user-directory)), as does every basis and import its test

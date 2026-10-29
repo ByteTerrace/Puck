@@ -385,9 +385,8 @@ pad fold and machine advance. A checkpoint includes the machine's rational
 clock phase. Both trace legs therefore sample the same frame boundaries.
 
 Run `puck test worlds/debug/machine-debugger-tests.puck --reproduce --jobs 1`
-for diagnostic cartridges, withheld input, segmented input, seeded fuzzing,
-unknown verdicts and cancellation.
-The ordinary `addons-tests.puck` also asserts an idle debugger at boot.
+for the six checks on the diagnostic cartridges and the withheld-input control
+that fails `responsive`.
 For replay, arm `replay.record <name>` over MCP (restarting guest-private state)
 or on stdin before the first World step, then drive the rows or run the
 generated scenario; after `replay.stop`,

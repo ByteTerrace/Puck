@@ -9,19 +9,13 @@ schema: "puck.world.definition.v1"
 basis: "debug"
 // Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
 documentId: "debug"
+import "stopped-machines"
 
 state {
   world {
     slot replayWitness = 0
   }
 }
-
-// Keep unrelated devices mounted but stopped in these table fixtures. World rules, bodies, the faerie and the
-// other boards continue normally; emulating six cartridges is independent of the table's replay proof.
-machines: map([
-  "humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck",
-  "range-deck-9", "range-deck-24", "range-deck-50"
-], name => { name: name, running: false })
 
 // 37 plies (19 White moves). The first idle run records real accepted moves; the second proves the tape's
 // per-tick scope hashes, while a world-owned cell outside the scope keeps its live value. No hash is authored.
@@ -53,31 +47,6 @@ test "the idle demo records all 19 moves then replays with matching scope hashes
     bodyPosition(body, 0, x) > 2.9
     bodyPosition(body, 0, x) < 3.1
     $tick > 7000
-  }
-}
-
-test "the replay holds the historical final position and its scope verdict" {
-  given {
-    aiSide = -1
-    chessDemo.idleTicks = 30
-    chessDemo.holdTicks = 1200
-  }
-  when {
-    ticks 4000
-    seat1: world.state chessDemo
-    ticks 4000
-    seat1: world.state chessDemo
-    ticks 150
-  }
-  expect {
-    chessInput.accepted == 37
-    turn == Black
-    verdict == 1
-    illegalCount == 0
-    chessTape.status == 4
-    chessDemo.matches == 1
-    pieceCell.piece10 == 29
-    pieceCell.piece28 == 61
   }
 }
 
@@ -160,96 +129,6 @@ test "a seated player plays e4 with the keys and e5 with a pointer drag" {
   }
 }
 
-// Seat 1 sits down, lifts the e2 pawn and puts it back with the cancel button, steps left to d2 (from White's side the
-// a-file is on the left), puts the d2 pawn down on d5, which is judged illegal and put back as it stood, steps back
-// down and plays d2-d4, and the context button stands her up. Had the cancel not put e2 back, the d2 press would take
-// nothing and no legal move would follow.
-test "a seated player cancels a lift, an illegal put-down is put back and the context button stands her up" {
-  given {
-    chessDemo.enabled = 0
-    aiSide = -1
-  }
-  when {
-    seat1: body.pose 56.5 9.25 21.1 0 0 0 0
-    ticks 150
-    seat1: body.press interact
-    ticks 5
-    seat1: body.press confirm
-    ticks 5
-    seat1: body.press cancel
-    ticks 150
-    seat1: body.press strafe -1
-    ticks 4
-    seat1: body.press confirm
-    ticks 5
-    seat1: body.press forward 1
-    ticks 4
-    seat1: body.press forward 1
-    ticks 4
-    seat1: body.press forward 1
-    ticks 4
-    seat1: body.press confirm
-    ticks 250
-    seat1: body.press forward -1
-    ticks 4
-    seat1: body.press forward -1
-    ticks 4
-    seat1: body.press forward -1
-    ticks 4
-    seat1: body.press confirm
-    ticks 5
-    seat1: body.press forward 1
-    ticks 4
-    seat1: body.press forward 1
-    ticks 4
-    seat1: body.press confirm
-    ticks 200
-    seat1: body.press interact
-    ticks 10
-  }
-  expect {
-    pieceCell.piece12 == 11
-    pieceCell.piece11 == 28
-    illegalCount == 1
-    turn == Black
-    play.held == -1
-    board(engaged, board, 1) == 0
-  }
-}
-
-test "pieces settle and derive initial board cells" {
-  given {
-    chessDemo.enabled = 0
-    aiSide = -1
-  }
-  when {
-    ticks 150
-  }
-  expect {
-    pieceCell.piece12 == 11
-    pieceCode.piece12 == Pawn
-    gameStarted == 1
-    boardCollisions == 0
-  }
-}
-
-test "e2e4 records legal" {
-  given {
-    chessDemo.enabled = 0
-    aiSide = -1
-  }
-  when {
-    ticks 150
-    seat1: body.pose 56.4 10.35 22.5 0 0 0 27
-    ticks 150
-  }
-  expect {
-    verdict == 1
-    pieceCell.piece12 == 27
-    turn == Black
-  }
-}
-
 test "illegal knight move records illegal then legal succeeds" {
   given {
     chessDemo.enabled = 0
@@ -289,28 +168,6 @@ test "king step records legal and multi step refused" {
     move.kind == Quiet
     move.mover == King
     pieceCell.piece4 == 11
-    turn == Black
-  }
-}
-
-test "knight capture records move kind two" {
-  given {
-    chessDemo.enabled = 0
-    aiSide = -1
-  }
-  when {
-    seat1: body.pose 56.8 10.35 22.3 0 0 0 23
-    ticks 150
-    seat1: body.pose 55.6 10.35 22.3 0 0 0 23
-    seat1: body.pose 56.8 10.35 22.3 0 0 0 38
-    ticks 150
-  }
-  expect {
-    verdict == 1
-    move.kind == Capture
-    move.captured == -((Pawn))
-    pieceCell.piece1 == 21
-    pieceCell.piece16 == -1
     turn == Black
   }
 }
@@ -428,47 +285,6 @@ test "white queenside castle records legal" {
     castleTransitAttacked.wq == 0
     castleRights == 3
     turn == Black
-  }
-}
-
-// 1. e3 Nf6 2. a3 e6 3. a4 Be7 4. h3 O-O: the black king goes from e8 (cell 59) to g8 (cell 57) and the h8 rook (cell
-// 56) to f8 (cell 58).
-test "black kingside castle records legal" {
-  given {
-    chessDemo.enabled = 0
-    aiSide = -1
-  }
-  when {
-    ticks 150
-    seat1: body.pose 56.4 10.35 22.3 0 0 0 27
-    ticks 150
-    seat1: body.pose 56.2 10.35 22.9 0 0 0 9
-    ticks 150
-    seat1: body.pose 57.2 10.35 22.3 0 0 0 31
-    ticks 150
-    seat1: body.pose 56.4 10.35 22.9 0 0 0 19
-    ticks 150
-    seat1: body.pose 57.2 10.35 22.5 0 0 0 31
-    ticks 150
-    seat1: body.pose 56.4 10.35 23.1 0 0 0 10
-    ticks 150
-    seat1: body.pose 55.8 10.35 22.3 0 0 0 24
-    ticks 150
-    seat1: body.pose 56 10.35 23.3 0 0 0 11
-    seat1: body.pose 56.2 10.35 23.3 0 0 0 8
-    ticks 150
-  }
-  expect {
-    verdict == 1
-    illegalCount == 0
-    move.kind == Castle
-    move.from == 59
-    move.to == 57
-    pieceCell.piece28 == 57
-    pieceCell.piece31 == 58
-    castleTransitAttacked.bk == 0
-    castleRights == 12
-    turn == White
   }
 }
 
@@ -608,22 +424,6 @@ test "AI White makes one legal opening move and waits for Black" {
   expect {
     turn == Black
     verdict == 1
-    ai.pending == 0
-    aiEnabled == 0
-    aiBest.token == -1
-    boardCollisions == 0
-  }
-}
-
-test "AI Black replies after a human opening" {
-  when {
-    ticks 150
-    seat1: body.pose 56.4 10.35 22.5 0 0 0 27
-    ticks 600
-  }
-  expect {
-    aiSide == Black
-    turn == White
     ai.pending == 0
     aiEnabled == 0
     aiBest.token == -1

@@ -171,9 +171,11 @@ through how it plays.
 ## Tests
 
 [`chess-tests.puck`](chess-tests.puck) holds the table's scenarios, each booted
-in the whole debug world: a seated player playing a move with the keys and one
-with a pointer drag, a seated player cancelling a lift, having an illegal
-put-down put back and standing up, legal and illegal moves, captures, castling through
-and clear of attack, en passant, a move left in check, threefold repetition and
-the opponent on either side. Run them with
-`puck test worlds/debug/chess-tests.puck`.
+in the whole debug world with its machines stopped: the idle demo's scope
+replay matching, cancelled by an engagement and refusing a changed scope, a
+seated player playing a move with the keys and one with a pointer drag, the
+move rules a position must be built to reach (an illegal knight move, a king's
+multi-step, a pawn capture, a queen's slide, castling on either wing, through
+and clear of attack, en passant, a move left in check and threefold
+repetition), one opponent move and a stale opponent answer. Run them with
+`puck test worlds/debug/chess-tests.puck --reproduce --jobs 1`.

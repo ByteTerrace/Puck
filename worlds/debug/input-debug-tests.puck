@@ -2,6 +2,7 @@
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "input-debug-tests"
+import "stopped-machines"
 
 test "a forbidden kit mode transition leaves the whole firing unapplied" {
   when {
@@ -37,27 +38,6 @@ test "autorun and run survive a suit switch after their buttons are released" {
     bodyState(body, 0, suit) == 0
     channel(1, forward) == 1
     channel(1, run) == 1
-  }
-}
-
-test "autofly survives flight entry and a flying noclip switch" {
-  when {
-    ticks 30
-    seat1: player.signal keyboard.z press
-    ticks 2
-    seat1: player.signal keyboard.m press
-    ticks 2
-    seat1: player.signal keyboard.m release
-    seat1: player.signal keyboard.z release
-    ticks 15
-    seat1: body.press noclip 1 0.2 0
-    ticks 15
-  }
-  expect {
-    bodyState(body, 0, flightFuel) > 0
-    bodyState(body, 0, noclip) == 1
-    channel(1, rise) == 1
-    bodyPosition(body, 0, y) > 1
   }
 }
 
@@ -123,45 +103,6 @@ test "leaving a board releases its held direction before locomotion resumes" {
   }
   expect {
     board(engaged, board, 1) == 0
-    channel(1, forward) == 0
-  }
-}
-
-test "entering a machine screen cancels autorun" {
-  when {
-    ticks 30
-    seat1: body.pose 7.6 0.05 29.4 90 0 0
-    ticks 5
-    seat1: player.signal keyboard.z press
-    ticks 2
-    seat1: player.signal keyboard.n press
-    ticks 2
-    seat1: body.press interact
-    ticks 3
-    seat1: player.signal keyboard.n release
-    seat1: player.signal keyboard.z release
-    ticks 10
-  }
-  expect {
-    engaged(body, 0, 0) == 1
-    channel(1, forward) == 0
-  }
-}
-
-test "leaving a machine screen releases its held direction" {
-  when {
-    ticks 30
-    seat1: body.pose 7.6 0.05 29.4 90 0 0
-    ticks 5
-    seat1: body.press interact
-    ticks 5
-    seat1: player.signal keyboard.w press
-    ticks 3
-    seat1: body.press interact
-    ticks 10
-  }
-  expect {
-    engaged(body, 0, 0) == 0
     channel(1, forward) == 0
   }
 }

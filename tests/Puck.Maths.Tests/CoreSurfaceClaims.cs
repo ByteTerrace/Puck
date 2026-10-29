@@ -654,6 +654,40 @@ internal static class CoreSurfaceClaims {
         // same multiset in different orders must differ, so a Compute that summed rather than folded is visible.
         Assert.NotEqual(expected: Fnv1aHash.Compute(values: "ab"u8), actual: Fnv1aHash.Compute(values: "ba"u8));
 
+        // The packed zero-lane reduction and chunked span walk must keep the scalar recurrence, including
+        // arbitrary incoming hashes, partial lanes, every split boundary, and a nonzero byte in any lane.
+        var buffer = new byte[129];
+
+        for (var length = 0; (length <= buffer.Length); length++) {
+            for (var position = -1; (position < length); position++) {
+                Array.Clear(array: buffer);
+                if (position >= 0) { buffer[position] = ((byte)(1 + (position % 255))); }
+                var expected = Fnv1aHash.Create();
+
+                expected.Add(values: "prefix"u8);
+                foreach (var value in buffer.AsSpan(length: length, start: 0)) { expected.Add(value: value); }
+                var actual = Fnv1aHash.Create();
+
+                actual.Add(values: "prefix"u8);
+                actual.Add(values: buffer.AsSpan(length: length, start: 0));
+                Assert.Equal(expected: expected.Value, actual: actual.Value);
+                var split = ((position + 1) % (length + 1));
+                var partitioned = Fnv1aHash.Create();
+
+                partitioned.Add(values: "prefix"u8);
+                partitioned.Add(values: buffer.AsSpan(length: split, start: 0));
+                partitioned.Add(values: buffer.AsSpan(length: (length - split), start: split));
+                Assert.Equal(expected: expected.Value, actual: partitioned.Value);
+            }
+        }
+        var zeroLanes = Fnv1aHash.Create();
+
+        zeroLanes.Add(value: 0U); zeroLanes.Add(value: 0UL);
+        var zeroBytes = Fnv1aHash.Create();
+
+        for (var index = 0; (index < 12); index++) { zeroBytes.Add(value: ((byte)0)); }
+        Assert.Equal(expected: zeroBytes.Value, actual: zeroLanes.Value);
+
         return null;
     }
     public static string? MonotonicPartitionerSurface() {

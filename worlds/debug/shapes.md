@@ -227,8 +227,8 @@ the level displays. A level written to `liftCall`, as `gallery.lift` and the
 traversal addon do, becomes a landing call. The buttons read the Moth's body
 against a reach box before each plate, since a rule reads no facing: six cells
 of the body's x across the car's back wall, and one box on each landing.
-`hall-tests.puck` checks the calls, the ride, the queue order and the door
-buttons.
+`hall-tests.puck` checks the door buttons' collider swaps reproducing from a
+checkpoint; the calls and the queue order are shown by riding the lift.
 
 Section boards hang on two rods from the ceiling above each row's first
 exhibit, with their text facing the landing along -X. Their lower edge is

@@ -512,6 +512,9 @@ public static partial class TestCommand {
             DefaultValueFactory = static _ => null,
             Description = "Run in this directory instead of a scratch one and keep it: every generated test world, transcript, export and manifest, so a failing test is a world the ordinary tools can open.",
         };
+        var cacheOption = new Option<string?>(name: "--cache-dir") {
+            Description = "Override the device-cache root shared by all workers and runs. Absent uses the ordinary per-user Puck caches.",
+        };
         var reproduceOption = new Option<bool>(name: "--reproduce") {
             DefaultValueFactory = static _ => false,
             Description = "Restore each scenario's checkpoint and replay its recorded input, requiring identical per-tick authority hashes, machine cores and final state exports without another boot.",
@@ -535,12 +538,14 @@ public static partial class TestCommand {
             hostOption,
             jobsOption,
             keepOption,
+            cacheOption,
             pathArgument,
             reproduceOption,
             worldArtifactOption,
         };
 
         command.SetAction(action: parseResult => Run(
+            cacheDirectory: parseResult.GetValue(option: cacheOption),
             host: parseResult.GetValue(option: hostOption),
             jobs: parseResult.GetValue(option: jobsOption),
             keep: parseResult.GetValue(option: keepOption),

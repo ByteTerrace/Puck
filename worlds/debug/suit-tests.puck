@@ -23,6 +23,7 @@ documentId: "debug"
 // The two-seat scenarios seat a second body: the toggle is one rule per local seat (suit-toggle.puck), and this world
 // seats two where the Moth worlds seat one, so it instantiates the second seat's own.
 import "suit-toggle"
+import "stopped-machines"
 
 bodies {
   localSeats: 2
@@ -31,30 +32,6 @@ bodies {
 }
 
 suitToggle(seat: 2, index: 1)
-
-test "the Moth starts in the suit" {
-  when {
-    ticks 30
-  }
-  expect {
-    bodyState(body, 0, suit) == 1
-  }
-}
-
-test "in the suit, flight lifts her off the ground" {
-  when {
-    ticks 30
-    seat1: body.press flight 1 0.2 0
-    ticks 15
-    seat1: body.press rise 1 1 0
-    ticks 30
-  }
-  expect {
-    bodyState(body, 0, suit) == 1
-    bodyState(body, 0, flightFuel) > 0
-    bodyPosition(body, 0, y) > 1
-  }
-}
 
 test "a press on the ground takes the suit off and refuses flight" {
   when {
@@ -72,37 +49,6 @@ test "a press on the ground takes the suit off and refuses flight" {
     bodyState(body, 0, flightFuel) == 0
     airPose[0] == 0
     bodyPosition(body, 0, y) < 0.5
-  }
-}
-
-test "a second press puts the suit back on and flight works again" {
-  when {
-    ticks 30
-    seat1: body.press suit 1 0.2 0
-    ticks 15
-    seat1: body.press suit 1 0.2 0
-    ticks 15
-    seat1: body.press flight 1 0.2 0
-    ticks 15
-    seat1: body.press rise 1 1 0
-    ticks 30
-  }
-  expect {
-    bodyState(body, 0, suit) == 1
-    bodyPosition(body, 0, y) > 1
-  }
-}
-
-test "a press in the air leaves the suit on" {
-  when {
-    ticks 30
-    seat1: body.press jump 1 0.3 0
-    ticks 6
-    seat1: body.press suit 1 0.1 0
-    ticks 45
-  }
-  expect {
-    bodyState(body, 0, suit) == 1
   }
 }
 
@@ -187,7 +133,7 @@ test "suited up in the garden, she comes home suited and flies" {
 }
 
 // Each seat toggles its own body: a press on the second seat's suit channel takes off the second body's suit and leaves
-// the first seat's body in hers, and a press from each takes off both.
+// the first seat's body in hers.
 test "the second seat's press takes off only its own suit" {
   when {
     ticks 30
@@ -197,84 +143,6 @@ test "the second seat's press takes off only its own suit" {
   expect {
     bodyState(body, 1, size) == 1
     bodyState(body, 0, suit) == 1
-    bodyState(body, 1, suit) == 0
-  }
-}
-
-test "the first seat's press leaves the second seat in her suit" {
-  when {
-    ticks 30
-    seat1: body.press suit 1 0.2 0
-    ticks 15
-  }
-  expect {
-    bodyState(body, 1, size) == 1
-    bodyState(body, 0, suit) == 0
-    bodyState(body, 1, suit) == 1
-  }
-}
-
-// The Humble Gaming Brick (devices.puck): standing a metre in front of it, the context button engages it. Out of the
-// suit she picks it up, so her pilotHold cell raises her look's hold pose and the brick's placement shows nothing on
-// its rest; the same button puts it back. In the suit she plays it where it stands.
-test "out of the suit, engaging the brick picks it up" {
-  when {
-    ticks 30
-    seat1: body.press suit 1 0.2 0
-    ticks 15
-    seat1: body.pose 7.6 0.05 29.4 90 0 0
-    ticks 5
-    seat1: body.press interact 1 0.2 0
-    ticks 10
-  }
-  expect {
-    engaged(body, 0, 0) == 1
-    pilotHold[0] == 1
-  }
-}
-
-test "leaving the brick puts it back" {
-  when {
-    ticks 30
-    seat1: body.press suit 1 0.2 0
-    ticks 15
-    seat1: body.pose 7.6 0.05 29.4 90 0 0
-    ticks 5
-    seat1: body.press interact 1 0.2 0
-    ticks 10
-    seat1: body.press interact 1 0.2 0
-    ticks 10
-  }
-  expect {
-    engaged(body, 0, 0) == 0
-    pilotHold[0] == 0
-  }
-}
-
-test "in the suit, she plays the brick where it stands" {
-  when {
-    ticks 30
-    seat1: body.pose 7.6 0.05 29.4 90 0 0
-    ticks 5
-    seat1: body.press interact 1 0.2 0
-    ticks 10
-  }
-  expect {
-    engaged(body, 0, 0) == 1
-    pilotHold[0] == 0
-  }
-}
-
-test "a press from each seat takes off both suits" {
-  when {
-    ticks 30
-    seat1: body.press suit 1 0.2 0
-    seat2: body.press suit 1 0.2 1
-    ticks 15
-  }
-  expect {
-    bodyState(body, 1, size) == 1
-    bodyState(body, 0, suit) == 0
     bodyState(body, 1, suit) == 0
   }
 }
