@@ -7,6 +7,8 @@ public sealed partial class WorldInstanceHost {
     private readonly Dictionary<string, WorldAuthorityCheckpoint> m_scenarioBoot = [];
     private readonly Dictionary<string, (byte[] Source, WorldAuthorityCheckpoint Image)> m_scenarioImages = [];
 
+    private Dictionary<string, int> m_scenarioLifetimes = [];
+    private string[] m_scenarioAuthorities = [];
     private Action? m_restoreScenarioResolver;
 
     private sealed record ObservationImage(string Owner, WorldObservationSite Site, WorldScreenSource.Session Source,
@@ -27,6 +29,8 @@ public sealed partial class WorldInstanceHost {
             m_scenarioImages.Add(key: row.Name, value: (File.ReadAllBytes(path: row.SourcePath), checkpoint!));
         }
         m_restoreScenarioResolver = m_resolver.CaptureRestorePoint();
+        m_scenarioLifetimes = new(m_startedLifetimes, StringComparer.Ordinal);
+        m_scenarioAuthorities = m_issuedAuthorities.ToArray();
         m_scenarioObservations = m_screenSessions.SelectMany(selector: pair => pair.Value.Rows.Values.Select(selector: session =>
             new ObservationImage(session.Owner, session.Site, session.Source, session.GenerationId, session.InstanceName,
                 session.IsNewGeneration, session.Refusal, session.Observation?.Session,
@@ -51,8 +55,7 @@ public sealed partial class WorldInstanceHost {
         m_inDoubtTransfers.Clear();
         foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
         m_forwardedBodies.Clear();
-        m_appliedTransferIds.Clear();
-        m_appliedTransferHighWater.Clear();
+        m_deferredReaps.Clear();
         m_announcedCrossingHolds.Clear();
         m_seededArrivals.Clear();
         m_freshCounters.Clear();
@@ -66,6 +69,10 @@ public sealed partial class WorldInstanceHost {
         foreach (var name in Names.ToArray()) {
             if (!m_scenarioBoot.ContainsKey(key: name) && !TryStop(name: name, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
         }
+        m_startedLifetimes.Clear();
+        foreach (var (name, lifetime) in m_scenarioLifetimes) { m_startedLifetimes.Add(key: name, value: lifetime); }
+        m_issuedAuthorities.Clear();
+        m_issuedAuthorities.UnionWith(other: m_scenarioAuthorities);
         m_restoreScenarioResolver?.Invoke();
         foreach (var (name, initial) in m_scenarioBoot) {
             if (name == BootInstanceName) { continue; }

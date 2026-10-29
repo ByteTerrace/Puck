@@ -16,15 +16,15 @@ public sealed class ScenarioResetLawTests {
         var contributions = submission.Input.Contributions.ToArray();
         var events = submission.Input.Events.ToArray();
 
-        Assert.NotEmpty(contributions);
-        Assert.NotEmpty(events);
+        Assert.NotEmpty(collection: contributions);
+        Assert.NotEmpty(collection: events);
         submission = submission with { Input = submission.Input with { Contributions = contributions, Events = events } };
         using var probe = run.Tape.ObserveReplay();
 
-        run.Transport.SubmitIntent(submission);
+        run.Transport.SubmitIntent(submission: submission);
         run.StepWithoutInput();
-        Array.Clear(contributions);
-        Array.Clear(events);
+        Array.Clear(array: contributions);
+        Array.Clear(array: events);
         run.StepWithoutInput();
         probe.Dispose();
         Assert.Equal(-1, probe.Verify());
@@ -118,6 +118,7 @@ public sealed class ScenarioResetLawTests {
         File.WriteAllBytes(source, WorldDefinitionSerialization.Serialize(definition: server.Definition));
         using var host = new WorldInstanceHost(
             applicationStopping: CancellationToken.None,
+            admitsSpawn: true,
             machineHostFactory: Fixtures.MachineHostFactory,
             machineId: Guid.NewGuid(),
             resolver: new WorldSessionResolver(),
@@ -129,6 +130,13 @@ public sealed class ScenarioResetLawTests {
         host.AdmitBoot(row: instance);
         host.CaptureScenarioBoot();
         Assert.True(condition: server.TryCaptureCheckpoint(host.CaptureRow(row: instance), out var boot, out var reason), userMessage: reason);
+
+        Assert.True(condition: host.TryStart(instance: out var visitor, name: "visitor", path: source, reason: out reason), userMessage: reason);
+        var firstAuthority = visitor!.Server.AuthorityIdentity;
+
+        Assert.True(condition: host.TryStop(name: "visitor", reason: out reason), userMessage: reason);
+        Assert.True(condition: host.TryStart(instance: out visitor, name: "visitor", path: source, reason: out reason), userMessage: reason);
+        Assert.NotEqual(firstAuthority, visitor!.Server.AuthorityIdentity);
 
         Assert.True(condition: run.Tape.TryBeginRecording(name: "long", refusal: out reason), userMessage: reason);
         run.Steps(count: 20);
@@ -149,6 +157,9 @@ public sealed class ScenarioResetLawTests {
         host.RestoreScenario(checkpoint: boot!);
         Assert.Equal(WorldReplayMode.Idle, run.Tape.Mode);
         Assert.False(condition: run.Transport.InputMasked);
+        Assert.True(condition: host.TryStart(instance: out visitor, name: "visitor", path: source, reason: out reason), userMessage: reason);
+        Assert.Equal(firstAuthority, visitor!.Server.AuthorityIdentity);
+        Assert.True(condition: host.TryStop(name: "visitor", reason: out reason), userMessage: reason);
         run.StepWithoutInput();
         var afterDrive = run.Hash();
 
