@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Unicode;
 using Puck.Maths;
@@ -710,6 +711,19 @@ public sealed class WireWriter {
         destination: Reserve(count: sizeof(long)),
         value: value
     );
+    /// <summary>Writes contiguous signed 64-bit lanes in wire order, without a count prefix.</summary>
+    /// <param name="values">The lanes.</param>
+    public void WriteInt64s(ReadOnlySpan<long> values) {
+        var bytes = Reserve(count: checked((values.Length * sizeof(long))));
+
+        if (BitConverter.IsLittleEndian) {
+            MemoryMarshal.AsBytes(span: values).CopyTo(destination: bytes);
+        } else {
+            for (var index = 0; (index < values.Length); index++) {
+                BinaryPrimitives.WriteInt64LittleEndian(destination: bytes.Slice(length: sizeof(long), start: (index * sizeof(long))), value: values[index]);
+            }
+        }
+    }
     /// <summary>Writes a nullable fixed-point scalar behind its presence bit.</summary>
     /// <param name="value">The value.</param>
     public void WriteNullableFixed(FixedQ4816? value) {

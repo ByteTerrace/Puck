@@ -81,6 +81,11 @@ checks pristine/changed/pristine scenarios with one boot and replay, and
 also compares a reused worker's export and manifest with a fresh-process boot.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
+Workers share the per-user device caches. Use `puck test --cache-dir <scratch-root>`
+when a lane must keep writes isolated; reuse that root across its paired runs.
+An ordinary scheduled boot has no replay probe or `reproduction.json`; a fresh-process
+hash comparison runs `puck test --reproduce` in a separate worker so its proof actually
+compares the recorded ticks.
 
 When profiling a sweep, sample the coordinator and the simultaneous sum of its
 descendants' working sets; report private bytes separately. Do not add individual

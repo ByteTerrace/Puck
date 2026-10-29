@@ -11,6 +11,21 @@ namespace Puck.Networking.Tests;
 /// the initial capacity, and <see cref="WireWriter.WriteString"/>'s in-place encoding and its one caller-bug throw.
 /// </summary>
 public sealed class WireWriterLawTests {
+    [Fact]
+    public void ContiguousLanesKeepTheScalarWireEncodingAcrossGrowthAndReset() {
+        long[] values = [long.MinValue, -1, 0, 1, 0x123456789abcdef, long.MaxValue];
+        var scalar = new WireWriter(capacity: 16);
+        var contiguous = new WireWriter(capacity: 16);
+
+        for (var pass = 0; (pass < 2); pass++) {
+            scalar.Reset(); contiguous.Reset();
+            scalar.WriteByte(value: 7); contiguous.WriteByte(value: 7);
+            foreach (var value in values) { scalar.WriteInt64(value: value); }
+            contiguous.WriteInt64s(values: []);
+            contiguous.WriteInt64s(values: values);
+            Assert.Equal(expected: scalar.ToArray(), actual: contiguous.ToArray());
+        }
+    }
     /// <summary>A capacity below the writer's floor is raised to it rather than refused: the capacity is a sizing
     /// hint, never a bound on what may be written.</summary>
     [Fact]

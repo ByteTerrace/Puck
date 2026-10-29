@@ -767,7 +767,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     // ---- population section ----
 
-    private static void WriteTransferState(WireWriter writer, WorldBodyTransferState state) {
+    private static void WriteTransferState(WireWriter writer, in WorldBodyTransferState state) {
         writer.WriteArray(items: state.ScriptActors.Timers, writeItem: WriteScriptActor);
         writer.WriteArray(items: state.ScriptActors.Pending, writeItem: WriteScriptActor);
         writer.WriteArray(items: state.ScriptActors.Tape, writeItem: WriteScriptActor);
@@ -1129,7 +1129,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return rows;
     }
-    private static void WriteResidue(WireWriter writer, WorldBodyIntegrationResidue residue) {
+    private static void WriteResidue(WireWriter writer, in WorldBodyIntegrationResidue residue) {
         writer.WriteFixedVector(value: residue.PreviousPosition);
         writer.WriteInt64(value: residue.PositionRemainderX);
         writer.WriteInt64(value: residue.PositionRemainderY);
