@@ -763,8 +763,9 @@ public static class CreationStampEmitter {
     /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
     /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
     /// <remarks>This is the collision-field sibling of <see cref="Emit"/>: the same stamp prefix and mirror alignment,
-    /// with every domain fold expanded to its rigid copies and the render-only facets (panels, trims, warps, relief,
-    /// text, detail shapes, sweeps) left out. A mirrored shape's orientation is composed from its two reflection
+    /// with every domain fold expanded to its rigid copies and the render-only facets (panels, trims, warps, per-shape
+    /// relief, text, detail shapes, sweeps) left out. The creation's noise relief is the caller's to emit inside its
+    /// scope, through the fixed-point <c>EmitNoise</c>. A mirrored shape's orientation is composed from its two reflection
     /// planes as a fixed quaternion; it never visits <see cref="Matrix4x4"/>,
     /// <see cref="Quaternion.CreateFromRotationMatrix"/>, or a floating-point normalize.</remarks>
     public static void EmitFixed(SdfProgramBuilder builder, CreationDocument document, FixedCreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null) {
@@ -871,9 +872,24 @@ public static class CreationStampEmitter {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(noise);
 
+        EmitNoise(builder: builder, frame: StampFrame.Of(transform: transform), noise: noise);
+    }
+    /// <summary>Emits a creation's noise-relief facet under a fixed-point stamp transform: the contact sibling of
+    /// <see cref="EmitNoise(SdfProgramBuilder, CreationNoiseDocument, CreationStampTransform)"/>, whose frame constants
+    /// are derived in fixed point before the program's single-precision encoding, as <see cref="EmitFixed"/>'s are.</summary>
+    /// <param name="builder">The target program builder, inside the stamp's open field scope.</param>
+    /// <param name="noise">The creation's normalized noise facet.</param>
+    /// <param name="transform">The fixed-point stamp transform.</param>
+    public static void EmitNoise(SdfProgramBuilder builder, CreationNoiseDocument noise, FixedCreationStampTransform transform) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(noise);
+
+        EmitNoise(builder: builder, frame: StampFrame.Of(transform: transform), noise: noise);
+    }
+    private static void EmitNoise(SdfProgramBuilder builder, in StampFrame frame, CreationNoiseDocument noise) {
         _ = StampPrefix(
             builder: builder,
-            frame: StampFrame.Of(transform: transform)
+            frame: frame
         )
             .NoiseDisplace(
             amplitude: noise.Amplitude,

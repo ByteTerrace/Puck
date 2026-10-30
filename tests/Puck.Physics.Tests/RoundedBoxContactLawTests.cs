@@ -42,8 +42,10 @@ public sealed class RoundedBoxContactLawTests {
 
         Assert.True(condition: resolution.Grounded);
         Assert.InRange(((double)position.Y), 1.98, 1.997);
-        // Independent rounded-cube equation: the centre is body radius + fillet radius from the inner corner.
-        Assert.InRange(((double)(position - V(x: 1.92, y: 1.92, z: 1.92)).Length), 0.0899, 0.0901);
+        // Independent rounded-cube equation: the centre is body radius + fillet radius from the inner corner. Walkable
+        // ground lifts along up, which over a curved fillet leaves the body a second-order sliver (a few tenths of a
+        // millimetre on this 8 cm fillet) above the tangent plane it resolved against, never inside.
+        Assert.InRange(((double)(position - V(x: 1.92, y: 1.92, z: 1.92)).Length), 0.0899, 0.0905);
     }
     [InlineData(FixedBodyColliderKind.Capsule)]
     [InlineData(FixedBodyColliderKind.Box)]

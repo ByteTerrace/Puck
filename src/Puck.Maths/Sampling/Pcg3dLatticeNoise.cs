@@ -95,6 +95,59 @@ public static class Pcg3dLatticeNoise {
                 : 0))
         );
     }
+    /// <summary>Samples one octave of 3D value noise at a lattice point, Q48.16 throughout: the CPU twin of the
+    /// renderer's <c>sdfValueNoise3</c>, which a relieved creation's bake and its contact both read.</summary>
+    /// <param name="q">The point in lattice cells; the cell is its floor on each axis.</param>
+    /// <param name="seedX">The seed each corner's X lane is keyed with.</param>
+    /// <param name="seedY">The seed each corner's Y lane is keyed with.</param>
+    /// <param name="seedZ">The seed each corner's Z lane is keyed with.</param>
+    /// <returns>The quintic-smoothed trilinear blend of the eight corners' <see cref="Pcg3d"/> X lanes (each the top 16
+    /// bits as a fraction in <c>[0, 1)</c>), remapped to <c>[-1, 1)</c>.</returns>
+    public static FixedQ4816 ValueNoise3(FixedVector3 q, uint seedX, uint seedY, uint seedZ) {
+        var cx = (q.X.Value >> FixedQ4816.FractionBitCount);
+        var cy = (q.Y.Value >> FixedQ4816.FractionBitCount);
+        var cz = (q.Z.Value >> FixedQ4816.FractionBitCount);
+        var ux = Quintic(t: (q.X - FixedQ4816.FromInteger(value: cx)));
+        var uy = Quintic(t: (q.Y - FixedQ4816.FromInteger(value: cy)));
+        var uz = Quintic(t: (q.Z - FixedQ4816.FromInteger(value: cz)));
+        var x00 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, cy, cz), to: Corner((cx + 1L), cy, cz));
+        var x10 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, (cy + 1L), cz), to: Corner((cx + 1L), (cy + 1L), cz));
+        var x01 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, cy, (cz + 1L)), to: Corner((cx + 1L), cy, (cz + 1L)));
+        var x11 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, (cy + 1L), (cz + 1L)), to: Corner((cx + 1L), (cy + 1L), (cz + 1L)));
+        var y0 = FixedQ4816.Lerp(amount: uy, from: x00, to: x10);
+        var y1 = FixedQ4816.Lerp(amount: uy, from: x01, to: x11);
+
+        return ((FixedQ4816.Lerp(amount: uz, from: y0, to: y1) * FixedQ4816.FromInteger(value: 2)) - FixedQ4816.One);
+
+        FixedQ4816 Corner(long x, long y, long z) => FixedQ4816.FromRawBits(value: ((long)(Pcg3d(
+            x: (unchecked((uint)x) ^ seedX),
+            y: (unchecked((uint)y) ^ seedY),
+            z: (unchecked((uint)z) ^ seedZ)
+        ).X >> 16)));
+    }
+    /// <summary>Sums octaves of <see cref="ValueNoise3"/> as the renderer's <c>NoiseDisplace</c> does: octave
+    /// <c>k</c> samples at <c>q·lacunarityᵏ</c> with seed <c>seed + k</c> (its Y and Z lanes keyed by that seed times
+    /// <see cref="HashStreamA"/> and <see cref="HashStreamB"/>) and weighs <c>gainᵏ</c>.</summary>
+    /// <param name="q">The first octave's point in lattice cells.</param>
+    /// <param name="seed">The first octave's seed.</param>
+    /// <param name="octaves">The octave count; none sums to zero.</param>
+    /// <param name="gain">Each octave's weight over the one before.</param>
+    /// <param name="lacunarity">Each octave's frequency over the one before.</param>
+    /// <returns>The weighted sum, each term in <c>[-1, 1)</c> times its weight; the caller normalizes and scales it.</returns>
+    public static FixedQ4816 Fbm3(FixedVector3 q, uint seed, int octaves, FixedQ4816 gain, FixedQ4816 lacunarity) {
+        var weight = FixedQ4816.One;
+        var sum = FixedQ4816.Zero;
+
+        for (var octave = 0u; (octave < octaves); octave++) {
+            var octaveSeed = unchecked(seed + octave);
+
+            sum += (weight * ValueNoise3(q: q, seedX: octaveSeed, seedY: unchecked(octaveSeed * HashStreamA), seedZ: unchecked(octaveSeed * HashStreamB)));
+            q *= lacunarity;
+            weight *= gain;
+        }
+
+        return sum;
+    }
     /// <summary>Samples one octave of 2D value noise over a cell index (XZ), Q48.16 throughout.</summary>
     /// <param name="cellX">The cell index along X.</param>
     /// <param name="cellZ">The cell index along Z.</param>

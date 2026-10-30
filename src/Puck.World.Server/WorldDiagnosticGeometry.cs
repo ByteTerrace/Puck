@@ -103,6 +103,12 @@ public static class WorldDiagnosticGeometry {
     /// <param name="point">World-space point.</param>
     /// <returns>Signed separation in metres.</returns>
     public static double SignedDistance(FixedStaticCollider collider, Vector3 point) {
+        if (collider.Kind == FixedStaticColliderKind.Field) {
+            // A field answers only near its surface; elsewhere its sign still separates inside from outside.
+            return (FixedFieldColliderContact.TryMeasure(collider: in collider, distance: out var measured, normal: out _, point: FixedVector3.FromVector3(value: point))
+                ? (double)measured
+                : double.PositiveInfinity);
+        }
         var relative = (FixedVector3.FromVector3(value: point) - collider.Center);
         var p = ((collider.Kind is FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid)
             ? collider.Rotation.RotateInverse(vector: relative) : relative).ToVector3();
@@ -147,6 +153,15 @@ public static class WorldDiagnosticGeometry {
 
         if (collider.Kind == FixedStaticColliderKind.HalfSpace) {
             yield return center;
+            yield break;
+        }
+        if (collider.Kind == FixedStaticColliderKind.Field) {
+            // The relieved surface's witnesses: each relieved primitive's own, projected onto the field.
+            foreach (var primitive in (collider.Field?.Bases ?? [])) {
+                foreach (var witness in SurfaceSamples(collider: primitive)) {
+                    yield return FixedFieldColliderContact.Nearest(collider: in collider, probe: FixedVector3.FromVector3(value: witness)).Point.ToVector3();
+                }
+            }
             yield break;
         }
         for (var x = -1; (x <= 1); x++) {

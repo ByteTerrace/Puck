@@ -108,6 +108,24 @@ public static class FixedContactPushMath {
             left: velocity,
             right: normal
         );
+
+        // Walkable ground holds a body where it stands: it pushes along up, never along its own tilted normal. A normal
+        // push and a normal clamp each leave a downslope remainder of the tick's fall (the push's sideways component,
+        // and the fall's velocity less its normal part), which a body at rest on any slope would creep by every tick.
+        // Lifting along up resolves the same penetration (penetration / (normal·up)) and the same approach (the
+        // velocity's normal component, removed through its up component), so planar motion stays as the body drives
+        // it. On level ground the normal is up and both forms are one.
+        if (grounded) {
+            return new Trial(
+                Grounded: true,
+                Normal: normal,
+                PositionDelta: (up * (penetration / alignment)),
+                VelocityDelta: ((into < FixedQ4816.Zero)
+                    ? (up * (-into / alignment))
+                    : FixedVector3.Zero)
+            );
+        }
+
         var velocityDelta = ((into < FixedQ4816.Zero)
             ? -(normal * into)
             : FixedVector3.Zero

@@ -1428,17 +1428,21 @@ measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built)
   - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal` clamps its factor to at least 2, so a small creation declaring 1.5625 m spacing still subdivides its existing ~15 mm lattice (`src/Puck.World.Client/WorldPlacementStamper.cs:770`).
   - [medium] `physics.contact` adds three or four shared `CompareExchange` updates to every surviving convex query whether or not a counters reader exists (`src/Puck.Physics/FixedStaticContactWork.cs:51`): count per thread or per tick and publish on read.
 
-- Contact rides the unrelieved masses: creation noise is render-only, so a body
-  on a wall floats over or sinks into the drawn relief by up to its amplitude
-  (4 m on the sectors). The fixed-point render reading already evaluates
-  `NoiseDisplace` deterministically; analytic contact needs a collider whose
-  surface is the relieved field, with a step bound for the sweep. This is the
-  windowed colliders report's last red: 12 findings over 22 witnesses, the
-  sectors' superellipsoid colliders 2.7 to 5.6 m from the drawn relief against
-  2.4 to 2.7 m bake budgets, which fail every sweep's `colliders` signal.
-- A standing body creeps downslope on a curved superellipsoid: 2 cm a second on
-  a 22 degree slope and 7 cm a second on a 58 degree one (`body.where` over 30
-  ticks at rest, north sector).
+- Contact on the drawn relief has landed (a field collider per relieved copy,
+  [terrain pass](terrain-pass.md#contact-on-the-drawn-relief)). Next: the
+  windowed `world.debug-view report colliders` over the valley, which had 12
+  red findings over 22 witnesses on the masses' colliders and must read 0, and
+  the Moth's feet on the drawn mesh at `valley-slope`. Headless, the report's
+  collision-versus-authored-field comparison reads 0 red over 9,442 witnesses.
+- Field-collider cost: a Moth standing on relief spends about 70 field queries
+  and 420 relieved samples a tick, each six octaves of value noise (about
+  3.4 µs on a loaded machine). If the quiet rim p99 misses its bar, cut the
+  octaves contact reads to the geometric ones (the terrain pass's step 3 cut),
+  or take the noise's gradient in closed form with its value.
+- The field provider (`FixedFieldContactSolver`) reads a field's value as the
+  distance, so over a relieved scope divided by its `L` it holds a body up to
+  `L` times its skin off the rock; the analytic field collider measures the
+  distance as value over gradient length, and the provider should too.
 - A scoped static creation's instance bound is a sphere about the creation's
   origin (`WorldPlacementStamper`'s scoped branch), 770 m in radius for a sector
   centred on the ring's centre, so the bake's eight-cells-a-coarse-axis cap, not

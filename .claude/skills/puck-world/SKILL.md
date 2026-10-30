@@ -711,7 +711,11 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   contained cylinder cores with a computed inward-error bound; diagnostics
   name errors within it as known approximations, red beyond it, and never
   apply that bound to outward error. Other finite primitives use
-  oriented bounds. The Moth's capsule has a 0.35 m radius and is 2.06 m tall;
+  oriented bounds. A creation with relief (`noise`) collides as its drawn
+  surface: one field collider per copy over the creation's own fixed-point
+  program, the valley's walls included
+  ([sdf-authoring](../sdf-authoring/references/shapes.md#contact-admission)).
+  The Moth's capsule has a 0.35 m radius and is 2.06 m tall;
   sharp and rounded boxes use closest segment/box features. Lateral edge/rim
   approach requires enough step height to clear the local touched edge plus
   its fillet radius, never the distant apex of a tilted ramp; an edge witness
