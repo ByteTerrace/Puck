@@ -96,10 +96,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   lever's values; first-person feel in the lift and stairwell; the glass
   exhibit on both backends; how indoor rooms read against daylight once the
   image meter drives exposure ([lighting](#lighting-and-gi)).
-- Residency's look and policy: what a late or over-budget group shows and
-  whether switches fade or cut; whether the debug world gets doors that close;
-  the resident-byte target machine; a standard
-  door's opening time ([residency](../decisions/residency.md#the-owners-calls)).
 - Whether a cube projection is wanted for screens on shapes, beside the sphere
   the owner asked for ([curved screens](#screens-on-curved-and-general-sdf-surfaces)).
 - The ideas [awaiting review](#awaiting-the-owners-review).
@@ -155,8 +151,6 @@ medium, lows · Next: the high silhouette leak with the zero-weight gather
 fallback in the same change, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
-
-- [high] Regression: the Moth reads half dark (a hard vertical split down her head and body, the left half near black) at the chess-table pose on the integration head, where the owner's walkthrough showed her evenly lit at the same pose. `normals` and `indirect` are smooth and even on her and the sun's `shadow` is black indoors, so the dark half is direct light other than the sun, or its occlusion. Candidates landed since the walkthrough: bake-scale (`9cca256dc`: scale in the draw matrix and normals), lift-lag (`5f840ca49`: the presentation query field rebuilt only when a solid creation changes), mcp-batch (`80484a58f`: replica deliveries keep the state arena). Pose `body.pose 56.49 9.07 20.87 181 0 0 0`, `view.override camera look 56.454 12.92 17.786 56.489 10.07 20.871 55`; captures in `.claude/scratch/lead-window/` (`moth-split-*.png`, and `moth-walkthrough-same-pose.png` from before). (from: the lead's verification window)
 
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
 
@@ -291,25 +285,22 @@ Owner: test runner and replay specialist · medium and low ·
 Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
 replica cost and repeat the paired CPU measurements on a quiet machine.
 
-- Boot-reuse review findings (Claude review of `e89871067`; none reachable in today's 18 files):
-  - [medium] Field rows (`state.world` rows with a `Field` trait: `initial`, `paint`, `min`/`max`, `medium.heightScale`, draw fills) are dropped from the boot shape; on restore `InstallFields` keeps the lattice cells and `RestoreFieldRegions` restores the first scenario's, and `PaintLatticeDraws` never reruns, so a second scenario differing only in a field row starts on the first's lattice with no error (`WorldPersistence.Scenarios.cs:48-66`, `WorldPersistence.Checkpoint.cs:941`).
-  - [medium] `ScenarioCheckpoint` replaces only `DefinitionJson` and `Arena`; `Undo`, `RuleGroups`, rule and interaction latches, `Decisions` and `Search` stay the first scenario's, so scenarios differing in undo-bearing rule groups throw in `ValidateUndoSnapshot` and the worker loses every remaining leg (`WorldPersistence.Scenarios.cs:109-111`, `WorldPersistence.Undo.cs:19`).
-  - [medium] The CLI computes `ScenarioBootShape` over the raw staged JSON with unresolved `basis`/`imports` while the server compares the composed definition, so a census row whose inhabiting placement comes from an import lands on a shared worker and the server aborts it ("requires its own worker") (`TestCommand.Batch.cs:10-19`, `WorldPersistence.Scenarios.cs:83-91`).
-  - [low] `RestoreCheckpointCore` delivers the restored definition to attached sinks before `ResetClockSeeds` and `GrantTable.SyncState`, so a projection sink seeding trait clocks reads the previous scenario's seeds (presentation only) (`WorldPersistence.Scenarios.cs:138-142`, `WorldPersistence.Checkpoint.cs:1048`).
+- [medium] Re-measure complete-boot reuse on a quiet machine and profile Go's
+  reproduction replica. The boot-reuse-2 correction requires identical composed
+  documents apart from schedules, including every state row and rule. Its paired
+  `--reproduce --jobs 1` runs across the original 18 debug files (84 scenarios)
+  use 3,731.27 -> 3,731.77 whole-process-tree CPU seconds, effectively unchanged
+  on the loaded machine despite 18 -> 83 host boots. Go uses 1,127.77 -> 1,164.20
+  seconds (+3.2%). All 256 verdict, state-export and reproduction artifacts are
+  byte-identical; the field, undo-ordinal and separately imported census pairs
+  fail before and pass after. These numbers favor the complete checkpoint
+  boundary over rebuilding every derived section merely to retain broader
+  reuse; they do not establish quiet-machine performance. Per-file CPU, wall
+  time, boot counts and red/green evidence are in
+  `.claude/scratch/boot-reuse-2-evidence/report.md` (lead checkout). The
+  earlier incomplete-identity implementation also showed no clear loaded-machine
+  speedup; its replica profiling remains relevant below. (from: boot-reuse-2)
 
-- [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (boot-reuse-report.md, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
-
-- [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
-  Compatible scenarios now restore pristine session lanes into their own
-  admitted rows, seeds and rules, rebind gates and clock seeds, and recompose
-  seed-derived geometry where needed. Replay departure continuation and queued
-  seat-route edges are cleared at the reset boundary. All 18 debug test files
-  (84 scenarios), ordinary and `--reproduce --jobs 1`, report one host boot per
-  worker/file; all 428 verdict, state and reproduction artifacts match the
-  control byte for byte. The measured pair is integration `f9ab3d912` against
-  boot-reuse `eabf68e08`; the lane's scratch hand-back retains per-file CPU and
-  hall/chess phase tables. Few-tick profiles do not show a fixed three-second
-  authored startup delay.
 - `--reproduce` cost: the complete loaded-machine boot-reuse comparison uses
   3,352.27 → 3,590.33 whole-process-tree CPU seconds (+7.1%), while ordinary
   runs use 1,456.67 → 1,396.70 seconds (−4.1%). Go accounts for most of the

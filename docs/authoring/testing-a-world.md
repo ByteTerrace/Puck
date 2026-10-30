@@ -40,6 +40,11 @@ when debugging a single shared resource, or `--jobs <n>`
 to choose the worker limit explicitly. The headless host advances on the
 world's fixed tick grid without waiting for wall clock.
 
+A worker reuses its native host only for consecutive scenarios whose complete
+composed documents are identical apart from their schedules. Changed state,
+fields, rules or expectations get a fresh host. Compatible scenarios restore
+the complete boot checkpoint before their commands run.
+
 ```text
 test: chinese-checkers~all-marbles-settle-into-the-star <- .../chinese-checkers.puck test "all marbles settle into the star"
   expect$1: pass gate="missingCount == 0" saw=[missingCount=0] firedTick=501
