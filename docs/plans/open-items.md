@@ -897,9 +897,12 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision (the companion lands inert in the live debug world today; the lead's call
-between the consensus split), then the uncertain crossing, opened by a two-silo
-failover witness.
+decision along the [custody protocol](companion-redesign.md) (the companion lands
+inert in the live debug world today; two builds of the decision failed review on
+trust, away bookkeeping and the custody key, so the protocol is specified per
+authority and checked by the `CompanionCustodyModel` law in
+`tests/Puck.World.Protocol.Tests`, which the build follows as its oracle), then
+the uncertain crossing, opened by a two-silo failover witness.
 
 - [medium] A rule firing costs the world host far more than the work sheet
   prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`

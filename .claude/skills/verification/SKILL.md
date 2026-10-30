@@ -289,6 +289,25 @@ In xUnit v3, `Assert.Throws`, `Record.Exception` and their async forms rethrow
 the skip exception, so a test that wraps a call which can skip reports
 **Skipped** instead of failing; catch it with `try`/`catch` and assert on it.
 
+## The companion custody model check
+
+`CompanionCustodyModelLawTests` (`tests/Puck.World.Protocol.Tests`) is the
+executable model of the companion custody protocol
+([the specification](../../../docs/plans/companion-redesign.md#8-the-model)). Its
+named traces and small scopes run with the ordinary suite; its large scopes
+(over about 100,000 states each, several minutes and a few hundred megabytes in
+all) are explicit tests carrying `Category=ModelCheck`:
+
+```text
+dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release --no-build --explicit on --filter-trait Category=ModelCheck
+```
+
+The lane building the protocol runs the model check at every step, and every
+change to the protocol (the model, its specification, or the engine code that
+implements a transition) runs it before landing: the protocol is changed in the
+model first, and the model check is the evidence. Without `--explicit on` the
+filter selects nothing.
+
 ## What uses the GPU
 
 Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
