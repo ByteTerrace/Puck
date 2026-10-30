@@ -383,10 +383,10 @@ public sealed class InstallPruneLawTests : IDisposable {
             unreadable = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
             File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite, path: olderRecord);
         }
-        Assert.Contains(expectedSubstring: "nothing was deleted", actualString: unreadable);
+        Assert.Contains(actualString: unreadable, expectedSubstring: "nothing was deleted");
         Assert.Contains(expectedSubstring: "fails validation", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["0.9.0", "1.0.0", "1.0.1"], actual: VersionNames());
-        Assert.True(condition: Objects.Contains(pin: older) && Objects.Contains(pin: orphan), userMessage: "a skipped pass deleted an object");
+        Assert.True(condition: (Objects.Contains(pin: older) && Objects.Contains(pin: orphan)), userMessage: "a skipped pass deleted an object");
         Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(pin: stale, root: sourceRoot)));
         File.Delete(path: Path.Combine(path1: sourceRoot, path2: "development", path3: "manifest.json"));
 
@@ -463,7 +463,6 @@ public sealed class InstallPruneLawTests : IDisposable {
 
         Assert.True(condition: cleanup.DeleteChild(name: "d"));
     }
-
     // A pointer that is not the plain name of an existing version skips the whole pass before anything, a trash/
     // leftover included, is deleted.
     [Fact]
@@ -544,6 +543,7 @@ public sealed class InstallPruneLawTests : IDisposable {
 
         Assert.Contains(expectedSubstring: "nothing was deleted", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
     }
+
     // Hands the walk to the next directory, closing the one it leaves unless that is the root.
     private static ConfinedDirectory Owned(ConfinedDirectory current, ConfinedDirectory next, ConfinedDirectory root) {
         if (!ReferenceEquals(objA: current, objB: root)) { current.Dispose(); }

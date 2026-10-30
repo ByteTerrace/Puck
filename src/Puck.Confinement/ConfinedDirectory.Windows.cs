@@ -227,6 +227,7 @@ public sealed partial class ConfinedDirectory {
         private static unsafe partial bool SetFileInformationByHandle(SafeFileHandle handle, int informationClass, void* information, uint size);
         [LibraryImport("kernel32.dll", EntryPoint = "K32GetMappedFileNameW", SetLastError = true)]
         private static unsafe partial uint GetMappedFileName(nint process, nint address, char* name, uint size);
+
         [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true)]
         public static partial nint GetModuleHandle(nint name);
     }
