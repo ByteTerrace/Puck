@@ -26,46 +26,43 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Dual-stick play and the Moth's motion](#dual-stick-play-and-the-moths-motion):
-   land the controls review's follow-up branch, whose sliced-sweep fillet fix
-   is a high that blocks the owner's main push.
-2. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
+1. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
    (depth visibility leaks at every silhouette) with the zero-weight gather
    fallback in the same change, then the trace cost and the wrapped-diffuse sun
    leak. In flight: probe-depth-fix.
-3. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
+2. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
    the walkthrough's other high; `SdfMeshInstance.Matrix` already scales at
    draw, so the fix is in the dynamic bake path's identity and detail.
-4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a hot-reload code revision as one invalidation contract (emitter revisions
    and the static field), then the persisted caches keyed by the modules as
    built; a product of edited code under the unedited identity is the hazard.
-5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+4. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), the per-swap state load, then the schema switch.
-6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
+5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
    break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
    `--reproduce`, including the unexplained Go CPU regression in the loaded
    boot-reuse comparison.
-7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-8. [Residency and streaming](#residency-and-streaming): the measurements, then
+7. [Residency and streaming](#residency-and-streaming): the measurements, then
    near-first ordering of bake, store loads and landing; the card tables are
    its test case.
-9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
-    it in `panes` and answers under pause, then the diagnostics' windowed checks
-    and the developer exhibits.
-11. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+   it in `panes` and answers under pause, then the diagnostics' windowed checks
+   and the developer exhibits.
+10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
-12. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     isolate the temporal-off cadence blink first, then why history never
     resolves the jitter.
-13. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
