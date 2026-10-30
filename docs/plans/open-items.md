@@ -297,7 +297,7 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   boundary over rebuilding every derived section merely to retain broader
   reuse; they do not establish quiet-machine performance. Per-file CPU, wall
   time, boot counts and red/green evidence are in
-  `.claude/scratch/boot-reuse-2/report.md` in the boot-reuse-2 worktree. The
+  `.claude/scratch/boot-reuse-2-evidence/report.md` (lead checkout). The
   earlier incomplete-identity implementation also showed no clear loaded-machine
   speedup; its replica profiling remains relevant below. (from: boot-reuse-2)
 
