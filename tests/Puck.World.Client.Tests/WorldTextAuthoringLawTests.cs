@@ -70,11 +70,13 @@ public sealed class WorldTextAuthoringLawTests {
         CreationDomainParentLawTests.Advance(client: ClientFixtures.Client(definition: CreationDomainParentLawTests.Definition(creation: creation, scale: 2f)), pool: pool, tick: 1UL, transforms: transforms);
         Assert.Equal(2, transforms.Length);
         Assert.Equal(expected: 0f, actual: box.Detail);
-        // The thinner of the run's 0.02 relief and a tenth of its 0.25 em, at the body's scale of 2.
-        Assert.Equal(expected: 0.04f, actual: text.Detail, tolerance: 1e-6f);
+        // The thinner of the run's 0.02 relief and a tenth of its 0.25 em, in the slot's own units: the body's scale of 2
+        // rides the slot.
+        Assert.Equal(expected: 0.02f, actual: text.Detail, tolerance: 1e-6f);
+        Assert.Equal(expected: 2f, actual: transforms[text.Slot].Scale);
         Assert.Equal(expected: 0, actual: program.Instructions.Count(predicate: static instruction => (instruction.Op == SdfOp.PushField)));
         // The text's bound is its glyphs' reach about the root, whatever the creation's other shapes reach.
-        var textReach = CreationStampEmitter.TextReach(document: creation.EngineDocument, fontFor: fonts.Resolve, scale: 2f);
+        var textReach = CreationStampEmitter.TextReach(document: creation.EngineDocument, fontFor: fonts.Resolve, scale: 1f);
 
         Assert.True(condition: (textReach > 0f));
         Assert.InRange(actual: text.Radius, high: (textReach + 0.5f), low: textReach);

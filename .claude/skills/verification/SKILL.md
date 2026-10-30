@@ -81,17 +81,35 @@ its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` retains one native host per worker while consecutive boot shapes match, restores its boot authority cohort before each
-compatible scenario, and installs its schedule. Compatibility includes the entire
-boot state and rules of the root and every staged companion; a different world
-starts a fresh native host in the worker. Generated expectation rules count as a difference. The reset
-cancels live tape drives as well as recordings. Session epochs reset only in this
+`puck test` retains one native host per worker only while consecutive scenarios
+have identical composed documents apart from their schedules, including every
+staged companion and asset. State rows (fields and ordinary rows alike), rules,
+groups and generated expectations all participate. A different document boots a
+fresh host; a compatible one restores its complete pristine checkpoint. Never
+transplant only the arena into another document's checkpoint: undo plans bind
+row ordinals, and fields, group progress, latches, decisions and search derive
+from the whole document. Changing an ordinary row before an undo-owned row can
+invalidate that checkpoint even when the group declaration did not change.
+The CLI composes JSON before comparing shapes: a placement in one import can
+read its census from a state row in another, which neither raw fragment sees.
+An imported partial row need not parse as a standalone definition. These
+one-use roots are not retained in the composition cache. A reused raw JSON
+document also loads through the
+file-composition boundary. Drive grants and presentation clock seeds
+are rebound before restore delivers to attached sinks. Restoration rebuilds
+geometry and population when the preceding run edited their configuration.
+Checkpoint restoration discards replay-only departure rollback bodies: a committed
+departure otherwise keeps its source-scoped transfer id and falsely refuses the next
+scenario's replay as a duplicate. The scenario reset
+cancels queued seat-route edges after restoring boot claims; otherwise a prior crossing
+admits the next scenario's input before tick one and changes its first two hashes.
+It also cancels live tape drives as well as recordings. Session epochs reset only in this
 isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
 caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
 and extensions require the native container. `WorldTestHostLawTests` preserves the
-three native-container witnesses. `TestCommandLawTests.OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput`
-checks pristine/changed/pristine scenarios with one boot and replay, and
+three native-container witnesses. `TestCommandLawTests.DifferentScenariosStartPristineAndIdenticalScenariosReuseOneHost`
+checks fresh boots for changed scenarios, reuse for identical scenarios and replay, and
 also compares a reused worker's export and manifest with a fresh-process boot.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
@@ -100,6 +118,11 @@ when a lane must keep writes isolated; reuse that root across its paired runs.
 An ordinary scheduled boot has no replay probe or `reproduction.json`; a fresh-process
 hash comparison runs `puck test --reproduce` in a separate worker so its proof actually
 compares the recorded ticks.
+
+Each leg's `timing.json` separates boot, restore, authored time, export and replay;
+export is included in authored time. `firstTickMilliseconds` measures the authored
+phase through its first completed tick, including host-service startup on a fresh
+boot. Read it beside the tick count before calling a short scenario's cost fixed.
 
 When profiling a sweep, sample the coordinator and the simultaneous sum of its
 descendants' working sets; report private bytes separately. Do not add individual
@@ -273,6 +296,10 @@ does not wait on itself and siblings still exclude one another; [lease reference
 In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
 shell can split the colon-bearing switch before the lease receives it
 ([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
+On Windows, a forwarded bare `bash` resolves to WSL's `bash.exe`, which cannot see
+`D:/` paths and exits 127 after the lease was granted; forward Git Bash by its full
+path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`) to run several commands
+under one lease.
 
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed

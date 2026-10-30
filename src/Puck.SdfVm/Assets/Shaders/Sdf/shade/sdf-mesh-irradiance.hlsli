@@ -191,10 +191,16 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
     // Extend the boundary probes only as far as their visibility permits. The pushed receiver, never the clamped
     // lookup, is tested against their surface samples, so leaving the window cannot invent open sky.
-    float3 lattice = clamp(((pushed / spacing) - 0.5), (float3)low, (float3)(low + dims - 1));
+    float3 unclamped = ((pushed / spacing) - 0.5);
+    float3 lattice = clamp(unclamped, (float3)low, (float3)(low + dims - 1));
     float3 base = floor(lattice);
     float3 fraction = (lattice - base);
     int3 first = int3(base);
+    // How far past the window's boundary probes the receiver stands, in cells, at most one. Beyond the window every
+    // boundary probe lies on the window's side of the receiver, where the facing term would light only the normals turned
+    // toward the window; it eases to one over that first cell, so a receiver outside takes the boundary probes alike
+    // whichever way it faces, as far as their depth admits it. KEEP IN SYNC with SdfMeshIrradiance.Gather.
+    float outside = saturate(length(unclamped - lattice));
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         int3 offset = int3((corner & 1u), ((corner >> 1) & 1u), ((corner >> 2) & 1u));
         int3 cell = (first + offset);
@@ -213,7 +219,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float facing = smoothstep(0.0, 0.5 * spacing, dot(toward, normal));
+        float facing = lerp(smoothstep(0.0, 0.5 * spacing, dot(toward, normal)), 1.0, outside);
         float weight = (((axes.x * axes.y * axes.z) * facing) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
 
         if (weight <= 0.0) {

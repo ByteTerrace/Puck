@@ -20,6 +20,7 @@ using Puck.Cli.Format;
 using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Puck.Cli.Landing;
+using Puck.Cli.Lanes;
 using Puck.Cli.Laws;
 using Puck.Cli.Locks;
 using Puck.Cli.Mcp;
@@ -91,6 +92,7 @@ public static class PuckRootCommand {
             GateCommand.Create(clock: clock, composition: Gate),
             HostCommand.Create(composition: Gate),
             LandingCommand.Create(),
+            LanesCommand.Create(clock: clock),
             LawsCommand.Create(),
             LeaseCommand.Create(clock: clock),
             LocksCommand.Create(),

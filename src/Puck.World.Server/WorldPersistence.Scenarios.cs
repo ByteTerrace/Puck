@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Runtime.CompilerServices;
@@ -12,7 +11,7 @@ public sealed partial class WorldPersistence {
         bytes => WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: Host.Configuration.DocumentDirectory,
             utf8Json: bytes, machines: Host.Machines.ValidationCatalog));
 
-    /// <summary>A computed identity for the entire boot state; only the command schedule may differ.</summary>
+    /// <summary>A computed identity for a composed boot. Only the command schedule may differ.</summary>
     public static string ScenarioBootShape(byte[] json) {
         using var document = JsonDocument.Parse(json);
         using var hash = SHA256.Create();
@@ -28,28 +27,16 @@ public sealed partial class WorldPersistence {
         stream.FlushFinalBlock();
         return Convert.ToHexStringLower(inArray: hash.Hash!);
     }
-
-    private readonly ConditionalWeakTable<byte[], BootShape> m_bootShapes = new();
-    private readonly ConditionalWeakTable<WorldDefinition, BootShape> m_definitionShapes = new();
-
-    private sealed record BootShape(string Value);
-
-    private string CachedBootShape(byte[] json) => m_bootShapes.GetValue(json, static bytes => new BootShape(Value: ScenarioBootShape(json: bytes))).Value;
-
-    /// <summary>Reuses a complete boot checkpoint only for an identical world with a different schedule.</summary>
+    /// <summary>Attaches a compatible scenario's schedule to its complete pristine boot checkpoint.</summary>
     public WorldAuthorityCheckpoint ScenarioCheckpoint(WorldAuthorityCheckpoint boot, WorldDefinitionAdmission admission) {
         var json = WorldDefinitionSerialization.Serialize(definition: admission.Definition);
 
-        if (CachedBootShape(json: json) != CachedBootShape(json: boot.Server.DefinitionJson)) {
-            var expected = JsonNode.Parse(boot.Server.DefinitionJson)!.AsObject();
-            var actual = JsonNode.Parse(json)!.AsObject();
-            var changed = expected.Select(selector: pair => pair.Key).Union(second: actual.Select(selector: pair => pair.Key))
-                .Where(predicate: key => ((key != "schedule") && !JsonNode.DeepEquals(node1: expected[key], node2: actual[key])));
-
-            throw new InvalidOperationException(message: $"Scenario changes boot configuration ({string.Join(separator: ", ", values: changed)}); it requires its own worker.");
+        // Fields, row ordinals, rule groups, latches, decisions and search all derive from this document.
+        // Replacing only its arena cannot make the rest of a different boot's checkpoint compatible.
+        if (ScenarioBootShape(json: json) != ScenarioBootShape(json: boot.Server.DefinitionJson)) {
+            throw new InvalidOperationException(message: "Scenario changes boot configuration; it requires its own worker.");
         }
         m_checkpointAdmissions.Add(key: json, value: admission);
-        _ = m_definitionShapes.GetValue(admission.Definition, _ => new BootShape(Value: CachedBootShape(json: json)));
         return boot with {
             Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json },
         };
@@ -59,12 +46,9 @@ public sealed partial class WorldPersistence {
         lock (Host.AuthorityGate) {
             var admission = CheckpointAdmission(json: checkpoint.Server.DefinitionJson);
             var definition = admission.Definition;
-            // A scenario may edit a kit, screen, input policy or collision row. Restore the derived products
-            // before validating and loading their checkpointed continuation into the same authority.
-            var currentShape = m_definitionShapes.GetValue(Host.Configuration,
-                current => new BootShape(Value: ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: current)))).Value;
-
-            if (currentShape != CachedBootShape(json: checkpoint.Server.DefinitionJson)) {
+            // The previous run may have edited geometry or machine configuration after boot.
+            if (ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) !=
+                ScenarioBootShape(json: checkpoint.Server.DefinitionJson)) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }

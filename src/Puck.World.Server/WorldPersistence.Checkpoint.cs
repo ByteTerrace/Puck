@@ -870,6 +870,7 @@ public sealed partial class WorldPersistence {
             );
         }
 
+        Host.ResetRedrivenDepartures();
         Host.Document.AdoptDefinition(definition: restoredDefinition);
         Host.Document.AdoptBase(
             definition: restoredBase,
@@ -1041,6 +1042,11 @@ public sealed partial class WorldPersistence {
             throw new InvalidOperationException(message: $"the checkpoint's search progress does not restore: {searchReason}");
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
+        if (resetSessionEpochs) {
+            // Scenario delivery must observe its restored grants and seed clocks, including in attached sinks.
+            Host.GrantTable.SyncState(definition: restoredDefinition, arena: Host.Arena);
+            Host.ResetClockSeeds(definition: restoredDefinition);
+        }
         // A restore completes outside the tick, so it delivers the restored definition itself: every attached sink
         // replaces the observations and trait clocks it held, which no per-tick anchor step would resend.
         Host.Document.MarkDefinitionDeliveryPending();

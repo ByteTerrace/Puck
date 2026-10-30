@@ -65,7 +65,7 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 
 ## Drivers
 
-`drivers` is up to 16 named `{ name, signal, cadence, when, blendInSeconds,
+`drivers` is up to 32 named `{ name, signal, cadence, when, blendInSeconds,
 blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
 They advance in declaration order, and a driver reads only drivers declared
 before it, the rule a shape's `parent` follows.
@@ -134,6 +134,11 @@ A `target` is `{ kind }` of `surface`, `body`, or `state`:
 | `surface` | `direction` (author frame, nonzero), `reach` in (0, 8], `standoff` ≤ 1 |
 | `body` | `index`, `offset` ≤ 16 |
 | `state` | `reference` = `state.<row>[.<key>]` holding a world-space point |
+
+`reach`, `standoff` and a replant's `distance` and `height` are creation
+lengths: at a look or `bodies.scale` scale other than one they scale with the
+body, as its shapes do, so a quarter-size Moth stands her boots a quarter-size
+sole height off the floor (`WorldCreationInstances.Effectors`).
 
 A `plant` is `{ driver, window, swingWeight }`, where the window is a
 `[from, to]` pair in [0, 2π) that wraps when `from` exceeds `to`. This is what

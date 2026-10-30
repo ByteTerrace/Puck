@@ -262,8 +262,15 @@ public static class FixedConvexContact {
     }
 
     internal static bool TryPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) =>
-        TryPush(collider: in collider, orientation: in orientation, position: position, push: out push, skin: skin, supportQueries: out _, volume: in volume);
+        in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) {
+        var pushes = TryPush(collider: in collider, orientation: in orientation, position: position, push: out push, skin: skin, supportQueries: out var supports, volume: in volume);
+
+        // A query its bounds test rejects spends no support evaluation and runs no iteration.
+        if (supports > 0) {
+            FixedStaticContactWork.Process.CountConvex(supports: supports);
+        }
+        return pushes;
+    }
 
     /// <summary>Queries an exact finite convex collider contact and reports the deterministic number
     /// of support-map evaluations spent by GJK, the simplex bootstrap, EPA and face-normal recovery.</summary>

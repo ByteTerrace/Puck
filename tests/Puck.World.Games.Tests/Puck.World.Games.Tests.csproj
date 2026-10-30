@@ -37,6 +37,8 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/World/AllocationCollection.cs" Link="World/AllocationCollection.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.cs" Link="World/AuthoredGameFixtures.cs" />
+        <Compile Include="../Shared/World/AuthoredGameFixtures.Load.cs" Link="World/AuthoredGameFixtures.Load.cs" />
         <Compile Include="../Shared/World/CarryFixtures.cs" Link="World/CarryFixtures.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />

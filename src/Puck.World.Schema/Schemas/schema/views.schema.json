@@ -129,6 +129,35 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldCameraAutoFirstPerson"
+        },
+        "boom": {
+          "description": "Optional authored distance limits and input step for the interactive orbit.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "minimum": {
+              "description": "The closest requested orbit distance.",
+              "type": "number"
+            },
+            "maximum": {
+              "description": "The farthest requested orbit distance.",
+              "type": "number"
+            },
+            "step": {
+              "description": "Distance removed by one positive input unit.",
+              "type": "number"
+            }
+          },
+          "required": [
+            "minimum",
+            "maximum",
+            "step"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldCameraBoom"
         }
       },
       "required": [

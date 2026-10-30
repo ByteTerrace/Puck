@@ -26,7 +26,7 @@ public sealed class WorldArtifactBuildLawTests {
                 text: """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <ItemGroup>
-                    <ProjectReference Include="..\Puck.Library\Puck.Library.csproj" />
+                    <ProjectReference Include="../Puck.Library/Puck.Library.csproj" />
                   </ItemGroup>
                 </Project>
 

@@ -144,6 +144,21 @@ public sealed class AzureResourceInventoryTests {
         Assert.Empty(collection: wire.Uris);
     }
 
+    [Fact]
+    public void ABareGroupNameIsRefusedNamingTheAbsoluteForm() {
+        using var wire = new Wire();
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => Source(
+            wire,
+            group: "puck"
+        ));
+
+        Assert.Contains(
+            "/subscriptions/<id>/resourceGroups/<name>",
+            refusal.Message
+        );
+        Assert.Empty(collection: wire.Uris);
+    }
+
     private sealed class Wire(params string[] replies) : HttpMessageHandler {
         private readonly Queue<string> m_replies = new(collection: replies);
 

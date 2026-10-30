@@ -56,7 +56,7 @@ public sealed record BindingWheelDefinition(
     /// <summary>The fewest rings a wheel may declare.</summary>
     public const int MinRings = 1;
     /// <summary>The most rings a wheel may declare.</summary>
-    public const int MaxRings = 3;
+    public const int MaxRings = 4;
     /// <summary>The fewest sector rows a ring may declare.</summary>
     public const int MinSectorsPerRing = 2;
     /// <summary>The most sector rows a ring may declare.</summary>

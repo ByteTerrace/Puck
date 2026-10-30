@@ -92,6 +92,19 @@ is `WorldSeatCameraFeel.Default`: zero pointer and stick response, so every look
 input turns the camera by nothing. The camera boom's smoothing is the
 `camera-boom` row of the world's `dynamics` table.
 
+The standard's `worlds/standard/camera.puck` authors that response, the portable
+feel, and `views.seatControl.boom { minimum, maximum, step }` in full-size metres.
+`player.camera.boom` consumes an authored Axis2D binding's vertical delta and
+changes the seat's requested distance within those bounds; an absent policy
+leaves the orbit distance alone. It changes the existing interactive orbit's
+distance before the existing boom follower and clearance resolve, so zoom uses
+the same smoothing and collision handling. `world.view.camera full` reports
+`boomDistance`, `boomMinimum`, `boomMaximum` and `boomStep`, including headless.
+The standard binds `mouse.wheel` to it and `mouse.button3` to
+`player.camera.reset`, which restores the rig's angles and distance. The open
+wheel overrides that source with `player.wheel.scroll`; the router discards
+relative samples that cross a page boundary during their capture fold.
+
 The first authored layout is what a boot shows; `view.override layout <name>`
 selects another. Grammar for the `.puck` forms above belongs to `puck-dsl`.
 `orbit`/`fieldOfView` accept the named arguments shown; `orbit`'s first three
@@ -340,7 +353,7 @@ The standard right stick binds `player.look.steer`: horizontal input writes
 `Turn`. Authors may bind `player.look` for free orbit, explicit bindings may
 still write `Turn`, and a drive kit may interpret its left-stick roles
 according to their own motion program. In the debug world the left-stick
-press (and N) toggles the `run` channel, West and Left Shift hold it, and the
+press (and N) toggles the `run` channel, Left Shift holds it, West/J dash, and the
 left trigger's page turns the stick presses into autorun and autofly
 ([the Moth's controls](../../../../worlds/debug/avatars/moth.md#controls)).
 

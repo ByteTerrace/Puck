@@ -176,9 +176,13 @@ client instead; its operation discovery contains only those grants.
 
 For read-only discovery, `AzureResourceInventory` uses the same generic ARM SDK
 pipeline to list an explicitly named resource group's resources. The
-[granaries deployment](../../experimental/src/Puck.World/Assets/hosting/granaries.extensions.json)
+[granaries deployment](../../worlds/hosting/granaries.extensions.json)
 shows the complete no-C# wiring. Source settings pin `resourceGroup`, `apiVersion`,
 and `resourceType`; optional `namePrefix` and `excludeNames` narrow membership.
+`resourceGroup` is the absolute `/subscriptions/<id>/resourceGroups/<name>` ID; a
+bare group name is refused with a message naming that form. The subscription is
+authored; the engine never discovers it (the owner's ruling), so it comes from the
+author's or addon's configuration.
 `fields` maps disclosure names to slash-separated property paths such as `/id`,
 `/location`, and `/sku/name`. Only selected scalar values leave the adapter;
 missing or null properties become empty strings. Select only metadata safe for

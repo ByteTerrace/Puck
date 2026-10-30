@@ -30,7 +30,7 @@ camera: the first authored `views` layout is what a boot shows, and the Moth's
 is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
 `view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
 authors the body, its motion programs, its camera (`seatControl`,
-`seatRig "moth-camera"`) and its seat camera feel. A new rule or feature for
+`seatRig "moth-camera"`); the standard's `camera.puck` supplies shared feel and boom limits. A new rule or feature for
 the live world goes in `debug.puck` (or a scratch `.puck` world booted with
 `--world`). Every other world (the island
 `puck.world.json`, its districts, the games) and their canary, parity and
@@ -237,7 +237,11 @@ with tick, command, status and output. Use `world.at` for absolute ticks or
 several commands at the same tick, and a multiline script for an ordered
 command/wait/read sequence.
 
-Keep reads lean: `world.view.camera` answers a compact line (`full` for every
+Keep reads lean: a large answer (`world.affordances`, `world.grants`) is narrowed
+by `puck_exec`'s own filters, which never change what the command does and apply to every
+line's answer: `lines` (one-based ranges such as `1-20,40`), `match` (lines containing a text,
+ignoring case), `fields` (keys of `key=value` answers, or property names anywhere in a JSON
+answer) and `maxBytes` (a cut ending in an explicit mark, with `truncated` set). `world.view.camera` answers a compact line (`full` for every
 field, a key list for chosen ones), `help <prefix>` answers one synopsis line per
 verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
 one script rather than one call per sample. `world.view.pick <view> <x> <y>`
@@ -741,7 +745,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   its colliders swap while its attachment stays intact. The lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.
 - A moving carrier or a solid response swap wakes only the parked rigid bodies
-  whose bounds meet the box its changed colliders cover; any other contact-field
+  whose bounds, grown by the contact reach (two contact skins) and the rigid
+  support probe's travel, meet the box its changed colliders cover; any other contact-field
   change wakes every one. A ride or a door that lags the tick shows as
   `world.counters physics.bodies` advances per tick far above the idle count
   ([server README](../../../src/Puck.World.Server/README.md)).

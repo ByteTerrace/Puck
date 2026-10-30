@@ -12,9 +12,9 @@ inputModes {
       default: "suited"
       states [
         { name: "pilot", values ["0"], channels: concat(movement, controls) }
-        { name: "suited", values ["1"], channels: concat(movement, controls, ["rise", "flight"]) }
+        { name: "suited", values ["1"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
         { name: "pilot-noclip", values ["2"], channels: concat(movement, controls, ["rise"]) }
-        { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight"]) }
+        { name: "suited-noclip", values ["3"], channels: concat(movement, controls, ["rise", "flight", "dash"]) }
       ]
       suspendedBy [{ family: "engagement", states ["tabletop", "machine", "screen", "body"] }]
       transitions [

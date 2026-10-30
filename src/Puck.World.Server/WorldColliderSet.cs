@@ -120,6 +120,10 @@ public sealed partial class WorldColliderSet : IContactField {
     /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
     /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
     public ulong AttachedRevision { get; private set; }
+    /// <summary>Gets how far past a body's collider surface a collider of this set still acts on the body, in metres:
+    /// the reach of a carrier's support (<see cref="TryRideDisplacement"/>), two contact skins and one fixed-point step,
+    /// which is beyond the single skin every other contact keeps.</summary>
+    internal FixedQ4816 ContactReach => ((m_solver.ContactSkin + m_solver.ContactSkin) + FixedQ4816.Epsilon);
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
     /// <summary>Gets the number of solid circular cylinders in the set.</summary>
@@ -883,7 +887,7 @@ public sealed partial class WorldColliderSet : IContactField {
         displacement = FixedVector3.Zero;
         var found = false;
         var bestDepth = FixedQ4816.Zero;
-        var skin = ((m_solver.ContactSkin + m_solver.ContactSkin) + FixedQ4816.Epsilon);
+        var skin = ContactReach;
 
         for (var index = 0; (index < m_previousAttachedColliders.Count); index++) {
             var collider = m_previousAttachedColliders[index];

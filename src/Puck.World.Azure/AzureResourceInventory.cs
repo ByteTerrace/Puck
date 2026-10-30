@@ -54,7 +54,7 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
             segments[4].EndsWith(value: '.') ||
             segments[4].Any(predicate: c => !(char.IsLetterOrDigit(c: c) || (c is '_' or '-' or '.' or '(' or ')')))
         ) {
-            throw new ArgumentException(message: "Inventory requires an absolute subscription/resource-group ID without URI syntax or traversal segments.");
+            throw new ArgumentException(message: "Inventory requires the absolute resource-group ID /subscriptions/<id>/resourceGroups/<name>, without URI syntax or traversal segments; the subscription is authored, never discovered.");
         }
         var scope = new ResourceIdentifier(resourceId: m_settings.ResourceGroup);
 

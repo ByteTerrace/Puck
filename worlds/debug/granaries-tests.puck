@@ -1,0 +1,102 @@
+// The granary board's scenarios (granaries.puck), each booted in the whole debug world:
+// `puck test worlds/debug/granaries-tests.puck --reproduce --jobs 1`.
+// The feed is seeded as the observation would write it: one cell per account in each of the five text rows, keyed by the
+// account's name. Cells are named by ordinal on the 4x4 `granaryGrid` (4 * row + column); `granaryCellOf` holds an
+// account's cell plus one, and `granaryBoard` is 1 on a cell a piece stands on.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "granaries-tests"
+import "stopped-machines"
+
+test "accounts dealt onto the board are found on their cells and covered" {
+  given {
+    granaryNames[bytrcstp001] = "bytrcstp001"
+    granaryNames[bytrcstp002] = "bytrcstp002"
+    granaryNames[bytrcstp003] = "bytrcstp003"
+  }
+  when {
+    ticks 30
+  }
+  expect {
+    granaryBoard[0] == 1
+    granaryBoard[1] == 1
+    granaryBoard[2] == 1
+    granaryBoard[3] == 0
+    granaryTally.accounts == 3
+    granaryTally.watered == 1
+    granaryTally.powered == 0
+  }
+}
+
+test "the lectern reads the piece under the cursor" {
+  given {
+    granaryNames[bytrcstp001] = "bytrcstp001"
+    granaryNames[bytrcstp002] = "bytrcstp002"
+    granaryKinds[bytrcstp002] = "BlobStorage"
+    granaryRegions[bytrcstp002] = "eastus2"
+    granarySkus[bytrcstp002] = "Standard_GRS"
+    granarySeat.cursor = 1
+  }
+  when {
+    ticks 30
+  }
+  expect {
+    granarySel.name == "bytrcstp002"
+    granarySel.region == "eastus2"
+    granarySel.kind == "BlobStorage"
+    granarySel.sku == "Standard_GRS"
+  }
+}
+
+test "a provider's stage grows and shrinks the pieces it covers" {
+  given {
+    granaryNames[bytrcstp001] = "bytrcstp001"
+    granaryNames[bytrcstp002] = "bytrcstp002"
+    granaryNames[bytrcstp003] = "bytrcstp003"
+    granaryNames[bytrcstp004] = "bytrcstp004"
+    granaryNames[bytrcstp005] = "bytrcstp005"
+    granaryNames[bytrcstp006] = "bytrcstp006"
+  }
+  when {
+    ticks 30
+    seat1: world.state.cell.set granaryIrrigationRequest $value 1
+    seat1: world.state.cell.set granaryPowerRequest $value 2
+    ticks 30
+    seat1: world.state.cell.set granaryIrrigationRequest $value 0
+    ticks 30
+  }
+  expect {
+    granaryIrrigationStage == 0
+    granaryPowerStage == 2
+    granaryTally.watered == 1
+    granaryTally.powered == 1
+  }
+}
+
+test "an account that leaves the feed leaves the board and its coverage" {
+  given {
+    granaryNames[bytrcstp001] = "bytrcstp001"
+    granaryNames[bytrcstp002] = "bytrcstp002"
+  }
+  when {
+    ticks 30
+    seat1: world.state.cell.remove granaryNames bytrcstp001
+    ticks 30
+  }
+  expect {
+    granaryBoard[0] == 0
+    granaryBoard[1] == 1
+    granaryTally.accounts == 1
+    granaryTally.watered == 0
+  }
+}
+
+test "with no feed the board says it is not connected and holds no pieces" {
+  expect {
+    granaryFeed.status == 0
+    granaryTally.accounts == 0
+    granaryBoard[0] == 0
+    granarySel.name == ""
+  }
+}

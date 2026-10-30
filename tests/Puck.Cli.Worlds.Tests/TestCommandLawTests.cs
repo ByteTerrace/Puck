@@ -44,7 +44,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(collection: json.RootElement.GetProperty(propertyName: "echoes").EnumerateArray(), filter: echo => echo.GetProperty(propertyName: "rejected").GetBoolean());
     }
     [Fact]
-    public void DifferentStateAndRulesHaveDifferentBootShapesAndTheirOwnVerdicts() {
+    public void DifferentStateAndRulesOwnTheirHostsAndKeepTheirOwnVerdicts() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-shapes-");
 
         directory.WriteText(name: "worlds/first.puck", text: """
@@ -66,15 +66,15 @@ public sealed class TestCommandLawTests {
         var (exit, output) = RunTest(directory.PathOf(name: "worlds"), "--reproduce");
         Assert.True(condition: (exit == 0), userMessage: output);
         Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=2 world-runs=2");
-        var first = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":7},"rules":[],"schedule":{"tick":1}}""");
-        var rescheduled = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":7},"rules":[],"schedule":{"tick":2}}""");
-        var changed = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":11},"rules":[],"schedule":{"tick":1}}""");
+        var first = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":7}]}]},"rules":[],"schedule":{"tick":1}}""");
+        var rescheduled = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":7}]}]},"rules":[],"schedule":{"tick":2}}""");
+        var changed = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":11}]}]},"rules":[],"schedule":{"tick":1}}""");
 
         Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: rescheduled));
         Assert.NotEqual(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: changed));
     }
     [Fact]
-    public void OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput() {
+    public void DifferentScenariosStartPristineAndIdenticalScenariosReuseOneHost() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
 
         directory.WriteText(name: "isolation.puck", text: """
@@ -95,12 +95,22 @@ public sealed class TestCommandLawTests {
               expect { value[0] >= 7 }
             }
             test "changed" {
+              given { value[0] = 11 }
               when {
                 seat1: world.state.cell.set value 0 99
               }
-              expect { value[0] >= 7 }
+              expect {
+                value[0] == 99
+                marker[0] == 7
+              }
             }
             test "pristine again" {
+              when {
+                seat1: world.state.cell.set marker 0 7
+              }
+              expect { value[0] >= 7 }
+            }
+            test "identical boot" {
               when {
                 seat1: world.state.cell.set marker 0 7
               }
@@ -111,8 +121,8 @@ public sealed class TestCommandLawTests {
 
         var (exit, output) = RunTest(directory.PathOf(name: "isolation.puck"), "--reproduce", "--keep", kept);
         Assert.Equal(actual: exit, expected: 0);
-        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=1 world-runs=3");
-        for (var index = 0; (index < 3); index++) {
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=3 world-runs=4");
+        for (var index = 0; (index < 4); index++) {
             Assert.Contains("\"divergence\":-1", File.ReadAllText(path: Path.Combine(path1: kept, path2: $"worlds/{index:D6}/run1/reproduction.json")), StringComparison.Ordinal);
         }
         Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
@@ -126,8 +136,8 @@ public sealed class TestCommandLawTests {
 
         Assert.True(Test.TestCommand.TryRunLeg(world: generated, artifact: Artifact(), legDirectory: freshDirectory,
             exportTick: 7, rateHz: 60, error: error, reading: out var fresh), userMessage: error.ToString());
-        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")), actual: fresh!.ExportBytes);
-        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/test-run.json")), actual: fresh.ManifestBytes);
+        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000003/run1/out/state-export.json")), actual: fresh!.ExportBytes);
+        Assert.Equal(expected: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000003/run1/out/test-run.json")), actual: fresh.ManifestBytes);
 
         static ulong[] ReadProbeHashes(string reproductionPath) {
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(path: reproductionPath));
@@ -137,7 +147,7 @@ public sealed class TestCommandLawTests {
 
         var pristineHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000000/run1/reproduction.json"));
         var changedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000001/run1/reproduction.json"));
-        var reusedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000002/run1/reproduction.json"));
+        var reusedHashes = ReadProbeHashes(reproductionPath: Path.Combine(path1: kept, path2: "worlds/000003/run1/reproduction.json"));
 
         Assert.False(condition: File.Exists(path: Path.Combine(path1: freshDirectory, path2: "reproduction.json")));
         // An ordinary scheduled boot records no proof. A separate reproduction must actually compare it.

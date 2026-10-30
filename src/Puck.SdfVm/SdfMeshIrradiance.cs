@@ -1258,11 +1258,15 @@ public sealed class SdfMeshIrradiance {
     // record and the terms of its weight.
     private void Gather(Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool readable, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
         var pushed = (point + (normal * SdfMeshIrradianceProbe.NormalBias));
+        var unclamped = ((pushed / layout.Spacing) - new Vector3(value: 0.5f));
         var sample = Vector3.Clamp(
-            value1: ((pushed / layout.Spacing) - new Vector3(value: 0.5f)),
+            value1: unclamped,
             min: new Vector3(x: low.X, y: low.Y, z: low.Z),
             max: new Vector3(x: ((low.X + layout.Dims.X) - 1), y: ((low.Y + layout.Dims.Y) - 1), z: ((low.Z + layout.Dims.Z) - 1))
         );
+        // How far past the boundary probes the receiver stands, in cells, at most one: the facing term eases to one over
+        // that cell, since every boundary probe lies on the window's side of a receiver outside it.
+        var outside = Math.Clamp(value: (unclamped - sample).Length(), min: 0f, max: 1f);
         var floor = new Vector3(x: MathF.Floor(x: sample.X), y: MathF.Floor(x: sample.Y), z: MathF.Floor(x: sample.Z));
         var fraction = (sample - floor);
 
@@ -1295,7 +1299,7 @@ public sealed class SdfMeshIrradiance {
             // probe's squared cosine stamped into flat floors. Irradiance is already evaluated along the normal.
             var facing = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * layout.Spacing)), 0f, 1f);
 
-            facing = ((facing * facing) * (3f - (2f * facing)));
+            facing = float.Lerp(((facing * facing) * (3f - (2f * facing))), 1f, outside);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
             var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);

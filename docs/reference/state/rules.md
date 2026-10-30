@@ -777,7 +777,7 @@ covers what a host does with each call.
   gate compiles to at most 1,024 tokens nested at most 64 deep, and an
   expression to at most 256 tokens and 64 shared subprograms.
 - **A bounded tick.** A document's rules are priced statically at their worst
-  case, and the whole sheet must stay within 4,000,000 work units per tick; the
+  case, and the whole sheet must stay within 4,250,000 work units per tick; the
   compiler doesn't accept an average-case estimate. See [Rule analysis,
   scheduling, and work budgets](analysis.md).
 - **No stepping debugger.** A trace records one line of facts per evaluation;

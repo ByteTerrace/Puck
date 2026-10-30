@@ -95,7 +95,7 @@ let alchemyOpening = map(range(0, alchemyCells), i => ((i >= 1) and (i <= starte
 
 // The bodies: debug.puck imports this file ahead of Go and Reversi, so its cursor and 31 element tokens take the top 32
 // slots (`shapes.puck`'s `alchemyBodies`): `alchemyCursor` is `alchemyTop` and `alchemyToken{e}` is `alchemyTop - e`.
-let alchemyTop = ((galleryPopulation + 2 + boardRoomBodies) - 1)
+let alchemyTop = (((galleryPopulation + 2 + boardRoomBodies) - 1) - granaryBodies)
 grants: map(
   range(0, totalElements),
   i => { capability: Drive, grantee: "seat1", subject: $"body:{alchemyTop - 1 - i}" }

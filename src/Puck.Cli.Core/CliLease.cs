@@ -84,6 +84,67 @@ public sealed class CliLease : IDisposable {
         }
     }
 
+    /// <summary>One live waiter in a lease queue.</summary>
+    /// <param name="Id">The ticket's sequence number, without padding.</param>
+    /// <param name="Holder">The holder name the waiter gave.</param>
+    /// <param name="Lane">The lane the waiter works for.</param>
+    /// <param name="Ahead">How many admissions come before this ticket's.</param>
+    /// <param name="Position">The ticket's lane's turn among the queued lanes in the current round.</param>
+    /// <param name="Lanes">How many lanes are queued.</param>
+    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes);
+
+    /// <summary>What a lease directory shows at one moment.</summary>
+    /// <param name="Holder">The holder name, or null when nothing holds the lease.</param>
+    /// <param name="Lane">The holder's lane, or null when nothing holds the lease.</param>
+    /// <param name="HolderAlive">Whether the holder's process still runs; false for a holder file left by an exited process.</param>
+    /// <param name="Queue">The live waiters in queue order.</param>
+    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue);
+
+    /// <summary>Reads a lease without changing it: no ticket is taken, no dead ticket or stale holder is removed, no rotation serial is written.</summary>
+    /// <param name="root">The shared lease directory.</param>
+    /// <param name="name">The resource: build, gpu or heavy.</param>
+    /// <param name="now">The time the metadata of a process the OS cannot name is judged against.</param>
+    /// <returns>The holder and the live waiters; an absent directory reads as an idle lease.</returns>
+    public static LeaseState Inspect(string root, string name, DateTimeOffset now) {
+        var directory = Path.Combine(path1: root, path2: name);
+        var holder = ReadHolder(directory: directory);
+        string? holderName = null, holderLane = null;
+        var alive = false;
+
+        if (holder is { Length: > 0 }) {
+            holderName = holder[0];
+            holderLane = ((holder.Length == 5) ? holder[4] : DefaultLane(holder: holder[0]));
+            alive = (ProcessGone(lines: holder, now: now) == false);
+        }
+        var queue = (directory + ".queue");
+        var tickets = new List<LeaseTicket>();
+
+        if (Directory.Exists(path: queue)) {
+            foreach (var file in Directory.EnumerateFiles(path: queue).Order(comparer: StringComparer.Ordinal)) {
+                string[] lines;
+
+                try {
+                    using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: (FileShare.ReadWrite | FileShare.Delete));
+                    using var reader = new StreamReader(stream: stream);
+
+                    lines = reader.ReadToEnd().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { continue; }
+                if ((ProcessGone(lines: lines, now: now) != false) || (lines.Length is not (4 or 5))) { continue; }
+                var place = Admission(drop: false, now: now, rotation: (directory + ".rotation"), ticket: file);
+
+                tickets.Add(item: new LeaseTicket(
+                    Ahead: place.Ahead,
+                    Holder: lines[0],
+                    Id: Path.GetFileName(path: file).TrimStart(trimChar: '0'),
+                    Lane: ((lines.Length == 5) ? lines[4] : DefaultLane(holder: lines[0])),
+                    Lanes: place.Lanes,
+                    Position: place.Position
+                ));
+            }
+        }
+        return new LeaseState(Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets);
+    }
+
     /// <summary>The lane a holder works for when none is named: the first word of its name.</summary>
     private static string DefaultLane(string holder) => holder.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries)[0];
     /// <summary>The metadata a holder file and a ticket share: holder, UTC time, process id and process start ticks, then the lane
@@ -103,9 +164,11 @@ public sealed class CliLease : IDisposable {
     private static string Enqueue(string queue, string holder, string lane, TimeProvider clock) {
         Directory.CreateDirectory(path: queue);
         var lines = Metadata(clock: clock, holder: holder, lane: lane);
+        var floor = 1L;
+        var denied = 0;
 
         while (true) {
-            var next = 1L;
+            var next = floor;
 
             foreach (var file in Directory.EnumerateFiles(path: queue)) {
                 if (long.TryParse(s: Path.GetFileName(path: file), provider: CultureInfo.InvariantCulture, result: out var sequence) && (sequence >= next)) { next = (sequence + 1); }
@@ -120,17 +183,21 @@ public sealed class CliLease : IDisposable {
                 foreach (var line in lines) { writer.WriteLine(value: line); }
                 return path;
             } catch (IOException) when (File.Exists(path: path)) { }
+            // Windows refuses a name whose deleted file is still held open elsewhere, and the listing may not show it:
+            // take the next sequence, and give up only when the directory itself refuses.
+            catch (UnauthorizedAccessException) when (++denied <= 64) { floor = (next + 1); }
         }
     }
     /// <summary>Where a ticket stands in the admission order: tickets ahead, its lane's turn among the queued lanes, and how many lanes are queued.</summary>
     private readonly record struct Place(int Ahead, int Position, int Lanes);
 
     /// <summary>
-    /// Replays the admission order over the live tickets, dropping each whose process is gone. Each round admits the oldest
+    /// Replays the admission order over the live tickets, skipping each whose process is gone and deleting its file only when
+    /// <c>drop</c> is set, so a read-only inspection leaves the queue as it found it. Each round admits the oldest
     /// ticket of the lane served least recently, then counts that lane as the most recently served; a ticket whose lane is
     /// not yet readable is a lane of its own that has never been served.
     /// </summary>
-    private static Place Admission(string ticket, string rotation, DateTimeOffset now) {
+    private static Place Admission(string ticket, string rotation, DateTimeOffset now, bool drop = true) {
         var mine = Path.GetFileName(path: ticket);
         var queues = new Dictionary<string, Queue<string>>(comparer: StringComparer.Ordinal);
         var live = 0;
@@ -147,7 +214,8 @@ public sealed class CliLease : IDisposable {
 
                 lines = reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
             } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
-                // Vanished, or being written: a ticket we cannot read yet is counted, never skipped.
+                // Vanished, being written, or deleted but still held open (Windows answers access denied): a ticket we
+                // cannot read yet is counted, never skipped.
                 if (!File.Exists(path: file)) { continue; }
             }
             if (lines is not null) {
@@ -156,6 +224,7 @@ public sealed class CliLease : IDisposable {
                 recognized = (exited is not null);
                 // A ticket whose metadata never became recognizable (its writer died mid-write) is dropped once it is old.
                 if (exited ?? ((DateTime.UtcNow - File.GetLastWriteTimeUtc(path: file)) > TimeSpan.FromSeconds(seconds: 10))) {
+                    if (!drop) { continue; }
                     // A ticket the OS will not let go of yet (Windows holds a deleted file open elsewhere) stays counted.
                     try { File.Delete(path: file); continue; } catch (IOException) { } catch (UnauthorizedAccessException) { }
                 }
@@ -189,7 +258,7 @@ public sealed class CliLease : IDisposable {
     private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: lane))));
     /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
     private static long Served(string path) {
-        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (IOException) { return 0; }
+        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return 0; }
     }
     /// <summary>Records that a lane holds the lease now, as the highest serial any lane has had. Only the guard's owner writes.</summary>
     private static void Serve(string rotation, string lane) {

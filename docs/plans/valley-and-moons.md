@@ -76,6 +76,100 @@ ends with the check named in it.
    the highest settings, both backends, edit-to-running under 30 s. More moons
    and content follow it.
 
+## Measured
+
+Headless and CPU numbers, taken on the lead machine while five other lanes
+built and tested beside them, so wall times are loaded and counts are the
+evidence. The windowed half (GPU bake, frame time, the HLSL edit, Vulkan) is
+the `valley` group of the sweep's tour (`worlds/debug/sweep.json`), each stop
+naming what its still must show.
+
+### Phase 0: before the valley
+
+| Reading | Value |
+|---|---|
+| Composition | 38 documents (16 shared), 305 creations, 1047 placements, 13 screens |
+| Contact | analytic provider, 512 placement colliders, skin 0.02 m, slope 60 degrees |
+| Headless simulate per iteration (`host.frames 300`) | p50 8.9 ms, avg 17.3 ms (the machines' emulation is most of it) |
+| `puck bench world` | idle tick 13.3 ms median, paced tick 3.9 ms, 488 sleeping rigid bodies, 14.1 body visits a tick |
+| Rules | 735 rules, 2,783,787 of 4,000,000 work units a tick |
+| Cold bake, every group on the CPU (`puck mesh audit --cpu`) | 987 groups, 791 meshes, 476 M samples, 4.1 M refined cells, 13.09 M triangles (level 1 1.56 M, level 2 0.97 M), 0 discarded, 477 s |
+| Mesh audit over the same bake | 774 groups audited and 213 not (the CPU audit then read only unchunked groups); 53,965 open and 84 non-manifold edges summed over the audited groups |
+| C# edit to running | a doc-comment edit in `Puck.Physics`, under most of the World's projects, to a booted headless World through `puck_world_start`'s store build: 250 to 370 s on the loaded machine; hot reload, the bar's path, is the edit-to-run lane's measurement |
+
+Warm GPU bake work, mesh and source counts at the window, and the HLSL edit,
+are the window's to read: a headless World builds no renderer.
+
+### Phase 1: the valley as built
+
+`worlds/debug/valley.puck`: eight sectors, each one creation placed at the
+centre and turned to its bearing, built from `worlds/standard/terrain.puck`
+(`terrainMass`, `terrainFloorCut`, `terrainRelief`): a main superellipsoid
+mass and two shoulders sunk 30% below the floor plane, cut 10 m under it, and
+6-octave fBm relief of 4 m amplitude at 0.02 cycles a metre. The feet stand
+205 to 230 m from the origin, the summits 300 to 430 m high; the floor
+(`debug.puck`'s `floor`) is a 740 m disc that runs on under every wall, so the
+old slab edge is gone. The overlook is a deck at 345 m on the south-west
+face. Draw distance is 6000 m and the clear day's fog 0.0006 a metre, so the
+rim keeps about two thirds of its light. A body under y −40 is stood on the
+floor 190 m out below the sector whose wedge it fell in (`fall-recovery`),
+checked at five points including the origin.
+
+Per sector, baked offline on the CPU (`puck mesh audit --cpu --group
+"(valley-<sector>)"`); samples are the sector's own past the 35.8 M every
+other group's first lattice answers empty, seconds the whole run's.
+
+| Sector | Peak m | Samples | Refined cells | Triangles | Level 1 / 2 | Cell mm | Off-surface p99 mm | Face normal p50 / p99 deg | Folds / flipped | Open / non-manifold | Seconds |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| north | 380 | 6.83 M | 52,309 | 296,724 | 153,062 / 42,844 | 2791 | 36.6 | 4.4 / 16.4 | 127 / 52 | 0 / 0 | 43.0 |
+| north-east | 330 | 5.50 M | 41,117 | 241,460 | 122,034 / 33,124 | 2844 | 37.2 | 4.7 / 18.0 | 77 / 42 | 0 / 0 | 33.8 |
+| east | 300 | 5.69 M | 41,827 | 257,760 | 124,480 / 31,042 | 2811 | 36.9 | 4.2 / 14.8 | 145 / 71 | 0 / 0 | 32.1 |
+| south-east | 350 | 5.65 M | 43,000 | 243,376 | 131,462 / 39,132 | 2999 | 40.3 | 5.0 / 19.3 | 168 / 75 | 0 / 0 | 28.8 |
+| south | 430 | 7.43 M | 56,913 | 321,524 | 172,552 / 51,876 | 2887 | 37.9 | 4.6 / 18.3 | 179 / 76 | 0 / 0 | 38.6 |
+| south-west | 360 | 6.17 M | 47,207 | 265,928 | 138,638 / 39,200 | 2903 | 38.6 | 4.8 / 18.2 | 170 / 84 | 0 / 1 | 31.7 |
+| west | 300 | 6.00 M | 44,492 | 268,646 | 129,444 / 32,390 | 2672 | 34.7 | 4.2 / 15.0 | 161 / 81 | 0 / 2 | 31.0 |
+| north-west | 340 | 6.16 M | 47,033 | 266,288 | 136,104 / 37,712 | 2771 | 36.5 | 4.7 / 18.3 | 154 / 68 | 0 / 0 | 23.7 |
+| floor (740 m disc) | | 4.82 M | 24,128 | 36,524 | 5,628 / 5,628 | 3256 | 8.4 | 1.0 / 30.8 | 4 / 12 | 0 / 0 | 13.1 |
+| overlook | | 0.91 M | 12,226 | 27,364 | 5,838 / 5,838 | 251 | 8.1 | 0.1 / 10.2 | 4 / 2 | 0 / 0 | 5.9 |
+
+No sector discarded work. Every sector's field reads well under a distance
+(slope deficit p50 0.7: the anisotropic ellipsoid gauge and the noise scope's
+step clamp), which the bake measures against and the audit reports as
+"loose". The worst clusters are folds where the relief crosses the floor cut
+10 m under the floor, out of sight; the visible ones are shading normals up
+to 60 degrees off on the steepest relief, for the window to judge. The eight
+sectors add 2.16 M triangles (level 1 1.11 M, level 2 0.31 M) to the world's
+13.09 M.
+
+Contact on the slopes (`world.counters physics.contact`, per tick, the world's
+191 other resolves included): a Moth standing on the floor away from the walls
+adds no convex query; standing at a wall's foot, 82 convex (GJK and EPA)
+queries and 2,172 support evaluations; on a 22 degree slope at 368 m, 49 and
+1,066; on the 58 degree face at 258 m, 51 and 1,251; the overlook deck, 41 and
+1,067. `world.debug-view report colliders` finds 0 red and 0 amber over 13,832
+witnesses. The rule budget rises 112,392 units a tick, to 2,896,179, for the
+eight recovery wedges.
+
+The bake reaches these numbers because a scoped creation's relief declares its
+detail (`CreationNoiseDocument.DetailSpacing`: a quarter of the wavelength of
+the finest octave carrying a sixteenth of the amplitude, 1.56 m here) and the
+floor cut keeps the masses' buried halves off the lattice; without either a
+sector baked at 20.6 m cells into 10,364 triangles and the relief aliased away.
+The gallery's NOISE exhibit, the world's other scoped noise creation, bakes at
+6.3 mm instead of 18.7 mm by the same rule: 137,372 triangles instead of
+15,936, its face normal p99 8.7 instead of 23.6 degrees.
+The CPU audit measures a sector against a fixed-point field that now reads a
+514 m superellipsoid radius at full precision (through its Q16 inverse it read
+surface points 0.06 to 0.85 m off, with no gradient at a 1 mm probe), and it
+reads chunked static unions whole. What the terrain still lacks, contact on the
+drawn relief first, is the [terrain packet](open-items.md#the-valleys-terrain).
+
+**Heightfield source: not added.** Measured analytic terrain does not fail the
+edit bar (one sector rebakes alone; its CPU bake is 24 to 43 s on a loaded
+machine and the GPU bake is the window's to time) or the contact bar (about 50
+convex queries a tick for a body on a slope). The frame bar is read in the
+window; a heightfield is added only if that reading fails.
+
 ## The owner's rulings
 
 - **The valley** is a basin or caldera with relatively close slopes, not far

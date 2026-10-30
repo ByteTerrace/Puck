@@ -171,11 +171,17 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// <param name="CharacterFade">The full-size fade distances; absent uses the standard distances.</param>
 /// <param name="ClearanceMaxElevation">The cutaway boom's highest elevation above the seat's level plane, in radians.</param>
 /// <param name="AutoFirstPerson">The optional automatic pull-in policy; absent is off with standard hysteresis.</param>
+/// <param name="Boom">Optional authored distance limits and input step for the interactive orbit.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
     WorldCameraClearanceChoice ClearanceMode = WorldCameraClearanceChoice.Cutaway,
     WorldCameraCharacterFade? CharacterFade = null, float ClearanceMaxElevation = 1.1f,
-    WorldCameraAutoFirstPerson? AutoFirstPerson = null);
+    WorldCameraAutoFirstPerson? AutoFirstPerson = null, WorldCameraBoom? Boom = null);
+/// <summary>Authored bounds for a seat's interactive orbit distance, in full-size metres.</summary>
+/// <param name="Minimum">The closest requested orbit distance.</param>
+/// <param name="Maximum">The farthest requested orbit distance.</param>
+/// <param name="Step">Distance removed by one positive input unit.</param>
+public sealed record WorldCameraBoom(float Minimum, float Maximum, float Step);
 /// <summary>Opt-in automatic first person. Distances are full-size metres; dwell requires consecutive time
 /// below entry or above exit clearance. The gap retains the current view.</summary>
 /// <param name="Enabled">Whether automatic pull-in is the author's default.</param>

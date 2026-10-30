@@ -71,7 +71,8 @@ public sealed class FixedStaticContactSolverTests {
         );
 
         Assert.True(condition: resolution.Grounded);
-        var support = Assert.IsType<ContactSupportWitness>(resolution.Support);
+        var support = Assert.IsType<ContactSupportWitness>(@object: resolution.Support);
+
         Assert.Equal(colliders[0], support.Collider);
         Assert.Equal(FixedSurfaceColliderSource.Static, support.Source);
         Assert.Equal(0, support.ColliderIndex);
@@ -249,4 +250,69 @@ public sealed class FixedStaticContactSolverTests {
             expected: FixedQ4816.FromDouble(value: -9d)
         );
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void FastMotionStopsAtAThinWallOnlyWhenOneExists(bool wall) {
+        var start = Vector(x: -3d, y: 1d, z: 0d);
+        var position = Vector(x: 3d, y: 1d, z: 0d);
+        var velocity = Vector(x: 30d, y: 0d, z: 0d);
+        FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(
+            center: Vector(x: (wall ? 0d : 20d), y: 1d, z: 0d), halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
+        FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.25d) }];
+        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+            position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes, up: FixedVector3.UnitY);
+
+        Assert.Equal(expected: ContactRefusal.None, actual: result.Refusal);
+        Assert.False(condition: result.Unproved);
+        if (wall) {
+            Assert.True(condition: (position.X < FixedQ4816.Zero));
+            Assert.Equal(expected: -FixedVector3.UnitX, actual: result.ObstructionNormal);
+            Assert.Equal(expected: FixedQ4816.Zero, actual: velocity.X);
+        } else {
+            Assert.Equal(expected: Vector(x: 3d, y: 1d, z: 0d), actual: position);
+            Assert.Equal(expected: FixedVector3.Zero, actual: result.ObstructionNormal);
+            Assert.Equal(expected: FixedQ4816.FromInteger(value: 30), actual: velocity.X);
+        }
+    }
+    [Fact]
+    public void ExhaustedAnalyticSweepKeepsOnlyItsProvedPrefix() {
+        var start = Vector(x: 0d, y: 1d, z: 0d);
+        var position = Vector(x: 1000d, y: 1d, z: 0d);
+        var velocity = Vector(x: 30000d, y: 0d, z: 0d);
+        FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 500d, y: 1d, z: 0d),
+            halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
+        FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.25d) }];
+        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+            position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes, up: FixedVector3.UnitY);
+
+        Assert.True(condition: result.Unproved);
+        Assert.Equal(expected: ContactRefusal.None, actual: result.Refusal);
+        Assert.Equal(expected: FixedVector3.Zero, actual: result.ObstructionNormal);
+        Assert.True(condition: (position.X > start.X));
+        Assert.True(condition: (position.X < FixedQ4816.FromInteger(value: 500)));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 30000), actual: velocity.X);
+    }
+    // A small, fast body crossing space no collider's bounds reach arrives at its endpoint proved.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AMoveThroughClearSpaceReachesItsEndpointInOneSolve(bool culled) {
+        var start = Vector(x: 0d, y: 1d, z: 0d);
+        var end = Vector(x: 2d, y: 1d, z: 0d);
+        var position = end;
+        var velocity = Vector(x: 60d, y: 0d, z: 0d);
+        FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 1d, y: 1d, z: 50d),
+            halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
+        FixedVector3?[] extents = (culled ? [colliders[0].WorldHalfExtent()] : []);
+        FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.01d) }];
+        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+            position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes,
+            up: FixedVector3.UnitY, colliderExtents: extents);
+
+        Assert.False(condition: result.Unproved);
+        Assert.Equal(expected: end, actual: position);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 60), actual: velocity.X);
+    }
+
 }

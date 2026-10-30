@@ -40,6 +40,11 @@ when debugging a single shared resource, or `--jobs <n>`
 to choose the worker limit explicitly. The headless host advances on the
 world's fixed tick grid without waiting for wall clock.
 
+A worker reuses its native host only for consecutive scenarios whose complete
+composed documents are identical apart from their schedules. Changed state,
+fields, rules or expectations get a fresh host. Compatible scenarios restore
+the complete boot checkpoint before their commands run.
+
 ```text
 test: chinese-checkers~all-marbles-settle-into-the-star <- .../chinese-checkers.puck test "all marbles settle into the star"
   expect$1: pass gate="missingCount == 0" saw=[missingCount=0] firedTick=501
@@ -412,10 +417,11 @@ Decompilation keeps those authored row names and sections. Generated
 | 1 | a verdict failed, or a step's recorded outcome was not the one it declared |
 | 2 | usage: a source that does not compile, a source with neither tests nor a scheduled verdict document, a `--reproduce` mismatch, a build or boot refusal |
 
-Each worker retains a native World host. Scenarios sharing its boot configuration
-restore the complete boot checkpoint, install their schedule, and run in
-authored order. State and rules belong to the boot configuration; a difference
-starts a fresh native host in the worker. A boot that cannot be checkpointed runs each scenario in
+Each worker retains a native World host. Scenarios sharing its host composition
+restore the complete pristine checkpoint, install their own state seeds, rules
+and schedule, and run in authored order. Population declarations, machines,
+companions and assets still determine whether the native host can be shared.
+A boot that cannot be checkpointed runs each scenario in
 its own native host. `--reproduce`
 captures each authority's input, restores its starting checkpoint in place, and
 replays that input without another boot. It requires matching per-tick authority

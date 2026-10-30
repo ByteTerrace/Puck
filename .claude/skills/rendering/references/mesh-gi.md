@@ -80,13 +80,30 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   uncertainty behind a thin wall from admitting a bright exterior probe.
   Squared angular cosines gave probes relocated close to a floor a strong pole
   directly above each lattice centre; the distance fade removes those repeated
-  floor spots without changing the stored lighting. The CPU bounce read and the
-  pixel read use the same rule.
+  floor spots without changing the stored lighting. Past the boundary, blend
+  this distance fade toward one over the first cell outside, as below. The CPU
+  bounce read and pixel read use the same rule, without squaring the final weight.
 - At the volume boundary clamp the lookup, then test the actual receiver,
   pushed `NormalBias` (0.05 m) along its normal, against depth. Never bias by
   spacing or test the clamped position: either can carry a receiver through a
   thin wall. An unwritten or invalid probe contributes nothing. No answering
   probe means no measured indirect light, and a depth miss has finite reach.
+- Past the boundary the facing term eases to one over the first cell outside
+  (`outside` in `sdfMeshProbesAt` and `Gather`). Every boundary probe lies on the
+  window's side of such a receiver, so the hemisphere weight would light only
+  the normals turned toward the window: a body or surface out there reads half
+  dark, split at the plane that faces the window. A body posed ahead of the
+  window's refill stands outside the published window until the moved cells are
+  measured (`world.probe` answers `unsettled` meanwhile): on a fresh boot whose
+  first trace ran at the spawn, a pose across the hall reads the spawn's window
+  for the refill's duration. Reproduce a boundary finding by posing past the
+  published window and taking a presented capture before the refill lands; a
+  settled capture or a pose before the first trace hides it.
+  That orientation correction is still limited by the measured depth reach:
+  the local surface map rejects a receiver beyond its short support even when
+  the boundary-facing factor is one. It supplies no coarse far-field coverage;
+  a large refill can therefore leave the old window unable to light the moved
+  receiver. Keep that coverage finding separate from the orientation correction.
 - Read `world.probe <x> <y> <z> [<nx> <ny> <nz>]` for each corner's origin,
   offset, back-face share, validity, sweeps, cubes and weight terms.
   Each valid corner also reports an exact mesh-segment `reference-clear` check,

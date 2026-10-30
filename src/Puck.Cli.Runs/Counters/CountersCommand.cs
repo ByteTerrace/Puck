@@ -8,7 +8,7 @@ using Puck.World;
 namespace Puck.Cli.Counters;
 
 /// <summary><c>puck counters</c> — the work-counter collector. It boots the authored counters workload
-/// (the debug world's shadow workload, <c>tests/Puck.Counters/debug.world.json</c>, driven by <c>shadow.script.txt</c> beside it, unless
+/// (the debug world's shadow workload, <c>tests/Puck.Counters/debug.puck</c>, driven by <c>shadow.script.txt</c> beside it, unless
 /// <c>--world</c> and <c>--script</c> select another workload) offscreen once per
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
@@ -18,7 +18,7 @@ public static partial class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
     public const string ScriptPath = "tests/Puck.Counters/shadow.script.txt";
     /// <summary>The workload's world document, repository-relative.</summary>
-    public const string WorldPath = "tests/Puck.Counters/debug.world.json";
+    public const string WorldPath = "tests/Puck.Counters/debug.puck";
 
     private const string ReportFileName = "counters.report.json";
     private const string ScratchPrefix = "puck-counters-";
@@ -287,7 +287,7 @@ public static partial class CountersCommand {
             and node. Standard error carries progress; transcripts stay in the run's scratch directory.
 
             --world and --script select another authored workload and its script, such as the seated-avatar
-            workload (avatar.world.json, run by avatar.script.txt). The report carries both paths. To judge a
+            workload (avatar.puck, run by avatar.script.txt). The report carries both paths. To judge a
             change, collect a report before and after it and compare them with 'puck counters compare'.
 
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
