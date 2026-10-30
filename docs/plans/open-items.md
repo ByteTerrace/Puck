@@ -779,11 +779,12 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision along the [custody redesign](companion-redesign.md) (the companion lands
+decision along the [custody protocol](companion-redesign.md) (the companion lands
 inert in the live debug world today; two builds of the decision failed review on
-trust, away bookkeeping and the custody key, and the redesign derives all three
-from crossing-log records), then the uncertain crossing, opened by a two-silo
-failover witness.
+trust, away bookkeeping and the custody key, so the protocol is specified per
+authority and checked by the `CompanionCustodyModel` law in
+`tests/Puck.World.Protocol.Tests`, which the build follows as its oracle), then
+the uncertain crossing, opened by a two-silo failover witness.
 
 - [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
