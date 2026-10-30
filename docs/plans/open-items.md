@@ -26,42 +26,44 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
-   coverage, enclosure, floor and wrapped-diffuse sun findings, with quiet
-   timing and frame-cost qualification of the probe-depth fixes at integration.
-2. [Bake detail](#bake-detail): measure static curvature refinement and local
+1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): the
+   debug world runs at 7-8 FPS on Direct3D 12 and 4 FPS on Vulkan at every
+   sweep stop, quiet; find what each frame waits on.
+2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
+   coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
+   timing is settled (Vulkan matches Direct3D 12).
+3. [Bake detail](#bake-detail): measure static curvature refinement and local
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
-3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a hot-reload code revision as one invalidation contract (emitter revisions
    and the static field), then the persisted caches keyed by the modules as
    built; a product of edited code under the unedited identity is the hazard.
-4. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
-   answer), the per-swap state load, then the schema switch.
-5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
-   break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
-   `--reproduce`, including the unexplained Go CPU regression in the loaded
-   boot-reuse comparison.
-6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+   answer), then the schema switch.
+6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
+   break (`WorldTestBatch.cs:89`), then delete complete-boot reuse and make the
+   per-tick authority hash incremental, as the quiet measurement supports.
+7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-7. [Residency and streaming](#residency-and-streaming): the measurements, then
+8. [Residency and streaming](#residency-and-streaming): the measurements, then
    near-first ordering of bake, store loads and landing; the card tables are
    its test case.
-8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
-   it in `panes` and answers under pause, then the diagnostics' windowed checks
-   and the developer exhibits.
-10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+    it in `panes` and answers under pause, then the diagnostics' windowed checks
+    and the developer exhibits.
+11. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
-11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+12. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
-12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+13. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -159,6 +161,39 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
   1280x900. Measure the actual view/slot allocation; the loaded paired shader
   readings establish no quiet-machine 60 FPS or VRAM qualification.
 
+### Frame time on the lead machine
+
+Owner: rendering and host performance specialist · high · Next: find what the
+frame waits on (per-view GPU time from `world.counters gpu` timestamps, then
+drop session views, screens and the desktop capture one at a time), then fix it
+and re-read these stops.
+
+- [high] The RTX 4070 is nowhere near 60 FPS at any sweep stop. A quiet windowed
+  Direct3D 12 World at 1280x900, bakes settled, `world.lockstep off`, reads 121-140
+  ms average per iteration (7-8 FPS) at the lobby (`debug.go gallery`), level 1
+  (`debug.go gallery-level-1`), the boardroom, the card table (`debug.go cards`)
+  and the valley rim (`body.pose 0 386 470 0 0 0`), three `host.frames` readings
+  of 45-90 ticks each with temporal on and three with it off. Temporal changes
+  nothing (lobby 131-135 ms on, 130-137 ms off; rim 135-136 on, 127-131 off):
+  every reading has produce 98-116 ms and simulate 21-29 ms, the slowest
+  iterations 210-265 ms. Machine load was 8-16 %, and the World used about 1.3
+  cores. A `dotnet-sampled-thread-time` trace of the lobby has the frame thread
+  on CPU for only 1.9 s of 8 s (75 % of that in `FixedStepPump.Step`, rule
+  evaluation 35 %), so most of produce is spent outside managed code. Vulkan at
+  the lobby reads 212-273 ms per iteration with produce only 25-37 ms and the
+  frame's `begin` (the wait for the previous frame) 380-413 ms, which points at
+  the GPU. Counted work at the lobby: `world` 11.5 M vertices and 794 draws,
+  `beacon-eye` 5.2 M, and session views of the garden and night field about
+  25 M more. Unconfirmed: whether the GPU itself is saturated (no utilization
+  was sampled during the run) and which view costs it. The busiest managed
+  non-frame thread is the desktop screen's capture feed
+  (`Win32GraphicsCaptureFeed`, 3.3 s of CPU in 8 s). (from: quiet-measure)
+- [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
+  unread: `gallery.level 0` stands her before the door, not in the car, so the
+  reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
+  steps and 44 ms) is the lift travelling without her. Pose her inside the car
+  first. (from: quiet-measure)
+
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · Next: remaining
@@ -237,13 +272,6 @@ holds the fixed poses and the approaches already rejected.
     11.02 MiB Medium, 33.05 MiB High. Actual retained uploads are reported
     separately; whole-process private memory does not uniformly decrease.
     Raw pairs and allocation diagnostics are in the probe-depth-fix hand-back.
-  - [ ] Quiet integration confirmation: repeat the depth-visibility timing pair
-    without the campaign's competing CPU work. The loaded pairs above establish
-    work and CPU reductions, not quiet backend parity. Investigate if Vulkan
-    remains about three times Direct3D 12 under matched quiet conditions. The
-    full Direct3D tours miss the frame budget before and after (standing means
-    50.54 to 85.78 ms, walking 52.20 to 75.35 ms, mostly produce/simulate);
-    these nonadjacent loaded readings do not isolate probe gather cost.
   - [x] [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
     still show small dark marks at mid-height on the stairwell's east wall
     (`own-vulkan-stairwell-lit.png`, the black squares the owner reported), 2
@@ -345,8 +373,9 @@ holds the fixed poses and the approaches already rejected.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
-replica cost and repeat the paired CPU measurements on a quiet machine.
+Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then delete
+complete-boot reuse and make the per-tick authority hash incremental (both
+measured below).
 
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
@@ -357,31 +386,54 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   here), and have the sweep refuse a directory it cannot remove rather than
   crash. (from: the
   prune-redesign lane)
-- [medium] Re-measure complete-boot reuse on a quiet machine and profile Go's
-  reproduction replica. The boot-reuse-2 correction requires identical composed
-  documents apart from schedules, including every state row and rule. Its paired
-  `--reproduce --jobs 1` runs across the original 18 debug files (84 scenarios)
-  use 3,731.27 -> 3,731.77 whole-process-tree CPU seconds, effectively unchanged
-  on the loaded machine despite 18 -> 83 host boots. Go uses 1,127.77 -> 1,164.20
-  seconds (+3.2%). All 256 verdict, state-export and reproduction artifacts are
-  byte-identical; the field, undo-ordinal and separately imported census pairs
-  fail before and pass after. These numbers favor the complete checkpoint
-  boundary over rebuilding every derived section merely to retain broader
-  reuse; they do not establish quiet-machine performance. Per-file CPU, wall
-  time, boot counts and red/green evidence are in
-  .claude/scratch/boot-reuse-2-evidence/report.md (lead checkout, ignored). The
-  earlier incomplete-identity implementation also showed no clear loaded-machine
-  speedup; its replica profiling remains relevant below. (from: boot-reuse-2)
+- [medium] Delete complete-boot checkpoint reuse and keep the warm worker
+  (decided on the quiet measurement). Under the complete identity no two
+  scenarios of a file share a composed document: alchemy boots 8 hosts for 8
+  scenarios, Go 15 for 15, and boot-reuse-2's suite 83 for 84, so restoring the
+  pristine checkpoint saves at most one warm boot (about 3.3 s) per suite run.
+  What does pay is the worker process staying alive: its first boot is 8.5-9.2 s
+  and every later boot in it 3.1-3.5 s. The reuse path still costs on every run:
+  the coordinator composes and canonicalizes every staged `.world.json` of every
+  scenario to compute `BatchShape` (`src/Puck.Cli.Worlds/Test/TestCommand.Batch.cs`),
+  part of the 30-55 s of coordinator preparation per file below, and the
+  scenario-restore machinery (`WorldPersistence.ScenarioCheckpoint`,
+  `WorldInstanceHost.RestoreScenario`, the seat-route and input-timeline resets
+  in `WorldTestBatch.StartLeg`) carries the hazards the verification skill lists.
+  Boot every scenario fresh in the warm worker, delete the shape comparison and
+  the scenario restore, and re-time alchemy and Go. Quiet readings (load under
+  15 % before each run, about 25-38 % during, the run's own work), `--jobs 1`,
+  whole-process-tree CPU by job object:
 
-- `--reproduce` cost: the complete loaded-machine boot-reuse comparison uses
-  3,352.27 → 3,590.33 whole-process-tree CPU seconds (+7.1%), while ordinary
-  runs use 1,456.67 → 1,396.70 seconds (−4.1%). Go accounts for most of the
-  reproduction increase (865.73 → 1,152.02 seconds). Its first scenario was
-  already slower before any cross-scenario restore; an isolated fresh-host
-  pair for that same scenario instead uses 101.77 → 94.95 seconds with exact
-  artifacts. The cause remains unconfirmed: repeat paired per-file timings on
-  a quiet machine and profile the replica before attributing this to either
-  contention or host reuse.
+  | File, mode | Runs | Wall s, median (spread) | CPU s, median (spread) | Host boots |
+  |---|---:|---:|---:|---:|
+  | alchemy, ordinary | 3 | 113.1 (113.0-115.8) | 208.9 (205.6-209.0) | 8 |
+  | alchemy, `--reproduce` | 3 | 214.5 (213.9-215.8) | 351.2 (350.8-353.1) | 8 |
+  | Go, ordinary | 1 | 243.2 | 515.7 | 15 |
+  | Go, `--reproduce`, traced | 1 | 604.7 | 1,065.0 | 15 |
+
+  Chess, the whole-suite `--jobs 1`/`--reproduce`/`--jobs 2` runs and two more
+  Go runs were not reached in the measurement window. (from: quiet-measure)
+- [medium] `--reproduce` costs about twice the ordinary run, and the cost is
+  per-tick hashing and recording, not host reuse. Recording slows the authored
+  phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
+  recorded; Go's 2,804-tick scenarios 15 s against 31 s under the trace), the
+  replay then repeats it (replay time equals recorded authored time), and a
+  replica has a fixed 2.4-4 s floor even for a 16-tick scenario. A
+  `dotnet-sampled-thread-time` trace of Go's reproduce worker (481 CPU-s on the
+  tick threads) splits it: `WorldReplayProbe.Verify` 51 %, the authored steps 49 %;
+  `WorldPersistence.AppendStateHashComponent` 36.5 % of all of it
+  (`WorldPopulation.AppendContinuationHash` 16.4 %, `StateArena.ComputeHash`
+  13.9 %), `WorldReplayTape.NoteTick` 20.7 % (with
+  `WorldAuthorityCheckpointCodec.WritePopulationEntry` 10.3 %), the session
+  sinks' snapshot delivery to the garden and night mirrors 16.7 %
+  (`WorldDocumentStateView.ApplyFieldCells` 11.4 %), replica arena construction
+  and load 7 %, and the simulation itself (rules 13 %, bodies and contact sweeps
+  about 15 %) the rest. Make the per-tick hash incremental (fold only changed
+  arena columns and changed body continuations), and find whether a headless
+  test worker's session mirrors have any reader before delivering to them;
+  then re-time Go.
+  Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
+  (from: quiet-measure)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
@@ -515,9 +567,15 @@ outside `PuckHotReload`.
   sent the next Vulkan boot into a full 333 s rebake (a cold bake of the debug
   world is 314 s on Direct3D 12 and 333 s on Vulkan, 2,022 groups and 1.09
   billion samples, per backend store). Hash only what the bake reads.
-- Re-measure the loops on an idle machine against the targets: a
-  `Puck.World.Client` edit to ready under 20 s, an HLSL edit settling under
-  30 s, boot to ready under 6 s. On the loaded lead machine a hot-reloaded
+- HLSL on a quiet lead machine is inside the 30 s ruling: in a windowed
+  Direct3D 12 World, a new constant in `passes/sdf-light-stage.hlsli` went from
+  save to `world.shaders.reload` answering `state=applied` (`sdf-world-views`
+  alone) in 8.04 and 8.24 s, harness round trips of about 1-1.5 s included; a
+  revert to bytecode already in the shader cache took 2.65 s. The C# loop
+  (`dotnet watch`, windowed) was not reached in that window and is still owed.
+- Re-measure the C# loops on an idle machine against the targets: a
+  `Puck.World.Client` edit to ready under 20 s, boot to ready under 6 s. On the
+  loaded lead machine a hot-reloaded
   Client body edit applies in 45-54 ms after the watch's first edit (14.3 s), a
   light-stage constant edit settles through `world.shaders.reload` in 11.8 s, a
   headless boot reaches `world.status` in 4.6-4.8 s, and the `dotnet run` loop
@@ -928,6 +986,13 @@ failover witness.
 Owner: MCP lane (specialist) · medium · Next: the schema switch, then the pick
 answer.
 
+- Time the MCP front's swap to a newly activated build, from a private install
+  root (`puck mcp --prepare-install --install-root <worktree>/.claude/mcp-install`):
+  the quiet measurement did not, since activating in the shared root reaches every
+  session's tools. The placement swap needs no more work: three quiet `hallLights
+  level1` swaps read a worst simulate of 40.0-44.5 ms per iteration against 40.5
+  ms without one. (from: quiet-measure)
+
 - [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout, with or without the mcp-batch change (81 of 82 pass). Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`. (from: mcp-batch lane)
 
 - [medium] Investigate a GPU lease held by an older operator worker while no
@@ -1330,10 +1395,14 @@ the completed 70-stop comparison manifest.
   120-frame burst under load. The final runs report `shadow-far.held=0`, so
   they do not qualify a cadence refresh. Two events do not establish a period;
   no particular far-shadow, GI or screen refresh is proved responsible.
-  Run a longer quiet-machine on/off burst at this pose on both backends, record
-  presentation/tick metadata and refresh counters, and isolate any remaining
-  step before changing its publication/blending. (from: owner walkthrough;
-  temporal-shimmer source and captures at `c1b214939`)
+  A quiet Direct3D 12 run at this pose (lift at level 3, `world.temporal off`,
+  bakes settled) did not reproduce it: a 120-frame presented burst over that
+  region changed at most 5 pixels and max abs dY 0.72 in any frame (41 of 119
+  pairs changed at all). That World presented at 7-8 FPS, about 3.5 ticks a
+  frame ([frame time](#frame-time-on-the-lead-machine)), so this is not yet the
+  refresh cadence the item asks for; one burst, Direct3D only. Re-run it on both
+  backends once the frame time is fixed, before closing the item. (from: owner
+  walkthrough; quiet-measure)
 
 ### Panes: split screens the player drives
 

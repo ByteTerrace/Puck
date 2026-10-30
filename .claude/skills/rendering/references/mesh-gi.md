@@ -234,6 +234,16 @@ compare Vulkan with Direct3D on the same source state with all geometry settled
 ([open items](../../../../docs/plans/open-items.md#cross-backend-parity-and-gpu-robustness)
 records the remaining shaft difference).
 
+The probe trace runs on the CPU and costs about the same on both backends. To
+time it, pose the teal corner (`world.lockstep on`, `body.pose 4.60 0.07 29.76
+152 0 0`, `view.override camera look 5.929 2.188 27.222 4.60 4.2 29.76`), warm
+once, then switch `world.indirect high`, `world.wait 5`, `world.indirect
+medium`, `world.wait 5` and read the two `[sdf.mesh-gi] done … seconds=` lines.
+On the lead machine, quiet (load under 15 %), three runs each: High 8.35 s and
+Medium 1.21 s on Direct3D 12, High 7.84 s and Medium 1.13 s on Vulkan, with
+about 90-98 s of World process CPU per High+Medium pair on both, and identical
+ray counts. A reading taken beside other CPU work is not a backend comparison.
+
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the
 toroidal volume creates no rectangular wall patch or bright distance band.
