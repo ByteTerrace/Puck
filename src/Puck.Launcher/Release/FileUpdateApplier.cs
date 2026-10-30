@@ -119,6 +119,7 @@ public sealed class FileUpdateApplier : IUpdateApplier {
             path: Path.Combine(path1: versionDirectory, path2: "state-generation"),
             contents: manifest.StateGeneration.ToString(provider: CultureInfo.InvariantCulture)
         );
+        _ = InstallRecord.Write(files: payload.Files.Select(selector: static file => file.Hash), installRoot: root, version: manifest.Version);
 
         // Publish pending health first: two updates before a stub launch must not promote an unstarted version.
         HealthGateFile.MarkPending(cacheRoot: root, version: manifest.Version);

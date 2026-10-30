@@ -15,7 +15,8 @@ namespace Puck.Launcher.Release;
 /// version-monotonicity comparison. An update can advance the on-disk pointer before this process restarts;
 /// <see cref="FileUpdateApplier"/> also checks that pointer before activating another version.</param>
 /// <param name="CheckInterval">How often an automatic check runs. <see langword="null"/> or non-positive disables automatic checking; <c>update.check</c> still works manually.</param>
-/// <param name="KeepVersions">The number of most-recent staged versions to retain beyond the current one.</param>
+/// <param name="KeepVersions">The number of most recently installed versions <see cref="InstallPruner"/> keeps beyond
+/// <c>current</c>, <c>last-good</c>, a pending install's version and every version a live process holds.</param>
 /// <param name="InstallId">The 16-byte, hex-encoded rollout-bucketing identity. When <see langword="null"/>, one is minted via <see cref="System.Security.Cryptography.RandomNumberGenerator"/> and persisted at <c>&lt;cacheRoot&gt;/install-id</c> on first use.</param>
 /// <param name="ReplayAcceptanceHorizon">The verifier-wide finite replay horizon <c>H</c> — bounds how stale a
 /// manifest the verifier considers signature-valid, and defines the sequence-mark epoch length. <see langword="null"/>
@@ -27,12 +28,15 @@ public sealed record UpdateOptions(
     ReleaseTrustAnchor TrustAnchor,
     string InstalledVersion,
     TimeSpan? CheckInterval = null,
-    int KeepVersions = 2,
+    int KeepVersions = AddSelfUpdateDefaults.KeepVersions,
     string? InstallId = null,
     TimeSpan? ReplayAcceptanceHorizon = null
 );
 /// <summary>Default values <c>AddSelfUpdate</c> falls back to when <see cref="UpdateOptions"/> leaves a field unauthored.</summary>
 public static class AddSelfUpdateDefaults {
+    /// <summary>The default <see cref="UpdateOptions.KeepVersions"/>.</summary>
+    public const int KeepVersions = 2;
+
     /// <summary>The default verifier-wide replay horizon <c>H</c> when <see cref="UpdateOptions.ReplayAcceptanceHorizon"/> is unset.</summary>
     public static readonly TimeSpan ReplayAcceptanceHorizon = TimeSpan.FromDays(days: 30);
 }

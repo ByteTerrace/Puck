@@ -18,6 +18,8 @@
 // - surviving history is clipped to the 3x3's YCoCg, coverage and transport box, its weight lowered by the reactivity,
 //   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through, and a
 //   reactive pixel shows it by its reactivity;
+// - a stationary, nonreactive receiver with a complete phase window instead shows that window's fixed-order mean,
+//   replacing each phase within a period and retaining the samples this phase's neighborhood misses;
 // - a sub-pixel feature (sdfResolveFeature) the footprint showed within the last jitter period widens the box to its
 //   color while the surface stands still, so the mean the jitter gathers over the feature survives the frames that miss
 //   it, as a supersampled image holds it, and the history saturates at SDF_HISTORY_FEATURE_WEIGHT_CAP rather than one
@@ -39,12 +41,16 @@
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
 // The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords): the identity
-// of the receiver tap nearest the pixel's center, then its ray distance and the gathered weight as two half floats (the
+// of the receiver, then its tangent-plane distance along the output ray and gathered weight as two half floats (the
 // distance low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
 // SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport), then the remembered feature:
 // its YCoCg as three half floats, Y low and Co high in the fifth word, Cg low in the sixth with the frames the memory has
 // left above it, zero for none. The weight saturates at SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples
-// (SdfTemporalSamples.Period), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
+// (SdfWorldPackage.TemporalPeriod), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
+// Word six is the stationary phase mask. From SDF_HISTORY_WINDOW_OFFSET, each phase holds five words: color/coverage
+// as four halves, transport as four halves, then its Gaussian weight as a half. A completed window replaces each phase
+// with that phase's new samples. Its fixed-order sum is invariant when the jitter repeats; an exponential mean capped
+// at one period instead keeps favoring the latest phase, and clipping to its neighborhood destroys unsighted features.
 // The falloff of the Gaussian a sample is weighted by, over its squared distance in output pixels from the output
 // pixel's center: 1 / (2 * 0.35^2), a reconstruction about as wide as one output pixel's box.
 static const float SdfResolveFilterFalloff = 4.08;
@@ -203,7 +209,8 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
 // `accepted` says the history survived, `total` is the weight the mean `accumulated` (and its transport) gathered, and
 // `reactive` is the reactivity of the tap nearest the pixel's center: the pixel's own, so a steady pixel beside a reactive
 // one keeps its history.
-void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport) {
+void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out bool complete, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport) {
+    ViewportData view = worldView();
     float2 scale = (float2(extent) / float2(render));
     float2 center = ((float2(id.xy) + 0.5) / scale);
     int2 nearest = int2(floor(center - jitter));
@@ -237,11 +244,20 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             }
         }
     }
-    // Each 3x3 tap's surface identity (0 on a miss) and ray distance, and the receiver the history keeps for this pixel:
+    // Each 3x3 tap's identity (0 on a miss) and tangent-plane distance along the output ray, and the receiver history keeps:
     // the tap nearest its center that is not a feature, so a feature the jitter leaves next frame does not reject a
     // history the surface under it carries. Validating against every tap keeps an edge's history whichever side of it the
     // jitter puts the nearest-depth tap on; the clip below still bounds what the history contributes. The feature the
     // pixel shows this frame is the most contrasting of its unreactive feature taps.
+    float4 currentRows[6];
+    sdfCurrentViewRows(currentRows);
+    // Jitter changes which side of a static silhouette the footprint samples. Such a footprint has no single
+    // receiver identity shared by every phase. Prove that the camera and every visible tap stand still instead.
+    bool footprintStill = ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0) &&
+        all(currentRows[0].xyz == passGroup.previousView[0].xyz) &&
+        all(currentRows[1] == passGroup.previousView[1]) && all(currentRows[2] == passGroup.previousView[2]) &&
+        all(currentRows[3].xyz == passGroup.previousView[3].xyz) &&
+        all(currentRows[4].xy == passGroup.previousView[4].xy) && all(currentRows[5].xyz == passGroup.previousView[5].xyz));
     uint identities[9];
     float distances[9];
     float centerWeight = -1.0;
@@ -267,17 +283,23 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             bool feature = sdfResolveFeature(window, (uint)(((dy + 2) * 5) + (dx + 2)), contrast);
 
             float tapReactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
+            footprintStill = (footprintStill && (tapReactive <= 0.0));
 
             uint record = sdfVisibilityRecord(pixel, 0u, render);
             SdfVisibility visibility = sdfLoadVisibility(record);
             bool surface = sdfVisibilityHit(visibility);
+            float receiverDistance = 0.0;
 
             if (surface) {
                 transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
+                float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
+                float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
+
+                receiverDistance = sdfHistoryReceiverDistance(visibility.t, direction, normal, airDirection, passGroup.farDistance);
             }
 
             identities[tap] = (surface ? visibility.identity : 0u);
-            distances[tap] = (surface ? visibility.t : 0.0);
+            distances[tap] = receiverDistance;
             if (weight > nearestWeight) {
                 nearestWeight = weight;
                 reactive = saturate(tapReactive);
@@ -318,8 +340,12 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     }
 
     accepted = false;
+    complete = false;
+    uint historyWord = (SDF_HISTORY_SURFACE_WORDS * ((id.y * extent.x) + id.x));
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
+    uint receiverIdentity = 0u;
+    float receiverT = 0.0;
     // The feature the history remembers for this pixel, with the frames it has left, and how far, in output pixels, the
     // history moved to reach the pixel.
     float3 featureYCoCg = float3(0.0, 0.0, 0.0);
@@ -327,9 +353,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     float travel = 1.0e9;
 
     if ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0)) {
-        float4 currentRows[6];
-        sdfCurrentViewRows(currentRows);
-        ViewportData view = worldView();
         bool moved = false;
         float2 previousPixel = float2(0.0, 0.0);
         float2 currentPixel = float2(0.0, 0.0);
@@ -364,22 +387,28 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             if (all(historyPosition >= -0.5) && all(historyPosition <= (float2(extent) - 0.5))) {
                 uint2 texel = sdfResolveClamp(int2(floor(historyPosition + 0.5)), extent);
                 uint word = (SDF_HISTORY_SURFACE_WORDS * ((texel.y * extent.x) + texel.x));
+                historyWord = word;
                 uint historyIdentity = historySurface[word];
                 uint distanceAndWeight = historySurface[word + 1u];
                 float historyT = f16tof32(distanceAndWeight & 0xFFFFu);
                 uint featureWordA = historySurface[word + 4u];
                 uint featureWordB = historySurface[word + 5u];
 
-                // A tap's distance in the preceding view: its own, shifted by the camera's move along the nearest hit.
+                // A receiver-plane distance in the preceding view, shifted by the camera's move along the nearest hit.
                 float shift = (hit ? (previousT - hitT) : 0.0);
 
                 historyWeightGathered = f16tof32(distanceAndWeight >> 16u);
                 featureYCoCg = float3(f16tof32(featureWordA & 0xFFFFu), f16tof32(featureWordA >> 16u), f16tof32(featureWordB & 0xFFFFu));
                 featureLife = (featureWordB >> 16u);
                 [unroll] for (uint tap = 0u; tap < 9u; tap++) {
-                    accepted = (accepted || ((identities[tap] == 0u)
+                    bool matches = ((identities[tap] == 0u)
                         ? (historyIdentity == 0u)
-                        : sdfHistoryReceiverMatches(identities[tap], historyIdentity, (distances[tap] + shift), historyT)));
+                        : sdfHistoryReceiverMatches(identities[tap], historyIdentity, (distances[tap] + shift), historyT));
+                    if (matches && (!accepted || (abs((distances[tap] + shift) - historyT) < abs((receiverT + shift) - historyT)))) {
+                        receiverIdentity = identities[tap];
+                        receiverT = distances[tap];
+                    }
+                    accepted = (accepted || matches);
                 }
             }
         }
@@ -420,9 +449,94 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
     accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
     uint word = (SDF_HISTORY_SURFACE_WORDS * ((id.y * extent.x) + id.x));
+    // Stationary receivers retain one bounded window, not an ever older history. This also follows changes in lighting:
+    // every phase is replaced within a period, without clamping its other phases to a neighborhood that jitter moved.
+    // Moving or reactive receivers restart the window and keep the ordinary clipped, reprojected resolve while it fills.
+    uint phase = (passGroup.historyFrames % SDF_TEMPORAL_PERIOD);
+    uint fullMask = ((1u << SDF_TEMPORAL_PERIOD) - 1u);
+    uint maskWord = (SDF_HISTORY_WINDOW_OFFSET - 1u);
+    // The ordinary receiver check already covers the interior. Only a rejected footprint needs the more expensive
+    // proof that every tap is stationary before retaining a window across a phase's different receiver selection.
+    footprintStill = (footprintStill && !accepted);
+    [branch] if (footprintStill) {
+        [unroll] for (int dy = -1; dy <= 1; dy++) {
+            [unroll] for (int dx = -1; dx <= 1; dx++) {
+                uint2 pixel = sdfResolveClamp((nearest + int2(dx, dy)), render);
+                uint record = sdfVisibilityRecord(pixel, 0u, render);
+                SdfVisibility visibility = sdfLoadVisibility(record);
+                if (sdfVisibilityHit(visibility)) {
+                    float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
+                    float3 surfacePoint = (view.position.xyz + (direction * visibility.t));
+                    float3 previousPoint;
+                    footprintStill = (footprintStill && sdfPreviousPoint(record, visibility, surfacePoint, previousPoint) && all(previousPoint == surfacePoint));
+                }
+            }
+        }
+    }
+    bool stationary = (footprintStill || (accepted && (travel <= SdfResolveFeatureTravel) && (reactive <= 0.0)));
+    // Keep the receiver that carries a stationary window while the footprint still sees it. Picking the nearest
+    // non-feature anew every phase can switch to a thin adjoining surface that the following phase misses entirely,
+    // rejecting a valid window at an otherwise stationary edge.
+    if (stationary && accepted) {
+        centerIdentity = receiverIdentity;
+        centerT = receiverT;
+    }
+    bool sampleValid = ((reactive <= 0.0) && (weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
+    uint mask = (stationary ? (historySurface[historyWord + maskWord] & fullMask) : 0u);
+    mask = (sampleValid ? (mask | (1u << phase)) : 0u);
+    float4 windowColor = 0.0;
+    float4 windowTransport = 0.0;
+    float windowWeight = 0.0;
+    float4 windowMin = 3.402823e+38;
+    float4 windowMax = -windowMin;
+
+    [unroll] for (uint sample = 0u; sample < SDF_TEMPORAL_PERIOD; sample++) {
+        uint offset = (SDF_HISTORY_WINDOW_OFFSET + (sample * SDF_HISTORY_SAMPLE_WORDS));
+        uint packed[5] = { 0u, 0u, 0u, 0u, 0u };
+        bool present = ((mask & (1u << sample)) != 0u);
+
+        if (present && (sample == phase)) {
+            float4 color = clamp((sum / weightSum), -65504.0, 65504.0);
+            color.a = clamp(color.a, coverageMin, coverageMax);
+            uint2 transport = sdfPackTransport(transportSum / weightSum);
+            packed[0] = (f32tof16(color.r) | (f32tof16(color.g) << 16u));
+            packed[1] = (f32tof16(color.b) | (f32tof16(color.a) << 16u));
+            packed[2] = transport.x;
+            packed[3] = transport.y;
+            packed[4] = f32tof16(weightSum);
+        } else if (present) {
+            [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
+                packed[component] = historySurface[historyWord + offset + component];
+            }
+        }
+        // Decode the new phase too: using its unrounded sum while the other phases use halves would itself pulse.
+        if (present) {
+            float4 color = float4(f16tof32(packed[0] & 0xFFFFu), f16tof32(packed[0] >> 16u),
+                f16tof32(packed[1] & 0xFFFFu), f16tof32(packed[1] >> 16u));
+            float weight = f16tof32(packed[4]);
+            windowMin = min(windowMin, color);
+            windowMax = max(windowMax, color);
+            windowColor += (weight * color);
+            windowTransport += (weight * sdfUnpackTransport(uint2(packed[2], packed[3])));
+            windowWeight += weight;
+            [unroll] for (uint component = 0u; component < SDF_HISTORY_SAMPLE_WORDS; component++) {
+                historySurfaceRW[word + offset + component] = packed[component];
+            }
+        }
+    }
+    complete = ((mask == fullMask) && (windowWeight > 1.0e-6));
+    if (complete) {
+        accepted = true;
+        total = windowWeight;
+        // A convex mean stays inside its samples' bounds. Preserve a constant component exactly even when the
+        // division's approximate reciprocal rounds just below it before half-float storage (notably full coverage).
+        accumulated = clamp((windowColor / windowWeight), windowMin, windowMax);
+        accumulatedTransport = (windowTransport / windowWeight);
+    }
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
+    historySurfaceRW[word + maskWord] = (reusable ? mask : 0u);
     // The feature the pixel carries on: this frame's sighting for a whole period, or the accepted history's with one
     // frame less, which the jitter comes round to before it runs out; a restarted history remembers none.
     float3 writtenFeature = (sighted ? sightedYCoCg : featureYCoCg);
@@ -454,13 +568,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 airOrigin = passGroup.viewPosition;
     float3 airDirection = sdfResolveAirDirection(id.xy, extent);
     bool accepted = false;
+    bool complete = false;
     float total = 0.0;
     float reactive = 0.0;
     float4 accumulated = float4(0.0, 0.0, 0.0, 0.0);
     float4 accumulatedTransport = float4(0.0, 0.0, 0.0, 0.0);
 
     if (temporal) {
-        sdfResolveTemporal(id, extent, render, jitter, airOrigin, airDirection, accepted, total, reactive, accumulated, accumulatedTransport);
+        sdfResolveTemporal(id, extent, render, jitter, airOrigin, airDirection, accepted, complete, total, reactive, accumulated, accumulatedTransport);
     }
 
     // The spatial path shows where the history is rejected or holds less than one sample's weight, and by its
@@ -470,7 +585,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // switch a whole reactive screen between the two filters frame by frame), and it takes it on the unjittered grid, as
     // a view with no temporal path does: a screen reads its image along the unjittered ray, so that sample holds still.
     // Reactivity is the pixel's own sample's, so a jittered edge beside a screen keeps its history.
-    float shown = (accepted ? (saturate(total) * (1.0 - reactive)) : 0.0);
+    float shown = (accepted ? ((complete ? 1.0 : saturate(total)) * (1.0 - reactive)) : 0.0);
     bool still = (unjittered || (reactive > 0.0));
     float4 resolved = accumulated;
     uint2 transportWord = sdfPackTransport(accumulatedTransport);

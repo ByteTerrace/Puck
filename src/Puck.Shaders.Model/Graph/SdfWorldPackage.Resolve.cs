@@ -20,18 +20,24 @@ public static partial class SdfWorldPackage {
     /// <summary>The history color the resolve writes for the next frame.</summary>
     public const string HistoryColorWritten = "historyColorRW";
     /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the
-    /// visibility identity of the render-extent sample nearest the pixel's center, then its ray distance and the sample
-    /// weight the pixel has gathered as two half floats, the distance low, then the accumulated surface transport's two
+    /// receiver's visibility identity, then its tangent-plane distance along the output ray and the gathered weight
+    /// as two half floats, the distance low, then the accumulated surface transport's two
     /// words as <see cref="Parts.Transport"/> packs them, then the sub-pixel feature the pixel's footprint last showed:
     /// its YCoCg as three half floats, Y and Co in one word and Cg low in the next, with the frames the memory has left
-    /// above it, zero for none.</summary>
+    /// above it, zero for none; then a phase mask and one weighted color/coverage and transport sample per jitter phase.</summary>
     public const string HistorySurface = "historySurface";
     /// <summary>The history surface the resolve writes for the next frame.</summary>
     public const string HistorySurfaceWritten = "historySurfaceRW";
     /// <summary>The words one output pixel holds in the history surface: its identity, its ray distance with its gathered
-    /// weight, its transport's two words, and its remembered feature's two. SdfIsaHlsl generates it into the kernels as
+    /// weight, its transport's two words, its remembered feature's two, a phase mask and the stationary sample window. SdfIsaHlsl generates it into the kernels as
     /// <c>SDF_HISTORY_SURFACE_WORDS</c>, read by <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
-    public const uint HistorySurfaceWords = 6;
+    public const uint HistorySurfaceWords = (HistoryWindowOffset + (TemporalPeriod * HistorySampleWords));
+    /// <summary>The number of jitter phases in a complete temporal sample window.</summary>
+    public const uint TemporalPeriod = 8;
+    /// <summary>The first word of the stationary sample window, following the receiver, feature memory and phase mask.</summary>
+    public const uint HistoryWindowOffset = 7;
+    /// <summary>The words per stationary phase: RGBA and transport as four halves each, then its Gaussian weight as a half.</summary>
+    public const uint HistorySampleWords = 5;
 
     /// <summary>The resolve interface: the common frame values, the render-grid color, the resolved lit image and surface
     /// transport it writes, the visibility records it reads the render grid through, and what the

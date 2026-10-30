@@ -743,7 +743,7 @@ demands nothing of its writer, and device loss starts from none.
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds six words per output pixel
+- The **history surface** holds 47 words per output pixel
   (`SdfWorldPackage.HistorySurfaceWords`): the visibility identity of the
   pixel's receiver, the nearest of the render samples the resolve read that is
   not a sub-pixel feature; that sample's ray distance and the samples' summed
@@ -751,7 +751,8 @@ demands nothing of its writer, and device loss starts from none.
   while the pixel carries a feature), as two half floats; the weighted mean of
   the samples' surface transport, two words; and the feature the pixel's
   footprint last showed, its YCoCg as three half floats with the frames the
-  memory has left, zero for none.
+  memory has left, zero for none. A phase mask follows, then eight phase samples,
+  each holding color/coverage and transport as halves and its Gaussian weight.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the
@@ -792,6 +793,17 @@ writes stay within the half-float range; a non-finite accumulation stores zero
 weight, so a bright transient cannot contaminate later history after its source
 recovers.
 
+A stationary, nonreactive receiver also keeps one sample for each jitter phase.
+Once all eight phases are present, the resolve sums that finite window in a fixed
+phase order. The current phase replaces its own sample; the other phases survive
+the current neighborhood's misses. Both new and retained samples use the same
+half precision. Repeating the same phase inputs therefore gives the same color,
+coverage and transport on every frame, without the newest-phase bias of an
+exponential mean capped at eight samples. Lighting changes replace every sample
+within one period. A rejected receiver, reactivity or motion past 0.05 output
+pixels restarts this window; the clipped resolve supplies the image while it
+fills. `SdfWorldPackage.TemporalPeriod` owns the phase count and history capacity.
+
 A detail smaller than a render sample (a device's power light, a thin bright
 trim, a glint on a glossy part, a label's stroke) is hit by the jitter in some
 positions of the period and missed in others; in a missed frame no sample in the
@@ -810,7 +822,7 @@ lives and the pixel's history moved less than 0.05 output pixels to reach it,
 the clip box widens to the feature's color, so the mean the jitter gathers over
 the feature (the coverage a supersampled image would give it) survives the
 frames that miss it, and the history saturates at four periods rather than one,
-so that mean pulses by about a fifth over the period rather than doubling. A
+so the warm-up mean pulses less until the stationary window is complete. A
 feature is never the pixel's receiver, so the frame the jitter leaves it does
 not reject the history the surface under it carries. The memory is one point
 added to the box, not a tolerance: a shadow sweeping behind a power light is

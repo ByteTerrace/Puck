@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <AssemblyName>Puck.Confinement</AssemblyName>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Leaf contracts and data</PuckLayer>
+        <RootNamespace>Puck.Confinement</RootNamespace>
+    </PropertyGroup>
+</Project>

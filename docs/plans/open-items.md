@@ -26,13 +26,12 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
-   (depth visibility leaks at every silhouette) with the zero-weight gather
-   fallback in the same change, then the trace cost and the wrapped-diffuse sun
-   leak. In flight: probe-depth-fix.
-2. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
-   the walkthrough's other high; `SdfMeshInstance.Matrix` already scales at
-   draw, so the fix is in the dynamic bake path's identity and detail.
+1. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
+   coverage, enclosure, floor and wrapped-diffuse sun findings, with quiet
+   timing and frame-cost qualification of the probe-depth fixes at integration.
+2. [Bake detail](#bake-detail): measure static curvature refinement and local
+   dynamic-member refinement; the remaining scale-normal finding is in
+   [Lighting and GI](#lighting-and-gi).
 3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a hot-reload code revision as one invalidation contract (emitter revisions
    and the static field), then the persisted caches keyed by the modules as
@@ -60,8 +59,8 @@ resolves their edits to this file at merge.
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
 11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
-    isolate the temporal-off cadence blink first, then why history never
-    resolves the jitter.
+    qualify the original temporal-off blink at a quiet refresh cadence;
+    reconstruction now converges on both backends.
 12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
@@ -143,18 +142,45 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
   qualification was headless, and the original state and physics timings
   regressed, so keep per-file timing and boot and work counts when reading the
   full sweep.
+- Temporal-shimmer's required cross-family renderer review and quiet-machine
+  frame/memory qualification remain with integration. Its C1 source captured
+  all 70 tour stops across three bounded Direct3D runs against the 64-stop base;
+  45 exceed 2 %. Every name, percentage and inspected explanation is in the
+  lane's `tour-final-comparison-notes.md`. New valley geometry, changed motion
+  ticks and a held-lift baseline explain some differences; broad static-lighting
+  differences remain unisolated. A same-World shader comparison at
+  `gather-teal-door-far` changed only 0.008941 % beyond 16 RGB levels between
+  original and current resolve, so that sampled broad lighting change is not
+  explained by the resolve alone. This is not attribution for every stop.
+  The final merge of `lead/catch-up` at `45d6a960c` adds five granary stops beyond
+  that measured plan. Rerun the integrated tour, standing/walking frame readings
+  and gallery/lift body patrol. History grew from 6 to 47 uint words per output
+  pixel: 164 extra bytes per allocated history surface, or 180.18 MiB at
+  1280x900. Measure the actual view/slot allocation; the loaded paired shader
+  readings establish no quiet-machine 60 FPS or VRAM qualification.
 
 ### Lighting and GI
 
-Owner: next lighting batch (rendering, principal-grade review) · one high, five
-medium, lows · Next: the high silhouette leak with the zero-weight gather
-fallback in the same change, in flight in probe-depth-fix.
+Owner: next lighting batch (rendering, principal-grade review) · Next: remaining
+coverage, enclosure, corner and exposure findings; quiet GI qualification at integration.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
 
-- Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
+- Owner walkthrough, depth visibility: both poses checked on probe-depth-fix's
+  settled Vulkan build. At (1) `body.pose 66.24 4.57 14.73 329`, eye
+  (64.061, 5.331, 18.308), target (66.241, 5.57, 14.726), the original large
+  corner zig-zag and ceiling saw-tooth are no longer visible, but ceiling
+  hotspots remain and the wall clips white in `indirect`; this is not a clean
+  exposure qualification. At (2) `body.pose 58.17 4.57 30.87 180`, eye
+  (58.16, 8.403, 29.767), target (58.168, 5.57, 30.868), hard diamond/star
+  patterns remain around the NOISE and ERODE plinths in `indirect`. Whole
+  octahedral texels switching was a hypothesis, not an established cause; the
+  current local reconstruction still needs this case isolated. Original
+  captures w01-*, w02-* are in the lead's walkthrough scratch; the new
+  `owner-corner-vulkan` and `owner-noise-erode-vulkan` captures are in the
+  probe-depth-fix hand-back. Keep the floor finding open.
 
 - [low] A quarter-size Moth (Wonderland) shows thin bright lines under her back
   band plates' lower edges that the full-size Moth at the same relative framing
@@ -179,14 +205,8 @@ holds the fixed poses and the approaches already rejected.
 - Decide (the lead's call): the coat layer's F0 semantic, chosen consistently
   with the material model; and whether baked static copies occupy SDF instances
   at all, the copies represented independently of the bake program's limits.
-- Decide (the lead's call): a missed depth ray stores a bounded distance (about
-  1.5 spacing diagonals) or a flag, never the reach; the sky comes from the
-  radiance rays; an all-zero gather is explicit, never full light. The
-  filtering rule against thin occluders, corners and FP16 precision wants its
-  own short consensus before it is final.
-
 - Probe depth visibility (from the probe-depth review):
-  - [high] Depth visibility leaks at every silhouette: a ray that misses stores
+  - [x] [high] Depth visibility leaks at every silhouette: a ray that misses stores
     `min(reach, DepthMaximum = 128 m)`, about forty times the farthest receiver
     a probe serves, and the `distance <= mean` early-out returns 1 before
     Chebyshev runs, so any texel whose bilinear footprint touches a miss admits
@@ -196,29 +216,48 @@ holds the fixed poses and the approaches already rejected.
     `sdf-mesh-irradiance.hlsli:82`). Store misses at about 1.5 times the
     spacing diagonal or flag them, and take the sky from rays that still run to
     full reach.
-  - [medium] Each probe's first sweep casts 1,024 closest-hit depth rays to the
+  - [x] [medium] Each probe's first sweep casts 1,024 closest-hit depth rays to the
     full lighting reach, eight times the 128 radiance rays, because the sky cube
     is now measured from them; depth needs about one ray per texel bounded to
     the gather radius, and the radiance rays already compute a sky result that
     is overwritten (`SdfMeshProbeDepth.cs:30-32`, `SdfMeshIrradiance.cs:917-919`).
     The likely cause of the trace-time rise below.
-  - [medium] Zero-weight gathers became common (Chebyshev returns exactly 0 at
+  - [x] [medium] Zero-weight gathers became common (Chebyshev returns exactly 0 at
     zero variance with no floor, the facing term lost its `+0.2`, tiny weights
     flush to zero on the GPU), and a receiver whose eight weights are all 0 falls
     back to `sdfMeshLightVisibility` 1.0, fully lit by every traced static light:
     a point light in the next room shines through a flat wall
     (`sdf-mesh-irradiance.hlsli:142,202-204`, `SdfMeshIrradiance.cs:1250`).
-  - [medium] Depth visibility raised the GI trace time: Direct3D 12 from 3.9 s to
-    5.2-7.6 s and Vulkan from 4.6 s to 16.8 s (both on a loaded machine), with a
-    38.67 MiB probe table per residency. Re-measure on a quiet machine; if
-    Vulkan stays about three times Direct3D 12, find why
-    (the probe-depth hand-back in the lead checkout's scratch).
-  - [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
+  - [x] [medium] Depth visibility raised the GI trace time and reserved a 38.67 MiB
+    probe table at every tier. Bounded depth work removes 85.94 % of its rays.
+    Adjacent loaded-machine pairs: Direct3D 12 High 11.487 to 7.437 s, Medium
+    1.698 to 1.032 s, whole-protocol process CPU 102.65625 to 75.9375 s;
+    Vulkan High 15.527 to 13.247 s, Medium 1.932 to 1.123 s, CPU 97.625 to
+    75.421875 s. Radiance work matches. One table/volume now fits its tier:
+    11.02 MiB Medium, 33.05 MiB High. Actual retained uploads are reported
+    separately; whole-process private memory does not uniformly decrease.
+    Raw pairs and allocation diagnostics are in the probe-depth-fix hand-back.
+  - [ ] Quiet integration confirmation: repeat the depth-visibility timing pair
+    without the campaign's competing CPU work. The loaded pairs above establish
+    work and CPU reductions, not quiet backend parity. Investigate if Vulkan
+    remains about three times Direct3D 12 under matched quiet conditions. The
+    full Direct3D tours miss the frame budget before and after (standing means
+    50.54 to 85.78 ms, walking 52.20 to 75.35 ms, mostly produce/simulate);
+    these nonadjacent loaded readings do not isolate probe gather cost.
+  - [x] [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
     still show small dark marks at mid-height on the stairwell's east wall
     (`own-vulkan-stairwell-lit.png`, the black squares the owner reported), 2
     m-scale blotches on the boardroom floor and a bright vertical streak on its
     right partition (`own-vulkan-boardroom-indirect.png`). The sphere reads clean.
-  - [low] The sky share is measured over the 1,024 depth rays while bounce
+    Closed by explicit misses and compatible local surface reconstruction, a
+    distance-based hemisphere fade and shared radiance quadrature. The final
+    `matched-directx` and `capture-vulkan` fixed lit/indirect pairs in the
+    probe-depth-fix lane's scratch were individually inspected: the broad roof
+    band, repeated floor poles, thin far-corner streak and stairwall squares are
+    gone; the sphere stays continuous. The final Vulkan stair tread has a sharp
+    dark bow-tie patch, recorded separately below. The separate dim-enclosure
+    and grazing corner findings remain open.
+  - [x] [low] The sky share is measured over the 1,024 depth rays while bounce
     radiance comes from the 128 radiance rays, so a small window can count twice
     (`SdfMeshProbeDepth.cs:42-43`); FP16 variance cancellation at 3-5 m exceeds
     `NormalBias` and flips flat-surface visibility per texel (`:84-90`, HLSL
@@ -260,6 +299,30 @@ holds the fixed poses and the approaches already rejected.
   floor's diagonal patches and black rectangle, which reproduce in `indirect`
   while that floor reads shadowed in the shadow view; and the wing's
   north-east corner remnants ([rendering plan](rendering.md#open-items)).
+- [medium] The controlled final Vulkan stairwell lit/indirect pair has a sharp
+  dark bow-tie patch on a middle tread, absent in its baseline. The original
+  east-wall squares are no longer distinct, but the enclosure is darker.
+  Isolate geometry/moving bake from probe interpolation before attributing the
+  tread patch. All requested captures report settled bakes and irradiance;
+  the Vulkan sweep nevertheless flags the cumulative moving-bake cap counter
+  increasing from 3 to 41. Its cause is unisolated. Evidence:
+  `capture-vulkan/report.json` and `tour/probe-stairwell-*.png` in the
+  probe-depth-fix hand-back.
+- [medium] Far-field irradiance coverage: bounded local depth support exposes
+  unmeasured distant surfaces beyond the camera's probe window. The matched
+  probe-depth-fix tour shows black far walls at `finding-teal-roof`,
+  `gallery-entrance`, `devices`, `desktop`, `rate-range`, `camera-course`,
+  `stage`, `jump`, `flight` and `noclip`, and a larger dark pane through the
+  `garden` return portal. Several gallery/window views show the same far wall.
+  Live Vulkan readback confirms one authored south-wall receiver (69.5, 4, 12),
+  normal (0, 0, -1), answers with weight 0 although its boundary probes at
+  x=31 are bright and reference-clear=1. Their roughly 38.5 m separation is
+  beyond the 5.246 m local support. The near receiver (18.5, 4, 12) answers
+  with weight 0.525. The far wall also reads black in a fixed indirect view;
+  this isolates missing coverage for that receiver. Collision probing was
+  unavailable in that World's contact configuration. Supply coarse far-field
+  coverage while retaining local visibility. Not every changed tour pixel,
+  nor the garden return's scope/history, has been separately isolated.
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level 3
   ceiling and wall junction reproduces in beauty but not in `indirect`,
   `normals` or `shadow`; behind it at level 2 (chase view) a dotted bright line
@@ -285,6 +348,14 @@ Owner: test runner and replay specialist · medium and low ·
 Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
 replica cost and repeat the paired CPU measurements on a quiet machine.
 
+- [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
+  process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
+  recursive `Directory.Delete`, which overflows the stack past about 3,500
+  levels (a launcher-pruning depth law's red run left one at 5,000). Delete with
+  the pruning lane's iterative, link-refusing confined removal (not yet landed
+  here), and have the sweep refuse a directory it cannot remove rather than
+  crash. (from: the
+  prune-redesign lane)
 - [medium] Re-measure complete-boot reuse on a quiet machine and profile Go's
   reproduction replica. The boot-reuse-2 correction requires identical composed
   documents apart from schedules, including every state row and rule. Its paired
@@ -297,7 +368,7 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   boundary over rebuilding every derived section merely to retain broader
   reuse; they do not establish quiet-machine performance. Per-file CPU, wall
   time, boot counts and red/green evidence are in
-  `.claude/scratch/boot-reuse-2-evidence/report.md` (lead checkout). The
+  .claude/scratch/boot-reuse-2-evidence/report.md (lead checkout, ignored). The
   earlier incomplete-identity implementation also showed no clear loaded-machine
   speedup; its replica profiling remains relevant below. (from: boot-reuse-2)
 
@@ -384,6 +455,16 @@ surviving red findings by cluster, starting with the hall stairs.
   interpenetrating meshes.
 
 ### Edit to running, hot reload and boot
+
+- [high · owner: lead integration] The combined debug document at integration
+  45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
+  PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for
+  progress. This appears after the card-table merge and blocks the latest
+  probe-depth-fix World smoke qualification; the preceding integrated build
+  booted on both backends. Reconcile the composed recurring work and search
+  allowance without disabling chess. The focused probe/tooling builds and
+  96 cases still pass. The diagnostic is in the probe-depth-fix hand-back's
+  `integrated-latest-debug-compile.log`.
 
 - [medium] A `world.load` from debug into a same-capacity input fixture leaves
   authored state-writing rules refused with `the live edit grant refuses
@@ -607,8 +688,9 @@ movement-facing scheme returns.
   camera, bars and dash scripts under the controls worktree's
   `.claude/scratch/controls-evidence/`; inspect the same workload on Vulkan,
   read standing/walking frame time and patrol the stage. The hand-back is
-  `.claude/scratch/controls-handback.md`. Judge the dash's feel and the authored
-  secondary wings spacing; their appearance remains unconfirmed. The durable
+  .claude/scratch/controls-handback.md (lead checkout, ignored). Judge the dash's
+  feel and the authored secondary wings spacing; their appearance remains
+  unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
 - [high · owner: lead integration] Land the controls review's follow-up
@@ -783,6 +865,15 @@ decision (the companion lands inert in the live debug world today; the lead's ca
 between the consensus split), then the uncertain crossing, opened by a two-silo
 failover witness.
 
+- [high] Ordinary travellers can be duplicated by a resent commit: a
+  destination that re-leases the same transfer key after a crash lets a resent
+  commit (`MayResend` is true for transfer-id-keyed kinds) land a body the
+  source already restored after a `Missing` status; and `Missing` is final only
+  if the destination tombstones the key it answered for. The companion custody
+  spec's lease-once and tombstone rule (`Leased(K)`/`Dead(K)`) fixes both; apply
+  it to every traveller, not only companions. Unconfirmed against a run; the
+  companion protocol's model check found it and a design review is checking
+  the code. (from: the companion-redesign lane)
 - [medium] A rule firing costs the world host far more than the work sheet
   prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`
   runs `WorldServer.ValidateStateTransaction` and the commit runs
@@ -856,7 +947,9 @@ answer.
   and the `OperatorWorlds.WatchAsync`/`Stop` lifecycle, then release it through
   that session. Evidence and start ids are in the controls hand-back.
 
+- [x] [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The merged lease path now counts an unreadable or undeletable ticket as occupied, opens holder metadata with deletion sharing, and always releases its exclusive guard even when metadata cleanup is delayed. The guard, rather than an alive adapter PID in leftover metadata, proves ownership. Sixteen focused lease cases pass, including lane rotation and the Windows delayed-deletion reproduction. (from: bars-and-pick and probe-depth-fix lanes)
 - [low] `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
+
 
 - [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
 
@@ -1103,12 +1196,26 @@ Owner: suites lane · ordinary · Next: measure the two unmeasured suites' class
   which a `puck` verb running a verb under a shuffled listing would keep; and
   the federation hello, federation and crossing laws skip where QUIC is missing.
 
+### World admission under GPU contention
+
+Owner: operator-adapter lane · medium · Next: separate the GPU queue wait from
+the boot deadline, or give admission a ceiling that covers the granted queue.
+
+- `OperatorWorlds.MaxStartSeconds` in `src/Puck.Mcp/OperatorWorlds.cs` caps a
+  start's whole build/lease/attachment admission at 1800 seconds. Several
+  granted twenty-minute GPU batches can exceed that before a World launches.
+  Temporal-shimmer's latest-source Vulkan start and its one retry both expired
+  at `gpu-lease`, after building successfully and without launching a World.
+  Repeated fresh admissions lose queue position instead of making progress;
+  finish the pending lane's evidence after capacity changes. Keep the active
+  windowed batch limit separate from time spent waiting for admission.
+
 ### Delivery, launcher and CI
 
 Owner: delivery lane · ordinary · Next: measure deriving the eleven addon guest
 `.wasm` modules from source against edit-to-running.
 
-- [high] The launcher's version pruning (the owner's ruling: keep `current`, `last-good` and the newest N, delete the rest) was built in `21ab032cf` and reverted in the lead's revert commit after a Codex review found: (high) file probes do not protect a running version on Linux (`dotnet versions/old/Puck.Cli.dll` keeps running and its directory is deleted; `HealthGateFile.cs:164`); (high) the object sweep follows directory symlinks or junctions out of the install root and deletes external files (`:196-198`); (medium) a pending install intent is unprotected (`install-intent.json` persisted, `current` not yet switched, `KeepVersions=0` deletes the target; `:115`); (medium) retention ranks by version precedence, not install recency (`0.0.0-local.9` outranks `local.10`; `:141`); (medium) pruning races the MCP adapter's publication (`LocalAdapterInstall.ActivateAsync` publishes under `development.lock` before `update.lock`; `:191`). Rebuild it with each case as a law: never leave the install root (resolve and refuse reparse points), protect running versions by an OS-independent record (a process registry or lock file each version's process holds), protect the pending intent, order by install time, and share one lock with publication. (owner: delivery; from: delivery review)
+- [high] The launcher's version pruning (the owner's ruling: keep `current`, `last-good` and the newest N, delete the rest) is rebuilt by handle: `Puck.Confinement`'s `ConfinedDirectory` and `InstallRegistration`, and `InstallPruner`, with the invariants in the [launcher README](../../src/Puck.Launcher/README.md#pruning-past-versions) and a law per in-model review finding in `InstallPruneLawTests`. Its threat model is settled ([decision](../decisions/runtime-and-delivery.md#releases)): it defends against cooperating processes and crashes, not the install root's own user, and the round-3 review's in-model findings are fixed on its branch. It awaits the lead's landing review. Left outside the confinement: `ContentAddressedUpdateStager` deletes a corrupt cached object by path (`File.Delete(ContentAddressedStore.ObjectPath(...))`) and `ContentAddressedStore` writes objects by path, both under `update.lock`. (owner: delivery; from: prune-redesign)
 
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
@@ -1204,14 +1311,37 @@ the static round-section term's cost with `puck mesh audit --cpu`.
 
 ### Temporal shimmer and cadence flicker
 
-Owner: specialist or Sol lane (rendering, P15 temporal reconstruction) · two
-mediums from the owner's walkthrough · Next: isolate the temporal-off cadence
-blink first (it pollutes the temporal-on reading), then record the rejection,
-clamp and epoch causes at the given pixels to find why the history never
-resolves the jitter on these surfaces.
+Owner: integration rendering follow-up · medium · Next: exercise the original
+off-mode blink with refresh holds active on a quiet machine. The reconstruction
+item is closed: both windowed backends now converge at the packet's two poses;
+receiver-plane depth, exact stationary motion and the bounded eight-phase
+window are documented in the rendering skill. In 16 presented frames, gallery
+max mean abs dY fell from 1.2785 to 0.0049 on Direct3D and from 1.0677 to 0.0082
+on Vulkan, against adjacent off controls 0.0073 and 0.0093. On-mode changed-pixel
+maxima remain 414/0.945 % and 434/0.990 %, respectively; this is not exact zero.
+The corrected sill changes at most 1 pixel on/6 off on Direct3D, 3 on/4 off on
+Vulkan. The lane's `handback-current.md` retains all before/after bursts and
+the completed 70-stop comparison manifest.
 
-- [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
-- [medium] The lift door threshold also blinks with temporal off: pairs of frames about 11 presentations apart change about 3 % with max |dY| 26, then hold still, a cadence-driven refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh) independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). (from: owner walkthrough)
+- [medium] The original off-mode sill burst has two paired flashes 11
+  presentations apart, 3.18–3.42 % changed with max abs dY 26.28 (w06-burst-off
+  frames 1/2 and 12/13 under `D:/Source/ByteTerrace/Puck/.claude/scratch/walkthrough/`).
+  Region 0.36 0.78 0.32 0.1; `body.pose 16.15 13.57 37.28 191 0 0`;
+  `view.override camera look 15.508 16.895 33.842 16.155 14.57 37.279 55`;
+  lift held open at level 3. The old shaft-lintel lids coincided with the slab
+  top. All 481 and 553 pixels with abs dY > 5 in the two original flashes lie
+  inside that projected lid (2-pixel filter margin). A matched material-ID
+  comparison, with temporal, shadows, AO and indirect off, shows triangular
+  competing material winners before separation and a uniform floor after it.
+  The authored lintels now end at the slab underside; their overlap is fixed.
+  The natural paired blink was not reproduced even in an old-geometry
+  120-frame burst under load. The final runs report `shadow-far.held=0`, so
+  they do not qualify a cadence refresh. Two events do not establish a period;
+  no particular far-shadow, GI or screen refresh is proved responsible.
+  Run a longer quiet-machine on/off burst at this pose on both backends, record
+  presentation/tick metadata and refresh counters, and isolate any remaining
+  step before changing its publication/blending. (from: owner walkthrough;
+  temporal-shimmer source and captures at `c1b214939`)
 
 ### Panes: split screens the player drives
 
@@ -1402,7 +1532,7 @@ material defect needs no taste call); new content and art on the owner's call.
     guard and recessed cyan heel light are missing, and the heel needs a housing
     designed around the downward nozzle the air jump's plume leaves (the bake
     detail these parts get is the
-    [mesh-bake packet's](#dynamic-body-scale-and-the-mesh-bake)).
+    [mesh-bake packet's](#bake-detail)).
 - The suit toggle's handheld: only body 0 holds the brick (`pilotHold` declares
   the one key `"0"`); she holds it only while captured standing still, so a
   mirrored engagement that walks or carrying it about wants a hold pose that

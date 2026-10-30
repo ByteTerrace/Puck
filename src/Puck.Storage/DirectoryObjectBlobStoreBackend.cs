@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Puck.Confinement;
 
 namespace Puck.Storage;
 
@@ -6,6 +7,10 @@ namespace Puck.Storage;
 /// cross-process directory lock and publish a flushed temporary file by atomic replacement. Local roots must
 /// remain host-owned; this is not a sandbox for native code running as that host identity.</summary>
 internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend {
+    private const string LockName = ".puck-lock";
+
+    private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(seconds: 5);
+
     private static ObjectBlobContent? Read(ConfinedDirectory directory, string name, int maximum) {
         using var stream = directory.OpenFile(name);
 
@@ -32,7 +37,9 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
     private static string Token(ReadOnlySpan<byte> content) => Convert.ToHexStringLower(inArray: SHA256.HashData(source: content));
     private static void Walk(ConfinedDirectory directory, string path, string prefix, List<string> keys, ref int remaining,
         CancellationToken cancellationToken) {
-        foreach (var name in directory.Entries()) {
+        foreach (var entry in directory.Entries()) {
+            var name = entry.Name;
+
             cancellationToken.ThrowIfCancellationRequested();
             if (--remaining < 0) { throw new IOException(message: "Storage listing exceeds its entry budget."); }
             if (name.StartsWith(
@@ -45,7 +52,8 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
                 Key: key,
                 ObjectId: Guid.Empty
             ));
-            if (directory.IsDirectory(name: name)) {
+            // A link is opened as a directory so that the open refuses it, as it refuses a linked file below.
+            if (entry.Kind is ConfinedEntryKind.Directory or ConfinedEntryKind.Link) {
                 using var child = directory.Child(name: name);
 
                 if (child is not null) {
@@ -122,7 +130,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
         );
 
         if (directory is null) { return ValueTask.FromResult<ObjectBlobContent?>(result: null); }
-        using var gate = directory.AcquireLock(cancellationToken: cancellationToken);
+        using var gate = directory.AcquireLock(cancellationToken: cancellationToken, name: LockName, timeout: LockWait);
 
         return ValueTask.FromResult(result: Read(
             directory,
@@ -150,7 +158,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
             parent,
             create: true
         )!;
-        using var gate = directory.AcquireLock(cancellationToken: cancellationToken);
+        using var gate = directory.AcquireLock(cancellationToken: cancellationToken, name: LockName, timeout: LockWait);
         var current = Read(
             directory,
             name,
@@ -195,7 +203,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
                 name: name,
                 temporary: temporary
             );
-        } finally { directory.RemoveTemporary(name: temporary); }
+        } finally { _ = directory.DeleteChild(name: temporary); }
         return ValueTask.FromResult(result: new ObjectBlobWriteResult(
             true,
             false,

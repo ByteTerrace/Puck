@@ -14,6 +14,18 @@ static MotionPass passGroup;
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint first = (7u * id.x);
     float4 samplePoint = motionCases[first];
+    if (samplePoint.w != 0.0) {
+        float3 normal = float3(0.0, 1.0, 0.0);
+        float3 receiver = float3(sqrt(1.0 - (samplePoint.z * samplePoint.z)), samplePoint.z, 0.0);
+        float3 a = float3(sqrt(1.0 - (samplePoint.y * samplePoint.y)), samplePoint.y, 0.0);
+        float3 b = float3(sqrt(1.0 - (4.0 * samplePoint.y * samplePoint.y)), (2.0 * samplePoint.y), 0.0);
+
+        motionResults[uint2(id.x, 0u)] = float4(
+            sdfHistoryReceiverDistance(samplePoint.x, a, normal, receiver, 8192.0),
+            sdfHistoryReceiverDistance((0.5 * samplePoint.x), b, normal, receiver, 8192.0),
+            sdfHistoryReceiverDistance(samplePoint.x, a, normal, float3(1.0, 0.0, 0.0), 8192.0), 1.0);
+        return;
+    }
     for (uint row = 0u; row < 6u; row++) {
         passGroup.previousView[row] = motionCases[first + 1u + row];
     }

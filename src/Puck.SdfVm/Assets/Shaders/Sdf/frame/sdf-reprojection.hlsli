@@ -8,6 +8,19 @@
 #include "../field/sdf-quaternion.hlsli"
 
 static const float SdfHistoryDepthTolerance = 0.05;
+// Receiver validation compares depths along the output pixel's unjittered ray. Different jittered taps on one plane
+// can have very different ray distances at grazing incidence; comparing those distances rejects an unchanged plane.
+// Carry the tap's tangent plane to the receiver ray, retaining the sample's distance when that ray has no finite,
+// forward intersection within the view's reach.
+float sdfHistoryReceiverDistance(float sampleT, float3 sampleDirection, float3 normal, float3 receiverDirection, float farDistance) {
+    float facing = dot(normal, receiverDirection);
+    if (abs(facing) <= 1.0e-6) {
+        return sampleT;
+    }
+    float t = ((sampleT * dot(normal, sampleDirection)) / facing);
+
+    return ((isfinite(t) && (t > 0.0) && (t <= farDistance)) ? t : sampleT);
+}
 // Temporal color validates its receiver by identity and a relative depth tolerance.
 bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previousT, float historyT) {
     return ((identity == previousIdentity) &&
@@ -46,13 +59,23 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
     uint draw = sdfVisibilitySource(visibility.identity);
     uint mesh = sdfMeshRecord(draw);
     uint first = (3u * sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord]);
+    float3 a = sdfMeshWorldPosition(mesh, first);
+    float3 b = sdfMeshWorldPosition(mesh, first + 1u);
+    float3 c = sdfMeshWorldPosition(mesh, first + 2u);
+    float3 da = (sdfMeshPreviousPosition(mesh, first) - a);
+    float3 db = (sdfMeshPreviousPosition(mesh, first + 1u) - b);
+    float3 dc = (sdfMeshPreviousPosition(mesh, first + 2u) - c);
+
+    // Interpolate displacement, not a second world position. In particular, an unchanged triangle has exactly zero
+    // motion even when its long, thin outline makes barycentric reconstruction poorly conditioned.
+    if (all(da == 0.0) && all(db == 0.0) && all(dc == 0.0)) {
+        return true;
+    }
     float3 weights;
-    if (!sdfMeshBarycentric(sdfMeshWorldPosition(mesh, first), sdfMeshWorldPosition(mesh, first + 1u),
-        sdfMeshWorldPosition(mesh, first + 2u), currentPoint, weights)) {
+    if (!sdfMeshBarycentric(a, b, c, currentPoint, weights)) {
         return false;
     }
-    previousPoint = (((weights.x * sdfMeshPreviousPosition(mesh, first)) + (weights.y * sdfMeshPreviousPosition(mesh, first + 1u))) +
-        (weights.z * sdfMeshPreviousPosition(mesh, first + 2u)));
+    previousPoint = (currentPoint + (((weights.x * da) + (weights.y * db)) + (weights.z * dc)));
     return true;
 }
 // A view's camera rows, as SdfFrameBlock.WritePreviousView lays them: position and validity, right and tan(fov / 2),

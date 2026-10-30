@@ -1566,6 +1566,9 @@
           "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.directx.presentation": {
         "type": "Project",
         "dependencies": {
@@ -1583,7 +1586,8 @@
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.Hosting": "[10.*, )"
+          "Microsoft.Extensions.Hosting": "[10.*, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       },
       "puck.launcher.linux": {
@@ -1664,7 +1668,8 @@
         "dependencies": {
           "Azure.Identity": "[1.*, )",
           "Azure.Storage.Blobs": "[12.*, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       },
       "puck.vulkan.presentation": {

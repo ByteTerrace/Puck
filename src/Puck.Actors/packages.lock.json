@@ -777,12 +777,16 @@
           "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.storage": {
         "type": "Project",
         "dependencies": {
           "Azure.Identity": "[1.*, )",
           "Azure.Storage.Blobs": "[12.*, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       }
     }
