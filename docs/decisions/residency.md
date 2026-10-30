@@ -95,10 +95,13 @@ separate systems.
   projected-size rule, adopted because it follows the existing ruling, holds at
   any scale from a card to a mountain, and needs no tuning. The coarsest level
   stays resident within the far distance while the budget allows. A group that
-  has not landed has no recorded error yet, so the work that lands it (its
-  lattices, its store load, its words in the mesh region) is ordered by the
-  same rule with its planned box standing in: the box's diagonal in display
-  pixels over the distance to the box (`SdfMeshDemand`).
+  has not landed has no recorded error yet, so its planned box stands in: a box
+  whose diagonal projects past a pixel is demanded, and the work that lands it
+  (its lattices, its CPU stages, its store load, its words in the mesh region)
+  goes nearest first, by the pixels a metre covers at the box
+  (`SdfMeshDemand`). Ordering by projected size alone ranked far terrain and
+  shells above the occupied room's small parts, which then landed no sooner
+  than in document order.
 - **An area only adds demand.** While a demand point stands in an area, the area
   and its neighbours through open or soon-to-open openings are demanded whole.
   It raises priority and never lowers it, so an author uses it where the passive
@@ -143,9 +146,9 @@ Each step is taken when the measured need appears:
    program build and replan time against placement count, and store read rate
    against the landing rate.
 2. **Near-first:** order lattices, store loads and owed meshes by priority from
-   demand points. Today all three run in document order
-   (`SdfMeshPathBake.TryTakeForFrame`, `SdfWorldTables.MeshRegion`). Small, and it
-   serves the edit-to-run target: the room you stand in returns first.
+   demand points (`SdfMeshPathBake.TryTakeForFrame`, the bake's work queue,
+   `SdfWorldTables.WriteOwedMeshes`). Small, and it serves the edit-to-run
+   target: the room you stand in returns first.
 3. **GI on the same demand points:** the probe window follows every view, not
    `Views[0]` alone, the irradiance scene and its pending gate are scoped to what
    the window reaches, and `ProbeCache` is byte-bounded.

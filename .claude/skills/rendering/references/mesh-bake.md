@@ -112,18 +112,22 @@ laws exercise that boundary.
   the demand points rank alike.
 - **Work goes near-first** ([residency](../../../../docs/decisions/residency.md)).
   `SdfMeshDemand` holds the eye of every view of the residency's latest frame
-  (an `Elsewhere` or hidden view demands nothing); a group's priority is its
-  planned box's diagonal in display pixels over the eye's distance to the box,
-  at the demand point that sees it largest (`Group.TakeDemandBox` keeps the
-  box before `Begin` cubes it). `TryTakeForFrame` takes lattices, the load
-  queue (`PumpLoads`, one loader a processor) its store loads, and
-  `SdfWorldTables.WriteOwedMeshes` its owed mesh words in that order, the
-  plan's or the list's order among equals and a draw no host box bounds first.
-  With no demand point (the CPU laws, `puck mesh audit --cpu`) the plan's order
-  stands. Order never changes a mesh. `world.residency [radius]` reads when the
-  groups landed and became resident from the bake's start, near the demand
-  points and everywhere, with the store's reads, the region's landing, program
-  build times and the probe cache's bytes.
+  (an `Elsewhere` or hidden view demands nothing; a filmed camera measures in
+  its own image's pixels, `SdfViewSnapshot.DemandHeight`). A group whose
+  planned box (`Group.TakeDemandBox`, kept before `Begin` cubes it) projects
+  past a pixel ranks by the pixels a metre covers at the box, nearest first
+  whatever its size; one under a pixel ranks after. Ranking by projected size
+  instead let far terrain and shells outrank the lobby's small parts, and the
+  occupied area landed no sooner than in plan order. `TryTakeForFrame` takes
+  lattices, the work queue (`Schedule`, one worker a processor) runs store
+  loads and every CPU stage of the bake, and `SdfWorldTables.WriteOwedMeshes`
+  writes owed mesh words in that order, the plan's or the list's order among
+  equals and a draw no host box bounds first. With no demand point (the CPU
+  laws, `puck mesh audit --cpu`) the plan's order stands. Order never changes
+  a mesh. `world.residency [radius]` reads when the groups landed and became
+  resident from the bake's start, near the primary seat's eye and everywhere,
+  with the store's reads, the region's landing, program build times and the
+  probe cache's bytes.
 - **Large static unions draw in chunks.** `SdfMeshChunks` partitions the finished contour's triangles by their
   centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam

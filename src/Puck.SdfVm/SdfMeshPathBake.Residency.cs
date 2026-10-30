@@ -154,11 +154,11 @@ public sealed partial class SdfMeshPathBake {
     }
 
     /// <summary>Describes the latest bake's residency: its groups, when they landed (finished) and became resident (their
-    /// words in the mesh region) counted from its start, those within <paramref name="radius"/> of the first demand point (the primary seat's eye) apart,
-    /// its store loads, the time its plan and restart took, and the resident meshes' region bytes by level of
-    /// detail.</summary>
-    /// <param name="radius">The distance, in metres, from the first demand point to a group's demand box within which the group
-    /// counts as near.</param>
+    /// words in the mesh region) counted from its start, those near the first demand point (the primary seat's eye)
+    /// apart, with when half and nine tenths of those had landed and which landed last, its store loads, the time its
+    /// plan and restart took, and the resident meshes' region bytes by level of detail.</summary>
+    /// <param name="radius">The distance, in metres, from the first demand point to a group's demand box within which
+    /// the group counts as near.</param>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeResidency(float radius) {
         lock (m_gate) {
