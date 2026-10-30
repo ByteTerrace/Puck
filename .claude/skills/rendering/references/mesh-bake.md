@@ -489,7 +489,12 @@ laws exercise that boundary.
   crossing into another world mid-stride, or wearing a creation another body
   wears) takes that form's latest skinned mesh (`SdfMeshLibrary.TryTakeForm`)
   and watches its members against the poses the mesh's skin records
-  (`SdfMesh.Members`), so it bakes only once it settles away from them.
+  (`SdfMesh.Members`), so it bakes only once it settles away from them. The
+  library holds every mesh, empty result and form under the identity of the
+  bake that made it, and a program keeps a group (`SdfMeshPathBake.Keeps`,
+  `Renumbers`) only while that identity stands: after an applied update to the
+  bake's code or a reloaded bake kernel, every group bakes again, drawing its
+  earlier mesh until the new one lands.
 - **A material id shift renumbers every later mesh.** A group whose material
   ids moved takes its mesh renumbered (`SdfMeshLibrary.TryTake`), a new
   `SdfMesh` the mesh region lands again word for word, 2 MB a frame, with its

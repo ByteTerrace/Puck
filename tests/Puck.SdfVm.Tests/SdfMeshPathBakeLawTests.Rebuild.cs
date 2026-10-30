@@ -35,6 +35,67 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.True(condition: (replacement.MeshDrawsRevision > revision));
         Assert.False(condition: bake.Pending);
     }
+    // A program rebuilt after the bake's identity moved (an applied update to the code the bake runs, a reloaded bake
+    // kernel) keeps no group an earlier identity meshed, and neither it nor another residency takes a mesh the library
+    // holds under that identity: each group bakes again under the identity standing, drawing its earlier mesh meanwhile.
+    [Fact]
+    public void AMovedIdentityKeepsAndTakesNothingAnEarlierIdentityMeshed() {
+        var library = new SdfMeshLibrary();
+
+        static SdfProgram Sphere() {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            return builder.Sphere(radius: 0.5f, material: material).Build();
+        }
+
+        var built = new SdfMeshBakeIdentity(value: 3);
+        var moved = new SdfMeshBakeIdentity(value: 7);
+        var mesh = new SdfMesh(positions: new Vector3[] { new(x: 0, y: 0, z: 0), new(x: 1, y: 0, z: 0), new(x: 0, y: 1, z: 0) }, indices: new uint[] { 0, 1, 2 });
+        var first = Sphere();
+
+        foreach (var group in SdfMeshBakeGroup.Plan(program: first, transforms: [], farDistance: 100,
+            create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector))) {
+            library.Store(geometry: group.Sealed, identity: built.Value, materials: group.MaterialOrder, mesh: mesh);
+        }
+
+        var bake = new SdfMeshPathBake { Identity = built, Library = library, Residency = "built" };
+        var frame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { FarDistance = 100 };
+
+        Assert.Same(expected: mesh, actual: Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh);
+        Assert.False(condition: bake.Pending);
+
+        // The same identity keeps the group through a rebuilt program, the control for what follows.
+        Assert.Same(expected: mesh, actual: Assert.Single(collection: bake.Dress(frame: (frame with { Program = Sphere() })).MeshDraws).Mesh);
+        Assert.False(condition: bake.Pending);
+
+        bake.Identity = moved;
+
+        var rebuilt = bake.Dress(frame: (frame with { Program = Sphere() }));
+
+        Assert.True(condition: bake.Pending);
+        Assert.Same(expected: mesh, actual: Assert.Single(collection: rebuilt.MeshDraws).Mesh);
+
+        var arriving = new SdfMeshPathBake { Identity = moved, Library = library, Residency = "arriving" };
+
+        _ = arriving.Dress(frame: frame);
+        Assert.True(condition: arriving.Pending);
+    }
+    // A skinned group's mesh is the bake identity's too: a moved identity neither keeps the group nor renumbers it.
+    [Fact]
+    public void AMovedIdentityRebakesASkinnedGroupItWouldOtherwiseKeep() {
+        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "skinned" };
+        var index = 0L;
+
+        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
+        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f));
+        Assert.False(condition: bake.Pending);
+
+        bake.Identity = new SdfMeshBakeIdentity(value: 7);
+        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f));
+
+        Assert.True(condition: bake.Pending);
+    }
     // A program rebuilt while a skinned group's member stands off the pose its mesh was baked at (a body breathing when a
     // placement elsewhere changes) keeps the group: the same mesh draws on at once and nothing bakes, where planning the
     // group afresh at the member's new pose would key another geometry and bake it.
