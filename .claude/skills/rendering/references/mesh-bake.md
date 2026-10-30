@@ -27,6 +27,22 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   half a fine cell below the surface. Solids that touch (a stair's treads, a
   board on its table) meet at the surface, and refining that seam chamfered the
   concave crease above it by a cell.
+- **Touching solids are one solid to the contour.** Every Box carries a built-in
+  fillet (`SdfSolidGeometry.BoxCornerRadius`), so where the face two touching
+  boxes share meets a third solid (a flight's treads against its divider) the
+  fillets leave a crevice a few millimetres wide inside the union. A sample
+  outside between two inside samples, thinner than the contour's cell along
+  that line, reads inside as its shallower neighbour (`SdfSampledLattice.GapFill`:
+  `CloseCoarseGaps` in `Refine` below the fine cell and in `PrepareCrossings`
+  below the coarse one, `CloseFineGaps` at the fine spacing); drawn, a crevice
+  was a sliver of folded faces inside the solid. Inside a union the field is the
+  distance to the nearest face of the solid a sample lies in, which beside a
+  seam is the shared face, so its gradient points into the neighbour: the
+  interpolated normal (`TryNormal`) leaves out a corner whose step along its
+  gradient does not rise (`SeamGradient`), or the faces beside the seam shade
+  turned 180 degrees (the hall stairs' dark patches). The crevice's open mouth,
+  a groove under the cell where a tread's rounded edge meets the wall, still
+  contours as a facet whose corner normals are the wall's.
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
   in 20 s. A refinement past its fine-sample budget (`MaxFineSamples`) splits
   each cell into fewer fine cells, down to two, and contours whole only past
