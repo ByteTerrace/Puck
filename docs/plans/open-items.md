@@ -232,7 +232,7 @@ The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
 - [high] Auto exposure is not metering: on the owner's walkthrough (valley summit, `.claude/scratch/lead-window/owner-valley-summit.png`) `world.exposure` reads `mode=auto ev100=11.5 compensation=2.5` but every view `meter=none source=held`, so the image holds a fixed EV with +2.5 compensation and white terrain blows out. Find why no view meters (the meter's camera sample ring and the sweep's camera-cut finding in "Sweep and visual checks" are suspects), fix at the cause, and confirm the summit, the lobby and the card table on both backends. (from: the owner's walkthrough)
-- [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white sun key, hard black shadows with no sky fill, no rim and no aerial haze. A lighting-direction pass (sky colour and fill, sun colour and height, shadow softness, haze) with the owner, after exposure meters; the terrain pass covers materials and haze (docs/plans/terrain-pass.md, in progress). (from: the owner's walkthrough)
+- [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white sun key, hard black shadows with no sky fill, no rim and no aerial haze. A lighting-direction pass (sky colour and fill, sun colour and height, shadow softness, haze) with the owner, after exposure meters; the [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the image meter. (from: the owner's walkthrough)
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
 
 - Owner walkthrough, depth visibility: both poses checked on probe-depth-fix's
@@ -1419,9 +1419,9 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 ### The valley's terrain
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
-Next: the lead's window over the sweep tour's `valley` stops, then contact on
-the drawn relief. The measured state is in the
-[plan](valley-and-moons.md#phase-1-the-valley-as-built).
+Next: the [terrain pass](terrain-pass.md#order-of-work), whose steps take
+the sub-points below (contact in step 5, the caps and bound in step 4). The
+measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built).
 
 - Valley review findings (Codex review of the valley merge `be0f38692`):
   - [medium] The superellipsoid's product-first rounding misclassifies small superellipsoids and disagrees with the HLSL: exponent 2, all radii 1/1024 m, p = (1/256, 0, 0) gives −1/1024 m on the CPU and +3/1024 m on the GPU, so contact and the drawn surface disagree at small sizes (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836`). One formula, exact at both ends of the radius range, on both sides.
