@@ -365,6 +365,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (moved || (finished != m_drawnMeshes)) {
                 m_draws.Clear();
+                m_chunkOwners.Clear();
                 m_draws.AddRange(collection: frame.MeshDraws);
                 foreach (var group in m_groups) {
                     if (group.Mesh is not { } mesh) { continue; }
@@ -385,6 +386,7 @@ public sealed partial class SdfMeshPathBake {
                         var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
 
                         m_draws.Add(item: new SdfMeshDraw(Identity: ((mesh.Chunks.Count == 0) ? group : part), Material: 0, Mesh: part, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, IsDynamic = group.Dynamic });
+                        if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
                     }
                 }
                 foreach (var copy in frame.MeshInstances) {
@@ -413,7 +415,7 @@ public sealed partial class SdfMeshPathBake {
 
                     m_dressedMap = (Dresses(map: m_spareMap, hostMap: hostMap, hostDraws: frame.MeshDraws.Count)
                         ? m_spareMap
-                        : new SdfDressedPickMap(draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap));
+                        : new SdfDressedPickMap(chunkOwners: m_chunkOwners, draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap));
                     m_spareMap = previous;
                 }
             } else {
@@ -434,6 +436,8 @@ public sealed partial class SdfMeshPathBake {
     private SdfFrame? m_dressedSource;
     private SdfFrame? m_dressed;
     private SdfDressedPickMap? m_dressedMap;
+    // The group each chunk of a chunked group's mesh is drawn for, as the last dressing listed them.
+    private readonly Dictionary<object, SdfMeshBakeGroup> m_chunkOwners = new(comparer: ReferenceEqualityComparer.Instance);
     private SdfDressedPickMap? m_spareMap;
 
     // Whether a pick map extends a host map over exactly the dressed draws.

@@ -30,7 +30,7 @@ sleeping island a tick early. Restore scoped replay images after compiling their
 final bindings. An addon restart cancels its old input controllers, so capture the
 recording's start after that commit, with a preflight capture before committing.
 An independent test/history capture records that restart as an ordered tape entry.
-Isolated scenario restores replace session allocators and awake/sleeping work sets
+A replay-start restore (`WorldPersistence.RestoreReplayStart`) replaces session allocators and awake/sleeping work sets
 with their captured timeline; live checkpoint loads retain retired session epochs
 so an ended principal cannot be minted again.
 
@@ -38,8 +38,7 @@ so an ended principal cannot be minted again.
 operator recording. Scenario workers freeze all probes synchronously at export,
 before the host finishes its post-step work, then restore and replay each authority
 in place. A probe retains the final open tick's already-applied inputs without
-advancing that authority. Boot screen observations are reconstructed between
-scenarios, not retained from the preceding scenario.
+advancing that authority.
 
 Only `puck test --reproduce` attaches scenario probes and writes `reproduction.json`,
 after comparing each authority. An ordinary scheduled boot makes no reproduction

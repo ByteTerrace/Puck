@@ -133,7 +133,7 @@ with `FixedSurfaceQuery` and the contact narrowphase. Chamfered authored Boxes
 can still yield real inward discrepancies from their conservative inside
 colliders; neither the fillet nor the chamfer is an error-budget allowance.
 
-Opposing planar face interiors of touching boxes are inside their union, not exposed collision boundaries; certify that local relation before comparing them with the exterior mesh. Edges and corners stay measured. Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
+Opposing planar face interiors of touching boxes are inside their union, not exposed collision boundaries; certify that local relation before comparing them with the exterior mesh. Edges and corners stay measured, except against the mesh where no free ball of the hit triangle's half diagonal reaches the witness (`WorldDiagnosticGeometry.OpensOnto`): the fillet groove along an edge three filleted boxes share is in the field and the colliders but under the bake's cell, and counts `enclosed`. Only exact collider distances may close such a void; a bound's blocks a ball only when its centre lies inside. Mesh diagnostics use `WorldDiagnosticMeshQuery` and the retained scene's
 `TryNearestSurface`, not normal-ray hits. The nearest query reuses both levels
 of the trace hierarchy and tests world-space triangle distances (object-space
 nearest points are wrong under nonuniform scaling). It includes edges and

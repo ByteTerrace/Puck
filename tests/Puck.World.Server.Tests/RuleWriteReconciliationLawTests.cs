@@ -10,11 +10,10 @@ namespace Puck.World.Server.Tests;
 /// brought up to date by both. A drive gate a rule closes refuses drive exactly as one a command closes, and a body
 /// scale written to its register reaches the body whichever writer wrote it.</summary>
 public sealed class RuleWriteReconciliationLawTests {
-    /// <summary>A reused scenario host shares one boot: the preceding scenario's run moved a drive gate, and restoring
-    /// the boot rebinds the gate and clock seeds its seeds derive before the first command. A scenario whose seeds
-    /// differ is refused: it boots its own host.</summary>
+    /// <summary>A run moved a drive gate; restoring the starting checkpoint rebinds the gate and clock seeds its seeds
+    /// derive before the first command.</summary>
     [Fact]
-    public void AScenarioRestoreRebindsBootDerivedStateBeforeItsFirstCommand() {
+    public void ARestoreRebindsBootDerivedStateBeforeItsFirstCommand() {
         foreach (var seed in new[] { 0L, 1L }) {
             var definition = Scenario(stunned: seed);
             using var fixture = Fixtures.FreshServer(definition: definition);
@@ -27,14 +26,11 @@ public sealed class RuleWriteReconciliationLawTests {
             fixture.Step();
             Assert.Equal((seed == 0), server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
 
-            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: Admit(server, definition), boot: boot!));
+            server.Persistence.RestoreReplayStart(checkpoint: boot!);
             Assert.Equal((seed != 0), server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
             Assert.Same(clockSeeds, server.ClockSeeds);
             Assert.Equal((((seed == 0) ? 1UL : 3UL) << 62), clockSeeds["quiet"]);
             Assert.Equal(1UL, server.NextInputTick);
-
-            Assert.Throws<InvalidOperationException>(testCode: () => server.Persistence.ScenarioCheckpoint(
-                admission: Admit(server, Scenario(stunned: 1 - seed)), boot: boot!));
         }
     }
     private static WorldDefinition Scenario(long stunned) {
@@ -44,8 +40,6 @@ public sealed class RuleWriteReconciliationLawTests {
             ((row.Name.Value == "stunned") ? row with { Cells = [new StateCell(CellName.Parse(candidate: "0"), CellValue.Int(value: stunned))] } :
             ((row.Name.Value == "quiet") ? row with { Cells = [], Min = FixedQ4816.FromDouble(value: ((stunned == 0) ? 0.25 : 0.75)).Value } : row)))]);
     }
-    private static WorldDefinitionAdmission Admit(WorldServer server, WorldDefinition definition) => WorldDefinitionSerialization.DeserializeForAdmission(
-        utf8Json: WorldDefinitionSerialization.Serialize(definition: definition), machines: server.Machines.ValidationCatalog);
 
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
 

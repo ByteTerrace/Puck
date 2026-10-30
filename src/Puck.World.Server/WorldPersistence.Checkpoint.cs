@@ -1043,7 +1043,7 @@ public sealed partial class WorldPersistence {
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
         if (resetSessionEpochs) {
-            // Scenario delivery must observe its restored grants and seed clocks, including in attached sinks.
+            // A replay start must deliver its restored grants and seed clocks, including to attached sinks.
             Host.GrantTable.SyncState(definition: restoredDefinition, arena: Host.Arena);
             Host.ResetClockSeeds(definition: restoredDefinition);
         }

@@ -15,8 +15,8 @@ namespace Puck.Cli.Test;
 /// <remarks>
 /// Each collected world owns a numbered directory, independent of its filename, so parallel worlds never share
 /// persistence, transcripts or verdict exports.
-/// Each worker boots once and restores compatible scenarios from its checkpoint. With <c>--reproduce</c>, recorded
-/// input must reproduce each authority's hashes, machine cores and final export in place.
+/// Each worker process boots its scenarios one after another, each in a fresh native host. With <c>--reproduce</c>,
+/// recorded input must reproduce each authority's hashes, machine cores and final export in place.
 /// </remarks>
 public static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";

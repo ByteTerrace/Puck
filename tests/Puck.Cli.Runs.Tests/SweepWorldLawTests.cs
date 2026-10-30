@@ -25,7 +25,7 @@ public sealed class SweepWorldLawTests : IDisposable {
           ],
           "tour": {
             "settle": 5,
-            "stops": [ { "name": "pinned", "group": "g", "lines": ["body.stop 0"], "steps": [ { "at": 2, "run": "body.stop 0" } ], "settle": 5 } ]
+            "stops": [ { "name": "pinned", "group": "g", "lines": ["body.stop 0", "world.wait 70"], "steps": [ { "at": 2, "run": "body.stop 0" } ], "settle": 5 } ]
           }
         }
         """;
@@ -133,6 +133,8 @@ public sealed class SweepWorldLawTests : IDisposable {
 
             Assert.Equal(expected: SweepStatus.Red, actual: Assert.Single(collection: tour.Stills).Status);
             Assert.Contains(collection: tour.Stills[0].Reasons, filter: static reason => reason.StartsWith(comparisonType: StringComparison.Ordinal, value: "capture refused"));
+            // A stop's long tick wait runs as several short calls and none is refused.
+            Assert.DoesNotContain(collection: tour.Stills[0].Reasons, filter: static reason => reason.Contains(value: "world.wait 30", comparisonType: StringComparison.Ordinal) || reason.Contains(value: "world.wait 10", comparisonType: StringComparison.Ordinal));
             Assert.Equal(expected: ["watchdog.after-tour"], actual: run.Recheck().Select(selector: static signal => signal.Name));
 
             cancel.Cancel();

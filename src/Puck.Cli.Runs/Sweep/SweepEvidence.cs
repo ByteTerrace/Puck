@@ -93,6 +93,23 @@ public static class SweepEvidence {
         }
         return new SweepAnswer(Ok: (failures.Count == 0), Output: ((response.Commands is { Length: > 0 } entries) ? entries[^1].Output : response.Output), Refusals: failures, Unmeasured: (status == SweepStatus.Unknown));
     }
+    /// <summary>Reduces a <c>world.exposure</c> answer to the first view's reading: its EV100, what the meter read and
+    /// which source answered.</summary>
+    /// <param name="output">The answer.</param>
+    /// <returns>The reading as <c>ev100=… meter=… source=…</c>, or <see langword="null"/> when the answer holds no view.</returns>
+    public static string? ExposureReading(string output) {
+        var match = System.Text.RegularExpressions.Regex.Match(input: output, pattern: @"view 0: ev100=(?<ev>\S+) multiplier=\S+ meter=(?<meter>.+?) source=(?<source>\S+)", options: System.Text.RegularExpressions.RegexOptions.CultureInvariant, matchTimeout: TimeSpan.FromSeconds(value: 2));
+
+        return (match.Success ? $"ev100={match.Groups["ev"].Value} meter={match.Groups["meter"].Value} source={match.Groups["source"].Value}" : null);
+    }
+    /// <summary>Says whether a still that changed against its baseline was taken at another exposure, which moves every
+    /// pixel of the image and is the lighting's history rather than the scene.</summary>
+    /// <param name="before">The baseline still's reading, or <see langword="null"/>.</param>
+    /// <param name="after">This still's reading, or <see langword="null"/>.</param>
+    /// <returns>The note for the still's reasons, or <see langword="null"/> when either reading is missing.</returns>
+    public static string? ExposureNote(string? before, string? after) => (((before is null) || (after is null))
+        ? null
+        : ((before == after) ? $"exposure unchanged ({after}): the difference is in the scene" : $"exposure differs: {before} against {after}"));
     /// <summary>Matches each expected tick and command against its eventual world.at result, never its arm receipt.</summary>
     public static SweepAnswer Scheduled(SweepAnswer read, IReadOnlyList<(ulong Tick, string Command)> expected) {
         var initial = Check(read);

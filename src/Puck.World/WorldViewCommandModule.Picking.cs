@@ -41,7 +41,7 @@ internal sealed partial class WorldViewCommandModule {
         var screen = ((result.Material > SdfProgramBuilder.ScreenMaterialId) ? $" screen={(result.Material - SdfProgramBuilder.ScreenMaterialId - 1)}" : string.Empty);
 
         return string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={((uint)result.Kind)} source={result.Source} material={result.Material}{screen} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}]");
+            handler: $"[world.view.pick: instance={instance} request={result.Request} pixel={result.X},{result.Y} kind={((uint)result.Kind)} source={result.Source} material={result.Material}{screen} placement={(target?.Placement ?? "none")} body={(target?.BodyIndex?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} prototype={(target?.Prototype ?? "none")} materialName={(result.MaterialName ?? "none")}]");
     }
     private CommandResult Pick(WireArgs args, TextCommandSession? session) {
         if (args.Count > 3) {

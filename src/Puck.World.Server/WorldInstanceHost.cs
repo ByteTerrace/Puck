@@ -137,6 +137,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // earlier lifetime minted and a traveller still carries.
     private readonly Dictionary<string, int> m_startedLifetimes = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_issuedAuthorities = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Reports an authority after admission and before its first step.</summary>
+    public event Action<WorldInstance>? Admitted;
+
     // Instances an emptying reap spared because a queued transfer was still bound for them; reaped once nothing queued
     // names them (DrainPendingTransfers).
     private readonly HashSet<string> m_deferredReaps = new(comparer: StringComparer.Ordinal);

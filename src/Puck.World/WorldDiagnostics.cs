@@ -110,12 +110,20 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                                 var drawn = sample.Surface;
                                 var drawnNormal = sample.Normal;
                                 var hitError = sample.Budget.BakeHalfDiagonal;
+                                var enclosed = !WorldDiagnosticGeometry.OpensOnto(server.Population.DiagnosticColliders.Select(selector: static c => c.Collider),
+                                    point, normal, hitError);
 
-                                Count(comparison: "collision-versus-baked-mesh", red: sample.IsRed);
+                                if (enclosed) {
+                                    var counts = (comparisons.GetValueOrDefault(key: "collision-versus-baked-mesh") ?? new(Clean: 0, Red: 0, Unknown: 0));
+
+                                    comparisons["collision-versus-baked-mesh"] = counts with { Enclosed = (counts.Enclosed + 1) };
+                                } else {
+                                    Count(comparison: "collision-versus-baked-mesh", red: sample.IsRed);
+                                }
                                 var meshBudget = budget with { BakeHalfDiagonal = hitError };
                                 var separation = sample.Distance;
 
-                                if (sample.IsRed) {
+                                if (!enclosed && sample.IsRed) {
                                     findings.Add(item: new("", view, "red", source, "collision-versus-baked-mesh",
                                         "effective collision boundary agrees with retained opaque mesh within margin and bake precision",
                                         separation, meshBudget, point, normal,

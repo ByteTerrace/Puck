@@ -196,6 +196,33 @@ public sealed class ModuleExpansionTests {
         Assert.Contains(collection: refused.Diagnostics, filter: static diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "'wanted'"));
     }
     [Fact]
+    public void ASourceOfImportsAloneIsAFragmentAndALibraryWithDeclarationsImportingADocumentIsStillRefused() {
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-fragment-");
+
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
+
+        File.WriteAllText(contents: "state { world { slot composed = 9 } }", path: Path.Combine(path1: directory.RootPath, path2: "document.puck"));
+        File.WriteAllText(contents: "import \"document\"", path: Path.Combine(path1: directory.RootPath, path2: "fragment.puck"));
+        File.WriteAllText(contents: "import \"document\"\nlet unused = 1", path: Path.Combine(path1: directory.RootPath, path2: "library.puck"));
+        File.WriteAllText(contents: "import \"fragment\"", path: rootPath);
+
+        var fragment = WorldCompiler.CompileFile(Path.Combine(path1: directory.RootPath, path2: "fragment.puck"), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(condition: fragment.Diagnostics.HasErrors, userMessage: fragment.Diagnostics.FormatReport(""));
+        Assert.True(condition: fragment.EmitsDocument);
+
+        var composed = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(condition: composed.Diagnostics.HasErrors, userMessage: composed.Diagnostics.FormatReport(""));
+        Assert.Equal("fragment", Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: composed.RequireJson()["imports"])))["document"]!.ToString());
+
+        File.WriteAllText(contents: "import \"library\"", path: rootPath);
+
+        var refused = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(collection: refused.Diagnostics, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportGraph) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "imports the document 'document'")));
+    }
+    [Fact]
     public void AFileSpelledImportIsRefusedByNameAndALibraryImportingADocumentIsRefused() {
         using var directory = new TemporaryDirectory(prefix: "puck-module-import-spelling-");
 
@@ -490,7 +517,7 @@ public sealed class ModuleExpansionTests {
         for (var index = 0; (index <= LastIndex); index++) {
             var source = ((index == LastIndex)
                 ? "module leaf() { state { world { slot score = 0 } } }"
-                : $"import \"level-{(index + 1)}\"");
+                : $"import \"level-{(index + 1)}\"\nlet unused{index} = 0");
 
             File.WriteAllText(path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"), contents: source);
         }
@@ -511,7 +538,7 @@ public sealed class ModuleExpansionTests {
         for (var index = 0; (index <= LastIndex); index++) {
             var source = ((index == LastIndex)
                 ? "module leaf() {}"
-                : $"import \"level-{(index + 1)}\"");
+                : $"import \"level-{(index + 1)}\"\nlet unused{index} = 0");
 
             File.WriteAllText(path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"), contents: source);
         }
@@ -536,7 +563,7 @@ public sealed class ModuleExpansionTests {
         for (var index = (LastIndex - 1); (index >= 0); index--) {
             File.WriteAllText(
                 path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"),
-                contents: $"import \"level-{(index + 1)}\" as left\nimport \"level-{(index + 1)}\" as right"
+                contents: $"import \"level-{(index + 1)}\" as left\nimport \"level-{(index + 1)}\" as right\nlet unused{index} = 0"
             );
         }
 
