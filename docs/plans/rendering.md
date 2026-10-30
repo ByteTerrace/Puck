@@ -7648,15 +7648,15 @@ simulation state, and a world that declares nothing keeps P20-1's cull.
      averages are 50.49 → 52.40 ms (simulate 43.66 → 44.52, produce
      6.65 → 7.63); settled captures show continuous floors and ceilings.
      The frame-rate floor remains unqualified in both modes.
-4. **Residency.** Today every mesh of a world is resident, the debug world's
-   at the region's 2 GiB ceiling. Two shapes keep it bounded without stalls:
-   distance rings with hysteresis (resident within R + h of any view's camera,
-   evicted past R + 2h, landing ahead of the camera at the arena's 2 MB a
-   frame), which needs no authoring; or the Metroid shape, areas adjacent
-   through a closed door made resident before it opens, which needs areas and
-   doors that close. Worlds are already the area granularity across portals: a
-   routed residency stays live while its window shows. Which may pop (a
-   distant group reloading from the store) is the owner's call, below.
+4. **Residency.** Today every mesh of a world is resident at every level
+   (1.22 GB on Direct3D 12, 1.388 GB on Vulkan for the debug world), and a frame
+   that needs more than `GpuRegion.MaxByteCount` (just under 4 GiB) throws. The
+   design is settled in [residency](../decisions/residency.md): one selector
+   per presentation turns every demand point (views, seats, eyes mapped through
+   portal faces) into a priority per group and level that orders bake, store
+   loads and landing, places the GI window and evicts under one byte budget;
+   authored areas only add demand. Its order of work lives in the
+   [open items](open-items.md#residency-and-streaming).
 5. **Lights per view, landed.** A point or spot light ends at a range
    derived from its intensity and the world's darkest exposure, under a
    windowed inverse square that is exactly zero there, and each view shades only
