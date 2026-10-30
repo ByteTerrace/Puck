@@ -348,6 +348,7 @@ Owner: test runner and replay specialist · medium and low ·
 Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
 replica cost and repeat the paired CPU measurements on a quiet machine.
 
+- [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
   process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
   recursive `Directory.Delete`, which overflows the stack past about 3,500
