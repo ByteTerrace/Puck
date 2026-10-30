@@ -526,7 +526,26 @@ The rendered colliders report's only red findings left are the valley's relief
 
 ### Edit to running, hot reload and boot
 
-- [high] `world.reload` crashes a windowed World: on the owner's third live reload (tuning the wings layout in `worlds/standard/controls.puck` and `worlds/debug/controls.puck`) the next frame threw `InvalidOperationException: Only a staged region that owns its destination grows.` at `GpuRegion.Grow` from `SdfWorldTables.EnsureDynamicTransformCapacity` (`SdfWorldTables.FramePreparation.cs:26`, via `PackDynamicTransforms`), with the bake reporting 2,765 instances and 1,357 dynamic after the reload; the host stopped. Log: `.claude/scratch/lead-window/owner-reload-crash.stderr.log`. The dynamic transform table must grow (or be rebuilt) after a reload raises its count; a reload never stops the host. (from: the owner's walkthrough)
+- [medium] Upload plumbing keys the stored meshes: the bake's code identity
+  (`SdfMeshBakeClosure`) holds `SdfWorldTables.WriteMeshBakePoints`, so changing
+  `GpuRegion.Grow`'s return type changed that method's IL and missed every
+  stored mesh (`[sdf.mesh-bake] miss … the code, 1 member (Puck.SdfVm 1:
+  Puck.SdfVm.SdfWorldTables.WriteMeshBakePoints) changed`), rebaking all 2,078
+  debug-world groups, about nine minutes cold on each backend on the lead
+  machine. How the bake's points reach the GPU cannot change a baked mesh.
+  Bound the closure to the code that decides mesh contents.
+- [low] Growing the program region on `world.reload` waits for the device to go
+  idle (`SdfWorldTables.EnsureProgramCapacity`, `TryWaitIdle`) and rebuilds the
+  region whole. `GpuRegion.Grow` grows any owned region without waiting,
+  but keeps the policy it was created with, while a program can grow past the
+  ring's share of the aperture that `GpuResidency.Select` would stage. Grow it
+  without the idle wait and reselect the policy when the new size crosses the
+  share.
+- [low · unconfirmed] `world.reload` of a debug document that raises
+  `bodies.capacity` validates an `inhabit.count` against the raised capacity,
+  then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
+  is full` and spawns only what the boot's entity table holds. Decide whether a
+  reload grows the live entity table or refuses the raised capacity by name.
 - [high · owner: lead integration] The combined debug document at integration
   45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
   PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for

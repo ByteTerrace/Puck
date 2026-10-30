@@ -538,11 +538,24 @@ compares and fails naming the file that drifted, it writes nothing.
 
 ## Capacity and emission
 
-- Program words and instances grow on upload. Dynamic-transform capacity does
-  not: a frame that supplies fewer transforms than
+- Program words and instances grow on upload, and the dynamic-transform region
+  grows to the frame's table, whose rows are the program's slots plus one root
+  per rigid copy (a body), so a `world.reload` or a new body grows it mid-run.
+  A frame that supplies fewer transforms than
   `RequiredDynamicTransformCapacity` throws, because a slot rendering at
   identity is a bug. Fix the emission so the frame supplies the transforms it
   needs; do not raise the capacity.
+- A `GpuRegion` grows under whichever policy `GpuResidency.Select` gave it
+  (`GpuRegion.Grow`): a staged region carries its destination on the GPU, and a
+  ring or in-place region replaces its host-visible buffers and owes each the
+  whole region; the owner retires what it returns. A device with a large
+  host-visible device-local heap (resizable BAR, as on the lead machine under
+  both backends) gives a small per-frame table a ring, while the CPU fake
+  device's default profile stages every region, so a region path written or
+  tested for one policy alone passes the device-free suites and fails on the
+  lead machine. Test a region path under every policy, as
+  `GpuResidencyLawTests.ARegionGrowsUnderEveryPolicyAndEverySlotReadsItExact`
+  does.
 - Large GPU buffers give their memory back. Both arenas (`DirectXHeapArena`,
   `VulkanMemoryArena`) free a resource's own heap (one past half a shared
   heap) as it empties and keep only a shared one spare; a kept large heap takes
