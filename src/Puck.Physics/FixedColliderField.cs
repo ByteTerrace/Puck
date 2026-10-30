@@ -8,7 +8,7 @@ namespace Puck.Physics;
 /// <param name="field">The field, read in the collider's frame; negative inside.</param>
 /// <param name="boundScale">The factor <c>s</c> in <c>(0, 1]</c> that makes <c>s·F</c> 1-Lipschitz, so <c>|s·F(p)|</c>
 /// never exceeds the distance from <c>p</c> to the surface.</param>
-/// <param name="gradientStep">The central-difference half-span, in metres, of the gradient taps that measure the
+/// <param name="gradientStep">The tetrahedral tap offset, in metres, of the gradient taps that measure the
 /// surface's normal and its distance; positive.</param>
 /// <param name="bounded">Whether <see cref="FixedStaticCollider.Extent"/> bounds the surface about the collider's
 /// centre; an unbounded field (relief over a plane) joins every query.</param>
@@ -50,14 +50,9 @@ public static class FixedFieldColliderContact {
     // The core samples a capsule's search spends at most, and the halving rounds that refine the least of them.
     private const int MaximumCoreSamples = 16;
     private const int RefineRounds = 3;
-    // The cosine between the core and the normal at its end past which that end is the core's nearest point: 60
-    // degrees off the core, so a standing body on any walkable slope measures its foot alone.
-    private static readonly FixedQ4816 CoreEndSlope = FixedQ4816.FromDouble(value: 0.5);
     // The projection's iteration ceiling and the step below which it has reached the surface.
     private const int ProjectionIterations = 16;
     private static readonly FixedQ4816 ProjectionTolerance = FixedQ4816.FromRawBits(value: 16L);
-    // A gradient shorter than this has no measured direction (a field's centre of symmetry).
-    private static readonly FixedQ4816 MinimumGradient = FixedQ4816.FromRawBits(value: (1L << (FixedQ4816.FractionBitCount - 8)));
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
     // One query's reads of a field in its collider's frame, counted.
@@ -88,7 +83,7 @@ public static class FixedFieldColliderContact {
             return (TryValue(local: local, value: out var value) && TryMeasure(distance: out distance, local: local, normal: out normal, value: value));
         }
         // The same from the value already read at the point. The gradient is the tetrahedral difference: the four taps
-        // at h·(±1, ±1, ±1) with an odd count of minus signs, Σ kᵢ·F(p + h·kᵢ) / 4h, second-order like a central
+        // at h·(±1, ±1, ±1) with an even count of minus signs, Σ kᵢ·F(p + h·kᵢ) / 4h, a first-order
         // difference at four reads in place of six.
         public bool TryMeasure(FixedVector3 local, FixedQ4816 value, out FixedQ4816 distance, out FixedVector3 normal) {
             distance = FixedQ4816.Zero;
@@ -115,7 +110,8 @@ public static class FixedFieldColliderContact {
             );
             var length = gradient.Length;
 
-            if (length < MinimumGradient) {
+            // Field scaling changes this magnitude without changing the surface: only zero has no direction.
+            if (length == FixedQ4816.Zero) {
                 return false;
             }
 
@@ -124,11 +120,9 @@ public static class FixedFieldColliderContact {
             return true;
         }
         // The measured distance and normal at the core point nearest the surface: false when the envelope or one sample
-        // at the core's middle proves every core point at least the reach from the surface (s·F is 1-Lipschitz). To first
-        // order the distance runs linearly along the core with the slope of the core's direction on the normal, so when
-        // the normal measured at one end leans along the core by at least CoreEndSlope (the ground under a standing
-        // body, or a ceiling over it) the end it leans away from is the nearest. Otherwise (a face along the core) the
-        // core is sampled at most a radius apart and refined by halving about the least reading.
+        // at the core's middle proves every core point at least the reach from the surface (s·F is 1-Lipschitz).
+        // A local normal cannot certify the rest of a nonconvex core: a floor at one end can hide an overhang at the
+        // other. Sample the whole core and refine around the least reading, including an endpoint minimum.
         public bool TryCore(FixedVector3 lower, FixedVector3 axis, FixedQ4816 radius, FixedQ4816 reach, out FixedQ4816 distance, out FixedVector3 normal) {
             distance = FixedQ4816.Zero;
             normal = FixedVector3.Zero;
@@ -146,24 +140,6 @@ public static class FixedFieldColliderContact {
 
             if (length == FixedQ4816.Zero) {
                 return TryMeasure(distance: out distance, local: middle, normal: out normal, value: middleValue);
-            }
-
-            var direction = (axis / length);
-
-            if (TryMeasure(distance: out var lowerDistance, local: lower, normal: out var lowerNormal)) {
-                var slope = FixedVector3.Dot(left: direction, right: lowerNormal);
-
-                if (slope >= CoreEndSlope) {
-                    (distance, normal) = (lowerDistance, lowerNormal);
-                    return true;
-                }
-
-                if (
-                    (slope <= -CoreEndSlope) &&
-                    TryMeasure(distance: out distance, local: (lower + axis), normal: out normal)
-                ) {
-                    return true;
-                }
             }
 
             var count = ((radius > FixedQ4816.Zero)
@@ -193,9 +169,8 @@ public static class FixedFieldColliderContact {
             }
 
             var step = (FixedQ4816.One / countFixed);
-            var interior = ((bestT > FixedQ4816.Zero) && (bestT < FixedQ4816.One));
 
-            for (var round = 0; (interior && (round < RefineRounds)); round++) {
+            for (var round = 0; (round < RefineRounds); round++) {
                 step /= Two;
 
                 var (below, above) = ((bestT - step), (bestT + step));

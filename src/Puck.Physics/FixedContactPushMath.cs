@@ -4,7 +4,8 @@ namespace Puck.Physics;
 
 /// <summary>The push-resolution arithmetic shared by every contact-source solver over <see cref="IContactField"/>:
 /// displace out of penetration, latch the grounded/obstruction witness by the normal's walkable alignment, and clamp
-/// approach velocity along the normal. One home so a correction to it reaches every caller in the same change.</summary>
+/// approach velocity through up on walkable ground and across up on walls. One home so a correction to it reaches
+/// every caller in the same change.</summary>
 public static class FixedContactPushMath {
     /// <summary>The uncommitted outcome of resolving one confirmed contact push: the position/velocity deltas a
     /// caller adds, whether the push reads as walkable, and the measured surface normal. <see cref="Normal"/> is
@@ -57,9 +58,9 @@ public static class FixedContactPushMath {
     }
 
     /// <summary>Computes the trial for an ordinary push against a MEASURED surface normal: displacement along the
-    /// normal, the walkable test against <paramref name="up"/>, and the approach-velocity clamp.</summary>
+    /// separating direction, the walkable test against <paramref name="up"/>, and the approach-velocity clamp.</summary>
     /// <param name="normal">The measured contact normal.</param>
-    /// <param name="penetration">The confirmed penetration depth, added along <paramref name="normal"/>.</param>
+    /// <param name="penetration">The confirmed penetration depth along <paramref name="normal"/>.</param>
     /// <param name="velocity">The body's velocity, read only — the clamp is returned as a delta, never applied here.</param>
     /// <param name="up">The body's up axis the walkable test measures alignment against.</param>
     /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> <paramref name="normal"/>'s alignment with
@@ -71,7 +72,9 @@ public static class FixedContactPushMath {
             left: normal,
             right: up
         );
-        var grounded = (!blockClimb && (alignment >= groundedThreshold));
+        // An authored limit just below 90 degrees can quantize to a zero cosine. A vertical face has no
+        // upward separating direction, so it must never enter the lift's division by alignment.
+        var grounded = (!blockClimb && (alignment > FixedQ4816.Zero) && (alignment >= groundedThreshold));
 
         // A face steeper than the walkable slope is a wall, and a wall pushes across `up`, never along its own
         // normal: the normal push's up-component is a lift, and against a body driving into the face every tick

@@ -15,7 +15,7 @@ before code.
 | Smooth blends | `CreationDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
 | The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
 | Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldPlacementStamper.ReliefDetail` | Declares 1.56 m, but the scoped bound is a 770 m sphere about the ring's centre and refinement stops at eight cells a coarse axis, so sectors bake at 2.8 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)): the metre-scale grain. |
-| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relief collides as drawn (a field collider per copy); smooth blends are still hard unions. |
+| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relieved copies use field colliders, including their authored blends; unrelieved copies keep analytic primitive unions. Conservative relief contact remains open ([findings](open-items.md#the-valleys-terrain)). |
 | Materials | `shade/shade-weathering.hlsli`, `shade/shade-layers.hlsli`, called from `passes/sdf-light-stage.hlsli` | No slope, altitude or curvature rule, though weathering's up-facing `deposit` and its curvature edges are such rules in fragment form. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
 | Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
@@ -74,20 +74,27 @@ same relief), with the fixed-point fBm in `Pcg3dLatticeNoise.Fbm3`. The
 narrowphase is not `FixedFieldContactSolver`'s solve verbatim: that solve reads
 the field's value as the distance, which over a scope divided by its `L` holds
 a body up to `L` times its skin off the rock, and spends up to 1,033 samples a
-capsule. The field collider measures the distance as the value over the
+capsule. The field collider estimates distance as the value over the
 gradient's length (a four-tap tetrahedral difference), at the core point where
 the field reads least, and proves a body clear first from the shapes'
 unrelieved union grown by the amplitude, then from one relieved sample
-(`s·F` is 1-Lipschitz). A smooth blend over the cap reuses the collider by
-compiling its creation the same way; `TerrainRelief` replaces `NoiseDisplace`
+when the compiled field retains its Lipschitz bound. The gradient quotient is
+only a local estimate, not a clearance certificate; quantized scope scales,
+curved relief, narrow features and degenerate gradients have open contact
+findings in the [terrain packet](open-items.md#the-valleys-terrain). A local
+normal cannot select a capsule endpoint for a nonconvex union, so the contact
+search samples the whole core and refines its least reading. A smooth blend
+over the cap reuses the collider by compiling its creation the same way; `TerrainRelief` replaces `NoiseDisplace`
 inside the same program.
 
-**The step bound:** the relieved field reads at most `L` times the true
-distance, `L` the op's step factor, so a body volume advances `f / L` per
-certified step, and the existing interval rule (`RenderEditFieldBounds`: relief
-moves the surface by at most its amplitude) serves the certified sweep. The
-step checks the sweep's 64-query budget (`DefaultSweepBoundsQueryBudget`)
-against the Moth's top speed on relief and fixes whichever falls short.
+**The step bound to implement:** after preserving a conservative Lipschitz
+bound through fixed-point compilation, a body volume can advance by the
+certified field bound. The analytic provider currently slices motion by half
+the body's least support radius; its field colliders do not use
+`CertifiedFieldSweep`. The existing interval rule (`RenderEditFieldBounds`)
+bounds the displacement's field-value contribution, not its Euclidean surface
+reach. Integrate certified relief sweeps and check the 64-query budget
+(`DefaultSweepBoundsQueryBudget`) against the Moth's top speed.
 
 Grounding and the slope test read the field's normal, so the walkable slope is
 the drawn slope. The downslope creep's cause was the walkable push itself: it
