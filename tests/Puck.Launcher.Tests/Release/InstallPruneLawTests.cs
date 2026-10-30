@@ -69,10 +69,9 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.True(condition: File.Exists(path: Path.Combine(path1: Outside, path2: "nested", path3: "deep.txt")), userMessage: "a file outside the install root was deleted");
     }
 
-    // Round 2, high: a pass checked trash/ and later enumerated and deleted its children by path, so replacing trash/
-    // with a junction in between deleted the junction target's ordinary children. A held directory is enumerated and
-    // emptied through its handle: on Windows the replacement is refused while it is held, and on Linux it succeeds but
-    // the removal still acts on the held directory, never on what the name names now.
+    // A held directory is enumerated and emptied through its handle, so replacing its path with a link between the
+    // check and the deletion never reaches the link's target: on Windows the replacement is refused while the directory
+    // is held, and on Linux it succeeds but the removal still acts on the held directory.
     [Fact]
     public void ReplacingAHeldDirectoryWithALinkNeverRedirectsWhatIsRemovedThroughIt() {
         WriteOutside();
@@ -99,9 +98,8 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: (replaced ? displaced : Trash)));
         if (replaced) { DirectoryLinks.Remove(link: Trash); }
     }
-    // Round 2, high: registration fell back to proceeding without update.lock after a second, so a process launched
-    // directly from versions/<v>/ registered while a slow pass was deleting that version. Registration waits for the
-    // lease without a deadline and then confirms that versions/<v> is still the directory it was loaded from. On Windows
+    // A process launched directly from versions/<v>/ waits for update.lock however long a removal holds it, then
+    // confirms that versions/<v> is still the directory it was loaded from. On Windows
     // the runtime's open image file already denies moving its directory, so a running version cannot be removed or
     // replaced at all and the registration completes; on Linux the move succeeds and the registration fails the launch.
     [Fact]
@@ -146,9 +144,8 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.Contains(expectedSubstring: "versions/1.0.0 was removed", actualString: removedError.Message);
         Assert.Contains(expectedSubstring: "versions/1.0.1 is no longer the directory", actualString: replacedError.Message);
     }
-    // Round 2, medium: registration recognized versions/<v> by comparing path spellings, so an equivalent spelling (an
-    // extended-length or differently cased path on Windows, a linked ancestor on Linux) left the process unregistered
-    // and its version deletable. Recognition compares the identity of the image's parent directory.
+    // Registration recognizes versions/<v> by the identity of the image's parent directory, so any equivalent spelling
+    // (an extended-length or differently cased path on Windows, a linked ancestor on Linux) registers and protects it.
     [Fact]
     public void RegistrationRecognizesItsVersionDirectoryWhateverPathSpellsIt() {
         _ = Install(version: "1.0.0", healthy: true);
@@ -173,14 +170,16 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.Equal(expected: ["1.0.0"], actual: Prune(keepVersions: 0).DeletedVersions);
         if (!OperatingSystem.IsWindows()) { DirectoryLinks.Remove(link: m_directory.PathOf(name: "alias")); }
     }
-    // Round 2, medium: a kept version without an install record contributed no object pins, so the sweep deleted the
-    // objects only it referenced. Its objects are the content pins of the files it holds, and the sweep still runs.
+    // A kept version without an install record keeps the content pins of the regular files it holds, a link among them
+    // included, and the sweep of everything else still runs.
     [Fact]
     public void AKeptVersionWithoutARecordKeepsTheObjectsItHoldsAndTheSweepStillRuns() {
         var unrecorded = Install(version: "1.0.0", healthy: true);
         var current = Install(version: "1.0.1");
         var orphan = Objects.Put(content: "nothing references this"u8);
 
+        WriteOutside();
+        DirectoryLinks.Create(link: Path.Combine(path1: Version(version: "1.0.0"), path2: "escape"), target: Outside);
         File.Delete(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName));
         Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: Root, path2: "last-good")));
 
@@ -192,6 +191,8 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.True(condition: Objects.Contains(pin: current));
         Assert.False(condition: Objects.Contains(pin: orphan), userMessage: "the sweep did not run");
         Assert.Equal(expected: 1, actual: pass.DeletedObjects);
+        AssertOutsideIntact();
+        DirectoryLinks.Remove(link: Path.Combine(path1: Version(version: "1.0.0"), path2: "escape"));
     }
     [Fact]
     public void LinksAreRefusedAndWhatTheyReachSurvives() {

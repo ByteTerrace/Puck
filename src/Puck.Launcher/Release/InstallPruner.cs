@@ -36,8 +36,9 @@ public sealed record InstallPruneResult(
 /// deleted there through the same handle. An interrupted pass leaves complete versions and a partial <c>trash/</c>
 /// entry, which the next pass removes first. A version that is or holds a link is refused and kept.</para>
 /// <para>A kept version's objects are the pins its install record names, or, for a version without a record, the
-/// content pins of the files it holds. A pending intent's and a local release source's channel manifests' objects are
-/// kept too. A malformed intent skips the pass, and a store whose manifest does not parse keeps all its objects.
+/// content pins of the regular files it holds (a link is never a staged object). A pending intent's and a local
+/// release source's channel manifests' objects are kept too. A malformed intent skips the pass, and a store whose
+/// manifest does not parse keeps all its objects.
 /// Platforms other than Windows and Linux x64 skip the pass.</para>
 /// </summary>
 public static class InstallPruner {
@@ -285,7 +286,8 @@ public static class InstallPruner {
                     break;
                 }
                 default:
-                    throw new IOException(message: $"'{entry.Name}' is a link or not a regular file");
+                    // A link or a special file is never what staging wrote, so no cached object stands for it.
+                    break;
             }
         }
     }

@@ -305,7 +305,7 @@ public sealed class ReleaseManifestTests {
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => error.Path == "channel");
 
     // The applier writes both names into every version directory beside its payload; a payload file of either name would
-    // be overwritten after its hash was verified. install-record.json is the round-2 finding against version pruning.
+    // be overwritten after its hash was verified.
     [InlineData("state-generation")]
     [InlineData("install-record.json")]
     [InlineData("Install-Record.JSON")]

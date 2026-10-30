@@ -165,7 +165,7 @@ pending intent and a local release source's channel manifests count as
 references). Install order is the `sequence` the applier writes into
 `versions/<version>/install-record.json`, never version precedence; a payload
 file of that name (or `state-generation`) is refused by manifest validation. A
-kept version without a record keeps the content pins of the files it holds, so
+kept version without a record keeps the content pins of the regular files it holds, so
 it never blocks the sweep.
 
 Every step acts through `Puck.Confinement`'s `ConfinedDirectory` handles opened
