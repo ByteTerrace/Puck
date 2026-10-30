@@ -1174,10 +1174,12 @@ Material-ID exposed coincident lintel/floor faces, now separated at the slab
 underside. The prior corrected sill's Vulkan burst changed at most one pixel
 with temporal on or off. The exact original off-mode paired-frame cadence
 trigger remains unconfirmed. The grazing-depth, sliver-motion and opaque-coverage
-GPU witnesses passed 6/6 on both backends; the new displaced-camera witness's
-transport expectation was corrected and its retry is queued. Client checks pass
-4/4 after merging lead/catch-up 3ddc50e03. Latest-source Direct3D World33764 is
-cold-baking a new identity; its pre-settlement captures are invalid. The prior
+GPU witnesses, including the new static/displaced-edge cases, pass6/6 on both
+backends (corrected fixture retry6.845s). Client checks pass4/4 after merging
+lead/catch-up3ddc50e03. Direct3D World33764's cold bake finished927.324s;
+its warmed wall burst changed up to414pixels/.945%, max mean|dY|.0049, against
+64pixels/.146%, max mean.0073off. Its pre-settlement captures are invalid;
+latest-source sill and paused-scene controls remain pending. The prior
 full Vulkan tour captured28/64 stops before its 19-minute GPU batch ended;
 its comparison sheets are retained in the lane's scratch report, not a completed
 tour.
