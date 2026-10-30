@@ -1,25 +1,33 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Security.Cryptography;
+using Puck.World;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Test;
 
 public static partial class TestCommand {
     // A boot owns a cohort, not just its root document. Compare the composition of every staged companion
-    // and the bytes of every asset; each authority restores its own scenario rows and programs.
+    // and the bytes of every asset; each authority restores its complete pristine checkpoint.
     private static string BatchShape(TestWorld world) => ((Path.GetFileName(path: world.Path) + "\n") + string.Join(separator: "\n",
         values: Directory.EnumerateFiles(path: Path.GetDirectoryName(path: world.Path)!, searchPattern: "*", searchOption: SearchOption.AllDirectories).Order(comparer: StringComparer.Ordinal).Select(selector: path => {
             var bytes = File.ReadAllBytes(path: path);
             var shape = (((path == world.Path) || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".world.json"))
-                ? Puck.World.Server.WorldPersistence.ScenarioBootShape(json: bytes)
+                ? ComposedBootShape(bytes: bytes, path: path)
                 : Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
             var name = Path.GetRelativePath(relativeTo: Path.GetDirectoryName(path: world.Path)!, path: path).Replace(newChar: '/', oldChar: '\\');
 
             return $"{name.Length}:{name}:{shape}";
         })));
+    private static string ComposedBootShape(string path, byte[] bytes) {
+        if (!WorldSourceLoader.TryReadAuthored(path: path, document: bytes, authored: out var definition, reason: out var reason)) {
+            throw new InvalidOperationException(message: reason);
+        }
+        return Puck.World.Server.WorldPersistence.ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: definition));
+    }
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
-    // A worker retains its native host across compatible compositions, replacing scenario state and programs.
+    // A worker retains its native host across identical compositions, replacing only the scenario schedule.
     private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory) {
         var legs = new List<object>();
 

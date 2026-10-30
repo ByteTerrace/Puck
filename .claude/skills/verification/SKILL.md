@@ -67,17 +67,19 @@ its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` retains one native host per worker while consecutive scenarios share
-its composition, restores its boot authority cohort, and installs each scenario's
-own state seeds, rules and schedule. A fresh arena carries only the pristine
-checkpoint's session lanes; no preceding scenario's values or key ledger enter it.
-Compatibility includes every staged companion and asset, the population's body
-registers and field lattices, and state cells that choose the boot inhabitant census.
-Generated verdict rows and expectation rules do not require another native host.
-Responsive placement holdings are derived from each scenario's seeds; they do not
-split a worker's boot, but restoration recomposes their changed geometry before the
-first command. Drive gates and presentation clock seeds are rebound at the same
-boundary. Restoration rebuilds geometry and population only when their configuration changed.
+`puck test` retains one native host per worker only while consecutive scenarios
+have identical composed documents apart from their schedules, including every
+staged companion and asset. State rows (fields and ordinary rows alike), rules,
+groups and generated expectations all participate. A different document boots a
+fresh host; a compatible one restores its complete pristine checkpoint. Never
+transplant only the arena into another document's checkpoint: undo plans bind
+row ordinals, and fields, group progress, latches, decisions and search derive
+from the whole document. Changing an ordinary row before an undo-owned row can
+invalidate that checkpoint even when the group declaration did not change.
+The CLI composes before comparing shapes; a reused raw JSON document also loads
+through the file-composition boundary. Drive grants and presentation clock seeds
+are rebound before restore delivers to attached sinks. Restoration rebuilds
+geometry and population when the preceding run edited their configuration.
 Checkpoint restoration discards replay-only departure rollback bodies: a committed
 departure otherwise keeps its source-scoped transfer id and falsely refuses the next
 scenario's replay as a duplicate. The scenario reset
@@ -88,8 +90,8 @@ isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
 caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
 and extensions require the native container. `WorldTestHostLawTests` preserves the
-three native-container witnesses. `TestCommandLawTests.OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput`
-checks pristine/changed/pristine scenarios with one boot and replay, and
+three native-container witnesses. `TestCommandLawTests.DifferentScenariosStartPristineAndIdenticalScenariosReuseOneHost`
+checks fresh boots for changed scenarios, reuse for identical scenarios and replay, and
 also compares a reused worker's export and manifest with a fresh-process boot.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
