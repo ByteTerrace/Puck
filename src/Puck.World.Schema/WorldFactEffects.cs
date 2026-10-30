@@ -33,7 +33,8 @@ public enum WorldDocumentWrite : byte {
 /// <param name="TargetKey">The designated body's literal key, or the invalid default.</param>
 /// <param name="TargetKeyFrom">The designated body's live indirection, or <see langword="null"/>.</param>
 /// <param name="Designation">What a designation writes.</param>
-public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body);
+/// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
+public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false);
 /// <summary>The effect facts only a world fires. The facet is the type argument, so firing receives
 /// <see cref="IWorldFacts"/> as an argument.</summary>
 /// <remarks>Every world effect but the identity-fact write lands outside the arena, so it declares

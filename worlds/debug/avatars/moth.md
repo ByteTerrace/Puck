@@ -50,8 +50,11 @@ rule).
 | Left mouse drag | | Orbit the gameplay camera |
 | Right mouse drag | Right stick | Steer: orbit the camera, the body turning to face where it looks |
 | Left and right mouse buttons held | | Walk forward while the right button steers |
-| Left Shift (hold) | West (hold) | Run: 10 m/s where she walks at 5, and 10 where she flies at 5 |
+| Left Shift (hold) | | Run: 10 m/s where she walks at 5, and 10 where she flies at 5 |
 | N | Left stick press | Switch running on or off |
+| J | West | Dash along movement, or facing while idle: a 0.2 s burst with a 0.8 s cooldown, torso lean and back-thruster flare |
+| Mouse wheel | | Zoom the camera boom between the standard's authored limits; while the play wheel is open its hold pages bind scrolling to the ring instead |
+| Middle mouse button | | Reset camera angles and boom distance to the authored rig |
 | Z held, then N | Left trigger held, then left stick press | Autorun: switch walking forward on or off; it keeps going with the trigger released, and the stick still steers and strafes |
 | F | North | Switch flight mode on or off |
 | Space | South | Jump, twice before landing; in flight mode, rise |
@@ -115,10 +118,10 @@ too; Move's face buttons keep their own keys (F, Left Shift, Space, C, E).
 | Tour | RT then LT, X then Z | next exhibit, flag, previous exhibit, quality; slice; update rates; lights off, lights on, motion off, motion on; garden painting; night painting |
 
 Go and Tour name the debug world's places and gallery
-([`pad.puck`](../pad.puck)) and read empty in the garden and the night field.
+([`controls.puck`](../controls.puck)) and read empty in the garden and the night field.
 
-The play wheel has three rings, Act, View and Places (Places in the debug world
-alone). Hold Tab and point with the mouse, or hold LB and aim the right stick,
+The play wheel has Act, View and Bar rings, with Places added in the debug world.
+Hold Tab and point with the mouse, or hold LB and aim the right stick,
 then release over a sector. Up or Down on the arrow keys, the d-pad or the mouse
 wheel steps the ring while it is open. Act: Console, Build, Where
 (`body.where`), Channels (`body.channels`), Respawn (back to the stage), Suit
@@ -126,7 +129,10 @@ wheel steps the ring while it is open. Act: Console, Build, Where
 alone, `view.override layout play`), three-quarter, front, rear, wide, face,
 Desktop (the desktop pane, `view.override layout desktop`) and the chase
 camera. Places: the stage, the hero studio, the gallery, the portals, the chess
-table, the computer, the devices deck and Wonderland (`debug.go`). Releasing at
+table, the computer, the devices deck and Wonderland (`debug.go`). Bar selects
+clusters, keyboard/pad strips, wings, flanking sidebars, and compact/full size;
+the same per-seat settings are available through `run controls.bar` and
+`run controls.bar.compact` ([standard controls](../../standard/README.md)). Releasing at
 the hub cancels. The bar fades after six seconds without input, and the bar and
 the cursor step aside while the seat's view frames an engaged screen (the held
 view of a carried screen keeps the bar); the bar also steps aside while a wheel

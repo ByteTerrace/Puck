@@ -570,7 +570,7 @@ rebuilds the domain in its new frame. This is not incremental SDF invalidation: 
 without a proof, and a baked one only when the
 replacement solid query proves every cell, clearance probe, and static edge query unchanged; later off-grid segment
 checks use the replacement query, and medium domains require the same field provider and synchronized revision.
-Capacity changes rebuild as well. The [granary authoring example](../../experimental/src/Puck.World/Assets/worlds/modules/README.md#grow-and-rearrange-the-court)
+Capacity changes rebuild as well. The [granary board](../../worlds/debug/granaries.md#reading-the-board)
 combines these frames with preserved dealt instances and guarded reflow.
 
 Changing a navigation definition, or an edit whose proof affects that domain,

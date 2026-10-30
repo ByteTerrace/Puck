@@ -55,9 +55,11 @@ public static class MeshCpuBake {
 
         var meshes = new Dictionary<int, SdfMesh>();
 
-        foreach (var draw in bake.Dress(frame: frame).MeshDraws) {
-            if ((draw.Identity is SdfMeshBakeGroup group) && fields.ContainsKey(key: group.Selector)) {
-                meshes[group.Selector] = draw.Mesh;
+        // The landed mesh, not the frame's draws: a chunked group draws each chunk under the chunk's own identity, and
+        // its parent holds the whole surface the audit measures.
+        foreach (var selector in fields.Keys) {
+            if (bake.TryLandedMesh(mesh: out var mesh, selector: selector)) {
+                meshes[selector] = mesh;
             }
         }
 

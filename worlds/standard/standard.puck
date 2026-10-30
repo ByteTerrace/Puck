@@ -1,3 +1,4 @@
 schema: "puck.world.definition.v1"
 import "skin"
 import "controls"
+import "camera"

@@ -264,6 +264,17 @@ that field through `Puck.Maths`'s `IFieldEvaluator` and `IWorldQuery`. That is
 why neither this library nor a distance-field library needs to reference the
 other.
 
+The analytic solver's `ResolveSweep` splits translation into slices no longer
+than half the body's least support radius, resolving each through its existing
+contact kernel. Fast movement therefore meets a thin wall on its approach side.
+A move no collider's bounds reach (within the contact skin of the box spanning
+its start and end bounds) resolves its endpoint alone. Every slice measures the
+lateral edge rule from the whole move's starting foot, the foot a step-up
+raises from. The fixed-point rate accumulator preserves the exact unobstructed
+displacement. It shares the field solver's work budget: exhaustion keeps only
+the solved prefix and reports `Unproved`; an unrepresentable slice refuses the
+whole move.
+
 `FixedFieldContactSolver.ResolveSweep` proves a moving body's travel before it
 solves contact at the endpoint, so a body never passes through geometry,
 however fast it moves, however thin the geometry, and however close to it the
@@ -364,7 +375,10 @@ moves through space no sweep proved clear. A solver built with no sweep, for a
 field with no geometry, resolves at the endpoint alone. `FixedContactSweepWork`
 counts the sweeps, their bounds queries, and how many ended in contact or
 exhausted, as the deterministic `physics.sweep` work source; the World registers
-its `Process` ledger, and a law hands its solver a ledger of its own.
+its `Process` ledger, and a law hands its solver a ledger of its own. The
+analytic solver counts into `FixedStaticContactWork.Process`, the
+`physics.contact` source: resolves, exact collider queries, the convex queries
+past their bounds rejection with their support evaluations, and pushes.
 
 A step-sampling sweep has two tunnelling classes the certified sweep closes. A
 field that overstates its distance (a gradient above one) lets a sample-trusting

@@ -70,11 +70,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // lane, so the window must be counted on the base every other input timestamp shares — a private Stopwatch read
     // here would be a second, unsubstitutable time source sitting directly upstream of a simulation command.
     private readonly IInputClock m_clock;
-    private readonly WorldCursorFeed m_cursor;
-    private readonly WorldPointer m_pointer;
+    private readonly WorldCursorFeed? m_cursor;
+    private readonly WorldPointer? m_pointer;
     private readonly Func<InputRouter> m_router;
-    private readonly WheelStore m_store;
-    private readonly WorldSeatViewports m_viewports;
+    private readonly WheelStore? m_store;
+    private readonly WorldSeatViewports? m_viewports;
 
     private long m_selectionSequence;
 
@@ -143,14 +143,9 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <param name="clock">The engine-tick capture clock the selection-grace window is counted on — the process's
     /// one <see cref="IInputClock"/>, so the window shares the base every input timestamp already uses.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldWheelFeed(WorldPointer pointer, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router, WorldIconTable icons, IInputClock clock) {
+    public WorldWheelFeed(WorldPointer? pointer, WorldSeatBindings bindings, WorldCursorFeed? cursor, WorldSeatViewports? viewports, WheelStore? store, Func<InputRouter> router, WorldIconTable? icons, IInputClock clock) {
         ArgumentNullException.ThrowIfNull(argument: clock);
-        ArgumentNullException.ThrowIfNull(argument: icons);
-        ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: bindings);
-        ArgumentNullException.ThrowIfNull(argument: cursor);
-        ArgumentNullException.ThrowIfNull(argument: viewports);
-        ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: router);
 
         m_bindings = bindings;
@@ -163,7 +158,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
         for (var slot = 0; (slot < m_state.Length); slot++) {
             m_state[slot] = new SeatState {
-                Rings = new WorldWheelRings(resolveIcon: icons.ResolveIcon),
+                Rings = new WorldWheelRings(resolveIcon: ((icons is null) ? static _ => OverlayResolvedGlyph.None : icons.ResolveIcon)),
                 Status = ClosedStatus(slot: slot),
             };
         }
@@ -171,7 +166,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
     /// <summary>The pointer seat's last composed status — what <c>world.view.wheel</c> answers without a seat
     /// argument.</summary>
-    public WorldWheelStatus Status => StatusFor(slot: m_cursor.Status.Slot);
+    public WorldWheelStatus Status => StatusFor(slot: (m_cursor?.Status.Slot ?? 0));
 
     private static void ApplyRingScroll(SeatState state, BindingWheelView wheel) {
         state.RingScroll += state.BankedNotches;
@@ -260,6 +255,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             ? state.Center.Y
             : ((viewport.Region.Y + (viewport.Region.Height * 0.5f)) * viewport.Height)
         );
+
         var (innerRadius, ringWidth) = BindingWheelGeometry.RingRadii(
             style: wheel.Style,
             unit: unit
@@ -402,10 +398,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     private static BindingWheelSelection SelectPointer(SeatState state, BindingWheelView wheel, Vector2 pointer, Vector2 neutral, Vector2 center, float unit) {
         var mode = wheel.Style.PointerSelection;
         var targetingVector = BindingWheelGeometry.ResolveSpatialTargetVector(
+            hub: center,
             mode: mode,
-            position: pointer,
             neutral: neutral,
-            hub: center
+            position: pointer
         );
 
         if (
@@ -489,11 +485,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             !state.CommitArmed &&
             state.Gesture.CanArm &&
             state.Gesture.AxisKnown &&
-            (state.GestureWheel is { } gestureWheel) &&
-            !ReferenceEquals(
-            objA: state.Wheel,
-            objB: gestureWheel
-        )
+            (state.GestureWheel is { } gestureWheel)
         ) {
             var selection = SelectAxis(
                 state: state,
@@ -581,18 +573,27 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     }
     /// <inheritdoc/>
     public void OnPointer(int slot) {
-        if (((uint)slot) >= m_state.Length) {
+        // Relative wheel input acts through player.wheel.scroll, from the same router as
+        // every other authored input. The pointer store is only its presentation projection.
+        _ = m_pointer?.TakeWheel(slot: slot);
+    }
+    /// <summary>Accumulates relative vertical wheel notches on the currently open explicit radial.</summary>
+    public void Scroll(int slot, float notches) {
+        if ((((uint)slot) >= m_state.Length) || (!float.IsFinite(f: notches) || (notches == 0f))) {
             return;
         }
-
         var state = m_state[slot];
-        var notches = m_pointer.TakeWheel(slot: slot);
+        var wheel = CurrentGestureWheel(slot: slot, state: state);
 
-        if (CurrentGestureWheel(
-            slot: slot,
-            state: state
-        ) is not null) {
-            state.BankedNotches += notches;
+        if ((wheel is null) || (wheel.Style.RingSelection != BindingWheelRingSelectionMode.Explicit)) {
+            return;
+        }
+        var previousRing = state.ActiveRing;
+
+        state.BankedNotches += notches;
+        ApplyRingScroll(state: state, wheel: wheel);
+        if (state.ActiveRing != previousRing) {
+            state.CommitArmed = false;
         }
     }
     /// <summary>Latches cancellation for the seat's current gesture — both the author-bound
@@ -639,7 +640,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         if (relative) {
             // An OS pointer reports both position and raw motion. Use position while available: switching back
             // to accumulated raw counts would double-handle that motion and jump when the cursor hits an edge.
-            if (PointerAvailable(slot: slot, status: m_cursor.Status)) {
+            if ((m_cursor is not null) && PointerAvailable(slot: slot, status: m_cursor.Status)) {
                 return;
             }
 
@@ -663,12 +664,80 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <summary>One seat's last composed status.</summary>
     /// <param name="slot">The 0-based seat slot to read.</param>
     /// <returns>That seat's status, or a closed status when the slot is out of range.</returns>
-    public WorldWheelStatus StatusFor(int slot) => ((((uint)slot) < m_state.Length)
-        ? m_state[slot].Status
-        : ClosedStatus(slot: 0)
+    public WorldWheelStatus StatusFor(int slot) {
+        if (((uint)slot) >= m_state.Length) {
+            return ClosedStatus(slot: 0);
+        }
+        return m_state[slot].Status;
+    }
+    /// <summary>Advances logical wheel state once per headless fixed step, independently of reads.</summary>
+    public void TickLogical() {
+        if (m_viewports is not null) {
+            return;
+        }
+        for (var slot = 0; (slot < m_state.Length); slot++) {
+            RefreshLogical(slot: slot);
+        }
+    }
+
+    // A headless host has the same authored wheel and directional input, but no pixel-space
+    // pointer or hub. Resolve only logical facts rather than fabricating a viewport.
+    private void RefreshLogical(int slot) {
+        var state = m_state[slot];
+        var wheel = CurrentGestureWheel(slot: slot, state: state);
+
+        if (wheel is null) {
+            Close(slot: slot, state: state);
+            return;
+        }
+        var hover = -1;
+        var reason = (state.Gesture.Cancelled ? "cancelled" : "no-selection");
+
+        if (!state.Gesture.Cancelled && state.Gesture.AxisKnown) {
+            var selection = SelectAxis(state: state, wheel: wheel);
+
+            hover = (state.Gesture.AxisNeutral ? -1 : selection.Sector);
+            reason = (state.Gesture.AxisNeutral ? "dead-center" : selection.Reason);
+            var granted = state.Grace.Observe(deadCentre: (reason == "dead-center"), hoverSector: hover, nowTick: m_clock.NowTicks);
+
+            if ((hover < 0) && (granted >= 0)) {
+                hover = granted;
+                reason = "sector";
+            }
+        }
+        var ring = wheel.Rings[state.ActiveRing];
+
+        Arm(hoverReason: reason, hoverSector: hover, ring: ring, slot: slot, state: state, wheel: wheel);
+        state.Status = SnapshotStatus(hoverReason: reason, hoverSector: hover, ring: ring, slot: slot, state: state, wheel: wheel);
+    }
+    private static WorldWheelStatus SnapshotStatus(int slot, SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) => new(
+        Slot: slot,
+        Open: true,
+        Id: wheel.Id,
+        Group: wheel.Group,
+        RingCount: wheel.Rings.Count,
+        ActiveRing: state.ActiveRing,
+        ActiveRingLabel: (ring.Label ?? ring.PageId),
+        HoverSector: hoverSector,
+        HoverLabel: state.CommitLabel,
+        HoverCommand: state.CommitActivation?.Command,
+        HoverReason: hoverReason,
+        PointerSelection: wheel.Style.PointerSelection,
+        Placement: wheel.Style.Placement,
+        RingSelection: wheel.Style.RingSelection,
+        SelectorDeadZone: MathF.Sqrt(x: wheel.SelectorDeadZoneSquared),
+        SwitchFraction: wheel.Style.SwitchFraction,
+        SelectionGraceSeconds: wheel.Style.SelectionGraceSeconds,
+        Center: state.Center,
+        CenterKnown: state.CenterKnown
     );
+
     /// <summary>Composes every open seat's radial once per produced frame.</summary>
     public void Tick() {
+        if ((m_cursor is null) || (m_viewports is null) || (m_store is null)) {
+            TickLogical();
+            return;
+        }
         var pointerStatus = m_cursor.Status;
         var visibleCount = 0;
 
@@ -837,10 +906,10 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             } else if (state.PointerSelected) {
                 if (pointerAvailable) {
                     _ = m_viewports.Locate(
-                        view: in viewport,
-                        position: state.PointerNeutral,
                         framePosition: out var pointerNeutral,
-                        local: out _
+                        local: out _,
+                        position: state.PointerNeutral,
+                        view: in viewport
                     );
                     var selection = SelectPointer(
                         center: center,
@@ -932,27 +1001,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             state.FlashSince = 0L;
             state.FlashSeconds = wheel.Style.FadeOutSeconds;
             state.FlashEase = wheel.Style.FadeOutEase;
-            state.Status = new WorldWheelStatus(
-                Slot: slot,
-                Open: true,
-                Id: wheel.Id,
-                Group: wheel.Group,
-                RingCount: wheel.Rings.Count,
-                ActiveRing: state.ActiveRing,
-                ActiveRingLabel: (ring.Label ?? ring.PageId),
-                HoverSector: hoverSector,
-                HoverLabel: state.CommitLabel,
-                HoverCommand: state.CommitActivation?.Command,
-                HoverReason: hoverReason,
-                PointerSelection: wheel.Style.PointerSelection,
-                Placement: wheel.Style.Placement,
-                RingSelection: wheel.Style.RingSelection,
-                SelectorDeadZone: MathF.Sqrt(x: wheel.SelectorDeadZoneSquared),
-                SwitchFraction: wheel.Style.SwitchFraction,
-                SelectionGraceSeconds: wheel.Style.SelectionGraceSeconds,
-                Center: center,
-                CenterKnown: centerKnown
-            );
+            state.Status = SnapshotStatus(hoverReason: hoverReason, hoverSector: hoverSector, ring: ring, slot: slot, state: state, wheel: wheel);
         }
 
         m_store.Publish(frame: new OverlayWheelFrame(Seats: m_visible.AsMemory(

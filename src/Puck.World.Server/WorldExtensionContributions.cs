@@ -60,7 +60,8 @@ public static class WorldExtensionContributions {
     );
 }
 /// <summary>The built-in world-hosting extension every world host composes: the <c>directory</c> persistence provider,
-/// whose settings hold exactly one nonempty <c>path</c>.</summary>
+/// whose settings hold exactly one nonempty <c>path</c>, and the <c>observation.fixture</c> provider
+/// (<see cref="WorldFixtureObservationProvider"/>).</summary>
 public sealed class WorldServerExtension : IPuckExtension {
     /// <inheritdoc/>
     public string Name => "Puck.World.Server";
@@ -68,6 +69,7 @@ public sealed class WorldServerExtension : IPuckExtension {
     /// <inheritdoc/>
     public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
+        registry.AddOperation(provider: WorldFixtureObservationProvider.Registration);
         registry.AddStorage(provider: new(
             "directory",
             static settings => {

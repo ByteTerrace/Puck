@@ -25,6 +25,7 @@ public enum WorldBodyEffectScope : byte {
 /// <param name="Designation">Whether a designation fills or clears its register.</param>
 /// <param name="Key">The body a rule names, or <see langword="null"/> in a kit.</param>
 /// <param name="TargetKey">The body a rule designates, or <see langword="null"/>.</param>
+/// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
 public readonly record struct WorldBodyEffectForm(
     string Verb,
     BodyMotionOp Operation,
@@ -35,7 +36,8 @@ public readonly record struct WorldBodyEffectForm(
     string? Register,
     WorldBodyDesignationKind Designation,
     StateChannelRef? Key,
-    StateChannelRef? TargetKey
+    StateChannelRef? TargetKey,
+    bool UseMoveDirection = false
 );
 /// <summary>The one check and lowering of the four body-motion effects — <see cref="WorldEffect.SetVerticalVelocity"/>,
 /// <see cref="WorldEffect.ScaleVerticalVelocity"/>, <see cref="WorldEffect.PlanarImpulse"/> and
@@ -173,6 +175,7 @@ public static class WorldBodyEffects {
         form = new WorldBodyEffectForm(
             Designation: designation,
             Direction: direction,
+            UseMoveDirection: (effect is WorldEffect.PlanarImpulse { UseMoveDirection: true }),
             DurationTicks: durationTicks,
             Key: key,
             Operation: operation,
