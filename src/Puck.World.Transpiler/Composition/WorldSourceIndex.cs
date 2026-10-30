@@ -176,9 +176,8 @@ public static class WorldSourceIndex {
 
         return Held.GetOrAdd(
             key: key,
-            // The compiler identity names the modules as built, which an applied update does not move, so a process
-            // running edited code neither reads nor writes persisted declarations.
-            value: (((compilations is null) || (revision != 0)) ? Parse(content: content) : ReadPersisted(content: content, key: key, root: compilations))
+            // The persisted declaration is named by the compiler identity, which folds in an update applied to the parser.
+            value: ((compilations is null) ? Parse(content: content) : ReadPersisted(content: content, key: key, root: compilations))
         );
     }
     /// <summary>Forgets every declaration held in memory, so the next read of each source reads its persisted

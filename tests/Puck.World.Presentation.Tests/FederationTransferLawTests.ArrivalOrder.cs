@@ -113,12 +113,17 @@ public sealed partial class FederationTransferLawTests {
         Assert.Equal(-1, tape.Verify(name: "arrivals").Primary.DivergedAt);
     }
 
+    // Answers every arrival record with one verdict; every other record lands.
     private sealed class AnsweringCrossingLog(WorldCrossingDurability answer) : IWorldCrossingLog {
         public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) {
-            reason = ((answer == WorldCrossingDurability.Durable)
+            var verdict = ((entry.Record is WorldCrossingRecord.Arrival)
+                ? answer
+                : WorldCrossingDurability.Durable);
+
+            reason = ((verdict == WorldCrossingDurability.Durable)
                 ? string.Empty
-                : $"the log answered {answer}");
-            return answer;
+                : $"the log answered {verdict}");
+            return verdict;
         }
     }
 

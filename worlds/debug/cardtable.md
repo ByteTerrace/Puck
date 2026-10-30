@@ -23,10 +23,17 @@ creations that any author imports, in two variants an author chooses: `light`
 and court figures kept) and `dark` (a near-black ground, bright pips). This
 table wears `cardDeckPrototypes(variant: "light")`; the pips and the rank and
 suit index are large, matte and share the suit's colour so they read from the
-seat. A face's relief stays within 2 mm and a court figure is a bas-relief
-(`courtFlat` maps its modelled depth onto the court field), so no card pokes
-through the one laid over it; a layer of the stack (`cardLayer`, 3.2 mm) is the
-card's thickness and both faces' raised rims.
+seat. A face's relief stays within 2 mm and a court figure is a stack of cut-out
+layers on the court field (`courtRelief`, `courtStep` in `cards.puck`), so no
+card pokes through the one laid over it; a layer of the stack (`cardLayer`,
+3.2 mm) is the card's thickness and both faces' raised rims.
+
+A card's mesh bakes at a cell of several millimetres, so a mark must be a solid
+column from the card's surface, not a thin slab floating over it: pips and index
+glyphs stand on the face (their rim and core overlap the body), and a court
+figure's pieces stand on the court field's plate, deeper pieces first. Squashing
+a modelled 3D bust to a millimetre lost its features, and a pip core a hair
+clear of the face baked to rim fragments.
 
 The game is two layers. The rules are state: the stock, the waste, seven
 tableau columns and four foundations are ordered piles of card keys

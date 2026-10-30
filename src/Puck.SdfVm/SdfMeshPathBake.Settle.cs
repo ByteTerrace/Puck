@@ -123,7 +123,8 @@ public sealed partial class SdfMeshPathBake {
         group.DrawnScale = old.DrawnScale;
         Replace(group: group, index: index);
         m_drawnMeshes = -1;
-        if (Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out var baked)) {
+        group.Identity = Identity.Value;
+        if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var baked)) {
             group.Mesh = baked;
             group.Done = true;
             group.Stored = true;

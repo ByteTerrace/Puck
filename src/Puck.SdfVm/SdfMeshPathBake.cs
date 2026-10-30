@@ -743,8 +743,10 @@ public sealed partial class SdfMeshPathBake {
             transforms: transforms
         );
 
+        var identity = Identity.Value;
+
         foreach (var group in groups) {
-            _ = Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out _);
+            _ = Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out _);
         }
 
         lock (m_gate) {
@@ -765,6 +767,7 @@ public sealed partial class SdfMeshPathBake {
     private void Restart(SdfFrame frame) {
         var restarted = Stopwatch.GetTimestamp();
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
+        var identity = Identity.Value;
 
         m_allResident = false;
         m_demandTransforms = frame.DynamicTransforms;
@@ -782,7 +785,7 @@ public sealed partial class SdfMeshPathBake {
                 farDistance: frame.FarDistance,
                 groups: plan.Groups,
                 program: frame.Program,
-                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)),
+                stale: group => !(previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)),
                 transforms: frame.DynamicTransforms
             );
             m_groups.AddRange(collection: plan.Groups);
@@ -807,18 +810,21 @@ public sealed partial class SdfMeshPathBake {
             var group = m_groups[index];
 
             group.TakeDemandBox();
-            if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)) {
+            if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)) {
                 Replace(group: old, index: index);
                 continue;
             }
+            // Every way below of finishing a group without a bake takes what the library holds under this identity, and
+            // a group begun bakes under it, so a later program keeps the group only while the identity stands.
+            group.Identity = identity;
             replaced = true;
             // A dynamic group whose shapes only took other material ids, because a palette registered before them came
             // or went (a body leaving or entering the world), keeps its mesh renumbered by place, as a mesh taken from
             // the library is.
             if (
                 (old is not null) &&
-                Renumbers(group: group, old: old) &&
-                Library.TryTake(geometry: old.Sealed, materials: group.MaterialOrder, mesh: out var renumber)
+                Renumbers(group: group, identity: identity, old: old) &&
+                Library.TryTake(geometry: old.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var renumber)
             ) {
                 old.Renumber(materials: group.MaterialOrder, mesh: renumber);
                 old.ResidentAt = 0;
@@ -828,13 +834,13 @@ public sealed partial class SdfMeshPathBake {
             // Geometry the library holds a mesh of, baked at another index or slot, in an earlier program (a body that left
             // the world and came back) or by another residency (a body that crossed from another world), takes that mesh: a
             // static group's is in world space and a dynamic group's in its slot's frame, which its geometry holds.
-            if (Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out var baked)) {
+            if (Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var baked)) {
                 group.Mesh = baked;
                 group.Done = true;
                 continue;
             }
             // Geometry an earlier bake found no surface in meshes nothing again.
-            if (Library.HoldsEmpty(geometry: group.Sealed)) {
+            if (Library.HoldsEmpty(geometry: group.Sealed, identity: identity)) {
                 group.Outcome = "no surface, as baked before";
                 group.Done = true;
                 continue;
@@ -843,7 +849,7 @@ public sealed partial class SdfMeshPathBake {
             // crossing from another world mid-stride, or wearing a creation another body wears), takes that skinned mesh
             // and watches its members against the pose the mesh was baked at, so it bakes again only once it settles away
             // from it (Settle).
-            if (group.Dynamic && Library.TryTakeForm(form: group.Form, materials: group.MaterialOrder, mesh: out var shaped)) {
+            if (group.Dynamic && Library.TryTakeForm(form: group.Form, identity: identity, materials: group.MaterialOrder, mesh: out var shaped)) {
                 group.Mesh = shaped;
                 group.Done = true;
                 group.Stored = true;
@@ -884,15 +890,15 @@ public sealed partial class SdfMeshPathBake {
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={frame.Program.Instances.Count}");
             // The store's account reads its directory, so it runs off the frame's thread.
             if (Library.Disk is { } disk) {
-                var identity = Identity;
+                var parts = Identity;
                 var residency = Residency;
                 var baking = rebaked;
 
                 _ = Task.Run(action: () => {
                     if (baking > 0) {
-                        Console.Error.WriteLine(value: $"[sdf.mesh-bake] miss residency={residency} baking={baking}: {disk.ExplainMisses(identity: identity)}");
+                        Console.Error.WriteLine(value: $"[sdf.mesh-bake] miss residency={residency} baking={baking}: {disk.ExplainMisses(identity: parts)}");
                     } else {
-                        disk.Record(identity: identity);
+                        disk.Record(identity: parts);
                     }
                 });
             }
@@ -911,15 +917,17 @@ public sealed partial class SdfMeshPathBake {
     // Whether a new program's group stays the group the previous program planned at its selector: the same geometry and
     // materials, or, for a dynamic group, the same form and materials, which are the same shapes in another relative pose,
     // so the skinned mesh drawing (or baking) carries on, rides each member's slot, and bakes again only once the members
-    // settle away from the pose it was baked at (Settle).
-    private static bool Keeps(Group group, Group old) {
-        if ((old.Slot != group.Slot) || !old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
+    // settle away from the pose it was baked at (Settle). A group the previous program planned under another bake identity
+    // holds a product of other code or kernels, so it is never kept.
+    private static bool Keeps(Group group, Group old, UInt128 identity) {
+        if ((old.Identity != identity) || (old.Slot != group.Slot) || !old.MaterialOrder.AsSpan().SequenceEqual(other: group.MaterialOrder)) { return false; }
 
         return ((old.Sealed == group.Sealed) || (old.Dynamic && group.Dynamic && (old.Form == group.Form) && ((old.Mesh is not null) || !old.Done)));
     }
     // Whether a new program's group is the finished dynamic group the previous program planned at its selector with only
-    // its material ids moved: the same form, as many materials, and a mesh drawing.
-    private static bool Renumbers(Group group, Group old) => (
+    // its material ids moved: the same form, as many materials, and a mesh drawing, baked under the current identity.
+    private static bool Renumbers(Group group, Group old, UInt128 identity) => (
+        (old.Identity == identity) &&
         old.Dynamic &&
         group.Dynamic &&
         (old.Slot == group.Slot) &&
@@ -1025,7 +1033,7 @@ public sealed partial class SdfMeshPathBake {
         high = Vector3.Max(value1: high, value2: sheetHigh);
         if (!(low.X <= high.X)) {
             group.Outcome = $"no surface after {group.Refinements} refinements";
-            Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity);
+            Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
             group.Next = null;
             group.Done = true;
             group.Mesh = null;
@@ -1164,7 +1172,7 @@ public sealed partial class SdfMeshPathBake {
         }
         if (!(inside && outside) && !SheetBetween(lattice: final.Lattice, values: final.Values)) {
             group.Outcome = "no crossed cell in the final lattice";
-            Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity);
+            Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
             group.Final = null;
             group.Next = null;
             group.Done = true;
@@ -1218,7 +1226,7 @@ public sealed partial class SdfMeshPathBake {
             if ((refusal is not null) || (points is null) || (points.Length == 0)) {
                 if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); }
                 group.Outcome = ((refusal is null) ? "no crossed cell in the final lattice" : "lattice refused");
-                if (refusal is null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity); }
+                if (refusal is null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
                 group.Final = null;
                 group.Next = null;
                 group.Done = true;
@@ -1317,7 +1325,7 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = false;
             if ((contour is null) || (contour.QuadCount == 0)) {
                 group.Outcome = ((contour is null) ? "contour refused" : "contour empty");
-                if (contour is not null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity); }
+                if (contour is not null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
                 group.Done = true;
                 group.Mesh = null;
                 Finish();

@@ -92,6 +92,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: request.Members,
             writeItem: WriteReservationMember
         );
+        writer.WriteUInt64(value: request.SourceFloor);
     }
     private static WorldTransferReservationRequest ReadReservationRequest(ref WireReader reader) {
         var transferId = reader.ReadUInt64();
@@ -118,6 +119,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             ),
             maximum: MaxCollectionCount
         );
+        var sourceFloor = reader.ReadUInt64();
 
         return new WorldTransferReservationRequest(
             Border: border,
@@ -127,6 +129,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             PartyAllOrNothing: partyAllOrNothing,
             PeerAdmission: peerAdmission,
             SourceAuthority: sourceAuthority,
+            SourceFloor: sourceFloor,
             SourceRateHz: sourceRateHz,
             SourceTick: sourceTick,
             TransferId: transferId
@@ -286,6 +289,24 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         );
         writer.WriteUInt64(value: section.CrossingSequence);
+        writer.WriteArray(
+            items: section.SpentKeys,
+            writeItem: static (w, row) => {
+                WriteTransferKey(
+                    key: row.Key,
+                    writer: w
+                );
+                w.WriteBoolean(value: row.Committed);
+                w.WriteBoolean(value: row.Durable);
+            }
+        );
+        writer.WriteArray(
+            items: section.Floors,
+            writeItem: static (w, row) => {
+                w.WriteString(value: row.SourceAuthority);
+                w.WriteUInt64(value: row.Floor);
+            }
+        );
 
         return writer.ToArray();
     }
@@ -355,6 +376,30 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
         var crossingSequence = reader.ReadUInt64();
+        var spentKeys = reader.ReadArray(
+            field: "escrow spent transfer keys",
+            readItem: static (ref WireReader r) => {
+                var key = ReadTransferKey(reader: ref r);
+                var committed = r.ReadBoolean();
+                var durable = r.ReadBoolean();
+
+                return (key, committed, durable);
+            },
+            maximum: MaxCollectionCount
+        );
+        var floors = reader.ReadArray(
+            field: "escrow source floors",
+            readItem: static (ref WireReader r) => {
+                var sourceAuthority = r.ReadString(
+                    field: "source floor authority",
+                    maxBytes: MaxStringBytes
+                );
+                var floor = r.ReadUInt64();
+
+                return (sourceAuthority, floor);
+            },
+            maximum: MaxCollectionCount
+        );
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -367,10 +412,12 @@ public static partial class WorldAuthorityCheckpointCodec {
             BorderAdmissions: borderAdmissions,
             Committed: committed,
             CrossingSequence: crossingSequence,
+            Floors: floors,
             LatestCommittedTransfer: latest,
             Leases: leases,
             MobilityAdmissions: mobilityAdmissions,
-            MobilityLeases: mobilityLeases
+            MobilityLeases: mobilityLeases,
+            SpentKeys: spentKeys
         );
         reason = string.Empty;
 

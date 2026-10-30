@@ -200,9 +200,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         m_revisionOffsets[m_emitters.Count] = revisionCursor;
-        m_builtRevisions = new int[revisionCursor];
-        m_pendingRevisions = new int[revisionCursor];
-        m_buildingRevisions = new int[revisionCursor];
+        // The last component is the host's own: the code revision every emitter's emission is a product of.
+        m_builtRevisions = new int[(revisionCursor + 1)];
+        m_pendingRevisions = new int[(revisionCursor + 1)];
+        m_buildingRevisions = new int[(revisionCursor + 1)];
         m_transforms = new DynamicTransform[slotCursor];
 
         m_programSlots = slotCursor;
@@ -360,6 +361,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 }
             }
         }
+
+        // A hot-reload edit to any emission code re-emits every emitter, as a moved component of each would.
+        var code = m_revisionOffsets[m_emitters.Count];
+
+        m_pendingRevisions[code] = Puck.Abstractions.CodeRevision.Current;
+        moved |= (m_pendingRevisions[code] != m_builtRevisions[code]);
 
         return moved;
     }

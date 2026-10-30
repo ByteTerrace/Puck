@@ -617,7 +617,11 @@ wrong. The contracts that bite most often:
   the bake's code reaches, across the `Puck` assemblies, read from the build
   (`SdfMeshBakeClosure`). No list names the bake's files: code it calls is
   covered, code it does not call is not, a checkout's path is not, and a miss
-  logs the part that changed (`[sdf.mesh-bake] miss …`). `puck mesh identity
+  logs the part that changed (`[sdf.mesh-bake] miss …`). A hot-reload update to
+  a type the closure declares members of folds into the code identity
+  (`SdfMeshBakeClosure.Reads`, `CodeRevision.AppliedTo`), and the residency
+  follows it before each plan and stage; an update anywhere else keeps the
+  store. `puck mesh identity
   --build <dir> --against <dir>` names the members that differ between two
   builds before any boot.
 - **`puck mesh audit --world <file>` checks a bake without a GPU or a person
@@ -635,6 +639,7 @@ world.cadence off      # a still scene otherwise skips frames and reads near zer
 world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at least 30 or 15 times a second
 world.debug-view rates # tint each rated item by its tier; world.rates lists each one's size and tier (worlds/debug/range.md)
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
+world.gpu-timing on    # per-pass timestamps; `world.gpu-timing timeline` orders each node's latest span on the queue's clock with the idle gap before it
 world.budget           # program words, instances, scopes, segments
 ```
 

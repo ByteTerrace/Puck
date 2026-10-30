@@ -56,6 +56,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Equal(expected: 1L, actual: completed.Submission);
         Assert.Equal(expected: completed.Submission, actual: node.LatestTimingSubmission);
         Assert.Equal(expected: (2d * SdfWorldPackage.NativeFragment.Passes.Count), actual: node.LatestTimingMilliseconds);
+        // Every fake pass ran over the same two milliseconds of the queue's clock, so the submission spans just those.
+        Assert.Equal(expected: (0d, 2d), actual: node.LatestTimingSpan);
         Assert.True(condition: node.TryGetRenderGrid(grid: out var grid, submission: completed.Submission));
         Assert.Equal(actual: grid, expected: 1d);
         for (var frame = 0; (frame < 12); frame++) {

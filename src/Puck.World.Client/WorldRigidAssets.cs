@@ -12,7 +12,7 @@ namespace Puck.World.Client;
 public sealed class WorldRigidAssets {
     private sealed record AssetMetadata(bool Rigid, float Reach, int Slots);
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldPrototype, AssetMetadata> MetadataCache = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, AssetMetadata> MetadataCache = new();
 
     private readonly List<WorldPrototype> m_assets = [];
     private readonly Dictionary<string, int> m_indices = new(StringComparer.Ordinal);

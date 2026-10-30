@@ -26,9 +26,10 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): the
-   debug world runs at 7-8 FPS on Direct3D 12 and 4 FPS on Vulkan at every
-   sweep stop, quiet; find what each frame waits on.
+1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
+   display lit the debug world holds p50 16.67 ms at every stop, but a frame
+   carrying a 30 Hz tick (8 to 14 ms) misses the blank; cut the tick's cost on
+   the frame thread.
 2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
@@ -36,15 +37,13 @@ resolves their edits to this file at merge.
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
 4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-   a hot-reload code revision as one invalidation contract (emitter revisions
-   and the static field), then the persisted caches keyed by the modules as
-   built; a product of edited code under the unedited identity is the hazard.
+   a reboot for an edit outside `PuckHotReload`, and the windowed C# loop timed
+   on a quiet machine.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
-   cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
-   answer), then the schema switch.
-6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
-   break (`WorldTestBatch.cs:89`), then delete complete-boot reuse and make the
-   per-tick authority hash incremental, as the quiet measurement supports.
+   schema switch, then the pick answer.
+6. [Test runner and replay](#test-runner-and-replay): delete complete-boot reuse
+   and make the per-tick authority hash incremental, as the quiet measurement
+   supports.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
@@ -162,31 +161,36 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
 
 ### Frame time on the lead machine
 
-Owner: rendering and host performance specialist · high · Next: find what the
-frame waits on (per-view GPU time from `world.counters gpu` timestamps, then
-drop session views, screens and the desktop capture one at a time), then fix it
-and re-read these stops.
+Owner: simulation and host performance specialist · high · Next: take the 30 Hz
+tick off the frame-time budget (its cost first, by a thread-time trace of the
+rim's tick, then the [simulation tick](#simulation-tick-off-the-frame-thread)
+packet), and re-read these stops on a quiet machine.
 
-- [high] The RTX 4070 is nowhere near 60 FPS at any sweep stop. A quiet windowed
-  Direct3D 12 World at 1280x900, bakes settled, `world.lockstep off`, reads 121-140
-  ms average per iteration (7-8 FPS) at the lobby (`debug.go gallery`), level 1
-  (`debug.go gallery-level-1`), the boardroom, the card table (`debug.go cards`)
-  and the valley rim (`body.pose 0 386 470 0 0 0`), three `host.frames` readings
-  of 45-90 ticks each with temporal on and three with it off. Temporal changes
-  nothing (lobby 131-135 ms on, 130-137 ms off; rim 135-136 on, 127-131 off):
-  every reading has produce 98-116 ms and simulate 21-29 ms, the slowest
-  iterations 210-265 ms. Machine load was 8-16 %, and the World used about 1.3
-  cores. A `dotnet-sampled-thread-time` trace of the lobby has the frame thread
-  on CPU for only 1.9 s of 8 s (75 % of that in `FixedStepPump.Step`, rule
-  evaluation 35 %), so most of produce is spent outside managed code. Vulkan at
-  the lobby reads 212-273 ms per iteration with produce only 25-37 ms and the
-  frame's `begin` (the wait for the previous frame) 380-413 ms, which points at
-  the GPU. Counted work at the lobby: `world` 11.5 M vertices and 794 draws,
-  `beacon-eye` 5.2 M, and session views of the garden and night field about
-  25 M more. Unconfirmed: whether the GPU itself is saturated (no utilization
-  was sampled during the run) and which view costs it. The busiest managed
-  non-frame thread is the desktop screen's capture feed
-  (`Win32GraphicsCaptureFeed`, 3.3 s of CPU in 8 s). (from: quiet-measure)
+- [high] Steady 60 FPS is not held: frames that carry a tick miss the vertical
+  blank. The 7 to 8 FPS readings were the display powered off (the
+  [hazard](../development/contributing.md#hardware-and-toolchain-cautions); the
+  window now holds a display request). With the compositor running, a windowed
+  Direct3D 12 World at 1280x900, highest settings (shadows high, temporal on,
+  native scale), `world.lockstep off`, reads p50 16.67 ms at every stop, and
+  over 20 ms in 34 of 585 iterations at the lobby (p99 25.0), 62 of 581 at level
+  1 (p99 25.9), 20 of 593 at the boardroom (p99 24.5), 32 of 589 at the cards
+  (p99 25.1) and 218 of 534 at the valley rim (avg 18.7, p99 28.9); the machine
+  carried other lanes' builds (50 to 75 % CPU). Each slow iteration is one
+  fixed step of 8 to 14 ms (about 12 ms at the rim) plus produce of 6 to 7 ms on
+  the frame thread. The GPU is not the limit: at P0 the lobby's frame is
+  `world` 8.0 ms, the session views about 2 ms together and `beacon-eye`
+  0.4 ms (`world.gpu-timing timeline`). Vulkan under the same load reads avg
+  17.5 ms at the lobby and 19.8 to 26.5 ms elsewhere, with produce 8 to 11 ms
+  against Direct3D 12's 6 to 7. (from: frame-time)
+- [low] A reading taken while the compositor is not composing still looks like
+  a slow frame. `GUID_CONSOLE_DISPLAY_STATE` read "off" for whole readings at
+  60 FPS, so it cannot flag one; a present-side signal (the frame-latency wait
+  reaching its bound, or the queue idle behind the back buffer) would. The
+  Linux windows hold no display request (Wayland's idle inhibit, X11's
+  screensaver suspend). (from: frame-time)
+- [low] `WorldGpuTiming` (`world.gpu-timing` and its `timeline`) has no CPU
+  test over a fake runtime, so its lines rely on a live render root.
+  (from: frame-time)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
@@ -372,9 +376,8 @@ holds the fixed poses and the approaches already rejected.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then delete
-complete-boot reuse and make the per-tick authority hash incremental (both
-measured below).
+Next: delete complete-boot reuse and make the per-tick authority hash
+incremental (both measured below).
 
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
@@ -443,13 +446,6 @@ measured below).
   lane remove the avoidable companion workload while preserving the scenarios'
   claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
   from: boot-reuse profiling; the machine contribution is not isolated.)
-- [low] `WorldTestBatch`'s loop breaks on `batch.m_failed`, which stops the retry
-  of a leg that failed to open but also every remaining leg after any earlier
-  failure (a `--reproduce` divergence) wherever the next leg needs a fresh host,
-  so those scenarios report "did not finish successfully" without running; the
-  same-host branch (`CompleteLeg`) keeps going. Break only when opening or
-  starting leg `m_index` failed (`src/Puck.World/WorldTestBatch.cs:89`). (from:
-  reproduce-cost review)
 - [low] `--cache-dir` redirects only the `puck test` workers: the `puck test`
   process itself still persists compiles to the per-user `compilations`
   directory (`src/Puck.Cli.Worlds/WorldsRoot.cs:48`), and `TestCommandLawTests`
@@ -526,38 +522,15 @@ surviving red findings by cluster, starting with the hall stairs.
   across load; that cause is an inference, not yet confirmed. Owner: boot/reload
   lane. C7's genre sweeps boot each source fresh.
 
-Owner: hot-reload follow-up (boot and build) · two medium, the rest ordinary ·
-Next: the hot-reload code revision as one invalidation contract (the
-compositor's emitter revisions and the static-field rebuild), then the
-persisted cache identities, then the parse count; then a reboot for an edit
-outside `PuckHotReload`.
+Owner: hot-reload follow-up (boot and build) · ordinary ·
+Next: a reboot for an edit outside `PuckHotReload`, then the windowed C# loop
+timed on a quiet machine.
 
 - Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
-- Decide (the lead's call): every persisted product is keyed by a hash of what
-  it read, and `CodeRevision.Current` folds into that identity while an update
-  is applied, so a hot-reloaded process never reads or writes a product of
-  edited code under the unedited identity; a built process derives the
-  ordinary identities.
 
-- [medium] A hot-reload code revision never invalidates the compositor's emitter
-  revisions, and the static-field rebuild also needs a changed program, so
-  hot-reloading scene emission with unchanged world revisions keeps the old
-  geometry and query field (`src/Puck.World.Client/WorldFramePresenter.cs:567`).
-  (from: edit-to-run review)
-- [medium] `CompiledWorldCache` counts its synthetic parse before a possible real
-  authored parse while writing the cache, so a source-hash hit that keeps
-  `DEFN`/`ASST` but regenerates a missing `CURV` counts two parses where the
-  next complete-cache boot counts one
-  (`src/Puck.World.Schema/CompiledWorldCache.cs:318`). (from: edit-to-run review)
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does.
-- Persisted caches keyed by the modules as built (the compile cache's compiler
-  identity and the compiled world's engine build, both module version ids, and
-  the mesh bake's closure read from the built IL) cannot see an applied update,
-  so a hot-reloaded process could read or write a product of edited code under
-  the unedited identity. `WorldSourceIndex` bypasses its persisted declarations
-  once `CodeRevision.Current` moves; the others do not yet.
 - An applied update leaves the installed SDF pipeline set as it is: the
   pass-pipeline cache is keyed by bytecode, so an edit to the C# that describes
   a pipeline shows only after a reboot.
@@ -570,8 +543,12 @@ outside `PuckHotReload`.
   Direct3D 12 World, a new constant in `passes/sdf-light-stage.hlsli` went from
   save to `world.shaders.reload` answering `state=applied` (`sdf-world-views`
   alone) in 8.04 and 8.24 s, harness round trips of about 1-1.5 s included; a
-  revert to bytecode already in the shader cache took 2.65 s. The C# loop
-  (`dotnet watch`, windowed) was not reached in that window and is still owed.
+  revert to bytecode already in the shader cache took 2.65 s. The windowed C#
+  loop (`dotnet watch`) was not reached in that window and is still owed. On a
+  loaded machine, headless, a `Puck.World.Transpiler` body edit went from save
+  to `[world.hot-reload] applied revision 1` in under 1.5 s (`changes applied in
+  876ms`; the next edit 61 ms, under 1.2 s end to end), and the next
+  `world.reload` compiled the debug world under the edited code.
 - Re-measure the C# loops on an idle machine against the targets: a
   `Puck.World.Client` edit to ready under 20 s, boot to ready under 6 s. On the
   loaded lead machine a hot-reloaded
@@ -919,19 +896,13 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision (the companion lands inert in the live debug world today; the lead's call
-between the consensus split), then the uncertain crossing, opened by a two-silo
-failover witness.
+decision along the [custody protocol](companion-redesign.md) (the companion lands
+inert in the live debug world today; two builds of the decision failed review on
+trust, away bookkeeping and the custody key, so the protocol is specified per
+authority and checked by the `CompanionCustodyModel` law in
+`tests/Puck.World.Protocol.Tests`, which the build follows as its oracle), then
+the uncertain crossing, opened by a two-silo failover witness.
 
-- [high] Ordinary travellers can be duplicated by a resent commit: a
-  destination that re-leases the same transfer key after a crash lets a resent
-  commit (`MayResend` is true for transfer-id-keyed kinds) land a body the
-  source already restored after a `Missing` status; and `Missing` is final only
-  if the destination tombstones the key it answered for. The companion custody
-  spec's lease-once and tombstone rule (`Leased(K)`/`Dead(K)`) fixes both; apply
-  it to every traveller, not only companions. Unconfirmed against a run; the
-  companion protocol's model check found it and a design review is checking
-  the code. (from: the companion-redesign lane)
 - [medium] A rule firing costs the world host far more than the work sheet
   prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`
   runs `WorldServer.ValidateStateTransaction` and the commit runs

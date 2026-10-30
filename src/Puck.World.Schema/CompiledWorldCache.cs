@@ -235,7 +235,9 @@ public sealed class CompiledWorldRequest {
         ChunkContainer? container = null;
 
         if (match >= 0) {
-            (loadedFrom, container, _) = candidates[match];
+            // A source-hash match's header is this boot's own, so rewriting a derived chunk under it parses nothing.
+            (loadedFrom, container, var matched) = candidates[match];
+            header ??= matched;
             if (string.Equals(a: loadedFrom, b: cached, comparisonType: StringComparison.Ordinal)) {
                 CacheRetention.Stamp(path: cached);
             }
@@ -313,11 +315,6 @@ public sealed class CompiledWorldRequest {
         if (kept.Contains(item: DefinitionChunk.Instance.Code)) {
             WorldBootWork.Count(kind: WorldBootWork.CompiledHits);
         }
-        // The DEFN load stood for the authored parse this boot skipped, so the deterministic parse count reads the same
-        // whatever the cache held.
-        if (!context.AuthoredRead) {
-            WorldBootWork.Count(kind: WorldBootWork.Parses);
-        }
 
         string? writtenTo = null;
         string? writeFailure = null;
@@ -352,6 +349,11 @@ public sealed class CompiledWorldRequest {
             WrittenTo: writtenTo
         );
         drawn = context.RequireDrawn();
+        // The DEFN load stood for the authored parse this boot skipped, so the deterministic parse count reads the same
+        // whatever the cache held. It is counted once every read of the authored definition is behind it.
+        if (!context.AuthoredRead) {
+            WorldBootWork.Count(kind: WorldBootWork.Parses);
+        }
         reason = string.Empty;
         return true;
     }
