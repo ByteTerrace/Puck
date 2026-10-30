@@ -1426,6 +1426,10 @@ played by sitting at it like the chess, Go, Reversi and Alchemy tables. The
 Klondike table stands north of the Go table in the board game room
 (`worlds/debug/shapes.md`); the look is the owner's review.
 
+- The lead's window over the Klondike table (`.claude/scratch/lead-window/cards-table.png`, `cards-close.png`): the deal, the fans toward the seat and the face cards' upright figures read right, so the orientation holds. Three defects:
+  - [medium] Raised face relief pokes through the card: tan beads stand on top of face-down stacks and on a face-up pip card, where a face's raised core is deeper than the card is thick.
+  - [medium] Pip cards are unreadable at the seat: gold-rimmed pips and the rank index are small and dark on the near-black face ground; only the court cards read. The ground's tone is the owner's call (below); the pips' size and contrast are not.
+  - [low] The layout fills only the far third of the felt, with small cards and an empty band toward the seat; centre the tableau on the felt and size the cards to it.
 - Landed: the deck (`worlds/standard/cards.puck`, a library any author imports,
   52 faces and a back as SDF creations), Klondike and the `solitaire.puck`
   collection (`worlds/debug/klondike.puck`, `solitaire.puck`), the table
