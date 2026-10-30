@@ -7,8 +7,9 @@ namespace Puck.World.Server.Tests;
 /// <summary>The handoff token — the source-scoped transfer key, fenced by the traveler's ownership epoch, the
 /// destination's lease deadline, and the destination log's activation — holds across a destination restart. An exact
 /// replay of a committed token is answered as committed by a destination rebuilt from its checkpoint and crossing log;
-/// a different commit under the same token, a stale ownership epoch, an expired lease, and a destination whose log
-/// activation was superseded are each refused, beside a control that the same call succeeds when the fence holds.</summary>
+/// a different commit under the same token lands nothing and is named; a stale ownership epoch, an expired lease, and
+/// a destination whose log activation was superseded are each refused, beside a control that the same call succeeds
+/// when the fence holds.</summary>
 public sealed class CrossingHandoffTokenLawTests {
     private static WorldTransferReservationRequest Reservation(ulong transferId, ulong epoch) => new(
         TransferId: transferId,
@@ -84,7 +85,8 @@ public sealed class CrossingHandoffTokenLawTests {
             sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId
         ));
-        Assert.Equal(expected: 1UL, actual: restarted.Destination.Server.CrossingSequence);
+        // The lease record and the arrival record.
+        Assert.Equal(expected: 2UL, actual: restarted.Destination.Server.CrossingSequence);
     }
     [Fact]
     public void AnExactReplayOfACommittedTokenIsIdempotentAcrossADestinationRestart_AndADifferentCommitIsRefused() {
@@ -96,7 +98,7 @@ public sealed class CrossingHandoffTokenLawTests {
         );
         _ = world.Cross();
 
-        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read()).Record).Value;
+        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read(), predicate: static entry => (entry.Record is WorldCrossingRecord.Arrival)).Record).Value;
 
         using var restarted = world.Restart(
             destinationDied: true,
@@ -121,7 +123,8 @@ public sealed class CrossingHandoffTokenLawTests {
             userMessage: replayReason
         );
 
-        // The red leg: the same token carrying a different commit is refused, and lands nothing a second time.
+        // The red leg: the same token carrying a different commit lands nothing a second time, and the token still
+        // answers its own fate, Committed, naming the difference.
         Assert.True(condition: (destination.CommitTransfer(
             members: [arrival.Members[0] with { Position = (arrival.Members[0].Position + new Puck.Maths.FixedVector3(
                 X: Puck.Maths.FixedQ4816.One,
@@ -131,7 +134,7 @@ public sealed class CrossingHandoffTokenLawTests {
             reason: out var alteredReason,
             sourceAuthority: arrival.Request.SourceAuthority,
             transferId: arrival.Request.TransferId
-        ) == WorldTransferStatus.Missing));
+        ) == WorldTransferStatus.Committed));
         Assert.Contains(
             actualString: alteredReason,
             comparisonType: StringComparison.Ordinal,
@@ -149,7 +152,7 @@ public sealed class CrossingHandoffTokenLawTests {
 
         _ = world.Cross();
 
-        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read()).Record).Value;
+        var arrival = Assert.IsType<WorldCrossingRecord.Arrival>(@object: Assert.Single(collection: world.DestinationLog.Read(), predicate: static entry => (entry.Record is WorldCrossingRecord.Arrival)).Record).Value;
         var departedEpoch = arrival.Request.Members[0].Mobility!.Value;
 
         using var restarted = world.Restart(
@@ -237,8 +240,9 @@ public sealed class CrossingHandoffTokenLawTests {
 
         Assert.True(condition: world.TravelerAt(row: world.Source));
         Assert.False(condition: world.TravelerAt(row: world.Destination));
+        // The fenced activation took no lease, and answers nothing final: it cannot tombstone the key either.
         Assert.Equal(
-            expected: WorldTransferStatus.Missing,
+            expected: WorldTransferStatus.Uncertain,
             actual: world.Destination.Server.TransferStatus(
                 sourceAuthority: world.Source.Server.AuthorityIdentity,
                 transferId: transferId

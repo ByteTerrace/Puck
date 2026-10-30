@@ -35,19 +35,8 @@ public sealed partial class WorldInstanceHost {
             ? running
             : null);
 
-        if (
-            (source is not null) &&
-            !source.DrainedTransfers.TryDrain(transferId: transfer.TransferId)
-        ) {
-            if (m_narration.HasNarrationSink) {
-                m_narration.Narrate(
-                    channel: "world.transfer",
-                    text: $"[world.transfer: transfer={transferId} refused (already applied — refused rather than double-landing)]"
-                );
-            }
-
-            return;
-        }
+        // Every queued id was minted past every drained one (MintTransferId), so the drain only records it.
+        _ = source?.DrainedTransfers.TryDrain(transferId: transfer.TransferId);
 
         // A pose carrying a seat home moves its traveller, not its old slot: a transfer drained ahead of it can have
         // carried the traveller on, stopped the instance it left, and landed another body in the slot it left.
@@ -371,8 +360,48 @@ public sealed partial class WorldInstanceHost {
             BorderCapacity: transfer.BorderCapacity,
             PartyAllOrNothing: transfer.PartyAllOrNothing,
             PeerAdmission: (reservationMembers.Any(predicate: static member => !member.Source.IsLive) || members.Any(predicate: slot => (slot >= source.Server.Population.LocalSeatCount))),
-            Members: reservationMembers
+            Members: reservationMembers,
+            SourceFloor: SettledTransferFloor(
+                source: source,
+                transferId: transfer.TransferId
+            )
         );
+
+        // Allocated durably before any peer can hold the id: a restart of this source mints past it.
+        if (transfer.TransferId >= source.AllocatedTransferIds) {
+            var allocated = Math.Max(
+                val1: source.NextTransferId,
+                val2: checked((transfer.TransferId + 1UL))
+            );
+
+            if (!source.Server.TryRecordCrossing(
+                reason: out var allocationReason,
+                record: new WorldCrossingRecord.Allocation(Next: allocated)
+            )) {
+                var unallocated = $"'{sourceInstanceName}' could not make transfer id {transfer.TransferId} durable ({allocationReason})";
+
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} refused ({unallocated}) — no reservation was sent]"
+                    );
+                }
+                if (spawned) { ReapIfEmpty(name: targetName); }
+                NoteTransferOutcome(
+                    transfer: in transfer,
+                    sourceName: transfer.SourceInstance,
+                    target: targetAuthority,
+                    outcome: $"refused-allocation:{unallocated}"
+                );
+                CloseAdjacencyAfterRefusal(
+                    reason: unallocated,
+                    transfer: in transfer
+                );
+                return;
+            }
+            source.AllocatedTransferIds = allocated;
+        }
+
         var reservation = targetAuthority.Reserve(request: reservationRequest);
 
         if (!reservation.Accepted) {
@@ -1472,9 +1501,40 @@ public sealed partial class WorldInstanceHost {
         authority: instance.Server.AuthorityIdentity,
         index: slot
     ));
+    // The lowest id this source may still reserve, commit or ask under: the transfer being applied, every transfer it
+    // still has queued, and every transfer it holds in doubt. Every id below it is settled here or was never sent, so a
+    // destination may forget it (WorldTransferReservationRequest.SourceFloor).
+    private ulong SettledTransferFloor(WorldInstance source, ulong transferId) {
+        var floor = transferId;
+
+        foreach (var queued in m_pendingTransfers) {
+            if (ReferenceEquals(
+                objA: queued.Source,
+                objB: source
+            )) {
+                floor = Math.Min(
+                    val1: floor,
+                    val2: queued.TransferId
+                );
+            }
+        }
+        foreach (var pending in m_inDoubtTransfers) {
+            if (string.Equals(
+                a: pending.Transfer.SourceInstance,
+                b: source.Name,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                floor = Math.Min(
+                    val1: floor,
+                    val2: pending.Transfer.TransferId
+                );
+            }
+        }
+        return floor;
+    }
     // The one place a transfer id is minted: the source lifetime's own counter, in enqueue order, skipping an id an
-    // explicitly supplied id already drained. Ids are scoped by source authority on the wire, so a per-row counter loses
-    // nothing and keeps a row's checkpoint self-contained.
+    // already drained transfer holds. Ids are scoped by source authority on the wire, so a per-row counter loses nothing
+    // and keeps a row's checkpoint self-contained; a reservation allocates its id durably before it is sent.
     private static ulong MintTransferId(WorldInstance source) {
         ulong transferId;
 
@@ -1846,9 +1906,6 @@ public sealed partial class WorldInstanceHost {
     /// <see cref="PendingTransfer.FrozenScopeKey"/>. Omit for a non-resolver transfer.</param>
     /// <param name="frozenGenerationId">The resolver-issued generation id the resolve produced — see
     /// <see cref="PendingTransfer.FrozenGenerationId"/>. Omit for a non-resolver transfer.</param>
-    /// <param name="explicitTransferId">An explicit transfer id to carry instead of minting a fresh one — the
-    /// retry/idempotence verification seam (console <c>world.transfer</c>'s <c>transfer:&lt;id&gt;</c> token only; a
-    /// diegetic portal crossing never supplies this). Omit to mint a fresh, deterministically-ordered id.</param>
     /// <param name="testForceJoinRefusalOrdinal">Test-only — see <see cref="PendingTransfer.TestForceJoinRefusalOrdinal"/>.
     /// Omit outside verification.</param>
     /// <param name="arrival">Where each landed member's own pose lands — see <see cref="PendingTransfer.Arrival"/>.
@@ -1867,10 +1924,9 @@ public sealed partial class WorldInstanceHost {
     /// <param name="partyAllOrNothing">Whether the cohort binds as one transaction.</param>
     /// <param name="borderCapacity">The optional capacity authored on the crossed border.</param>
     /// <param name="border">The stable border identity used for destination admission accounting.</param>
-    /// <returns>The transfer id this call's queued crossing will carry (freshly minted unless
-    /// <paramref name="explicitTransferId"/> was supplied) — so a caller that wants to echo or later retry it has the
-    /// value without re-deriving the enqueue order itself.</returns>
-    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, ulong? explicitTransferId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) => EnqueuePending(
+    /// <returns>The transfer id this call's queued crossing will carry, freshly minted from the source's own counter, so
+    /// a caller that wants to echo it has the value without re-deriving the enqueue order itself.</returns>
+    public ulong EnqueueTransfer(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow = null, IReadOnlyList<int>? frozenCohortSlots = null, string? frozenScopeKey = null, ulong? frozenGenerationId = null, int? testForceJoinRefusalOrdinal = null, WorldPortalArrival arrival = WorldPortalArrival.Spawn, string? counterpart = null, string? adjacencyCounterpart = null, FixedVector3 sourceCrossingPoint = default, WorldFaceFrame? sourceFrame = null, WorldContinuumTrajectory? continuum = null, double holdSeconds = 2.0, WorldTransferFullPolicy fullPolicy = WorldTransferFullPolicy.Retry, bool partyAllOrNothing = true, int? borderCapacity = null, string? border = null) => EnqueuePending(
         actingPrincipal: actingPrincipal,
         adjacencyCounterpart: adjacencyCounterpart,
         arrival: arrival,
@@ -1879,7 +1935,6 @@ public sealed partial class WorldInstanceHost {
         continuum: continuum,
         counterpart: counterpart,
         destination: destination,
-        explicitTransferId: explicitTransferId,
         frozenCohortSlots: frozenCohortSlots,
         frozenGenerationId: frozenGenerationId,
         frozenScopeKey: frozenScopeKey,
@@ -1943,7 +1998,6 @@ public sealed partial class WorldInstanceHost {
             continuum: null,
             counterpart: null,
             destination: TransferDestination.Existing(name: BootInstanceName),
-            explicitTransferId: null,
             frozenCohortSlots: null,
             frozenGenerationId: null,
             frozenScopeKey: null,
@@ -1965,11 +2019,11 @@ public sealed partial class WorldInstanceHost {
         reason = string.Empty;
         return true;
     }
-    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, ulong? explicitTransferId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed) {
+    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed) {
         var source = m_instances.GetValueOrDefault(key: sourceInstance);
-        var transferId = (explicitTransferId ?? ((source is not null)
+        var transferId = ((source is not null)
             ? MintTransferId(source: source)
-            : throw new InvalidOperationException(message: $"cannot mint a transfer id for unknown source instance '{sourceInstance}'")));
+            : throw new InvalidOperationException(message: $"cannot mint a transfer id for unknown source instance '{sourceInstance}'"));
         // The travellers the transfer means, read as it is queued, so the drain moves them or refuses by name rather
         // than moving whatever body then holds their slots.
         var meant = (frozenCohortSlots ?? ((scope == TransferScope.Body)
@@ -2170,8 +2224,7 @@ public sealed partial class WorldInstanceHost {
     /// re-verified (the scope-key re-derivation above is what proves the resolution still holds).
     /// <see langword="null"/> for a non-resolver transfer.</param>
     /// <param name="TransferId">The transfer id this particular queued crossing carries — minted deterministically at
-    /// enqueue time (docs/architecture/worlds.md) unless a caller supplied one explicitly (console
-    /// <c>world.transfer</c>'s <c>transfer:&lt;id&gt;</c> token, the retry/idempotence verification seam). Threaded
+    /// enqueue time from its source's own counter (docs/architecture/worlds.md) and never reused. Threaded
     /// through every echo this transfer produces and checked against its source lifetime's
     /// <see cref="WorldInstance.DrainedTransfers"/> before it touches anything at drain time.</param>
     /// <param name="TestForceJoinRefusalOrdinal">Test-only (see <see cref="ApplyTransfer"/>'s own remarks on why a

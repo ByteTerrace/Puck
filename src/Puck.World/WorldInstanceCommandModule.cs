@@ -352,7 +352,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
         );
         yield return Simulation(
             name: "world.transfer",
-            description: "Queues a same-process transfer: world.transfer <source-instance> <body:index|seat|party> <destination>. body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts transfer:<id> and forcejoinrefusal:<ordinal> as verification-only modifiers. Transfer handshakes are checkpointed host state, not boot-only replay input.",
+            description: "Queues a same-process transfer: world.transfer <source-instance> <body:index|seat|party> <destination>. body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts forcejoinrefusal:<ordinal> as a verification-only modifier; every transfer id is minted by its source and never reused. Transfer handshakes are checkpointed host state, not boot-only replay input.",
             handler: (context, args) => {
                 if (args.Count < 3) {
                     return CommandResult.Error(output: "[world.transfer: expected <source-instance> <body:index|seat|party> <target-instance> | ephemeral <site> <path> | persisted <name> <path>]");
@@ -377,7 +377,6 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 }
 
                 WorldInstanceHost.TransferDestination destination;
-                ulong? explicitTransferId = null;
                 int? forceJoinRefusalOrdinal = null;
 
                 if (
@@ -400,52 +399,28 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                         return CommandResult.Error(output: destinationError!);
                     }
                 } else {
-                    // The bare '<target-instance>' form — the only one that also accepts trailing VERIFICATION-ONLY
-                    // modifiers (see this verb's own description). Stripped from the END, in either order, so the
-                    // ephemeral/persisted forms' own Tail-consumed document path never has to account for them —
-                    // those forms simply do not support the modifiers.
+                    // The bare '<target-instance>' form — the only one that also accepts the trailing VERIFICATION-ONLY
+                    // modifier (see this verb's own description), so the ephemeral/persisted forms' own Tail-consumed
+                    // document path never has to account for it.
                     var end = args.Count;
 
-                    while (end > 3) {
-                        var token = args[(end - 1)];
-
-                        if (
-                            token.StartsWith(
-                            comparisonType: StringComparison.Ordinal,
-                            value: "transfer:"
-                        ) &&
-                            CommandArgs.TryParseULong(
-                            text: token[9..],
-                            value: out var parsedTransferId
-                        )
-                        ) {
-                            explicitTransferId = parsedTransferId;
-                            end--;
-
-                            continue;
-                        }
-
-                        if (
-                            token.StartsWith(
+                    if (
+                        (end > 3) &&
+                        args[(end - 1)].StartsWith(
                             comparisonType: StringComparison.Ordinal,
                             value: "forcejoinrefusal:"
                         ) &&
-                            CommandArgs.TryParseInt(
-                            text: token[17..],
+                        CommandArgs.TryParseInt(
+                            text: args[(end - 1)][17..],
                             value: out var parsedOrdinal
                         )
-                        ) {
-                            forceJoinRefusalOrdinal = parsedOrdinal;
-                            end--;
-
-                            continue;
-                        }
-
-                        break;
+                    ) {
+                        forceJoinRefusalOrdinal = parsedOrdinal;
+                        end--;
                     }
 
                     if (end != 3) {
-                        return CommandResult.Error(output: "[world.transfer: expected exactly one target-instance name, or 'ephemeral <site> <path>' / 'persisted <name> <path>' (the bare target-instance form may also be followed by transfer:<id> and/or forcejoinrefusal:<n>)]");
+                        return CommandResult.Error(output: "[world.transfer: expected exactly one target-instance name, or 'ephemeral <site> <path>' / 'persisted <name> <path>' (the bare target-instance form may also be followed by forcejoinrefusal:<n>)]");
                     }
 
                     destination = WorldInstanceHost.TransferDestination.Existing(name: args[2].ToString());
@@ -459,7 +434,6 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                     sourceSlot: bodyIndex,
                     destination: destination,
                     actingPrincipal: context.Principal,
-                    explicitTransferId: explicitTransferId,
                     testForceJoinRefusalOrdinal: forceJoinRefusalOrdinal
                 );
 

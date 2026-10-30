@@ -29,18 +29,34 @@ public sealed record WorldCrossingArrival(WorldTransferReservationRequest Reques
 /// commit that rolled back, which adopts nothing.</param>
 public sealed record WorldArrivalOutcome(IReadOnlyList<int> Generations, bool RolledBack, IReadOnlyList<WorldIdentityProjection?> Adopted);
 /// <summary>One crossing step an authority makes durable before the step becomes visible to its peer. A source records
-/// its <see cref="Departure"/> before it sends the commit and its <see cref="Settlement"/> before it acknowledges; a
-/// destination records its <see cref="Arrival"/> before it answers the commit. Recovery restores the authority's
-/// latest checkpoint and redoes, in order, every record that checkpoint does not reflect, so a crash at any step
-/// leaves the traveler arrived or never departed and never both. A destination whose arrival record is
-/// <see cref="WorldCrossingDurability.Uncertain"/> answers <see cref="WorldTransferStatus.Uncertain"/> until its
-/// recovery decides.</summary>
+/// its <see cref="Allocation"/> before it reserves under a transfer key, its <see cref="Departure"/> before it sends the
+/// commit and its <see cref="Settlement"/> before it acknowledges; a destination records its <see cref="Lease"/> before
+/// it accepts a reservation, its <see cref="Arrival"/> before it answers the commit, and a <see cref="Tombstone"/>
+/// before it first answers <see cref="WorldTransferStatus.Missing"/> for a key whose death no earlier record shows.
+/// Recovery restores the authority's latest checkpoint and redoes, in order, every record that checkpoint does not
+/// reflect, so a crash at any step leaves the traveler arrived or never departed and never both, and leaves every key
+/// leased at most once. A destination whose arrival record is <see cref="WorldCrossingDurability.Uncertain"/> answers
+/// <see cref="WorldTransferStatus.Uncertain"/> until its recovery decides.</summary>
 public abstract record WorldCrossingRecord {
     private WorldCrossingRecord() { }
 
     /// <summary>A destination landed a cohort.</summary>
     /// <param name="Value">The arrival as it landed.</param>
     public sealed record Arrival(WorldCrossingArrival Value) : WorldCrossingRecord;
+    /// <summary>A destination leased a transfer key. Recovery leaves the key dead unless an arrival later in the log
+    /// lands it, so no reservation can lease it again.</summary>
+    /// <param name="Key">The leased key.</param>
+    /// <param name="Floor">The source's settled floor the reservation carried
+    /// (<see cref="WorldTransferReservationRequest.SourceFloor"/>).</param>
+    public sealed record Lease(WorldTransferKey Key, ulong Floor) : WorldCrossingRecord;
+    /// <summary>A destination is about to answer <see cref="WorldTransferStatus.Missing"/> for a key: from here no
+    /// reservation leases it and no commit lands under it, and a live lease a recovered checkpoint holds for it dies.</summary>
+    /// <param name="Key">The dead key.</param>
+    public sealed record Tombstone(WorldTransferKey Key) : WorldCrossingRecord;
+    /// <summary>A source allocated every transfer id below <paramref name="Next"/>: recovery never mints one of them
+    /// again.</summary>
+    /// <param name="Next">The first id the source has not allocated.</param>
+    public sealed record Allocation(ulong Next) : WorldCrossingRecord;
     /// <summary>A source detached a cohort and is about to send its commit. The transfer is in doubt from here until a
     /// settlement: recovery detaches the cohort again and asks the destination for the outcome.</summary>
     /// <param name="Transfer">The source's complete recovery record for the transfer.</param>

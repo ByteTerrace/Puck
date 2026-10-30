@@ -6,6 +6,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const byte CrossingArrivalTag = 0;
     private const byte CrossingDepartureTag = 1;
     private const byte CrossingSettlementTag = 2;
+    private const byte CrossingLeaseTag = 3;
+    private const byte CrossingTombstoneTag = 4;
+    private const byte CrossingAllocationTag = 5;
 
     private static void WriteCrossingArrival(WireWriter writer, WorldCrossingArrival arrival) {
         WriteReservationRequest(
@@ -157,6 +160,25 @@ public static partial class WorldAuthorityCheckpointCodec {
                     writeItem: WriteForwardedBody
                 );
                 break;
+            case WorldCrossingRecord.Lease lease:
+                writer.WriteByte(value: CrossingLeaseTag);
+                WriteTransferKey(
+                    key: lease.Key,
+                    writer: writer
+                );
+                writer.WriteUInt64(value: lease.Floor);
+                break;
+            case WorldCrossingRecord.Tombstone tombstone:
+                writer.WriteByte(value: CrossingTombstoneTag);
+                WriteTransferKey(
+                    key: tombstone.Key,
+                    writer: writer
+                );
+                break;
+            case WorldCrossingRecord.Allocation allocation:
+                writer.WriteByte(value: CrossingAllocationTag);
+                writer.WriteUInt64(value: allocation.Next);
+                break;
             default:
                 throw new InvalidOperationException(message: $"no crossing-log leaf for record kind '{entry.Record.GetType().Name}'");
         }
@@ -202,6 +224,21 @@ public static partial class WorldAuthorityCheckpointCodec {
                         );
                         break;
                     }
+                case CrossingLeaseTag: {
+                        var key = ReadTransferKey(reader: ref reader);
+
+                        record = new WorldCrossingRecord.Lease(
+                            Floor: reader.ReadUInt64(),
+                            Key: key
+                        );
+                        break;
+                    }
+                case CrossingTombstoneTag:
+                    record = new WorldCrossingRecord.Tombstone(Key: ReadTransferKey(reader: ref reader));
+                    break;
+                case CrossingAllocationTag:
+                    record = new WorldCrossingRecord.Allocation(Next: reader.ReadUInt64());
+                    break;
                 default:
                     reader.Fail(
                         detail: $"crossing record tag {tag} is not declared",

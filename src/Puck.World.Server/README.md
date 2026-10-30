@@ -1410,13 +1410,28 @@ nested grant validation.
 
 With a crossing log installed (`WorldServer.InstallCrossingLog`,
 `WorldServer.Crossings.cs`), every crossing step a peer can see is written ahead
-(`WorldCrossingRecord.cs`): the source's departure before its commit, the
-destination's arrival before its answer (`WorldTransferEscrow`), and the source's
-settlement before its acknowledgement or its return (`WorldInstanceHost.CrossingLog.cs`).
+(`WorldCrossingRecord.cs`): the source's allocation of a transfer id before its
+first reservation under it, the destination's lease before it accepts, the
+source's departure before its commit, the destination's arrival before its
+answer (`WorldTransferEscrow`), the destination's tombstone before its first
+`Missing` for a key, and the source's settlement before its acknowledgement or
+its return (`WorldInstanceHost.CrossingLog.cs`).
 A record that does not land refuses its step. `RecoverCrossings` redoes the
 records a restored checkpoint does not reflect — the escrow's crossing sequence
 is the watermark — and the drain reconciles the rest. A silo row's log is its
 authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).
+
+The escrow's key ledger (`WorldTransferEscrow.Keys.cs`) gives every key that
+holds anything here one row (a live lease, a retained commit, an uncertain
+arrival, or a settled key, committed or dead), so a key is leased at most once
+and `Missing` is final: a resent reservation or commit under a spent key is
+refused, and a committed key answers `Committed` whatever payload arrives. A key
+takes its row only through `RowRefusal`, checked before its lease or tombstone
+is written; a record the log does not take changes nothing. Settled rows below
+a source's settled floor (`WorldTransferReservationRequest.SourceFloor`) are
+dropped; `WorldTransferLimits.TransferKeys` bounds the rows, and
+`TransferKeysPerSource` each source's own share, refusing new work rather than
+evicting a row ([worlds](../../docs/architecture/worlds.md#transfer-determinism-and-replay)).
 
 An occupied source slot retains its pending recovery; a rollback-only checkpoint
 keeps only the remaining paired body/profile records and can never retry Commit.
@@ -1440,8 +1455,9 @@ A queued transfer is bound to the instance lifetime that queued it
 the drain refuses by name one whose lifetime stopped or whose member slot now
 holds another body or none, before any reservation. A name `TryStart` starts
 again takes a lifetime-qualified authority identity, so incarnations never
-repeat across lifetimes. Duplicate transfer ids are checked against the source
-lifetime's `WorldInstance.DrainedTransfers` (`WorldDrainedTransferIds`), not a
+repeat across lifetimes. Every transfer id is minted from the source lifetime's
+counter, past every id its `WorldInstance.DrainedTransfers`
+(`WorldDrainedTransferIds`) holds, and never reused. The drained set is not a
 high-water mark: a party split, a followed pose and a capacity retry apply ids
 out of enqueue order, and the watermark passes an id only once that id drained.
 The host-row checkpoint's `AppliedTransferHighWater` is that watermark and

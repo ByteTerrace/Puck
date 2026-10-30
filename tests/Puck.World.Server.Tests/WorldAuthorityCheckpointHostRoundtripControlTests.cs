@@ -358,10 +358,9 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
         Assert.True(condition: restoredNaive.Population.IsParked(index: PeerSlot));
     }
     // Control 5 — restore the source row with NextTransferId reset: the restored drained ids still hold the id this
-    // row already applied, so the drain refuses a transfer reusing it by name rather than double-landing a second
-    // traveler under it, and the reset counter mints past it.
+    // row already applied, so the reset counter mints past it rather than reusing it.
     [Fact]
-    public void Control_ResetNextTransferId_CollidesWithAnAppliedId_RefusesByName() {
+    public void Control_ResetNextTransferId_MintsPastAnAppliedId() {
         var (host, rowA, rowB, machineId, stateRoot) = HostRoundtripFixture.BuildCommittedScenario();
         using var disposeHost = host;
         using var disposeStateRoot = stateRoot;
@@ -404,33 +403,6 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
             actual: restoredA.Instance.NextTransferId
         );
 
-        var originalError = Console.Error;
-        using var captured = new StringWriter();
-        using var narrationLease = restoredHost.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
-
-        Console.SetError(newError: captured);
-
-        try {
-            _ = restoredHost.EnqueueTransfer(
-                actingPrincipal: Principal.Console,
-                destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
-                explicitTransferId: 0UL,
-                scope: WorldInstanceHost.TransferScope.Body,
-                sourceInstance: "row-a",
-                sourceSlot: 1
-            );
-            restoredHost.DrainPendingTransfers();
-        } finally {
-            Console.SetError(newError: originalError);
-        }
-
-        Assert.Contains(
-            expectedSubstring: "already applied",
-            actualString: captured.ToString(),
-            comparisonType: StringComparison.Ordinal
-        );
-        // The body never moved: refused before any detach, exactly like an ordinary already-applied replay.
-        Assert.True(condition: restoredA.Server.Population.IsActive(index: 1));
         Assert.NotEqual(
             expected: 0UL,
             actual: restoredHost.EnqueueTransfer(

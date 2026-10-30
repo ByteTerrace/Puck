@@ -9,8 +9,8 @@ namespace Puck.World.Server.Tests;
 // Transfers queue in one FIFO and drain at one fixed point, so whatever drains ahead of a transfer can move its
 // traveller, refill the slot it left, stop and start the instance it stood in, or mint ids out of enqueue order. Each
 // interleaving below queues work in one such order and checks one invariant: every body a scenario seats is carried by
-// exactly one body this host runs, standing where the transfers that named it put it; nothing queued is refused as
-// already applied; and an instance a queued transfer is bound for is still there when it drains.
+// exactly one body this host runs, standing where the transfers that named it put it; and an instance a queued
+// transfer is bound for is still there when it drains.
 public sealed class QueuedTransferInterleavingLawTests {
     private const string RowA = "row-a";
     private const string RowB = "row-b";
@@ -166,7 +166,6 @@ public sealed class QueuedTransferInterleavingLawTests {
             );
         }
 
-        Assert.DoesNotContain(expectedSubstring: "already applied", actualString: transcript, comparisonType: StringComparison.Ordinal);
         Assert.DoesNotContain(expectedSubstring: "no instance named", actualString: transcript, comparisonType: StringComparison.Ordinal);
 
         foreach (var refusal in refusals) {
