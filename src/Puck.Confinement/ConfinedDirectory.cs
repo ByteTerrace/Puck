@@ -93,7 +93,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
             return null;
         }
     }
-
     /// <summary>Opens a child directory relative to this one, holding only the child.</summary>
     /// <param name="name">The child's name: one component, never a path.</param>
     /// <param name="create">Whether a missing child is created.</param>
@@ -117,8 +116,8 @@ public sealed partial class ConfinedDirectory : IDisposable {
     public ConfinedDirectory? TryOpenChildForRemoval(string name) {
         RequireName(name: name);
         if (OperatingSystem.IsWindows()) {
-            var handle = Windows.Open(access: (Windows.DirectoryAccess | Windows.Delete), busyIsNull: true, create: false, directory: true,
-                name: name, newFile: false, parent: Handle, share: (Windows.ShareRead | Windows.ShareWrite));
+            var handle = Windows.Open(access: Windows.DirectoryAccess | Windows.Delete, busyIsNull: true, create: false, directory: true,
+                name: name, newFile: false, parent: Handle, share: Windows.ShareRead | Windows.ShareWrite);
 
             if (handle is null) {
                 return (Exists(name: name) ? null : throw new DirectoryNotFoundException(message: $"'{name}' does not exist."));
@@ -136,7 +135,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
     /// <returns><see langword="true"/> when the directory is held; <see langword="false"/> when a removal holds it.</returns>
     /// <exception cref="IOException">The lock cannot be taken for another reason.</exception>
     public bool TryHoldShared() => (OperatingSystem.IsWindows() || Linux.TryLock(handle: Handle, operation: Linux.LockShared));
-
     /// <summary>Opens a regular, singly linked file relative to this directory without following a link.</summary>
     /// <param name="name">The file's name: one component, never a path.</param>
     /// <param name="create">Whether a missing file is created; the stream is then writable.</param>
@@ -153,7 +151,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         SafeFileHandle? handle;
 
         if (OperatingSystem.IsWindows()) {
-            handle = Windows.Open(access: (Windows.GenericRead | (create ? Windows.GenericWrite : 0)), busyIsNull: false, create: (create || newFile),
+            handle = Windows.Open(access: Windows.GenericRead | (create ? Windows.GenericWrite : 0), busyIsNull: false, create: (create || newFile),
                 directory: false, name: name, newFile: newFile, parent: Handle, share: (exclusive ? 0 : Windows.ShareRead));
         } else {
             handle = Linux.Open(create: (create || newFile), directory: false, name: name, newFile: newFile, parent: Handle, write: create);
@@ -199,7 +197,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
             delay = Math.Min(val1: 50, val2: (delay * 2));
         }
     }
-
     /// <summary>Lists this directory's entries through its handle, never through a path.</summary>
     /// <returns>Each entry and what it was when listed.</returns>
     /// <exception cref="IOException">The directory cannot be listed.</exception>
@@ -234,7 +231,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         RequireName(name: temporary);
         RequireName(name: name);
         if (OperatingSystem.IsWindows()) {
-            using var source = (Windows.Open(access: (Windows.Delete | Windows.GenericWrite), busyIsNull: false, create: false, directory: false,
+            using var source = (Windows.Open(access: Windows.Delete | Windows.GenericWrite, busyIsNull: false, create: false, directory: false,
                 name: temporary, newFile: false, parent: Handle, share: 0) ?? throw new FileNotFoundException(message: $"'{temporary}' does not exist."));
 
             Windows.Rename(destination: Handle, handle: source, name: name, replace: true);
@@ -320,14 +317,13 @@ public sealed partial class ConfinedDirectory : IDisposable {
         RequireName(name: name);
         if (!OperatingSystem.IsWindows()) { return Linux.IsMapped(name: name, parent: Handle); }
         using var file = Windows.Open(access: Windows.ReadAttributes, busyIsNull: false, create: false, directory: false, name: name, newFile: false,
-            parent: Handle, share: (Windows.ShareRead | Windows.ShareWrite | Windows.ShareDelete));
+            parent: Handle, share: Windows.ShareRead | Windows.ShareWrite | Windows.ShareDelete);
 
         if ((file is null) || (Windows.MappedNtPath(address: address) is not { } mapped)) { return false; }
         using var opened = Windows.OpenNtPath(ntPath: mapped);
 
         return ((opened is not null) && (Windows.Identity(handle: opened) == Windows.Identity(handle: file)));
     }
-
     /// <summary>Closes every held handle, which releases every lock this object took.</summary>
     public void Dispose() {
         for (var i = (m_handles.Count - 1); (i >= 0); i--) { m_handles[i].Dispose(); }
@@ -336,7 +332,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
 
     private static SafeFileHandle? OpenDirectory(SafeFileHandle parent, string name, bool create) => (OperatingSystem.IsWindows()
         ? Windows.Open(access: Windows.DirectoryAccess, busyIsNull: false, create: create, directory: true, name: name, newFile: false,
-            parent: parent, share: (Windows.ShareRead | Windows.ShareWrite))
+            parent: parent, share: Windows.ShareRead | Windows.ShareWrite)
         : Linux.Open(create: create, directory: true, name: name, newFile: false, parent: parent, write: false));
     private ConfinedDirectory Wrap(SafeFileHandle handle, string name, bool removable) {
         var child = new ConfinedDirectory { m_path = System.IO.Path.Combine(path1: m_path, path2: name), m_removable = removable };
@@ -370,8 +366,8 @@ public sealed partial class ConfinedDirectory : IDisposable {
     // removed through it (Windows) or by name relative to the parent (Linux, after the same no-follow inspection).
     private static bool RemoveEntry(SafeFileHandle parent, string name) {
         if (OperatingSystem.IsWindows()) {
-            using var handle = Windows.OpenAny(access: (Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes), isDirectory: out var isDirectory,
-                isLink: out var isLink, name: name, parent: parent, share: (Windows.ShareRead | Windows.ShareWrite));
+            using var handle = Windows.OpenAny(access: Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes, isDirectory: out var isDirectory,
+                isLink: out var isLink, name: name, parent: parent, share: Windows.ShareRead | Windows.ShareWrite);
 
             if (handle is null) { return false; }
             if (isLink) { throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place."); }
@@ -393,7 +389,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
         }
         return Linux.Unlink(directory: false, name: name, parent: parent);
     }
-
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool FlushFileBuffers(SafeFileHandle handle);

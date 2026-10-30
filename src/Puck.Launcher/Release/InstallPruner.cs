@@ -43,6 +43,7 @@ public sealed record InstallPruneResult(
 /// </summary>
 public static class InstallPruner {
     private const int MaximumPointerBytes = 4096;
+
     private static readonly string[] StoreDirectoryNames = [ObjectCacheDirectoryName, LocalSourceDirectoryName];
 
     /// <summary>The stager's content-addressed object cache, directly under the install root.</summary>
@@ -172,9 +173,9 @@ public static class InstallPruner {
         var known = true;
 
         foreach (var version in kept) {
-            known &= Attempt(action: () => referenced.UnionWith(other: (version.Record is { } record)
+            known &= Attempt(action: () => referenced.UnionWith(other: ((version.Record is { } record)
                 ? PinHexes(pins: record.Files)
-                : ObjectsHeld(name: version.Name, versions: versions!)), entry: $"{VersionsDirectoryName}/{version.Name}: its objects are unknown, so no object was swept", refused: refused);
+                : ObjectsHeld(name: version.Name, versions: versions!))), entry: $"{VersionsDirectoryName}/{version.Name}: its objects are unknown, so no object was swept", refused: refused);
         }
         return new InstallPruneResult(
             DeletedObjects: (known ? StoreDirectoryNames.Sum(selector: store => SweepStore(referenced: referenced, refused: refused, root: root, storeName: store)) : 0),
@@ -274,17 +275,17 @@ public static class InstallPruner {
         foreach (var entry in directory.Entries()) {
             switch (entry.Kind) {
                 case ConfinedEntryKind.Directory: {
-                    using var child = (directory.Child(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
+                        using var child = (directory.Child(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
 
-                    Hash(directory: child, hexes: hexes);
-                    break;
-                }
+                        Hash(directory: child, hexes: hexes);
+                        break;
+                    }
                 case ConfinedEntryKind.File: {
-                    using var stream = (directory.OpenFile(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
+                        using var stream = (directory.OpenFile(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
 
-                    hexes.Add(item: ContentPin.Compute(content: stream).Hex);
-                    break;
-                }
+                        hexes.Add(item: ContentPin.Compute(content: stream).Hex);
+                        break;
+                    }
                 default:
                     // A link or a special file is never what staging wrote, so no cached object stands for it.
                     break;

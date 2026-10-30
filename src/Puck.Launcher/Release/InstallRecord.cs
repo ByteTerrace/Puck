@@ -17,7 +17,7 @@ namespace Puck.Launcher.Release;
 /// installed. A higher sequence is a more recent install, whatever the version strings' precedence.</param>
 /// <param name="Files">The payload files' content pins, as the manifest spells them.</param>
 public sealed record InstallRecord(long Sequence, IReadOnlyList<string> Files) {
-    private const int MaximumBytes = (16 * 1024 * 1024);
+    private const int MaximumBytes = ((16 * 1024) * 1024);
 
     /// <summary>The record's file name inside a version directory.</summary>
     public const string FileName = "install-record.json";

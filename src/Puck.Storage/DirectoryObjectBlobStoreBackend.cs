@@ -8,6 +8,7 @@ namespace Puck.Storage;
 /// remain host-owned; this is not a sandbox for native code running as that host identity.</summary>
 internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend {
     private const string LockName = ".puck-lock";
+
     private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(seconds: 5);
 
     private static ObjectBlobContent? Read(ConfinedDirectory directory, string name, int maximum) {

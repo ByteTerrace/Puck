@@ -15,6 +15,7 @@ public sealed partial class ConfinedDirectory {
         public const int SymlinkNoFollow = 0x100, RemoveDirectory = 0x200;
         public const int LockShared = 1, LockExclusive = 2, LockNonBlocking = 4;
         public const int NoEntry = 2, WouldBlock = 11, Exists = 17, NotDirectory = 20, InvalidArgument = 22, NotImplemented = 38, Loop = 40;
+
         private const uint ModeMask = 0xF000, ModeDirectory = 0x4000, ModeRegular = 0x8000, ModeLink = 0xA000;
 
         // Linux x86-64 struct stat. Other architectures fail closed before reaching this ABI.
@@ -28,9 +29,8 @@ public sealed partial class ConfinedDirectory {
 
         public static int Fd(SafeFileHandle handle) => checked((int)handle.DangerousGetHandle());
         public static string ProcPath(SafeFileHandle handle) => $"/proc/self/fd/{Fd(handle: handle)}";
-
         public static SafeFileHandle OpenPath(string path) {
-            var fd = OpenAt(flags: (ReadOnly | DirectoryFlag | CloseOnExec), mode: 0, name: path, parent: -100);
+            var fd = OpenAt(flags: ReadOnly | DirectoryFlag | CloseOnExec, mode: 0, name: path, parent: -100);
 
             if (fd < 0) {
                 var code = Marshal.GetLastPInvokeError();
@@ -39,12 +39,12 @@ public sealed partial class ConfinedDirectory {
                     ? new DirectoryNotFoundException(message: $"'{path}' does not exist.", innerException: new Win32Exception(error: code))
                     : new IOException(message: $"'{path}' cannot be opened.", innerException: new Win32Exception(error: code)));
             }
-            return new SafeFileHandle(preexistingHandle: fd, ownsHandle: true);
+            return new SafeFileHandle(ownsHandle: true, preexistingHandle: fd);
         }
         // Opens or creates name below parent without following a link; null when it is missing and not created.
         public static SafeFileHandle? Open(SafeFileHandle parent, string name, bool directory, bool create, bool write, bool newFile) {
-            var flags = (NoFollow | CloseOnExec | NonBlock | (directory ? DirectoryFlag : (write ? ReadWrite : ReadOnly)) |
-                ((create && !directory) ? Create : 0) | (newFile ? Exclusive : 0));
+            var flags = NoFollow | CloseOnExec | NonBlock | (directory ? DirectoryFlag : (write ? ReadWrite : ReadOnly)) |
+                ((create && !directory) ? Create : 0) | (newFile ? Exclusive : 0);
             var fd = OpenAt(flags: flags, mode: 0x180, name: name, parent: Fd(handle: parent));
 
             if ((fd < 0) && directory && create && (Marshal.GetLastPInvokeError() == NoEntry)) {
@@ -64,7 +64,7 @@ public sealed partial class ConfinedDirectory {
                     ? $"'{name}' is a link; confined access refuses it."
                     : ((code == NotDirectory) ? $"'{name}' is not a directory; confined access refuses it." : $"Cannot open confined entry '{name}'")));
             }
-            var handle = new SafeFileHandle(preexistingHandle: fd, ownsHandle: true);
+            var handle = new SafeFileHandle(ownsHandle: true, preexistingHandle: fd);
 
             try {
                 var stat = StatOf(handle: handle);
@@ -105,7 +105,7 @@ public sealed partial class ConfinedDirectory {
         }
         // True when the lock was taken; false when another holder's lock refuses it.
         public static bool TryLock(SafeFileHandle handle, int operation) {
-            if (Flock(fd: Fd(handle: handle), operation: (operation | LockNonBlocking)) == 0) { return true; }
+            if (Flock(fd: Fd(handle: handle), operation: operation | LockNonBlocking) == 0) { return true; }
             return ((Marshal.GetLastPInvokeError() == WouldBlock) ? false : throw Error(message: "Cannot lock confined entry"));
         }
         public static void Rename(SafeFileHandle sourceParent, string sourceName, SafeFileHandle destinationParent, string destinationName) {
@@ -129,10 +129,10 @@ public sealed partial class ConfinedDirectory {
             return ((Marshal.GetLastPInvokeError() == NoEntry) ? false : throw Error(message: $"Cannot remove confined entry '{name}'"));
         }
         public static SafeFileHandle? OpenDirectoryOrNull(SafeFileHandle parent, string name, out int error) {
-            var fd = OpenAt(flags: (ReadOnly | DirectoryFlag | NoFollow | CloseOnExec | NonBlock), mode: 0, name: name, parent: Fd(handle: parent));
+            var fd = OpenAt(flags: ReadOnly | DirectoryFlag | NoFollow | CloseOnExec | NonBlock, mode: 0, name: name, parent: Fd(handle: parent));
 
             error = ((fd < 0) ? Marshal.GetLastPInvokeError() : 0);
-            return ((fd < 0) ? null : new SafeFileHandle(preexistingHandle: fd, ownsHandle: true));
+            return ((fd < 0) ? null : new SafeFileHandle(ownsHandle: true, preexistingHandle: fd));
         }
         public static bool IsBusy(IOException exception) => ((exception.InnerException is Win32Exception native) && (native.NativeErrorCode == WouldBlock));
         // Whether a mapping of this process names the file held by parent/name: same inode and the same current path,
@@ -153,7 +153,6 @@ public sealed partial class ConfinedDirectory {
             }
             return false;
         }
-
         public static IOException Error(string message) => Error(code: Marshal.GetLastPInvokeError(), message: message);
         public static IOException Error(string message, int code) => new(message: message, innerException: new Win32Exception(error: code));
 

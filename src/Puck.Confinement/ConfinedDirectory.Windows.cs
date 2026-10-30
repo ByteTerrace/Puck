@@ -18,6 +18,7 @@ public sealed partial class ConfinedDirectory {
         public const uint GenericRead = 0x80000000, GenericWrite = 0x40000000;
         public const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4;
         public const uint DirectoryAccess = ListDirectory | Traverse | ReadAttributes | Synchronize;
+
         private const uint MaximumPath = 32768;
         private const uint FileOpen = 1, FileCreate = 2, FileOpenIf = 3;
         private const uint DirectoryFile = 0x1, NonDirectoryFile = 0x40, SynchronousIo = 0x20, OpenReparsePoint = 0x200000;
@@ -41,7 +42,6 @@ public sealed partial class ConfinedDirectory {
         public static string NativePath(string path) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: @"\\?\")
             ? path
             : (@"\\?\" + path.Replace(newChar: '\\', oldChar: '/')));
-
         // A volume root, or an anchor whose own path the host chose: the OS resolves it as given.
         public static SafeFileHandle OpenPath(string path) {
             var handle = CreateFile(NativePath(path: path), DirectoryAccess, ShareRead | ShareWrite, 0, 3, 0x02000000, 0);
@@ -69,10 +69,10 @@ public sealed partial class ConfinedDirectory {
                 var attributes = new ObjectAttributes { Attributes = 0x40, Length = sizeof(ObjectAttributes), ObjectName = ((nint)(&unicode)), RootDirectory = parent.DangerousGetHandle() };
                 IoStatusBlock io;
 
-                status = NtCreateFile(&raw, (access | ReadAttributes | Synchronize), &attributes, &io, null, 0x80, share, disposition, options, null, 0);
+                status = NtCreateFile(access: access | ReadAttributes | Synchronize, allocationSize: null, attributes: &attributes, disposition: disposition, extendedAttributes: null, extendedAttributesLength: 0, fileAttributes: 0x80, handle: &raw, options: options, share: share, status: &io);
             }
             if (status == 0) {
-                var handle = new SafeFileHandle(preexistingHandle: raw, ownsHandle: true);
+                var handle = new SafeFileHandle(ownsHandle: true, preexistingHandle: raw);
 
                 try {
                     var info = Information(handle: handle);
@@ -97,11 +97,11 @@ public sealed partial class ConfinedDirectory {
                 var attributes = new ObjectAttributes { Attributes = 0x40, Length = sizeof(ObjectAttributes), ObjectName = ((nint)(&unicode)), RootDirectory = parent.DangerousGetHandle() };
                 IoStatusBlock io;
 
-                status = NtCreateFile(&raw, (access | Synchronize), &attributes, &io, null, 0x80, share, FileOpen, (SynchronousIo | OpenReparsePoint), null, 0);
+                status = NtCreateFile(access: access | Synchronize, allocationSize: null, attributes: &attributes, disposition: FileOpen, extendedAttributes: null, extendedAttributesLength: 0, fileAttributes: 0x80, handle: &raw, options: SynchronousIo | OpenReparsePoint, share: share, status: &io);
             }
             if (status is NotFound or PathNotFound or NoSuchFile or DeletePending) { isDirectory = isLink = false; return null; }
             if (status != 0) { throw Failure(message: $"Cannot open confined entry '{name}'", status: status); }
-            var handle = new SafeFileHandle(preexistingHandle: raw, ownsHandle: true);
+            var handle = new SafeFileHandle(ownsHandle: true, preexistingHandle: raw);
 
             try {
                 var info = Information(handle: handle);
@@ -114,31 +114,31 @@ public sealed partial class ConfinedDirectory {
         public static unsafe ConfinedIdentity Identity(SafeFileHandle handle) {
             var buffer = stackalloc byte[24];
 
-            if (!GetFileInformationByHandleEx(handle, 18, buffer, 24)) { throw Error(message: "Cannot identify confined handle"); }
-            return new ConfinedIdentity(File: new UInt128(upper: *(ulong*)(buffer + 16), lower: *(ulong*)(buffer + 8)), Volume: *(ulong*)buffer);
+            if (!GetFileInformationByHandleEx(handle: handle, information: buffer, informationClass: 18, size: 24)) { throw Error(message: "Cannot identify confined handle"); }
+            return new ConfinedIdentity(File: new UInt128(lower: *((ulong*)(buffer + 8)), upper: *((ulong*)(buffer + 16))), Volume: *((ulong*)buffer));
         }
         public static unsafe List<ConfinedEntry> Entries(SafeFileHandle handle) {
-            const int Size = 64 * 1024;
+            const int Size = (64 * 1024);
             var entries = new List<ConfinedEntry>();
             var buffer = new byte[Size];
             var restart = true;
 
             fixed (byte* start = buffer) {
-                while (GetFileInformationByHandleEx(handle, (restart ? 15 : 14), start, Size)) {
+                while (GetFileInformationByHandleEx(handle: handle, information: start, informationClass: (restart ? 15 : 14), size: Size)) {
                     var offset = 0;
 
                     restart = false;
                     while (true) {
                         var entry = (start + offset);
-                        var attributes = *(uint*)(entry + 56);
-                        var name = new string(value: (char*)(entry + 68), startIndex: 0, length: checked((int)(*(uint*)(entry + 60) / 2)));
+                        var attributes = *((uint*)(entry + 56));
+                        var name = new string(length: checked((int)(*((uint*)(entry + 60)) / 2)), startIndex: 0, value: ((char*)(entry + 68)));
 
                         if (name is not ("." or "..")) {
-                            entries.Add(item: new ConfinedEntry(Name: name, Kind: (((attributes & AttributeReparsePoint) != 0)
+                            entries.Add(item: new ConfinedEntry(Kind: (((attributes & AttributeReparsePoint) != 0)
                                 ? ConfinedEntryKind.Link
-                                : (((attributes & AttributeDirectory) != 0) ? ConfinedEntryKind.Directory : ConfinedEntryKind.File))));
+                                : (((attributes & AttributeDirectory) != 0) ? ConfinedEntryKind.Directory : ConfinedEntryKind.File)), Name: name));
                         }
-                        var next = *(uint*)entry;
+                        var next = *((uint*)entry);
 
                         if (next == 0) { break; }
                         offset += checked((int)next);
@@ -154,13 +154,13 @@ public sealed partial class ConfinedDirectory {
             var size = (24 + (name.Length * 2));
             var buffer = stackalloc byte[size];
 
-            new Span<byte>(pointer: buffer, length: size).Clear();
-            *buffer = (byte)(replace ? 1 : 0);
-            *(nint*)(buffer + 8) = destination.DangerousGetHandle();
-            *(uint*)(buffer + 16) = checked((uint)(name.Length * 2));
+            new Span<byte>(length: size, pointer: buffer).Clear();
+            *buffer = ((byte)(replace ? 1 : 0));
+            *((nint*)(buffer + 8)) = destination.DangerousGetHandle();
+            *((uint*)(buffer + 16)) = checked((uint)(name.Length * 2));
             name.AsSpan().CopyTo(destination: new Span<char>(pointer: (buffer + 20), length: name.Length));
             IoStatusBlock io;
-            var status = NtSetInformationFile(handle, &io, buffer, checked((uint)size), 10);
+            var status = NtSetInformationFile(handle: handle, information: buffer, informationClass: 10, length: checked((uint)size), status: &io);
 
             if (status != 0) { throw Failure(message: $"Cannot move confined entry to '{name}'", status: status); }
         }
@@ -168,18 +168,18 @@ public sealed partial class ConfinedDirectory {
         public static unsafe void Remove(SafeFileHandle handle) {
             var flags = 0x1u | 0x2u | 0x10u;
 
-            if (SetFileInformationByHandle(handle, 21, &flags, 4)) { return; }
+            if (SetFileInformationByHandle(handle: handle, information: &flags, informationClass: 21, size: 4)) { return; }
             var code = Marshal.GetLastPInvokeError();
-            var classic = (byte)1;
+            var classic = ((byte)1);
 
-            if ((code != 87) || !SetFileInformationByHandle(handle, 4, &classic, 1)) {
+            if ((code != 87) || !SetFileInformationByHandle(handle: handle, information: &classic, informationClass: 4, size: 1)) {
                 throw new IOException(message: ((code is 145) ? "Confined directory is not empty." : "Cannot remove confined entry"), innerException: new Win32Exception(error: code));
             }
         }
         // The file now named by the NT path a mapping's file was opened by (K32GetMappedFileNameW reports the open-time
         // name, in its device form, and never a later one), or null when nothing is there.
         public static SafeFileHandle? OpenNtPath(string ntPath) {
-            var handle = CreateFile((@"\\?\GLOBALROOT" + ntPath), ReadAttributes, (ShareRead | ShareWrite | ShareDelete), 0, 3, 0x02000000, 0);
+            var handle = CreateFile(access: ReadAttributes, disposition: 3, flags: 0x02000000, name: (@"\\?\GLOBALROOT" + ntPath), security: 0, share: ShareRead | ShareWrite | ShareDelete, template: 0);
 
             if (!handle.IsInvalid) { return handle; }
             handle.Dispose();
@@ -189,9 +189,9 @@ public sealed partial class ConfinedDirectory {
             var buffer = new char[MaximumPath];
 
             fixed (char* start = buffer) {
-                var length = GetMappedFileName(-1, address, start, MaximumPath);
+                var length = GetMappedFileName(address: address, name: start, process: -1, size: MaximumPath);
 
-                return ((length == 0) ? null : new string(value: start, startIndex: 0, length: (int)length));
+                return ((length == 0) ? null : new string(length: ((int)length), startIndex: 0, value: start));
             }
         }
         public static bool IsBusy(IOException exception) => ((exception.InnerException is Win32Exception native) && (native.NativeErrorCode is 32 or 33));
@@ -207,7 +207,6 @@ public sealed partial class ConfinedDirectory {
                 : new IOException(message: message, innerException: new Win32Exception(error: code)));
         }
         private static IOException Error(string message) => new(message: message, innerException: new Win32Exception(error: Marshal.GetLastPInvokeError()));
-
         [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
         private static partial SafeFileHandle CreateFile(string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
         [LibraryImport("ntdll.dll")]

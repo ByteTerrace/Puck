@@ -8,7 +8,6 @@ namespace Puck.Launcher.Release;
 /// before this process registered, so running on would read files that are not this version's.</summary>
 /// <param name="message">The reason, naming the version.</param>
 public sealed class InstallRegistrationException(string message) : IOException(message: message);
-
 /// <summary>
 /// This process's registration as a holder of the version directory it runs from. A version is deletable only while no
 /// live process holds it (<see cref="InstallPruner"/>), and a held directory is a handle the operating system closes
@@ -109,7 +108,6 @@ public sealed class InstallRegistration : IDisposable {
             return new InstallRegistration(held: null, version: null);
         }
     }
-
     /// <summary>Releases the held version directory.</summary>
     public void Dispose() => m_held?.Dispose();
 }

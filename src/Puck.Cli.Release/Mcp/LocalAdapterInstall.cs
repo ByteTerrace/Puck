@@ -57,9 +57,9 @@ internal static class LocalAdapterInstall {
         if (cleared.Pruned is { } pruned) {
             Console.Error.WriteLine(value: ((pruned.Skipped is { } skipped)
                 ? $"puck-mcp: pruning skipped: {skipped}"
-                : $"puck-mcp: pruned {pruned.DeletedVersions.Count} version(s) and {pruned.DeletedObjects} object(s); kept {string.Join(separator: ", ", values: pruned.KeptVersions)}" +
-                    ((pruned.RunningVersions.Count == 0) ? "" : $" ({string.Join(separator: ", ", values: pruned.RunningVersions)} running)") +
-                    ((pruned.Refused.Count == 0) ? "" : $"; refused {string.Join(separator: "; ", values: pruned.Refused)}")));
+                : (($"puck-mcp: pruned {pruned.DeletedVersions.Count} version(s) and {pruned.DeletedObjects} object(s); kept {string.Join(separator: ", ", values: pruned.KeptVersions)}" +
+                    ((pruned.RunningVersions.Count == 0) ? "" : $" ({string.Join(separator: ", ", values: pruned.RunningVersions)} running)")) +
+                    ((pruned.Refused.Count == 0) ? "" : $"; refused {string.Join(separator: "; ", values: pruned.Refused)}"))));
         }
     }
 }

@@ -148,9 +148,9 @@ public sealed class InstallPruneLawTests : IDisposable {
     // (an extended-length or differently cased path on Windows, a linked ancestor on Linux) registers and protects it.
     [Fact]
     public void RegistrationRecognizesItsVersionDirectoryWhateverPathSpellsIt() {
-        _ = Install(version: "1.0.0", healthy: true);
-        _ = Install(version: "1.0.1", healthy: true);
-        _ = Install(version: "1.0.2", healthy: true);
+        _ = Install(healthy: true, version: "1.0.0");
+        _ = Install(healthy: true, version: "1.0.1");
+        _ = Install(healthy: true, version: "1.0.2");
         string spelled;
 
         if (OperatingSystem.IsWindows()) {
@@ -174,7 +174,7 @@ public sealed class InstallPruneLawTests : IDisposable {
     // included, and the sweep of everything else still runs.
     [Fact]
     public void AKeptVersionWithoutARecordKeepsTheObjectsItHoldsAndTheSweepStillRuns() {
-        var unrecorded = Install(version: "1.0.0", healthy: true);
+        var unrecorded = Install(healthy: true, version: "1.0.0");
         var current = Install(version: "1.0.1");
         var orphan = Objects.Put(content: "nothing references this"u8);
 
@@ -257,8 +257,8 @@ public sealed class InstallPruneLawTests : IDisposable {
     }
     [Fact]
     public void APendingInstallKeepsItsVersionAndObjects_AndAnUnreadableIntentSkipsThePass() {
-        _ = Install(version: "1.0.0", healthy: true);
-        _ = Install(version: "1.0.1", healthy: true);
+        _ = Install(healthy: true, version: "1.0.0");
+        _ = Install(healthy: true, version: "1.0.1");
         var pending = Stage(version: "1.0.2");
         var intent = new { Manifest = ManifestFor(version: "1.0.2"), VerifiedAt = DateTimeOffset.UnixEpoch, InstalledVersion = "1.0.1", Rid = "win-x64" };
 
@@ -274,7 +274,7 @@ public sealed class InstallPruneLawTests : IDisposable {
     }
     [Fact]
     public void RetentionRanksByInstallOrderNotVersionPrecedence() {
-        _ = Install(version: "0.0.0-local.1", healthy: true);
+        _ = Install(healthy: true, version: "0.0.0-local.1");
         _ = Install(version: "0.0.0-local.9");
         // local.9 never proves healthy: the stub returns to last-good, and later builds install over it.
         StubInstall.RevertToLastGood(failedVersion: "0.0.0-local.9", installRoot: Root, lastGoodVersion: "0.0.0-local.1");
