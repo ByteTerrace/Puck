@@ -92,7 +92,6 @@ public sealed class CliLease : IDisposable {
     /// <param name="Position">The ticket's lane's turn among the queued lanes in the current round.</param>
     /// <param name="Lanes">How many lanes are queued.</param>
     public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes);
-
     /// <summary>What a lease directory shows at one moment.</summary>
     /// <param name="Holder">The holder name, or null when nothing holds the lease.</param>
     /// <param name="Lane">The holder's lane, or null when nothing holds the lease.</param>
@@ -124,11 +123,11 @@ public sealed class CliLease : IDisposable {
                 string[] lines;
 
                 try {
-                    using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: (FileShare.ReadWrite | FileShare.Delete));
+                    using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: FileShare.ReadWrite | FileShare.Delete);
                     using var reader = new StreamReader(stream: stream);
 
-                    lines = reader.ReadToEnd().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { continue; }
+                    lines = reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
+                } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { continue; }
                 if ((ProcessGone(lines: lines, now: now) != false) || (lines.Length is not (4 or 5))) { continue; }
                 var place = Admission(drop: false, now: now, rotation: (directory + ".rotation"), ticket: file);
 
@@ -146,7 +145,7 @@ public sealed class CliLease : IDisposable {
     }
 
     /// <summary>The lane a holder works for when none is named: the first word of its name.</summary>
-    private static string DefaultLane(string holder) => holder.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries)[0];
+    private static string DefaultLane(string holder) => holder.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ((char[]?)null))[0];
     /// <summary>The metadata a holder file and a ticket share: holder, UTC time, process id and process start ticks, then the lane
     /// only when it is not the holder's first word.</summary>
     private static string[] Metadata(string holder, string lane, TimeProvider clock) {
@@ -185,9 +184,10 @@ public sealed class CliLease : IDisposable {
             } catch (IOException) when (File.Exists(path: path)) { }
             // Windows refuses a name whose deleted file is still held open elsewhere, and the listing may not show it:
             // take the next sequence, and give up only when the directory itself refuses.
-            catch (UnauthorizedAccessException) when (++denied <= 64) { floor = (next + 1); }
+            catch (UnauthorizedAccessException) when ((++denied <= 64)) { floor = (next + 1); }
         }
     }
+
     /// <summary>Where a ticket stands in the admission order: tickets ahead, its lane's turn among the queued lanes, and how many lanes are queued.</summary>
     private readonly record struct Place(int Ahead, int Position, int Lanes);
 
@@ -230,13 +230,14 @@ public sealed class CliLease : IDisposable {
                 }
             }
             var key = (recognized ? ("lane:" + ((lines!.Length == 5) ? lines[4] : DefaultLane(holder: lines[0]))) : ("ticket:" + id));
+
             if (!queues.TryGetValue(key: key, value: out var queue)) { queues[key] = queue = new Queue<string>(); }
             queue.Enqueue(item: id);
             live++;
             if (id == mine) { mineLane = key; }
         }
         if (mineLane is null) { return new Place(Ahead: live, Lanes: queues.Count, Position: queues.Count); }
-        var served = queues.Keys.ToDictionary(keySelector: key => key, elementSelector: key => (key.StartsWith(value: "lane:", comparisonType: StringComparison.Ordinal) ? Served(path: LanePath(lane: key[5..], rotation: rotation)) : 0L), comparer: StringComparer.Ordinal);
+        var served = queues.Keys.ToDictionary(keySelector: key => key, elementSelector: key => (key.StartsWith(comparisonType: StringComparison.Ordinal, value: "lane:") ? Served(path: LanePath(lane: key[5..], rotation: rotation)) : 0L), comparer: StringComparer.Ordinal);
         var next = (served.Values.DefaultIfEmpty().Max() + 1);
         var ahead = 0;
         var lanes = queues.Count;
@@ -258,7 +259,7 @@ public sealed class CliLease : IDisposable {
     private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: lane))));
     /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
     private static long Served(string path) {
-        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return 0; }
+        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return 0; }
     }
     /// <summary>Records that a lane holds the lease now, as the highest serial any lane has had. Only the guard's owner writes.</summary>
     private static void Serve(string rotation, string lane) {
@@ -292,9 +293,8 @@ public sealed class CliLease : IDisposable {
     public static string LaneOf(string checkout) {
         var name = Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout))).Trim();
 
-        return (name.Length == 0) ? "checkout" : name;
+        return ((name.Length == 0) ? "checkout" : name);
     }
-
     /// <summary>Resolves the shared lease directory through the worktree's common Git directory.</summary>
     /// <param name="checkout">The working checkout.</param>
     /// <param name="cancellationToken">Cancels Git discovery.</param>

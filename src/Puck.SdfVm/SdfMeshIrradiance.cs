@@ -1299,7 +1299,7 @@ public sealed class SdfMeshIrradiance {
             // probe's squared cosine stamped into flat floors. Irradiance is already evaluated along the normal.
             var facing = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * layout.Spacing)), 0f, 1f);
 
-            facing = float.Lerp(((facing * facing) * (3f - (2f * facing))), 1f, outside);
+            facing = float.Lerp(amount: outside, value1: ((facing * facing) * (3f - (2f * facing))), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
             var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);
