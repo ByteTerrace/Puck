@@ -409,5 +409,55 @@ public sealed class InstallPruneLawTests : IDisposable {
         }
         Assert.Equal(expected: ["1.0.0"], actual: Prune(keepVersions: 1).DeletedVersions);
     }
+    // A tree of any depth is scanned, hashed and removed without recursion: on a thread whose stack holds a few hundred
+    // frames, versions and a trash/ leftover far deeper than that are still pruned. Linux keeps one descriptor open per
+    // level, so its tree stays under the default limit of 1024.
+    [Fact]
+    public void TreesOfAnyDepthArePrunedWithoutRecursion() {
+        var depth = (OperatingSystem.IsWindows() ? 5000 : 900);
+        var unrecorded = Install(version: "1.0.0", healthy: true);
+
+        _ = Install(version: "1.0.1");
+        _ = Stage(version: "0.9.0");
+        File.Delete(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName));
+        Directory.CreateDirectory(path: Path.Combine(path1: Trash, path2: "leftover"));
+        using (var root = ConfinedDirectory.OpenAnchor(create: false, path: Root)!) {
+            foreach (var start in new[] { "versions/0.9.0", "versions/1.0.0", "trash/leftover" }) {
+                var current = root;
+
+                foreach (var segment in start.Split(separator: '/')) { current = Owned(current: current, next: current.Child(name: segment)!, root: root); }
+                for (var level = 0; (level < depth); level++) { current = Owned(current: current, next: current.Child(create: true, name: "d")!, root: root); }
+                using (var leaf = current.OpenFile(create: true, name: "leaf.dat")!) { leaf.Write(buffer: "deep"u8); }
+                current.Dispose();
+            }
+        }
+        InstallPruneResult? pass = null;
+        Exception? error = null;
+        var pruning = new Thread(maxStackSize: (128 * 1024), start: () => {
+            try {
+                pass = InstallPruner.Prune(installRoot: Root, keepVersions: 0);
+            } catch (Exception thrown) {
+                error = thrown;
+            }
+        });
+
+        pruning.Start();
+        pruning.Join();
+        Assert.Null(@object: error);
+        Assert.Null(@object: pass!.Skipped);
+        Assert.Empty(collection: pass.Refused);
+        Assert.Equal(expected: ["0.9.0"], actual: pass.DeletedVersions);
+        Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: Trash));
+        Assert.True(condition: Objects.Contains(pin: unrecorded));
+        // The kept version's deep tree goes the same way, so the run directory's own cleanup never walks it.
+        using var cleanup = ConfinedDirectory.OpenAnchor(create: false, path: Version(version: "1.0.0"))!;
+
+        Assert.True(condition: cleanup.DeleteChild(name: "d"));
+    }
+    // Hands the walk to the next directory, closing the one it leaves unless that is the root.
+    private static ConfinedDirectory Owned(ConfinedDirectory current, ConfinedDirectory next, ConfinedDirectory root) {
+        if (!ReferenceEquals(objA: current, objB: root)) { current.Dispose(); }
+        return next;
+    }
     public void Dispose() => m_directory.Dispose();
 }

@@ -305,31 +305,34 @@ public static class InstallPruner {
     }
     // The content pins of every file a version without an install record holds: what it was staged from.
     private static List<string> ObjectsHeld(ConfinedDirectory versions, string name) {
-        using var version = (versions.Child(name: name) ?? throw new IOException(message: "it no longer exists"));
         var hexes = new List<string>();
+        // Depth first without recursion: one open directory per level, and no stack, whatever the tree's depth.
+        var levels = new Stack<(ConfinedDirectory Directory, Queue<ConfinedEntry> Remaining)>();
+        var version = (versions.Child(name: name) ?? throw new IOException(message: "it no longer exists"));
 
-        Hash(directory: version, hexes: hexes);
-        return hexes;
-    }
-    private static void Hash(ConfinedDirectory directory, List<string> hexes) {
-        foreach (var entry in directory.Entries()) {
-            switch (entry.Kind) {
-                case ConfinedEntryKind.Directory: {
-                        using var child = (directory.Child(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
+        levels.Push(item: (version, new Queue<ConfinedEntry>(collection: version.Entries())));
+        try {
+            while (levels.TryPeek(result: out var level)) {
+                if (!level.Remaining.TryDequeue(result: out var entry)) {
+                    level.Directory.Dispose();
+                    _ = levels.Pop();
+                    continue;
+                }
+                if (entry.Kind == ConfinedEntryKind.Directory) {
+                    var child = (level.Directory.Child(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
 
-                        Hash(directory: child, hexes: hexes);
-                        break;
-                    }
-                case ConfinedEntryKind.File: {
-                        using var stream = (directory.OpenFile(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
+                    levels.Push(item: (child, new Queue<ConfinedEntry>()));
+                    foreach (var grandchild in child.Entries()) { levels.Peek().Remaining.Enqueue(item: grandchild); }
+                } else if (entry.Kind == ConfinedEntryKind.File) {
+                    using var stream = (level.Directory.OpenFile(name: entry.Name) ?? throw new IOException(message: $"'{entry.Name}' vanished"));
 
-                        hexes.Add(item: ContentPin.Compute(content: stream).Hex);
-                        break;
-                    }
-                default:
-                    // A link or a special file is never what staging wrote, so no cached object stands for it.
-                    break;
+                    hexes.Add(item: ContentPin.Compute(content: stream).Hex);
+                }
+                // A link or a special file is never what staging wrote, so no cached object stands for it.
             }
+            return hexes;
+        } finally {
+            foreach (var level in levels) { level.Directory.Dispose(); }
         }
     }
     // Sweeps <store>/objects/sha256/<fanout>/<hex>. A store that is also a release source protects what its channel

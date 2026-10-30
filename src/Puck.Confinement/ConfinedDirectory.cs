@@ -206,21 +206,29 @@ public sealed partial class ConfinedDirectory : IDisposable {
     /// none exists.</returns>
     /// <exception cref="IOException">An entry cannot be inspected.</exception>
     public string? FindLink() {
-        foreach (var entry in Entries()) {
-            if (entry.Kind == ConfinedEntryKind.Link) { return entry.Name; }
-            if (entry.Kind != ConfinedEntryKind.Directory) { continue; }
-            ConfinedDirectory? child;
+        // Depth first without recursion: one open directory per level, and no stack, whatever the tree's depth.
+        var levels = new Stack<(ConfinedDirectory? Directory, string Path, Queue<ConfinedEntry> Remaining)>();
 
-            try {
-                child = Child(name: entry.Name);
-            } catch (IOException) when (IsLinkNow(name: entry.Name)) {
-                return entry.Name;
+        levels.Push(item: (null, "", new Queue<ConfinedEntry>(collection: Entries())));
+        try {
+            while (levels.TryPeek(result: out var level)) {
+                if (!level.Remaining.TryDequeue(result: out var entry)) {
+                    level.Directory?.Dispose();
+                    _ = levels.Pop();
+                    continue;
+                }
+                var path = ((level.Path.Length == 0) ? entry.Name : $"{level.Path}/{entry.Name}");
+
+                if (entry.Kind == ConfinedEntryKind.Link) { return path; }
+                if ((entry.Kind == ConfinedEntryKind.Directory) && ((level.Directory ?? this).Child(name: entry.Name) is { } child)) {
+                    levels.Push(item: (child, path, new Queue<ConfinedEntry>()));
+                    foreach (var grandchild in child.Entries()) { levels.Peek().Remaining.Enqueue(item: grandchild); }
+                }
             }
-            using (child) {
-                if (child?.FindLink() is { } nested) { return $"{entry.Name}/{nested}"; }
-            }
+            return null;
+        } finally {
+            foreach (var level in levels) { level.Directory?.Dispose(); }
         }
-        return null;
     }
     /// <summary>Atomically replaces <paramref name="name"/> with the file <paramref name="temporary"/>, both directly in
     /// this directory, and makes the replacement durable.</summary>
@@ -341,7 +349,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
         return child;
     }
     private bool Exists(string name) => Entries().Any(predicate: entry => string.Equals(a: entry.Name, b: name, comparisonType: StringComparison.OrdinalIgnoreCase));
-    private bool IsLinkNow(string name) => Entries().Any(predicate: entry => ((entry.Kind == ConfinedEntryKind.Link) && (entry.Name == name)));
     private void RequireRemovable() {
         if (!m_removable) { throw new InvalidOperationException(message: "The directory was not opened for removal."); }
     }
@@ -357,37 +364,87 @@ public sealed partial class ConfinedDirectory : IDisposable {
             throw new ArgumentException(message: $"'{name}' is not a single directory entry name.", paramName: nameof(name));
         }
     }
+    private static IReadOnlyList<ConfinedEntry> EntriesOf(SafeFileHandle directory) => (OperatingSystem.IsWindows()
+        ? Windows.Entries(handle: directory)
+        : Linux.Entries(handle: directory));
+    // Removes everything below a directory, depth first and without recursion, so a tree of any depth costs one open
+    // handle per level and no stack. The caller keeps the directory itself and its handle.
     private static void RemoveContents(SafeFileHandle directory) {
-        foreach (var entry in (OperatingSystem.IsWindows() ? Windows.Entries(handle: directory) : Linux.Entries(handle: directory))) {
-            _ = RemoveEntry(name: entry.Name, parent: directory);
+        var levels = new Stack<(SafeFileHandle Directory, SafeFileHandle? Parent, string? Name, Queue<string> Remaining)>();
+
+        levels.Push(item: (directory, null, null, new Queue<string>(collection: EntriesOf(directory: directory).Select(selector: static entry => entry.Name))));
+        try {
+            while (levels.TryPeek(result: out var level)) {
+                if (level.Remaining.TryDequeue(result: out var name)) {
+                    if (OpenForRemoval(existed: out _, name: name, parent: level.Directory) is { } child) {
+                        levels.Push(item: (child, level.Directory, name, new Queue<string>()));
+                        foreach (var entry in EntriesOf(directory: child)) { levels.Peek().Remaining.Enqueue(item: entry.Name); }
+                    }
+                    continue;
+                }
+                _ = levels.Pop();
+                if (level.Name is not null) { RemoveEmptied(directory: level.Directory, name: level.Name, parent: level.Parent!); }
+            }
+        } finally {
+            foreach (var level in levels) {
+                if (level.Name is not null) { level.Directory.Dispose(); }
+            }
         }
     }
-    // One step of a removal: the entry is opened relative to its parent's handle, inspected through its own handle, and
-    // removed through it (Windows) or by name relative to the parent (Linux, after the same no-follow inspection).
-    private static bool RemoveEntry(SafeFileHandle parent, string name) {
+    // One step of a removal: the entry is opened relative to its parent's handle without following it and inspected
+    // through its own handle. A file is removed at once (through its handle on Windows, by name relative to the parent
+    // after the same no-follow inspection on Linux); a directory's handle is returned for emptying.
+    private static SafeFileHandle? OpenForRemoval(SafeFileHandle parent, string name, out bool existed) {
+        existed = false;
         if (OperatingSystem.IsWindows()) {
-            using var handle = Windows.OpenAny(access: Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes, isDirectory: out var isDirectory,
-                isLink: out var isLink, name: name, parent: parent, share: Windows.ShareRead | Windows.ShareWrite);
+            var handle = Windows.OpenAny(access: (Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes), isDirectory: out var isDirectory,
+                isLink: out var isLink, name: name, parent: parent, share: (Windows.ShareRead | Windows.ShareWrite));
 
-            if (handle is null) { return false; }
-            if (isLink) { throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place."); }
-            if (isDirectory) { RemoveContents(directory: handle); }
-            Windows.Remove(handle: handle);
-            return true;
-        }
-        using (var directory = Linux.OpenDirectoryOrNull(error: out var error, name: name, parent: parent)) {
-            if (directory is not null) {
-                RemoveContents(directory: directory);
-                return Linux.Unlink(directory: true, name: name, parent: parent);
+            if (handle is null) { return null; }
+            existed = true;
+            if (isDirectory && !isLink) { return handle; }
+            using (handle) {
+                if (isLink) { throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place."); }
+                Windows.Remove(handle: handle);
+                return null;
             }
-            if (error == Linux.NoEntry) { return false; }
-            if (error is not (Linux.NotDirectory or Linux.Loop)) { throw Linux.Error(code: error, message: $"Cannot open confined entry '{name}'"); }
         }
-        if (Linux.StatAt(name: name, parent: parent) is not { } stat) { return false; }
+        var directory = Linux.OpenDirectoryOrNull(error: out var error, name: name, parent: parent);
+
+        if (directory is not null) {
+            existed = true;
+            return directory;
+        }
+        if (error == Linux.NoEntry) { return null; }
+        if (error is not (Linux.NotDirectory or Linux.Loop)) { throw Linux.Error(code: error, message: $"Cannot open confined entry '{name}'"); }
+        if (Linux.StatAt(name: name, parent: parent) is not { } stat) { return null; }
         if (Linux.Kind(stat: stat) == ConfinedEntryKind.Link) {
             throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place.");
         }
-        return Linux.Unlink(directory: false, name: name, parent: parent);
+        existed = Linux.Unlink(directory: false, name: name, parent: parent);
+        return null;
+    }
+    // Removes a directory emptied through its handle, and closes that handle either way.
+    private static void RemoveEmptied(SafeFileHandle directory, SafeFileHandle parent, string name) {
+        using (directory) {
+            if (OperatingSystem.IsWindows()) {
+                Windows.Remove(handle: directory);
+                return;
+            }
+        }
+        _ = Linux.Unlink(directory: true, name: name, parent: parent);
+    }
+    private static bool RemoveEntry(SafeFileHandle parent, string name) {
+        if (OpenForRemoval(existed: out var existed, name: name, parent: parent) is { } directory) {
+            try {
+                RemoveContents(directory: directory);
+            } catch {
+                directory.Dispose();
+                throw;
+            }
+            RemoveEmptied(directory: directory, name: name, parent: parent);
+        }
+        return existed;
     }
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
