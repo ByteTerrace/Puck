@@ -1421,12 +1421,15 @@ records a restored checkpoint does not reflect — the escrow's crossing sequenc
 is the watermark — and the drain reconciles the rest. A silo row's log is its
 authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).
 
-The escrow's key ledger (`WorldTransferEscrow.Keys.cs`) holds every key that
-has nothing live any more, committed or dead, so a key is leased at most once
+The escrow's key ledger (`WorldTransferEscrow.Keys.cs`) gives every key that
+holds anything here one row (a live lease, a retained commit, an uncertain
+arrival, or a settled key, committed or dead), so a key is leased at most once
 and `Missing` is final: a resent reservation or commit under a spent key is
-refused, and a commit's outcome outlives its acknowledgement. Rows below a
-source's settled floor (`WorldTransferReservationRequest.SourceFloor`) are
-dropped; `WorldTransferLimits.TransferKeys` bounds the rest, and
+refused, and a committed key answers `Committed` whatever payload arrives. A key
+takes its row only through `RowRefusal`, checked before its lease or tombstone
+is written; a record the log does not take changes nothing. Settled rows below
+a source's settled floor (`WorldTransferReservationRequest.SourceFloor`) are
+dropped; `WorldTransferLimits.TransferKeys` bounds the rows, and
 `TransferKeysPerSource` each source's own share, refusing new work rather than
 evicting a row ([worlds](../../docs/architecture/worlds.md#transfer-determinism-and-replay)).
 

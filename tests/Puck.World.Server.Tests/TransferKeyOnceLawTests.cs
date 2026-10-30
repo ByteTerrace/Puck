@@ -472,13 +472,13 @@ public sealed class TransferKeyOnceLawTests {
         destination.AbortTransfer(sourceAuthority: "machine-a/boot", transferId: 30);
         Assert.False(condition: destination.ReserveTransfer(request: Reservation(floor: 11, traveller: 3, transferId: 10)).Accepted);
 
-        // A rising floor drops the rows below it and keeps the rows above it.
+        // A rising floor drops the settled rows below it and keeps the rows above it; the live lease 11 keeps its row.
         Assert.True(condition: destination.ReserveTransfer(request: Reservation(floor: 11, traveller: 4, transferId: 40)).Accepted);
         destination.AbortTransfer(sourceAuthority: "machine-a/boot", transferId: 40);
-        Assert.Equal(expected: 3, actual: LedgerRows(destination: destination));
+        Assert.Equal(expected: 4, actual: LedgerRows(destination: destination));
         Assert.True(condition: destination.ReserveTransfer(request: Reservation(floor: 35, traveller: 5, transferId: 50)).Accepted);
         destination.AbortTransfer(sourceAuthority: "machine-a/boot", transferId: 50);
-        Assert.Equal(expected: 3, actual: LedgerRows(destination: destination));
+        Assert.Equal(expected: 4, actual: LedgerRows(destination: destination));
         Assert.Equal(expected: WorldTransferStatus.Missing, actual: destination.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 40));
         Assert.False(condition: destination.ReserveTransfer(request: Reservation(floor: 35, traveller: 6, transferId: 40)).Accepted);
 
@@ -521,7 +521,8 @@ public sealed class TransferKeyOnceLawTests {
         var freed = destination.ReserveTransfer(request: Reservation(floor: 70_000, transferId: 70_000));
 
         Assert.True(condition: freed.Accepted, userMessage: freed.Reason);
-        Assert.Equal(expected: 2, actual: LedgerRows(destination: destination));
+        // The source's floor, its live lease and the other source's tombstone.
+        Assert.Equal(expected: 3, actual: LedgerRows(destination: destination));
 
         // Every source's share filled together fills the ledger: a new source is answered Uncertain and refused.
         for (var source = 1; (source < (WorldTransferLimits.TransferKeys / WorldTransferLimits.TransferKeysPerSource)); source++) {
@@ -529,7 +530,7 @@ public sealed class TransferKeyOnceLawTests {
         }
         var counts = destination.ExecuteAuthorityOperation(operation: () => destination.TransferEscrow.Counts);
 
-        Tombstone(count: (WorldTransferLimits.TransferKeys - (counts.TransferKeys + counts.ActiveTransactions)), destination: destination, source: "machine-last/boot");
+        Tombstone(count: (WorldTransferLimits.TransferKeys - counts.TransferKeys), destination: destination, source: "machine-last/boot");
         Assert.Equal(expected: WorldTransferStatus.Uncertain, actual: destination.TransferStatus(sourceAuthority: "machine-z/boot", transferId: 1));
         Assert.False(condition: destination.ReserveTransfer(request: Reservation(transferId: 3) with { SourceAuthority = "machine-z/boot" }).Accepted);
     }
@@ -563,6 +564,81 @@ public sealed class TransferKeyOnceLawTests {
         world.RecoverDestination();
         Assert.Equal(expected: WorldTransferStatus.Missing, actual: world.Destination.Server.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 2));
         Assert.False(condition: world.Destination.Server.ReserveTransfer(request: Reservation(transferId: 2)).Accepted);
+    }
+
+    // THE LAW (one door, failed appends): a reservation whose lease record the log refuses changes nothing, so a peer
+    // sending fresh keys, each claiming its own id as its settled floor, against a destination whose log refuses every
+    // append grows no ledger row. Red before the one admission door: each refused append left a spent row and raised no
+    // floor, so the rows grew with every request.
+    [Fact]
+    public void AReservationWhoseLeaseIsRefusedTakesNoRow() {
+        using var world = CrossingWorld.Build();
+        var destination = world.Destination.Server;
+
+        // A newer activation fences the destination's writer: every append is refused.
+        _ = world.DestinationLog.Activate();
+        for (var id = 1UL; (id <= 16UL); id++) {
+            var reply = destination.ReserveTransfer(request: Reservation(floor: id, transferId: id));
+
+            Assert.False(condition: reply.Accepted);
+            Assert.Contains(actualString: reply.Reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "could not be made durable");
+        }
+        Assert.Equal(expected: 0, actual: LedgerRows(destination: destination));
+    }
+
+    // THE LAW (one door, every row counted): a source's share counts every row it holds, its live leases included. A
+    // source that holds one lease and asks after a share's worth of keys it never reserved is answered Uncertain for the
+    // last of them, and after the lease is aborted it still holds exactly its share. Red before the one admission door:
+    // the share counted only settled keys, so every key was tombstoned and the aborted lease left the source one row past
+    // its share.
+    [Fact]
+    public void ASourcesShareCountsItsLiveLeases() {
+        using var world = CrossingWorld.Build();
+        var destination = world.Destination.Server;
+        var request = Reservation(transferId: 1);
+
+        Assert.True(condition: destination.ReserveTransfer(request: request).Accepted);
+        var answers = new List<WorldTransferStatus>();
+
+        for (var id = 0; (id < WorldTransferLimits.TransferKeysPerSource); id++) {
+            answers.Add(item: destination.TransferStatus(sourceAuthority: request.SourceAuthority, transferId: (1000UL + (ulong)id)));
+        }
+        destination.AbortTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId);
+
+        Assert.Equal(expected: (WorldTransferLimits.TransferKeysPerSource - 1), actual: answers.Count(predicate: static answer => (answer == WorldTransferStatus.Missing)));
+        Assert.Equal(expected: WorldTransferStatus.Uncertain, actual: answers[^1]);
+        Assert.Equal(expected: WorldTransferLimits.TransferKeysPerSource, actual: LedgerRows(destination: destination));
+    }
+
+    // THE LAW (a committed key's fate): a committed key answers Committed to every later commit. A commit carrying a
+    // different payload lands nothing and names the difference, and the original commit and the status query still
+    // answer Committed, so the key never answers Missing after Committed. Red before: the different payload answered
+    // Missing, a non-final Missing between two Committed answers.
+    [Fact]
+    public void ACommittedKeyAnswersCommittedWhateverPayloadArrives() {
+        using var world = CrossingWorld.Build();
+        var destination = world.Destination.Server;
+        var request = Reservation(transferId: 12);
+        var other = Member with { Position = new Puck.Maths.FixedVector3(X: Puck.Maths.FixedQ4816.One, Y: default, Z: default) };
+
+        Assert.True(condition: destination.ReserveTransfer(request: request).Accepted);
+        Assert.Equal(
+            expected: WorldTransferStatus.Committed,
+            actual: destination.CommitTransfer(members: [Member], reason: out _, sourceAuthority: request.SourceAuthority, transferId: request.TransferId)
+        );
+        Assert.Equal(
+            expected: WorldTransferStatus.Committed,
+            actual: destination.CommitTransfer(members: [other], reason: out var otherReason, sourceAuthority: request.SourceAuthority, transferId: request.TransferId)
+        );
+        Assert.Contains(actualString: otherReason, comparisonType: StringComparison.Ordinal, expectedSubstring: "different commit");
+        Assert.Equal(
+            expected: WorldTransferStatus.Committed,
+            actual: destination.CommitTransfer(members: [Member], reason: out var sameReason, sourceAuthority: request.SourceAuthority, transferId: request.TransferId)
+        );
+        Assert.Empty(collection: sameReason);
+        Assert.Equal(expected: WorldTransferStatus.Committed, actual: destination.TransferStatus(sourceAuthority: request.SourceAuthority, transferId: request.TransferId));
+        Assert.True(condition: destination.Population.IsActive(index: 0));
+        Assert.False(condition: destination.Population.IsActive(index: 1));
     }
 
     // THE LAW (allocation write ahead): a source whose log does not take the allocation of a transfer's id sends no

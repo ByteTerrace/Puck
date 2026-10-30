@@ -316,7 +316,7 @@ public sealed partial class FederationTransferLawTests {
             transferId: request.TransferId,
             members: [altered],
             reason: out var alteredReason
-        ) == WorldTransferStatus.Missing));
+        ) == WorldTransferStatus.Committed));
         Assert.Contains(
             actualString: alteredReason,
             comparisonType: StringComparison.Ordinal,
@@ -609,7 +609,7 @@ public sealed partial class FederationTransferLawTests {
                 request.TransferId,
                 [member with { ActionContinuity = alternative }],
                 out var reason
-            ) == WorldTransferStatus.Missing));
+            ) == WorldTransferStatus.Committed));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -702,7 +702,7 @@ public sealed partial class FederationTransferLawTests {
                 request.TransferId,
                 [member with { ActionContinuity = carried }],
                 out reason
-            ) == WorldTransferStatus.Missing));
+            ) == WorldTransferStatus.Committed));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -1536,8 +1536,9 @@ public sealed partial class FederationTransferLawTests {
                         transferId: (crossing - 1UL)
                     )
                 );
+                // The floor, the superseded key and the live commit.
                 Assert.Equal(
-                    2,
+                    3,
                     fixture.Server.TransferTableCounts.TransferKeys
                 );
             }

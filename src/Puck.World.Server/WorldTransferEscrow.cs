@@ -97,7 +97,8 @@ public enum WorldTransferStatus : byte {
 /// <param name="ActiveTransactions">The live leases, retained commits and uncertain arrivals.</param>
 /// <param name="MobilityCredentials">The authenticated source aliases of admitted travelers.</param>
 /// <param name="MobilityLeases">The traveler incarnations a live lease holds.</param>
-/// <param name="TransferKeys">The key ledger's rows: settled keys above their source's floor, and one floor per source.</param>
+/// <param name="TransferKeys">The key ledger's rows: every key holding anything here (a live lease, a retained commit,
+/// an uncertain arrival or a settled key above its source's floor) and one floor per source.</param>
 public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases, int TransferKeys);
 /// <summary>One named action register carried across an authority change. A destination accepts it only when its
 /// own seat kit declares the same name and kind; its own envelope remains authoritative.</summary>
@@ -343,16 +344,18 @@ public sealed partial class WorldTransferEscrow {
         m_borderAdmissions.Clear();
         m_detachedIdentities.Clear();
         m_spent.Clear();
+        m_rows.Clear();
         m_sourceRows.Clear();
         m_floors.Clear();
         m_recoveredLeases.Clear();
         m_crossingSequence = checkpoint.CrossingSequence;
 
+        // A restored row was admitted when it was made; every lease and retained commit below holds one too.
         foreach (var row in checkpoint.SpentKeys) {
-            SetSpent(
-                committed: row.Committed,
-                durable: row.Durable,
-                key: row.Key
+            EnterRow(key: row.Key);
+            m_spent[row.Key] = new SpentKey(
+                Committed: row.Committed,
+                Durable: row.Durable
             );
         }
         foreach (var row in checkpoint.Floors) {
@@ -398,10 +401,12 @@ public sealed partial class WorldTransferEscrow {
                 dueTick: unchecked((long)lease.DeadlineTick),
                 token: lease.Key
             );
+            EnterRow(key: lease.Key);
         }
 
         foreach (var row in checkpoint.Committed) {
             _ = m_committed.Add(item: row.Key);
+            EnterRow(key: row.Key);
             m_committedMembers[row.Key] = row.Members.Select(selector: CopyCommitMember).ToArray();
             m_committedPrincipals[row.Key] = row.Principals;
             m_committedIncarnations[row.Key] = [.. row.Incarnations];
@@ -699,16 +704,18 @@ public sealed partial class WorldTransferEscrow {
             comparisonType: StringComparison.Ordinal
         ) &&
         m_borderAdmissions.Remove(key: bodyIndex));
-    /// <summary>Lands a reserved cohort and makes its arrival durable before answering. An exact replay of a committed
-    /// transfer answers <see cref="WorldTransferStatus.Committed"/> again, as does any commit under a key whose retry
-    /// payload is retired; a transfer whose arrival record is uncertain answers <see cref="WorldTransferStatus.Uncertain"/>
-    /// and lands nothing. A refusal kills the key's lease and answers <see cref="WorldTransferStatus.Missing"/> only once
-    /// the key's death is durable, so no later reservation or commit under it is admitted; a death that cannot be made
-    /// durable answers <see cref="WorldTransferStatus.Uncertain"/>.</summary>
+    /// <summary>Lands a reserved cohort and makes its arrival durable before answering. A committed key answers
+    /// <see cref="WorldTransferStatus.Committed"/> to every later commit, its retry payload retired or not and whatever
+    /// payload the commit carries: a different one lands nothing and is named in <paramref name="reason"/>. A transfer
+    /// whose arrival record is uncertain answers <see cref="WorldTransferStatus.Uncertain"/> and lands nothing. A refusal
+    /// kills the key's lease and answers <see cref="WorldTransferStatus.Missing"/> only once the key's death is durable,
+    /// so no later reservation or commit under it is admitted; a death that cannot be made durable answers
+    /// <see cref="WorldTransferStatus.Uncertain"/>.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
     /// <param name="members">The travelers in reservation order.</param>
-    /// <param name="reason">The named refusal or uncertainty, or empty when committed.</param>
+    /// <param name="reason">The named refusal or uncertainty, the mismatch a committed key's different payload carried,
+    /// or empty when the commit stands as sent.</param>
     /// <returns><see cref="WorldTransferStatus.Committed"/>, <see cref="WorldTransferStatus.Uncertain"/>, or
     /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
     public WorldTransferStatus Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
@@ -716,21 +723,29 @@ public sealed partial class WorldTransferEscrow {
             SourceAuthority: sourceAuthority,
             TransferId: transferId
         );
+        var leased = m_leases.ContainsKey(key: key);
         var status = CommitUnder(
             key: key,
             members: members,
             reason: out reason
         );
 
-        // A relanding arrival is already durable, and a refused one leaves recovery or the re-drive to decide.
+        // A relanding arrival is already durable, and a refused one leaves recovery or the re-drive to decide. A
+        // committed key never reaches here: it answers Committed.
         if (
             (status != WorldTransferStatus.Missing) ||
-            m_relanding ||
-            m_committed.Contains(item: key)
+            m_relanding
         ) {
             return status;
         }
-        KillLease(key: key);
+        // The refused commit released its lease; the key's row now holds its death.
+        if (leased) {
+            ReleaseLease(key: key);
+            Spend(
+                committed: false,
+                key: key
+            );
+        }
         return AnswerMissing(
             key: key,
             reason: ref reason
@@ -754,23 +769,16 @@ public sealed partial class WorldTransferEscrow {
         ) {
             return WorldTransferStatus.Committed;
         }
+        // A committed key answers its own fate: the commit that stood. A different payload under it lands nothing and
+        // is named, but the key stays committed.
         if (m_committed.Contains(item: key)) {
-            if (
-                m_committedMembers.TryGetValue(
-                key: key,
-                value: out var committedMembers
-            ) &&
-                CommitMatches(
-                left: committedMembers,
+            reason = (CommitMatches(
+                left: m_committedMembers[key],
                 right: members
             )
-            ) {
-                reason = string.Empty;
-                return WorldTransferStatus.Committed;
-            }
-
-            reason = $"transfer {transferId} reuses a committed source-scoped id with a different commit";
-            return WorldTransferStatus.Missing;
+                ? string.Empty
+                : $"transfer {transferId} is committed with a different commit; this one landed nothing");
+            return WorldTransferStatus.Committed;
         }
         if (IsBelowFloor(key: key)) {
             reason = $"transfer {transferId} is below its source's settled floor";
@@ -1421,8 +1429,11 @@ public sealed partial class WorldTransferEscrow {
         if (request.Members.Count == 0) {
             return WorldTransferReservationReply.Refused(reason: "reservation carries no travelers");
         }
-        if (LedgerRefusal(request: request) is { } ledgerRefusal) {
-            return WorldTransferReservationReply.Refused(reason: ledgerRefusal);
+        if (RowRefusal(
+            floor: request.SourceFloor,
+            key: key
+        ) is { } rowRefusal) {
+            return WorldTransferReservationReply.Refused(reason: rowRefusal);
         }
         if (((m_leases.Count + m_committed.Count) + m_uncertain.Count) >= WorldTransferLimits.Transactions) {
             return WorldTransferReservationReply.Refused(reason: $"transfer history capacity is full ({WorldTransferLimits.Transactions}); acknowledge commits or retire travelers before reserving again");
@@ -1552,7 +1563,9 @@ public sealed partial class WorldTransferEscrow {
         }
 
         // Written ahead of the acceptance: a recovered destination finds the key leased, so it never leases it again.
-        // A lease that is not known durable is never installed, and its key is spent in this activation.
+        // A lease that is not known durable changes nothing here. An uncertain one may still be in the log, but this
+        // activation records nothing more, so it can neither lease the key again nor answer it Missing; its recovery
+        // finds the record and declares the key dead.
         var durability = m_server.RecordCrossingHeld(
             reason: out var leaseDetail,
             record: new WorldCrossingRecord.Lease(
@@ -1562,10 +1575,6 @@ public sealed partial class WorldTransferEscrow {
         );
 
         if (durability != WorldCrossingDurability.Durable) {
-            Spend(
-                committed: false,
-                key: key
-            );
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} lease could not be made durable — {leaseDetail}");
         }
         RaiseFloor(
@@ -1760,10 +1769,12 @@ public sealed partial class WorldTransferEscrow {
     }
     // Holds the reserved body indices and each traveler's mobility epoch for one transfer until its commit, abort or
     // deadline. A reservation installs it once its decision admits the cohort; a reland installs the one the recorded
-    // arrival bound.
+    // arrival bound. The key takes its row here: a reservation admitted it before writing its lease, and a reland
+    // reproduces a lease that was admitted when it was made.
     private WorldTransferReservationReply InstallLease(WorldTransferKey key, WorldTransferReservationRequest request, int[] slots, ulong deadline, WorldAdmissionVerdict? arrival) {
         var destinationDefinition = m_server.Definition;
 
+        EnterRow(key: key);
         m_leases.Add(
             key: key,
             value: new Lease(
@@ -1981,6 +1992,6 @@ public sealed partial class WorldTransferEscrow {
         ActiveTransactions: ((m_leases.Count + m_committed.Count) + m_uncertain.Count),
         MobilityCredentials: m_mobilityAdmissions.Count,
         MobilityLeases: m_mobilityLeases.Count,
-        TransferKeys: (m_spent.Count + m_floors.Count)
+        TransferKeys: TotalRows
     );
 }

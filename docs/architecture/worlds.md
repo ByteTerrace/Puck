@@ -1106,18 +1106,22 @@ whether a seat, a remote human or an autonomous body:
   commit kill the key the same way.
 - The destination keeps a key's outcome until its source can no longer ask. Acknowledging a commit,
   or the traveler moving on, retires only the commit's retry payload; the key still answers
+  `Committed`. A committed key answers `Committed` to every later commit: one carrying a different
+  payload lands nothing and names the difference, so a key never answers `Missing` after
   `Committed`.
 
 The key ledger stays bounded because each reservation carries the source's settled floor
 (`SourceFloor`): the lowest id it may still reserve, commit or ask under, which is the lowest of the
 transfer being reserved, its queued transfers and its in-doubt ones. The destination keeps no row
 below a source's highest floor and answers such a key `Missing`; a commit under a lease left below
-the floor is refused. The ledger holds settled keys above their floor and one floor per source, and
-is bounded with the leases and commits that become rows of it (`WorldTransferLimits.TransferKeys`);
-each source's own rows are bounded too (`TransferKeysPerSource`), so a source that asks after keys it
-never reserved, or never lets its floor rise, fills only its own share. A full ledger or share
-evicts nothing: it refuses reservations, and answers `Uncertain` for a key it cannot tombstone, until
-a rising floor frees it.
+the floor is refused. Every key holding anything at the destination (a live lease, a retained
+commit, an uncertain arrival or a settled key above its floor) holds one row, and each source's
+floor is a row too. A key takes its row through one admission check, made before anything changes:
+before its lease record is written, or before its tombstone is. A record the log does not take
+changes nothing. The rows are bounded as a whole (`WorldTransferLimits.TransferKeys`) and per
+source (`TransferKeysPerSource`), so a source that asks after keys it never reserved, or never lets
+its floor rise, fills only its own share. A full ledger or share evicts nothing: it refuses
+reservations, and answers `Uncertain` for a key it cannot tombstone, until a rising floor frees it.
 
 Every crossing step a peer can see is written ahead to the authority's crossing log
 (`IWorldCrossingLog`) before the step happens:
