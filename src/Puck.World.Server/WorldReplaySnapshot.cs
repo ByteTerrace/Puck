@@ -316,7 +316,7 @@ public sealed partial class WorldReplaySnapshot {
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 8u;
+    private const uint Version = 9u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -584,7 +584,7 @@ public sealed partial class WorldReplaySnapshot {
                     )) {
                         throw new InvalidDataException(message: custodyRefusal);
                     }
-                    server.ExecuteAuthorityOperation(operation: () => server.TransferEscrow.Custody.Apply(record: custodyRecord!));
+                    server.ExecuteAuthorityOperation(operation: () => server.ApplyCustodyRecord(record: custodyRecord!));
 
                     break;
                 case WorldReplayEntry.Departure departure:

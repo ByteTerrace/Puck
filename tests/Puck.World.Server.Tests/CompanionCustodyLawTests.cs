@@ -194,6 +194,107 @@ public sealed class CompanionCustodyLawTests {
             expected: [(companion, WorldCustodyNotice.Released, 0UL)]
         );
     }
+    // The reducer folds its own copy of each record: a caller that edits the collections it submitted changes neither
+    // the title, the history a checkpoint captures, nor the hash.
+    [Fact]
+    public void TheHistoryKeepsItsOwnCopyOfEveryRecord() {
+        using var world = CrossingWorld.Build();
+        var companion = Companion(world: world);
+        var home = world.Source.Server;
+        var members = new[] { new WorldCustodyHopMember(Epoch: 0UL, Incarnation: companion, Next: 1UL) };
+
+        Durable(record: new WorldCrossingRecord.Hop(From: home.AuthorityIdentity, Key: Key(world: world, id: 12UL), Members: members, To: world.Destination.Server.AuthorityIdentity), server: home);
+
+        var before = home.ExecuteAuthorityOperation(operation: () => WorldStateHashComposition.HashAuthoritative(server: home, tick: 0UL));
+
+        members[0] = new WorldCustodyHopMember(Epoch: 7UL, Incarnation: companion, Next: 8UL);
+        Assert.Equal(actual: home.ExecuteAuthorityOperation(operation: () => WorldStateHashComposition.HashAuthoritative(server: home, tick: 0UL)), expected: before);
+        Assert.Equal(actual: Title(companion: companion, server: home).MaxIssued, expected: 1UL);
+        Assert.Equal(actual: ((WorldCrossingRecord.Hop)home.ExecuteAuthorityOperation(operation: () => home.TransferEscrow.Custody.History[0])).Members[0].Next, expected: 1UL);
+    }
+    // Model trace AnUncertainRecordFencesEveryVerificationAtHome: a home latched on an uncertain record confirms no grant,
+    // whatever key the record names; a release carries none.
+    [Fact]
+    public void AnUncertainRecordFencesEveryVerificationAtHome() {
+        using var world = CrossingWorld.Build();
+        var companion = Companion(world: world);
+        var key = Key(world: world, id: 13UL);
+        var home = world.Source.Server;
+        var destination = world.Destination.Server.AuthorityIdentity;
+
+        Durable(record: new WorldCrossingRecord.Hop(From: world.Destination.Server.AuthorityIdentity, Key: key, Members: [new WorldCustodyHopMember(Epoch: 0UL, Incarnation: companion, Next: 1UL)], To: destination), server: home);
+        Assert.Equal(actual: home.ConfirmHops(destination: destination, incarnations: [companion], key: key), expected: [1UL]);
+        world.SourceLog.LoseAnswerOn = typeof(WorldCrossingRecord.Release);
+        world.SourceLog.LostAnswerLands = true;
+        Assert.Equal(actual: home.RecordCustody(reason: out _, record: new WorldCrossingRecord.Release(Incarnation: companion)), expected: WorldCrossingDurability.Uncertain);
+        Assert.Equal(actual: home.ConfirmHops(destination: destination, incarnations: [companion], key: key), expected: [(ulong?)null]);
+    }
+    // A retire is the custodian's own record that its copy is destroyed: recovery from a checkpoint that still holds the
+    // copy redoes the retire and leaves no body, as the live retire did.
+    [Fact]
+    public void ARetiredCompanionStaysRetiredAfterRecovery() {
+        using var world = CrossingWorld.Build(
+            destinationDefinition: Fixtures.BuildCompanionDocument(companions: 0, peerSlots: 2),
+            sourceDefinition: Fixtures.BuildCompanionDocument(companions: 1, peerSlots: 2)
+        );
+        var companion = PlacementIncarnation(row: world.Source, placementId: "companion-0");
+
+        _ = world.Cross();
+        Assert.True(condition: Embodies(row: world.Destination, incarnation: companion));
+        world.CheckpointDestination();
+        Durable(record: new WorldCrossingRecord.Retire(Cause: WorldCustodyRetireCause.Stale, Incarnation: companion), server: world.Destination.Server);
+        Assert.False(condition: Embodies(row: world.Destination, incarnation: companion));
+
+        using var restarted = world.Restart(destinationDied: true, sourceDied: false);
+
+        Assert.False(condition: Embodies(row: restarted.Destination, incarnation: companion));
+        Assert.True(condition: Embodies(row: restarted.Destination, incarnation: world.Traveler));
+    }
+    // Model trace TwoCompanionsSettlePerMemberAndPartialLandingRestoresTheOther under recovery: a source that dies after
+    // recording a settlement naming one landed companion, before it restored the other, restores that other companion
+    // when it redoes the settlement, and its own hop then settles as not arrived.
+    [Fact]
+    public void APartialSettlementRecoveredFromTheLogRestoresTheUnlandedCompanion() {
+        using var world = CrossingWorld.Build(
+            destinationDefinition: Fixtures.BuildCompanionDocument(companions: 0, peerSlots: 2),
+            destinationLandingRefusal: static ordinal => ((ordinal == 1) ? "refused at the landing" : null),
+            sourceDefinition: Fixtures.BuildCompanionDocument(companions: 2, peerSlots: 2)
+        );
+        var companions = new[] { "companion-0", "companion-1" }.Select(selector: id => (Slot: PlacementSlot(row: world.Source, placementId: id), Incarnation: PlacementIncarnation(row: world.Source, placementId: id))).OrderBy(keySelector: static pair => pair.Slot).Select(selector: static pair => pair.Incarnation).ToArray();
+
+        world.SourceLog.CrashAfter = typeof(WorldCrossingRecord.Settlement);
+        _ = Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
+
+        using var restarted = world.Restart(destinationDied: false, sourceDied: true);
+
+        restarted.Step(ticks: 2);
+        Assert.True(condition: Embodies(row: restarted.Source, incarnation: companions[0]));
+        Assert.False(condition: Embodies(row: restarted.Source, incarnation: companions[1]));
+        Assert.True(condition: Embodies(row: restarted.Destination, incarnation: companions[1]));
+        Assert.Equal(actual: Title(companion: companions[0], server: restarted.Source.Server).Kind, expected: WorldCustodyKind.Home);
+        Assert.Equal(actual: Title(companion: companions[1], server: restarted.Source.Server).Kind, expected: WorldCustodyKind.Away);
+    }
+
+    private static int PlacementSlot(HostRow row, string placementId) {
+        for (var slot = 0; (slot < row.Server.Population.Capacity); slot++) {
+            if (row.Server.Population.IsActive(index: slot) && string.Equals(a: row.Server.Population.InhabitantPlacementId(index: slot), b: placementId, comparisonType: StringComparison.Ordinal)) {
+                return slot;
+            }
+        }
+        throw new InvalidOperationException(message: $"no body of placement '{placementId}'");
+    }
+    private static WorldEntityAddress PlacementIncarnation(HostRow row, string placementId) => row.Server.Population.ResolveIncarnation(
+        authority: row.Server.AuthorityIdentity,
+        index: PlacementSlot(row: row, placementId: placementId)
+    )!.Value;
+    private static bool Embodies(HostRow row, WorldEntityAddress incarnation) {
+        for (var slot = 0; (slot < row.Server.Population.Capacity); slot++) {
+            if (row.Server.Population.IsActive(index: slot) && (row.Server.Population.ResolveIncarnation(authority: row.Server.AuthorityIdentity, index: slot) == incarnation)) {
+                return true;
+            }
+        }
+        return false;
+    }
     // A replay re-drives the custody records the live authority made durable and folds them through the same reducer:
     // the authoritative hash, which folds the custody, matches tick for tick. Red leg: a tape without the custody
     // entries diverges at the tick of the first record.
@@ -251,21 +352,21 @@ public sealed class CompanionCustodyLawTests {
 
         Step(ticks: 3);
         Durable(server: source.Server, record: new WorldCrossingRecord.Hop(
-            From: source.Server.AuthorityIdentity,
+            From: destination.Server.AuthorityIdentity,
             Key: key,
             Members: [new WorldCustodyHopMember(Epoch: 0UL, Incarnation: companion, Next: 1UL)],
-            To: destination.Server.AuthorityIdentity
+            To: "row-c"
         ));
         Step(ticks: 2);
         Durable(server: source.Server, record: new WorldCrossingRecord.HopDone(Arrived: true, Incarnation: companion, Key: key));
         Step(ticks: 2);
         Durable(server: source.Server, record: new WorldCrossingRecord.Recall(Epoch: 2UL, Incarnation: companion));
+        Assert.Equal(actual: Title(companion: companion, server: source.Server).Epoch, expected: 2UL);
         Step(ticks: 2);
         _ = tape.StopRecording();
 
         var verdict = tape.Verify(name: name);
 
         Assert.Equal(actual: verdict.Primary.DivergedAt, expected: -1);
-        Assert.Equal(actual: Title(companion: companion, server: source.Server).Epoch, expected: 2UL);
     }
 }

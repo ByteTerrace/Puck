@@ -30,6 +30,15 @@ public static partial class WorldConstructs {
             Summary: "Scoped input programs whose first live drive records a starting state and per-tick scope hashes; later drives restore and verify only that scope."
         ),
         new(
+            DocumentMember: "roles",
+            Grammar: "roles [ { name: … accept: … | driver: … kit: … look: … } ]",
+            Keyword: "roles",
+            RootArm: WorldRootArm.Field,
+            Shape: WorldConstructShape.Section,
+            Sugar: new(Fallback: "the generic value path", Open: true),
+            Summary: "The companion roles a world takes: each runs a visitor's own pinned driver (accept) or names one of the world's addons, and may dress an arriving companion in a kit and look."
+        ),
+        new(
             DocumentMember: "host",
             Grammar: "host { presentation: … width: … height: … fullscreen: … }",
             Keyword: "host",

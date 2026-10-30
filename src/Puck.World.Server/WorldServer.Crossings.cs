@@ -114,6 +114,7 @@ public sealed partial class WorldServer {
     internal WorldCrossingDurability RecordCrossingHeld(WorldCrossingRecord record, out string reason) {
         if (m_crossingLog is not { } log) {
             reason = string.Empty;
+            FoldDurable(record: record);
             return WorldCrossingDurability.Durable;
         }
         if (m_uncertainCrossing is { } uncertain) {
@@ -133,11 +134,20 @@ public sealed partial class WorldServer {
 
         if (durability == WorldCrossingDurability.Durable) {
             m_transferEscrow.AdvanceCrossingSequence();
+            FoldDurable(record: record);
         } else if (durability == WorldCrossingDurability.Uncertain) {
             m_uncertainCrossing = entry.Sequence;
             m_uncertainRecord = record;
         }
         return durability;
+    }
+    // A durable record's custody effect. An arrival folds where it lands (live, recovery and re-drive alike), so only
+    // the other records fold here.
+    private void FoldDurable(WorldCrossingRecord record) {
+        if ((record is not WorldCrossingRecord.Arrival) && m_transferEscrow.Custody.Concerns(record: record)) {
+            ApplyCustodyRecord(record: record);
+            CustodyTap?.Invoke(obj: record);
+        }
     }
 
     /// <summary>Makes one custody record durable and, once it is, folds it through this authority's custody reducer
@@ -172,29 +182,11 @@ public sealed partial class WorldServer {
     /// <paramref name="key"/>: it cannot yet call its answer about that key durable.</summary>
     /// <param name="key">The transfer key.</param>
     /// <returns><see langword="true"/> while an uncertain record about the key awaits recovery.</returns>
-    public bool IsUncertainAbout(WorldTransferKey key) => ExecuteAuthorityOperation(operation: () => (m_uncertainCrossing is not null) && (m_uncertainRecord switch {
-        WorldCrossingRecord.Hop hop => (hop.Key == key),
-        WorldCrossingRecord.HopDone done => (done.Key == key),
-        WorldCrossingRecord.HopAcked acked => (acked.Key == key),
-        WorldCrossingRecord.Arrival arrival => (arrival.Value.Key == key),
-        WorldCrossingRecord.Lease lease => (lease.Key == key),
-        WorldCrossingRecord.Tombstone tombstone => (tombstone.Key == key),
-        WorldCrossingRecord.Departure departure => (string.Equals(a: AuthorityIdentity, b: key.SourceAuthority, comparisonType: StringComparison.Ordinal) && (departure.Transfer.TransferId == key.TransferId)),
-        WorldCrossingRecord.Settlement settlement => (string.Equals(a: AuthorityIdentity, b: key.SourceAuthority, comparisonType: StringComparison.Ordinal) && (settlement.TransferId == key.TransferId)),
-        _ => false,
-    }));
+    public bool IsUncertainAbout(WorldTransferKey key) => ExecuteAuthorityOperation(operation: () => IsUncertainAboutHeld(key: key));
 
     // Callers hold the authority gate.
-    internal WorldCrossingDurability RecordCustodyHeld(WorldCrossingRecord record, out string reason) {
-        var durability = RecordCrossingHeld(
-            reason: out reason,
-            record: record
-        );
-
-        if (durability == WorldCrossingDurability.Durable) {
-            m_transferEscrow.Custody.Apply(record: record);
-            CustodyTap?.Invoke(obj: record);
-        }
-        return durability;
-    }
+    internal WorldCrossingDurability RecordCustodyHeld(WorldCrossingRecord record, out string reason) => RecordCrossingHeld(
+        reason: out reason,
+        record: record
+    );
 }

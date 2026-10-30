@@ -1,0 +1,8 @@
+// A companion is welcome as it is: an arriving companion runs its own pinned driver. A world refines the row by name
+// to dress it (kit, look), or names a driver of its own instead.
+roles [
+  {
+    name: "companion"
+    accept: true
+  }
+]

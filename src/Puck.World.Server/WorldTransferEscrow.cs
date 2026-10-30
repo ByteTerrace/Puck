@@ -20,15 +20,59 @@ namespace Puck.World.Server;
 /// human set Idle before it left). It can only add a human: the destination lands as a human every traveler that
 /// carries the Live source or this statement (<see cref="LandsHuman"/>), so no sender can exempt a body from the
 /// <c>networkPlayers</c> cap.</param>
-public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, bool RemoteHuman = false) {
+/// <param name="MemberId">The request-local id the source assigned this traveler when it enqueued the crossing; it never
+/// changes when the destination filters the cohort. A negative id stands for the traveler's ordinal.</param>
+/// <param name="Companion">What the traveler carries as a companion, or <see langword="null"/> for one that is not:
+/// the destination decides such a member on its own (its role, a duplicate, its capacity, home's confirmation of the
+/// hop) and lands it autonomous, never counted against the <c>networkPlayers</c> cap.</param>
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, bool RemoteHuman = false, int MemberId = -1, WorldTransferCompanion? Companion = null) {
+    /// <summary>Returns the member's request-local id, given its ordinal in the request the source sent.</summary>
+    /// <param name="ordinal">The member's ordinal in the source's request.</param>
+    /// <returns>The member id.</returns>
+    public int IdAt(int ordinal) => ((MemberId >= 0) ? MemberId : ordinal);
+
     /// <summary>Gets whether the destination lands this traveler as a remote human: through the peer door, with the
     /// arrival's Drive grants and its control following it, counted against the <c>networkPlayers</c> cap. The
     /// destination decides it from what it hands out, never from a sender's claim of autonomy: a traveler that keeps
     /// the Live source keeps an outside driver, so it is a human whatever the sender says. Every other traveler lands
     /// autonomous, authored by the destination with no Drive grant and no route, which gives an outside party
     /// nothing to drive and so needs no cap (the owner's ruling: a companion is not a networked player).</summary>
-    public bool LandsHuman => (Source.IsLive || RemoteHuman);
+    public bool LandsHuman => ((Companion is null) && (Source.IsLive || RemoteHuman));
 }
+/// <summary>Why a destination refused one companion of a reservation it otherwise accepted.</summary>
+public enum WorldCompanionRefusal : byte {
+    /// <summary>The destination declares nothing for the companion's role.</summary>
+    Role = 0,
+
+    /// <summary>A body or a live lease here already names the incarnation; transient.</summary>
+    Duplicate = 1,
+
+    /// <summary>The destination has no free body for it.</summary>
+    Full = 2,
+
+    /// <summary>Home did not confirm a currently valid grant of this hop.</summary>
+    Unverified = 3,
+
+    /// <summary>The title's hop is still pending at home; transient.</summary>
+    Pending = 4,
+
+    /// <summary>Home answered that the copy is not the title's current custody.</summary>
+    Stale = 5,
+
+    /// <summary>Home answered that the title was released.</summary>
+    Released = 6,
+
+    /// <summary>The authority asked did not mint the incarnation.</summary>
+    NotMyTitle = 7,
+
+    /// <summary>The destination could not decide now; transient.</summary>
+    Unavailable = 8,
+}
+/// <summary>One companion a destination refused while it accepted the rest of the reservation.</summary>
+/// <param name="MemberId">The refused member's request-local id.</param>
+/// <param name="Reason">Why.</param>
+/// <param name="Detail">The refusal's text.</param>
+public readonly record struct WorldMemberRefusal(int MemberId, WorldCompanionRefusal Reason, string Detail);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 /// <param name="TransferId">The transfer key's id: allocated durably by its source before this request is sent, and
@@ -147,7 +191,24 @@ public readonly record struct WorldContinuumTrajectory(
     );
 }
 /// <summary>The destination's reservation verdict and assigned body indices.</summary>
-public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition) {
+/// <param name="Accepted">Whether the destination leased any member.</param>
+/// <param name="Reason">The refusal's text, or empty.</param>
+/// <param name="DeadlineDestinationTick">The destination tick the lease expires at.</param>
+/// <param name="BodyIndices">The body index each accepted member is bound to, in the order of
+/// <paramref name="AcceptedMembers"/>.</param>
+/// <param name="DestinationDefinition">The destination's definition the lease is bound to.</param>
+/// <param name="AcceptedMembers">The request-local ids of the members the destination leased, in request order; absent
+/// leases every member, in order.</param>
+/// <param name="Refusals">Each companion the destination refused while it leased the rest.</param>
+public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition, IReadOnlyList<int>? AcceptedMembers = null, IReadOnlyList<WorldMemberRefusal>? Refusals = null) {
+    /// <summary>Gets each companion the destination refused while it leased the rest.</summary>
+    public IReadOnlyList<WorldMemberRefusal> Refusals { get; init; } = (Refusals ?? []);
+    /// <summary>Returns the request-local ids the destination leased: <see cref="AcceptedMembers"/>, or every member of
+    /// <paramref name="request"/> in order when the reply names none.</summary>
+    /// <param name="request">The request this reply answers.</param>
+    /// <returns>The leased member ids, in request order.</returns>
+    public IReadOnlyList<int> LeasedIds(WorldTransferReservationRequest request) => (AcceptedMembers ?? [.. request.Members.Select(selector: static (member, ordinal) => member.IdAt(ordinal: ordinal))]);
+
     /// <summary>Creates a named refusal.</summary>
     public static WorldTransferReservationReply Refused(string reason) => new(
         Accepted: false,
@@ -174,7 +235,9 @@ public enum WorldTransferArrival : byte {
 /// <summary>One detached source body carried into a previously reserved destination index. <c>TravelTurn</c> is the
 /// traveler's accumulated arrival turn once it lands (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which the
 /// destination keeps on the occupant for the routes it describes. <c>Profile</c> is the traveler's identity projection
-/// at commit, which the destination lands in place of the reservation's.</summary>
+/// at commit, which the destination lands in place of the reservation's. <c>MemberId</c> is the request-local id of the
+/// leased member it lands (negative stands for its ordinal); <c>Companion</c> is what a companion carries, its ticket the
+/// one home granted for this hop.</summary>
 public sealed record WorldTransferCommitMember(
     WorldIdentityProjection? Profile,
     WorldTransferArrival Arrival,
@@ -185,7 +248,9 @@ public sealed record WorldTransferCommitMember(
     FixedQ4816 VerticalVelocity,
     WorldTransferActionContinuity? ActionContinuity = null,
     WorldContinuumTrajectory? Continuum = null,
-    FixedQ4816 TravelTurn = default
+    FixedQ4816 TravelTurn = default,
+    int MemberId = -1,
+    WorldTransferCompanion? Companion = null
 ) {
     /// <summary>Gets the action registers the traveller carries. Carrying none is the empty continuity: an
     /// absent one reads as <see cref="WorldTransferActionContinuity.Empty"/>, so a commit means the same whichever
@@ -240,6 +305,12 @@ public sealed partial class WorldTransferEscrow {
     // The population remains the source of truth: stale rows are pruned before every capacity decision.
     private readonly Dictionary<int, string> m_borderAdmissions = new();
 
+    // Home's confirmations for the commit being decided, asked for this commit by this destination's own host: a
+    // companion lands only under the grant as it stands at the commit. Null outside a live commit.
+    private IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? m_commitConfirmations;
+    // The request-local ids each committed transfer landed: a companion the commit left out is absent.
+    private readonly Dictionary<WorldTransferKey, int[]> m_committedLanded = new();
+
     // The first crossing sequence this authority has not made durable; checkpointed as the recovery watermark.
     private ulong m_crossingSequence;
     // Set while a recorded arrival lands again: its record is already durable, so it is not written twice.
@@ -247,6 +318,8 @@ public sealed partial class WorldTransferEscrow {
     // Set while a re-drive lands a taped arrival: the outcome its landings must reproduce, and whether the landing
     // reached the recorded rollback.
     private WorldArrivalOutcome? m_relandOutcome;
+    // Set while a recorded arrival lands again: the companions it re-adopted, which its landing re-adopts again.
+    private IReadOnlyList<WorldEntityAddress> m_relandReadopted = [];
     private bool m_relandRolledBack;
 
     // A re-drive's one detached identity per owned id. Live, an id names one owned object, so every seat a recorded
@@ -316,6 +389,12 @@ public sealed partial class WorldTransferEscrow {
                     value: out var incarnations
                 )
                 ? [.. incarnations]
+                : []),
+                Landed: (m_committedLanded.TryGetValue(
+                    key: key,
+                    value: out var landed
+                )
+                ? [.. landed]
                 : [])
             ));
         }
@@ -344,6 +423,7 @@ public sealed partial class WorldTransferEscrow {
         m_committedMembers.Clear();
         m_committedPrincipals.Clear();
         m_committedIncarnations.Clear();
+        m_committedLanded.Clear();
         m_latestCommittedTransfer.Clear();
         m_mobilityLeases.Clear();
         m_mobilityAdmissions.Clear();
@@ -416,6 +496,7 @@ public sealed partial class WorldTransferEscrow {
             m_committedMembers[row.Key] = row.Members.Select(selector: CopyCommitMember).ToArray();
             m_committedPrincipals[row.Key] = row.Principals;
             m_committedIncarnations[row.Key] = [.. row.Incarnations];
+            m_committedLanded[row.Key] = [.. row.Landed];
         }
 
         foreach (var row in checkpoint.LatestCommittedTransfer) {
@@ -515,16 +596,17 @@ public sealed partial class WorldTransferEscrow {
             Registers: [.. member.ActionContinuity.Registers]
         ),
     };
-    private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first) {
+    private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first, int limit) {
         if (
             (preferred >= first) &&
+            (preferred < limit) &&
             (((uint)preferred) < ((uint)consumed.Length)) &&
             !consumed[preferred]
         ) {
             return preferred;
         }
 
-        for (var slot = first; (slot < consumed.Length); slot++) {
+        for (var slot = first; ((slot < limit) && (slot < consumed.Length)); slot++) {
             if (!consumed[slot]) {
                 return slot;
             }
@@ -641,6 +723,7 @@ public sealed partial class WorldTransferEscrow {
             }
         }
         _ = m_committedMembers.Remove(key: key);
+        _ = m_committedLanded.Remove(key: key);
         _ = m_committedPrincipals.Remove(key: key);
     }
     private void SupersedeCommittedIncarnation(WorldTransferKey key, WorldEntityAddress incarnation) {
@@ -722,19 +805,30 @@ public sealed partial class WorldTransferEscrow {
     /// <param name="members">The travelers in reservation order.</param>
     /// <param name="reason">The named refusal or uncertainty, the mismatch a committed key's different payload carried,
     /// or empty when the commit stands as sent.</param>
+    /// <param name="confirmed">Home's answers to this destination's own question for this commit: the epoch each
+    /// companion's currently granted hop lands it at. A leased companion with no matching answer is left out of the
+    /// landing while the rest land.</param>
     /// <returns><see cref="WorldTransferStatus.Committed"/>, <see cref="WorldTransferStatus.Uncertain"/>, or
     /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
-    public WorldTransferStatus Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+    public WorldTransferStatus Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
         var key = new WorldTransferKey(
             SourceAuthority: sourceAuthority,
             TransferId: transferId
         );
         var leased = m_leases.ContainsKey(key: key);
-        var status = CommitUnder(
-            key: key,
-            members: members,
-            reason: out reason
-        );
+
+        m_commitConfirmations = confirmed;
+        WorldTransferStatus status;
+
+        try {
+            status = CommitUnder(
+                key: key,
+                members: members,
+                reason: out reason
+            );
+        } finally {
+            m_commitConfirmations = null;
+        }
 
         // A relanding arrival is already durable, and a refused one leaves recovery or the re-drive to decide. A
         // committed key never reaches here: it answers Committed.
@@ -869,6 +963,15 @@ public sealed partial class WorldTransferEscrow {
 
             return WorldTransferStatus.Missing;
         }
+        for (var index = 0; (index < members.Count); index++) {
+            var leasedId = lease.Request.Members[index].IdAt(ordinal: index);
+
+            if (((members[index].MemberId < 0) ? index : members[index].MemberId) != leasedId) {
+                reason = $"transfer {transferId} commit member {(index + 1)} is not the member the reservation leased there";
+
+                return WorldTransferStatus.Missing;
+            }
+        }
 
         if (members.Any(predicate: static member => ((member.ActionContinuity is not { Registers: not null })))) {
             reason = $"transfer {transferId} carries invalid action continuity collections";
@@ -896,12 +999,13 @@ public sealed partial class WorldTransferEscrow {
             }
         }
 
-        var arrival = new WorldCrossingArrival(
+        var offered = new WorldCrossingArrival(
             Members: [.. members],
             Request: lease.Request,
             Slots: [.. lease.Slots]
         );
         var generations = new List<int>(capacity: members.Count);
+        var landedOrdinals = new List<int>(capacity: members.Count);
         // A re-drive stops where the recorded commit rolled back; a live commit or a recovery lands every traveler.
         var stop = ((m_relandOutcome is { RolledBack: true } recorded)
             ? recorded.Generations.Count
@@ -910,13 +1014,18 @@ public sealed partial class WorldTransferEscrow {
         // Every landing this commit made is undone, then reported with its rollback, so a re-drive lands and rolls
         // back the same travelers: a landing advances its index's generation, which outlives it.
         void RollBack() {
+            var landedSoFar = Narrowed(
+                arrival: offered,
+                ordinals: landedOrdinals
+            );
+
             RollBackArrival(
-                arrival: arrival,
+                arrival: landedSoFar,
                 landed: generations.Count
             );
             if (generations.Count > 0) {
                 m_server.ArrivalTap?.Invoke(
-                    arg1: arrival,
+                    arg1: landedSoFar,
                     arg2: new WorldArrivalOutcome(
                         Adopted: [],
                         Generations: [.. generations],
@@ -927,7 +1036,7 @@ public sealed partial class WorldTransferEscrow {
         }
 
         for (var index = 0; (index < members.Count); index++) {
-            if (index == stop) {
+            if (landedOrdinals.Count == stop) {
                 RollBack();
                 m_relandRolledBack = true;
                 reason = $"transfer {transferId} rolled back ahead of traveler {(index + 1)}, as recorded";
@@ -935,35 +1044,77 @@ public sealed partial class WorldTransferEscrow {
             }
 
             var slot = lease.Slots[index];
+            var companion = lease.Request.Members[index].Companion;
+
+            // A companion lands only under home's grant as it stands at this commit, and the ticket the commit carries
+            // is the one the reservation leased. One that does not is left out; the rest land. A recovery or a re-drive
+            // lands what the durable arrival already decided.
+            if ((companion is not null) && !m_relanding && !CommitConfirmed(
+                carried: members[index].Companion,
+                key: key,
+                leased: lease.Request.Members[index]
+            )) {
+                continue;
+            }
+
             var reply = LandMember(
-                arrival: arrival,
+                arrival: offered,
                 index: index,
                 verdict: lease.Arrival
             );
 
             if (!reply.Accepted) {
+                if ((companion is not null) && !m_relanding) {
+                    continue;
+                }
                 RollBack();
                 reason = $"body:{slot} refused reserved commit — {reply.Reason}";
                 return WorldTransferStatus.Missing;
             }
 
+            landedOrdinals.Add(item: index);
             generations.Add(item: m_server.Population.Generation(index: slot));
 
             if (
                 (m_relandOutcome is { } pinned) &&
-                (generations[index] != pinned.Generations[index])
+                (generations[^1] != pinned.Generations[(generations.Count - 1)])
             ) {
                 RollBack();
-                reason = $"body:{slot} landed at generation {generations[index]} where the recorded commit landed it at {pinned.Generations[index]}";
+                reason = $"body:{slot} landed at generation {generations[^1]} where the recorded commit landed it at {pinned.Generations[(generations.Count - 1)]}";
                 return WorldTransferStatus.Missing;
             }
         }
-        if (stop == members.Count) {
+        if (landedOrdinals.Count == stop) {
             RollBack();
             m_relandRolledBack = true;
             reason = $"transfer {transferId} rolled back after landing every traveler, as recorded";
             return WorldTransferStatus.Missing;
         }
+        if (
+            (landedOrdinals.Count == 0) ||
+            lease.Request.Members.Select(selector: static (member, ordinal) => (member, ordinal)).Any(predicate: pair => (pair.member.Companion is null) && !landedOrdinals.Contains(item: pair.ordinal))
+        ) {
+            RollBack();
+            reason = $"transfer {transferId} commit landed no traveler";
+            return WorldTransferStatus.Missing;
+        }
+
+        // The arrival is what landed: its record, its tape entry and its outcome name only the landed members, with the
+        // generation each took, so a recovery and a re-drive land exactly them.
+        var arrival = Narrowed(
+            arrival: offered,
+            ordinals: landedOrdinals
+        ) with {
+            Generations = [.. generations],
+            Readopted = (m_relanding
+                ? [.. m_relandReadopted]
+                : []),
+        };
+
+        lease = lease with {
+            Request = arrival.Request,
+            Slots = [.. arrival.Slots],
+        };
 
         // Written ahead of the answer: a destination that cannot make its arrival durable lands nothing, so a
         // restart can never lose a body the source was told had arrived. An uncertain record lands nothing either,
@@ -991,11 +1142,12 @@ public sealed partial class WorldTransferEscrow {
         }
 
         m_committed.Add(item: key);
+        m_committedLanded[key] = [.. arrival.Request.Members.Select(selector: static (member, ordinal) => member.IdAt(ordinal: ordinal))];
         // The arrival's custody effect (a re-adoption at home) folds wherever it lands: live, in recovery and in a re-drive.
         Custody.Apply(record: new WorldCrossingRecord.Arrival(Value: arrival));
         // A relanded arrival is the key's last durable record: it supersedes the death its lease record left.
         _ = m_spent.Remove(key: key);
-        m_committedMembers[key] = [.. members];
+        m_committedMembers[key] = [.. offered.Members];
         m_committedPrincipals[key] = lease.Slots.Select(selector: slot => (lease.Request.PeerAdmission
             ? m_server.Population.PeerPrincipal(index: slot)
             : lease.Request.Members[Array.IndexOf(
@@ -1039,11 +1191,15 @@ public sealed partial class WorldTransferEscrow {
         var adopted = AdoptHomeProfiles(arrival: arrival);
         // Reported once the commit stands, with the generation each traveler landed at and the projection each
         // traveler that came home is bound to.
+        var bindings = WorldCompanionCustody.Bindings(arrival: arrival);
+
         m_server.ArrivalTap?.Invoke(
             arg1: arrival,
             arg2: new WorldArrivalOutcome(
                 Adopted: adopted,
+                Bindings: [.. arrival.Request.Members.Select(selector: member => bindings.Where(predicate: bound => (bound.Companion == member.Mobility?.Incarnation)).Select(selector: static bound => (WorldCompanionBinding?)bound.Binding).FirstOrDefault())],
                 Generations: [.. generations],
+                Readopted: arrival.Readopted,
                 RolledBack: false
             )
         );
@@ -1085,7 +1241,7 @@ public sealed partial class WorldTransferEscrow {
             index: index
         );
 
-        if (arrival.Request.PeerAdmission) {
+        if (arrival.Request.PeerAdmission || (reservationMember.Companion is not null)) {
             var occupant = new WorldTransferredOccupant(
                 CatalogRig: reservationMember.CatalogRig,
                 TravelTurn: member.TravelTurn
@@ -1269,7 +1425,7 @@ public sealed partial class WorldTransferEscrow {
         for (var index = 0; (index < landed); index++) {
             var slot = arrival.Slots[index];
 
-            if (arrival.Request.PeerAdmission) {
+            if (arrival.Request.PeerAdmission || (arrival.Request.Members[index].Companion is not null)) {
                 m_server.GrantTable.RollbackTransferredEntity(slot: slot);
             } else {
                 _ = m_server.Population.TryDetachSeatForTransfer(
@@ -1376,7 +1532,7 @@ public sealed partial class WorldTransferEscrow {
             KillLease(key: key);
         }
     }
-    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
+    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
         ArgumentNullException.ThrowIfNull(argument: request);
         var key = new WorldTransferKey(
             SourceAuthority: request.SourceAuthority,
@@ -1413,19 +1569,30 @@ public sealed partial class WorldTransferEscrow {
             key: key,
             value: out var existing
         )) {
+            var leasedIds = existing.Request.Members.Select(selector: static (member, ordinal) => member.IdAt(ordinal: ordinal)).ToArray();
+
             if (!ReservationMatches(
                 left: existing.Request,
-                right: request
+                right: Leased(
+                    ids: leasedIds,
+                    request: request
+                )
             )) {
                 return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} reuses an existing source-scoped id with a different reservation");
             }
 
             return new WorldTransferReservationReply(
                 Accepted: true,
+                AcceptedMembers: leasedIds,
                 Reason: string.Empty,
                 DeadlineDestinationTick: existing.DeadlineTick,
                 BodyIndices: [.. existing.Slots],
-                DestinationDefinition: existing.DestinationDefinition
+                DestinationDefinition: existing.DestinationDefinition,
+                Refusals: [.. request.Members.Select(selector: static (member, ordinal) => member.IdAt(ordinal: ordinal)).Where(predicate: id => !leasedIds.Contains(value: id)).Select(selector: static id => new WorldMemberRefusal(
+                    Detail: "refused when this transfer was reserved",
+                    MemberId: id,
+                    Reason: WorldCompanionRefusal.Unverified
+                ))]
             );
         }
 
@@ -1488,9 +1655,11 @@ public sealed partial class WorldTransferEscrow {
             ? m_server.Population.LocalSeatCount
             : 0
         );
-        var consumed = new bool[(request.PeerAdmission
+        // A seat-door traveler takes a local seat; a peer and a companion take a peer slot.
+        var seatLimit = (request.PeerAdmission
             ? m_server.Population.Capacity
-            : m_server.Population.LocalSeatCount)];
+            : m_server.Population.LocalSeatCount);
+        var consumed = new bool[m_server.Population.Capacity];
 
         for (var slot = 0; (slot < consumed.Length); slot++) {
             consumed[slot] = m_server.Population.IsActive(index: slot);
@@ -1521,14 +1690,40 @@ public sealed partial class WorldTransferEscrow {
             }
         }
 
-        var slots = new int[request.Members.Count];
+        var slotList = new List<int>(capacity: request.Members.Count);
+        var acceptedOrdinals = new List<int>(capacity: request.Members.Count);
+        var refusals = new List<WorldMemberRefusal>();
 
         for (var index = 0; (index < request.Members.Count); index++) {
             var member = request.Members[index];
+
+            if (member.Companion is { } companion) {
+                if (CompanionRefusal(
+                    companion: companion,
+                    confirmed: confirmed,
+                    consumed: consumed,
+                    key: key,
+                    member: member,
+                    slot: out var companionSlot
+                ) is { } companionRefusal) {
+                    refusals.Add(item: new WorldMemberRefusal(
+                        Detail: companionRefusal.Detail,
+                        MemberId: member.IdAt(ordinal: index),
+                        Reason: companionRefusal.Reason
+                    ));
+                    continue;
+                }
+                consumed[companionSlot] = true;
+                slotList.Add(item: companionSlot);
+                acceptedOrdinals.Add(item: index);
+                continue;
+            }
+
             var slot = PreferredOrLowestFree(
                 consumed: consumed,
                 preferred: member.PreferredSlot,
-                first: firstSlot
+                first: firstSlot,
+                limit: seatLimit
             );
 
             if (slot < 0) {
@@ -1568,8 +1763,23 @@ public sealed partial class WorldTransferEscrow {
             }
 
             consumed[slot] = true;
-            slots[index] = slot;
+            slotList.Add(item: slot);
+            acceptedOrdinals.Add(item: index);
         }
+
+        if (acceptedOrdinals.Count == 0) {
+            return WorldTransferReservationReply.Refused(reason: ((refusals.Count > 0)
+                ? $"{refusals[0].Reason}: {refusals[0].Detail}"
+                : "reservation leases no traveler"));
+        }
+
+        var acceptedIds = acceptedOrdinals.Select(selector: ordinal => request.Members[ordinal].IdAt(ordinal: ordinal)).ToArray();
+        var slots = slotList.ToArray();
+
+        request = Leased(
+            ids: acceptedIds,
+            request: request
+        );
 
         // Written ahead of the acceptance: a recovered destination finds the key leased, so it never leases it again.
         // A lease that is not known durable changes nothing here. An uncertain one may still be in the log, but this
@@ -1596,7 +1806,105 @@ public sealed partial class WorldTransferEscrow {
             key: key,
             request: request,
             slots: slots
+        ) with {
+            AcceptedMembers = acceptedIds,
+            Refusals = refusals,
+        };
+    }
+    // The request narrowed to the members named by `ids`, in request order, each carrying its id explicitly so the
+    // narrowing never renumbers a member.
+    private static WorldTransferReservationRequest Leased(WorldTransferReservationRequest request, IReadOnlyList<int> ids) => request with {
+        Members = [.. request.Members.Select(selector: static (member, ordinal) => member with { MemberId = member.IdAt(ordinal: ordinal) }).Where(predicate: member => ids.Contains(value: member.MemberId))],
+    };
+    // Decides one companion of a reservation on its own: its role declared here, no body or live lease here naming its
+    // incarnation, a ticket for this very hop at the epoch above the one it leaves, home's confirmation that the grant is
+    // current (asked for this reservation by this destination's own host, never taken from the sender), and a free peer
+    // slot its source can occupy. A companion coming home is decided by home's own custody instead.
+    private (WorldCompanionRefusal Reason, string Detail)? CompanionRefusal(WorldTransferCompanion companion, WorldTransferReservationMember member, WorldTransferKey key, bool[] consumed, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed, out int slot) {
+        slot = -1;
+        var mobility = member.Mobility!.Value;
+        var incarnation = mobility.Incarnation;
+
+        if (string.Equals(a: incarnation.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal)) {
+            return (WorldCompanionRefusal.Unverified, "this authority holds the companion's title and does not take it back through a hop");
+        }
+        if (m_server.Definition.FindRole(name: companion.Role) is null) {
+            return (WorldCompanionRefusal.Role, $"this world declares nothing for role '{companion.Role}'");
+        }
+        if (m_mobilityLeases.ContainsKey(key: incarnation) || EmbodiesIncarnation(incarnation: incarnation)) {
+            return (WorldCompanionRefusal.Duplicate, $"a body or a live lease here already names {incarnation}");
+        }
+        if (
+            (companion.Ticket is not { } ticket) ||
+            (ticket.Incarnation != incarnation) ||
+            (ticket.Hop != key) ||
+            (ticket.Epoch != checked((mobility.Epoch + 1UL))) ||
+            !string.Equals(a: ticket.Home, b: incarnation.Authority, comparisonType: StringComparison.Ordinal) ||
+            (confirmed is null) ||
+            !confirmed.TryGetValue(key: (key, incarnation), value: out var next) ||
+            (next != ticket.Epoch)
+        ) {
+            return (WorldCompanionRefusal.Unverified, $"home did not confirm a current grant of {incarnation}'s hop under transfer {key.TransferId}");
+        }
+
+        slot = PreferredOrLowestFree(
+            consumed: consumed,
+            preferred: member.PreferredSlot,
+            first: m_server.Population.LocalSeatCount,
+            limit: consumed.Length
         );
+        if (slot < 0) {
+            return (WorldCompanionRefusal.Full, "no free body index for a companion");
+        }
+        if (!m_server.Population.SupportsSource(
+            index: slot,
+            source: member.Source,
+            refusal: out var sourceRefusal
+        )) {
+            slot = -1;
+            return (WorldCompanionRefusal.Full, sourceRefusal);
+        }
+        return null;
+    }
+    // Whether this commit may land a leased companion: the ticket it carries is the one leased, and home confirmed, for
+    // this commit, the grant at the epoch the lease expects.
+    private bool CommitConfirmed(WorldTransferCompanion? carried, WorldTransferKey key, WorldTransferReservationMember leased) => (
+        (carried?.Ticket is { } ticket) &&
+        (leased.Companion?.Ticket == ticket) &&
+        (m_commitConfirmations is { } confirmed) &&
+        confirmed.TryGetValue(key: (key, ticket.Incarnation), value: out var next) &&
+        (next == ticket.Epoch)
+    );
+    // The arrival narrowed to the members at `ordinals`, in order, each carrying its id explicitly.
+    private static WorldCrossingArrival Narrowed(WorldCrossingArrival arrival, IReadOnlyList<int> ordinals) => new(
+        Members: [.. ordinals.Select(selector: ordinal => arrival.Members[ordinal] with { MemberId = arrival.Request.Members[ordinal].IdAt(ordinal: ordinal) })],
+        Request: arrival.Request with {
+            Members = [.. ordinals.Select(selector: ordinal => arrival.Request.Members[ordinal] with { MemberId = arrival.Request.Members[ordinal].IdAt(ordinal: ordinal) })],
+        },
+        Slots: [.. ordinals.Select(selector: ordinal => arrival.Slots[ordinal])]
+    );
+    /// <summary>Returns the request-local ids a committed transfer landed here, or <see langword="null"/> when this
+    /// destination holds no commit for the key (none yet, refused, or acknowledged).</summary>
+    /// <param name="sourceAuthority">The source namespace.</param>
+    /// <param name="transferId">The transfer id.</param>
+    /// <returns>The landed ids, or <see langword="null"/>.</returns>
+    public IReadOnlyList<int>? Landed(string sourceAuthority, ulong transferId) => (m_committedLanded.TryGetValue(
+        key: new WorldTransferKey(SourceAuthority: sourceAuthority, TransferId: transferId),
+        value: out var landed
+    )
+        ? landed
+        : null);
+    // Whether an active body here is the incarnation.
+    private bool EmbodiesIncarnation(WorldEntityAddress incarnation) {
+        for (var index = 0; (index < m_server.Population.Capacity); index++) {
+            if (
+                m_server.Population.IsActive(index: index) &&
+                (m_server.Population.ResolveIncarnation(authority: m_server.AuthorityIdentity, index: index) == incarnation)
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Refuses a peer cohort whose humans would exceed the networkPlayers cap once every human already admitted and every
@@ -1635,6 +1943,9 @@ public sealed partial class WorldTransferEscrow {
             }
             if (!reservationIncarnations.Add(item: mobility.Incarnation)) {
                 return $"traveler {(index + 1)} repeats mobility incarnation {mobility.Incarnation}";
+            }
+            if (request.Members[index].Companion is not null) {
+                continue;
             }
             if (m_mobilityLeases.TryGetValue(
                 key: mobility.Incarnation,
@@ -1882,6 +2193,7 @@ public sealed partial class WorldTransferEscrow {
 
         m_relanding = true;
         m_relandOutcome = recorded;
+        m_relandReadopted = arrival.Readopted;
         m_relandRolledBack = false;
 
         try {
@@ -1906,6 +2218,7 @@ public sealed partial class WorldTransferEscrow {
         } finally {
             m_relanding = false;
             m_relandOutcome = null;
+            m_relandReadopted = [];
             m_relandRolledBack = false;
         }
     }

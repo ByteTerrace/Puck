@@ -32,6 +32,32 @@ public static class WorldWireLeaves {
         reader.ReadInt32(), WorldWireCodec.ReadPrincipal(ref reader),
         reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r)),
         reader.ReadArray("pending federated input", static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r), 1024));
+    /// <summary>Writes a crossing member's request-local id and its optional companion leaf.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="memberId">The request-local id, negative for the member's ordinal.</param>
+    /// <param name="companion">The companion leaf, or <see langword="null"/>.</param>
+    public static void WriteMemberIdentity(WireWriter writer, int memberId, WorldTransferCompanion? companion) {
+        writer.WriteInt32(value: memberId);
+        writer.WriteOptionalClass(
+            value: companion,
+            writeValue: WriteTransferCompanion
+        );
+    }
+    /// <summary>Reads what <see cref="WriteMemberIdentity"/> wrote, refusing an id below <c>-1</c>.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The member id and companion leaf.</returns>
+    public static (int MemberId, WorldTransferCompanion? Companion) ReadMemberIdentity(ref WireReader reader) {
+        var memberId = reader.ReadInt32();
+
+        if (!reader.Failed && (memberId < -1)) {
+            reader.Fail(
+                detail: $"member id {memberId} is negative",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return (memberId, reader.ReadOptionalClass(readValue: static (ref WireReader r) => ReadTransferCompanion(reader: ref r)));
+    }
     /// <summary>Writes what a crossing member carries as a companion: its role, followed member, title authority, driver
     /// pin and custody ticket.</summary>
     /// <param name="writer">The writer.</param>

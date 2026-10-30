@@ -62,13 +62,23 @@ public sealed partial class WorldServer {
             expectedBorder: expectedBorder
         );
     /// <inheritdoc cref="WorldTick.CommitTransfer"/>
-    public WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
-        m_tick.CommitTransfer(
-            members: members,
+    public WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var key = new WorldTransferKey(
+            SourceAuthority: sourceAuthority,
+            TransferId: transferId
+        );
+
+        return m_tick.CommitTransfer(
+            confirmed: ConfirmCompanionHops(
+                key: key,
+                tickets: (members ?? []).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>()
+            ),
+            members: members!,
             reason: out reason,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         );
+    }
     /// <inheritdoc cref="WorldTick.ConstrainTransferAuthorities"/>
     public void ConstrainTransferAuthorities(Func<string, bool> allowed) => m_tick.ConstrainTransferAuthorities(allowed: allowed);
     /// <inheritdoc cref="WorldTick.DescribeFields"/>
@@ -123,7 +133,20 @@ public sealed partial class WorldServer {
             previous: previous
         );
     /// <inheritdoc cref="WorldTick.ReserveTransfer"/>
-    public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) => m_tick.ReserveTransfer(request: request);
+    public WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+
+        return m_tick.ReserveTransfer(
+            confirmed: ConfirmCompanionHops(
+                key: new WorldTransferKey(
+                    SourceAuthority: request.SourceAuthority,
+                    TransferId: request.TransferId
+                ),
+                tickets: (request.Members ?? []).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>()
+            ),
+            request: request
+        );
+    }
     /// <inheritdoc cref="WorldTick.RetireTransferredMobility"/>
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) => m_tick.RetireTransferredMobility(mobility: in mobility);
     /// <inheritdoc cref="WorldTick.Step"/>

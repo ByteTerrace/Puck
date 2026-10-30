@@ -115,6 +115,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // TryDescribeDocumentSharing.
     private readonly Dictionary<string, bool> m_documentShared = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, WorldRemoteAuthority> m_remoteAuthorities = new(comparer: StringComparer.Ordinal);
+    // The title authorities a hosted authority reaches by identity: every admitted row, and every remote authority this
+    // host has opened. Read from any thread a reservation or commit arrives on, so it is concurrent.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IWorldCustodyHome> m_custodyHomes = new(comparer: StringComparer.Ordinal);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<WorldRemoteAuthority, byte> m_remoteCustodyHomes = new();
     private readonly Dictionary<(string Source, string Destination, string Endpoint), WorldRemoteAuthority> m_recoveredRemoteAuthorities = new();
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<WorldAuthorityEndpoint> m_submittedEndpoints = [];
@@ -276,6 +280,20 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The one leave-standing predicate both the party pre-check and the detach itself ask. A World principal is
     // admitted structurally over a body it authors — it holds no grant row by construction — and refused by name
     // over any body a seat or an admitted peer drives.
+    // Reaches a companion's title authority by identity: a hosted row, or a remote authority this host opened whose
+    // authenticated peer namespace is that identity.
+    private IWorldCustodyHome? ResolveCustodyHome(string authority) {
+        if (m_custodyHomes.TryGetValue(key: authority, value: out var home)) {
+            return home;
+        }
+        foreach (var remote in m_remoteCustodyHomes.Keys) {
+            if (string.Equals(a: remote.PeerAuthority, b: authority, comparisonType: StringComparison.Ordinal)) {
+                return remote;
+            }
+        }
+        return null;
+    }
+    private void RegisterRemoteCustodyHome(WorldRemoteAuthority remote) => _ = m_remoteCustodyHomes.TryAdd(key: remote, value: 0);
     private static bool AllowsLeave(WorldServer server, Principal principal, int slot, out string denial) {
         if (principal.Kind == PrincipalKind.World) {
             denial = "that body is driven by a seat or an admitted peer, and the world's own program never travels on their behalf";
@@ -361,6 +379,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             value: out var travelerRoute
         )
         ) {
+            _ = m_remoteCustodyHomes.TryRemove(key: travelerRoute, value: out _);
             travelerRoute.Dispose();
             if (m_authorityEndpoints.Remove(
                 key: locationEndpoint.Identity,
@@ -419,6 +438,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         foreach (var authority in m_recoveredRemoteAuthorities.Values) { authority.Dispose(); }
 
         m_instances.Clear();
+        m_custodyHomes.Clear();
+        m_remoteCustodyHomes.Clear();
         m_remoteAuthorities.Clear();
         m_recoveredRemoteAuthorities.Clear();
         m_authorityEndpoints.Clear();
@@ -1338,6 +1359,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             }
         }
 
+        if (m_instances.TryGetValue(key: name, value: out var stopping)) {
+            _ = m_custodyHomes.TryRemove(item: new KeyValuePair<string, IWorldCustodyHome>(stopping.Server.AuthorityIdentity, stopping.Server));
+        }
         _ = m_instances.Remove(key: name);
         _ = m_deferredReaps.Remove(item: name);
         ForgetResolvedDocuments();
@@ -1464,7 +1488,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         row.Server.TransferForwarder = this;
+        row.Server.CustodyHomes = ResolveCustodyHome;
         m_instances[row.Name] = row;
+        m_custodyHomes[row.Server.AuthorityIdentity] = row.Server;
         _ = m_issuedAuthorities.Add(item: row.Server.AuthorityIdentity);
         if (
             row.Server.AuthorityIdentity.StartsWith(

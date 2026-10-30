@@ -278,6 +278,17 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // The companions following this crossing's travelers join its cohort, each named by its member id and bound to
+        // the member it follows; each crosses only under a hop its title authority grants.
+        var companions = CompanionsFollowing(
+            members: members,
+            source: source
+        );
+
+        if (companions.Count > 0) {
+            members = [.. members, .. companions.Select(selector: static companion => companion.Slot)];
+        }
+
         // Reserve through the destination authority's escrow even when both authorities happen to be colocated.
         // Loopback is only a transport optimization beneath this contract; it is not a second transfer path.
         var sourceTick = (source.Server.NextInputTick - 1UL);
@@ -329,9 +340,12 @@ public sealed partial class WorldInstanceHost {
             // A human is a seat or an admitted remote human, never read from its control source. Anything else (a
             // companion an addon drives, a census bot) crosses autonomous: its driver stays here, so a Live source
             // crosses as Idle, which the destination authors itself without spending its networkPlayers cap.
-            var human = ((sourceSlot < source.Server.Population.LocalSeatCount) || source.Server.Population.IsAdmittedPeer(bodyIndex: sourceSlot));
+            var companion = companions.FirstOrDefault(predicate: candidate => (candidate.Slot == sourceSlot)).Leaf;
+            var human = ((companion is null) && ((sourceSlot < source.Server.Population.LocalSeatCount) || source.Server.Population.IsAdmittedPeer(bodyIndex: sourceSlot)));
 
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
+                Companion: companion,
+                MemberId: reservationIndex,
                 Principal: MemberTravelPrincipal(
                     server: source.Server,
                     transfer: in transfer,
@@ -359,7 +373,8 @@ public sealed partial class WorldInstanceHost {
             Border: transfer.Border,
             BorderCapacity: transfer.BorderCapacity,
             PartyAllOrNothing: transfer.PartyAllOrNothing,
-            PeerAdmission: (reservationMembers.Any(predicate: static member => !member.Source.IsLive) || members.Any(predicate: slot => (slot >= source.Server.Population.LocalSeatCount))),
+            // A companion lands through the destination's entity door whatever the rest of the cohort does.
+            PeerAdmission: (reservationMembers.Any(predicate: static member => ((member.Companion is null) && !member.Source.IsLive)) || members.Where(predicate: (_, ordinal) => (reservationMembers[ordinal].Companion is null)).Any(predicate: slot => (slot >= source.Server.Population.LocalSeatCount))),
             Members: reservationMembers,
             SourceFloor: SettledTransferFloor(
                 source: source,
@@ -402,7 +417,43 @@ public sealed partial class WorldInstanceHost {
             source.AllocatedTransferIds = allocated;
         }
 
+        if (companions.Count > 0) {
+            var keep = Enumerable.Repeat(element: true, count: members.Length).ToArray();
+
+            AuthorizeCompanions(
+                destination: (targetAuthority.Local?.Server.AuthorityIdentity ?? targetAuthority.Remote!.PeerAuthority),
+                keep: keep,
+                key: new WorldTransferKey(
+                    SourceAuthority: sourceAuthority,
+                    TransferId: transfer.TransferId
+                ),
+                reservationMembers: reservationMembers,
+                source: source
+            );
+            members = [.. members.Where(predicate: (_, ordinal) => keep[ordinal])];
+            reservationMembers = [.. reservationMembers.Where(predicate: (_, ordinal) => keep[ordinal])];
+            reservationRequest = reservationRequest with { Members = reservationMembers };
+        }
+
         var reservation = targetAuthority.Reserve(request: reservationRequest);
+
+        if (reservation.Accepted) {
+            // The destination decides each companion on its own: a refused one stays here, and the cohort that departs
+            // is exactly the members it leased, by id.
+            var leasedIds = reservation.LeasedIds(request: reservationRequest);
+            var leased = Enumerable.Range(start: 0, count: reservationMembers.Length).Where(predicate: ordinal => leasedIds.Contains(value: reservationMembers[ordinal].IdAt(ordinal: ordinal))).ToArray();
+
+            foreach (var refusal in reservation.Refusals) {
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} member {refusal.MemberId} stays — '{targetName}' refused it ({refusal.Reason}: {refusal.Detail})]"
+                    );
+                }
+            }
+            members = [.. leased.Select(selector: ordinal => members[ordinal])];
+            reservationMembers = [.. leased.Select(selector: ordinal => reservationMembers[ordinal])];
+        }
 
         if (!reservation.Accepted) {
             var capacityRefusal = (reservation.Reason.Contains(
@@ -725,6 +776,8 @@ public sealed partial class WorldInstanceHost {
             }
 
             commitMembers.Add(item: new WorldTransferCommitMember(
+                Companion: reservationMembers[index].Companion,
+                MemberId: reservationMembers[index].MemberId,
                 Profile: profile?.Project(),
                 Arrival: ((transfer.Arrival == WorldPortalArrival.Mapped)
                     ? WorldTransferArrival.Mapped
@@ -1881,6 +1934,7 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
+        SettleOwnHops();
         ReapDeferred();
     }
     /// <summary>Queues a same-process transfer for this host's next <see cref="DrainPendingTransfers"/> call —

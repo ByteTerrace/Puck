@@ -24,11 +24,18 @@ public static partial class WorldAuthorityCheckpointCodec {
             member: member,
             writer: writer
         );
+        WorldWireLeaves.WriteMemberIdentity(
+            companion: member.Companion,
+            memberId: member.MemberId,
+            writer: writer
+        );
     }
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
         var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
+        var motion = WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader);
+        var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
 
-        return (WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader) with { Profile = profile });
+        return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
     }
     private static void WriteReservationMember(WireWriter writer, WorldTransferReservationMember member) {
         WritePrincipal(
@@ -51,6 +58,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: WorldWireLeaves.WriteMobility
         );
         writer.WriteBoolean(value: member.RemoteHuman);
+        WorldWireLeaves.WriteMemberIdentity(
+            companion: member.Companion,
+            memberId: member.MemberId,
+            writer: writer
+        );
     }
     private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader) {
         var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
@@ -63,11 +75,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
         var remoteHuman = reader.ReadBoolean();
+        var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
 
         return new WorldTransferReservationMember(
             BodyColor: bodyColor,
             CatalogRig: catalogRig,
+            Companion: companion,
             Identity: identity,
+            MemberId: memberId,
             Mobility: mobility,
             PreferredSlot: preferredSlot,
             Principal: principal,
@@ -200,6 +215,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: committed.Incarnations,
             writeItem: WorldWireLeaves.WriteEntityAddress
         );
+        writer.WriteArray(
+            items: committed.Landed,
+            writeItem: static (w, id) => w.WriteInt32(value: id)
+        );
     }
     private static WorldTransferCommittedCheckpoint ReadCommitted(ref WireReader reader) {
         var key = ReadTransferKey(reader: ref reader);
@@ -220,10 +239,16 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r),
             maximum: MaxCollectionCount
         );
+        var landed = reader.ReadArray(
+            field: "committed landed members",
+            readItem: static (ref WireReader r) => r.ReadInt32(),
+            maximum: MaxCollectionCount
+        );
 
         return new WorldTransferCommittedCheckpoint(
             Incarnations: incarnations,
             Key: key,
+            Landed: landed,
             Members: members,
             Principals: principals
         );

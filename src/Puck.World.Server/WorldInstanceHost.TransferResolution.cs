@@ -691,6 +691,7 @@ public sealed partial class WorldInstanceHost {
                             narrationHub: m_narration
                         );
                         m_remoteAuthorities[resolvedName] = remote;
+                        RegisterRemoteCustodyHome(remote: remote);
                     }
 
                     authority = new WorldPeerCall(
@@ -1009,6 +1010,7 @@ public sealed partial class WorldInstanceHost {
                 );
 
                 m_remoteAuthorities[instanceName] = remote;
+                RegisterRemoteCustodyHome(remote: remote);
                 definition = loaded;
                 attach = remote.AttachSink;
                 reason = string.Empty;
@@ -1143,6 +1145,27 @@ public sealed partial class WorldInstanceHost {
                 ? Local.Server.ReserveTransfer(request: request)
                 : Remote!.Reserve(request: request with { PeerAdmission = true })
         ));
+        public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
+            if (Fault is not null) {
+                return Fault.TryLanded(
+                    landed: out landed,
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                );
+            }
+            if (Local is not null) {
+                landed = Local.Server.TransferLanded(
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                );
+                return true;
+            }
+            return Remote!.TryLanded(
+                landed: out landed,
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            );
+        }
         public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
             if (Fault is not null) {
                 return Fault.TryStatus(

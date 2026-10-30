@@ -896,12 +896,17 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision along the [custody protocol](companion-redesign.md) from step 2 of its
-build plan (member ids and tickets, then hop authorization and verification);
-step 1, the custody records and their reducer (`WorldCompanionCustody`, folded
-by checkpoint restore, crossing-log recovery and the tape's `Custody` entry, and
-by the authoritative hash), stands with its laws in `CompanionCustodyLawTests`.
-The companion still lands inert in the live debug world. The protocol is
+decision along the [custody protocol](companion-redesign.md) from step 4 of its
+build plan (settlement by the destination's word). Steps 1 to 3 stand: the
+custody records and their reducer, member ids and per-member verdicts, and hop
+authorization and verification (laws in `CompanionCustodyLawTests`,
+`CompanionCrossingLawTests` and `CompanionCustodyConformanceLawTests`). Until
+the later steps land: an onward hop's title stays pending (step 4 settles it);
+home refuses a companion coming back through a hop (step 5 builds the return
+and re-adoption); an arriving companion has no driver and wears the default kit
+and look (step 9); a custodian reaches a remote home only through a remote
+authority its host already opened. The debug world's faerie declares no role
+yet, so it does not travel. The protocol is
 checked by the `CompanionCustodyModel` law in `tests/Puck.World.Protocol.Tests`,
 which the build follows as its oracle. Then the uncertain crossing, opened by a
 two-silo failover witness.

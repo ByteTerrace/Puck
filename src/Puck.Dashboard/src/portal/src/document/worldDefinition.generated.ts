@@ -77,6 +77,7 @@ export type WorldDefinition = {
   timeline?: WorldTimelineSection | null;
   commands?: (WorldConsoleCommand | null)[] | null;
   replays?: (WorldScopedReplay | null)[] | null;
+  roles?: (WorldRole | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -7749,6 +7750,14 @@ export type WorldPlacementInhabit = {
    * The region and deterministic fill sequence that place the bodies relative to the placement root.
    */
   distribution?: WorldDistribution | null;
+  /**
+   * The name of the companion role (WorldRole) the body holds: it goes where the player it follows goes, under the role declaration of each world it enters. Absent: the body holds no role.
+   */
+  role?: string | null;
+  /**
+   * The 0-based local seat whose player the role's body follows. Required with Role and refused without it.
+   */
+  follows?: number | null;
 };
 
 export type WorldPlacementInhabitCount = number | {
@@ -11319,6 +11328,29 @@ export type WorldRigid = {
    * The angular-velocity decay rate, per second, on the same terms as LinearDamping. Non-negative; zero (the default) applies none.
    */
   angularDamping?: number;
+};
+
+export type WorldRole = {
+  /**
+   * The role's name, unique within the document.
+   */
+  name: string;
+  /**
+   * The Name of this world's own addon that drives the role: the same pinned driver a visitor prefers, or one the author substitutes. Exactly one of this and Accept.
+   */
+  driver?: string | null;
+  /**
+   * Whether this world runs a visitor's own preferred driver, resolved by its pin.
+   */
+  accept?: boolean;
+  /**
+   * The Name an arriving companion moves under. Absent: the default peer kit. A companion re-adopted by its own home placement wears that placement's kit instead.
+   */
+  kit?: string | null;
+  /**
+   * The look an arriving companion wears. Absent: the default look.
+   */
+  look?: string | null;
 };
 
 /**

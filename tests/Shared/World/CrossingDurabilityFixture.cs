@@ -233,15 +233,20 @@ internal sealed class CrossingWorld : IDisposable {
     /// authority's durable checkpoint before any crossing.</summary>
     /// <param name="beforeFirstStep">Runs once both authorities stand, before their first step: where a tape that
     /// records them arms.</param>
-    public static CrossingWorld Build(Action<CrossingWorld>? beforeFirstStep = null) {
+    /// <param name="sourceDefinition">The source's document, or <see langword="null"/> for the base fixture.</param>
+    /// <param name="destinationDefinition">The destination's document, or <see langword="null"/> for the base
+    /// fixture.</param>
+    /// <param name="destinationLandingRefusal">The destination escrow's landing policy at each commit member's
+    /// ordinal, or <see langword="null"/> to admit every member.</param>
+    public static CrossingWorld Build(Action<CrossingWorld>? beforeFirstStep = null, WorldDefinition? sourceDefinition = null, WorldDefinition? destinationDefinition = null, Func<int, string?>? destinationLandingRefusal = null) {
         var machineId = Guid.NewGuid();
         var root = new TemporaryDirectory(prefix: "puck-crossing-durability-");
         var host = NewHost(
             machineId: machineId,
             root: root
         );
-        var source = HostRow.Build(name: "row-a");
-        var destination = HostRow.Build(name: "row-b");
+        var source = HostRow.Build(definition: sourceDefinition, name: "row-a");
+        var destination = HostRow.Build(definition: destinationDefinition, landingRefusal: destinationLandingRefusal, name: "row-b");
         var sourceLog = new MemoryCrossingStore();
         var destinationLog = new MemoryCrossingStore();
         var sourceWriter = sourceLog.Activate();

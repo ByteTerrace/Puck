@@ -10,9 +10,13 @@ namespace Puck.World.Server;
 /// <param name="Members">The committed travelers, in member order.</param>
 /// <param name="Readopted">The companions this arrival re-adopted at their home: each lands in its held slot and its
 /// title comes home one epoch above the custody it left.</param>
-public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null) {
+/// <param name="Generations">The occupant generation each member took where it landed, in member order; empty before the
+/// commit has landed it.</param>
+public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null, IReadOnlyList<int>? Generations = null) {
     /// <summary>Gets the companions this arrival re-adopted at their home; empty for one that re-adopts none.</summary>
     public IReadOnlyList<WorldEntityAddress> Readopted { get; init; } = (Readopted ?? []);
+    /// <summary>Gets the occupant generation each member took where it landed, in member order.</summary>
+    public IReadOnlyList<int> Generations { get; init; } = (Generations ?? []);
     /// <summary>Gets the handoff token this arrival committed under.</summary>
     public WorldTransferKey Key => new(
         SourceAuthority: Request.SourceAuthority,

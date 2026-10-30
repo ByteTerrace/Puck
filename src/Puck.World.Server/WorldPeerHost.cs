@@ -870,6 +870,86 @@ public sealed class WorldPeerHost : IDisposable {
         credential.RequireValid();
         return operation();
     });
+    // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
+    // The destination is the namespace this connection authenticated as, never one the body names.
+    private async Task<bool> ServeHopQueryAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeHopQuery(
+            body: body.Span,
+            failure: out var failure,
+            incarnations: out var incarnations,
+            key: out var key
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"hop query — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        var answers = ExecuteAuthenticated(credential: credential, operation: () => m_server.ConfirmHops(
+            destination: sourceAuthority,
+            incarnations: incarnations,
+            key: key
+        ))!;
+
+        await WorldFederationCodec.WriteResponseAsync(
+            body: WorldFederationCodec.EncodeHopQueryReply(answers: answers),
+            ct: ct,
+            kind: WorldFederationResponse.HopQueryReply,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
+    // A custodian asks this authority, as a companion's title authority, to authorize its onward hop. The custodian is
+    // the namespace this connection authenticated as, and the crossing's key must be one that namespace minted.
+    private async Task<bool> ServeHopRequestAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeHopRequest(
+            body: body.Span,
+            destination: out var destination,
+            failure: out var failure,
+            key: out var key,
+            members: out var members
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"hop request — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+        if (!string.Equals(a: key.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the hop request names a transfer namespace this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        var answers = ExecuteAuthenticated(credential: credential, operation: () => m_server.RequestHop(
+            destination: destination,
+            key: key,
+            members: members,
+            source: sourceAuthority
+        ));
+
+        await WorldFederationCodec.WriteResponseAsync(
+            body: WorldFederationCodec.EncodeHopAnswer(answers: answers),
+            ct: ct,
+            kind: WorldFederationResponse.HopAnswer,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
     private async Task<bool> ServeCommitAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
         if (!WorldFederationCodec.TryDecodeCommit(
             body: body.Span,
@@ -976,6 +1056,24 @@ public sealed class WorldPeerHost : IDisposable {
 
             case WorldFederationRequest.Commit:
                 return await ServeCommitAsync(
+                    body: body,
+                    credential: credential,
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.HopQuery:
+                return await ServeHopQueryAsync(
+                    body: body,
+                    credential: credential,
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.HopRequest:
+                return await ServeHopRequestAsync(
                     body: body,
                     credential: credential,
                     ct: ct,
@@ -1437,13 +1535,25 @@ public sealed class WorldPeerHost : IDisposable {
         }
 
         if (kind == WorldFederationRequest.Status) {
-            var status = ExecuteAuthenticated(credential: credential, operation: () => m_server.TransferStatus(
-                sourceAuthority: sourceAuthority,
-                transferId: transferId
-            ));
+            var (status, landed) = ExecuteAuthenticated(credential: credential, operation: () => {
+                var answered = m_server.TransferStatus(
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                );
+
+                return (answered, ((answered == WorldTransferStatus.Committed)
+                    ? m_server.TransferLanded(
+                        sourceAuthority: sourceAuthority,
+                        transferId: transferId
+                    )
+                    : null));
+            });
 
             await WorldFederationCodec.WriteResponseAsync(
-                body: new[] { ((byte)status) },
+                body: WorldFederationCodec.EncodeStatus(
+                    landed: landed,
+                    status: status
+                ),
                 ct: ct,
                 kind: WorldFederationResponse.Status,
                 stream: stream

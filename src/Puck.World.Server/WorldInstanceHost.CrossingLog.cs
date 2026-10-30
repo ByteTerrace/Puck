@@ -78,7 +78,9 @@ public sealed partial class WorldInstanceHost {
     // Written ahead of the acknowledgement for an arrival, and ahead of the restore for a cohort that stays: a restart
     // then redoes the outcome this source already acted on instead of asking the destination again. A settlement
     // that does not land keeps the transfer where it is, and the next drain tries again.
-    private bool TrySettle(InDoubtTransfer pending, bool arrived) {
+    // A commit member's request-local id: the one it carries, or its ordinal.
+    private static int MemberIdAt(IReadOnlyList<WorldTransferCommitMember> commits, int ordinal) => ((commits[ordinal].MemberId < 0) ? ordinal : commits[ordinal].MemberId);
+    private bool TrySettle(InDoubtTransfer pending, bool arrived, IReadOnlyList<int>? landed = null) {
         if (pending.SettlementRecorded) {
             return true;
         }
@@ -110,7 +112,9 @@ public sealed partial class WorldInstanceHost {
             record: new WorldCrossingRecord.Settlement(
                 Forwarded: forwarded,
                 Landed: (arrived
-                    ? [.. Enumerable.Range(start: 0, count: pending.MemberCount)]
+                    ? (landed is { } ids
+                        ? [.. ids]
+                        : [.. Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Select(selector: ordinal => MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))])
                     : []),
                 Retired: [],
                 TransferId: pending.Transfer.TransferId
@@ -179,12 +183,14 @@ public sealed partial class WorldInstanceHost {
                         record: departure.Transfer,
                         row: row
                     );
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.Apply(record: departure));
                     break;
                 case WorldCrossingRecord.Settlement settlement:
                     RedoSettlement(
                         row: row,
                         settlement: settlement
                     );
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.Apply(record: settlement));
                     break;
                 case WorldCrossingRecord.Lease lease:
                     row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoLease(
@@ -204,7 +210,7 @@ public sealed partial class WorldInstanceHost {
                 case WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
                     WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or
                     WorldCrossingRecord.Stranded or WorldCrossingRecord.GraceElapsed:
-                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.Apply(record: entry.Record));
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.ApplyCustodyRecord(record: entry.Record));
                     break;
                 default:
                     throw new ArgumentException(
@@ -312,6 +318,23 @@ public sealed partial class WorldInstanceHost {
 
         if (settlement.Arrived) {
             if (index >= 0) {
+                // A member the settlement names neither landed nor retired is restored: a companion the destination
+                // left out of the commit.
+                var remaining = m_inDoubtTransfers[index];
+                var unlanded = Enumerable.Range(start: 0, count: remaining.CommitMembers.Count).Where(predicate: ordinal => {
+                    var id = MemberIdAt(commits: remaining.CommitMembers, ordinal: ordinal);
+
+                    return !settlement.Landed.Contains(value: id) && !settlement.Retired.Contains(value: id);
+                }).ToArray();
+
+                if (unlanded.Length > 0) {
+                    _ = RestoreDetachedMembers(
+                        commits: [.. unlanded.Select(selector: ordinal => remaining.CommitMembers[ordinal])],
+                        members: [.. unlanded.Select(selector: ordinal => remaining.Landed[ordinal])],
+                        source: row,
+                        transferId: settlement.TransferId
+                    );
+                }
                 m_inDoubtTransfers.RemoveAt(index: index);
             }
             foreach (var (incarnation, body) in PrepareForwardedBodies(

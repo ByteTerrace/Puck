@@ -20,9 +20,44 @@ public sealed partial class WorldInstanceHost {
         return mask;
     }
     private bool TryPublishCommittedTransfer(InDoubtTransfer pending) {
-        if (!m_instances.ContainsKey(key: pending.Transfer.SourceInstance)) { return false; }
+        if (!m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var source)) { return false; }
         try {
             var transfer = pending.Transfer;
+
+            // The destination may have left a companion out of the commit: the settlement names who landed, and every
+            // other member is restored here before the rest publish.
+            if (!pending.SettlementRecorded && (pending.CommitMembers.Any(predicate: static member => member.Companion is not null))) {
+                if (!pending.TargetAuthority!.Value.TryLanded(
+                    landed: out var landedIds,
+                    sourceAuthority: pending.SourceAuthority,
+                    transferId: transfer.TransferId
+                )) {
+                    return false;
+                }
+                if (landedIds is not null) {
+                    var unlanded = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !landedIds.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
+
+                    if (unlanded.Length > 0) {
+                        if (!TrySettle(
+                            arrived: true,
+                            landed: landedIds,
+                            pending: pending
+                        )) {
+                            return false;
+                        }
+                        _ = RestoreDetachedMembers(
+                            commits: [.. unlanded.Select(selector: ordinal => pending.CommitMembers[ordinal])],
+                            members: [.. unlanded.Select(selector: ordinal => pending.Landed[ordinal])],
+                            source: source,
+                            transferId: transfer.TransferId
+                        );
+                        foreach (var ordinal in unlanded.Reverse()) {
+                            pending.Landed.RemoveAt(index: ordinal);
+                            pending.CommitMembers.RemoveAt(index: ordinal);
+                        }
+                    }
+                }
+            }
 
             PublishCommittedTransfer(
                 in transfer,
@@ -264,6 +299,7 @@ public sealed partial class WorldInstanceHost {
                             }
                         );
                         m_remoteAuthorities[routeName] = routeAuthority;
+                        RegisterRemoteCustodyHome(remote: routeAuthority);
                         publishedEndpoint = EndpointFor(
                             authority: routeAuthority,
                             identity: routeName,

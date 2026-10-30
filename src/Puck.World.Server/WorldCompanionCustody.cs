@@ -118,6 +118,11 @@ public sealed class WorldCompanionCustody {
     private readonly Dictionary<(WorldEntityAddress Incarnation, int Visit), ulong> m_stranded = new();
     private readonly HashSet<(WorldEntityAddress Incarnation, int Visit)> m_graceElapsed = new();
     private readonly HashSet<WorldEntityAddress> m_retired = new();
+    private readonly Dictionary<WorldEntityAddress, (WorldTransferKey Arrival, WorldCompanionBinding Binding, WorldEntityAddress Follows, WorldTransferCompanion Carried)> m_bindings = new();
+    // This authority's departures that carried companions, by transfer id: each companion's member id and incarnation;
+    // and the landed member ids of each one's settlement.
+    private readonly Dictionary<ulong, List<(int MemberId, WorldEntityAddress Incarnation)>> m_ownDepartures = new();
+    private readonly Dictionary<ulong, int[]> m_ownSettlements = new();
 
     /// <summary>Initializes a new instance of the <see cref="WorldCompanionCustody"/> class for one authority.</summary>
     /// <param name="authority">Reads the authority's identity: the namespace whose incarnations it holds titles
@@ -132,17 +137,23 @@ public sealed class WorldCompanionCustody {
     /// <summary>Gets every incarnation a custodian retired here on home's word.</summary>
     public IReadOnlyCollection<WorldEntityAddress> Retired => m_retired;
 
-    /// <summary>Returns whether <paramref name="record"/> is one this reducer folds: a custody kind, or an arrival
-    /// that re-adopted a companion at home.</summary>
+    /// <summary>Returns whether <paramref name="record"/> is of a shape this reducer can fold: a custody kind, an
+    /// arrival that landed or re-adopted a companion, a departure that carried one, or a settlement.</summary>
     /// <param name="record">The record.</param>
-    /// <returns><see langword="true"/> when <see cref="Apply"/> derives custody from it.</returns>
+    /// <returns><see langword="true"/> when <see cref="Apply"/> may derive custody from it.</returns>
     public static bool Folds(WorldCrossingRecord record) => record switch {
         WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
         WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or WorldCrossingRecord.Stranded or
-        WorldCrossingRecord.GraceElapsed => true,
-        WorldCrossingRecord.Arrival arrival => (arrival.Value.Readopted.Count > 0),
+        WorldCrossingRecord.GraceElapsed or WorldCrossingRecord.Settlement => true,
+        WorldCrossingRecord.Arrival arrival => ((arrival.Value.Readopted.Count > 0) || arrival.Value.Request.Members.Any(predicate: static member => member.Companion is not null)),
+        WorldCrossingRecord.Departure departure => departure.Transfer.CommitMembers.Any(predicate: static member => member.Companion is not null),
         _ => false,
     };
+    /// <summary>Returns whether this authority's custody depends on <paramref name="record"/>: one that
+    /// <see cref="Folds"/>, where a settlement counts only when it settles a departure that carried a companion.</summary>
+    /// <param name="record">The record.</param>
+    /// <returns><see langword="true"/> when <see cref="Apply"/> folds it.</returns>
+    public bool Concerns(WorldCrossingRecord record) => (Folds(record: record) && ((record is not WorldCrossingRecord.Settlement settlement) || m_ownDepartures.ContainsKey(key: settlement.TransferId)));
 
     /// <summary>Folds one durable record. A record this reducer does not fold (<see cref="Folds"/>) changes nothing.
     /// The fold is total: any prefix of an authority's records folds to a custody state.</summary>
@@ -151,9 +162,11 @@ public sealed class WorldCompanionCustody {
     public void Apply(WorldCrossingRecord record) {
         ArgumentNullException.ThrowIfNull(argument: record);
 
-        if (!Folds(record: record)) {
+        if (!Concerns(record: record)) {
             return;
         }
+        // The history and every fact derived from it read this authority's own copy, never the caller's collections.
+        record = Owned(record: record);
         m_history.Add(item: record);
         switch (record) {
             case WorldCrossingRecord.Hop hop:
@@ -247,7 +260,26 @@ public sealed class WorldCompanionCustody {
             case WorldCrossingRecord.GraceElapsed grace:
                 _ = m_graceElapsed.Add(item: (grace.Incarnation, grace.Visit));
                 break;
+            case WorldCrossingRecord.Departure departure: {
+                var carried = new List<(int, WorldEntityAddress)>();
+
+                for (var index = 0; (index < departure.Transfer.CommitMembers.Count); index++) {
+                    var member = departure.Transfer.CommitMembers[index];
+
+                    if (member.Companion?.Ticket is { } ticket) {
+                        carried.Add(item: (((member.MemberId < 0) ? index : member.MemberId), ticket.Incarnation));
+                    }
+                }
+                m_ownDepartures[departure.Transfer.TransferId] = carried;
+                break;
+            }
+            case WorldCrossingRecord.Settlement settlement:
+                m_ownSettlements[settlement.TransferId] = [.. settlement.Landed];
+                break;
             case WorldCrossingRecord.Arrival arrival:
+                foreach (var binding in Bindings(arrival: arrival.Value)) {
+                    m_bindings[binding.Companion] = (arrival.Value.Key, binding.Binding, binding.Follows, binding.Carried);
+                }
                 foreach (var incarnation in arrival.Value.Readopted) {
                     if (TitleFor(incarnation: incarnation) is not { } home) {
                         continue;
@@ -282,6 +314,9 @@ public sealed class WorldCompanionCustody {
         m_stranded.Clear();
         m_graceElapsed.Clear();
         m_retired.Clear();
+        m_bindings.Clear();
+        m_ownDepartures.Clear();
+        m_ownSettlements.Clear();
         foreach (var record in history) {
             Apply(record: record);
         }
@@ -373,6 +408,35 @@ public sealed class WorldCompanionCustody {
     /// <param name="visit">The visit.</param>
     /// <returns><see langword="true"/> once the elapse is recorded.</returns>
     public bool IsGraceElapsed(WorldEntityAddress incarnation, int visit) => m_graceElapsed.Contains(item: (incarnation, visit));
+    /// <summary>Returns the settlements home owes its own hops, each a record of its own: a hop whose departure this
+    /// authority settled arrived when the settlement landed the companion's member and did not otherwise; a hop with no
+    /// departure on record was abandoned and did not arrive. A departure still in doubt owes nothing yet. The caller
+    /// asks only when no crossing of this authority is between its hop record and its departure record.</summary>
+    /// <returns>Each owed settlement: the hop's key, the companion, and whether it arrived.</returns>
+    public IReadOnlyList<(WorldTransferKey Key, WorldEntityAddress Incarnation, bool Arrived)> OwedOwnHopSettlements() {
+        var owed = new List<(WorldTransferKey, WorldEntityAddress, bool)>();
+        var home = m_authority();
+
+        foreach (var ((key, incarnation), hop) in m_hops.OrderBy(keySelector: static pair => pair.Key.Key.TransferId).ThenBy(keySelector: static pair => pair.Key.Incarnation.Index)) {
+            if (
+                !string.Equals(a: hop.From, b: home, comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(a: key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) ||
+                m_hopsDone.Contains(item: (key, incarnation))
+            ) {
+                continue;
+            }
+            if (!m_ownDepartures.TryGetValue(key: key.TransferId, value: out var departed) || !departed.Any(predicate: carried => (carried.Incarnation == incarnation))) {
+                owed.Add(item: (key, incarnation, false));
+                continue;
+            }
+            if (m_ownSettlements.TryGetValue(key: key.TransferId, value: out var landed)) {
+                var memberId = departed.First(predicate: carried => (carried.Incarnation == incarnation)).MemberId;
+
+                owed.Add(item: (key, incarnation, landed.Contains(value: memberId)));
+            }
+        }
+        return owed;
+    }
     /// <summary>Returns the notices home owes and has not recorded: one per recall, and one per release.</summary>
     /// <returns>Each owed notice: the incarnation, what it tells, and the recall's epoch (zero for a release).</returns>
     public IReadOnlyList<(WorldEntityAddress Incarnation, WorldCustodyNotice What, ulong Epoch)> OwedNotices() {
@@ -400,6 +464,68 @@ public sealed class WorldCompanionCustody {
         }
     }
 
+    /// <summary>Returns the binding the arrival that landed <paramref name="incarnation"/> here recorded: the player
+    /// member it follows, the slot and generation that member landed at, and the followed member's incarnation.</summary>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="binding">The binding, when one is recorded.</param>
+    /// <param name="follows">The followed member's incarnation.</param>
+    /// <param name="arrival">The key of the arrival that recorded it.</param>
+    /// <param name="carried">The companion leaf it arrived with (its role, home and driver).</param>
+    /// <returns><see langword="true"/> when an arrival here bound the companion to a member landed with it.</returns>
+    public bool TryBinding(WorldEntityAddress incarnation, out WorldCompanionBinding binding, out WorldEntityAddress follows, out WorldTransferKey arrival, out WorldTransferCompanion? carried) {
+        if (m_bindings.TryGetValue(key: incarnation, value: out var bound)) {
+            (arrival, binding, follows, carried) = bound;
+            return true;
+        }
+        binding = default;
+        follows = default;
+        arrival = default;
+        carried = null;
+        return false;
+    }
+    /// <summary>Derives each landed companion's binding from an arrival: the member it follows by request-local id, bound
+    /// to the slot and generation that member landed at in the same arrival. A companion whose followed member did not
+    /// land with it is bound to nothing.</summary>
+    /// <param name="arrival">The arrival as it landed.</param>
+    /// <returns>Each bound companion, in member order, with its binding, the followed member's incarnation and the
+    /// companion leaf it carried.</returns>
+    public static IReadOnlyList<(WorldEntityAddress Companion, WorldCompanionBinding Binding, WorldEntityAddress Follows, WorldTransferCompanion Carried)> Bindings(WorldCrossingArrival arrival) {
+        ArgumentNullException.ThrowIfNull(argument: arrival);
+
+        var bound = new List<(WorldEntityAddress, WorldCompanionBinding, WorldEntityAddress, WorldTransferCompanion)>();
+        var members = arrival.Request.Members;
+
+        for (var index = 0; (index < members.Count); index++) {
+            if ((members[index].Companion is not { FollowsMember: { } followsId } carried) || (members[index].Mobility is not { } mobility)) {
+                continue;
+            }
+            for (var followed = 0; (followed < members.Count); followed++) {
+                if (
+                    (members[followed].IdAt(ordinal: followed) != followsId) ||
+                    (members[followed].Companion is not null) ||
+                    (members[followed].Mobility is not { } leader) ||
+                    (followed >= arrival.Generations.Count)
+                ) {
+                    continue;
+                }
+                bound.Add(item: (mobility.Incarnation, new WorldCompanionBinding(
+                    FollowsMember: followsId,
+                    Generation: arrival.Generations[followed],
+                    Slot: arrival.Slots[followed]
+                ), leader.Incarnation, carried));
+                break;
+            }
+        }
+        return bound;
+    }
+
+    private static WorldCrossingRecord Owned(WorldCrossingRecord record) => (WorldAuthorityCheckpointCodec.TryDecodeCrossingRecord(
+        bytes: WorldAuthorityCheckpointCodec.EncodeCrossingRecord(record: record),
+        reason: out var reason,
+        record: out var owned
+    )
+        ? owned!
+        : throw new ArgumentException(message: $"a custody record does not survive its own encoding — {reason}", paramName: nameof(record)));
     private bool IsHome(string authority) => string.Equals(a: authority, b: m_authority(), comparisonType: StringComparison.Ordinal);
     private Title? TitleFor(WorldEntityAddress incarnation) {
         if (!IsHome(authority: incarnation.Authority)) {
