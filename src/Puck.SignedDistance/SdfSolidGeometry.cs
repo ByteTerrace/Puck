@@ -17,17 +17,12 @@ namespace Puck.SignedDistance;
 /// half-height and extrusion half-depth 1, top half-width given by taper (default 0.5). Changing a value here changes the
 /// meaning of every persisted document that names the vocabulary.</remarks>
 public static class SdfSolidGeometry {
-    /// <summary>The inset corner radius of a Box, as a fraction of its smallest effective scale. Contact compilers
-    /// use this same value; the fillet retains the authored outer face extents.</summary>
-    private const float BoxRound = 0.04f;
-
-    /// <summary>Returns a Box's built-in inset fillet radius in the authored scale's units. Shared by shape emission
-    /// and analytic collision compilation.</summary>
-    public static float BoxCornerRadius(Vector3 scale) {
-        var effective = EffectiveScale(scale: scale);
-
-        return (BoxRound * MathF.Min(x: effective.X, y: MathF.Min(x: effective.Y, y: effective.Z)));
-    }
+    // A Box is sharp unless its document rounds it: its `rounding` is an inset fillet (the faces stay at the authored
+    // extents) that the contact compiler reads from the same field. A fillet built into every Box was sub-cell relief on
+    // nearly every box the bake meets (4% of a wall's or tread's half thickness, under the 15 mm floor of any bake
+    // cell): a union of touching boxes carried a groove along every seam and a crevice where a seam met a third face,
+    // which the contour drew as flipped slivers and holes, and every edge was a rounding under the cell that the contour
+    // had to shade around. A look is authored, never built into a primitive (AGENTS.md).
 
     private const float CapsuleRadius = 1f;
     private const float ConeHalfHeight = 1f;
@@ -257,9 +252,9 @@ public static class SdfSolidGeometry {
     /// <param name="profile">Optional Prism cross-section; null is the trapezoid.</param>
     /// <param name="lift">Prism only: how the profile becomes a solid — extruded along Z, or revolved about Y at the
     /// unit radial offset. Ignored by every other primitive.</param>
-    /// <param name="rounding">The edge-rounding radius, in the primitive's own unit space; admitted on Prism and
+    /// <param name="rounding">The edge-rounding radius, in the primitive's own unit space; admitted on Box, Prism and
     /// Cylinder (a Cone's sharp apex has no room, so its ceiling is zero) and ignored elsewhere. Clamped by
-    /// <see cref="SdfProgramBuilder.ClampRounding"/>.</param>
+    /// <see cref="SdfProgramBuilder.ClampRounding"/>, and on a Box by its smallest half-extent.</param>
     /// <param name="chamfer">The 45-degree edge-chamfer radius, in the primitive's own unit space; admitted on Box,
     /// Cylinder, and Prism (an extrude only — a revolve has no cap seam to bevel) and ignored elsewhere. A Box or
     /// Cylinder with a positive chamfer emits <see cref="SdfProgramBuilder.ChamferedRectangle"/> in place of its
@@ -321,9 +316,9 @@ public static class SdfSolidGeometry {
             (type == SdfSolidPrimitive.Box) &&
             (chamfer > 0f)
         ) {
-            // The plain Box arm's zero set is BoxHalfExtents with a BoxRound fillet; the chamfered Box keeps that outer
-            // extent and that fillet (the family's rounding lane, applied on top of the chamfer) so a chamfer going to
-            // zero lands on the plain Box. Analytic contact uses the same lifted-profile zero set, including its fillet.
+            // The plain Box arm's zero set is BoxHalfExtents; the chamfered Box keeps that outer extent (the authoring
+            // doors refuse a chamfer beside a rounding, so the family's rounding lane carries nothing here) so a chamfer
+            // going to zero lands on the plain Box. Analytic contact uses the same lifted-profile zero set.
             return chain.ChamferedRectangle(
                 blend: blend,
                 chamfer: chamfer,
@@ -333,7 +328,7 @@ public static class SdfSolidGeometry {
                 lift: SdfLift.Extrude,
                 liftAmount: BoxHalfExtents.Z,
                 material: material,
-                rounding: BoxRound,
+                rounding: rounding,
                 smooth: smooth
             );
         }
@@ -359,7 +354,7 @@ public static class SdfSolidGeometry {
             detail: detail,
             halfExtents: BoxHalfExtents,
             material: material,
-            round: BoxRound,
+            round: MathF.Min(x: rounding, y: MathF.Min(x: BoxHalfExtents.X, y: MathF.Min(x: BoxHalfExtents.Y, y: BoxHalfExtents.Z))),
             smooth: smooth
         ),
             SdfSolidPrimitive.Torus => chain.Torus(
@@ -463,7 +458,7 @@ public static class SdfSolidGeometry {
     /// <param name="lift">Prism only: extrude the profile along Z to <c>scale.z</c>, or revolve it about Y with
     /// <c>scale.z</c> as the radial offset (zero gives a solid of revolution). Ignored by every other
     /// primitive.</param>
-    /// <param name="rounding">The edge-rounding radius in world units; admitted on Prism and Cylinder (a Cone's
+    /// <param name="rounding">The edge-rounding radius in world units; admitted on Box, Prism and Cylinder (a Cone's
     /// ceiling is zero) and ignored elsewhere. An emission riding a <c>Scale</c> transform divides it by the largest scale component, so
     /// the local radius is the conservative one. Clamped by <see cref="SdfProgramBuilder.ClampRounding"/>.</param>
     /// <param name="chamfer">The 45-degree edge-chamfer radius in world units; admitted on Box, Cylinder, and Prism
@@ -587,8 +582,6 @@ public static class SdfSolidGeometry {
             );
         }
 
-        var boxRound = BoxCornerRadius(scale: effectiveScale);
-
         if (type == SdfSolidPrimitive.Prism) {
             RequireTaper(taper: taper);
 
@@ -606,12 +599,12 @@ public static class SdfSolidGeometry {
                 detail: detail
             );
         }
-        // The plain Box arm's faces sit at the scaled half-extents, as the transformed unit box's do, under one
-        // world-space corner radius inset from them (sdfBox erodes by it and offsets back out), so the field stays a true
-        // rounded-box distance at any aspect; the chamfered arm keeps the same zero set and the same fillet (riding the
-        // family's rounding lane on top of the chamfer), so the two share outer bounds and a chamfer going to zero lands
-        // on the plain Box.
+        // The plain Box arm's faces sit at the scaled half-extents, as the transformed unit box's do, under the authored
+        // world-space rounding inset from them (sdfBox erodes by it and offsets back out), so the field stays a true
+        // rounded-box distance at any aspect; the chamfered arm keeps the same zero set (the authoring doors refuse a
+        // chamfer beside a rounding), so the two share outer bounds and a chamfer going to zero lands on the plain Box.
         var boxExtents = (BoxHalfExtents * effectiveScale);
+        var boxRound = MathF.Min(x: rounding, y: MathF.Min(x: boxExtents.X, y: MathF.Min(x: boxExtents.Y, y: boxExtents.Z)));
 
         if (
             (type == SdfSolidPrimitive.Box) &&
@@ -780,8 +773,8 @@ public static class SdfSolidGeometry {
             Center: Vector3.Zero,
             HalfExtents: new Vector3(value: 1.0001f)
         ),
-            // The box's faces sit at its half-extents and its fillet is inset from them, so the bound is the box itself:
-            // the analytic contact provider collides a box as exactly this extent times its scale.
+            // The box's faces sit at its half-extents and an authored rounding is inset from them, so the bound is the
+            // box itself: the analytic contact provider collides a box as exactly this extent times its scale.
             SdfSolidPrimitive.Box => new(
             Center: Vector3.Zero,
             HalfExtents: BoxHalfExtents
@@ -968,7 +961,7 @@ public static class SdfSolidGeometry {
             return (radii * direction).Length();
         }
 
-        // KEEP IN SYNC with AppendScaledPrimitive's Box arms: the fillet is an inset in both spellings (sdfBox
+        // KEEP IN SYNC with AppendScaledPrimitive's Box arms: an authored rounding is an inset in both spellings (sdfBox
         // erodes its half-extents by the corner radius before offsetting back out; ChamferedRectangle insets by its
         // rounding), so the zero set is the half-extents lane itself, the scale per axis.
         if (type == SdfSolidPrimitive.Box) {
@@ -1236,6 +1229,18 @@ public static class SdfSolidGeometry {
 
                     break;
                 }
+            case SdfSolidPrimitive.Box: {
+                    // The rounding is inset from every face, so the smallest half-extent binds it.
+                    inradius = MathF.Min(
+                        x: MathF.Min(
+                            x: radial,
+                            y: axial
+                        ),
+                        y: effectiveScale.Z
+                    );
+
+                    break;
+                }
             default: {
                     return 0f;
                 }
@@ -1302,7 +1307,7 @@ public static class SdfSolidGeometry {
         );
         var reach = type switch {
             SdfSolidPrimitive.Prism => (MathF.Sqrt(x: 3f) * 1.0001f),
-            SdfSolidPrimitive.Box => (BoxHalfExtents.Length() + BoxRound),
+            SdfSolidPrimitive.Box => BoxHalfExtents.Length(),
             SdfSolidPrimitive.Torus => (TorusMajor + TorusMinor),
             SdfSolidPrimitive.Cylinder => MathF.Sqrt(x: ((CylinderRadius * CylinderRadius) + (CylinderHalfHeight * CylinderHalfHeight))),
             SdfSolidPrimitive.Capsule => (CapsuleEndpoint.Length() + CapsuleRadius),

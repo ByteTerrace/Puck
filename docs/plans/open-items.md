@@ -57,9 +57,10 @@ resolves their edits to this file at merge.
     headless, its look in the lead's window.
 11. [Residency and streaming](#residency-and-streaming): near-first has landed;
     next, GI on the same demand points and the measurements still open.
-12. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
-    inverted sheets along the divider; the colliders report's remaining reds are
-    the valley relief's ([the valley's terrain](#the-valleys-terrain)).
+12. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the valley
+    sectors' buried colliders and the gallery's sub-cell seams; the colliders
+    report's remaining reds are the valley relief's
+    ([the valley's terrain](#the-valleys-terrain)).
 13. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
     it in `panes` and answers under pause, then the diagnostics' windowed checks
     and the developer exhibits.
@@ -491,25 +492,50 @@ Next: make the per-tick authority hash incremental (measured below).
 
 ### Collision versus drawn mesh
 
-Owner: next geometry and bake lane · ordinary · Next: the hall stairs' inverted
-sheets along the divider, then the 178 witnesses with no mesh correspondence.
-The rendered colliders report's only red findings left are the valley's relief
+Owner: next geometry and bake lane · ordinary · Next: the valley sectors'
+buried colliders, then the grooves at the hall stairs' creases. The rendered
+colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
 - [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). In flight: the bake-seams lane (principal), a root fix to zero defects, superseding the case patches (2dbc758c1 and the unlanded hall-stairs branch). (from: the owner's walkthrough)
-- The hall stairs' mesh carries inverted and doubled faces where flight A's
-  boxes meet the divider (x 12.1) and flight B's meet the east wall (x 12.3 and
-  14.1): `puck mesh audit --cpu --group "(hall-stairs)"` reports 1,557 flipped
-  triangles, 865 folds and 84 open edges, its worst clusters faces at 0.0 mm
-  off the field turned 180 degrees from its gradient (12.100, 5.828, 36.179).
-  The sweep's `finding-flight-a-level-1` stop ("dark patches where flight A
-  meets the wall") is likely this. A face two touching boxes share reads zero
-  in the union's field on both sides; find what samples or refines it, as the
-  touching seam under the Wonderland stairs did.
-- 178 collider witnesses find no retained triangle within the search radius
-  (`mesh correspondence uncertified` in the report's coverage); name their
-  placements and say whether each is a missing draw, a draw outside the static
-  trace scene or a search that should reach it.
+- The 178 witnesses the colliders report counts as `mesh correspondence
+  uncertified` all lie on the valley sectors' terrain masses (`main`,
+  `shoulder-left`, `shoulder-right` of every `valley-*` sector, y between about
+  -380 and -705 m), which the report's coverage finding now names with a
+  first witness each. No draw is missing and no search falls short: the
+  render cuts each mass's buried part away at the floor plane
+  (`terrainFloorCut`, a detail Intersection in `worlds/standard/terrain.puck`)
+  while contact collides each mass whole, so there is no surface to find.
+  Either contact takes the same cut (a body cannot reach under the floor), or
+  the report counts witnesses a detail intersection removes from the drawn
+  field as buried rather than unknown.
+- [high · bake-seams lane, handed back mid-work] With a sharp Box (the
+  decision [a box is sharp unless its document rounds it](../decisions/engine-design.md#a-box-is-sharp-unless-its-document-rounds-it))
+  `puck mesh audit --cpu --group "(hall-stairs)"` falls from score 7,891 (953
+  flipped, 306 folds, 27 open edges) to 397.9 (13 flipped, 2 folds, 0 open
+  edges, 68k triangles from 101k), and `(wonderland-stairs)` from 50.3 (3
+  flipped, 4 folds) to 7.2 (1 flipped, 0 folds). The residue is not zero: on
+  the hall stairs a 38 mm band across tread B5's underside against the
+  divider (12.300, 7.627, 35.702) faces +x against a -x gradient, a 62 mm band
+  along the landing's north edge at z 39.697, and the east wall's face at
+  (14.098, 4.277, 34.898) sits 12.6 mm off; on the Wonderland stairs four
+  slivers at the corner where a concave crease meets the side face (1.152,
+  0.570, 29.641). All lie on seams between touching boxes, where the union's
+  interior gradient points at the shared face: the remaining work is in the
+  contour (a vertex or crossing that reads an interior sample's gradient near
+  a seam), and whether `GapFill`/`SeamGradient` still earn their place over
+  sharp boxes is to be measured. `(hall-shell)` reads score 9,237 before and
+  14,969 after (51 flipped, 216 open edges, vertices up to 36 mm off the
+  surface at the cassettes and the top bands at y 12.3 and 3.29: 0.13 m boxes
+  in a 125 mm contour cell, a thin feature the lattice should refine for), and
+  `(hall-roof)` 39.3 and `(hall-floor-3)` 15.4 before are seam-groove facets
+  (46 and 41 degrees) that sharp boxes remove; `(hall-blind-3-north)` audits
+  clean (score 0, face normals under 14 degrees) so its speckle is not the
+  bake's. Not yet run on the sharp-box build: the shell's images
+  (`.claude/scratch/bake-seams-shell-images` in the lane's worktree hold the
+  tip's), the test suites, the store-wide audit, `puck test worlds/debug
+  --jobs 1 --reproduce` (contact follows the shape change) and the windowed
+  looks.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.

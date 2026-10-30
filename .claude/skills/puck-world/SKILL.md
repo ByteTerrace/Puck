@@ -703,8 +703,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
 - XInput caps at four pads locally; HID pads are uncapped.
 - The debug world uses the analytic contact provider (`collision.requirements`
-  empty): spheres, circular cylinders and Boxes have surface contact. Box
-  fillets derive from `SdfSolidGeometry.BoxCornerRadius`; chamfered Boxes use
+  empty): spheres, circular cylinders and Boxes have surface contact. A Box
+  collides with its authored `rounding` (sharp without one); chamfered Boxes use
   their exact lifted-profile support map, including deep bevels and the
   cap/profile corner. Superellipsoids use their Lp surface (the chair seat
   and back are exponent 4, not Boxes). Rounded/chamfered circular rims use

@@ -15,8 +15,8 @@ public sealed class WorldDiagnosticReportTests {
         Assert.False(WorldDiagnosticGeometry.SharedInteriorFace(left, right, new Vector3(1, 1, 0), 0.001));
         Assert.False(WorldDiagnosticGeometry.SharedInteriorFace(left, left, Vector3.UnitX, 0.001));
     }
-    // Two stair treads against a wall, each a filleted box as the hall's stairs compile: the edge the three share
-    // encloses a fillet groove no bake cell draws, while the tread's corner at the wall opens onto the stairwell.
+    // Two stair treads against a wall, each a box rounded by its document: the edge the three share encloses a fillet
+    // groove no bake cell draws, while the tread's corner at the wall opens onto the stairwell.
     [Fact]
     public void AGrooveThreeBoxesEncloseIsClosedWhereTheTreadMeetingTheWallIsOpen() {
         static FixedStaticCollider Box(Vector3 min, Vector3 max, float radius) => FixedStaticCollider.RoundedBox(

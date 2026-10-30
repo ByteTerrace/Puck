@@ -270,7 +270,8 @@ public sealed partial class WorldColliderSet : IContactField {
         hash.Add(value: collider.Rotation.W.Value);
     }
 
-    // Boxes retain their fillet and circular cylinders their surface; other finite primitives retain a bound.
+    // Boxes retain their authored rounding (sharp without one) and circular cylinders their surface; other finite
+    // primitives retain a bound.
     private static readonly FixedQ4816 SqrtTwo = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2));
     private static readonly FixedQ4816 BevelFactor = (FixedQ4816.FromInteger(value: 2) - SqrtTwo);
 
@@ -279,7 +280,9 @@ public sealed partial class WorldColliderSet : IContactField {
             var shapeScaleX = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.X)),
                 y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
             var stampScale = (copy.LocalHalfExtents.X / shapeScaleX);
-            var radius = (FixedQ4816.FromDouble(value: SdfSolidGeometry.BoxCornerRadius(scale: copy.Shape.Scale)) * stampScale);
+            // The drawn box insets its rounding by at most its smallest half-extent (SdfSolidGeometry's Box arms).
+            var smallest = FixedQ4816.Min(x: copy.LocalHalfExtents.X, y: FixedQ4816.Min(x: copy.LocalHalfExtents.Y, y: copy.LocalHalfExtents.Z));
+            var radius = FixedQ4816.Min(x: (FixedQ4816.FromDouble(value: (copy.Shape.Rounding ?? 0f)) * stampScale), y: smallest);
             var chamfer = (FixedQ4816.FromDouble(value: (copy.Shape.Chamfer ?? 0f)) * stampScale);
             var inner = FixedVector3.Max(left: FixedVector3.Zero, right: (copy.LocalHalfExtents - new FixedVector3(X: radius, Y: radius, Z: radius)));
 

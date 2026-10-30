@@ -33,7 +33,7 @@ accumulator, not just the preceding shape, and is likewise unmaskable.
 
 | Type | taper | profile | lift | rounding | chamfer | exponent | curve |
 |---|---|---|---|---|---|---|---|
-| Box | | | | | ≤ min(scale x,y,z) | | |
+| Box | | | | ≤ min(scale x,y,z) | ≤ min(scale x,y,z) | | |
 | Cylinder | | | | ≤ min(radial, axial) | ≤ min(radial, axial) | | |
 | Cone | | | | ceiling is **0** — the apex is sharp | | | |
 | Prism | [0,1], default 0.5 | yes | yes | see below | extrude only | | |
@@ -41,7 +41,12 @@ accumulator, not just the preceding shape, and is likewise unmaskable.
 | Sweep | | | | | | | required, only here |
 | Sphere, Torus, Capsule, Ellipsoid, RoundCone, Plane | | | | | | | |
 
-`rounding` and `chamfer` may never both be nonzero on one shape.
+`rounding` and `chamfer` may never both be nonzero on one shape. A Box is sharp
+without them: no primitive carries a rounding of its own, so boxes that touch
+(treads, slabs, a wall on a floor) meet as one solid with no groove at the seam,
+and a solid placement collides as the same sharp or rounded box
+([decision](../../../../docs/decisions/engine-design.md#a-box-is-sharp-unless-its-document-rounds-it)).
+Round only an exposed edge.
 
 Prism ceilings by profile, then additionally capped at `scale.z` for an extrude:
 
@@ -132,7 +137,7 @@ Verify profile admission and surfaces with `AuthoredShapeAdmissionLawTests` and
 |---|---|---|
 | `onion` | clamped [0, 0.2] | hollow shell of that thickness |
 | `dilate` | clamped [0, 0.2] | inflates the field |
-| `rounding` | Prism, Cylinder, Cone; ≥ 0 | curved edge |
+| `rounding` | Box, Prism, Cylinder, Cone; ≥ 0 | curved edge |
 | `chamfer` | Box, Cylinder, Prism-extrude; ≥ 0 | 45° bevel |
 
 ### Warps
