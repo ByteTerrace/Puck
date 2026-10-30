@@ -148,6 +148,16 @@ holds the fixed poses and the approaches already rejected.
 
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
+- [low] A quarter-size Moth (Wonderland) shows thin bright lines under her back
+  band plates' lower edges that the full-size Moth at the same relative framing
+  does not, though both draw one mesh (`world.debug-view normals` matches): a
+  shading length in world units does not follow a body's scale (candidates: the
+  cascades' depth bias and texel, the surface pass's AO and shadow tap radii,
+  `SdfMeshIrradianceProbe.NormalBias`). Pose `body.pose 6.16 0.07 30.43 23 0 0`
+  at scale 0.25 with `view.override camera look 6.40 0.30 31.05 6.16 0.24 30.43`;
+  the full-size twin is `view.override camera look 7.12 0.99 32.91 6.16 0.75 30.43`
+  at scale 1. (from: bake-scale)
+
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the
   view's HDR output with a highlight clamp) drives auto-exposure, the probe
   meter kept for local adaptation, because the probe meter cannot see dynamic
