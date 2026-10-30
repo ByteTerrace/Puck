@@ -19,7 +19,7 @@ before code.
 | Materials | `shade/shade-weathering.hlsli`, `shade/shade-layers.hlsli`, called from `passes/sdf-light-stage.hlsli` | No slope, altitude or curvature rule, though weathering's up-facing `deposit` and its curvature edges are such rules in fragment form. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
 | Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
-| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. At a cut the EV snaps to whatever that cache answers, so it depends on where the camera stood before ([sweep packet](open-items.md#sweep-and-visual-checks)). The [lighting packet](open-items.md#lighting-and-gi) already chose an image meter. |
+| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. At the summit the owner saw every view `meter=none source=held`: the meter never answered, so EV 11.5 plus 2.5 held and the rock blew out ([lighting packet](open-items.md#lighting-and-gi), which also chose an image meter). At a cut the EV snaps to whatever the cache answers ([sweep packet](open-items.md#sweep-and-visual-checks)). |
 | Residency | [residency decision](../decisions/residency.md), `SdfMeshDemand`, `SdfMeshChunks` | Near-first has landed; chunks are 8 m bins of one contour and do not stream. Terrain tiles (the decision's step 7) are unbuilt. |
 
 ## Design
@@ -105,9 +105,13 @@ luminance histogram of the lit HDR image, takes a mean between low and high
 percentiles, and writes the target EV into a one-element GPU buffer the
 composite reads, with no readback between a frame and its exposure. Adaptation
 eases as now, and **a cut snaps to the frame's own histogram**, so the EV after
-a teleport depends only on the destination's picture. The probe meter stays for
-local adaptation (`SdfViewExposures.MeteredOf`); the camera-trace cache leaves
-the exposure path. Display-referred constants the views pass divides by the
+a teleport depends only on the destination's picture. A rendered frame always
+has an image, so `held` leaves the exposure path with the camera-trace cache.
+The probe meter stays for local adaptation and the air light
+(`SdfViewExposures.MeteredOf`, `AirLightOf`), so why it answered nothing at the
+summit is found in the same step: `TryMeter` refuses with no window, with no
+installed scene (`RefreshScene` runs only while no bake is pending), and when
+the camera trace sees more than `InsideShare` back faces. Display-referred constants the views pass divides by the
 exposure (the unbound screen glass) move to the composite or read the previous
 frame's EV, settled by measurement. `world.exposure` reads the buffer back. The
 first check is the lighting packet's 18% grey card under a manual EV, which
@@ -175,7 +179,7 @@ bake numbers come from `puck mesh audit --cpu --group "(valley-"`.
 | Step | Lane | Needs | Target |
 |---|---|---|---|
 | 0. Baseline | lead, GPU | GPU free | Six stills on both backends; frame p50/p99 and per-pass GPU ms at each pose; `world.exposure` at each stop after two tour orders on one World. |
-| 1. Image meter | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it. Composite plus meter costs under 0.2 ms more than the composite alone. |
+| 1. Image meter | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. The summit, the lobby and the card table meter on both backends, and the probe meter answers at the summit. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it. Composite plus meter costs under 0.2 ms more than the composite alone. |
 | 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
 | 3. `TerrainRelief` op | field/maths C | none | Fixed-point and kernel bakes of one sector match to the triangle (`--cpu` against a stored bake). The exact noise result is pinned by one Maths law. Sector CPU bake time at the same cell is within 1.5× of today's 24 to 43 s. |
 | 4. Relative caps, shape bound, tiles | authoring/bake D | 3 for relief; the bound fix none | A sector bakes at its declared spacing (cell under 1.6 m before tiles). With tiles, demanded triangles at any valley stop stay under today's 2.16 M plus 1.5 M, and the mesh region grows under 150 MB. Warm boot is unchanged; time to the demanded set after a sector edit is under today's sector bake. |
@@ -201,23 +205,19 @@ Risks:
   queries on a slope today. If step 5 misses its p99, contact cuts its octaves
   coarser, declared as the terrain's spacing so the diagnostics measure it,
   never as an allowance.
-- **Loose fields.** Warp and large amplitude raise the step factor, slowing the
-  bake and the certified sweep; the erosion mask and the relative cap hold it,
-  read from `creation stats`' clamps.
-- **Register pressure in the views pass** (168 registers on Direct3D 12 drove
-  paints out of the material's live range). Layers load inside their loop.
-- **GI ignores layers.** The irradiance trace bounces base albedo, so snow
-  bounces rock colour; filed if a still shows it.
-- **Tile seams.** Skirts can show at grazing angles from the rim; the shared
-  border is the alternative.
+- **Loose fields.** Warp and amplitude raise the step factor, slowing the bake
+  and the sweep; the erosion mask and relative cap hold it.
+- **Views-pass registers** (168 on Direct3D 12 drove paints out of the
+  material's live range): layers load inside their loop.
+- **GI ignores layers:** snow bounces rock colour.
+- **Tile seams:** skirts can show at grazing angles from the rim.
 
 Owner calls:
 
 - Which set the valley wears (ruled: picked later, from step 8's stills).
-- Whether the "pale, bright" +2.5 EV compensation stays once the meter reads the
-  image; it partly offsets the incident meter in dim interiors.
-- How strongly distance fades toward blue: each set's haze preset is a proposal.
-- The sun's direction and time of day for the valley, which decides how much
-  ridge shadow the far walls show.
-- Whether the far terrain cascade may cache at a coarser snap (the existing
-  look call).
+- Whether the "pale, bright" +2.5 EV compensation stays once the meter reads
+  the image.
+- How strongly distance fades toward blue (each set's haze is a proposal).
+- The valley's sun direction and time of day, with the lighting-direction pass
+  the lighting packet holds.
+- Whether the far terrain cascade may cache at a coarser snap.
