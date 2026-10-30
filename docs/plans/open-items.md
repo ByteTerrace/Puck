@@ -96,10 +96,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   lever's values; first-person feel in the lift and stairwell; the glass
   exhibit on both backends; how indoor rooms read against daylight once the
   image meter drives exposure ([lighting](#lighting-and-gi)).
-- Residency's look and policy: what a late or over-budget group shows and
-  whether switches fade or cut; whether the debug world gets doors that close;
-  the resident-byte target machine; a standard
-  door's opening time ([residency](../decisions/residency.md#the-owners-calls)).
 - Whether a cube projection is wanted for screens on shapes, beside the sphere
   the owner asked for ([curved screens](#screens-on-curved-and-general-sdf-surfaces)).
 - The ideas [awaiting review](#awaiting-the-owners-review).
