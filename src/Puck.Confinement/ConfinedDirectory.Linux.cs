@@ -11,10 +11,10 @@ namespace Puck.Confinement;
 // fstatat(2), flock(2), rename(2) (renameat2, RENAME_NOREPLACE), unlink(2) and proc_pid_maps(5) manual pages.
 public sealed partial class ConfinedDirectory {
     private static partial class Linux {
-        public const int ReadOnly = 0, ReadWrite = 2, Create = 0x40, Exclusive = 0x80, NonBlock = 0x800, DirectoryFlag = 0x10000, NoFollow = 0x20000, CloseOnExec = 0x80000;
+        public const int ReadOnly = 0, WriteOnly = 1, ReadWrite = 2, Create = 0x40, Exclusive = 0x80, NonBlock = 0x800, DirectoryFlag = 0x10000, NoFollow = 0x20000, CloseOnExec = 0x80000;
         public const int SymlinkNoFollow = 0x100, RemoveDirectory = 0x200;
         public const int LockShared = 1, LockExclusive = 2, LockNonBlocking = 4;
-        public const int NoEntry = 2, WouldBlock = 11, Exists = 17, NotDirectory = 20, InvalidArgument = 22, NotImplemented = 38, Loop = 40;
+        public const int NoEntry = 2, WouldBlock = 11, AccessDenied = 13, Exists = 17, NotDirectory = 20, InvalidArgument = 22, NotImplemented = 38, Loop = 40;
 
         private const uint ModeMask = 0xF000, ModeDirectory = 0x4000, ModeRegular = 0x8000, ModeLink = 0xA000;
 
@@ -128,8 +128,8 @@ public sealed partial class ConfinedDirectory {
             if (UnlinkAt(flags: (directory ? RemoveDirectory : 0), name: name, parent: Fd(handle: parent)) == 0) { return true; }
             return ((Marshal.GetLastPInvokeError() == NoEntry) ? false : throw Error(message: $"Cannot remove confined entry '{name}'"));
         }
-        public static SafeFileHandle? OpenDirectoryOrNull(SafeFileHandle parent, string name, out int error) {
-            var fd = OpenAt(flags: ReadOnly | DirectoryFlag | NoFollow | CloseOnExec | NonBlock, mode: 0, name: name, parent: Fd(handle: parent));
+        public static SafeFileHandle? OpenForRemoval(SafeFileHandle parent, string name, bool directory, bool writeOnly, out int error) {
+            var fd = OpenAt(flags: (writeOnly ? WriteOnly : ReadOnly) | (directory ? DirectoryFlag : 0) | NoFollow | CloseOnExec | NonBlock, mode: 0, name: name, parent: Fd(handle: parent));
 
             error = ((fd < 0) ? Marshal.GetLastPInvokeError() : 0);
             return ((fd < 0) ? null : new SafeFileHandle(ownsHandle: true, preexistingHandle: fd));

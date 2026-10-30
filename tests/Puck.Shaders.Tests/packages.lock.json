@@ -268,6 +268,9 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.sdfvm": {
         "type": "Project",
         "dependencies": {

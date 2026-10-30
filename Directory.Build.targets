@@ -21,6 +21,12 @@
         <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="Properties/RepositoryPaths.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="Properties/RunDirectory.cs" />
     </ItemGroup>
+    <!-- The run-directory policy removes a directory through Puck.Confinement (iterative, link-refusing), so every project
+         that compiles it references that BCL-only leaf; a project that already reaches it through another reference
+         is not given the reference twice. -->
+    <ItemGroup Condition="('$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR ('$(PuckKind)' == 'Tool' AND $(MSBuildProjectName.StartsWith('Puck.Cli')))) AND ('@(ProjectReference)' == '' OR !$([System.String]::Copy('@(ProjectReference)').Contains('Puck.Confinement.csproj')))">
+        <ProjectReference Include="$(MSBuildThisFileDirectory)src/Puck.Confinement/Puck.Confinement.csproj" />
+    </ItemGroup>
     <!-- Every law that needs a directory under the temporary root takes a TemporaryDirectory, whose verdict-bound
          disposal (and the assembly-level attribute that resolves it) the one shared source carries; its owner
          teardown waits under the one liveness bound TestLiveness states, so both are linked together. -->

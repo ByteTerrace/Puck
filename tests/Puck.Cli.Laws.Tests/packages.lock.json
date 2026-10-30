@@ -265,6 +265,7 @@
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )",
           "FSharp.Core": "[11.*, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Resharp": "[1.*, )",
           "System.CommandLine": "[2.*, )"
         }
@@ -273,8 +274,12 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.Build.Framework": "[18.*, )",
-          "Puck.Cli.Core": "[1.0.0, )"
+          "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
+      },
+      "puck.confinement": {
+        "type": "Project"
       }
     }
   }
