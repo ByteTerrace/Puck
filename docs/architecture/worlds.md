@@ -1096,8 +1096,8 @@ whether a seat, a remote human or an autonomous body:
 - The source allocates a key durably before it reserves under it, and never uses it again. A
   restart mints past every id its log allocated, and an operator cannot supply an id.
 - The destination leases a key at most once, durably: its lease record is written before the
-  reservation is accepted. A recovered destination holds a logged lease until the arrival that
-  follows it lands; one whose arrival never follows is dead.
+  reservation is accepted. Recovering a logged lease leaves its key dead, unless an arrival later in
+  the log lands it.
 - `Missing` is final. Before a destination first answers `Missing` for a key, to a status query or a
   commit, it makes the key's death durable, writing a tombstone unless its log already shows it. From
   then on no reservation leases the key and no commit lands under it, and a tombstone redone past a
@@ -1163,9 +1163,13 @@ authority restores its latest checkpoint and redoes, in order, every record past
 - a departure detaches its cohort again and puts the transfer back in doubt;
 - a settlement publishes the forwarding routes or restores the cohort;
 - an allocation raises the next transfer id past every id it covers;
-- a lease holds its key leased until its arrival lands, and a lease whose arrival never follows
-  leaves its key dead once recovery finishes;
+- a lease raises its source's floor and leaves its key dead, until an arrival later in the log
+  lands it;
 - a tombstone kills its key, and any live lease the checkpoint holds for it.
+
+Each record sets the fate of the key it names, and a floor drops every settled key below it, so
+the ledger a recovery leaves depends only on the records it redid, never on how they were split
+into calls (a silo redoes its journal one record at a time).
 
 The ordinary drain then reconciles the transfer with its peer. Recovery refuses an arrival it cannot
 land again and leaves its sequence unapplied. Whichever step a crash or a lost answer interrupts, the

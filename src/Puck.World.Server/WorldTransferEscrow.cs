@@ -347,7 +347,6 @@ public sealed partial class WorldTransferEscrow {
         m_rows.Clear();
         m_sourceRows.Clear();
         m_floors.Clear();
-        m_recoveredLeases.Clear();
         m_crossingSequence = checkpoint.CrossingSequence;
 
         // A restored row was admitted when it was made; every lease and retained commit below holds one too.
@@ -985,7 +984,8 @@ public sealed partial class WorldTransferEscrow {
         }
 
         m_committed.Add(item: key);
-        _ = m_recoveredLeases.Remove(item: key);
+        // A relanded arrival is the key's last durable record: it supersedes the death its lease record left.
+        _ = m_spent.Remove(key: key);
         m_committedMembers[key] = [.. members];
         m_committedPrincipals[key] = lease.Slots.Select(selector: slot => (lease.Request.PeerAdmission
             ? m_server.Population.PeerPrincipal(index: slot)

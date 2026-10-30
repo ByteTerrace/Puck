@@ -11,7 +11,7 @@ namespace Puck.World.Server.Tests;
 /// hazard a resent reservation or commit opens when one of those holds only in memory: the federation lane resends
 /// every transfer-keyed request (<c>MayResend</c>), so a request answered once can arrive again after the source has
 /// acted on the answer. Every law ends with exactly one traveller.</summary>
-public sealed class TransferKeyOnceLawTests {
+public sealed partial class TransferKeyOnceLawTests {
     // Steps long enough for any lease taken during the crossing to expire and for the source to settle.
     private const int PastEveryLease = 90;
 

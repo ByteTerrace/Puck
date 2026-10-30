@@ -136,9 +136,11 @@ public sealed partial class WorldInstanceHost {
     /// the records at or past the checkpoint's crossing sequence, read back from the row's durable crossing log. An
     /// arrival lands its cohort again through the row's own escrow; a departure detaches its cohort again and puts the
     /// transfer back in doubt; a settlement publishes the cohort's forwarding routes or returns it home; an allocation
-    /// raises the row's next transfer id past every id it allocated; a lease holds its key leased until its arrival
-    /// lands; a tombstone kills its key, and a live lease the checkpoint holds for it. Once every record is redone, a key
-    /// leased whose arrival never followed is dead. The ordinary drain then reconciles whatever is still in doubt with
+    /// raises the row's next transfer id past every id it allocated; a lease raises its source's floor and leaves its
+    /// key dead until an arrival later in the log lands it; a tombstone kills its key, and a live lease the checkpoint
+    /// holds for it. Each record sets the fate of the key it names, so the redo is a fold whose result does not depend on
+    /// how the records are split across calls: a silo redoes its journal one record at a time, a restarted row all at
+    /// once. The ordinary drain then reconciles whatever is still in doubt with
     /// its destination, so the traveler ends arrived or never departed. Call after <see cref="Admit"/> and
     /// <see cref="RestoreRow"/>, before the row steps; a fresh row with no checkpoint redoes its whole log.</summary>
     /// <param name="row">The restored row.</param>
@@ -206,9 +208,6 @@ public sealed partial class WorldInstanceHost {
             next = checked((next + 1UL));
             row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.ResumeCrossingSequence(next: next));
         }
-
-        // Every key the log leased whose arrival never followed is dead from here.
-        row.Server.ExecuteAuthorityOperation(operation: row.Server.TransferEscrow.FinishRecovery);
     }
 
     private void RedoArrival(WorldInstance row, WorldCrossingArrival arrival) {

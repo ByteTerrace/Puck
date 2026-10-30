@@ -8,18 +8,16 @@ public sealed partial class WorldTransferEscrow {
     private readonly record struct SpentKey(bool Committed, bool Durable);
 
     private readonly Dictionary<WorldTransferKey, SpentKey> m_spent = new();
-    // Every key that holds a row here, whatever it holds: a live or recovered lease, a retained commit, an uncertain
-    // arrival or a spent key. A key keeps its one row as it moves between those; it takes a row only through
-    // EnterRow after RowRefusal admits it (or when recovery redoes state that was admitted live), and gives it up only
-    // through LeaveRow once its source's floor passes it.
+    // Every key that holds a row here, whatever it holds: a live lease, a retained commit, an uncertain arrival or a
+    // spent key. A key keeps its one row as it moves between those; it takes a row only through EnterRow after
+    // RowRefusal admits it (or when recovery redoes state that was admitted live), and gives it up only through
+    // LeaveRow once its source's floor passes it.
     private readonly HashSet<WorldTransferKey> m_rows = [];
     // Each source namespace's count of keys in m_rows.
     private readonly Dictionary<string, int> m_sourceRows = new(comparer: StringComparer.Ordinal);
     // Per authenticated source namespace, its highest settled floor (WorldTransferReservationRequest.SourceFloor): every
     // id below it is dead here without a row. Each floor is a row of its source too.
     private readonly Dictionary<string, ulong> m_floors = new(comparer: StringComparer.Ordinal);
-    // Keys a recovering activation found leased in its crossing log past its checkpoint and has not yet seen arrive.
-    private readonly HashSet<WorldTransferKey> m_recoveredLeases = [];
 
     private int TotalRows => (m_rows.Count + m_floors.Count);
 
@@ -66,17 +64,17 @@ public sealed partial class WorldTransferEscrow {
             m_sourceRows[key.SourceAuthority] = (m_sourceRows.GetValueOrDefault(key: key.SourceAuthority) + 1);
         }
     }
-    // Gives up a key's row; every caller's key holds one.
+    // Gives up a key's row. The count moves only with the set, so a key that holds no row changes nothing.
     private void LeaveRow(WorldTransferKey key) {
         _ = m_spent.Remove(key: key);
-        _ = m_rows.Remove(item: key);
+        if (m_rows.Remove(item: key)) {
+            var remaining = (m_sourceRows[key.SourceAuthority] - 1);
 
-        var remaining = (m_sourceRows[key.SourceAuthority] - 1);
-
-        if (remaining == 0) {
-            _ = m_sourceRows.Remove(key: key.SourceAuthority);
-        } else {
-            m_sourceRows[key.SourceAuthority] = remaining;
+            if (remaining == 0) {
+                _ = m_sourceRows.Remove(key: key.SourceAuthority);
+            } else {
+                m_sourceRows[key.SourceAuthority] = remaining;
+            }
         }
     }
     // Records that a key holding a row has nothing live any more. Below its source's floor it gives up its row; a death
@@ -159,9 +157,15 @@ public sealed partial class WorldTransferEscrow {
         }
     }
 
-    /// <summary>Redoes a crossing-log lease record: raises its source's floor and holds the key leased until the
-    /// arrival that may follow it in the log lands, or until <see cref="FinishRecovery"/> declares it dead. The caller
-    /// holds the authority gate.</summary>
+    // Recovery is a fold over the crossing log: each record sets the fate of the key it names, so the ledger after a
+    // record depends only on the records before it, however the redo is cut into calls. A lease leaves its key dead, a
+    // tombstone leaves it dead, and an arrival landing under it leaves it committed (CommitLease). A floor drops every
+    // settled row below it as it is redone; no later record names a key below a floor, since a source raises its floor
+    // past a key only once it has its answer for that key.
+
+    /// <summary>Redoes a crossing-log lease record: raises its source's floor and leaves the key dead, which is its fate
+    /// unless an arrival record later in the log lands it. The log holds the lease record, so every recovery declares
+    /// the key dead the same way, and the death is durable. The caller holds the authority gate.</summary>
     /// <param name="key">The leased key.</param>
     /// <param name="floor">The source's settled floor the reservation carried.</param>
     internal void RedoLease(WorldTransferKey key, ulong floor) {
@@ -169,33 +173,22 @@ public sealed partial class WorldTransferEscrow {
             floor: floor,
             sourceAuthority: key.SourceAuthority
         );
-        _ = m_recoveredLeases.Add(item: key);
-        EnterRow(key: key);
+        RedoDeath(key: key);
     }
     /// <summary>Redoes a crossing-log tombstone: the key is dead, and a live lease the recovered checkpoint holds for it
     /// is released. A committed key is never tombstoned, since <see cref="Commit"/> and <see cref="Status"/> answer it
-    /// Committed. A row a later floor passes is dropped when that floor next rises. The caller holds the authority
-    /// gate.</summary>
+    /// Committed. The caller holds the authority gate.</summary>
     /// <param name="key">The dead key.</param>
     internal void RedoTombstone(WorldTransferKey key) {
-        _ = m_recoveredLeases.Remove(item: key);
         ReleaseLease(key: key);
+        RedoDeath(key: key);
+    }
+    // A redone durable death: admitted when it was recorded, so it enters without the bounds.
+    private void RedoDeath(WorldTransferKey key) {
         EnterRow(key: key);
         m_spent[key] = new SpentKey(
             Committed: false,
             Durable: true
         );
-    }
-    /// <summary>Ends a crossing recovery: every key the log leased whose arrival never followed is dead. The log holds
-    /// its lease record, so every later recovery declares it dead too, and the death is durable. The caller holds the
-    /// authority gate.</summary>
-    internal void FinishRecovery() {
-        foreach (var key in m_recoveredLeases) {
-            m_spent[key] = new SpentKey(
-                Committed: false,
-                Durable: true
-            );
-        }
-        m_recoveredLeases.Clear();
     }
 }

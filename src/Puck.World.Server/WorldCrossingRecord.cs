@@ -43,9 +43,8 @@ public abstract record WorldCrossingRecord {
     /// <summary>A destination landed a cohort.</summary>
     /// <param name="Value">The arrival as it landed.</param>
     public sealed record Arrival(WorldCrossingArrival Value) : WorldCrossingRecord;
-    /// <summary>A destination leased a transfer key. Recovery holds the key leased until the arrival that follows it in
-    /// the log lands; a key whose arrival never follows is dead once recovery finishes, so no reservation can lease it
-    /// again.</summary>
+    /// <summary>A destination leased a transfer key. Recovery leaves the key dead unless an arrival later in the log
+    /// lands it, so no reservation can lease it again.</summary>
     /// <param name="Key">The leased key.</param>
     /// <param name="Floor">The source's settled floor the reservation carried
     /// (<see cref="WorldTransferReservationRequest.SourceFloor"/>).</param>
