@@ -651,7 +651,10 @@ the torso lean and the existing back-pod burn lanes.
 
 The analytic contact provider sweeps fast displacement in slices no longer than
 half the least support radius of the moving volumes, using the same core radius
-as field sweeps. Each slice reuses the existing endpoint contact solver. Work is
+as field sweeps, wherever some collider's bounds meet the move's swept bounds
+(a move through clear space is one endpoint solve). Each slice reuses the
+existing endpoint contact solver and measures the edge rule from the whole
+move's starting foot. Work is
 bounded by `FixedFieldContactSolver.DefaultSweepBoundsQueryBudget`; exhaustion
 keeps the resolved prefix and reports `Unproved`, as the field provider does,
 while an unrepresentable displacement refuses the whole move. Unobstructed

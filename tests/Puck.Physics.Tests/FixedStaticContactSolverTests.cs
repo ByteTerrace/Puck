@@ -293,5 +293,26 @@ public sealed class FixedStaticContactSolverTests {
         Assert.True(condition: (position.X < FixedQ4816.FromInteger(value: 500)));
         Assert.Equal(expected: FixedQ4816.FromInteger(value: 30000), actual: velocity.X);
     }
+    // A small, fast body crossing space no collider's bounds reach arrives at its endpoint proved.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AMoveThroughClearSpaceReachesItsEndpointInOneSolve(bool culled) {
+        var start = Vector(x: 0d, y: 1d, z: 0d);
+        var end = Vector(x: 2d, y: 1d, z: 0d);
+        var position = end;
+        var velocity = Vector(x: 60d, y: 0d, z: 0d);
+        FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 1d, y: 1d, z: 50d),
+            halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
+        FixedVector3?[] extents = (culled ? [colliders[0].WorldHalfExtent()] : []);
+        FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.01d) }];
+        var result = Solver().ResolveSweep(colliders: colliders, dynamicColliders: [], previousPosition: start,
+            position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes,
+            up: FixedVector3.UnitY, colliderExtents: extents);
+
+        Assert.False(condition: result.Unproved);
+        Assert.Equal(expected: end, actual: position);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 60), actual: velocity.X);
+    }
 
 }
