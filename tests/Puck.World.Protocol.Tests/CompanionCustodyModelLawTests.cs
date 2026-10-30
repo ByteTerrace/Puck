@@ -12,36 +12,45 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
     // enabled, and how many faults a trace may carry.
     // Each scope: the player's route, how many companions follow, whether B declares the role, the fault classes
     // enabled, how many faults a trace may carry, and how many of one class (partitions and deadlines allow one more).
-    public static TheoryData<string, int, bool, Fault, int, int> Scopes => new() {
-        { "A", 1, true, Fault.Loss | Fault.Dup, 2, 2 },
-        { "A", 1, true, Fault.Crash | Fault.Deadline | Fault.Disconnect, 3, 2 },
-        { "A", 1, true, Fault.Log | Fault.Crash | Fault.Disconnect, 3, 2 },
-        { "A", 1, true, Fault.Partition | Fault.Disconnect, 2, 1 },
-        { "A", 1, true, Fault.Install | Fault.Recall | Fault.Disconnect, 3, 2 },
-        { "A", 1, true, Fault.Deadline | Fault.Forge | Fault.Disconnect, 2, 1 },
-        { "A", 1, true, Fault.Write | Fault.Census | Fault.Disconnect | Fault.Recall, 3, 1 },
-        { "A", 1, true, Fault.All, 1, 1 },
-        { "A", 2, true, Fault.Loss | Fault.Crash | Fault.Admission, 2, 1 },
-        { "A", 2, true, Fault.Admission | Fault.Disconnect, 2, 2 },
-        { "A", 2, true, Fault.Install | Fault.Recall | Fault.Disconnect, 2, 1 },
-        { "AB", 1, true, Fault.Loss | Fault.Crash, 1, 1 },
-        { "AB", 1, true, Fault.Log | Fault.Crash, 1, 1 },
-        { "AB", 1, true, Fault.Forge | Fault.Disconnect, 2, 1 },
-        { "AB", 1, false, Fault.Disconnect | Fault.Loss, 1, 1 },
-        { "AB", 1, true, Fault.Disconnect | Fault.Partition, 1, 1 },
-        { "AB", 2, true, Fault.Admission, 1, 1 },
-        { "A", 2, true, Fault.Crash | Fault.Log, 2, 1 },
-        { "AH", 1, true, Fault.Loss, 1, 1 },
-        { "AB", 2, true, Fault.None, 0, 1 },
-        { "ABH", 1, true, Fault.None, 0, 1 },
+    // Each scope: the player's route, how many companions follow, slots a custodian offers, whether B declares the
+    // role, the fault classes enabled, how many faults a trace may carry, and how many of one class (partitions and
+    // deadlines allow one more).
+    // Each scope: the player's route, how many companions follow, slots a custodian offers, whether B declares the
+    // role, the fault classes enabled, how many faults a trace may carry, how many of one class (partitions and
+    // deadlines allow one more), and the scope's state cap (measured at about 100 MB of managed memory per million).
+    public static TheoryData<string, int, int, bool, Fault, int, int, int> Scopes => new() {
+        { "A", 1, 3, true, Fault.Loss | Fault.Dup | Fault.Reconnect, 2, 2, 1_500_000 },
+        { "A", 1, 3, true, Fault.Crash | Fault.Deadline | Fault.Disconnect, 3, 2, 1_500_000 },
+        { "A", 1, 3, true, Fault.Log | Fault.Crash | Fault.Disconnect, 3, 2, 1_500_000 },
+        { "A", 1, 3, true, Fault.Loss | Fault.Deadline | Fault.Reconnect, 3, 2, 1_500_000 },
+        { "A", 1, 3, true, Fault.Partition | Fault.Disconnect | Fault.Reconnect, 2, 1, 1_500_000 },
+        { "A", 1, 3, true, Fault.Install | Fault.Recall | Fault.Disconnect, 3, 2, 1_500_000 },
+        { "A", 1, 3, true, Fault.Deadline | Fault.Forge | Fault.Disconnect, 2, 1, 1_500_000 },
+        { "A", 1, 3, true, Fault.Write | Fault.Census | Fault.Disconnect | Fault.Recall, 3, 1, 1_500_000 },
+        { "A", 1, 3, true, Fault.All, 1, 1, 1_500_000 },
+        { "A", 2, 3, true, Fault.Loss | Fault.Crash | Fault.Admission | Fault.Install, 4, 2, 4_000_000 },
+        { "A", 2, 3, true, Fault.Admission | Fault.Disconnect, 2, 2, 1_500_000 },
+        { "A", 2, 3, true, Fault.Install | Fault.Recall | Fault.Disconnect, 2, 1, 1_500_000 },
+        { "A", 2, 3, true, Fault.Crash | Fault.Log, 2, 1, 1_500_000 },
+        { "A", 2, 2, true, Fault.Loss | Fault.Disconnect | Fault.Admission, 2, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Loss | Fault.Crash, 2, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Log | Fault.Crash, 1, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Forge | Fault.Disconnect | Fault.Recall, 2, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Deadline | Fault.Reconnect | Fault.Loss, 1, 1, 1_500_000 },
+        { "AB", 1, 3, false, Fault.Disconnect | Fault.Loss, 1, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Disconnect | Fault.Partition, 1, 1, 1_500_000 },
+        { "AB", 2, 3, true, Fault.Admission | Fault.Install, 1, 1, 4_000_000 },
+        { "AH", 1, 3, true, Fault.Loss, 1, 1, 1_500_000 },
+        { "AB", 2, 3, true, Fault.None, 0, 1, 1_500_000 },
+        { "ABH", 1, 3, true, Fault.None, 0, 1, 1_500_000 },
     };
 
     [Theory]
     [MemberData(nameof(Scopes))]
-    public void EveryReachableStateHoldsTheInvariantsAndConverges(string route, int companions, bool bAccepts, Fault allowed, int faults, int limit) {
-        var result = Explore(bAccepts: bAccepts, route: Route(route), companions: companions, faults: faults, allowed: allowed, limit: limit);
+    public void EveryReachableStateHoldsTheInvariantsAndConverges(string route, int companions, int custodianSlots, bool bAccepts, Fault allowed, int faults, int limit, int cap) {
+        var result = Explore(bAccepts: bAccepts, route: Route(route), companions: companions, custodianSlots: custodianSlots, faults: faults, allowed: allowed, limit: limit, cap: cap);
 
-        output.WriteLine(message: $"route={route} companions={companions} B={bAccepts} faults={allowed}x{faults} limit={limit}: {result}");
+        output.WriteLine(message: $"route={route} companions={companions} slots={custodianSlots} B={bAccepts} faults={allowed}x{faults} limit={limit}: {result}");
         Assert.True(condition: (result.States > 50), userMessage: $"the scope explored only {result.States} states");
         Assert.True(condition: result.Converged > 0);
     }
@@ -260,6 +269,7 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         Assert.Single(collection: s.Nodes[1].Outbound);
         s = Drive(s: s, "strand A:2");
         s = Drive(s: s, "elapse A:2");
+        s = Drive(s: s, "shed-mint A:2");
         s = Drive(s: s, "shed A:2");
         Assert.False(condition: Fold(s: s, Node.A).Has(id: Ids.C1));
         Assert.Contains(collection: s.Nodes[1].Records, filter: static r => r is Dep { Shed: true });
@@ -293,7 +303,10 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         s = Drive(s: s, "cross H>A");
         s = DrainUntil(s: s, static m => m.Kind == MsgKind.Commit);
         s = Drive(s: s, "append UncertainLanded A");
+        // The commit is held while A asks home again; the arrival is appended on the answer, and that append is uncertain.
         s = Drive(s: s, "deliver H>A:Commit");
+        s = Drive(s: s, "deliver A>H:HopQuery");
+        s = Drive(s: s, "deliver H>A:HopQueryReply");
         Assert.True(condition: s.Nodes[1].Latched);
         Assert.Contains(collection: s.Network, filter: static m => m.Kind == MsgKind.Uncertain);
         s = Drive(s: s, "deliver A>H:Uncertain");
@@ -412,16 +425,17 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         s = Drive(s: s, "sweep A:2");
         s = Drive(s: s, "strand A:2");
         s = Drive(s: s, "elapse A:2");
+        s = Drive(s: s, "shed-mint A:2");
         s = Drive(s: s, "shed A:2");
         s = Drive(s: s, "heal H-A");
         // The sweep's own lease at home makes the shed's first reservation a duplicate until that lease is gone.
         s = Drain(s: s);
         s = Drive(s: s, "crash H");
-        s = Drive(s: s, "retry reserve A:As1");
+        s = Drive(s: s, "retry reserve A:A2");
         s = DrainUntil(s: s, static m => (m.Kind == MsgKind.Reserved) && (m.From == Node.H) && (m.Lane == 1));
         // The first attempt's lease expires; the second attempt's lease expires too; the third lands.
         s = Drive(s: s, "expire H:");
-        s = DrainUntil(s: s, static m => (m.Kind == MsgKind.Reserved) && (m.From == Node.H) && (m.Key != "As1"));
+        s = DrainUntil(s: s, static m => (m.Kind == MsgKind.Reserved) && (m.From == Node.H) && (m.Key != "A2"));
         s = Drive(s: s, "expire H:");
         s = Drain(s: s);
 
@@ -494,6 +508,170 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         Assert.True(condition: Fold(s: s, Node.B).Follows(id: Ids.C1));
     }
 
+    // ---- the round-4 review's counterexamples ---------------------------------------------------------------------
+
+    [Fact]
+    public void ADelayedVerificationAnswerCannotAuthorizeARevokedHop() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.HopQueryReply);
+        Assert.Contains(collection: s.Network, filter: static m => (m.Kind == MsgKind.HopQueryReply) && m.Arg.EndsWith("=2", StringComparison.Ordinal));
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "reconnect");
+        // While the hop is pending home cannot recall: its destination may hold a verified answer.
+        Assert.DoesNotContain(collection: CustodyModel.Successors(s: s, faultBudget: int.MaxValue).Select(static p => p.Name), filter: static n => n.StartsWith("recall", StringComparison.Ordinal));
+        s = Drive(s: s, "deliver H>B:HopQueryReply");
+        s = Drain(s: s);
+        // B leased on the delayed answer, but the player had left A, so nothing departs; the lease dies, home resolves
+        // the hop against B's tombstone, and the separated companion returns. No copy was ever committed at B.
+        Assert.Equal(expected: CustodyKind.Pending, actual: Title(s: s, Ids.C1).Kind);
+        s = Drive(s: s, "expire B:");
+        s = Converge(s: s);
+        Assert.Equal(expected: (CustodyKind.Home, Node.H, 2), actual: Title(s: s, Ids.C1));
+        Assert.DoesNotContain(collection: s.Nodes[2].Records.OfType<Arr>().SelectMany(static a => a.Members), filter: static m => m.Id == Ids.C1);
+        Assert.Contains(collection: s.Nodes[2].Records, filter: static r => r is Dead { Key: "A1" });
+    }
+
+    [Fact]
+    public void ACommitLandsOnlyUnderTheGrantAsItStandsAtTheCommit() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.Commit);
+        s = Drive(s: s, "deliver A>B:Commit");
+        // The commit is held while B asks home again; a release recorded meanwhile leaves the companion unlanded.
+        Assert.Single(collection: s.Nodes[2].HeldCommits);
+        s = Drive(s: s, "install 2");
+        s = Drain(s: s);
+        Assert.DoesNotContain(collection: s.Nodes[2].Records.OfType<Arr>().SelectMany(static a => a.Members), filter: static m => m.Id == Ids.C1);
+        Assert.Equal(expected: Node.B, actual: s.PlayerAt);
+        s = Converge(s: s);
+        Assert.Equal(expected: CustodyKind.Released, actual: Title(s: s, Ids.C1).Kind);
+    }
+
+    [Fact]
+    public void InstallDuringAPartialLandingRetiresTheUnlandedCompanion() {
+        var s = Start(route: "AB", companions: 2);
+
+        s = Drive(s: s, "cross H>A");
+        s = DrainUntil(s: s, static m => (m.Kind == MsgKind.Reserved) && (m.From == Node.A));
+        s = Drive(s: s, "refuse at commit A:H1:2");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.Committed);
+        s = Drive(s: s, "install 2");
+        s = Drain(s: s);
+        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Settle { Retired: [Ids.C1] });
+        Assert.False(condition: Fold(s: s, Node.H).Has(id: Ids.C1));
+        Assert.True(condition: Fold(s: s, Node.A).Follows(id: Ids.C2));
+        _ = Converge(s: s);
+    }
+
+    [Fact]
+    public void CanonicalTextKeepsTheOrderWithinALane() {
+        var a = Start(route: "AB");
+        var b = a.Clone();
+        var first = new Msg(From: Node.A, To: Node.H, Kind: MsgKind.Reserve, Key: "A1", Members: [], Arg: "", Dup: false);
+        var second = new Msg(From: Node.A, To: Node.H, Kind: MsgKind.Reserve, Key: "A2", Members: [], Arg: "", Dup: false);
+
+        a.Network.AddRange(collection: [first, second]);
+        b.Network.AddRange(collection: [second, first]);
+        Assert.NotEqual(expected: a.Canon(), actual: b.Canon());
+        Assert.Equal(expected: "A1", actual: CustodyModel.LaneHeads(s: a).Single().Key);
+        Assert.Equal(expected: "A2", actual: CustodyModel.LaneHeads(s: b).Single().Key);
+    }
+
+    [Fact]
+    public void AStatusQueryMayPassADelayedCommitAfterAReconnect() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.Commit);
+        s = Drive(s: s, "expire A:");
+        s = Drive(s: s, "reconnect H>A");
+        s = Drive(s: s, "retry status H:H1");
+        Assert.Contains(collection: CustodyModel.LaneHeads(s: s), filter: static m => m.Kind == MsgKind.Status);
+        s = Drive(s: s, "deliver H>A:Status");
+        s = Drive(s: s, "deliver A>H:StatusReply:H1::Missing");
+        Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C1) && Fold(s: s, Node.H).Has(id: Ids.Player));
+        s = Drive(s: s, "deliver H>A:Commit");
+        Assert.Contains(collection: s.Network, filter: static m => m.Kind == MsgKind.Missing);
+        s = Converge(s: s);
+        Assert.Equal(expected: (CustodyKind.Home, Node.H, 0), actual: Title(s: s, Ids.C1));
+    }
+
+    [Fact]
+    public void ALaterHopDoesNotContradictAnEarlierRecall() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "reconnect");
+        s = Drive(s: s, "recall 2");
+        Assert.Equal(expected: 2, actual: Title(s: s, Ids.C1).Epoch);
+        s = Drive(s: s, "cross H>B");
+        s = Drive(s: s, "authorize H2");
+        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Hop { Key: "H2" });
+        s = Converge(s: s);
+        Assert.Equal(expected: (CustodyKind.Away, Node.B, 3), actual: Title(s: s, Ids.C1));
+    }
+
+    [Fact]
+    public void ABindingNamesTheFollowedGeneration() {
+        var s = Start(route: "AA");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        Assert.True(condition: Fold(s: s, Node.A).Follows(id: Ids.C1));
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "reconnect");
+        // The player lands at A again at a new generation of the same slot; the old binding does not follow it.
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        Assert.Equal(expected: Node.A, actual: s.PlayerAt);
+        Assert.False(condition: Fold(s: s, Node.A).Follows(id: Ids.C1));
+        s = Converge(s: s);
+        Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C1));
+    }
+
+    [Fact]
+    public void AFullCustodianRefusesTheSecondCompanion() {
+        var s = Start(route: "AB", companions: 2);
+
+        s.CustodianSlots = 2;
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        Assert.Contains(collection: s.Trace, filter: static t => t.Contains("A>H:Reserved", StringComparison.Ordinal) && t.Contains("3:Full", StringComparison.Ordinal));
+        Assert.True(condition: Fold(s: s, Node.A).Follows(id: Ids.C1));
+        Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C2));
+        Assert.Equal(expected: (CustodyKind.Home, Node.H, 0), actual: Title(s: s, Ids.C2));
+        _ = Converge(s: s);
+    }
+
+    [Fact]
+    public void ShedKeysComeFromTheCommonAllocator() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "partition H-A");
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "sweep A:2");
+        s = Drive(s: s, "strand A:2");
+        s = Drive(s: s, "elapse A:2");
+        s = Drive(s: s, "shed-mint A:2");
+        Assert.Contains(collection: s.Nodes[1].Records, filter: static r => r is Minted { Shed: true, Key: "A2" });
+        s = Drive(s: s, "shed A:2");
+        Assert.Contains(collection: s.Nodes[1].Records, filter: static r => r is Dep { Shed: true, Key: "A2" });
+        s = Drive(s: s, "heal H-A");
+        s = Converge(s: s);
+        Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C1));
+    }
+
     // ---- the explorer ---------------------------------------------------------------------------------------------
 
     private static Node[] Route(string route) => route.Select(static c => Enum.Parse<Node>(value: c.ToString())).ToArray();
@@ -552,8 +730,6 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         }
     }
 
-    private const int StateCap = 1_500_000;
-
     private readonly record struct Exploration(int States, int Converged, int MaxDepth, long Milliseconds, long PeakMegabytes);
 
     // Visited states are kept as 128-bit digests of their canonical text (two independent 64-bit folds), not the text.
@@ -570,8 +746,8 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
     }
 
     // Depth-first over the fault budget, so the frontier stays small while the visited set carries the breadth.
-    private static Exploration Explore(bool bAccepts, Node[] route, int companions, int faults, Fault allowed, int limit = 1) {
-        var start = new ModelState(aAccepts: true, bAccepts: bAccepts, route: route, companions: companions);
+    private static Exploration Explore(bool bAccepts, Node[] route, int companions, int faults, Fault allowed, int limit = 1, int custodianSlots = CustodyModel.Capacity - 1, int cap = 1_500_000) {
+        var start = new ModelState(aAccepts: true, bAccepts: bAccepts, route: route, companions: companions) { CustodianSlots = custodianSlots };
 
         start.Budget.Allowed = allowed;
         start.Budget.Limit = limit;
@@ -605,13 +781,13 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
                     stack.Push(item: (next, depth + 1));
                 }
             } catch (ModelViolation violation) {
-                throw new Xunit.Sdk.XunitException($"{violation.Message}\nscope: route={string.Join("", route)} companions={companions} B={bAccepts} faults={allowed}x{faults} limit={limit}\ntrace: {string.Join(" -> ", state.Trace)}");
+                throw new Xunit.Sdk.XunitException($"{violation.Message}\nscope: route={string.Join("", route)} companions={companions} slots={custodianSlots} B={bAccepts} faults={allowed}x{faults} limit={limit}\ntrace: {string.Join(" -> ", state.Trace)}");
             }
             if ((visited.Count & 0xFFFF) == 0) {
                 peak = Math.Max(peak, GC.GetTotalMemory(forceFullCollection: false));
             }
-            if (visited.Count > StateCap) {
-                throw new Xunit.Sdk.XunitException($"the scope route={string.Join("", route)} companions={companions} faults={allowed}x{faults} exceeds {StateCap} states; tighten its bounds");
+            if (visited.Count > cap) {
+                throw new Xunit.Sdk.XunitException($"the scope route={string.Join("", route)} companions={companions} faults={allowed}x{faults} exceeds {cap} states; tighten its bounds");
             }
         }
 
