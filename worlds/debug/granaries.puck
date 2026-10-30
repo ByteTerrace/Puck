@@ -14,8 +14,8 @@ import "shapes"
 //
 // The pieces are a deal. `granaryStores` is a placement carrying a `deal` facet over the granaryNames row: one child
 // piece per account, parented to the table at the cell its dealt slot names, its prototype chosen by the account's kind
-// (the variants map reads granaryKinds). The 16 board tiles each carry an influence volume on their own channel, so a
-// rule finds the cell a piece stands on by asking which tile covers it (`granaryCellOf`), and the occupancy row
+// (the variants map reads granaryKinds). The 16 board tiles carry influence volumes on channels that code their ordinal,
+// so a rule finds the cell a piece stands on by asking which tile covers it (`granaryCellOf`), and the occupancy row
 // `granaryBoard` (the board facet's own row, over the grid `granaryGrid`) follows. Water and power are two providers at
 // the board's rims whose coverage grows in three stages; the coverage rows hold, per account, how many providers cover
 // its piece.
@@ -469,8 +469,9 @@ template granaryStore(name, body, roof) {
 }
 
 // ---- Finding each piece's cell ----------------------------------------------------------------------------------------
-// The tiles' channels `bit0`..`bit3` and `tile` code the cell a piece stands on: an account's cell is the sum of the bits that cover its piece. A piece the deal removes leaves the row; its cell and
-// coverage cells are cleaned on the tick after, once the influence no longer reads.
+// The tiles' channels `tile` and `bit0`..`bit3` code the cell a piece stands on: an account's cell is the sum of the bits
+// that cover its piece, and `granaryCellOf` holds it plus one, so an absent cell never reads as cell 0. A piece the deal
+// removes leaves the row; its cell and coverage cells are cleaned on the tick after, once the influence no longer reads.
 
 rule "granary-locate" {
   local at = (1 +

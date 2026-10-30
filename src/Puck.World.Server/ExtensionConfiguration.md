@@ -136,7 +136,7 @@ service result cannot accidentally become another request body.
 
 An `observations` entry reads an approved external collection and maps selected
 fields into existing state rows of any cell kind, and nothing else. The
-[granaries example](../../experimental/src/Puck.World/Assets/worlds/modules/README.md) uses this
+[debug world's granary board](../../worlds/debug/granaries.md) uses this
 path to represent storage accounts without configuring any cloud mutation
 operations; the [Azure hosting example](../Puck.World.Azure/azure.extensions.example.json)
 also shows a `Fixed` row fed by a metrics observation. An observation writes
@@ -160,6 +160,13 @@ Only a complete snapshot can replace the previous collection. Changed rows
 enter one recorded mutation batch; unchanged snapshots submit nothing.
 Failed, partial, or oversized reads retain the last complete collection. Normal
 admission can still refuse a projection; read-back retries it until it is applied.
+
+An observation may also name a `status` table: an ordinary `Int` table, owned by the observation, whose one cell
+`status` the host keeps at 0 until a read has finished, 1 while the last read succeeded and 2 once it failed. An
+authored rule reads it to tell an empty collection from a feed that is not there. The built-in `observation.fixture`
+provider (no provider settings) serves the observation settings' `items` (each a `key` and its `fields`) in place of a
+service, and its `failure` string makes every read fail, so a test or a headless run drives the same projection with
+nothing behind it.
 
 `refreshTicks` paces attempts, including failures, using simulation time; a stopped
 world starts no new reads. `scanEveryTicks` also bounds when results are collected.

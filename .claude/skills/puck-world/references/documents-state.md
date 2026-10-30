@@ -721,9 +721,10 @@ Dealt placement instances carry reserved `dealSlot` identities independently of 
 selects instance-owned transforms, prototypes, and facets. Spatial volumes distinguish occupation, shared clearance,
 and opaque influence channels; static planning does not ban dynamic facets from ordinary placements. Reflow previews
 travel through attributed queries and return an ordinary batch with spatial, named-input, and payment guards.
-The quarantined granary module guide records the spatial/reflow
-authoring contract: `experimental/src/Puck.World/Assets/worlds/modules/README.md`
-("Grow and rearrange the court").
+The debug world's granary board guide records the spatial authoring contract
+and the influence reads: `worlds/debug/granaries.md` ("Reading the board").
+A volume whose extents bind a state row is compiled into the index again when
+the row changes (`WorldSpatialQueryCompilation.Resolve`).
 
 `WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
 step/slope limits, a vertical capsule, and swept neighbour edges from

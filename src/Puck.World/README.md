@@ -135,11 +135,11 @@ World composes both Gaming Brick forges as built-ins and discovers the rest from
 installation it cannot use refuses the boot by name. Imported world content
 cannot enable cloud access by itself.
 
-The [granaries district](../../experimental/src/Puck.World/Assets/worlds/modules/README.md) renders the existing Azure
-deployment's storage inventory on the island's own plaza as an importable, authored
-storeyard; the same collection tables can serve a text world. Its buildings can preserve gameplay-owned
+The [debug world's granary board](../../worlds/debug/granaries.md) renders the existing Azure
+deployment's storage inventory as pieces on a tabletop board in the gallery's board game room; the same collection
+tables can serve a text world. A dealt instance can preserve gameplay-owned
 transforms and facets across inventory refreshes, and `world.reflow.preview` / `world.reflow.status` / `world.reflow.commit` rearrange
-declared footprints through a guarded, undoable placement-and-payment batch. The district guide owns the policy
+declared footprints through a guarded, undoable placement-and-payment batch. The board guide owns the policy
 and its current boundaries.
 
 ```bash

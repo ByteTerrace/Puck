@@ -1315,6 +1315,13 @@ material defect needs no taste call); new content and art on the owner's call.
   into an addon that is a pure function of its inputs; start with one committed
   test cartridge with a known win condition.
 
+- The granary board ([granaries.md](../../worlds/debug/granaries.md)): the owner's own
+  run against the live resource group is outstanding (the command is in that guide; the
+  fixture configuration stands in for it everywhere else). A piece's look carries its
+  account's kind only, since a deal's variants read one row; SKU and region are rows the
+  lectern reads. The pieces are dealt placements, not bodies, so a seated player inspects
+  and cannot yet pick one up; moving a piece (`deal.preserve`, `reflow`) is unused here.
+
 ### Agent tooling and skills
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
