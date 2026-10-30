@@ -155,8 +155,12 @@ only when the task allows it, and restore what you changed.
 To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
 call returns `pending` and a `startId` promptly. Poll `puck_world_start_wait`
-with that id (each wait defaults to 20 seconds; `timeoutMs` allows up to 120000 in one
-call, so a cold build needs few polls); never repeat the start while pending. A pending
+with that id. A contended multi-lane GPU run can set `timeoutSeconds: 7200`:
+the admission deadline includes compilation, the fair GPU queue and attachment,
+so the former thirty-minute maximum expired behind other verification batches.
+This extends queue admission, not the lane's twenty-minute running-World batch.
+Each wait defaults to 20 seconds; `timeoutMs` allows up to 120000 in one
+call, so a cold build needs few polls. Never repeat the start while pending. A pending
 answer names its `stage` (`building` the World from the checkout's sources, `gpu-lease`,
 or `booting`, with the World's last stderr line in `output`) and the seconds `elapsedSeconds`
 since admission. A cold build continues between calls and across adapter updates.

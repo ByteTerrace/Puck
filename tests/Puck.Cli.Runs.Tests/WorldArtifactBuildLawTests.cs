@@ -26,7 +26,7 @@ public sealed class WorldArtifactBuildLawTests {
                 text: """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <ItemGroup>
-                    <ProjectReference Include="..\Puck.Library\Puck.Library.csproj" />
+                    <ProjectReference Include="../Puck.Library/Puck.Library.csproj" />
                   </ItemGroup>
                 </Project>
 
@@ -182,6 +182,42 @@ public sealed class WorldArtifactBuildLawTests {
             actual: File.ReadAllText(path: second.Path),
             expected: File.ReadAllText(path: first.Path)
         );
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void SourcesChangingAfterKeyingNeverPublishUnderTheEarlierKey(bool duringBuild) {
+        using var checkout = new Checkout();
+        using var leases = new TemporaryDirectory();
+        var store = checkout.Store;
+
+        void Change() => checkout.Write(name: LibrarySource, text: "namespace Changed;\n");
+        var builder = new CountingBuilder(entered: (duringBuild ? Change : null));
+        WorldArtifact? artifact = null;
+
+        try {
+            Assert.False(condition: WorldArtifactBuild.TryResolve(
+                artifact: out artifact,
+                builder: builder.Build,
+                error: out var error,
+                leaseRoot: () => { if (!duringBuild) { Change(); } return leases.RootPath; },
+                logDirectory: checkout.LogDirectory,
+                repositoryRoot: checkout.Root,
+                store: store,
+                timeout: TestLiveness.Bound,
+                verb: "law"));
+            Assert.Null(@object: artifact);
+            Assert.Contains(actualString: error, expectedSubstring: "sources changed");
+            Assert.Equal(expected: (duringBuild ? 1 : 0), actual: builder.Builds);
+        } finally { artifact?.Dispose(); }
+
+        // The earlier state must still miss: a refused build cannot poison a later return to these bytes.
+        checkout.Write(name: LibrarySource, text: "namespace Library;\n");
+        var restoredBuilder = new CountingBuilder();
+        using var restored = Resolve(checkout: checkout, store: store, builder: restoredBuilder);
+
+        Assert.False(condition: restored.Reused);
+        Assert.Equal(expected: 1, actual: restoredBuilder.Builds);
     }
     [InlineData("world")]
     [InlineData("stub")]
@@ -430,7 +466,7 @@ public sealed class WorldArtifactBuildLawTests {
 
             do {
                 seen = Volatile.Read(location: ref location);
-            } while ((value > seen) && (Interlocked.CompareExchange(location1: ref location, value: value, comparand: seen) != seen));
+            } while ((value > seen) && (Interlocked.CompareExchange(comparand: seen, location1: ref location, value: value) != seen));
         }
     }
     [Fact]

@@ -277,43 +277,33 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   volume's visibility bits (`SdfLight.IsTraced`, `sdfMeshLightVisibility`): a
   fixture that lights through a slab is an anchored light or a volume that
   holds no probe there. `world.exposure` reads each view's EV and meter.
-- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and the
-  gather feeds the indirect light, the reflection and every traced light's
-  visibility; a probe artefact (a band along a wall) shows in
-  `world.debug-view indirect` apart from the direct light. The volume a view
-  reads is filtered over the neighbours each probe sees
-  (`SdfMeshIrradiance.Filter`), and a probe lights only what lies on its side
-  of the first-hit planes of its 26 lattice rays, the four about the receiver's
-  direction blended (`sdfMeshProbePlaneVisibility`): a leak through a wall
-  none of those rays meets, or a storey the 2 m lattice straddles, is the
-  lattice's coarseness, and a soft dark patch beside a finite blocker is the
-  cone of the rays that hit it. Only an answering probe that survives the
-  separation test itself can separate another's suspect admission
-  (`sdfMeshProbeSeparate`), and the separating plane is the blocker's whole
-  half-space, so a finite blocker between two probes can over-darken what both
-  see. A probe stands in the open: a lattice centre inside geometry or within
-  `SdfMeshIrradianceProbe.Clearance` of a surface moves to the nearest clear
-  point of its cell (`SdfMeshIrradiance.Place`) and carries the offset in its
-  record, which every position read uses; one no point frees is invalid and
-  gives its share to the corners that answer. See [mesh GI](references/mesh-gi.md).
-  Without separation a probe just above a roof or beside a
-  doorway lights the room's upper walls in jagged patches through the rays
-  that cleared the edge. Never use an axis-depth half-space for initial visibility, which
-  rejects every receiver beyond a plinth, and never push the receiver by a
-  share of the spacing: the push (`SdfMeshIrradianceProbe.NormalBias`) and the
-  planes' fade (`DepthFade`) are metres under the thinnest wall and floor,
-  since a wall pixel where it meets a floor is level with that surface and a
-  surface facing a near wall must not read the room beyond it. Debug a
-  probe artefact with `world.probe <x> <y> <z> [<nx> <ny> <nz>]` first (each
-  corner's position, offset, inside share, validity, neighbours, cubes and
-  weight terms at a receiver), and only then by splitting the gather in a
-  scratch edit of the `indirect` case in `debug/sdf-debug-views.hlsli` (each
-  corner's share, or magenta where no probe answers) and
-  `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in
-  `sdfLightStage`) reads the same gather's indirect light as part of each
-  surface's illumination, so a surface lit wrongly by the volume is also
-  exposed wrongly by it. A nested
-  world's views read their own volume at their own authored tier.
+- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
+  gather supplies indirect light, reflections and traced static-light visibility.
+  Each probe publishes its own measured cubes, without neighbour filtering.
+  Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
+  per texel. Each word packs ray distance and two signed normal bytes;
+  negative distance marks a measured miss. Four reflected angular taps reconstruct compatible surface patches before
+  testing signed receiver gaps and blocked coverage. Radial depth interpolation rejects
+  coplanar receivers at grazing angles, so no mean/squared-distance pair remains.
+  Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
+  The sky cube comes from the same full-reach radiance rays as bounced light.
+  Surface support stays within the angular taps; no neighbour vetoes or suspect sets return.
+  The first sweep caches FP16 normal gradients from each texel's local angular
+  neighbourhood. Interpolate compatible quadratic coefficients and intersect
+  their entering root; a tangent alone shadowed
+  the visible side of sparsely sampled curved geometry. The sparse-curve law
+  checks against exact mesh segments. No triangle-footprint clipping is used.
+  Gather weights are trilinear share × a half-spacing smooth distance fade in front of the receiver × depth
+  visibility. The actual receiver is biased by `NormalBias` metres, never by
+  spacing; clamping the lookup must not move the visibility-test receiver.
+  A zero-weight gather supplies no measured indirect or traced static light.
+  Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
+  its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
+  stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
+  its exact reference segment distinguishes sampling errors from cube content.
+  Local adaptation consumes this same gather, so an irradiance error also
+  changes exposure. See [mesh GI](references/mesh-gi.md) for sampling, storage,
+  boundary behavior and the fixed-camera checks on both backends.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances

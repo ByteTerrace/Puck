@@ -21,9 +21,9 @@ namespace Puck.SdfVm;
 /// <param name="Luminance">The mean over the probe's six cube faces of the luminance the static geometry sends it, in
 /// the views pass's units; its own measurement, before FP16 packing.</param>
 /// <param name="Trilinear">The receiver's trilinear share of the corner, from zero to one.</param>
-/// <param name="Facing">How far the probe lies in front of the receiver's surface, from zero (behind) to one (along the
-/// normal).</param>
-/// <param name="Visibility">The depth-moment visibility of the pushed receiver from the probe, from zero to one.</param>
+/// <param name="Facing">The smooth distance fade from zero on/behind the receiver's tangent plane to one half a spacing in
+/// front of it.</param>
+/// <param name="Visibility">The angular surface visibility of the pushed receiver from the probe, from zero to one.</param>
 /// <param name="Front">Whether the probe lies in front of the receiver's surface.</param>
 /// <param name="Weight">The weight the corner answers with, after facing and depth visibility; zero
 /// where it does not answer.</param>

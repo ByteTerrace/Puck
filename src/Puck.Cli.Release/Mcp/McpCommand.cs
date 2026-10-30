@@ -49,7 +49,7 @@ public static class McpCommand {
             throw;
         }
     }
-    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, CancellationToken cancellationToken) {
+    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, Func<int, long, bool>? ancestor, CancellationToken cancellationToken) {
         // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
         // so every console interrupt is a graceful drain rather than a tear-down mid-session.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
@@ -105,6 +105,7 @@ public static class McpCommand {
                 ? null
                 : new OperatorWorldLaunch(
                     AcquireGpuLease: async (holder, lane, wait, token) => await CliLease.AcquireAsync(
+                        ancestor: ancestor,
                         cancellationToken: token,
                         clock: TimeProvider.System,
                         holder: holder,
@@ -141,7 +142,7 @@ public static class McpCommand {
         }
     }
 
-    public static Command Create() {
+    public static Command Create(Func<int, long, bool>? ancestor = null) {
         var attachOption = new Option<string?>(name: "--attach") {
             Description = "The attachment file printed by `world.control start` in a running World's console, or `latest` to follow the newest running World across restarts. When omitted with --profile operator, defaults to `latest`. Each tool call attaches on demand, so the adapter may start before any World.",
         };
@@ -214,6 +215,7 @@ public static class McpCommand {
             }
         });
         command.SetAction(action: (parseResult, cancellationToken) => RunAsync(
+            ancestor: ancestor,
             attachmentPath: parseResult.GetValue(option: attachOption),
             cancellationToken: cancellationToken,
             configurationPath: parseResult.GetValue(option: httpOption),
