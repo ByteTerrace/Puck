@@ -184,6 +184,15 @@ window; a heightfield is added only if that reading fails.
   wave. Assisted flight (horizon leveling, cruise) is a later pass, so phase 5
   reuses the Moth's existing free flight as it is.
 - **Landing is open,** anywhere a body can stand, as it is now.
+- **The valley as built falls short** (the owner, walking it): its walls read as
+  soft white masses with metre-scale grain, without material, with clipped
+  exposure and no sense of distance. It needs a real terrain pass, not tuning:
+  terrain-scale noise (ridged and domain-warped, octaves from kilometres to
+  centimetres), slope and altitude materials, contact on the drawn relief, the
+  exposure meter fixed at its cause, and distance haze, each a generic engine
+  capability. The standard package ships **two terrain material sets an author
+  chooses, a natural alpine one and a stylized painterly one**; the valley uses
+  one, picked later.
 
 Still open, for when the work reaches them: whether the moons dominate the day
 or the night, and how long the ascent is.
