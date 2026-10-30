@@ -83,9 +83,12 @@ public abstract record WorldCrossingRecord {
         public IReadOnlyList<int> Burned { get; init; } = (Burned ?? []);
     }
     /// <summary>A source allocated every transfer id below <paramref name="Next"/>: recovery never mints one of them
-    /// again.</summary>
+    /// again. A crossing that sets out with companions names them here, before anything is sent under its key, so a key
+    /// that never departs is abandoned on record and each companion's title authority is told.</summary>
     /// <param name="Next">The first id the source has not allocated.</param>
-    public sealed record Allocation(ulong Next) : WorldCrossingRecord;
+    /// <param name="Mint">The crossing minted under the allocation and the companions it set out with, or
+    /// <see langword="null"/> for an allocation that minted no crossing with companions.</param>
+    public sealed record Allocation(ulong Next, WorldTransferMint? Mint = null) : WorldCrossingRecord;
     /// <summary>A source detached a cohort and is about to send its commit. The transfer is in doubt from here until a
     /// settlement: recovery detaches the cohort again and asks the destination for the outcome.</summary>
     /// <param name="Transfer">The source's complete recovery record for the transfer.</param>

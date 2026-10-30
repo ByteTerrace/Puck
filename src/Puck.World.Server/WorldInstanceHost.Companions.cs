@@ -1,14 +1,9 @@
 using Puck.Commands;
-using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 public sealed partial class WorldInstanceHost {
-    // The onward hops the crossing being applied was granted by another title authority: each is given up if the
-    // crossing does not depart with it.
-    private List<(WorldInstance Row, WorldTransferKey Key, WorldEntityAddress Incarnation, string Home)> m_foreignGrants = [];
-
     // One companion a crossing carries: the body it leaves, the ordinal of the member it follows in the cohort, and the
     // leaf it carries (its role, home and driver; the ticket comes from its title authority's grant).
     private readonly record struct CompanionMember(int Slot, int FollowsOrdinal, WorldTransferCompanion Leaf);
@@ -125,9 +120,6 @@ public sealed partial class WorldInstanceHost {
                 var answer = ((index < answers.Count) ? answers[index] : default);
                 var expected = checked((member.Mobility!.Value.Epoch + 1UL));
 
-                if ((answer.Verdict == WorldHopVerdict.Granted) && !string.Equals(a: home.Key, b: authority, comparisonType: StringComparison.Ordinal)) {
-                    m_foreignGrants.Add(item: (source, key, incarnations[index], home.Key));
-                }
                 transient |= (answer.Verdict is WorldHopVerdict.Pending or WorldHopVerdict.Unavailable);
                 if ((answer.Verdict == WorldHopVerdict.Granted) && (answer.Incarnation == incarnations[index]) && (answer.Next == expected)) {
                     reservationMembers[ordinal] = member with {
@@ -254,9 +246,10 @@ public sealed partial class WorldInstanceHost {
             }
         }
     }
-    // Abandons every key this authority granted its own hop under whose attempt ended without departing (a settlement
-    // landing nothing, one record each), then settles every own hop whose key is settled: one record per companion, each
-    // its own operation. A key still queued, and a departure in doubt, wait.
+    // Abandons every key this authority minted a crossing with companions under, or granted its own hop under, whose
+    // attempt ended without departing (a settlement landing nothing, one record each), then settles every own hop whose
+    // key is settled: one record per companion, each its own operation. A key still queued, and a departure in doubt,
+    // wait.
     private void SettleOwnHops() {
         foreach (var row in m_instances.Values.ToArray()) {
             foreach (var transferId in row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.UnsettledOwnKeys())) {

@@ -126,7 +126,8 @@ public static class WorldWireLeaves {
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
         Authority: reader.ReadRequiredString(field: "entity address authority"),
         Index: reader.ReadInt32(),
-        Generation: reader.ReadInt32()
+        Generation: reader.ReadInt32(),
+        Titled: reader.ReadBoolean()
     );
     /// <summary>Reads a traveler's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>), refusing a
     /// value outside the reduced interval <c>[-pi, pi]</c>, which no accumulation produces.</summary>
@@ -235,6 +236,7 @@ public static class WorldWireLeaves {
         writer.WriteString(value: address.Authority);
         writer.WriteInt32(value: address.Index);
         writer.WriteInt32(value: address.Generation);
+        writer.WriteBoolean(value: address.Titled);
     }
     /// <summary>Writes a <see cref="WorldMobilityIdentity"/>. Kept <c>Action&lt;WireWriter, WorldMobilityIdentity&gt;</c>-shaped
     /// (no <see langword="in"/> parameter) so it keeps serving as a bare method-group argument to the checkpoint

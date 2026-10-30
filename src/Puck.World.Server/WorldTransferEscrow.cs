@@ -203,6 +203,10 @@ public readonly record struct WorldContinuumTrajectory(
 public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition, IReadOnlyList<int>? AcceptedMembers = null, IReadOnlyList<WorldMemberRefusal>? Refusals = null) {
     /// <summary>Gets each companion the destination refused while it leased the rest.</summary>
     public IReadOnlyList<WorldMemberRefusal> Refusals { get; init; } = (Refusals ?? []);
+    /// <summary>Gets a value indicating whether the refusal decided nothing: the request or its answer was lost on the
+    /// lane, or the destination could not decide yet (it is latched on a record it cannot call durable, or its lease
+    /// record did not land). The source keeps its attempt and sends the same request again.</summary>
+    public bool Transient { get; init; }
     /// <summary>Returns the request-local ids the destination leased: <see cref="AcceptedMembers"/>, or every member of
     /// <paramref name="request"/> in order when the reply names none.</summary>
     /// <param name="request">The request this reply answers.</param>
@@ -1575,7 +1579,7 @@ public sealed partial class WorldTransferEscrow {
             reason: out var suspended,
             request: request
         )) {
-            return WorldTransferReservationReply.Refused(reason: suspended);
+            return WorldTransferReservationReply.Refused(reason: suspended) with { Transient = true };
         }
 
         if (!TryCopyReservation(
@@ -1818,7 +1822,7 @@ public sealed partial class WorldTransferEscrow {
         );
 
         if (durability != WorldCrossingDurability.Durable) {
-            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} lease could not be made durable — {leaseDetail}");
+            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} lease could not be made durable — {leaseDetail}") with { Transient = true };
         }
         RaiseFloor(
             floor: request.SourceFloor,
@@ -1840,6 +1844,54 @@ public sealed partial class WorldTransferEscrow {
     private static WorldTransferReservationRequest Leased(WorldTransferReservationRequest request, IReadOnlyList<int> ids) => request with {
         Members = [.. request.Members.Select(selector: static (member, ordinal) => member with { MemberId = member.IdAt(ordinal: ordinal) }).Where(predicate: member => ids.Contains(value: member.MemberId))],
     };
+    /// <summary>Returns the hop tickets this destination asks home to confirm before it decides
+    /// <paramref name="request"/>: one per companion it would otherwise take (a role declared here, no body or live lease
+    /// here naming its incarnation) whose ticket names this very hop. None when the key already holds a lease, an arrival
+    /// or a death here or this authority is latched, since each of those answers without home's word; a companion coming
+    /// home is decided from this authority's own records and asks nobody. The caller holds the authority gate.</summary>
+    /// <param name="request">The reservation request.</param>
+    /// <returns>The tickets to confirm, in member order; empty when the decision needs no confirmation.</returns>
+    public IReadOnlyList<WorldCustodyTicket> ReservationHopQuestion(WorldTransferReservationRequest request) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+
+        var key = new WorldTransferKey(
+            SourceAuthority: request.SourceAuthority,
+            TransferId: request.TransferId
+        );
+
+        if (m_committed.Contains(item: key) || m_spent.ContainsKey(key: key) || m_leases.ContainsKey(key: key) || m_server.CustodyLatched || IsSuspended(reason: out _, request: request)) {
+            return [];
+        }
+        var tickets = new List<WorldCustodyTicket>();
+
+        foreach (var member in (request.Members ?? [])) {
+            if (
+                (member.Companion is { Ticket: { } ticket } companion) &&
+                (ticket.Hop == key) &&
+                (member.Mobility is { } mobility) &&
+                !string.Equals(a: mobility.Incarnation.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal) &&
+                (m_server.Definition.FindRole(name: companion.Role) is not null) &&
+                !m_mobilityLeases.ContainsKey(key: mobility.Incarnation) &&
+                !EmbodiesIncarnation(incarnation: mobility.Incarnation)
+            ) {
+                tickets.Add(item: ticket);
+            }
+        }
+        return tickets;
+    }
+    /// <summary>Returns the hop tickets this destination asks home to confirm before it lands a commit under
+    /// <paramref name="key"/>: every companion its live lease holds for a hop (a member it will refuse at the landing
+    /// included), since the reservation's answer is spent. None when no live lease holds the key, the key is committed or
+    /// uncertain here, or this authority is latched, since each of those answers without home's word. The caller holds
+    /// the authority gate.</summary>
+    /// <param name="key">The transfer key.</param>
+    /// <returns>The tickets to confirm, in member order; empty when the commit needs no confirmation.</returns>
+    public IReadOnlyList<WorldCustodyTicket> CommitHopQuestion(WorldTransferKey key) {
+        if (m_committed.Contains(item: key) || m_server.CustodyLatched || IsUncertain(key: key, reason: out _) || !m_leases.TryGetValue(key: key, value: out var lease)) {
+            return [];
+        }
+        return [.. lease.Request.Members.Where(predicate: member => !IsReturn(member: member)).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>().Where(predicate: ticket => (ticket.Hop == key))];
+    }
     // Decides one companion of a reservation on its own: its role declared here, no body or live lease here naming its
     // incarnation, a ticket for this very hop at the epoch above the one it leaves, home's confirmation that the grant is
     // current (asked for this reservation by this destination's own host, never taken from the sender), and a free peer
@@ -2037,6 +2089,11 @@ public sealed partial class WorldTransferEscrow {
             }
             if (request.Members[index].Companion is not null) {
                 continue;
+            }
+            // An owned traveller moves only under a hop its title authority grants, which only its companion leaf asks
+            // for: stripped of the leaf, it is refused rather than landed as an ordinary traveller.
+            if (mobility.Incarnation.Titled) {
+                return $"traveler {(index + 1)} names titled incarnation {mobility.Incarnation} without the companion leaf its title authority's hop requires";
             }
             if (m_mobilityLeases.TryGetValue(
                 key: mobility.Incarnation,

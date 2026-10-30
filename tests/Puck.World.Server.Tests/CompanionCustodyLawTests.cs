@@ -11,10 +11,12 @@ namespace Puck.World.Server.Tests;
 /// authority holds. Each law is the engine form of a named trace of the custody model
 /// (<c>CompanionCustodyModelLawTests</c>). Home is the source row; the companion is an incarnation it minted.</summary>
 public sealed class CompanionCustodyLawTests {
+    // The titled incarnation home would mint for the body at index 1: these laws fold its custody records, whatever body
+    // stands there.
     private static WorldEntityAddress Companion(CrossingWorld world) => world.Source.Server.Population.ResolveIncarnation(
         authority: world.Source.Server.AuthorityIdentity,
         index: 1
-    )!.Value;
+    )!.Value with { Titled = true };
     private static WorldTransferKey Key(CrossingWorld world, ulong id) => new(
         SourceAuthority: world.Source.Server.AuthorityIdentity,
         TransferId: id
@@ -347,7 +349,7 @@ public sealed class CompanionCustodyLawTests {
             }
         }
 
-        var companion = source.Server.Population.ResolveIncarnation(authority: source.Server.AuthorityIdentity, index: 1)!.Value;
+        var companion = source.Server.Population.ResolveIncarnation(authority: source.Server.AuthorityIdentity, index: 1)!.Value with { Titled = true };
         var key = new WorldTransferKey(SourceAuthority: source.Server.AuthorityIdentity, TransferId: 1UL);
 
         Step(ticks: 3);

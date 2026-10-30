@@ -85,6 +85,50 @@ public sealed partial class CompanionCrossingLawTests {
         Assert.Equal(actual: rows.Records(row: rows.Home).OfType<WorldCrossingRecord.Settlement>().Single().Landed, expected: [0]);
     }
 
+    // A companion's incarnation carries its title mark: a source that strips the companion leaf cannot land home's
+    // companion as an ordinary traveller, and the same address without the mark names no title of home's.
+    [Fact]
+    public void AStrippedCompanionLeafLandsNoTitledIncarnation() {
+        using var rows = new Rows();
+        var companion = rows.Companions[0];
+        var key = new WorldTransferKey(SourceAuthority: rows.C.Server.AuthorityIdentity, TransferId: 991UL);
+        var forged = ForgedRequest(rows: rows, key: key, ticketEpoch: 1UL);
+        var stripped = forged with { Members = [forged.Members[0], forged.Members[1] with { Companion = null }] };
+
+        Assert.True(condition: companion.Titled);
+        Assert.False(condition: rows.Player.Titled);
+
+        var reply = rows.B.Server.ReserveTransfer(request: stripped);
+
+        Assert.False(condition: reply.Accepted);
+        Assert.Contains(expectedSubstring: "without the companion leaf", actualString: reply.Reason);
+        // Unmarked, the address is another incarnation: home holds no title of it and grants it no hop.
+        var unmarked = companion with { Titled = false };
+
+        Assert.Null(@object: rows.Home.Server.ExecuteAuthorityOperation(operation: () => rows.Home.Server.TransferEscrow.Custody.TitleOf(incarnation: unmarked)));
+        Assert.Equal(actual: Assert.Single(collection: rows.Home.Server.RequestHop(destination: rows.B.Server.AuthorityIdentity, key: key, members: [new WorldHopRequestMember(Epoch: 0UL, Incarnation: unmarked)], source: rows.C.Server.AuthorityIdentity)).Verdict, expected: WorldHopVerdict.NotMyTitle);
+    }
+    // A commit that landed members and could not make its arrival durable burns their slots' generations, and the
+    // tombstone names them: a destination restarted from its image and log keeps those generations, so the slots' next
+    // occupants are new generations there too.
+    [Fact]
+    public void ARestartedDestinationKeepsTheGenerationsARefusedLandingBurned() {
+        using var rows = new Rows();
+        var before = Enumerable.Range(start: 0, count: rows.B.Server.Population.Capacity).Select(selector: slot => rows.B.Server.Population.Generation(index: slot)).ToArray();
+
+        rows.Logs["row-b"].LoseAnswerOn = typeof(WorldCrossingRecord.Arrival);
+        rows.Logs["row-b"].LostAnswer = WorldCrossingDurability.Refused;
+        rows.Cross(from: rows.Home, to: rows.B);
+
+        var tombstone = Assert.Single(collection: rows.Records(row: rows.B).OfType<WorldCrossingRecord.Tombstone>());
+
+        Assert.Equal(actual: tombstone.Burned.Count, expected: 2);
+        rows.Restart(name: "row-b");
+
+        foreach (var slot in tombstone.Burned) {
+            Assert.True(condition: (rows.B.Server.Population.Generation(index: slot) > before[slot]), userMessage: $"body:{slot} is back at generation {before[slot]} after the restart");
+        }
+    }
     // Forwards every call to the destination, holding the landed verdict back until released.
     private sealed class HoldLanded(WorldServer destination) : IWorldPeerCall {
         public bool Release { get; set; }

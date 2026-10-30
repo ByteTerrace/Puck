@@ -336,6 +336,20 @@ public static partial class WorldAuthorityCheckpointCodec {
             case WorldCrossingRecord.Allocation allocation:
                 writer.WriteByte(value: CrossingAllocationTag);
                 writer.WriteUInt64(value: allocation.Next);
+                writer.WriteOptionalClass(
+                    value: allocation.Mint,
+                    writeValue: static (w, mint) => {
+                        w.WriteUInt64(value: mint.TransferId);
+                        w.WriteString(value: mint.To);
+                        w.WriteArray(
+                            items: mint.Companions,
+                            writeItem: static (m, companion) => {
+                                WorldWireLeaves.WriteEntityAddress(address: companion.Incarnation, writer: m);
+                                m.WriteString(value: companion.Home);
+                            }
+                        );
+                    }
+                );
                 break;
             case WorldCrossingRecord.Hop hop:
                 writer.WriteByte(value: CrossingHopTag);
@@ -484,8 +498,34 @@ public static partial class WorldAuthorityCheckpointCodec {
                     Key: key
                 );
             }
-            case CrossingAllocationTag:
-                return new WorldCrossingRecord.Allocation(Next: reader.ReadUInt64());
+            case CrossingAllocationTag: {
+                var next = reader.ReadUInt64();
+
+                return new WorldCrossingRecord.Allocation(
+                    Mint: reader.ReadOptionalClass(readValue: static (ref WireReader r) => {
+                        var transferId = r.ReadUInt64();
+                        var to = r.ReadString(field: "mint destination authority", maxBytes: MaxStringBytes);
+
+                        return new WorldTransferMint(
+                            Companions: r.ReadArray(
+                                field: "mint companions",
+                                readItem: static (ref WireReader m) => {
+                                    var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref m);
+
+                                    return new WorldCustodyMintMember(
+                                        Home: m.ReadString(field: "mint companion home", maxBytes: MaxStringBytes),
+                                        Incarnation: incarnation
+                                    );
+                                },
+                                maximum: WorldBodiesLimits.CapacityCeiling
+                            ),
+                            To: to,
+                            TransferId: transferId
+                        );
+                    }),
+                    Next: next
+                );
+            }
             case CrossingHopTag: {
                 var key = ReadTransferKey(reader: ref reader);
                 var from = reader.ReadString(

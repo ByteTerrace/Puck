@@ -91,6 +91,8 @@ public sealed partial class CompanionCrossingLawTests {
             )).Accepted);
         }
         rows.Cross(from: rows.Home, to: rows.B);
+        // A full destination is retried a bounded number of drains before the attempt is abandoned on record.
+        rows.Step(ticks: 12);
 
         Assert.True(condition: Rows.SlotOf(row: rows.Home, incarnation: rows.Player) >= 0);
         Assert.True(condition: Rows.SlotOf(row: rows.Home, incarnation: rows.Companions[0]) >= 0);

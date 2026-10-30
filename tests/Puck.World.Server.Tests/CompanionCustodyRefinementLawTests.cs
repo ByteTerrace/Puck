@@ -142,7 +142,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             try {
                 run.Drive();
             } catch (Exception exception) when (exception is not Xunit.Sdk.XunitException) {
-                run.Diverge(text: $"the run threw {exception.GetType().Name}: {exception.Message}");
+                run.Diverge(text: $"the run threw {exception.GetType().Name}: {exception.Message}{Environment.NewLine}{string.Join(Environment.NewLine, (exception.StackTrace ?? string.Empty).Split(Environment.NewLine).Take(count: 12))}");
             }
             return new Outcome(Comparisons: run.m_comparisons, Deferred: run.m_deferred, Divergences: run.m_divergences, Observables: run.m_observables, Points: run.m_points);
         }
@@ -155,7 +155,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             m_model.Budget.Limit = 100;
             // A custodian seats the player and offers its peer slots to companions.
             m_model.CustodianSlots = (1 + m_scope.BPeerSlots);
-            m_rows = new CompanionRows(bDeclaresRole: m_scope.BDeclaresRole, bPeerSlots: m_scope.BPeerSlots, companions: m_scope.Companions, logs: (name, log) => new ObservedLog(Node: NodeOfRow(name: name), Inner: log, Owner: this));
+            m_rows = new CompanionRows(bDeclaresRole: m_scope.BDeclaresRole, bPeerSlots: m_scope.BPeerSlots, companions: m_scope.Companions, logs: (name, log) => new ObservedLog(Node: NodeOfRow(name: name), Inner: log, Owner: this), retained: true);
             m_rows.Admitted = InstallSeams;
             foreach (var row in m_rows.All) {
                 InstallSeams(row: row);
@@ -172,7 +172,10 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             for (var index = 0; (index < m_scope.Companions); index++) {
                 m_slots[Model.Node.H][index + 1] = CompanionRows.SlotOf(row: m_rows.Home, incarnation: m_rows.Companions[index]);
             }
-            // The player crosses along the route; each crossing runs to quiescence before the next.
+            // The player crosses along the route; each crossing runs to quiescence before the next. A crossing that a
+            // fault ended before anything was minted started nothing, and the player tries again once.
+            var retried = false;
+
             while (true) {
                 Boundary();
                 if (m_divergences.Count > 0) {
@@ -191,8 +194,15 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                     Diverge(text: $"the model's player stands at {at} but the engine's does not");
                     return;
                 }
+                var faulted = m_faultSpent;
+
                 m_pendingTransfer[(int)at] = m_rows.Enqueue(from: RowOf(node: at), to: RowOf(node: to));
                 Settle();
+                if ((m_divergences.Count == 0) && (m_model.Itinerary == itinerary) && !faulted && m_faultSpent && !retried) {
+                    retried = true;
+                    Trace(text: $"the player tries {at}>{to} again");
+                    continue;
+                }
                 if ((m_divergences.Count == 0) && (m_model.Itinerary == itinerary)) {
                     Diverge(text: $"the engine never minted the crossing {at}>{to}");
                     return;
@@ -227,9 +237,28 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                 }
                 Boundary();
                 if (!m_stepHadObservable && (step > 2)) {
+                    // Nothing moves: a latched authority recovers (checkpoint plus log), as the model's fair completion
+                    // recovers it, and the run goes on.
+                    if (RecoverLatched()) {
+                        continue;
+                    }
                     return;
                 }
             }
+        }
+        private bool RecoverLatched() {
+            if (m_divergences.Count > 0) {
+                return false;
+            }
+            foreach (var node in Enum.GetValues<Model.Node>()) {
+                if (RowOf(node: node).Server.UncertainCrossing is not null) {
+                    Trace(text: $"recover latched {node}");
+                    RestartEngine(node: node);
+                    CrashModel(node: node);
+                    return true;
+                }
+            }
+            return false;
         }
         // A drain boundary: the model catches up on the engine's drain-time moves, the derived states are compared, and a
         // scheduled author's or owner's act happens here.
@@ -245,6 +274,10 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             if ((m_schedule is { } schedule) && (schedule.Point == index) && !m_faultSpent) {
                 m_faultSpent = true;
                 ApplyBoundaryFault(fault: schedule.Fault);
+            }
+            // An authority latched on an uncertain record recovers before the next drain (checkpoint plus log), as the
+            // model's fair completion recovers it; its peers' retries then meet the recovered activation.
+            while (RecoverLatched()) {
             }
             Compare(where: $"boundary #{index}");
         }
@@ -266,7 +299,9 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                 case Fault.Stranger: {
                     var move = Model.CustodyModel.FaultActions(s: m_model).FirstOrDefault(predicate: static move => move.Name.StartsWith("stranger A", StringComparison.Ordinal));
 
-                    if (move.Next is null) {
+                    // The stranger matters only ahead of the player's crossing into A, where it fills A's cap; the
+                    // engine seats it in a local seat, which the slot map does not follow once the player has left A.
+                    if ((move.Next is null) || (m_model.Itinerary >= m_model.Route.Length) || (m_model.Route[m_model.Itinerary] != Model.Node.A)) {
                         return;
                     }
                     Trace(text: $"act {move.Name}");
@@ -326,7 +361,8 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                     Source: IntentSource.Idle
                 )],
                 PartyAllOrNothing: true,
-                PeerAdmission: true,
+                // As the engine sends a companion's own crossing: a companion lands through the entity door.
+                PeerAdmission: false,
                 SourceAuthority: engineKey.SourceAuthority,
                 SourceRateHz: destination.Definition.SimulationRateHz,
                 SourceTick: tick,
@@ -337,6 +373,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             Expect(from: forger, kind: Model.MsgKind.Reserve, key: key, to: target);
             var reply = destination.ReserveTransfer(request: request);
 
+            Trace(text: $"forged reservation {(reply.Accepted ? "accepted" : $"refused: {reply.Reason}")}");
             ExpectReply(from: target, key: key, kinds: [Model.MsgKind.Reserved, Model.MsgKind.ReserveRefused], to: forger, replied: (reply.Accepted ? Model.MsgKind.Reserved : Model.MsgKind.ReserveRefused));
             if (!reply.Accepted) {
                 return;
@@ -364,7 +401,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                 var key = Owner.KeyName(key: new WorldTransferKey(SourceAuthority: request.SourceAuthority, TransferId: request.TransferId));
 
                 Owner.LearnMembers(key: new WorldTransferKey(SourceAuthority: request.SourceAuthority, TransferId: request.TransferId), members: request.Members);
-                return Owner.Call(from: from, to: To, kind: Model.MsgKind.Reserve, key: key, call: () => Destination.ReserveTransfer(request: request), unreachable: () => WorldTransferReservationReply.Refused(reason: "the lane to the destination is unavailable"), replied: static reply => (reply.Accepted ? Model.MsgKind.Reserved : Model.MsgKind.ReserveRefused), replyKinds: [Model.MsgKind.Reserved, Model.MsgKind.ReserveRefused], after: reply => Owner.LearnSlots(from: from, key: key, reply: reply, request: request));
+                return Owner.Call(from: from, to: To, kind: Model.MsgKind.Reserve, key: key, call: () => Destination.ReserveTransfer(request: request), unreachable: () => WorldTransferReservationReply.Refused(reason: "the lane to the destination is unavailable") with { Transient = true }, replied: static reply => (reply.Accepted ? Model.MsgKind.Reserved : Model.MsgKind.ReserveRefused), replyKinds: [Model.MsgKind.Reserved, Model.MsgKind.ReserveRefused], after: reply => Owner.LearnSlots(from: from, key: key, reply: reply, request: request));
             }
             public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
                 var from = Owner.NodeOfAuthority(authority: sourceAuthority);
@@ -410,7 +447,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopQuery, key: Owner.KeyName(key: key), call: () => Inner.ConfirmHops(destination: destination, incarnations: incarnations, key: key, phase: phase), unreachable: static () => null, replied: static _ => Model.MsgKind.HopQueryReply, replyKinds: [Model.MsgKind.HopQueryReply]);
             public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopRequest, key: Owner.KeyName(key: key), call: () => Inner.RequestHop(destination: destination, key: key, members: members, source: source), unreachable: () => [.. members.Select(selector: static member => new WorldHopAnswer(Incarnation: member.Incarnation, Next: 0UL, Verdict: WorldHopVerdict.Unavailable))], replied: static _ => Model.MsgKind.HopAnswer, replyKinds: [Model.MsgKind.HopAnswer]);
             public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) => Owner.Call(from: From, to: To, kind: Model.MsgKind.CustodyQuery, key: Owner.KeyName(key: key), call: () => Inner.QueryCustody(asker: asker, incarnation: incarnation, key: key), unreachable: static () => WorldCustodyAnswer.Uncertain, replied: static _ => Model.MsgKind.CustodyReply, replyKinds: [Model.MsgKind.CustodyReply]);
-            public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopSettled, key: Owner.KeyName(key: key), call: () => Inner.SettleHop(incarnation: incarnation, key: key, source: source), unreachable: static () => false, replied: static _ => Model.MsgKind.HopSettledAck, replyKinds: [Model.MsgKind.HopSettledAck]);
+            public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) => Owner.Call(from: From, to: To, kind: Model.MsgKind.HopSettled, key: Owner.KeyName(key: key), call: () => Inner.SettleHop(incarnation: incarnation, key: key, source: source), unreachable: static () => false, replied: static acked => (acked ? Model.MsgKind.HopSettledAck : null), replyKinds: [Model.MsgKind.HopSettledAck]);
         }
         private sealed record ObservedLog(Refinement Owner, Model.Node Node, IWorldCrossingLog Inner) : IWorldCrossingLog {
             public WorldCrossingDurability Append(in WorldCrossingEntry entry, out string reason) => Owner.Append(entry: in entry, inner: Inner, node: Node, reason: out reason);
@@ -418,7 +455,7 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
 
         // One engine call between two authorities: the model delivers the request (or drops it), the engine performs it
         // (or finds the peer unreachable), and the model delivers the reply the engine's answer names.
-        private TReply Call<TReply>(Model.Node from, Model.Node to, Model.MsgKind kind, string key, Func<TReply> call, Func<TReply> unreachable, Func<TReply, Model.MsgKind> replied, Model.MsgKind[] replyKinds, Action<TReply>? after = null) {
+        private TReply Call<TReply>(Model.Node from, Model.Node to, Model.MsgKind kind, string key, Func<TReply> call, Func<TReply> unreachable, Func<TReply, Model.MsgKind?> replied, Model.MsgKind[] replyKinds, Action<TReply>? after = null) {
             var index = m_points.Count;
             var fault = FaultAt(index: index);
 
@@ -459,16 +496,16 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                         }
                     }
                 }
-                if (fault == Fault.Dup) {
-                    _ = Expect(from: from, kind: kind, key: key, to: to);
-                }
             }
             m_activeCalls.Add(item: (index, from, to));
             TReply reply;
 
             try {
                 reply = call();
+                // The duplicate reaches the receiver after the first copy's handler ran; the sender hears the second
+                // answer, and the first is lost.
                 if (fault == Fault.Dup) {
+                    _ = Expect(from: from, kind: kind, key: key, to: to);
                     reply = call();
                 }
             } catch (AuthorityCrashedException) {
@@ -495,7 +532,10 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                 DropReply(from: to, key: key, kinds: replyKinds, to: from);
                 return ((fault == Fault.DropReply) ? unreachable() : reply);
             }
-            ExpectReply(from: to, key: key, kinds: replyKinds, to: from, replied: replied(arg: reply));
+            // A reply that answers nothing yet (home has not settled the hop it was told of) is no message at all.
+            if (replied(arg: reply) is { } answered) {
+                ExpectReply(from: to, key: key, kinds: replyKinds, to: from, replied: answered);
+            }
             return reply;
         }
         private WorldCrossingDurability Append(in WorldCrossingEntry entry, IWorldCrossingLog inner, Model.Node node, out string reason) {
@@ -646,6 +686,25 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
             if (path is not null) {
                 return Expected.Delivered;
             }
+            // The model bounds each obligation's retries to keep its state space finite; the engine retries an
+            // unanswered obligation every drain. A resend past that bound is the model's own retry move with the count
+            // forgotten, never a new transition.
+            var unbounded = m_model.Clone();
+            var counted = unbounded.At(node: from).Retries.Keys.Where(predicate: retried => retried.Contains(value: key, comparisonType: StringComparison.Ordinal)).ToArray();
+
+            if (counted.Length > 0) {
+                var bounded = m_model;
+
+                foreach (var retried in counted) {
+                    _ = unbounded.At(node: from).Retries.Remove(key: retried);
+                }
+                m_model = unbounded;
+                if (Search(depth: 3, goal: state => ((Find(state: state, from: from, to: to, key: key, kinds: [kind]) is { } msg) ? Delivered(state: state, msg: msg) : null)) is not null) {
+                    Defer(text: "retry (past the model's retry bound)");
+                    return Expected.Delivered;
+                }
+                m_model = bounded;
+            }
             if ((kind == Model.MsgKind.Reserve) && !m_model.At(node: from).Outbound.ContainsKey(key: key)) {
                 Defer(text: "retry (engine re-sends a refused reservation)");
                 return Expected.Unmodelled;
@@ -699,8 +758,11 @@ public sealed class CompanionCustodyRefinementLawTests(Xunit.ITestOutputHelper o
                 var next = m_model.Clone();
                 var index = next.Network.IndexOf(item: msg);
 
+                // The copy is delayed on a lane of its own (spec section 4: a duplicate may arrive late, as a request a
+                // reconnect left behind does), so it reaches the receiver after the first copy's handler and its nested
+                // exchange, which is when the engine's second call delivers it.
                 next.Network[index] = msg with { Dup = true };
-                next.Network.Add(item: msg with { Dup = true });
+                next.Network.Add(item: msg with { Dup = true, Lane = (msg.Lane + 1000) });
                 next.Budget.Dups++;
                 next.Budget.Faults++;
                 m_model = next;

@@ -207,6 +207,7 @@ public sealed partial class WorldInstanceHost {
                         val1: row.NextTransferId,
                         val2: allocation.Next
                     );
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.Apply(record: allocation));
                     break;
                 case WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
                     WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or

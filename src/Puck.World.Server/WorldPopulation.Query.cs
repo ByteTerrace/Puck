@@ -592,9 +592,10 @@ public sealed partial class WorldPopulation {
         return (((entry.Mobility is { } mobility) && (entry.MobilityGeneration == entry.Generation))
             ? mobility.Incarnation
             : new WorldEntityAddress(
-                authority,
-                index,
-                entry.Generation
+                Authority: authority,
+                Generation: entry.Generation,
+                Index: index,
+                Titled: entry.Titled
             )
         );
     }
@@ -669,7 +670,7 @@ public sealed partial class WorldPopulation {
             : new WorldMobilityIdentity(
                 DepartedFrom: here,
                 Epoch: 0UL,
-                Incarnation: here
+                Incarnation: (here with { Titled = entry.Titled })
             ));
     }
 

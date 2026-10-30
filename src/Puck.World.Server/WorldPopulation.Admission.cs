@@ -50,6 +50,7 @@ public sealed partial class WorldPopulation {
         body.SetIntentSource(source: inhabit.Source);
         entry.Body = body;
         entry.PlacementId = placement.Id;
+        entry.Titled = (inhabit.Role is not null);
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
@@ -112,6 +113,7 @@ public sealed partial class WorldPopulation {
         entry.AutonomyState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = (generation ?? checked((entry.Generation + 1)));
+        entry.Titled = false;
     }
     // The networkPlayers admission cap counts remote humans only (the owner's ruling): a census bot, an inhabitant and
     // an autonomous traveler such as a companion are never networked players. A parked human keeps its slot (it is
@@ -276,6 +278,7 @@ public sealed partial class WorldPopulation {
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: slot);
         entry.TravelTurn = FixedQ4816.Zero;
         entry.Generation = checked((entry.Generation + 1));
+        entry.Titled = false;
         entry.Active = true;
         m_revision++;
     }

@@ -992,6 +992,11 @@ public static class CustodyModel {
             }
         }
         _ = to.Held.Remove(key: msg.Key);
+        // The reservation's answers are spent by this decision, whatever it decides: a retried reservation, and the
+        // commit, ask home again, so a companion is decided only under the grant as it stands when it is decided.
+        foreach (var spent in to.Verified.Keys.Where(k => k.StartsWith(msg.Key + ":", StringComparison.Ordinal) && k.EndsWith(":R", StringComparison.Ordinal)).ToArray()) {
+            _ = to.Verified.Remove(key: spent);
+        }
         if (playerRefused) {
             Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
             return;
@@ -1984,6 +1989,25 @@ public static class CustodyModel {
                     next.Budget.Deadlines++;
                     next.Budget.Faults++;
                     yield return ($"verify timeout {(Node)i}:{key}", next);
+                }
+            }
+            // A destination stops waiting for home's answer to a commit's question and lands only what home confirmed:
+            // an unconfirmed companion is not landed, as one whose grant is gone is not.
+            for (var i = 1; i < 3; i++) {
+                foreach (var (key, held) in s.Nodes[i].HeldCommits) {
+                    var next = s.Clone();
+                    var node = next.Nodes[i];
+
+                    if (node.Leases.TryGetValue(key: key, value: out var lease)) {
+                        foreach (var member in lease.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: Verification(key: key, id: m.Id, phase: 'C')))) {
+                            node.Verified[Verification(key: key, id: member.Id, phase: 'C')] = -1;
+                        }
+                    }
+                    _ = node.HeldCommits.Remove(key: key);
+                    OnCommit(s: next, to: node, view: Fold(s: next, at: (Node)i), msg: held);
+                    next.Budget.Deadlines++;
+                    next.Budget.Faults++;
+                    yield return ($"verify timeout commit {(Node)i}:{key}", next);
                 }
             }
         }

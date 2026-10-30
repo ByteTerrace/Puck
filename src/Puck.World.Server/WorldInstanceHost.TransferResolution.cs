@@ -52,11 +52,13 @@ public sealed partial class WorldInstanceHost {
 
             try {
                 // Every step below may answer "not yet". Leaving the entry exactly where it is and re-asking at the
-                // next drain is the whole reconciliation loop already does for an unresolved status.
+                // next drain is the whole reconciliation loop already does for an unresolved status. The destination is
+                // asked even after it answered Committed once: a settlement that did not land is recorded from the
+                // answer of the drain that records it, so what this source settles is a function of its records and
+                // the destination's word, never of an answer an earlier activation held.
                 var status = WorldTransferStatus.Committed;
 
                 if (
-                    !pending.CommitConfirmed &&
                     !targetAuthority.TryStatus(
                     sourceAuthority: pending.SourceAuthority,
                     transferId: pending.Transfer.TransferId,

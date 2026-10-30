@@ -750,6 +750,7 @@ public static partial class WorldFederationCodec {
 
         writer.WriteBoolean(value: reply.Accepted);
         writer.WriteString(value: reply.Reason);
+        writer.WriteBoolean(value: reply.Transient);
         writer.WriteUInt64(value: reply.DeadlineDestinationTick);
         writer.WriteInt32(value: reply.BodyIndices.Count);
 
@@ -1385,6 +1386,7 @@ public static partial class WorldFederationCodec {
 
         var accepted = reader.ReadBoolean();
         var reason = reader.ReadString(field: "reservation reply reason");
+        var transient = reader.ReadBoolean();
         var deadline = reader.ReadUInt64();
         var count = reader.ReadCount(
             field: "reservation reply body count",
@@ -1475,7 +1477,9 @@ public static partial class WorldFederationCodec {
             DeadlineDestinationTick: deadline,
             DestinationDefinition: definition,
             Reason: reason
-        );
+        ) {
+            Transient = transient,
+        };
 
         return Finish(
             failure: out failure,

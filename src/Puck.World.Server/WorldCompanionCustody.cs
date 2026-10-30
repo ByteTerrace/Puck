@@ -74,6 +74,17 @@ public readonly record struct WorldCustodyHopMember(WorldEntityAddress Incarnati
 /// <param name="Epoch">The epoch it leaves at.</param>
 /// <param name="Next">The epoch it lands at.</param>
 public readonly record struct WorldCustodyHop(WorldTransferKey Key, WorldEntityAddress Incarnation, string From, string To, ulong Epoch, ulong Next);
+/// <summary>What a source minted a transfer key for, before it sent anything under it: the destination and every
+/// companion the crossing set out with, each with its title authority. Whatever becomes of the crossing, each title
+/// authority other than this source and the destination is told how that companion's hop under the key settled.</summary>
+/// <param name="TransferId">The minted transfer id.</param>
+/// <param name="To">The destination authority.</param>
+/// <param name="Companions">The companions the crossing set out with.</param>
+public sealed record WorldTransferMint(ulong TransferId, string To, IReadOnlyList<WorldCustodyMintMember> Companions);
+/// <summary>One companion a minted crossing set out with.</summary>
+/// <param name="Incarnation">The companion.</param>
+/// <param name="Home">Its title authority.</param>
+public readonly record struct WorldCustodyMintMember(WorldEntityAddress Incarnation, string Home);
 /// <summary>One title as its home's records say: its custody, the custodian and epoch, its pending hop, every epoch it
 /// issued, and whether it was recalled or released.</summary>
 /// <param name="Incarnation">The incarnation; its index is the held slot.</param>
@@ -135,6 +146,8 @@ public sealed class WorldCompanionCustody {
     // transaction's receipt is later retired or superseded.
     private readonly Dictionary<WorldTransferKey, int[]> m_arrivalLanded = new();
     private readonly Dictionary<ulong, int[]> m_ownSettlements = new();
+    // Every crossing this authority minted with companions, by transfer id.
+    private readonly Dictionary<ulong, WorldTransferMint> m_mints = new();
 
     /// <summary>Initializes a new instance of the <see cref="WorldCompanionCustody"/> class for one authority.</summary>
     /// <param name="authority">Reads the authority's identity: the namespace whose incarnations it holds titles
@@ -151,22 +164,28 @@ public sealed class WorldCompanionCustody {
     public IReadOnlyCollection<WorldEntityAddress> Retired => m_retired;
 
     /// <summary>Returns whether <paramref name="record"/> is of a shape this reducer can fold: a custody kind, an
-    /// arrival that landed or re-adopted a companion, a departure that carried one, or a settlement.</summary>
+    /// allocation that minted a crossing with companions, an arrival that landed or re-adopted a companion, a departure
+    /// that carried one, or a settlement.</summary>
     /// <param name="record">The record.</param>
     /// <returns><see langword="true"/> when <see cref="Apply"/> may derive custody from it.</returns>
     public static bool Folds(WorldCrossingRecord record) => record switch {
         WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
         WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or WorldCrossingRecord.Stranded or
         WorldCrossingRecord.GraceElapsed or WorldCrossingRecord.Settlement => true,
+        WorldCrossingRecord.Allocation allocation => (allocation.Mint is { Companions.Count: > 0 }),
         WorldCrossingRecord.Arrival arrival => ((arrival.Value.Readopted.Count > 0) || (arrival.Value.Leased.Count > 0) || arrival.Value.Request.Members.Any(predicate: static member => member.Companion is not null)),
         WorldCrossingRecord.Departure departure => departure.Transfer.CommitMembers.Any(predicate: static member => member.Companion is not null),
         _ => false,
     };
     /// <summary>Returns whether this authority's custody depends on <paramref name="record"/>: one that
-    /// <see cref="Folds"/>, where a settlement counts only when it settles a departure that carried a companion.</summary>
+    /// <see cref="Folds"/>, where a settlement counts only when it settles a crossing minted with companions or a
+    /// departure that carried one.</summary>
     /// <param name="record">The record.</param>
     /// <returns><see langword="true"/> when <see cref="Apply"/> folds it.</returns>
-    public bool Concerns(WorldCrossingRecord record) => (Folds(record: record) && ((record is not WorldCrossingRecord.Settlement settlement) || m_ownDepartures.ContainsKey(key: settlement.TransferId) || IsOwnHopKey(transferId: settlement.TransferId)));
+    public bool Concerns(WorldCrossingRecord record) => record switch {
+        WorldCrossingRecord.Settlement settlement => (m_ownDepartures.ContainsKey(key: settlement.TransferId) || m_mints.ContainsKey(key: settlement.TransferId) || IsOwnHopKey(transferId: settlement.TransferId)),
+        _ => Folds(record: record),
+    };
 
     /// <summary>Folds one durable record. A record this reducer does not fold (<see cref="Folds"/>) changes nothing.
     /// The fold is total: any prefix of an authority's records folds to a custody state.</summary>
@@ -182,6 +201,9 @@ public sealed class WorldCompanionCustody {
         record = Owned(record: record);
         m_history.Add(item: record);
         switch (record) {
+            case WorldCrossingRecord.Allocation { Mint: { } mint }:
+                m_mints[mint.TransferId] = mint;
+                break;
             case WorldCrossingRecord.Hop hop:
                 foreach (var member in hop.Members) {
                     var key = (hop.Key, member.Incarnation);
@@ -345,18 +367,20 @@ public sealed class WorldCompanionCustody {
         m_arrivalLanded.Clear();
         m_ownSettlements.Clear();
         m_arrivals.Clear();
+        m_mints.Clear();
         foreach (var record in history) {
             Apply(record: record);
         }
     }
 
     /// <summary>Returns the title this authority holds for <paramref name="incarnation"/>, or <see langword="null"/>
-    /// when it did not mint the incarnation (<c>NotMyTitle</c>). An incarnation it minted with no custody record is at
+    /// when it did not mint the incarnation as a titled one (<c>NotMyTitle</c>): another authority's, or one without the
+    /// title mark (<see cref="WorldEntityAddress.Titled"/>). A titled incarnation it minted with no custody record is at
     /// home at epoch zero.</summary>
     /// <param name="incarnation">The incarnation.</param>
     /// <returns>The title, or <see langword="null"/>.</returns>
     public WorldCustodyTitle? TitleOf(WorldEntityAddress incarnation) {
-        if (!IsHome(authority: incarnation.Authority)) {
+        if (!incarnation.Titled || !IsHome(authority: incarnation.Authority)) {
             return null;
         }
         if (!m_titles.TryGetValue(key: incarnation, value: out var title)) {
@@ -462,19 +486,27 @@ public sealed class WorldCompanionCustody {
         }
         return owed;
     }
-    /// <summary>Returns the transfer ids of this authority's own keys that it granted a hop under and that neither
-    /// departed nor settled: each is abandoned on record (a settlement landing nothing) once no attempt under it is in
-    /// flight, so its hop settles as not arrived.</summary>
+    /// <summary>Returns the transfer ids of this authority's own keys that a crossing with companions was minted under,
+    /// or that it granted a hop of its own under, and that neither departed with a companion nor settled: once no
+    /// attempt under one is queued or in doubt it is abandoned on record (a settlement landing nothing), so its hops
+    /// settle as not arrived and every other title authority its companions belong to is told.</summary>
     /// <returns>The transfer ids, lowest first.</returns>
     public IReadOnlyList<ulong> UnsettledOwnKeys() {
         var home = m_authority();
 
         return [.. m_hops.Keys
-            .Where(predicate: pair => string.Equals(a: pair.Key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) && !m_hopsDone.Contains(item: pair) && !m_ownDepartures.ContainsKey(key: pair.Key.TransferId) && !m_ownSettlements.ContainsKey(key: pair.Key.TransferId))
+            .Where(predicate: pair => string.Equals(a: pair.Key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) && !m_hopsDone.Contains(item: pair))
             .Select(selector: static pair => pair.Key.TransferId)
+            .Concat(second: m_mints.Keys)
+            .Where(predicate: transferId => !m_ownDepartures.ContainsKey(key: transferId) && !m_ownSettlements.ContainsKey(key: transferId))
             .Distinct()
             .Order()];
     }
+    /// <summary>Returns whether this authority recorded the mint of a crossing with companions under
+    /// <paramref name="transferId"/>.</summary>
+    /// <param name="transferId">The transfer id.</param>
+    /// <returns><see langword="true"/> once the mint is durable.</returns>
+    public bool IsMinted(ulong transferId) => m_mints.ContainsKey(key: transferId);
     private bool IsOwnHopKey(ulong transferId) {
         var home = m_authority();
 
@@ -493,12 +525,6 @@ public sealed class WorldCompanionCustody {
     /// <param name="key">The arrival's key.</param>
     /// <returns>The landed ids, or <see langword="null"/> when no such arrival landed under the key.</returns>
     public IReadOnlyList<int>? ArrivalLanded(WorldTransferKey key) => m_arrivalLanded.GetValueOrDefault(key: key);
-    /// <summary>Returns whether this authority's departure under <paramref name="transferId"/> carried
-    /// <paramref name="incarnation"/>.</summary>
-    /// <param name="transferId">The departure's transfer id.</param>
-    /// <param name="incarnation">The companion.</param>
-    /// <returns><see langword="true"/> when the departure record names it.</returns>
-    public bool DepartedWith(ulong transferId, WorldEntityAddress incarnation) => (m_ownDepartures.TryGetValue(key: transferId, value: out var departed) && departed.Carried.Any(predicate: member => (member.Incarnation == incarnation)));
     /// <summary>Returns the verdict home's records give a companion coming back from <paramref name="custodian"/> at
     /// <paramref name="epoch"/>: the one door every return reads custody through, at its reservation and again at its
     /// commit. <see langword="null"/> accepts it: the title is away with exactly that custodian at exactly that epoch.
@@ -512,7 +538,7 @@ public sealed class WorldCompanionCustody {
     public WorldCompanionRefusal? VerifyReturn(WorldEntityAddress incarnation, string custodian, ulong epoch) {
         ArgumentNullException.ThrowIfNull(argument: custodian);
 
-        if (!IsHome(authority: incarnation.Authority)) {
+        if (!incarnation.Titled || !IsHome(authority: incarnation.Authority)) {
             return WorldCompanionRefusal.NotMyTitle;
         }
         if (!m_titles.TryGetValue(key: incarnation, value: out var title)) {
@@ -570,23 +596,23 @@ public sealed class WorldCompanionCustody {
     /// <param name="incarnation">The visiting companion.</param>
     /// <returns>The leaf, or <see langword="null"/> when no arrival here landed it as a companion.</returns>
     public WorldTransferCompanion? CarriedOf(WorldEntityAddress incarnation) => m_carried.GetValueOrDefault(key: incarnation);
-    /// <summary>Returns the settlement notices this custodian owes other title authorities: every companion its
-    /// settled departures carried under another authority's title onward to a third authority, until the title
-    /// authority acknowledged the notice. A return to the title authority owes none: home's own arrival record settles
-    /// it.</summary>
+    /// <summary>Returns the settlement notices this custodian owes other title authorities: every companion a settled
+    /// crossing of its own was minted with under another authority's title, bound for a third authority, until the
+    /// title authority acknowledged the notice, whether or not the companion departed with it. A return to the title
+    /// authority owes none: home's own arrival record settles it.</summary>
     /// <returns>Each owed notice: the hop's key, the companion, and its title authority.</returns>
     public IReadOnlyList<(WorldTransferKey Key, WorldEntityAddress Incarnation, string Home)> OwedHopNotices() {
         var owed = new List<(WorldTransferKey, WorldEntityAddress, string)>();
         var self = m_authority();
 
-        foreach (var (transferId, departed) in m_ownDepartures.OrderBy(keySelector: static pair => pair.Key)) {
+        foreach (var (transferId, mint) in m_mints.OrderBy(keySelector: static pair => pair.Key)) {
             if (!m_ownSettlements.ContainsKey(key: transferId)) {
                 continue;
             }
             var key = new WorldTransferKey(SourceAuthority: self, TransferId: transferId);
 
-            foreach (var (_, incarnation, home) in departed.Carried) {
-                if (!string.Equals(a: home, b: self, comparisonType: StringComparison.Ordinal) && !string.Equals(a: home, b: departed.Target, comparisonType: StringComparison.Ordinal) && !m_acked.Contains(item: (key, incarnation))) {
+            foreach (var (incarnation, home) in mint.Companions) {
+                if (!string.Equals(a: home, b: self, comparisonType: StringComparison.Ordinal) && !string.Equals(a: home, b: mint.To, comparisonType: StringComparison.Ordinal) && !m_acked.Contains(item: (key, incarnation))) {
                     owed.Add(item: (key, incarnation, home));
                 }
             }
@@ -684,7 +710,7 @@ public sealed class WorldCompanionCustody {
         : throw new ArgumentException(message: $"a custody record does not survive its own encoding — {reason}", paramName: nameof(record)));
     private bool IsHome(string authority) => string.Equals(a: authority, b: m_authority(), comparisonType: StringComparison.Ordinal);
     private Title? TitleFor(WorldEntityAddress incarnation) {
-        if (!IsHome(authority: incarnation.Authority)) {
+        if (!incarnation.Titled || !IsHome(authority: incarnation.Authority)) {
             return null;
         }
         if (!m_titles.TryGetValue(key: incarnation, value: out var title)) {

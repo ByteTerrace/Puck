@@ -72,7 +72,7 @@ public sealed partial class WorldServer {
             confirmed: ConfirmCompanionHops(
                 key: key,
                 phase: WorldHopPhase.Commit,
-                tickets: (members ?? []).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>()
+                tickets: ExecuteAuthorityOperation(operation: () => m_transferEscrow.CommitHopQuestion(key: key))
             ),
             members: members!,
             reason: out reason,
@@ -144,7 +144,7 @@ public sealed partial class WorldServer {
                     TransferId: request.TransferId
                 ),
                 phase: WorldHopPhase.Reservation,
-                tickets: (request.Members ?? []).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>()
+                tickets: ExecuteAuthorityOperation(operation: () => m_transferEscrow.ReservationHopQuestion(request: request))
             ),
             request: request
         );

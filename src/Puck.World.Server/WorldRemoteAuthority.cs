@@ -1311,7 +1311,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         );
 
         if (answer.Kind != WorldFederationResponse.Reservation) {
-            return WorldTransferReservationReply.Refused(reason: answer.Describe());
+            // A request or answer the lane lost decided nothing; an unconfigured federation identity never will.
+            return WorldTransferReservationReply.Refused(reason: answer.Describe()) with {
+                Transient = ((answer.Failure.Refusal is WireRefusal.LaneUnavailable or WireRefusal.RequestTimedOut or WireRefusal.ConnectionClosed) && !LacksSigningIdentity()),
+            };
         }
 
         if (
@@ -1433,7 +1436,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 incarnation: incarnation,
                 key: key
             ),
-            answer: out var answer
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{incarnation}"
         );
 
         return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: (WorldCustodyAnswer)answer.Body.Span[0]))
@@ -1455,7 +1459,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 incarnation: incarnation,
                 key: key
             ),
-            answer: out var answer
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{incarnation}"
         );
 
         return ((answer.Kind == WorldFederationResponse.HopSettledAck) && (answer.Body.Length == 1) && (answer.Body.Span[0] == 1));
@@ -1478,7 +1483,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 key: key,
                 members: members
             ),
-            answer: out var answer
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{destination}|{string.Join(',', members.Select(selector: static member => $"{member.Incarnation}@{member.Epoch}"))}"
         );
 
         return (((answer.Kind == WorldFederationResponse.HopAnswer) && WorldFederationCodec.TryDecodeHopAnswer(

@@ -15,7 +15,7 @@ internal sealed class CompanionRows : IDisposable {
     private readonly Dictionary<string, byte[]> m_images = new(comparer: StringComparer.Ordinal);
     private readonly Func<string, IWorldCrossingLog, IWorldCrossingLog> m_logs;
 
-    public CompanionRows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null, bool cDeclaresRole = true, Func<int, string?>? cLandingRefusal = null, Func<string, IWorldCrossingLog, IWorldCrossingLog>? logs = null) {
+    public CompanionRows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null, bool cDeclaresRole = true, Func<int, string?>? cLandingRefusal = null, Func<string, IWorldCrossingLog, IWorldCrossingLog>? logs = null, bool retained = false) {
         m_logs = (logs ?? ((_, log) => log));
         LandingRefusals["row-b"] = bLandingRefusal;
         LandingRefusals["row-c"] = cLandingRefusal;
@@ -39,6 +39,13 @@ internal sealed class CompanionRows : IDisposable {
                 Slot: slot,
                 WireProtocolKey: WorldProtocol.WireProtocolKey
             )).Accepted);
+        }
+        // A retained row stays up when its last body leaves (a persistent world), so a law that compares every
+        // authority's state after each step always finds it running.
+        if (retained) {
+            foreach (var row in m_rows.Values) {
+                Host.RestoreRow(row: row.Instance, slice: Host.CaptureRow(row: row.Instance) with { Retained = true });
+            }
         }
         Step(ticks: 3);
         Player = Incarnation(row: Home, slot: 0)!.Value;
