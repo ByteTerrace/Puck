@@ -103,6 +103,8 @@ Next: fix the prelude (dismiss the chess toast, wait in shorter steps),
 reproduce the companion overlaps, then one paired windowed tour (about 18
 minutes of GPU) when no lane holds the GPU, compared stop by stop.
 
+- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. Settle the lighting state before each stop (indirect and exposure converged, a fixed camera-trace history) or compare against a baseline taken in the same World session. (from: bake-scale lane)
+
 - Finish sweep-honest's paired motion qualification. Its first final tour
   measures all 23 windowed signals and captures all 64 stops cleanly, and 62
   unchanged stops' motion records match an earlier fresh tour exactly; the
