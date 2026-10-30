@@ -72,13 +72,6 @@ bindingOverlays [
             inherits: "base"
             label: "Tour"
             entries [
-              {
-                command: "world.toon"
-                id: "tourToon"
-                label: "Toon shading"
-                text: "toggle"
-                sources ["gamepad.back", "keyboard.f6"]
-              }
               { command: "gallery.next", id: "tourNext", label: "Next exhibit", sources: padUp }
               { command: "gallery.flag", id: "tourFlag", label: "Flag exhibit", sources: padRight }
               { command: "gallery.prev", id: "tourPrev", label: "Previous exhibit", sources: padDown }
@@ -154,7 +147,6 @@ icons [
   { name: "tour.motionOn", label: "M1" }
   { name: "tour.garden", label: "PG" }
   { name: "tour.night", label: "PN" }
-  { name: "tour.toon", label: "CE" }
 ]
 
 state {
@@ -189,7 +181,6 @@ state {
       tourMotionOn = "tour.motionOn"
       tourGarden = "tour.garden"
       tourNight = "tour.night"
-      tourToon = "tour.toon"
     }
     table wheelLabels {
       goStage = "Stage"
@@ -219,72 +210,31 @@ bindingOverlays [
     id: "bare"
     bindingBar {
       banks [
-        { id: "go", pageId: "pad-lt-rt", alpha: 1 }
-        { id: "tour", pageId: "pad-rt-lt", alpha: 1 }
+        { id: "go", pageId: "pad-lt-rt", alpha: 0.5, activeAlpha: 1 }
+        { id: "tour", pageId: "pad-rt-lt", alpha: 0.5, activeAlpha: 1 }
       ]
       layouts {
-        standard {
-          tables {
-            toon [{ source: "gamepad.back", x: 0, y: 0, badge [0, 1] }]
-          }
-          banks {
-            go { pieces [{ table: "left" }, { table: "right" }], anchor { edge: Bottom, inset: 3.6 } }
-            tour {
-              pieces [{ table: "left" }, { table: "right" }, { table: "toon" }]
-              anchor { edge: Bottom, inset: 3.6 }
-            }
-          }
-        }
-        keys {
-          banks {
-            go {
-              pieces [
-                { table: "move", at [-6, 0] }
-                { table: "act", at [-3, 0] }
-                { table: "mouse", at [4, 0] }
-                { table: "cameras", at [-3, 1] }
-                { table: "functions", at [3, 1] }
-              ]
-            }
-            tour {
-              pieces [
-                { table: "move", at [-6, 0] }
-                { table: "act", at [-3, 0] }
-                { table: "mouse", at [4, 0] }
-                { table: "cameras", at [-3, 1] }
-                { table: "functions", at [3, 1] }
-              ]
-            }
-          }
-        }
-        pad {
-          banks {
-            go { pieces [{ table: "left", at [-5, 0] }, { table: "right", at [-1, 0] }, { table: "face", at [4, 0] }] }
-            tour {
-              pieces [{ table: "left", at [-5, 0] }, { table: "right", at [-1, 0] }, { table: "face", at [4, 0] }]
-            }
-          }
-        }
         wings {
-          // Five banks bottom at -4 pitches, keeping the primary at the standard 220/600 lift.
+          // Two tiers of wings: View and Debug above the primary, Go and Tour mirrored below it.
+          anchor { edge: Bottom, inset: 5.8888889 }
           banks {
-            move { anchor { edge: Bottom, inset: 0.3888889 } }
-            view { anchor { edge: Bottom, inset: 0.3888889 } }
-            debug { anchor { edge: Bottom, inset: 0.3888889 } }
+            move { anchor { edge: Bottom, inset: 0.8888889 } }
+            view { anchor { edge: Bottom, inset: 0.8888889 } }
+            debug { anchor { edge: Bottom, inset: 0.8888889 } }
             go {
-              pieces [{ table: "left", at [-9, -2.25] }, { table: "right", at [9, -2.25] }]
-              anchor { edge: Bottom, inset: 0.3888889 }
+              pieces [{ table: "left", at [2, -2] }, { table: "right", at [-2, -2] }]
+              anchor { edge: Bottom, inset: 0.8888889 }
             }
             tour {
-              pieces [{ table: "left", at [-12, -3] }, { table: "right", at [12, -3] }]
-              anchor { edge: Bottom, inset: 0.3888889 }
+              pieces [{ table: "left", at [-1, -2] }, { table: "right", at [1, -2] }]
+              anchor { edge: Bottom, inset: 0.8888889 }
             }
           }
         }
         sidebars {
           banks {
-            go { pieces [{ table: "column", at [1.2, 0] }], anchor { edge: Left, inset: 1.5 } }
-            tour { pieces [{ table: "column", at [-1.2, 0] }], anchor { edge: Right, inset: 1.5 } }
+            go { pieces [{ table: "column", at [1, 0] }], anchor { edge: Left, inset: 0.75 } }
+            tour { pieces [{ table: "column", at [-1, 0] }], anchor { edge: Right, inset: 0.75 } }
           }
         }
 
