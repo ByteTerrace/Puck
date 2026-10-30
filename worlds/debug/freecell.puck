@@ -1,0 +1,623 @@
+// FreeCell patience, as rules over piles of physical cards (solitaire.puck switches between the patience games and
+// cardtable.puck lays the cards out on a table). The console and the seated player play it through one mailbox: a
+// request names an `action` (1 deal, 2 move a run from pile `from` to pile `to` led by card `card`) and bumps `request`;
+// the door answers `applied`, `result` (1 played, -1 refused) and the rest of the cells below, and the cards follow.
+//
+// Piles: 0 to 3 the four free cells, 4 to 7 the foundations (suits 0 spades, 1 hearts, 2 clubs, 3 diamonds) and 8 to 15
+// the eight columns. Cards are keyed 0 to 51 by suit * 13 + rank - 1 and every card is face up. A deal gathers every
+// card into the deck, shuffles it with the seeded stream and deals a card a tick across the columns. A run of cards
+// moves as the free cells and empty columns would let it be moved a card at a time: at most (empty cells + 1) times two
+// to the power of the empty columns, not counting a target column that is itself empty.
+
+// The surface the table (cardtable.puck) reads and the mailbox it writes.
+export action solitaireFreecell
+export read solitaireFreecell, solitaireFreecellCards, solitaireFreecellRank, solitaireFreecellSuit, solitaireFreecellLength
+export read solitaireFreecellDeck, solitaireFreecellPile0, solitaireFreecellPile1, solitaireFreecellPile2, solitaireFreecellPile3
+export read solitaireFreecellPile4, solitaireFreecellPile5, solitaireFreecellPile6, solitaireFreecellPile7
+export read solitaireFreecellPile8, solitaireFreecellPile9, solitaireFreecellPile10, solitaireFreecellPile11
+export read solitaireFreecellPile12, solitaireFreecellPile13, solitaireFreecellPile14, solitaireFreecellPile15
+
+let fcPowers = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+let fcColumns = range(8, 8)
+let fcCells = range(0, 4)
+let fcFoundations = range(4, 4)
+
+state {
+  world {
+    row {
+      name: "solitaireFreecellCards"
+      kind: "Int"
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: i })
+    }
+
+    row {
+      name: "solitaireFreecellRank"
+      kind: "Int"
+      domain: keysOf(row: solitaireFreecellCards)
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: i % 13 + 1 })
+    }
+
+    row {
+      name: "solitaireFreecellSuit"
+      kind: "Int"
+      domain: keysOf(row: solitaireFreecellCards)
+      capacity: 52
+      cells: map(range(0, 52), i => { key: $"{i}", value: floor(i / 13) })
+    }
+
+    // The cards a move may carry for each count of empty columns: two to the power of that count.
+    row {
+      name: "solitaireFreecellPower"
+      kind: "Int"
+      capacity: 9
+      cells: map(range(0, 9), i => { key: $"{i}", value: fcPowers[i] })
+    }
+
+    pile solitaireFreecellDeck of solitaireFreecellCards capacity(52) {
+      "0"
+      "1"
+      "2"
+      "3"
+      "4"
+      "5"
+      "6"
+      "7"
+      "8"
+      "9"
+      "10"
+      "11"
+      "12"
+      "13"
+      "14"
+      "15"
+      "16"
+      "17"
+      "18"
+      "19"
+      "20"
+      "21"
+      "22"
+      "23"
+      "24"
+      "25"
+      "26"
+      "27"
+      "28"
+      "29"
+      "30"
+      "31"
+      "32"
+      "33"
+      "34"
+      "35"
+      "36"
+      "37"
+      "38"
+      "39"
+      "40"
+      "41"
+      "42"
+      "43"
+      "44"
+      "45"
+      "46"
+      "47"
+      "48"
+      "49"
+      "50"
+      "51"
+    }
+
+    pile solitaireFreecellPile0 of solitaireFreecellCards capacity(1)
+
+    pile solitaireFreecellPile1 of solitaireFreecellCards capacity(1)
+
+    pile solitaireFreecellPile2 of solitaireFreecellCards capacity(1)
+
+    pile solitaireFreecellPile3 of solitaireFreecellCards capacity(1)
+
+    pile solitaireFreecellPile4 of solitaireFreecellCards capacity(13)
+
+    pile solitaireFreecellPile5 of solitaireFreecellCards capacity(13)
+
+    pile solitaireFreecellPile6 of solitaireFreecellCards capacity(13)
+
+    pile solitaireFreecellPile7 of solitaireFreecellCards capacity(13)
+
+    pile solitaireFreecellPile8 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile9 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile10 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile11 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile12 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile13 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile14 of solitaireFreecellCards capacity(19)
+
+    pile solitaireFreecellPile15 of solitaireFreecellCards capacity(19)
+
+    table solitaireFreecell capacity(24) {
+      request = 0
+      applied = 0
+      action = 0
+      from = -1
+      to = -1
+      card = -1
+      stage = 0
+      busy = 0
+      status = 0
+      result = 0
+      moves = 0
+      sourceOk = 0
+      targetOk = 0
+      runLength = 0
+      emptyCells = 4
+      emptyColumns = 0
+      deals = 0
+      dealStep = 0
+      gatherStep = 0
+      moveReady = 0
+    }
+
+    row {
+      name: "solitaireFreecellStream"
+      kind: "Int"
+      draw {
+        generator {
+          source: "StreamDraw"
+        }
+        timing: "Event"
+      }
+    }
+  }
+}
+
+patterns [
+  {
+    name: "solitaireFreecellLength"
+    kind: Int
+    value: 1
+    symbols [
+      {
+        name: "any"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: star(item: any())
+  }
+  {
+    name: "solitaireFreecellSingle"
+    kind: Int
+    value: 1
+    symbols [
+      {
+        name: "any"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: any()
+  }
+  {
+    name: "solitaireFreecellRun"
+    kind: Int
+    value: 1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) *
+      (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2)
+    symbols [
+      {
+        name: "face"
+        min: 1
+        max: 2
+      }
+      {
+        name: "next"
+        min: 2
+        max: 2
+      }
+    ]
+    pattern: sequence(items: [
+      symbol(name: "face")
+      star(item: symbol(name: "next"))
+    ])
+  }
+  {
+    name: "solitaireFreecellLanding"
+    kind: Int
+    value: (solitaireFreecellRank[$token] == solitaireFreecellRank[solitaireFreecell.card] + 1) *
+      (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[solitaireFreecell.card] % 2)
+    symbols [
+      {
+        name: "yes"
+        min: 1
+        max: 1
+      }
+    ]
+    pattern: sequence(items: [
+      star(item: any())
+      symbol(name: "yes")
+    ])
+  }
+]
+
+rule "solitaireFreecell-new-deal" {
+  when (solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0 and
+    solitaireFreecell.action == 1)
+  solitaireFreecell.stage = 1
+  solitaireFreecell.status = 0
+  solitaireFreecell.result = 0
+  solitaireFreecell.busy = 1
+}
+
+// A transfer between two named piles is priced by those two piles alone, so every transfer below is a rule of its own,
+// gated on the literal piles it moves between.
+
+// A deal gathers the cards a card a tick, pile by pile from the first cell to the last column: `gatherStep` counts those
+// sixteen piles and moves on when the pile it names is empty.
+template freecellGather(step, pile) {
+  rule $"solitaireFreecell-gather-{step}" {
+    when (solitaire.table == 2 and
+      solitaireFreecell.stage == 1 and
+      solitaireFreecell.gatherStep == step and
+      count(pile) > 0)
+    transform transfer(from: pile, to: solitaireFreecellDeck, selector: First)
+  }
+  rule $"solitaireFreecell-gather-advance-{step}" {
+    when (solitaire.table == 2 and
+      solitaireFreecell.stage == 1 and
+      solitaireFreecell.gatherStep == step and
+      count(pile) == 0)
+    solitaireFreecell.gatherStep = minimum(15, step + 1)
+  }
+}
+
+freecellGather(step: 0, pile: solitaireFreecellPile0)
+freecellGather(step: 1, pile: solitaireFreecellPile1)
+freecellGather(step: 2, pile: solitaireFreecellPile2)
+freecellGather(step: 3, pile: solitaireFreecellPile3)
+freecellGather(step: 4, pile: solitaireFreecellPile4)
+freecellGather(step: 5, pile: solitaireFreecellPile5)
+freecellGather(step: 6, pile: solitaireFreecellPile6)
+freecellGather(step: 7, pile: solitaireFreecellPile7)
+freecellGather(step: 8, pile: solitaireFreecellPile8)
+freecellGather(step: 9, pile: solitaireFreecellPile9)
+freecellGather(step: 10, pile: solitaireFreecellPile10)
+freecellGather(step: 11, pile: solitaireFreecellPile11)
+freecellGather(step: 12, pile: solitaireFreecellPile12)
+freecellGather(step: 13, pile: solitaireFreecellPile13)
+freecellGather(step: 14, pile: solitaireFreecellPile14)
+freecellGather(step: 15, pile: solitaireFreecellPile15)
+
+rule "solitaireFreecell-gather-reset" {
+  when solitaire.table == 2 and solitaireFreecell.stage == 0
+  solitaireFreecell.gatherStep = 0
+}
+
+rule "solitaireFreecell-shuffle" {
+  when solitaire.table == 2 and solitaireFreecell.stage == 1 and solitaireFreecell.gatherStep == 15 and count(
+      solitaireFreecellDeck
+    ) == 52
+  transaction {
+    shuffle solitaireFreecellDeck with solitaireFreecellStream
+    solitaireFreecell.stage = 3
+  }
+}
+
+// The deal: 52 cards, a card a tick, across the eight columns (card k goes to column k % 8).
+template freecellDeal(step, pile) {
+  rule $"solitaireFreecell-deal-{step}" {
+    when solitaire.table == 2 and solitaireFreecell.stage == 3 and solitaireFreecell.dealStep == step
+    transform transfer(from: solitaireFreecellDeck, to: pile, selector: First)
+  }
+}
+
+for k in range(0, 52) {
+  freecellDeal(step: k, pile: $"solitaireFreecellPile{8 + k % 8}")
+}
+
+rule "solitaireFreecell-deal-finish" {
+  when solitaire.table == 2 and solitaireFreecell.stage == 3 and solitaireFreecell.dealStep == 51
+  transaction {
+    solitaireFreecell.stage = 0
+    solitaireFreecell.status = 1
+    solitaireFreecell.moves = 0
+    solitaireFreecell.deals = solitaireFreecell.deals + 1
+    solitaireFreecell.result = 1
+    solitaireFreecell.applied = solitaireFreecell.request
+  }
+}
+
+// After the deal rules and their finish: a rule sees the cells the rules before it wrote this tick, so the step moves on
+// only once the card it names has been dealt.
+rule "solitaireFreecell-deal-advance" {
+  when solitaire.table == 2 and (solitaireFreecell.stage == 0 or solitaireFreecell.stage == 3)
+  solitaireFreecell.dealStep = solitaireFreecell.stage == 0 ? 0 : solitaireFreecell.dealStep + 1
+}
+
+// The empty cells and columns, read for the run a move may carry.
+rule "solitaireFreecell-empties" {
+  mode: Level
+  solitaireFreecell.emptyCells = (
+    (count(solitaireFreecellPile0) == 0) +
+    (count(solitaireFreecellPile1) == 0) +
+    (count(solitaireFreecellPile2) == 0) +
+    (count(solitaireFreecellPile3) == 0)
+  )
+  solitaireFreecell.emptyColumns = (
+    (count(solitaireFreecellPile8) == 0) +
+    (count(solitaireFreecellPile9) == 0) +
+    (count(solitaireFreecellPile10) == 0) +
+    (count(solitaireFreecellPile11) == 0) +
+    (count(solitaireFreecellPile12) == 0) +
+    (count(solitaireFreecellPile13) == 0) +
+    (count(solitaireFreecellPile14) == 0) +
+    (count(solitaireFreecellPile15) == 0)
+  )
+}
+
+rule "solitaireFreecell-prepare-move" {
+  when (solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0 and
+    solitaireFreecell.status == 1 and
+    solitaireFreecell.action == 2)
+  solitaireFreecell.sourceOk = 0
+  solitaireFreecell.targetOk = 0
+  solitaireFreecell.runLength = 0
+}
+
+// A run leaves a column when it is in sequence from its leading card to the column's end; a free cell gives up its one
+// card; a foundation gives up nothing.
+rule "solitaireFreecell-source" {
+  when (solitaire.table == 2 and
+    solitaireFreecell["request"] != solitaireFreecell["applied"] and
+    solitaireFreecell["stage"] == 0 and
+    solitaireFreecell["busy"] == 0 and
+    solitaireFreecell["status"] == 1 and
+    solitaireFreecell["action"] == 2 and
+    $zones[solitaireFreecell.from][solitaireFreecell["card"]] == 1)
+  zones [
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    solitaireFreecellPile8
+    solitaireFreecellPile9
+    solitaireFreecellPile10
+    solitaireFreecellPile11
+    solitaireFreecellPile12
+    solitaireFreecellPile13
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+  ]
+  solitaireFreecell["sourceOk"] = match(solitaireFreecellRun, $zones[solitaireFreecell.from])[solitaireFreecell["card"]]
+  solitaireFreecell["runLength"] = match(solitaireFreecellLength, $zones[solitaireFreecell.from], prefix)[solitaireFreecell["card"]]
+}
+
+rule "solitaireFreecell-source-cell" {
+  when (solitaire.table == 2 and
+    solitaireFreecell["request"] != solitaireFreecell["applied"] and
+    solitaireFreecell["stage"] == 0 and
+    solitaireFreecell["busy"] == 0 and
+    solitaireFreecell["status"] == 1 and
+    solitaireFreecell["action"] == 2 and
+    $zones[solitaireFreecell.from][solitaireFreecell["card"]] == 1)
+  zones [
+    solitaireFreecellPile0
+    solitaireFreecellPile1
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+  ]
+  solitaireFreecell["sourceOk"] = 1
+  solitaireFreecell["runLength"] = 1
+}
+
+// A column takes a run on an empty column or on the card one rank above its leading card in the other colour, when the
+// free cells and the other empty columns could carry it a card at a time and the column has room.
+rule "solitaireFreecell-target-column" {
+  when (solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0 and
+    solitaireFreecell.status == 1 and
+    solitaireFreecell.action == 2 and
+    solitaireFreecell.sourceOk == 1)
+  zones [
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    solitaireFreecellPile8
+    solitaireFreecellPile9
+    solitaireFreecellPile10
+    solitaireFreecellPile11
+    solitaireFreecellPile12
+    solitaireFreecellPile13
+    solitaireFreecellPile14
+    solitaireFreecellPile15
+  ]
+  solitaireFreecell["targetOk"] = (
+    (
+      solitaireFreecell["runLength"] <=
+      (solitaireFreecell["emptyCells"] + 1) *
+        solitaireFreecellPower[solitaireFreecell["emptyColumns"] - (count($zones[solitaireFreecell.to]) == 0)]
+    ) *
+    (count($zones[solitaireFreecell.to]) + solitaireFreecell["runLength"] <= 19) *
+    (count($zones[solitaireFreecell.to]) == 0 ? 1 : match(solitaireFreecellLanding, $zones[solitaireFreecell.to]))
+  )
+}
+
+// A free cell takes one card while it is empty.
+rule "solitaireFreecell-target-cell" {
+  when (solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0 and
+    solitaireFreecell.status == 1 and
+    solitaireFreecell.action == 2 and
+    solitaireFreecell.sourceOk == 1)
+  zones [
+    solitaireFreecellPile0
+    solitaireFreecellPile1
+    solitaireFreecellPile2
+    solitaireFreecellPile3
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+  ]
+  solitaireFreecell["targetOk"] = (solitaireFreecell["runLength"] == 1) * (count($zones[solitaireFreecell.to]) == 0)
+}
+
+// A foundation takes the next rank of its own suit, one card at a time.
+rule "solitaireFreecell-target-foundation" {
+  when (solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0 and
+    solitaireFreecell.status == 1 and
+    solitaireFreecell.action == 2 and
+    solitaireFreecell.sourceOk == 1)
+  zones [
+    ""
+    ""
+    ""
+    ""
+    solitaireFreecellPile4
+    solitaireFreecellPile5
+    solitaireFreecellPile6
+    solitaireFreecellPile7
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+    ""
+  ]
+  solitaireFreecell["targetOk"] = (
+    (solitaireFreecell["runLength"] == 1) *
+    (solitaireFreecellSuit[solitaireFreecell["card"]] == solitaireFreecell["to"] - 4) *
+    (solitaireFreecellRank[solitaireFreecell["card"]] == count($zones[solitaireFreecell.to]) + 1)
+  )
+}
+
+// A move is ready when the door is idle on a move request whose run and landing the rules above accepted. The move rules
+// below gate on this one cell and on their two piles, which is all the work budget has to price them by.
+rule "solitaireFreecell-move-ready" {
+  mode: Level
+  solitaireFreecell.moveReady = (
+    solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0 and
+    solitaireFreecell.status == 1 and
+    solitaireFreecell.action == 2 and
+    solitaireFreecell.sourceOk == 1 and
+    solitaireFreecell.targetOk == 1
+  )
+}
+
+template freecellMove(from, to, pileFrom, pileTo) {
+  rule $"solitaireFreecell-move-{from}-{to}" {
+    when solitaireFreecell.moveReady == 1 and solitaireFreecell.from == from and solitaireFreecell.to == to
+    transaction {
+      transform transfer(from: pileFrom, to: pileTo, selector: Slice, key: solitaireFreecell.card)
+      solitaireFreecell.moves = solitaireFreecell.moves + 1
+      solitaireFreecell.busy = 1
+      solitaireFreecell.result = 1
+      solitaireFreecell.applied = solitaireFreecell.request
+    }
+  }
+}
+
+// A column's run goes to another column, a cell or a foundation; a cell's card goes to a column or a foundation.
+for from in fcColumns {
+  for to in filter(fcColumns, other => other != from) {
+    freecellMove(from: from, to: to, pileFrom: $"solitaireFreecellPile{from}", pileTo: $"solitaireFreecellPile{to}")
+  }
+  for to in fcCells {
+    freecellMove(from: from, to: to, pileFrom: $"solitaireFreecellPile{from}", pileTo: $"solitaireFreecellPile{to}")
+  }
+  for to in fcFoundations {
+    freecellMove(from: from, to: to, pileFrom: $"solitaireFreecellPile{from}", pileTo: $"solitaireFreecellPile{to}")
+  }
+}
+
+for from in fcCells {
+  for to in fcColumns {
+    freecellMove(from: from, to: to, pileFrom: $"solitaireFreecellPile{from}", pileTo: $"solitaireFreecellPile{to}")
+  }
+  for to in fcFoundations {
+    freecellMove(from: from, to: to, pileFrom: $"solitaireFreecellPile{from}", pileTo: $"solitaireFreecellPile{to}")
+  }
+}
+
+rule "solitaireFreecell-reject" {
+  when (solitaire.table == 2 and
+    solitaireFreecell.request != solitaireFreecell.applied and
+    solitaireFreecell.stage == 0 and
+    solitaireFreecell.busy == 0)
+  transaction {
+    solitaireFreecell.result = -1
+    solitaireFreecell.applied = solitaireFreecell.request
+  }
+}
+
+rule "solitaireFreecell-maintenance-start" {
+  when solitaire.table == 2 and solitaireFreecell.stage == 0 and solitaireFreecell.busy == 1
+  solitaireFreecell.busy = 0
+}
+
+rule "solitaireFreecell-win" {
+  when solitaire.table == 2 and solitaireFreecell.status == 1 and solitaireFreecell.busy == 0
+  solitaireFreecell.status = (
+    (
+      count(solitaireFreecellPile4) +
+      count(solitaireFreecellPile5) +
+      count(solitaireFreecellPile6) +
+      count(solitaireFreecellPile7)
+    ) == 52 ?
+      2 :
+    1
+  )
+}
