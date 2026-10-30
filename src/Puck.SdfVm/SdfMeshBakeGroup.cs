@@ -46,9 +46,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// group is glass only while every instance riding its slot is, and the world group never is.</summary>
     public bool Glass { get; private set; }
 
-    /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, and the finest
-    /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice.</summary>
-    public List<(Vector3 Center, float Radius, float Detail)> Members { get; } = [];
+    /// <summary>Gets each static instance's bounding sphere, which a union of several sizes its lattice by, the finest
+    /// feature it declares (<see cref="SdfInstanceRange.Detail"/>), which refines its lattice, and the box that refinement
+    /// covers: the sphere's cube, narrowed to the instance's own box where it declares one (<see cref="SdfInstanceRange.Box"/>).</summary>
+    public List<(Vector3 Center, float Radius, float Detail, Vector3 Low, Vector3 High)> Members { get; } = [];
 
     /// <summary>Gets the finest feature, in world units, any of the group's instances declares
     /// (<see cref="SdfInstanceRange.Detail"/>); zero for none.</summary>
@@ -308,7 +309,14 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 groups.Add(item: group);
             }
             if (!instance.IsDynamic) {
-                group.Members.Add(item: (instance.Center, radius, instance.Detail));
+                var low = (instance.Center - new Vector3(value: radius));
+                var high = (instance.Center + new Vector3(value: radius));
+
+                if (instance.Box is { } box) {
+                    low = Vector3.Min(value1: high, value2: Vector3.Max(value1: low, value2: box.Low));
+                    high = Vector3.Max(value1: low, value2: Vector3.Min(value1: high, value2: box.High));
+                }
+                group.Members.Add(item: (instance.Center, radius, instance.Detail, low, high));
             }
             if (instance.Detail > 0f) {
                 var low = (center - new Vector3(value: radius));

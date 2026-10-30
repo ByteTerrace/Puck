@@ -717,12 +717,15 @@ public static class WorldPlacementStamper {
                     // exact neighbour the union's field sags below a distance, and the bake reads the sag as a sheet it
                     // closes into slabs across the neighbour.
                     var warped = ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
+                    var box = CreationStampEmitter.ShapeStampBox(document: creation, shapeIndex: shapeIndex, transform: stampTransform);
+                    var margin = new Vector3(value: PlacementBoundMargin);
 
                     _ = builder.BeginInstance(
                         bakesWithPrevious: ((emitted++ > 0) && !warped && !previousWarped),
                         boundCenter: boundCenter,
                         boundRadius: (boundRadius + PlacementBoundMargin),
-                        detail: ShapeDetail(shape: shape, scale: placement.Scale)
+                        detail: ShapeDetail(shape: shape, scale: placement.Scale),
+                        box: ((box is { } tight) ? ((tight.Low - margin), (tight.High + margin)) : null)
                     );
                     CreationStampEmitter.EmitShapeStamp(
                         builder: builder,

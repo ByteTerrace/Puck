@@ -254,6 +254,9 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 public sealed class SdfSampledLattice {
     // A refinement that would measure more fine samples than this is not taken: the lattice contours at its own spacing.
     private const int MaxFineSamples = 4_000_000;
+    // The field value, in field units, within which a sample lies on the surface: one step of the fixed-point evaluator
+    // (2^-16), above the float interpreter's rounding at world coordinates (Solid).
+    private const float OnSurface = (1f / 65536f);
     // The share of a step across a line, at the line's own slope, the field may change by toward either neighbour before
     // a pair on the line lies beside a solid rather than either side of a sheet (SheetsBetween): a sheet tilted 45
     // degrees from the line changes the field by 0.71 of a step across it and stays a sheet; a line over a plate's top
@@ -329,6 +332,9 @@ public sealed class SdfSampledLattice {
             throw new ArgumentException(message: $"A lattice of {count} samples holds one value and material per sample.");
         }
 
+        for (var index = 0; (index < values.Length); index++) {
+            values[index] = Solid(value: values[index]);
+        }
         m_origin = origin;
         m_cell = cell;
         m_samplesX = samplesX;
@@ -363,7 +369,9 @@ public sealed class SdfSampledLattice {
     /// <param name="factor">The fine cells along each axis of a coarse cell, at least two; fewer when that many would
     /// measure more fine samples than the refinement's budget (<see cref="Refinement"/> reports the split taken).</param>
     /// <param name="regions">The boxes, in the lattice's frame, whose surface is contoured at the fine spacing wherever
-    /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none.</param>
+    /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none. Where every
+    /// region's cells would measure more fine samples than the refinement's budget, the regions covering the fewest cells
+    /// are refined and the rest contour at the lattice's own spacing.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
     /// their answers; empty when no cell needs refining or even two fine cells a side would measure too many, and the
     /// lattice then contours at its own spacing.</returns>
@@ -537,37 +545,46 @@ public sealed class SdfSampledLattice {
             }
         }
 
-        // Cells of a region the surface can enter: a corner lies within half the cell's diagonal of it.
+        // Each region's cells the surface can enter: a corner lies within half the cell's diagonal of it.
+        var regionCells = new List<int>[regions.Length];
+
         if (!regions.IsEmpty) {
             var reach = (0.5f * m_cell.Length());
 
-            for (var z = 0; (z < cellsZ); z++) {
-                for (var y = 0; (y < cellsY); y++) {
-                    for (var x = 0; (x < cellsX); x++) {
-                        var low = (m_origin + (new Vector3(x: x, y: y, z: z) * m_cell));
-                        var high = (low + m_cell);
-                        var overlaps = false;
+            for (var r = 0; (r < regions.Length); r++) {
+                var region = regions[r];
+                var cellsOf = new List<int>();
+                var from = ((region.Low - m_origin) / m_cell);
+                var to = ((region.High - m_origin) / m_cell);
+                var (x0, x1) = (Math.Max(val1: 0, val2: ((int)MathF.Floor(x: from.X) - 1)), Math.Min(val1: (cellsX - 1), val2: ((int)MathF.Floor(x: to.X) + 1)));
+                var (y0, y1) = (Math.Max(val1: 0, val2: ((int)MathF.Floor(x: from.Y) - 1)), Math.Min(val1: (cellsY - 1), val2: ((int)MathF.Floor(x: to.Y) + 1)));
+                var (z0, z1) = (Math.Max(val1: 0, val2: ((int)MathF.Floor(x: from.Z) - 1)), Math.Min(val1: (cellsZ - 1), val2: ((int)MathF.Floor(x: to.Z) + 1)));
 
-                        foreach (var region in regions) {
-                            overlaps |= ((low.X <= region.High.X) && (high.X >= region.Low.X) &&
+                for (var z = z0; (z <= z1); z++) {
+                    for (var y = y0; (y <= y1); y++) {
+                        for (var x = x0; (x <= x1); x++) {
+                            var low = (m_origin + (new Vector3(x: x, y: y, z: z) * m_cell));
+                            var high = (low + m_cell);
+
+                            if (!((low.X <= region.High.X) && (high.X >= region.Low.X) &&
                                 (low.Y <= region.High.Y) && (high.Y >= region.Low.Y) &&
-                                (low.Z <= region.High.Z) && (high.Z >= region.Low.Z));
-                        }
-                        if (!overlaps) {
-                            continue;
-                        }
+                                (low.Z <= region.High.Z) && (high.Z >= region.Low.Z))) {
+                                continue;
+                            }
 
-                        var nearest = float.PositiveInfinity;
+                            var nearest = float.PositiveInfinity;
 
-                        for (var offset = 0; (offset < 8); offset++) {
-                            nearest = MathF.Min(nearest, MathF.Abs(m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
-                        }
-                        if (nearest <= reach) {
-                            measured[CellIndex(x: x, y: y, z: z)] = true;
-                            any = true;
+                            for (var offset = 0; (offset < 8); offset++) {
+                                nearest = MathF.Min(nearest, MathF.Abs(m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
+                            }
+                            if (nearest <= reach) {
+                                cellsOf.Add(item: CellIndex(x: x, y: y, z: z));
+                            }
                         }
                     }
                 }
+                regionCells[r] = cellsOf;
+                any |= (cellsOf.Count > 0);
             }
         }
 
@@ -653,6 +670,98 @@ public sealed class SdfSampledLattice {
         if (!any) {
             return [];
         }
+
+        // The split and the regions the fine-sample budget serves. The cells the samples cannot resolve (a sheet, a gap, two
+        // patches) are measured first, then each region's cells, the region the fewest cells cover first, a region whose
+        // cells would carry the count past MaxFineSamples left to the coarse contour: a member whose region spans a whole
+        // union (a slab's thin finish) costs as much as every other member together, and dropping all the regions for it
+        // left the members that need refining, a strip under the slab, at the coarse cell. The finest split serving the
+        // most regions is taken, splitting each cell into fewer fine cells rather than none: a sheet thinner than the
+        // coarse cell is caught by any refinement and lost by the coarse contour.
+        var essential = measured;
+        var order = new List<int>();
+
+        for (var r = 0; (r < regionCells.Length); r++) {
+            if (regionCells[r] is { Count: > 0 }) { order.Add(item: r); }
+        }
+        order.Sort(comparison: (a, b) => ((regionCells[a].Count != regionCells[b].Count) ? regionCells[a].Count.CompareTo(value: regionCells[b].Count) : a.CompareTo(value: b)));
+
+        bool[]? chosen = null;
+        var chosenSplit = 0;
+        var chosenServed = -1;
+        var counted = new HashSet<int>();
+        var added = new List<int>();
+        var addedCells = new List<int>();
+
+        for (var split = factor; (split >= 2); split--) {
+            var mask = (bool[])essential.Clone();
+            var fits = true;
+
+            counted.Clear();
+            for (var cell = 0; (fits && (cell < mask.Length)); cell++) {
+                if (mask[cell]) { fits = Count(cell: cell, split: split, newKeys: null); }
+            }
+            if (!fits) { continue; }
+
+            var served = 0;
+
+            foreach (var r in order) {
+                added.Clear();
+                addedCells.Clear();
+
+                var within = true;
+
+                foreach (var cell in regionCells[r]) {
+                    if (mask[cell]) { continue; }
+                    mask[cell] = true;
+                    addedCells.Add(item: cell);
+                    if (!Count(cell: cell, split: split, newKeys: added)) {
+                        within = false;
+                        break;
+                    }
+                }
+                if (within) {
+                    served++;
+                    continue;
+                }
+                foreach (var key in added) { _ = counted.Remove(item: key); }
+                foreach (var cell in addedCells) { mask[cell] = false; }
+            }
+            if (served > chosenServed) {
+                (chosen, chosenSplit, chosenServed) = (mask, split, served);
+            }
+            if (served == order.Count) { break; }
+        }
+
+        // Counts a cell's fine samples that are not coarse samples into `counted`, recording each new one in `newKeys`;
+        // false once the count passes MaxFineSamples.
+        bool Count(int cell, int split, List<int>? newKeys) {
+            var x = (cell % cellsX);
+            var y = ((cell / cellsX) % cellsY);
+            var z = (cell / (cellsX * cellsY));
+            var fineX = ((cellsX * split) + 1);
+            var fineY = ((cellsY * split) + 1);
+
+            for (var fz = (z * split); (fz <= ((z + 1) * split)); fz++) {
+                for (var fy = (y * split); (fy <= ((y + 1) * split)); fy++) {
+                    for (var fx = (x * split); (fx <= ((x + 1) * split)); fx++) {
+                        if (((fx % split) == 0) && ((fy % split) == 0) && ((fz % split) == 0)) { continue; }
+
+                        var key = (fx + (fineX * (fy + (fineY * fz))));
+
+                        if (counted.Add(item: key)) { newKeys?.Add(item: key); }
+                    }
+                }
+            }
+
+            return (counted.Count <= MaxFineSamples);
+        }
+
+        if (chosen is null) {
+            return [];
+        }
+        measured = chosen;
+        factor = chosenSplit;
 
         // Every cell touching a measured cell contours at the fine spacing too, from its coarse corners, so no cell that
         // contours whole meets a measured fine sample.
@@ -903,7 +1012,7 @@ public sealed class SdfSampledLattice {
         }
 
         for (var index = 0; (index < values.Length); index++) {
-            m_fineValues[(first + index)] = values[index];
+            m_fineValues[(first + index)] = Solid(value: values[index]);
             m_fineMaterials[(first + index)] = materials[index];
         }
     }
@@ -936,11 +1045,6 @@ public sealed class SdfSampledLattice {
 
         return (start + ((axis == 0) ? length : ((axis == 1) ? (length * fineX) : (length * fineX * fineY))));
     }
-    private bool MeasuredSample(int key) {
-        var (x, y, z) = FineCoordinates(key: key);
-
-        return (((x % m_factor) == 0) && ((y % m_factor) == 0) && ((z % m_factor) == 0)) || m_fineSlots.ContainsKey(key: key);
-    }
     private Vector3 CrossingPoint(long key, float fraction) {
         var (start, axis, length) = CrossingEdge(key: key);
         var (x, y, z) = FineCoordinates(key: start);
@@ -950,7 +1054,7 @@ public sealed class SdfSampledLattice {
     }
     /// <summary>Returns the next points for locating each sign-changing edge's zero along that edge. After refinement,
     /// repeatedly answer these points with <see cref="AnswerCrossings"/> until this returns no points, then measure
-    /// <see cref="GradientPoints"/>. Artificial transition samples and closed thin sheets keep their lattice crossings.</summary>
+    /// <see cref="GradientPoints"/>. Closed thin sheets and gaps keep their lattice crossings.</summary>
     /// <returns>The next round's points in the order <see cref="AnswerCrossings"/> takes their values.</returns>
     public Vector3[] CrossingPoints() {
         PrepareCrossings();
@@ -959,7 +1063,11 @@ public sealed class SdfSampledLattice {
                 var (start, axis, length) = CrossingEdge(key: key);
                 var end = EdgeEnd(start: start, axis: axis, length: length);
 
-                if (Closed(key: start) || Closed(key: end) || !MeasuredSample(key: start) || !MeasuredSample(key: end)) { continue; }
+                // A transition edge's unmeasured end reads the value its coarse corners interpolate, whose sign the
+                // contour's topology keeps; its root is searched along the edge as a measured one is. Inside a union the
+                // interpolated value is no distance (a layer thinner than a coarse cell measures to the face it shares
+                // with its neighbour), so its linear estimate lands off the surface, by up to that layer's thickness.
+                if (Closed(key: start) || Closed(key: end)) { continue; }
                 var (x, y, z) = FineCoordinates(key: start);
                 var (ex, ey, ez) = FineCoordinates(key: end);
 
@@ -995,7 +1103,7 @@ public sealed class SdfSampledLattice {
             if (!float.IsFinite(value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
             var root = m_crossingRoots[m_pendingCrossings[(first + index)]];
 
-            if (value == 0f) {
+            if (MathF.Abs(x: value) <= OnSurface) {
                 root.Done = true;
                 continue;
             }
@@ -1400,6 +1508,12 @@ public sealed class SdfSampledLattice {
 
         return (((x % factor) == 0) && ((y % factor) == 0) && ((z % factor) == 0) && m_closedCoarse.Contains(item: Index(x: (x / factor), y: (y / factor), z: (z / factor))));
     }
+    // A sample's value with the surface counted as solid: a sample on the surface reads inside, a hair under it. A solid
+    // holds its boundary, and so does a union of solids that touch: the face two of them share (a tread on its riser, a
+    // slab's finish on its ceiling) lies inside the union, though each reads zero there. Counted outside, such a sample
+    // opens a sheet of faces along the seam inside the solid, and a sample on a face's plane past the face's edge (a
+    // strip's side under the slab it hangs from) puts the crossing of the face across it on that sample.
+    private static float Solid(float value) => (((value > -OnSurface) && (value <= OnSurface)) ? -OnSurface : value);
     // The thickness, in steps, of the run of one sample `value` between `before` and `after` of the other sign along a
     // line, as the line's values interpolate its two crossings.
     private static float RunThickness(float before, float value, float after) {
@@ -2036,8 +2150,8 @@ public sealed class SdfSampledLattice {
 
                     gradient /= magnitude;
                     (nx, ny, nz) = (gradient.X, gradient.Y, gradient.Z);
-                    // A measured root stays on its edge. Only an interpolated transition sample keeps the previous
-                    // first-order plane correction; a closed sheet retains its deliberately displaced crossing.
+                    // A searched root stays on its edge, and a closed sheet retains its deliberately displaced crossing;
+                    // any other crossing's plane moves by its measured value.
                     offset = ((closed || owner.m_crossingRoots.ContainsKey(key: owner.CrossingKey(axis: axis, length: length, start: start)))
                         ? 0.0
                         : Math.Clamp(value: (measured.W / magnitude), min: -reach, max: reach));

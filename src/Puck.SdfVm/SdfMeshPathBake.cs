@@ -1093,7 +1093,7 @@ public sealed partial class SdfMeshPathBake {
         var longest = MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z));
         var finest = float.PositiveInfinity;
 
-        foreach (var (_, radius, _) in group.Members) {
+        foreach (var (_, radius, _, _, _) in group.Members) {
             finest = MathF.Min(x: finest, y: MemberCell(radius: radius));
         }
 
@@ -1114,13 +1114,16 @@ public sealed partial class SdfMeshPathBake {
         var target = float.PositiveInfinity;
         var detailed = float.PositiveInfinity;
 
-        foreach (var (center, radius, detail) in group.Members) {
+        foreach (var (_, radius, detail, low, high) in group.Members) {
             var own = ((detail > 0f) ? MathF.Min(x: MemberCell(radius: radius), y: detail) : MemberCell(radius: radius));
 
-            if ((detail <= 0f) && ((own * RegionRatio) >= coarse)) { continue; }
+            // A member the lattice already resolves refines nothing: a declared detail at or past the coarse spacing (a
+            // slab's half thickness over a lattice finer than it) would only spend the refinement's sample budget on
+            // surface the coarse contour holds, leaving the thin members that need it the coarse cell.
+            if ((detail > 0f) ? (own >= coarse) : ((own * RegionRatio) >= coarse)) { continue; }
             regions.Add(item: new SdfLatticeRegion(
-                High: Vector3.Min(value1: group.High, value2: (center + new Vector3(value: radius))),
-                Low: Vector3.Max(value1: group.Low, value2: (center - new Vector3(value: radius)))
+                High: Vector3.Min(value1: group.High, value2: high),
+                Low: Vector3.Max(value1: group.Low, value2: low)
             ));
             target = MathF.Min(x: target, y: own);
             if (detail > 0f) { detailed = MathF.Min(x: detailed, y: detail); }
@@ -1215,6 +1218,7 @@ public sealed partial class SdfMeshPathBake {
             if (factor >= 2) {
                 points = Homogeneous(points: final.Sampled.Refine(factor: factor, regions: final.Regions));
             }
+            Console.Error.WriteLine(value: $"[bs2] group {group.Selector} dims={lattice.Dims} cell={lattice.Cell} asked={factor} regions={final.Regions.Length} took={final.Sampled.Refinement} measured={final.Sampled.MeasuredCells} refined={final.Sampled.RefinedCells} fine={points?.Length ?? 0}");
             if ((points is null) || (points.Length == 0)) {
                 points = ChooseCrossingPoints(final: final);
             } else {
@@ -1382,7 +1386,10 @@ public sealed partial class SdfMeshPathBake {
     // beside a sharp convex crease past it (SdfContour.Beside) that the field puts inside the solid: moved onto the face
     // nearer it, its quads still turn across the crease, and as no crease its face's normal would shade the other face's
     // quads up to 90 degrees off, where a vertex proud of a rounding lies outside. A vertex whose gradient reads shorter
-    // than KinkGradient of the field's typical slope sits on a crease the gradient's taps straddle and stays. Once every vertex is answered, the
+    // than KinkGradient of the field's typical slope sits on a crease the gradient's taps straddle and stays, and so does
+    // one whose gradient turns away from the way its own triangles face: inside a union, the field of a layer thinner than
+    // a cell (a slab's ceiling finish, a tread on its riser) measures to the face it shares with its neighbour, so its
+    // gradient points at that seam, and the move would lift the vertex off the surface onto it. Once every vertex is answered, the
     // contour splits at the creases that remain on the thread pool. Every movement is clipped before an incident
     // triangle reverses its original facing; an incomplete projection keeps its original crease and shading normal.
     private void AnswerCreases(Group group, in SdfMeshBakeRequest request, float[] values, float[] gradients) {
@@ -1400,6 +1407,7 @@ public sealed partial class SdfMeshPathBake {
 
             if (!(MathF.Abs(x: distance) > tolerance)) { continue; }
             gradient /= length;
+            if (!(Vector3.Dot(vector1: gradient, vector2: group.Projection!.Outward(vertex: vertex)) > 0f)) { continue; }
             var cut = ((vertex < contour.Beside.Length) && contour.Beside[vertex] && (distance < 0f));
             var point = group.Projection!.Move(amount: out var amount, contour: contour, displacement: (-distance * gradient), vertex: vertex);
 
@@ -1713,6 +1721,18 @@ public sealed partial class SdfMeshPathBake {
             }
         }
 
+        // The way a vertex's own surface faces: the sum of its triangles' original area normals.
+        public Vector3 Outward(int vertex) {
+            var (x, y, z) = (0.0, 0.0, 0.0);
+
+            for (var at = m_starts[vertex]; (at < m_starts[(vertex + 1)]); at++) {
+                var reference = m_triangles[m_incident[at]].Reference;
+
+                (x, y, z) = ((x + reference.X), (y + reference.Y), (z + reference.Z));
+            }
+
+            return new Vector3(x: (float)x, y: (float)y, z: (float)z);
+        }
         public Vector3 Move(SdfContour contour, int vertex, Vector3 displacement, out float amount) {
             var original = At(contour: contour, vertex: vertex);
             var target = (original + displacement);

@@ -298,7 +298,7 @@ let hallSwitchStates = [
 // level, running inside the piers between the windows and 3 cm into every sill and head, so each opening shows a panel
 // that covers it whole and lets no daylight through, its slats' seams painted on. One long board, rather than one per window, bakes at the coarse
 // lattice its length sets, so a level's blinds cost few triangles. A raised blind has rolled into the charcoal cassette
-// at the head of its opening (part of `hall-shell`, always drawn), so its placement shows `hall-blinds-up`, a creation
+// at the head of its opening (`hall-cassettes-*`, always drawn), so its placement shows `hall-blinds-up`, a creation
 // with nothing to draw: raising blinds bakes nothing, and lowering them bakes their boards the first time they show (the
 // mesh store keeps them after; every level's bake with the boot, since they start down). The boards are solid, so a line
 // of sight through a window reads its blind (`hall-tests.puck`).
@@ -322,6 +322,11 @@ let hallOpenings = reduce(
     ),
     map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })
   )
+)
+let hallCassetteRows = reduce(
+  range(0, 4),
+  [],
+  (rows, k) => concat(rows, map(["south", "north", "east"], face => { level: k, face: face }))
 )
 // Each blind board: its level, its name, and its world bounds.
 let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
@@ -489,31 +494,42 @@ prototypes {
       }
       // West face, solid.
       hallBox(label: "west", x0: 10, x1: 10.3, y0: 0, y1: parapet, z0: 12.3, z1: 39.7, slot: hallWall)
-      // The cassette a window's blind rolls into, under the band over its head, part of the wall so it bakes with it.
-      for (opening, n) in hallOpenings {
-        for depth in ((opening.face == "south") ? [[12.05, 12.28]] : ((opening.face == "north") ? [[39.72, 39.95]] : [])) {
-          hallBox(
-            label: $"cassette-{n}",
-            x0: opening.a0,
-            x1: opening.a1,
-            y0: ((storey * opening.level) + 3.2),
-            y1: ((storey * opening.level) + 3.33),
-            z0: depth[0],
-            z1: depth[1],
-            slot: hallTrim
-          )
-        }
-        for depth in ((opening.face == "east") ? [[69.72, 69.95]] : []) {
-          hallBox(
-            label: $"cassette-{n}",
-            x0: depth[0],
-            x1: depth[1],
-            y0: ((storey * opening.level) + 3.2),
-            y1: ((storey * opening.level) + 3.33),
-            z0: opening.a0,
-            z1: opening.a1,
-            slot: hallTrim
-          )
+    }
+  }
+  // The cassettes a level's blinds roll into on one face, one under the band over each window's head, set back in the
+  // wall's thickness. A row is a creation of its own, so it bakes at its own small spacing: inside the shell's union,
+  // whose lattice the whole building sizes, its 2 cm and 5 cm setbacks from the wall's faces lie inside one cell.
+  for row in hallCassetteRows {
+    prototype $"hall-cassettes-{row.level}-{row.face}" {
+      document {
+        name: $"hall-cassettes-{row.level}-{row.face}"
+        schema: "puck.creation.v1"
+        palette: hallPalette
+        for (opening, n) in filter(hallOpenings, o => ((o.level == row.level) and (o.face == row.face))) {
+          for depth in ((row.face == "south") ? [[12.05, 12.28]] : ((row.face == "north") ? [[39.72, 39.95]] : [])) {
+            hallBox(
+              label: $"cassette-{n}",
+              x0: opening.a0,
+              x1: opening.a1,
+              y0: ((storey * row.level) + 3.2),
+              y1: ((storey * row.level) + 3.33),
+              z0: depth[0],
+              z1: depth[1],
+              slot: hallTrim
+            )
+          }
+          for depth in ((row.face == "east") ? [[69.72, 69.95]] : []) {
+            hallBox(
+              label: $"cassette-{n}",
+              x0: depth[0],
+              x1: depth[1],
+              y0: ((storey * row.level) + 3.2),
+              y1: ((storey * row.level) + 3.33),
+              z0: opening.a0,
+              z1: opening.a1,
+              slot: hallTrim
+            )
+          }
         }
       }
     }
@@ -1132,6 +1148,13 @@ placements {
     prototype: "hall-shell"
     position [0, 0, 0]
     solid
+  }
+  for row in hallCassetteRows {
+    placement $"hall-cassettes-{row.level}-{row.face}" {
+      prototype: $"hall-cassettes-{row.level}-{row.face}"
+      position [0, 0, 0]
+      solid
+    }
   }
   placement "hall-floor-0" {
     prototype: "hall-floor-0"
