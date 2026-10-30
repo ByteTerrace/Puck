@@ -974,11 +974,7 @@ brief's priorities ([security review](../development/security-review.md)).
 
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
-  the extension grant vocabulary allows. The Azure deployment files
-  (`src/Puck.Azure.Resources/bicepconfig.json`,
-  `avm/ptn/platform/public-ai-services/main.bicepparam`) carry the owner's
-  subscription ID; whether they stay is the owner's call. (from: the lead,
-  landing granaries)
+  the extension grant vocabulary allows. (from: the lead, landing granaries)
 - Complete the independent review: federation interruption, recovery and
   revocation schedules; authorization and disclosure composition; deployed Azure
   identity, storage and key policy; aggregate hostile-input budgets; and
