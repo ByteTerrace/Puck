@@ -26,6 +26,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
     private sealed class FailingJournalStore(IObjectBlobStore inner) : IObjectBlobStore {
         private int m_fail;
         private string? m_loseRootAnswer;
+        private int m_rootWritesPassing;
         private bool m_lostRootLands;
         private string? m_failRootRead;
         private RootReadHold? m_rootReadHold;
@@ -61,8 +62,10 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
         ));
 
         public void FailNextJournalWrite() => Interlocked.Exchange(location1: ref m_fail, value: 1);
-        public void LoseNextRootAnswer(string world, bool lands) {
+        // Loses the answer of the row's root write that follows `passing` more root writes.
+        public void LoseNextRootAnswer(string world, bool lands, int passing = 0) {
             m_lostRootLands = lands;
+            Volatile.Write(location: ref m_rootWritesPassing, value: passing);
             Volatile.Write(location: ref m_loseRootAnswer, value: world);
         }
         public ValueTask<IReadOnlyList<string>> ListAsync(ObjectStorageTarget target, Guid objectId, string keyPrefix, CancellationToken cancellationToken = default) =>
@@ -101,7 +104,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             }
             var losing = Volatile.Read(location: ref m_loseRootAnswer);
 
-            if (IsRoot(address: address, world: losing) && (Interlocked.CompareExchange(comparand: losing, location1: ref m_loseRootAnswer, value: null) == losing)) {
+            if (IsRoot(address: address, world: losing) && (Interlocked.Decrement(location: ref m_rootWritesPassing) < 0) && (Interlocked.CompareExchange(comparand: losing, location1: ref m_loseRootAnswer, value: null) == losing)) {
                 if (m_lostRootLands) {
                     _ = await inner.WriteAsync(address: address, cancellationToken: cancellationToken, content: content, ifMatchVersion: ifMatchVersion, mode: mode, target: target);
                 }
@@ -486,8 +489,10 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
         );
         Assert.True(condition: await checkpoint);
 
+        // The destination's lease lands; the answer to its arrival is lost.
         pair.Store.LoseNextRootAnswer(
             lands: lands,
+            passing: 1,
             world: "rowb"
         );
         var transferId = original.Instances.EnqueueTransfer(
@@ -523,7 +528,11 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
 
         Assert.Equal(
             expected: lands,
-            actual: journal!.Value.Journal.Entries.Any(predicate: static entry => (entry.Kind == WorldAuthorityJournalEntryKind.Crossing))
+            actual: journal!.Value.Journal.Entries.Any(predicate: static entry => (
+                (entry.Kind == WorldAuthorityJournalEntryKind.Crossing) &&
+                WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(bytes: entry.Encoded.Span, entry: out var crossing, reason: out _) &&
+                (crossing.Record is WorldCrossingRecord.Arrival)
+            ))
         );
 
         var replacement = pair.NewHost();

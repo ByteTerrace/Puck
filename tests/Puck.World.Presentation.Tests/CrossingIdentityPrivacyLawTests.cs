@@ -441,6 +441,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.Equal(expected: colocated.Border, actual: reader.ReadString(field: "border"));
         Assert.False(condition: reader.ReadBoolean());
         Assert.True(condition: reader.ReadBoolean());
+        Assert.Equal(expected: colocated.SourceFloor, actual: reader.ReadUInt64());
         Assert.Equal(expected: colocated.Members.Count, actual: reader.ReadInt32());
         Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: encoded, failure: out var failure, request: out var decoded), userMessage: failure.ToString());
         Assert.True(condition: decoded!.PeerAdmission);
@@ -753,7 +754,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         world.SourceLog.CrashAfter = typeof(WorldCrossingRecord.Departure);
         Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
         // The destination has reserved but has never seen a commit. Its explicit abort is an authoritative Missing.
-        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read()).Record);
+        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read(), predicate: static entry => (entry.Record is WorldCrossingRecord.Departure)).Record);
 
         world.Destination.Server.AbortTransfer(sourceAuthority: world.Source.Server.AuthorityIdentity,
             transferId: departure.Transfer.TransferId);
@@ -789,7 +790,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "beforeDeparture"), reason: out reason, value: 4), userMessage: reason);
         world.SourceLog.CrashAfter = typeof(WorldCrossingRecord.Departure);
         _ = Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
-        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read()).Record);
+        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read(), predicate: static entry => (entry.Record is WorldCrossingRecord.Departure)).Record);
 
         world.Destination.Server.AbortTransfer(sourceAuthority: world.Source.Server.AuthorityIdentity, transferId: departure.Transfer.TransferId);
         using var restarted = world.Restart(destinationDied: false, sourceDied: true);
@@ -826,7 +827,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "beforeDeparture"), value: 4, changed: out _, reason: out reason), userMessage: reason);
         world.SourceLog.CrashAfter = typeof(WorldCrossingRecord.Departure);
         _ = Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
-        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read()).Record);
+        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read(), predicate: static entry => (entry.Record is WorldCrossingRecord.Departure)).Record);
 
         world.Destination.Server.AbortTransfer(sourceAuthority: world.Source.Server.AuthorityIdentity, transferId: departure.Transfer.TransferId);
         using var restarted = world.Restart(sourceDied: true, destinationDied: false);
@@ -917,7 +918,8 @@ public sealed class CrossingIdentityPrivacyLawTests {
             var failure = Xunit.Record.Exception(testCode: () => tape = RecordHomeArrival(carried: 5, directory: directory.RootPath, fixture: fixture));
 
             Assert.Null(@object: failure);
-            Assert.Single(collection: log.Entries);
+            // The arrival's lease and the arrival itself.
+            Assert.Equal(expected: 2, actual: log.Entries.Count);
             Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
             Assert.Equal(5L, Fact(identity: owned, key: "replayFact"));
             Assert.Contains(collection: sink.Narrations, filter: static narration => narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "could not save"));

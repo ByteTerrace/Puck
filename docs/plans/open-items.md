@@ -895,15 +895,6 @@ decision (the companion lands inert in the live debug world today; the lead's ca
 between the consensus split), then the uncertain crossing, opened by a two-silo
 failover witness.
 
-- [high] Ordinary travellers can be duplicated by a resent commit: a
-  destination that re-leases the same transfer key after a crash lets a resent
-  commit (`MayResend` is true for transfer-id-keyed kinds) land a body the
-  source already restored after a `Missing` status; and `Missing` is final only
-  if the destination tombstones the key it answered for. The companion custody
-  spec's lease-once and tombstone rule (`Leased(K)`/`Dead(K)`) fixes both; apply
-  it to every traveller, not only companions. Unconfirmed against a run; the
-  companion protocol's model check found it and a design review is checking
-  the code. (from: the companion-redesign lane)
 - [medium] A rule firing costs the world host far more than the work sheet
   prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`
   runs `WorldServer.ValidateStateTransaction` and the commit runs
