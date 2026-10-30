@@ -17,15 +17,6 @@ query evaluator (`SdfFieldEvaluator`) and `maths-usage`.
 
 ## Camera bloom
 
-The temporal phase window describes an output footprint, which can sample different
-receiver identities on opposite jitter phases at a static silhouette. If ordinary
-receiver validation rejects it, the resolve may retain its bounded phase window
-only after proving that the unjittered camera is exactly unchanged, every tap is
-nonreactive, and each visible tap's previous point equals its current point. This
-extra motion check runs only for rejected footprints. A displaced camera keeps
-the ordinary receiver rejection; it must not retain the window through a
-disocclusion merely because the current receiver itself is stationary.
-
 The [bloom decision](../../../docs/decisions/rendering.md#bloom-is-a-cameras-scatter-applied-once-before-tonemapping)
 owns the design; the [frame handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#camera-bloom)
 owns authoring and pass order. `SdfWorldPackage.WithBloom` declares the endpoint's
@@ -274,6 +265,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   pixels use the clipped resolve while their window fills. A stationary window
   keeps its validated receiver while the footprint still sees it; choosing a
   new thin adjoining face each phase can reject the window on the next phase.
+  The window describes an output footprint, which can sample different receiver
+  identities on opposite jitter phases at a static silhouette. If ordinary
+  receiver validation rejects it, retain the bounded window only after proving
+  the unjittered camera is exactly unchanged, every tap is nonreactive, and each
+  visible tap's previous point equals its current point. This extra motion check
+  runs only for rejected footprints. A displaced camera keeps ordinary receiver
+  rejection; a stationary current receiver alone does not prove no disocclusion.
   The package owns
   `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
   HLSL. A layout change needs a host with the matching history allocation before

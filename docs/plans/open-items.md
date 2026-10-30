@@ -1163,14 +1163,24 @@ the static round-section term's cost with `puck mesh audit --cpu`.
 ### Temporal shimmer and cadence flicker
 
 Owner: temporal-shimmer rendering lane (P15 temporal reconstruction) · two
-mediums from the owner's walkthrough · Next: complete the latest-source Vulkan
-bursts and comparative tour, then isolate the remaining gallery boundary changes.
-The phase window fixes the bulk of the shimmer; the exact original off-mode
-paired-frame trigger remains unconfirmed. Material-ID exposed coincident
-lintel/floor faces, now separated at the slab underside. The corrected sill's
-Direct3D burst changes at most two pixels with temporal on or off. A static
-client-pose interpolation error and opaque-coverage rounding also have fixes;
-the hardware coverage witness's retry is pending.
+mediums from the owner's walkthrough · Next: finish the merged head's cold bake,
+measure the stationary-footprint fallback on both backends, and complete the
+comparative tour in bounded groups. The phase window fixes the bulk of the
+shimmer; its prior Vulkan wall burst still changed up to 360 pixels/.821%.
+Frozen-resolve diagnostics and a heat map locate that residual on stationary
+wall boundaries. Receiver-plane depth and a proof of an unchanged camera and
+all footprint taps now protect the phase window there; live validation is pending.
+Material-ID exposed coincident lintel/floor faces, now separated at the slab
+underside. The prior corrected sill's Vulkan burst changed at most one pixel
+with temporal on or off. The exact original off-mode paired-frame cadence
+trigger remains unconfirmed. The grazing-depth, sliver-motion and opaque-coverage
+GPU witnesses passed 6/6 on both backends; the new displaced-camera witness's
+transport expectation was corrected and its retry is queued. Client checks pass
+4/4 after merging lead/catch-up 3ddc50e03. Latest-source Direct3D World33764 is
+cold-baking a new identity; its pre-settlement captures are invalid. The prior
+full Vulkan tour captured28/64 stops before its 19-minute GPU batch ended;
+its comparison sheets are retained in the lane's scratch report, not a completed
+tour.
 
 - [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79 0 0`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191 0 0`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
 - [medium] The lift door threshold also blinks with temporal off: over region 0.36 0.78 0.32 0.1, pairs of frames 11 presentations apart change 3.18–3.42 % with max |dY| 26.28, then return on the next frame and hold still (frames 1/2 and 12/13 of w06-burst-off/). Magnified stills show sharp triangular patches swapping across the sill. Distinguish surface/depth selection from a cadence-driven lighting refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh); it is independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). The threshold's temporal-on measurement above uses this same region. (from: owner walkthrough)
