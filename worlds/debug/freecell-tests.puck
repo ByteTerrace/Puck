@@ -2,8 +2,10 @@
 // FreeCell: `puck test worlds/debug/freecell-tests.puck --reproduce`. The table deals by itself at boot from the seeded
 // stream, so every scenario sees the same deal. Piles are 0 to 3 the free cells, 4 to 7 the foundations (suits spades,
 // hearts, clubs, diamonds) and 8 to 15 the columns, which hold 7, 7, 7, 7, 6, 6, 6, 6 cards. A card is
-// suit * 13 + rank - 1. The columns end on 20 (eight of hearts), 22 (ten of hearts), 42 (four of diamonds), 8 (nine of
-// spades), 43 (five of diamonds), 33 (eight of clubs), 39 (ace of diamonds) and 26 (ace of clubs).
+// suit * 13 + rank - 1. The columns end on 20 (eight of hearts), 22 (ten of hearts), 42 (four of diamonds), 23 (jack of
+// hearts), 43 (five of diamonds), 33 (eight of clubs), 39 (ace of diamonds) and 26 (ace of clubs); beneath them lie 3
+// (four of spades), 29 (four of clubs), 47 (nine of diamonds), 8 (nine of spades), 17 (five of hearts), 5 (six of spades),
+// 30 (five of clubs) and 45 (seven of diamonds).
 
 schema: "puck.world.definition.v1"
 basis: "debug"
@@ -55,27 +57,37 @@ test "a legal move takes the ace to its foundation" {
   }
 }
 
-// The eight of hearts is no card to put on the ten of hearts (it wants a nine of the other colour): refused, and the
-// control moves it on the nine of spades, which takes it.
+// The ace of diamonds goes to its foundation and the four of diamonds lands on the five of clubs under it (a card goes on
+// the next rank up of the other colour); then the eight of hearts is put on the ten of hearts, which is neither, and is
+// refused with the piles as they were.
 test "a card moves on the next rank of the other colour and nowhere else" {
   when {
     ticks 400
-    seat1: world.state.cell.set solitaireFreecell from 8
-    seat1: world.state.cell.set solitaireFreecell to 9
-    seat1: world.state.cell.set solitaireFreecell card 20
+    seat1: world.state.cell.set solitaireFreecell from 14
+    seat1: world.state.cell.set solitaireFreecell to 7
+    seat1: world.state.cell.set solitaireFreecell card 39
     seat1: world.state.cell.set solitaireFreecell action 2
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
-    seat1: world.state.cell.set solitaireFreecell to 11
+    seat1: world.state.cell.set solitaireFreecell from 10
+    seat1: world.state.cell.set solitaireFreecell to 14
+    seat1: world.state.cell.set solitaireFreecell card 42
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 8
+    seat1: world.state.cell.set solitaireFreecell to 9
+    seat1: world.state.cell.set solitaireFreecell card 20
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
   }
   expect {
-    solitaireFreecell.result == 1
-    solitaireFreecell.moves == 1
-    count(solitaireFreecellPile8) == 6
+    solitaireFreecell.result == -1
+    solitaireFreecell.moves == 2
+    count(solitaireFreecellPile7) == 1
+    count(solitaireFreecellPile8) == 7
     count(solitaireFreecellPile9) == 7
-    count(solitaireFreecellPile11) == 8
+    count(solitaireFreecellPile10) == 6
+    count(solitaireFreecellPile14) == 6
   }
 }
 
@@ -144,96 +156,141 @@ test "a seated player lifts the ace and plays it on its foundation" {
   }
 }
 
-// A run of two (the nine of spades and the eight of hearts, once the eight is on the nine) moves a card at a time through
-// the free cells: with all four cells full no run moves, and with one free it does.
+// Five moves build the run of two the next tests carry (the six of spades under the five of diamonds in column 13) and
+// bare the seven of diamonds in column 15: the aces go to their foundations, the four of diamonds lands on the five of
+// clubs, the eight of clubs on the nine of diamonds and the five of diamonds on the six of spades. Four more fill the free
+// cells with the eight of hearts, the ten of hearts, the jack of hearts and the five of hearts, and with no cell free
+// the run of two cannot go on the seven.
 test "a run moves only as far as the free cells carry it" {
   when {
     ticks 400
-    seat1: world.state.cell.set solitaireFreecell from 10
-    seat1: world.state.cell.set solitaireFreecell to 0
-    seat1: world.state.cell.set solitaireFreecell card 42
+    seat1: world.state.cell.set solitaireFreecell from 14
+    seat1: world.state.cell.set solitaireFreecell to 7
+    seat1: world.state.cell.set solitaireFreecell card 39
     seat1: world.state.cell.set solitaireFreecell action 2
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
-    seat1: world.state.cell.set solitaireFreecell from 12
-    seat1: world.state.cell.set solitaireFreecell to 1
-    seat1: world.state.cell.set solitaireFreecell card 43
+    seat1: world.state.cell.set solitaireFreecell from 10
+    seat1: world.state.cell.set solitaireFreecell to 14
+    seat1: world.state.cell.set solitaireFreecell card 42
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
     seat1: world.state.cell.set solitaireFreecell from 13
-    seat1: world.state.cell.set solitaireFreecell to 2
+    seat1: world.state.cell.set solitaireFreecell to 10
     seat1: world.state.cell.set solitaireFreecell card 33
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
-    seat1: world.state.cell.set solitaireFreecell from 14
-    seat1: world.state.cell.set solitaireFreecell to 3
-    seat1: world.state.cell.set solitaireFreecell card 39
+    seat1: world.state.cell.set solitaireFreecell from 12
+    seat1: world.state.cell.set solitaireFreecell to 13
+    seat1: world.state.cell.set solitaireFreecell card 43
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 15
+    seat1: world.state.cell.set solitaireFreecell to 6
+    seat1: world.state.cell.set solitaireFreecell card 26
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
     seat1: world.state.cell.set solitaireFreecell from 8
-    seat1: world.state.cell.set solitaireFreecell to 11
+    seat1: world.state.cell.set solitaireFreecell to 0
     seat1: world.state.cell.set solitaireFreecell card 20
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 9
+    seat1: world.state.cell.set solitaireFreecell to 1
+    seat1: world.state.cell.set solitaireFreecell card 22
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
     seat1: world.state.cell.set solitaireFreecell from 11
-    seat1: world.state.cell.set solitaireFreecell to 9
-    seat1: world.state.cell.set solitaireFreecell card 8
+    seat1: world.state.cell.set solitaireFreecell to 2
+    seat1: world.state.cell.set solitaireFreecell card 23
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 12
+    seat1: world.state.cell.set solitaireFreecell to 3
+    seat1: world.state.cell.set solitaireFreecell card 17
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 13
+    seat1: world.state.cell.set solitaireFreecell to 15
+    seat1: world.state.cell.set solitaireFreecell card 5
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
   }
   expect {
     solitaireFreecell.result == -1
-    solitaireFreecell.moves == 5
-    count(solitaireFreecellPile9) == 7
-    count(solitaireFreecellPile11) == 8
+    solitaireFreecell.moves == 9
+    count(solitaireFreecellPile13) == 6
+    count(solitaireFreecellPile15) == 5
   }
 }
 
+// The same nine moves, then the eight of hearts goes from its cell onto the nine of spades (the cell is free again), and the
+// run of two moves on the seven of diamonds.
 test "a run moves once a free cell is emptied" {
   when {
     ticks 400
-    seat1: world.state.cell.set solitaireFreecell from 10
-    seat1: world.state.cell.set solitaireFreecell to 0
-    seat1: world.state.cell.set solitaireFreecell card 42
+    seat1: world.state.cell.set solitaireFreecell from 14
+    seat1: world.state.cell.set solitaireFreecell to 7
+    seat1: world.state.cell.set solitaireFreecell card 39
     seat1: world.state.cell.set solitaireFreecell action 2
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
-    seat1: world.state.cell.set solitaireFreecell from 12
-    seat1: world.state.cell.set solitaireFreecell to 1
-    seat1: world.state.cell.set solitaireFreecell card 43
+    seat1: world.state.cell.set solitaireFreecell from 10
+    seat1: world.state.cell.set solitaireFreecell to 14
+    seat1: world.state.cell.set solitaireFreecell card 42
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
     seat1: world.state.cell.set solitaireFreecell from 13
-    seat1: world.state.cell.set solitaireFreecell to 2
+    seat1: world.state.cell.set solitaireFreecell to 10
     seat1: world.state.cell.set solitaireFreecell card 33
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
-    seat1: world.state.cell.set solitaireFreecell from 14
-    seat1: world.state.cell.set solitaireFreecell to 3
-    seat1: world.state.cell.set solitaireFreecell card 39
+    seat1: world.state.cell.set solitaireFreecell from 12
+    seat1: world.state.cell.set solitaireFreecell to 13
+    seat1: world.state.cell.set solitaireFreecell card 43
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 15
+    seat1: world.state.cell.set solitaireFreecell to 6
+    seat1: world.state.cell.set solitaireFreecell card 26
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
     seat1: world.state.cell.set solitaireFreecell from 8
+    seat1: world.state.cell.set solitaireFreecell to 0
+    seat1: world.state.cell.set solitaireFreecell card 20
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 9
+    seat1: world.state.cell.set solitaireFreecell to 1
+    seat1: world.state.cell.set solitaireFreecell card 22
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 11
+    seat1: world.state.cell.set solitaireFreecell to 2
+    seat1: world.state.cell.set solitaireFreecell card 23
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 12
+    seat1: world.state.cell.set solitaireFreecell to 3
+    seat1: world.state.cell.set solitaireFreecell card 17
+    seat1: world.state.cell.set solitaireFreecell request 1 add
+    ticks 20
+    seat1: world.state.cell.set solitaireFreecell from 0
     seat1: world.state.cell.set solitaireFreecell to 11
     seat1: world.state.cell.set solitaireFreecell card 20
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
-    seat1: world.state.cell.set solitaireFreecell from 3
-    seat1: world.state.cell.set solitaireFreecell to 7
-    seat1: world.state.cell.set solitaireFreecell card 39
-    seat1: world.state.cell.set solitaireFreecell request 1 add
-    ticks 20
-    seat1: world.state.cell.set solitaireFreecell from 11
-    seat1: world.state.cell.set solitaireFreecell to 9
-    seat1: world.state.cell.set solitaireFreecell card 8
+    seat1: world.state.cell.set solitaireFreecell from 13
+    seat1: world.state.cell.set solitaireFreecell to 15
+    seat1: world.state.cell.set solitaireFreecell card 5
     seat1: world.state.cell.set solitaireFreecell request 1 add
     ticks 20
   }
   expect {
     solitaireFreecell.result == 1
-    solitaireFreecell.moves == 7
-    count(solitaireFreecellPile7) == 1
-    count(solitaireFreecellPile9) == 9
-    count(solitaireFreecellPile11) == 6
+    solitaireFreecell.moves == 11
+    count(solitaireFreecellPile0) == 0
+    count(solitaireFreecellPile13) == 4
+    count(solitaireFreecellPile15) == 7
   }
 }

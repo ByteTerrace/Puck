@@ -4,11 +4,14 @@ The debug world stands a card table in the gallery hall's board game room, the
 east end of level 2 ([`shapes.md`](shapes.md#the-board-game-room)), north of the
 Go table. It plays Klondike or FreeCell patience with 52 physical cards on a felt
 board centred at (60.8, 9.86, 35.9), on a table 1.6 m by 1.5 m whose top is 0.8 m
-over the floor. The felt is 1.08 m by 1.2 m and the pick grid (48 by 54 cells of
-2 cm) fills it evenly: a 10.6 by 14.9 cm card, columns 12 cm apart (FreeCell's
-eight fill the grid, Klondike's seven stand centred in it) and a fan step of 4 cm,
-so the deepest column (six face-down cards and a king down to an ace) ends on the
-grid's last row. [`cardtable.puck`](cardtable.puck) holds the table, its cards and
+over the floor. The pick grid is 48 by 54 cells of 2 cm: a 10.6 by 14.9 cm card,
+columns 12 cm apart (FreeCell's eight fill the grid's width, Klondike's seven stand
+centred in it) and a fan step of 4 cm, so the deepest column (six face-down cards
+and a king down to an ace) ends on the grid's last row. The felt (1.08 m by
+0.78 m) is cut to a game in play: its far edge is 6 cm past the top row, a deal's
+fans end 13 cm short of its near edge and a fan of ten cards reaches it; deeper
+fans run on over the table's wood and the pointer still picks them.
+[`cardtable.puck`](cardtable.puck) holds the table, its cards and
 its seat; [`klondike.puck`](klondike.puck) and [`freecell.puck`](freecell.puck)
 hold the rules and [`solitaire.puck`](solitaire.puck) the collection they belong
 to (`solitaire.table` names the game in play, 1 Klondike and 2 FreeCell, set by
@@ -19,11 +22,11 @@ creations that any author imports, in two variants an author chooses: `light`
 (an ivory ground, red hearts and diamonds, black spades and clubs, the gold rim
 and court figures kept) and `dark` (a near-black ground, bright pips). This
 table wears `cardDeckPrototypes(variant: "light")`; the pips and the rank and
-suit index are large and share the suit's colour so they read from the seat. A
-face's relief stays within a few hundredths of a card's thickness and a court
-figure is flattened into the card (`courtFlat`), so no card pokes through the
-one laid over it; a layer of the stack (`cardLayer`, 3.4 mm) is the card's
-thickness and both faces' raised rims.
+suit index are large, matte and share the suit's colour so they read from the
+seat. A face's relief stays within 2 mm and a court figure is a bas-relief
+(`courtFlat` maps its modelled depth onto the court field), so no card pokes
+through the one laid over it; a layer of the stack (`cardLayer`, 3.2 mm) is the
+card's thickness and both faces' raised rims.
 
 The game is two layers. The rules are state: the stock, the waste, seven
 tableau columns and four foundations are ordered piles of card keys
@@ -100,7 +103,7 @@ diamonds is 39).
 | Read a pile | `world.state solitaireKlondikePile2` (bottom to top) |
 | Read where the table put each card | `world.state kSlotOf` |
 | Read the seat's cursor and lifted run | `world.state kSeat` |
-| Frame the table from the seat | `view.override camera look 60.8 11.2 37.6 60.8 9.86 35.9`, then `view.override camera auto` |
+| Frame the table from the seat | `view.override camera look 60.8 11.2 37.6 60.8 9.86 35.8`, then `view.override camera auto` |
 
 ## Looking at the table
 
@@ -112,7 +115,7 @@ script on a windowed World booted with `puck_world_start` (the deal takes about
 debug.go cards
 world.wait bakes 180
 world.wait 160
-view.override camera look 60.8 11.0 38.0 60.8 9.86 35.9
+view.override camera look 60.8 11.0 37.9 60.8 9.86 35.75
 world.wait captures 30
 world.screenshot <abs-path>/cards-wide.png
 world.wait captures 30

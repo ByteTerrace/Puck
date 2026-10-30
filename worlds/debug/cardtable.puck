@@ -28,19 +28,22 @@ let cardSurface = 1.309
 let cardScale = 0.06
 let cardHalfWide = 0.0528
 let cardHalfTall = 0.0744
-let cardLayer = 0.0034
+let cardLayer = 0.0032
 
 // The pick grid: 0.02 m cells in 48 columns (six to a card column: FreeCell's eight columns fill it and Klondike's seven
 // stand centred between half a column of margin) and 54 rows counting from the far (-Z) edge toward the seat, so the whole
-// grid is 0.96 m by 1.08 m and the felt (1.08 m by 1.2 m) frames it evenly. A cell names the pile under it (`kBoard` for
-// Klondike, `kBoardF` for FreeCell); a tableau column's depth is read off its row, two rows to a card of the fan.
+// grid is 0.96 m by 1.08 m. The felt (1.08 m by 0.78 m, its far edge 6 cm past the grid's) is cut to a game in play, not to
+// the longest fan a column could ever grow: a deal's seven-card fans end 13 cm short of its near edge, and a fan of ten
+// cards reaches it; deeper fans run on over the table's wood, and the pointer still picks them (the grid's depth). A cell
+// names the pile under it (`kBoard` for Klondike, `kBoardF` for FreeCell); a tableau column's depth is read off its row,
+// two rows to a card of the fan.
 let cardFan = 0.04
 let cardCell = 0.02
 let cardWide = 48
 let cardDeep = 54
 let cardColumnPitch = 0.12
 let cardX0 = (0 - ((cardWide * cardCell) / 2))
-let cardZ0 = (0 - ((cardDeep * cardCell) / 2))
+let cardZ0 = -0.42
 let cardCells = (cardWide * cardDeep)
 // The top row's cards fill the grid's first eight rows; the tableau's first card begins at the eleventh, so its fan's
 // card j shows its strip on rows 10 + 2j and 11 + 2j, and the deepest column (six face-down cards and a king to an ace)
@@ -288,8 +291,8 @@ prototypes {
       }
       shape Box "felt" {
         material: 1
-        position [0, 1.3045, 0]
-        scale [0.54, 0.0045, 0.60]
+        position [0, 1.3045, -0.09]
+        scale [0.54, 0.0045, 0.39]
       }
     }
   }
@@ -389,8 +392,9 @@ state {
       domain: cellsOf(topology: kGrid)
       cells: map(range(0, cardCells), i => {
         key: $"{i}",
-        value: (i % cardWide < 3 or i % cardWide > 44) ? -1 : (((i - i % cardWide) / cardWide) <= 7 ? kTopRowZones[(((i %
-          cardWide) - 3) - ((i % cardWide) - 3) % 6) / 6] : 2 + (((i % cardWide) - 3) - ((i % cardWide) - 3) % 6) / 6)
+        value: (i % cardWide < 3 or i % cardWide > 44) ? -1 :
+          (((i - i % cardWide) / cardWide) <= 7 ? kTopRowZones[(((i % cardWide) - 3) - ((i % cardWide) - 3) % 6) / 6] :
+            2 + (((i % cardWide) - 3) - ((i % cardWide) - 3) % 6) / 6)
       })
     }
     row {

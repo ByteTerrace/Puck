@@ -208,9 +208,8 @@ patterns [
   {
     name: "solitaireFreecellRun"
     kind: Int
-    value: 1 +
-      (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) * (solitaireFreecellSuit[$token] % 2 !=
-        solitaireFreecellSuit[$previous] % 2)
+    value: 1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) *
+      (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2)
     symbols [
       {
         name: "face"
@@ -304,10 +303,9 @@ rule "solitaireFreecell-gather-reset" {
 }
 
 rule "solitaireFreecell-shuffle" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.stage == 1 and
-    solitaireFreecell.gatherStep == 15 and
-    count(solitaireFreecellDeck) == 52)
+  when solitaire.table == 2 and solitaireFreecell.stage == 1 and solitaireFreecell.gatherStep == 15 and count(
+      solitaireFreecellDeck
+    ) == 52
   transaction {
     shuffle solitaireFreecellDeck with solitaireFreecellStream
     solitaireFreecell.stage = 3
@@ -469,8 +467,11 @@ rule "solitaireFreecell-target-column" {
     solitaireFreecellPile15
   ]
   solitaireFreecell["targetOk"] = (
-    (solitaireFreecell["runLength"] <= (solitaireFreecell["emptyCells"] + 1) *
-      solitaireFreecellPower[solitaireFreecell["emptyColumns"] - (count($zones[solitaireFreecell.to]) == 0)]) *
+    (
+      solitaireFreecell["runLength"] <=
+      (solitaireFreecell["emptyCells"] + 1) *
+        solitaireFreecellPower[solitaireFreecell["emptyColumns"] - (count($zones[solitaireFreecell.to]) == 0)]
+    ) *
     (count($zones[solitaireFreecell.to]) + solitaireFreecell["runLength"] <= 19) *
     (count($zones[solitaireFreecell.to]) == 0 ? 1 : match(solitaireFreecellLanding, $zones[solitaireFreecell.to]))
   )
