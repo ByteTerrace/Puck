@@ -1,3 +1,4 @@
+using Puck.Maths;
 using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
@@ -62,7 +63,7 @@ public sealed partial class WorldPopulation {
         if (local && (m_baseContactField is WorldColliderSet rebuilt)) { rebuilt.FoldRows(box: ref box, definition: definition, rows: rows); }
         RebindSolidConsumers(
             previousNavigation: previousNavigation,
-            reach: ((local && !box.Unbounded && (m_baseContactField is WorldColliderSet)) ? box : null)
+            reach: ((local && !box.Unbounded && (m_baseContactField is WorldColliderSet swapped)) ? (box, FieldWakeMargin(colliders: swapped)) : null)
         );
         return true;
     }
@@ -80,10 +81,10 @@ public sealed partial class WorldPopulation {
     }
 
     // Hands every live body the navigation and contact field the solid consumers compiled. With no reach every rigid
-    // body wakes. With one, every collider the change moved lies inside it: only the rigid bodies it reaches wake (their
-    // rest latch cleared), and the sleepers settle on the new field now, so the change owes the next PrepareBodyStep
-    // nothing and a checkpoint between the two finds no sleeper behind the field it rests in.
-    private void RebindSolidConsumers(NavigationRuntime previousNavigation, WorldColliderBox? reach) {
+    // body wakes. With one, every collider the change moved lies inside its box: only the rigid bodies within its margin
+    // of that box wake (their rest latch cleared), and the sleepers settle on the new field now, so the change owes the
+    // next PrepareBodyStep nothing and a checkpoint between the two finds no sleeper behind the field it rests in.
+    private void RebindSolidConsumers(NavigationRuntime previousNavigation, (WorldColliderBox Box, FixedQ4816 Margin)? reach) {
         var sleepersBefore = m_sleepingBodies.Count;
 
         for (var index = 0; (index < m_entries.Length); index++) {
@@ -97,7 +98,7 @@ public sealed partial class WorldPopulation {
                     field: m_contactField,
                     upPolicy: m_bodyUpPolicy,
                     walkableThreshold: m_walkableThreshold,
-                    wake: ((reach is not { } box) || FieldChangeReaches(box: in box, body: body))
+                    wake: ((reach is not { } changed) || FieldChangeReaches(box: in changed.Box, body: body, margin: changed.Margin))
                 );
             }
         }
