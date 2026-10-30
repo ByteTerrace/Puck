@@ -631,8 +631,14 @@ public sealed class SdfSampledLattice {
 
                         // A solid's edge or corner the line grazes falls toward the pair from both sides as a sheet does,
                         // but the lines beside the pair cross its body a step thick or more (Thickens) or miss it
-                        // (ThinBeside).
-                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 2), sheetInside: !inside)) {
+                        // (ThinBeside). Between two inside samples the falls must meet below the surface by half a fine
+                        // cell, a gap the fine samples can open: where two solids touch (a stair's treads, a board on its
+                        // table) the falls meet at the surface, and a fillet's notch at the seam's mouth only just below
+                        // it. Neither is a gap the fine lattice draws, and measuring its cells leaves the ring around
+                        // them, contoured from interpolated corners, to cut the crease above the seam.
+                        var tolerance = (inside ? (-0.5f / factor) : 0.1f);
+
+                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), tolerance: tolerance, value: MathF.Abs(value)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 2), sheetInside: !inside)) {
                             MarkEdge(at: at, axis: axis);
                         }
                     }
@@ -831,7 +837,8 @@ public sealed class SdfSampledLattice {
     // non-uniform scale) changes by less, or more, than a step's length over a step. The refinement's tolerance of a
     // tenth admits a solid's edge or corner a line grazes, whose falls meet at or above the surface, and tells it apart
     // by the lines beside (Thickens, ThinBeside); a test with no lines to compare passes no tolerance, since a sheet's
-    // falls meet below the surface by half its thickness and a grazed edge's never do.
+    // falls meet below the surface by half its thickness and a grazed edge's never do. A gap between two inside samples
+    // takes a negative tolerance, half a fine cell (Refine): solids that touch meet at the surface and are no gap.
     private static bool PassesBetween(float before, float value, float after, float further, float reach, float tolerance = 0.1f) {
         var fallA = (before - value);
         var fallB = (further - after);
