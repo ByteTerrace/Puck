@@ -787,6 +787,8 @@ failover witness.
 Owner: MCP lane (specialist) · medium · Next: the schema switch, then the pick
 answer.
 
+- [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout, with or without the mcp-batch change (81 of 82 pass). Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`. (from: mcp-batch lane)
+
 - [medium] Investigate a GPU lease held by an older operator worker while no
   World is advertised and the worker has no direct child process. During the
   controls extraction, two 1200-second windowed starts expired waiting for that
