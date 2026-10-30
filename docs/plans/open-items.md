@@ -1034,6 +1034,20 @@ Owner: suites lane · ordinary · Next: measure the two unmeasured suites' class
   which a `puck` verb running a verb under a shuffled listing would keep; and
   the federation hello, federation and crossing laws skip where QUIC is missing.
 
+### World admission under GPU contention
+
+Owner: operator-adapter lane · medium · Next: separate the GPU queue wait from
+the boot deadline, or give admission a ceiling that covers the granted queue.
+
+- `OperatorWorlds.MaxStartSeconds` in `src/Puck.Mcp/OperatorWorlds.cs` caps a
+  start's whole build/lease/attachment admission at 1800 seconds. Several
+  granted twenty-minute GPU batches can exceed that before a World launches.
+  Temporal-shimmer's latest-source Vulkan start and its one retry both expired
+  at `gpu-lease`, after building successfully and without launching a World.
+  Repeated fresh admissions lose queue position instead of making progress;
+  finish the pending lane's evidence after capacity changes. Keep the active
+  windowed batch limit separate from time spent waiting for admission.
+
 ### Delivery, launcher and CI
 
 Owner: delivery lane · ordinary · Next: the launcher's version pruning (the MCP
@@ -1161,7 +1175,7 @@ Direct3D burst changes at most two pixels with temporal on or off. A static
 client-pose interpolation error and opaque-coverage rounding also have fixes;
 the hardware coverage witness's retry is pending.
 
-- [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
+- [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79 0 0`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191 0 0`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
 - [medium] The lift door threshold also blinks with temporal off: over region 0.36 0.78 0.32 0.1, pairs of frames 11 presentations apart change 3.18–3.42 % with max |dY| 26.28, then return on the next frame and hold still (frames 1/2 and 12/13 of w06-burst-off/). Magnified stills show sharp triangular patches swapping across the sill. Distinguish surface/depth selection from a cadence-driven lighting refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh); it is independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). The threshold's temporal-on measurement above uses this same region. (from: owner walkthrough)
 
 ### Panes: split screens the player drives

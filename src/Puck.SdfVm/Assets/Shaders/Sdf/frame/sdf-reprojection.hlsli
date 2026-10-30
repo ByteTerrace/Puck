@@ -8,6 +8,19 @@
 #include "../field/sdf-quaternion.hlsli"
 
 static const float SdfHistoryDepthTolerance = 0.05;
+// Receiver validation compares depths along the output pixel's unjittered ray. Different jittered taps on one plane
+// can have very different ray distances at grazing incidence; comparing those distances rejects an unchanged plane.
+// Carry the tap's tangent plane to the receiver ray, retaining the sample's distance when that ray has no finite,
+// forward intersection within the view's reach.
+float sdfHistoryReceiverDistance(float sampleT, float3 sampleDirection, float3 normal, float3 receiverDirection, float farDistance) {
+    float facing = dot(normal, receiverDirection);
+    if (abs(facing) <= 1.0e-6) {
+        return sampleT;
+    }
+    float t = ((sampleT * dot(normal, sampleDirection)) / facing);
+
+    return ((isfinite(t) && (t > 0.0) && (t <= farDistance)) ? t : sampleT);
+}
 // Temporal color validates its receiver by identity and a relative depth tolerance.
 bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previousT, float historyT) {
     return ((identity == previousIdentity) &&

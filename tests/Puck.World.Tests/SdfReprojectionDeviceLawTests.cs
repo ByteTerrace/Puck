@@ -40,7 +40,7 @@ public sealed class SdfReprojectionDeviceLawTests {
     private static readonly SdfMesh Sliver = new(positions: new Vector3[] { Vector3.Zero, new(64f, 0f, 0f), new(64f, (1f / 4096f), 0f) },
         indices: new uint[] { 0, 1, 2 });
 
-    private readonly record struct MotionCase(Vector3 Current, Vector3 Previous, uint Identity, bool History, bool Valid);
+    private readonly record struct MotionCase(Vector3 Current, Vector3 Previous, uint Identity, bool History, bool Valid, bool PlaneDepth = false);
 
     private static MotionCase[] Cases() {
         var point = new Vector3(x: 0.3f, y: 0.5f, z: 0f);
@@ -57,6 +57,9 @@ public sealed class SdfReprojectionDeviceLawTests {
             new(Current: still, Previous: still, Identity: 0, History: true, Valid: false),
             new(Current: behind, Previous: behind, Identity: Draw(draw: 2), History: true, Valid: false),
             new(Current: sliver, Previous: sliver, Identity: Draw(draw: 3), History: true, Valid: true),
+            // Two jittered rays meet y=1 at t=64 and t=32. The same output ray meets it at t=128; raw t rejects both.
+            new(Current: new Vector3(64f, (1f / 64f), (1f / 128f)), Previous: new Vector3(128f, 128f, 64f),
+                Identity: 0, History: false, Valid: true, PlaneDepth: true),
         ];
     }
 
@@ -83,6 +86,10 @@ public sealed class SdfReprojectionDeviceLawTests {
             var item = cases[index];
 
             Assert.Equal(expected: (item.Valid ? 1f : 0f), actual: results[index].W);
+            if (item.PlaneDepth) {
+                Assert.Equal(expected: new Vector4(value: item.Previous, w: 1f), actual: results[index]);
+                continue;
+            }
             if (!item.Valid) {
                 continue;
             }
@@ -118,7 +125,7 @@ public sealed class SdfReprojectionDeviceLawTests {
 
             // Every mesh has the one triangle, triangle 0.
             records[((index * recordWords) + 1)] = item.Identity;
-            probes[(index * 7)] = new Vector4(value: item.Current, w: 0f);
+            probes[(index * 7)] = new Vector4(value: item.Current, w: (item.PlaneDepth ? 1f : 0f));
             SdfFrameBlock.WritePreviousView(block: block, view: new SdfReprojectionView(Camera: Camera, Height: Height, Jitter: Jitter, Width: Width), valid: item.History);
             var offset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.PreviousView));
 

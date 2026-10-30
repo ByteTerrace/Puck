@@ -252,6 +252,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   a still surface. `SdfReprojectionDeviceLawTests` includes this thin-triangle
   witness on both backends. Check the static `motion` view when history fails
   to accumulate; unchanged geometry must show valid, zero object motion.
+- **A receiver's depth belongs to the output ray.** Different jittered rays
+  hitting one grazing plane can have very different ray distances. Project each
+  tap's tangent plane onto the output pixel's unjittered ray before storing or
+  validating its receiver depth (`sdfHistoryReceiverDistance`). Identity and the
+  relative depth tolerance stay unchanged. The reprojection device witness
+  maps two samples at distances 64 and 32 onto the same receiver depth 128.
 - **Stationary reconstruction keeps a complete jitter window.** The resolve's
   history surface retains each phase's color, coverage, transport and weight.
   Replacing one phase and summing in fixed order removes periodic newest-phase

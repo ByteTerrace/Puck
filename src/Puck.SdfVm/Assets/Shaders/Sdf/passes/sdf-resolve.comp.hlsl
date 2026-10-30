@@ -41,7 +41,7 @@
 #include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
 // The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords): the identity
-// of the receiver tap nearest the pixel's center, then its ray distance and the gathered weight as two half floats (the
+// of the receiver, then its tangent-plane distance along the output ray and gathered weight as two half floats (the
 // distance low; the far limit 8192 and the weight cap stay normal halves, each within a relative 2^-11, far inside
 // SdfHistoryDepthTolerance), then the accumulated transport's two words (sdfPackTransport), then the remembered feature:
 // its YCoCg as three half floats, Y low and Co high in the fifth word, Cg low in the sixth with the frames the memory has
@@ -210,6 +210,7 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
 // `reactive` is the reactivity of the tap nearest the pixel's center: the pixel's own, so a steady pixel beside a reactive
 // one keeps its history.
 void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airOrigin, float3 airDirection, out bool accepted, out bool complete, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport) {
+    ViewportData view = worldView();
     float2 scale = (float2(extent) / float2(render));
     float2 center = ((float2(id.xy) + 0.5) / scale);
     int2 nearest = int2(floor(center - jitter));
@@ -243,7 +244,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             }
         }
     }
-    // Each 3x3 tap's surface identity (0 on a miss) and ray distance, and the receiver the history keeps for this pixel:
+    // Each 3x3 tap's identity (0 on a miss) and tangent-plane distance along the output ray, and the receiver history keeps:
     // the tap nearest its center that is not a feature, so a feature the jitter leaves next frame does not reject a
     // history the surface under it carries. Validating against every tap keeps an edge's history whichever side of it the
     // jitter puts the nearest-depth tap on; the clip below still bounds what the history contributes. The feature the
@@ -277,13 +278,18 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             uint record = sdfVisibilityRecord(pixel, 0u, render);
             SdfVisibility visibility = sdfLoadVisibility(record);
             bool surface = sdfVisibilityHit(visibility);
+            float receiverDistance = 0.0;
 
             if (surface) {
                 transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
+                float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
+                float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
+
+                receiverDistance = sdfHistoryReceiverDistance(visibility.t, direction, normal, airDirection, passGroup.farDistance);
             }
 
             identities[tap] = (surface ? visibility.identity : 0u);
-            distances[tap] = (surface ? visibility.t : 0.0);
+            distances[tap] = receiverDistance;
             if (weight > nearestWeight) {
                 nearestWeight = weight;
                 reactive = saturate(tapReactive);
@@ -339,7 +345,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     if ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0)) {
         float4 currentRows[6];
         sdfCurrentViewRows(currentRows);
-        ViewportData view = worldView();
         bool moved = false;
         float2 previousPixel = float2(0.0, 0.0);
         float2 currentPixel = float2(0.0, 0.0);
@@ -381,7 +386,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
                 uint featureWordA = historySurface[word + 4u];
                 uint featureWordB = historySurface[word + 5u];
 
-                // A tap's distance in the preceding view: its own, shifted by the camera's move along the nearest hit.
+                // A receiver-plane distance in the preceding view, shifted by the camera's move along the nearest hit.
                 float shift = (hit ? (previousT - hitT) : 0.0);
 
                 historyWeightGathered = f16tof32(distanceAndWeight >> 16u);

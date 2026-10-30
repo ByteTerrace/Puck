@@ -393,6 +393,11 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   windowed World is started only when the GPU queue can take it. Windowed checks
   owed by several lanes are batched into one lead verification window rather than
   each lane waiting on the lease.
+- Refresh private CLI copies when lease admission changes. A FIFO waiter and a
+  lane-rotating waiter can each select the other's ticket and leave an idle
+  resource unclaimed. Stop the old queued caller and use one scheduling policy;
+  `puck lease gpu --help` states the policy. Do not keep retrying World starts
+  against that mixed queue.
 - A check that needs the owner present (their hardware, their eyes on a window)
   goes ahead of the GPU queue for its short run: the owner's time is the scarcest
   resource. The lead keeps it to a minute or two and discounts any lane timing
