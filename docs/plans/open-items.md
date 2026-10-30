@@ -97,8 +97,8 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   exhibit on both backends; how indoor rooms read against daylight once the
   image meter drives exposure ([lighting](#lighting-and-gi)).
 - Residency's look and policy: what a late or over-budget group shows and
-  whether switches fade or cut; whether the debug world gets doors that close
-  and the gallery authors areas; the resident-byte target machine; a standard
+  whether switches fade or cut; whether the debug world gets doors that close;
+  the resident-byte target machine; a standard
   door's opening time ([residency](../decisions/residency.md#the-owners-calls)).
 - Whether a cube projection is wanted for screens on shapes, beside the sphere
   the owner asked for ([curved screens](#screens-on-curved-and-general-sdf-surfaces)).
@@ -1356,7 +1356,10 @@ waits for loading. The steps, each taken when its measured need appears:
 5. Eviction under one byte budget across residencies, with coarse levels owning
    compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
 6. Authored areas (a volume with openings, on an existing volume vocabulary),
-   when a world needs them.
+   tried first on the gallery's floors with the stairwell, lift shaft and window
+   bands as openings (the owner's suggestion): time until the occupied floor has
+   landed, with and without the areas, and floor-first eviction under a lowered
+   budget.
 7. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
    the moons.
 

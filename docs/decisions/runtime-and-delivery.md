@@ -196,6 +196,26 @@ closed group is supported; later external transfers or durable effects outside
 the recovery point's scope refuse it by default. Finalization removes rollback
 eligibility and never deletes backup recovery points.
 
+**Pruning defends against cooperating processes and crashes, not against the
+install root's own user.** The launcher removes past versions and unreferenced
+objects under an install root that only its user and the launcher write. A
+process with that user's write access can already replace the binaries the
+launcher runs, so an interleaving that needs a hostile process renaming entries
+inside the root mid-pass is outside the threat model, and a review finding that
+requires one is not a defect. Inside it, pruning must hold four things:
+- it never follows a link out of the root (a planted or mistaken link deletes
+  nothing outside it);
+- it never deletes a version a registered Puck process runs from, and every
+  Puck entry point that can run from `versions/<v>/` registers before loading,
+  or refuses to start;
+- it is crash-safe: an interrupted pass leaves every kept version whole and is
+  finished or undone by the next one;
+- it fails closed: unreadable or malformed metadata, manifests or records keep
+  what they might protect.
+
+Three pre-landing reviews of earlier designs each found the same class of high,
+all of it adversarial same-user interleavings; this rule settles the class.
+
 ## The runtime
 
 **Bare-metal Puck runs on Puck's own host (the owner's ruling).** The
