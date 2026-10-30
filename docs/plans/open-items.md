@@ -743,8 +743,9 @@ movement-facing scheme returns.
   `.claude/scratch/controls-evidence/`; inspect the same workload on Vulkan,
   read standing/walking frame time and patrol the stage. The hand-back is
   .claude/scratch/controls-handback.md (lead checkout, ignored). Judge the dash's
-  feel and the authored secondary wings spacing; their appearance remains
-  unconfirmed. The durable
+  feel and the authored secondary wings spacing. The owner confirmed the
+  sidebars layout correct in play (`.claude/scratch/lead-window/owner-bar-sidebars.png`);
+  wings, compact/full and the dash's appearance remain unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
 - [high · owner: lead integration] Land the controls review's follow-up
