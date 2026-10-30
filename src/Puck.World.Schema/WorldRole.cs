@@ -19,6 +19,9 @@ namespace Puck.World;
 /// <param name="Drive">The per-tick Drive budget the driver holds over each body of the role.</param>
 /// <param name="Observe">The per-tick Observe budget the driver holds over each body of the role and over the body
 /// each follows.</param>
+/// <param name="FollowReach">How far from the door its player went through, in metres, a companion of the role
+/// leaving this world may start its own crossing: one that trailed further behind is set down this far from the door,
+/// so it arrives in sight of its player.</param>
 public sealed record WorldRole(
     string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Driver = null,
@@ -27,8 +30,11 @@ public sealed record WorldRole(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Look = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ulong Fuel = 0UL,
     ushort Drive = 4,
-    ushort Observe = 1
+    ushort Observe = 1,
+    double FollowReach = WorldRole.DefaultFollowReach
 ) {
+    /// <summary>The follow reach a role that authors none holds, in metres.</summary>
+    public const double DefaultFollowReach = 2.0;
     /// <summary>The addon name the visiting driver of a role mounts under: generated, so no authored row can take
     /// it.</summary>
     /// <param name="role">The role name.</param>

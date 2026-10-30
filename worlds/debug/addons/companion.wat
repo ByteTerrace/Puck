@@ -22,6 +22,8 @@
   (global $driveIndex (mut i32) (i32.const 0))
   (global $driveGeneration (mut i32) (i32.const 0))
   (global $selfBody (mut i64) (i64.const -1))
+  ;; Set by a fresh disclosure of handles, consumed by the next steer.
+  (global $rebound (mut i32) (i32.const 0))
   (global $observeSelf (mut i32) (i32.const 0))
   (global $observeSelfIndex (mut i32) (i32.const 0))
   (global $observeSelfGeneration (mut i32) (i32.const 0))
@@ -356,6 +358,14 @@
       (global.set $lastMX (global.get $mothX)) (global.set $lastMY (global.get $mothY)) (global.set $lastMZ (global.get $mothZ))
       (global.set $restX (global.get $selfX)) (global.set $restZ (global.get $selfZ))
       (global.set $lastSX (global.get $selfX)) (global.set $lastSZ (global.get $selfZ))))
+    ;; A fresh set of handles is a new binding: the faerie arrived in this world, or came back to it, with its
+    ;; player. Its old route and any door it meant to fly through belong to where it was, so it starts here afresh.
+    (if (global.get $rebound) (then
+      (global.set $rebound (i32.const 0))
+      (global.set $trailHead (i32.const 0)) (global.set $trailNext (i32.const 0)) (global.set $portalEnd (i64.const 0))
+      (global.set $lastMX (global.get $mothX)) (global.set $lastMY (global.get $mothY)) (global.set $lastMZ (global.get $mothZ))
+      (global.set $restX (global.get $selfX)) (global.set $restZ (global.get $selfZ))
+      (global.set $lastSX (global.get $selfX)) (global.set $lastSZ (global.get $selfZ))))
     (local.set $mx (i64.sub (global.get $mothX) (global.get $lastMX)))
     (local.set $my (i64.sub (global.get $mothY) (global.get $lastMY)))
     (local.set $mz (i64.sub (global.get $mothZ) (global.get $lastMZ)))
@@ -555,6 +565,7 @@
             (if (i32.eqz (local.get $disclosed))
               (then
                 (local.set $disclosed (i32.const 1))
+                (global.set $rebound (i32.const 1))
                 (global.set $drive (i32.const 0))
                 (global.set $observeSelf (i32.const 0))
                 (global.set $observeMoth (i32.const 0))
@@ -567,9 +578,11 @@
                 (global.set $driveIndex (i32.load16_u offset=4 (local.get $cell)))
                 (global.set $driveGeneration (i32.load16_u offset=6 (local.get $cell)))
                 (global.set $selfBody (local.get $body))))
+            ;; Observe over its own body or the player it follows: a disclosure lists the Drive body first, so any
+            ;; other observed body is that player, at whatever index this world holds it.
             (if (i64.eq (i64.load offset=16 (local.get $cell)) (i64.const 2))
               (then
-                (if (i64.eqz (local.get $body))
+                (if (i64.ne (local.get $body) (global.get $selfBody))
                   (then
                     (global.set $observeMoth (i32.const 1))
                     (global.set $observeMothIndex (i32.load16_u offset=4 (local.get $cell)))
@@ -627,6 +640,8 @@
       (then (call $steer)))
     (global.get $out))
 
+  ;; No neighbour until a world's senses report one: a world without companion-senses never answers the read.
+  (data (i32.const 0x5070) "\ff\ff\ff\ff\ff\ff\ff\ff")
   (data (i32.const 0x5400) "\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff\ff")
   (data (i32.const 0x6000) "companionSense")
   (data (i32.const 0x6040) "evade")

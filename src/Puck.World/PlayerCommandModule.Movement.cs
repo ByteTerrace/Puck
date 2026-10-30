@@ -1059,6 +1059,29 @@ internal sealed partial class PlayerCommandModule {
                 return CommandResult.Error(output: $"[body.where: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
+            // body:<n> names any of the instance's bodies by its zero-based entity index (a companion or other
+            // non-seat traveller), where a bare number names a seat.
+            if (
+                (args[0].ToString() is { } bodyToken) &&
+                bodyToken.StartsWith(value: "body:", comparisonType: StringComparison.Ordinal)
+            ) {
+                if (
+                    !int.TryParse(s: bodyToken.AsSpan(start: 5), provider: System.Globalization.CultureInfo.InvariantCulture, result: out var entity) ||
+                    (entity < 0)
+                ) {
+                    return CommandResult.Error(output: "[body.where: instance-targeted body:<n> must name a zero-based body index]");
+                }
+
+                var bodyAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: entity));
+
+                return new CommandResult(Output: WithInstanceTag(
+                    text: bodyAnswer.Text,
+                    instanceName: instance.Name
+                )) {
+                    IsError = bodyAnswer.Refused,
+                };
+            }
+
             if (
                 !args.TryInt(
                 index: 0,

@@ -113,8 +113,8 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// 1 — see <see cref="ResolvedCount"/>.</param>
 /// <param name="Distribution">The region and deterministic fill sequence that place the bodies relative to the
 /// placement root.</param>
-/// <param name="Role">The <see cref="WorldRole.Name"/> the bodies hold: a companion role the document's <c>roles</c>
-/// section declares, whose driver drives them and which goes where the player they follow goes. Absent: the bodies
+/// <param name="Role">The name of the companion role (<see cref="WorldRole"/>) the bodies hold, which the document's
+/// <c>roles</c> section declares, whose driver drives them and which goes where the player they follow goes. Absent: the bodies
 /// hold no role and travel as ordinary bodies.</param>
 /// <param name="Follows">The 0-based local seat whose player the role's bodies follow across instances. Required with
 /// <see cref="Role"/> and refused without it.</param>

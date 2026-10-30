@@ -15,7 +15,7 @@
         "type": "string"
       },
       "modulePath": {
-        "description": "The WASM module file path, resolved beside the document that authors the row (WorldDocumentPaths); existence and hash verification are the run path\u0027s job.",
+        "description": "The WASM module file path, resolved beside the document that authors the row (WorldDocumentPaths); existence and hash verification are the run path\u0027s job. Empty names the module by Hash alone, resolved from the process content store (a role\u0027s visiting driver mounts this way).",
         "type": "string"
       },
       "hash": {

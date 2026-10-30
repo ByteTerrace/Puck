@@ -391,6 +391,42 @@ while the step's start overlaps consumed continuum time. This makes a 60 Hz sour
 at 120 Hz. Exhausting the eight-face work ceiling clamps one raw fixed-point
 unit inside the last confirmed owner and removes only outward normal velocity.
 
+## Companions
+
+A companion is a body whose inhabit facet names a `role` and the local seat it
+`follows` ([decision](../../../../docs/decisions/companions.md)); its binding
+(`WorldCompanionBinding`: role, followed body, home authority, preferred driver
+pin) is population state and checkpointed. It never crosses on its own: a portal
+hit by a companion body starts nothing (`ResolveAndEnqueueCoalescedTransfers`).
+When its player's transfer completes (`CompleteCommittedTransfer` →
+`CarryCompanions`), each companion following a departed member is queued as its
+own Body transfer through the same door, carrying `WorldTransferCompanion`
+(role, the player's incarnation, home, driver pin) on its reservation member. A
+mapped companion arrival starts from within its role's `followReach` of the door
+and is mirrored through the face to the side its player came out of, so a
+trailing companion never lands behind the destination's door.
+
+The destination decides at reservation (`WorldTransferEscrow.CompanionRefusal`):
+its own companion coming home is always taken, by incarnation, into the slot its
+placement held (`WorldPopulation.MarkAway`/`TryReadoptAway`: the away companion
+counts toward its placement, so a reload spawns no replacement); a world with no
+row for the role refuses; an `accept` row refuses a pin the process content store
+(`WorldProjectionContent.Shared`) cannot resolve and verify, or a second visiting
+pin while one runs. A role refusal answers `CompanionRefused`; the source tells
+the player (`WorldInstanceHost.CompanionNotice`, the toast) and a companion away
+from home goes home. A companion whose player is no longer beside it is sent
+home by the drain's separation sweep. Its home must be an authority this host
+runs; a remote home is reported and the companion stays.
+
+`WorldServer.ReconcileRoles` runs before the addon pump: each role's driver
+(its named addon, or the generated `role$<name>` visiting driver) holds Drive and
+Observe over each companion of the role and Observe over the player it follows,
+and every other body hold it has is revoked. An `accept` role mounts its visiting
+driver as an addons row with an empty `modulePath`, resolved by pin from the
+content store, while a visitor of the role is present, and removes it after.
+Started instances mount their own addon runtime (`AddonHostFactory`). Read a
+companion in another instance with `body.where body:<n> instance:<name>`.
+
 ## Input and action continuity
 
 Movement and actions route to the seat's current authority. A transfer carries

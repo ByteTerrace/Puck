@@ -68,6 +68,14 @@ legitimately move it backward — configuration undo, not time travel: the
 pre-undo guest's memory is not part of the document and is never restored);
 an author driving it forward is expected to increment with checked overflow.
 
+**A module may be named by its pin alone.** An empty `modulePath` resolves the
+module by `hash` from the process content store (`WorldProjectionContent.Shared`);
+the loader verifies the bytes against the pin before conversion, and a pin the
+store does not hold refuses the prepare by name. A companion role's visiting
+driver mounts this way ([federation](adjacency-and-federation.md#companions)).
+Every instance a host starts mounts its own addon runtime through the same
+prepare/commit door (`WorldInstanceHost.AddonHostFactory`).
+
 **A guest may be WebAssembly text.** A `.wat` module is source: commit it and
 no compiled `.wasm` beside it (the debug world's guests are
 `worlds/debug/addons/*.wat`). `hash: "auto"` pins the module's source bytes at

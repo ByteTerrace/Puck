@@ -14,6 +14,16 @@ documentId: "garden"
 import "../standard/standard"
 import "suit"
 import "size"
+import "companion-body"
+
+// The standard accepts a visiting companion's own driver; the garden dresses an arriving faerie as itself.
+roles [
+  {
+    name: "companion"
+    kit: "companion-flight"
+    look: "companion-steady"
+  }
+]
 
 // The garden draws no HUD panels; controls.puck supplies its cursor.
 hud {

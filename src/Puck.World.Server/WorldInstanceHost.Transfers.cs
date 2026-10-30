@@ -195,6 +195,16 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // A companion leaves its world only with the player it follows (CarryCompanions) or to go home: its own body
+        // reaching a door into another world starts nothing, while a door within its world moves it as any body.
+        if (
+            (transfer.Companion is null) &&
+            (transfer.ResolvedDestinationRow is not null) &&
+            members.Any(predicate: slot => (source.Server.Population.Companion(index: slot) is not null))
+        ) {
+            return;
+        }
+
         // Each member is still the traveller it was when the transfer was queued: a transfer drained ahead of this one
         // can have carried it on and left its slot empty or landed another body there, which this transfer never
         // meant. A non-atomic party checks each member as it splits.
@@ -595,6 +605,7 @@ public sealed partial class WorldInstanceHost {
 
             // Read before the detach, which hands the slot back: the turn the traveler has accumulated so far.
             var departureTurn = source.Server.Population.TravelTurn(index: sourceSlot);
+            var followReach = CompanionFollowReach(slot: sourceSlot, source: source.Server);
 
             if (!TryDetachAndCaptureMember(
                 source: source,
@@ -657,8 +668,15 @@ public sealed partial class WorldInstanceHost {
             // stands, so a party crossing abreast at different lateral offsets needs no per-member seam.
             if (transfer.Arrival == WorldPortalArrival.Mapped) {
                 var sourceFrame = transfer.SourceFrame!.Value;
+                // A companion following its player through a door arrives just through it, however far behind it
+                // trailed: its offset from the door is held within its role's follow reach, and an offset on the side
+                // a traveller enters from (the face's front, which a crossing walks into) is mirrored through the
+                // face, so it arrives on the side its player came out of rather than behind the destination's door.
+                var mappedFrom = ((transfer.Companion is { Home: false })
+                    ? (sourceFrame.Origin + ThroughDoor(normal: sourceFrame.Normal, offset: (position - sourceFrame.Origin).ClampLength(maximum: followReach)))
+                    : position);
                 var mapped = WorldFrameIsometry.MapArrival(
-                    travelerPosition: position,
+                    travelerPosition: mappedFrom,
                     travelerYawRadians: yaw,
                     travelerPlanarVelocity: dynamicState.PlanarVelocity,
                     travelerVerticalVelocity: dynamicState.VerticalVelocity,

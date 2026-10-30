@@ -25596,6 +25596,22 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "WorldDistribution"
+              },
+              "role": {
+                "description": "The name of the companion role (WorldRole) the bodies hold, which the document\u0027s roles section declares, whose driver drives them and which goes where the player they follow goes. Absent: the bodies hold no role and travel as ordinary bodies.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "follows": {
+                "description": "The 0-based local seat whose player the role\u0027s bodies follow across instances. Required with Role and refused without it.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [

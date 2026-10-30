@@ -733,14 +733,26 @@ set and component chrome out of the core sets; then the overlay text's advance.
 
 ### Transfers, federation and server
 
-Owner: specialist, transfers and server · medium · Next: build the companion
-decision (the companion lands inert in the live debug world today; the lead's call
-between the consensus split), then the uncertain crossing, opened by a two-silo
-failover witness.
+Owner: specialist, transfers and server · medium · Next: the uncertain crossing,
+opened by a two-silo failover witness.
 
-- [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
-
-- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
+- [medium] A remote `accept` world resolves a visiting companion driver only from its own process content store
+  (`WorldTransferEscrow.CompanionRefusal`, `WorldProjectionContent.Shared`): a companion's home publishes the
+  module bytes into the store of the process it runs in, so a colocated destination verifies and mounts them, but
+  a federated destination on another machine refuses the companion at reservation. Fetch the pinned bytes through
+  the authorized federation door the projection prototypes already use (`WorldProjectionContent.TryResolve`'s
+  `fetch`), verified against the pin, and send a separated companion home across federation, which
+  `WorldInstanceHost.EnqueueCompanionHome` reports and refuses for a home this host does not run. Done when a
+  two-process leg carries the faerie into a remote `accept` world and home again. (from: companion build)
+- [medium] The faerie's lasting state lives in guest memory: `companion.wat` keeps its route, rest anchor and PCG
+  stream in globals, so a visiting driver restarts them on arrival. The decision puts lasting state in body
+  registers, and the addon ABI gives a guest no write to its own body's registers (Drive acts on channels only).
+  Add a request that writes a declared `state.body` register of a body the guest drives, then move the faerie's
+  stream and mood into registers declared in `companion-body.puck`. (from: companion build)
+- A companion follows its player through portal doors only. An adjacency seam hands bodies over one at a time
+  (`ScanInstanceAdjacencies`), so a companion crosses a seam by itself, unbound from its player's crossing and
+  with no role check. Route a companion's seam crossing through `CarryCompanions` like a door's.
+  (from: companion build)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;

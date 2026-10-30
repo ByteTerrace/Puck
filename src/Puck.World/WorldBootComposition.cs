@@ -836,7 +836,10 @@ public static class WorldBootComposition {
                 admitsSpawn: true,
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()
-            );
+            ) {
+                // Every instance this process starts mounts its own addons, a companion's visiting driver included.
+                AddonHostFactory = sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
+            };
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
             var bootRow = new WorldInstance(

@@ -57,6 +57,18 @@ metadata {
   description: "A flat 256 m ground under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a gallery hall whose east wing holds five portal paintings."
 }
 
+// The faerie's home: its own guest (companion.puck) drives the companion role here, the faerie that lives here and a
+// visiting one with the same pin alike, in place of the standard's visiting drivers.
+roles [
+  {
+    name: "companion"
+    accept: false
+    driver: "companion"
+    kit: "companion-flight"
+    look: "companion"
+  }
+]
+
 // A traveller coming back from the garden or the night field arrives here, and their windows onto this world observe
 // it whole.
 admission [

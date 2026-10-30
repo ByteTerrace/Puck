@@ -10,6 +10,29 @@ public sealed partial class WorldInstanceHost {
     // separation sweep does not queue them again every tick.
     private readonly HashSet<(string Instance, WorldEntityAddress Incarnation)> m_strandedCompanions = [];
 
+    // Mirrors an offset from a door's face onto the side behind its normal, which a crossing walks into: the part of the
+    // offset along the face normal becomes non-positive.
+    private static Puck.Maths.FixedVector3 ThroughDoor(Puck.Maths.FixedVector3 offset, Puck.Maths.FixedVector3 normal) {
+        var depth = Puck.Maths.FixedVector3.Dot(left: offset, right: normal);
+
+        return ((depth > Puck.Maths.FixedQ4816.Zero)
+            ? (offset - (normal * (depth + depth)))
+            : offset);
+    }
+    // How far from the door a following companion's mapped arrival may start: its role's follow reach in the world it
+    // leaves, so one that trailed far behind its player does not arrive out of its sight.
+    private static Puck.Maths.FixedQ4816 CompanionFollowReach(WorldServer source, int slot) => Puck.Maths.FixedQ4816.FromDouble(value: ((
+        (source.Population.Companion(index: slot) is { } binding) &&
+        (source.Definition.FindRole(name: binding.Role) is { } role))
+        ? role.FollowReach
+        : WorldRole.DefaultFollowReach));
+
+    /// <summary>Gets or initializes the builder of each started instance's own addon runtime, supplied by the composition
+    /// root (this project names no addon runtime). It attaches the runtime to the server it is handed and throws
+    /// <see cref="InvalidOperationException"/> when an enabled row cannot prepare. <see langword="null"/>: started
+    /// instances mount no addons.</summary>
+    public Func<WorldDefinition, WorldServer, IWorldAddonHost>? AddonHostFactory { get; init; }
+
     /// <summary>Gets or sets the receiver of a player's companion notice: the line a player reads when the world it
     /// crosses into does not take its companion, which goes or stays home. The composition root shows it on the HUD; it
     /// also narrates on the <c>world.companion</c> channel.</summary>

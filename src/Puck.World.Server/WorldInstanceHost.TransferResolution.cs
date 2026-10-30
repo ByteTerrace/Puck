@@ -198,12 +198,6 @@ public sealed partial class WorldInstanceHost {
         var order = new List<CoalescedPortalGroupKey>();
 
         foreach (var hit in hits) {
-            // A companion never crosses on its own: it travels with the player it follows, so its own body touching a
-            // door starts nothing.
-            if (instance.Server.Population.Companion(index: hit.Seat) is not null) {
-                continue;
-            }
-
             if (WorldDefinitionRows.FindDestination(
                 destinations: instance.Server.Definition.Destinations,
                 name: hit.Portal.Destination

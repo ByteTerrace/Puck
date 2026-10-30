@@ -102,15 +102,34 @@ role per instance drives every arriving companion of that role, under that
 world's fuel and budget; placement capacity bounds how many a world takes, and
 a full world refuses at reservation.
 
-## Building it
+## How it is built
 
-The work, in the "Transfers, federation and server" packet of the
-[open items](../plans/open-items.md#transfers-federation-and-server): the role
-and preferred-driver fields on the reservation member; the destination's role
-declaration (`accept`, a driver pin, a substituted driver, or nothing), with
-`worlds/standard/` declaring `accept` for the companion role; refusal at
-reservation with the player's notice; home re-adoption by incarnation with the
-away placement counted as present (which also fixes a returning companion
-landing detached at its destination slot); placement- or group-keyed driver
-grants in place of `body:42`; and the faerie's lasting state moved into
-registers.
+A world declares its roles in a `roles` section: a row names the role, either
+`driver` (this world's own addon, which is the same pin when it matches the
+visitor's or a substitute when it does not) or `accept`, and the kit and look an
+arriving companion is dressed in. A world with no row for a role takes no
+companion of it. The standard package (`worlds/standard/`) declares `accept` for
+`companion`; the debug world, the faerie's home, names the faerie's own addon
+instead, and the night field and the garden refine the standard's row with the
+faerie's kit and look.
+
+A companion is an inhabit facet holding a `role` and the local seat it
+`follows`. It crosses in a transfer of its own right after its player's, through
+the same door, carrying its role, its player's incarnation, its home and its
+preferred driver's pin on the reservation member. Its home publishes the
+driver's module bytes into the process content store as it leaves; an `accept`
+destination verifies them against the pin at reservation and mounts them as an
+addon row named by pin alone. The role, never a body slot, decides the driver's
+grants: Drive and Observe over each companion of the role and Observe over the
+player it follows, re-derived whenever the population moves.
+
+A companion that arrives behind its player is set down just through the door
+within its role's follow reach, so it never lands behind the destination's
+door. Home re-adopts its own companion by incarnation into the slot and
+placement it left, and counts it present while it is away.
+
+Two parts remain open in the transfers packet of the
+[open items](../plans/open-items.md#transfers-federation-and-server): a remote
+`accept` world can resolve a visiting driver only from its own content store, and
+the faerie keeps its decision state in guest memory because a guest has no way
+to write its own body's registers.

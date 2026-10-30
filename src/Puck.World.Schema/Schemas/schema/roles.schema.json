@@ -1,0 +1,74 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "A world\u0027s declaration for one companion role: who drives a body that holds the role here, what it wears, and the authority its driver receives. A companion is admitted only where its role is declared; a crossing toward a world that declares nothing for its role is refused at reservation and the companion stays home.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The role\u0027s name, unique within the document (companion).",
+        "type": "string"
+      },
+      "driver": {
+        "description": "The Name of this world\u0027s own addon that drives the role: the same pinned driver a visitor prefers, or one the author substitutes. Exactly one of this and Accept.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "accept": {
+        "description": "Whether this world runs a visitor\u0027s own preferred driver, resolved by its pin from the process content store and verified before it mounts, under this world\u0027s Fuel and grants. One visiting driver runs per role; a companion preferring a different pin while one runs is refused at reservation.",
+        "type": "boolean",
+        "default": false
+      },
+      "kit": {
+        "description": "The Name an arriving companion moves under. Absent: the default peer kit. A companion re-adopted by its own home placement wears that placement\u0027s kit instead.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "look": {
+        "description": "The Name an arriving companion wears. Absent: the default look.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "fuel": {
+        "description": "The per-tick fuel a visiting driver runs under; 0 charges the ABI default. Ignored for a named Driver, whose own row states its fuel.",
+        "type": "integer",
+        "default": 0
+      },
+      "drive": {
+        "description": "The per-tick Drive budget the driver holds over each body of the role.",
+        "type": "integer",
+        "default": 4
+      },
+      "observe": {
+        "description": "The per-tick Observe budget the driver holds over each body of the role and over the body each follows.",
+        "type": "integer",
+        "default": 1
+      },
+      "followReach": {
+        "description": "How far from the door its player went through, in metres, a companion of the role leaving this world may start its own crossing: one that trailed further behind is set down this far from the door, so it arrives in sight of its player.",
+        "type": "number",
+        "default": 2
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false,
+    "title": "WorldRole"
+  },
+  "default": null
+}

@@ -1259,6 +1259,18 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
             server.Neighbours = instanceNeighbours;
             server.Adjacencies = adjacencies;
+            // The instance's own addon runtime, through the same prepare/commit door the boot world mounts by: an
+            // enabled row that cannot prepare refuses the start.
+            if (AddonHostFactory is { } addonHostFactory) {
+                try {
+                    _ = addonHostFactory(arg1: definition!, arg2: server);
+                } catch (Exception exception) when (exception is InvalidOperationException) {
+                    machines.Dispose();
+                    reason = $"'{name}' could not mount its addons — {exception.Message}";
+
+                    return false;
+                }
+            }
 
             // The identical two-line pattern WorldBootComposition wires for the boot instance's own transport (a
             // WorldServer implements IWorldServerHost directly — see LoopbackTransport's own remarks) — one

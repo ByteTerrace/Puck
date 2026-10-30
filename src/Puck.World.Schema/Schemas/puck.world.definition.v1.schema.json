@@ -222,6 +222,9 @@
     "replays": {
       "$ref": "./schema/replays.schema.json"
     },
+    "roles": {
+      "$ref": "./schema/roles.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

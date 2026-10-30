@@ -251,9 +251,10 @@ creation still draws the fuzzer and traversal walkers.
 Body 42 starts at (-1.2, 1.52, 1). The `companion-flight` kit uses the engine's
 existing colliding free-flight Lift hold and the ordinary forward, strafe and
 rise channels. The guest reads its pose and the Moth's once per tick and follows
-her half-metre breadcrumbs at about shoulder height. It preserves the approach
-when her pose jumps through a portal, flies through that same opening, and clears
-the old route after its own crossing. A safe point on the route becomes its rest
+her half-metre breadcrumbs at about shoulder height. Within one world it
+preserves the approach when her pose jumps through a portal, flies through that
+same opening, and clears the old route after its own crossing; a door into another
+world carries it after her (below). A safe point on the route becomes its rest
 anchor, which keeps a stop on a stair from demanding a side offset through the
 divider. It remains an independent body; it is never attached or posed by its guest.
 
@@ -279,8 +280,26 @@ flits clear with a seeded lateral choice, pauses startled, then comes back.
 A future tracked hand supplies this same authoritative input; camera pixels or
 wall-clock probe values never enter the guest's decisions directly.
 
-The guest retains Drive only over body 42 and Observe over the two poses. One
-additional Observe grant discloses the sensory row (21 reads/tick, budget 24).
+The faerie holds the `companion` role and follows seat 1's player
+([companion.puck](companion.puck); the design is
+[companions](../../docs/decisions/companions.md)). Its body (creation, kit and the
+steady `companion-steady` look) is [companion-body.puck](companion-body.puck),
+which the night field and the garden import. The debug world names this guest as
+the role's driver (`roles` in [debug.puck](debug.puck)); the standard accepts
+visiting drivers, so in the night field and the garden the faerie's own pinned
+guest mounts as `role$companion`, by its pin from the content store, under that
+world's fuel and the role's grants. When its player walks through a painting the
+faerie takes its own crossing right after, arriving just through the door; when
+she comes home it is re-adopted into its placement at body 42. A world that
+declares no `companion` role refuses it at reservation and the player's toast
+says so; away from home it then goes home. `body.where body:<n>
+instance:<name>` reads it in another world.
+
+The role gives the guest Drive only over the faerie and Observe over it and the
+player it follows, wherever each stands, so the guest tells them apart by its
+Drive handle's body rather than by index. One additional Observe grant discloses
+the sensory row (21 reads/tick, budget 24); a world without the senses (the night
+field, the garden) answers none, and the guest flies on its follow alone.
 It has no Edit, Mutate, pose or teleport grant. All choices and movement are
 integer simulation work; replay reconstructs its seeded guest memory under the
 existing pinned-module receipt. Captured frames are evidence of presentation,

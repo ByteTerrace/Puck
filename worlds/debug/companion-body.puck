@@ -1,0 +1,136 @@
+// The faerie's body as data every world it can visit declares: its creation, its colliding free-flight kit and a steady
+// look. No driver, placement or senses: a world that takes the companion role dresses an arriving faerie in these rows,
+// and the companion's own home (companion.puck) adds its placement, its glowing look and its driver.
+import "inputs"
+
+prototypes {
+  prototype "companion" {
+    document {
+      name: "lantern seed"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#F2C49A", roughness: 0.4, specular: 0.2 }
+        { color: "#FF9F38", roughness: 0.3, emissive: 900, emissiveLane: 0 }
+        { color: "#744080", roughness: 0.5, specular: 0.15 }
+      ]
+      // Both curved sides meet the seed at both tips. All pieces ride one root: banking opens no attachment.
+      shape Sweep "husk-left" {
+        position [0, 0, 0]
+        group: 1
+        material: 0
+        curve {
+          a [-0.025, 0.025, 0]
+          b [0.185, 0.125, 0]
+          c [0.025, 0.235, 0]
+          radiusStart: 0.016
+          radiusEnd: 0.012
+          bulge: 0.005
+        }
+        swings [
+          { driver: "bank", pivot [0, 0.13, 0], axis [0, 0, 1], amplitude: 0.06, wave: "linear" }
+          { driver: "pitch", pivot [0, 0.13, 0], axis [1, 0, 0], amplitude: -0.035, wave: "linear" }
+        ]
+      }
+      shape Sweep "husk-right" {
+        position [0, 0, 0]
+        group: 1
+        material: 0
+        parent: "husk-left"
+        curve {
+          a [-0.025, 0.025, 0]
+          b [-0.135, 0.135, -0.005]
+          c [0.025, 0.235, 0]
+          radiusStart: 0.016
+          radiusEnd: 0.012
+        }
+      }
+      shape Sweep "seed" {
+        position [0, 0, 0]
+        group: 1
+        material: 1
+        parent: "husk-left"
+        curve {
+          a [-0.025, 0.027, 0]
+          b [-0.005, 0.12, 0.012]
+          c [0.025, 0.233, 0]
+          radiusStart: 0.009
+          radiusEnd: 0.009
+          bulge: 0.018
+        }
+      }
+      shape Sweep "lavender-cuff" {
+        position [0, 0, 0]
+        group: 1
+        material: 2
+        parent: "husk-left"
+        curve {
+          a [-0.025, 0.025, -0.003]
+          b [0.021, 0.05, -0.003]
+          c [0.039, 0.071, -0.003]
+          radiusStart: 0.018
+          radiusEnd: 0.019
+        }
+      }
+      drivers [
+        { name: "bank", signal: "lateralAcceleration", cadence: 1, when ["always"] }
+        { name: "pitch", signal: "forwardAcceleration", cadence: 1, when ["always"] }
+      ]
+    }
+  }
+}
+
+kits [
+  {
+    name: "companion-flight"
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    collider: sphere(radius: 0.125)
+    mass: 0
+    motion {
+      facingSnap: false
+      holds [
+        {
+          name: "takeoff"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 0.3
+          forward: Heading
+          gravity { fall: 46, rise: 28 }
+          envelope { sinkSpeed: 40 }
+          thrust: 1
+        }
+        {
+          name: "hover"
+          bond: Free
+          hold: Lift
+          forward: Heading
+          lift: 1
+          speed: 11
+          gravity { fall: 46, rise: 28 }
+          thrust: 1
+        }
+      ]
+      moveFrame: World
+      shaping [{ along { engage: 32, release: 42 }, turnScale: 1 }]
+      speed { value: 11 }
+      stepHeight: 0
+      turn { falloff: 1, maxPitch: 1.2, pitchRate: 0, rate: 5 }
+    }
+  }
+]
+
+// The faerie as a visitor wears its creation with its seed's glow held steady: the pulse is its home's senses.
+looks [
+  {
+    name: "companion-steady"
+    scale: 1
+    source: creation(prototypeId: companion)
+    motion {
+      cues []
+      gaitAmplitude: 0
+      replayFrames: false
+      secondsPerFrame: 0
+    }
+  }
+]

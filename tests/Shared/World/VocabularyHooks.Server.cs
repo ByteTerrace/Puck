@@ -19,5 +19,10 @@ internal static class VocabularyHooks {
         WorldPostProcessVocabularyHook.PostProcessPackageCheck = static _ => null;
         WorldPostProcessVocabularyHook.PostProcessConfigCheck = static (_, _, _) => null;
         WorldProbeVocabularyHook.ProbeKindCheck = static _ => true;
+        // The process-wide content store a visiting driver resolves from, kept out of the per-user cache.
+        var content = new Puck.Testing.TemporaryDirectory(prefix: "puck-content-process-");
+
+        WorldProjectionContent.ConfigureShared(store: new Puck.Assets.ContentAddressedStore(root: content.RootPath));
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => content.Dispose();
     }
 }

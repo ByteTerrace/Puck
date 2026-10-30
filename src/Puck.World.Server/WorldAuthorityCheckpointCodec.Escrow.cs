@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Networking;
 using Puck.World.Protocol;
 
@@ -31,10 +32,17 @@ public static partial class WorldAuthorityCheckpointCodec {
         return (WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader) with { Profile = profile });
     }
     private static void WriteReservationMember(WireWriter writer, WorldTransferReservationMember member) {
-        WritePrincipal(
-            writer: writer,
-            principal: member.Principal
-        );
+        // A body the world's own program moves (a companion, an inhabitant) travels as Principal.World, which has no
+        // live wire value: it rides a flag, as an input controller's does.
+        var program = (member.Principal == Principal.World);
+
+        writer.WriteBoolean(value: program);
+        if (!program) {
+            WritePrincipal(
+                writer: writer,
+                principal: member.Principal
+            );
+        }
         writer.WriteInt32(value: member.PreferredSlot);
         WorldIdentityProjectionWire.WriteOptional(
             projection: member.Identity,
@@ -57,7 +65,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader) {
-        var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
+        var principal = (reader.ReadBoolean() ? Principal.World : WorldWireCodec.ReadPrincipal(reader: ref reader));
         var preferredSlot = reader.ReadInt32();
         var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var source = WorldWireCodec.ReadIntentSource(reader: ref reader);

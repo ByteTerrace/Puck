@@ -37,6 +37,9 @@ public static partial class WorldDefinitionValidator {
             if (role.Fuel > WorldAddonLimits.FuelPerAddon) {
                 errors.Add(item: $"{path} '{role.Name}' fuel {role.Fuel} exceeds the maximum of {WorldAddonLimits.FuelPerAddon}.");
             }
+            if (!double.IsFinite(d: role.FollowReach) || (role.FollowReach < 0) || (role.FollowReach > 64)) {
+                errors.Add(item: $"{path} '{role.Name}' followReach {role.FollowReach} is outside 0..64 metres.");
+            }
             if ((role.Drive == 0) || (role.Observe == 0)) {
                 errors.Add(item: $"{path} '{role.Name}' drive and observe budgets must be at least 1.");
             }
