@@ -73,6 +73,17 @@ public sealed class SdfDressedPickMapLawTests {
         var orphan = new SdfDressedPickMap(draws: [Draw(identity: "wall"), Draw(identity: staticGroup), SdfSlotCopy(of: "gone")], hostDraws: 1, inner: new HostMap());
 
         Assert.Null(@object: orphan.Resolve(identity: Mesh(source: 2)));
+
+        // A chunked group draws one mesh per chunk, identified by the chunk, and each names the group's first instance.
+        var chunk = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitZ });
+        var chunked = new SdfDressedPickMap(
+            chunkOwners: new Dictionary<object, SdfMeshBakeGroup> { [chunk] = staticGroup },
+            draws: [Draw(identity: "wall"), Draw(identity: chunk), Draw(identity: Triangle)],
+            hostDraws: 1,
+            inner: new HostMap()
+        );
+
+        Assert.Equal(expected: ["host0", "instance0", null], actual: Enumerable.Range(start: 0, count: 3).Select(selector: index => chunked.Resolve(identity: Mesh(source: (uint)index))));
     }
     [Fact]
     public void TheMapMatchesTheListItWasMadeFromAndNoOther() {

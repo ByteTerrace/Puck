@@ -882,8 +882,12 @@ rendered frame answers (a paused World still renders), then answers in place of
 `pending`; the call's answer deadline ends the hold with a line saying the pick
 went unanswered. The answer names what the pixel's mesh or program
 instance draws: `body=<index>` for a body's stamp and `placement=<id>` for a
-placement, whether the pixel is a baked mesh the frame drew from a group or a
-portal-straddle copy, or a mesh the host drew itself.
+placement, whether the pixel is a baked mesh the frame drew from a group (a
+chunked group's chunks included) or a portal-straddle copy, or a mesh the host
+drew itself; `prototype=<id>` names the creation it was stamped from and
+`materialName=<prototype>.palette[<slot>]` the palette entry it hit (`none` for
+either when the pixel belongs to no registered stamp, such as the group of the
+program's segments no instance owns). A screen's face adds `screen=<index>`.
 `world.patrol <x0> <z0> <x1> <z1> <step> [yawDegrees|-] [settleTicks] [y|-]` walks
 body 0 over a grid of its current level (or of the level whose floor `y` names) and
 picks the centre of the first seat's rendered view at each point (and five pixels

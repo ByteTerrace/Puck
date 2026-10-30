@@ -73,7 +73,9 @@ public sealed record SweepSignalResult(string Name, string Leg, string Line, str
 /// <param name="ChangedFraction">The fraction of its pixels changed against the baseline beyond the level tolerance,
 /// or <see langword="null"/> without a comparable baseline still.</param>
 /// <param name="Motion">The held body's authoritative pose and presentation rig at capture, when measured.</param>
-public sealed record SweepStillResult(string Name, string Group, string? Note, string? File, string Capture, string Status, IReadOnlyList<string> Reasons, double? ChangedFraction, string? Motion = null);
+/// <param name="Exposure">The first view's exposure at capture (<c>ev100=… meter=… source=…</c>), when measured: a whole-image
+/// brightness difference against a baseline still is this value differing, not the scene.</param>
+public sealed record SweepStillResult(string Name, string Group, string? Note, string? File, string Capture, string Status, IReadOnlyList<string> Reasons, double? ChangedFraction, string? Motion = null, string? Exposure = null);
 /// <summary>The tour's stills and sheets.</summary>
 /// <param name="LevelTolerance">The channel difference beyond which a pixel counts as changed.</param>
 /// <param name="AmberFraction">The changed fraction beyond which a still is amber.</param>
@@ -174,6 +176,7 @@ public sealed class SweepBaseline {
     private readonly Dictionary<string, Dictionary<string, string>> m_metrics = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, string> m_status = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, string> m_stills = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, string> m_exposures = new(comparer: StringComparer.Ordinal);
 
     private SweepBaseline(string path) {
         Path = path;
@@ -221,6 +224,9 @@ public sealed class SweepBaseline {
                     if (still.TryGetProperty(propertyName: "file", value: out var file) && (file.GetString() is { } relative)) {
                         read.m_stills[still.GetProperty(propertyName: "name").GetString()!] = System.IO.Path.GetFullPath(path: System.IO.Path.Combine(path1: directory, path2: relative));
                     }
+                    if (still.TryGetProperty(propertyName: "exposure", value: out var exposure) && (exposure.GetString() is { } reading)) {
+                        read.m_exposures[still.GetProperty(propertyName: "name").GetString()!] = reading;
+                    }
                 }
             }
 
@@ -238,6 +244,10 @@ public sealed class SweepBaseline {
     /// <param name="name">The stop.</param>
     /// <returns>The still's path, or <see langword="null"/> when the baseline has none.</returns>
     public string? StillFor(string name) => ((m_stills.TryGetValue(key: name, value: out var path) && File.Exists(path: path)) ? path : null);
+    /// <summary>Returns the exposure the baseline's still for a stop was taken at.</summary>
+    /// <param name="name">The stop.</param>
+    /// <returns>The reading (<see cref="SweepStillResult.Exposure"/>), or <see langword="null"/> when the baseline has none.</returns>
+    public string? ExposureFor(string name) => m_exposures.GetValueOrDefault(key: name);
     /// <summary>Names signals lost from a leg that this run selected.</summary>
     public IEnumerable<SweepSignalResult> MissingSignals(IReadOnlyList<SweepSignalResult> current, IReadOnlyList<SweepLegResult> legs) {
         var present = current.Select(selector: static signal => Key(leg: signal.Leg, name: signal.Name)).ToHashSet(comparer: StringComparer.Ordinal);
