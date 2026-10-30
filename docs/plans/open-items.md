@@ -29,9 +29,8 @@ resolves their edits to this file at merge.
 1. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the owner-visible
    sub-cell features (stair holes and flipped faces, blind slats, shell seams)
    fixed at the root in the bake. In flight: bake-seams (principal).
-2. [Lighting and GI](#lighting-and-gi): nothing renders black (sky fill on
-   shaded faces, probes or sky outside the window) and the meter meters during
-   a bake. In flight: lighting-robust.
+2. [Lighting and GI](#lighting-and-gi): no dark interval before a cold area's
+   first irradiance level publishes.
 3. [The valley's terrain](#the-valleys-terrain): contact on the drawn relief
    (in flight: relief-contact), then the terrain pass (docs/plans/terrain-pass.md).
 4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
@@ -239,8 +238,7 @@ coverage, enclosure, corner and exposure findings; quiet GI qualification at int
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
-- [high] Far surfaces render pure black on every gallery floor (the owner's walkthrough, `.claude/scratch/lead-window/owner-level2-black.png`, level 2 at (47.6, 9.1, 23.3) looking east, bakes all landed at 639 s): picks into the black land on drawn geometry (`hall-shell.palette[0]`, `hall-shaft.palette[2]`), and `world.cull off` changes nothing, so the surfaces draw but receive no light: they lie outside the measured probe window and the "no indirect light until measured" rule gives them zero, with no direct light indoors. Fix at the cause: a surface outside the window gets the nearest measured probes or a sky/ambient term, never black; and the window follows every view (the residency decision's step 3). Confirm on every floor, both backends. (from: the owner's walkthrough)
-- [high] Auto exposure is not metering: on the owner's walkthrough (valley summit, `.claude/scratch/lead-window/owner-valley-summit.png`) `world.exposure` reads `mode=auto ev100=11.5 compensation=2.5` but every view `meter=none source=held`, so the image holds a fixed EV with +2.5 compensation and white terrain blows out. Cause found on the same World: the meter answers nothing until the whole cold bake has landed (`SdfMeshIrradiance.TryMeter` needs an installed scene, and `RefreshScene` runs only while no bake is pending); once all 2,078 groups landed at 639 s, every view metered (lobby view 0 ev100 7.81 from probes). A cold bake, an edit or a residency change therefore leaves the image unmetered for minutes. Fix at the cause: meter from what has landed (or from the camera trace) while the bake runs, never wait for the whole world; then confirm the summit, the lobby and the card table on both backends. (from: the owner's walkthrough)
+- [medium] A cold area lights as without the irradiance volume until its first level publishes: on gallery level 2, arriving by `debug.go`, the Moth and the hall read near-black for about 20 s on both backends, then light correctly (the meter already answers from probes meanwhile). Light from the coarser levels or the sky term the moment a view arrives, so no cut shows a dark interval; then re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the valley summit on both backends, which the landing check did not revisit. (from: the lighting-robust landing check)
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white sun key, hard black shadows with no sky fill, no rim and no aerial haze. A lighting-direction pass (sky colour and fill, sun colour and height, shadow softness, haze) with the owner, after exposure meters; the [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the image meter. (from: the owner's walkthrough)
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
 
