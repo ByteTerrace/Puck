@@ -190,7 +190,10 @@ owns provider-neutral configuration; the Azure README owns Azure provider keys. 
 Desktop update recovery lives in `Puck.Launcher/Release`, including the startup
 health writer (`HealthGateFile`, not `Program`). It holds the same persistent
 `update.lock` as the stub and updater, checks both current and the executable
-directory, then deletes the health marker. The applier promotes current to
+directory, then deletes the health marker, prunes excess versions beyond
+`current`, `last-good` and the most recent `UpdateOptions.KeepVersions` other
+versions (never deleting a version a running process uses), and drops
+unreferenced `objects`. The applier promotes current to
 last-good only with no marker, then writes pending health before swapping current;
 two applies before a launch must never promote an unstarted version. Missing/corrupt state generations refuse rollback.
 Replay reservation precedes the durable recovery intent; interruption between
