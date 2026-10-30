@@ -155,7 +155,24 @@ public static class InstallPruner {
         var retained = 0;
 
         foreach (var version in installed) {
-            if (protectedNames.Contains(item: version.Name) || (retained++ < keepVersions)) {
+            if (protectedNames.Contains(item: version.Name)) {
+                kept.Add(item: version);
+                continue;
+            }
+            // A running version is kept for its process, never for the allowance: the allowance keeps the newest others.
+            // No process registers meanwhile, because registration waits for the update lease this pass holds.
+            switch (Probe(name: version.Name, refused: refused, versions: versions!)) {
+                case Removal.Running:
+                    running.Add(item: version.Name);
+                    kept.Add(item: version);
+                    continue;
+                case Removal.Refused:
+                    kept.Add(item: version);
+                    continue;
+                case Removal.Gone:
+                    continue;
+            }
+            if (retained++ < keepVersions) {
                 kept.Add(item: version);
                 continue;
             }
@@ -197,6 +214,20 @@ public static class InstallPruner {
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)) {
             refused.Add(item: $"{entry}: {error.Message}");
             return false;
+        }
+    }
+    // Whether a process holds the version: Running when one does, Removed when the version could be removed, Gone when
+    // it no longer exists, and Refused when it cannot be opened.
+    private static Removal Probe(ConfinedDirectory versions, string name, List<string> refused) {
+        try {
+            using var held = versions.TryOpenChildForRemoval(name: name);
+
+            return ((held is null) ? Removal.Running : Removal.Removed);
+        } catch (DirectoryNotFoundException) {
+            return Removal.Gone;
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+            refused.Add(item: $"{VersionsDirectoryName}/{name}: {error.Message}");
+            return Removal.Refused;
         }
     }
     private static Removal Remove(ConfinedDirectory versions, ConfinedDirectory trash, string name, List<string> refused) {

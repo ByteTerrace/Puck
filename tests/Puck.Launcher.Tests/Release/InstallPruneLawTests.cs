@@ -392,5 +392,22 @@ public sealed class InstallPruneLawTests : IDisposable {
         File.WriteAllText(path: Path.Combine(path1: Root, path2: "install-intent.json"), contents: """{"manifest":{"version":"1.0.1"}}""");
         Assert.Contains(expectedSubstring: "fails validation", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
     }
+    // A running version is kept for its process and never takes one of the allowance's places, so the allowance still
+    // keeps the newest others.
+    [Fact]
+    public void ARunningVersionDoesNotTakeAPlaceTheAllowanceKeeps() {
+        _ = Install(version: "1.0.0", healthy: true);
+        _ = Install(version: "1.0.1", healthy: true);
+        _ = Install(version: "1.0.2", healthy: true);
+        _ = Install(version: "1.0.3");
+        Assert.Equal(expected: "1.0.2", actual: File.ReadAllText(path: Path.Combine(path1: Root, path2: "last-good")));
+        using (StubInstall.HoldVersion(installRoot: Root, version: "1.0.1")) {
+            var pass = Prune(keepVersions: 1);
+
+            Assert.Equal(expected: ["1.0.1"], actual: pass.RunningVersions);
+            Assert.Empty(collection: pass.DeletedVersions);
+        }
+        Assert.Equal(expected: ["1.0.0"], actual: Prune(keepVersions: 1).DeletedVersions);
+    }
     public void Dispose() => m_directory.Dispose();
 }
