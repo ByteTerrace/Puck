@@ -1,0 +1,57 @@
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "debug",
+  "scanEveryTicks": 30,
+  "lineage": "b8e4a7c1-35d2-4e69-8f01-6c7a2d9e5b13",
+  "providers": [
+    {
+      "name": "fixture",
+      "type": "observation.fixture",
+      "settings": {}
+    }
+  ],
+  "operations": [],
+  "clients": [
+    {
+      "principal": "console",
+      "operations": [],
+      "requests": [
+        { "capability": "observe", "subject": "state:granaryNames" },
+        { "capability": "observe", "subject": "state:granaryResources" },
+        { "capability": "observe", "subject": "state:granaryRegions" },
+        { "capability": "observe", "subject": "state:granaryKinds" },
+        { "capability": "observe", "subject": "state:granarySkus" },
+        { "capability": "observe", "subject": "state:granaryFeed" },
+        { "capability": "mutate", "subject": "section:state" }
+      ]
+    }
+  ],
+  "connections": [],
+  "observations": [
+    {
+      "name": "partition-accounts",
+      "provider": "fixture",
+      "client": "console",
+      "maximumItems": 16,
+      "refreshTicks": 1800,
+      "status": "granaryFeed",
+      "settings": {
+        "items": [
+          { "key": "bytrcstp001", "fields": { "name": "bytrcstp001", "id": "/synthetic/storageAccounts/bytrcstp001", "region": "southcentralus", "kind": "StorageV2", "sku": "Standard_LRS" } },
+          { "key": "bytrcstp002", "fields": { "name": "bytrcstp002", "id": "/synthetic/storageAccounts/bytrcstp002", "region": "southcentralus", "kind": "StorageV2", "sku": "Standard_GRS" } },
+          { "key": "bytrcstp003", "fields": { "name": "bytrcstp003", "id": "/synthetic/storageAccounts/bytrcstp003", "region": "eastus2", "kind": "BlobStorage", "sku": "Standard_LRS" } },
+          { "key": "bytrcstp004", "fields": { "name": "bytrcstp004", "id": "/synthetic/storageAccounts/bytrcstp004", "region": "westeurope", "kind": "BlockBlobStorage", "sku": "Premium_LRS" } },
+          { "key": "bytrcstp005", "fields": { "name": "bytrcstp005", "id": "/synthetic/storageAccounts/bytrcstp005", "region": "eastus2", "kind": "FileStorage", "sku": "Premium_ZRS" } },
+          { "key": "bytrcstp006", "fields": { "name": "bytrcstp006", "id": "/synthetic/storageAccounts/bytrcstp006", "region": "northeurope", "kind": "Storage", "sku": "Standard_RAGRS" } }
+        ]
+      },
+      "fields": {
+        "name": "granaryNames",
+        "id": "granaryResources",
+        "region": "granaryRegions",
+        "kind": "granaryKinds",
+        "sku": "granarySkus"
+      }
+    }
+  ]
+}
