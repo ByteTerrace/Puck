@@ -1443,10 +1443,9 @@ public sealed partial class FederationTransferLawTests {
                 expected: ((byte)WorldFederationResponse.Status),
                 actual: status.Kind
             );
-            Assert.Equal(
-                expected: ((byte)WorldTransferStatus.Missing),
-                actual: Assert.Single(collection: status.Body.ToArray())
-            );
+            Assert.True(condition: WorldFederationCodec.TryDecodeStatus(body: status.Body.Span, landed: out var landed, status: out var answered));
+            Assert.Equal(expected: WorldTransferStatus.Missing, actual: answered);
+            Assert.Null(@object: landed);
 
             await WorldFederationCodec.WriteRequestAsync(
                 stream: stream,

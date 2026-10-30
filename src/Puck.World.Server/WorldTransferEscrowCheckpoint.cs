@@ -15,6 +15,8 @@ namespace Puck.World.Server;
 /// <param name="SpentKeys">The transfer-key ledger: every key above its source's floor that holds nothing live here any
 /// more, whether it committed, and whether its death is recoverable from the crossing log.</param>
 /// <param name="Floors">Each source namespace's highest settled floor.</param>
+/// <param name="Custody">Every custody record the authority folded, in fold order
+/// (<see cref="WorldCompanionCustody.History"/>); a restore folds them again through the same reducer.</param>
 public sealed record WorldTransferEscrowCheckpoint(
     IReadOnlyList<WorldTransferLeaseCheckpoint> Leases,
     IReadOnlyList<WorldTransferCommittedCheckpoint> Committed,
@@ -24,5 +26,9 @@ public sealed record WorldTransferEscrowCheckpoint(
     IReadOnlyList<(int Slot, string Border)> BorderAdmissions,
     ulong CrossingSequence,
     IReadOnlyList<(WorldTransferKey Key, bool Committed, bool Durable)> SpentKeys,
-    IReadOnlyList<(string SourceAuthority, ulong Floor)> Floors
-);
+    IReadOnlyList<(string SourceAuthority, ulong Floor)> Floors,
+    IReadOnlyList<WorldCrossingRecord>? Custody = null
+) {
+    /// <summary>Gets every custody record the authority folded, in fold order.</summary>
+    public IReadOnlyList<WorldCrossingRecord> Custody { get; init; } = (Custody ?? []);
+}

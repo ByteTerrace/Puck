@@ -32,6 +32,96 @@ public static class WorldWireLeaves {
         reader.ReadInt32(), WorldWireCodec.ReadPrincipal(ref reader),
         reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r)),
         reader.ReadArray("pending federated input", static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r), 1024));
+    /// <summary>Writes a crossing member's request-local id and its optional companion leaf.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="memberId">The request-local id, negative for the member's ordinal.</param>
+    /// <param name="companion">The companion leaf, or <see langword="null"/>.</param>
+    public static void WriteMemberIdentity(WireWriter writer, int memberId, WorldTransferCompanion? companion) {
+        writer.WriteInt32(value: memberId);
+        writer.WriteOptionalClass(
+            value: companion,
+            writeValue: WriteTransferCompanion
+        );
+    }
+    /// <summary>Reads what <see cref="WriteMemberIdentity"/> wrote, refusing an id below <c>-1</c>.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The member id and companion leaf.</returns>
+    public static (int MemberId, WorldTransferCompanion? Companion) ReadMemberIdentity(ref WireReader reader) {
+        var memberId = reader.ReadInt32();
+
+        if (!reader.Failed && (memberId < -1)) {
+            reader.Fail(
+                detail: $"member id {memberId} is negative",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return (memberId, reader.ReadOptionalClass(readValue: static (ref WireReader r) => ReadTransferCompanion(reader: ref r)));
+    }
+    /// <summary>Writes what a crossing member carries as a companion: its role, followed member, title authority, driver
+    /// pin and custody ticket.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="companion">The companion leaf.</param>
+    public static void WriteTransferCompanion(WireWriter writer, WorldTransferCompanion companion) {
+        writer.WriteString(value: companion.Role);
+        writer.WriteOptional(
+            value: companion.FollowsMember,
+            writeValue: static (w, member) => w.WriteInt32(value: member)
+        );
+        writer.WriteString(value: companion.Home);
+        writer.WriteNullableString(value: companion.Driver);
+        writer.WriteOptional(
+            value: companion.Ticket,
+            writeValue: static (w, ticket) => {
+                w.WriteString(value: ticket.Home);
+                WriteEntityAddress(
+                    address: ticket.Incarnation,
+                    writer: w
+                );
+                w.WriteString(value: ticket.Hop.SourceAuthority);
+                w.WriteUInt64(value: ticket.Hop.TransferId);
+                w.WriteUInt64(value: ticket.Epoch);
+            }
+        );
+    }
+    /// <summary>Reads a companion leaf written by <see cref="WriteTransferCompanion"/>, refusing a blank role or title
+    /// authority, and a ticket whose title authority or incarnation names another home than the companion's.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The companion leaf.</returns>
+    public static WorldTransferCompanion ReadTransferCompanion(ref WireReader reader) {
+        var role = reader.ReadRequiredString(field: "companion role");
+        var follows = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadInt32());
+        var home = reader.ReadRequiredString(field: "companion home");
+        var driver = reader.ReadNullableString(field: "companion driver");
+        var ticket = reader.ReadOptional(readValue: static (ref WireReader r) => new WorldCustodyTicket(
+            Home: r.ReadRequiredString(field: "ticket home"),
+            Incarnation: ReadEntityAddress(reader: ref r),
+            Hop: new WorldTransferKey(
+                SourceAuthority: r.ReadRequiredString(field: "ticket hop source"),
+                TransferId: r.ReadUInt64()
+            ),
+            Epoch: r.ReadUInt64()
+        ));
+
+        if (
+            !reader.Failed &&
+            (ticket is { } carried) &&
+            (!string.Equals(a: carried.Home, b: home, comparisonType: StringComparison.Ordinal) || !string.Equals(a: carried.Incarnation.Authority, b: home, comparisonType: StringComparison.Ordinal))
+        ) {
+            reader.Fail(
+                detail: $"companion ticket names title authority '{carried.Home}' for an incarnation of '{carried.Incarnation.Authority}', not the companion's home '{home}'",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldTransferCompanion(
+            Driver: driver,
+            FollowsMember: follows,
+            Home: home,
+            Role: role,
+            Ticket: ticket
+        );
+    }
     /// <summary>Reads a <see cref="WorldEntityAddress"/>, refusing a blank authority.</summary>
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(
         Authority: reader.ReadRequiredString(field: "entity address authority"),

@@ -2,3 +2,4 @@
 import "skin"
 import "controls"
 import "camera"
+import "companions"

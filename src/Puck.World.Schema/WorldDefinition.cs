@@ -95,8 +95,26 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("editor"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEditorDefaults? EditorRaw = null,
     [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null,
     [property: JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null,
-    [property: JsonPropertyName("replays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScopedReplay>? ReplaysRaw = null
+    [property: JsonPropertyName("replays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScopedReplay>? ReplaysRaw = null,
+    [property: JsonPropertyName("roles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRole>? RolesRaw = null
 ) {
+    /// <summary>Gets the companion roles this world declares; absent declares none, so every companion is refused at
+    /// reservation.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldRole> Roles => (RolesRaw ?? []);
+    /// <summary>Returns the role row named <paramref name="name"/>, or <see langword="null"/> when this world declares
+    /// none.</summary>
+    /// <param name="name">The role name.</param>
+    /// <returns>The declared role, or <see langword="null"/>.</returns>
+    public WorldRole? FindRole(string name) {
+        foreach (var role in Roles) {
+            if (string.Equals(a: role.Name, b: name, comparisonType: StringComparison.Ordinal)) {
+                return role;
+            }
+        }
+
+        return null;
+    }
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.definition.v1";
     /// <summary>The rate a world with no <see cref="Simulation"/> section runs at. Distinct from the resident,

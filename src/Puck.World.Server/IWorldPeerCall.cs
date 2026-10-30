@@ -48,4 +48,16 @@ public interface IWorldPeerCall {
     /// <see langword="false"/> when the call itself could not reach the peer (a remote implementation's transport
     /// failure — an in-process implementation always succeeds).</returns>
     bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status);
+    /// <summary>Reads the request-local ids a committed transfer landed at the peer: a destination may leave a companion
+    /// out of a commit while the rest land. A peer that never leaves a member out answers <see langword="null"/>, which
+    /// means every member the reservation leased.</summary>
+    /// <param name="sourceAuthority">The reserving authority's own endpoint identity.</param>
+    /// <param name="transferId">The committed transfer id.</param>
+    /// <param name="landed">The landed ids, or <see langword="null"/> for every leased member.</param>
+    /// <returns><see langword="true"/> once the peer answered; <see langword="false"/> when it could not be
+    /// reached.</returns>
+    bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
+        landed = null;
+        return true;
+    }
 }

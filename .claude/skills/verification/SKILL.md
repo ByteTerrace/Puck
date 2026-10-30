@@ -286,7 +286,7 @@ the skip exception, so a test that wraps a call which can skip reports
 executable model of the companion custody protocol
 ([the specification](../../../docs/plans/companion-redesign.md#8-the-model)). Its
 named traces and small scopes run with the ordinary suite; its large scopes
-(over about 100,000 states each, several minutes and a few hundred megabytes in
+(over about 100,000 states each, seven to seventeen minutes by machine load and a few hundred megabytes in
 all) are explicit tests carrying `Category=ModelCheck`:
 
 ```text

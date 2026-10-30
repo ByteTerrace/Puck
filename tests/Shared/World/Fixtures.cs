@@ -516,6 +516,48 @@ internal static partial class Fixtures {
             PopulationRaw = (document.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1) }),
         });
     }
+    /// <summary>Builds the base document with <paramref name="companions"/> companion placements, each one body holding
+    /// the <c>companion</c> role and following local seat 0, and <paramref name="peerSlots"/> bodies of headroom past
+    /// the seats for companions arriving from elsewhere. <paramref name="declaresRole"/> decides whether the document
+    /// declares the role (accepting a visitor's own driver).</summary>
+    public static WorldDefinition BuildCompanionDocument(int companions, int peerSlots, bool declaresRole = true) {
+        var creation = BuildBallCreation();
+        var document = BuildDocumentCore(
+            spawnPoints: BuildSpawnPoints(),
+            collision: new WorldCollision(
+                ContactSkin: 0.02f,
+                GradientProbe: 0f,
+                MaxIterations: 4,
+                MaxSlopeDegrees: 60f,
+                Requirements: []
+            ),
+            rateHz: DefaultRateHz,
+            seatCollider: null,
+            creations: [creation],
+            placements: [.. Enumerable.Range(start: 0, count: companions).Select(selector: index => new WorldPlacement(
+                Id: $"companion-{index}",
+                PrototypeId: creation.Id,
+                Position: new DocumentVector3(value: new Vector3(x: (2f + index), y: 0f, z: 2f)),
+                YawDegrees: 0f,
+                Scale: 1f,
+                Inhabit: new WorldPlacementInhabit(
+                    Kit: SeatKitName,
+                    Look: null,
+                    Source: IntentSource.Idle,
+                    Distribution: WorldDistribution.Default,
+                    Role: "companion",
+                    Follows: 0
+                )
+            ))]
+        );
+
+        return (document with {
+            PopulationRaw = (document.Population with { CapacityRaw = ((WorldBodiesLimits.LocalSeatCount + companions) + peerSlots) }),
+            RolesRaw = (declaresRole
+                ? [new WorldRole(Name: "companion", Accept: true)]
+                : null),
+        });
+    }
     /// <summary>Builds a minimal, valid <see cref="WorldDefinition"/> entirely in code — one row per REQUIRED
     /// section, each populated with the smallest value shape
     /// its own validation pass accepts. Carries exactly the extra furniture the laws in this suite need beyond the
