@@ -603,25 +603,57 @@ rule "granary-feed-live" {
 }
 
 // What the lectern shows for the piece under the cursor, and nothing for an empty cell.
-template granaryInspect(field, source, phase) {
-  rule $"granary-inspect-{field}" {
-    when granaryPhase == phase and granaryCellOf[$each] == granarySeat.cursor + 1
-    mode: Level
-    forEach: granaryNames
-    setState(state: granarySel, key: field, fromState: source, fromKey: $each)
-  }
-
-  rule $"granary-inspect-{field}-empty" {
-    when granaryPhase == phase and granaryBoard[granarySeat.cursor] == 0
-    mode: Level
-    setState(state: granarySel, key: field, text: "")
-  }
+rule "granary-inspect-name" {
+  when granaryPhase == 8 and granaryCellOf[$each] == granarySeat.cursor + 1
+  mode: Level
+  forEach: granaryNames
+  setState(state: granarySel, key: name, fromState: granaryNames, fromKey: $each)
 }
 
-granaryInspect(name, granaryNames, 8)
-granaryInspect(region, granaryRegions, 9)
-granaryInspect(kind, granaryKinds, 10)
-granaryInspect(sku, granarySkus, 11)
+rule "granary-inspect-region" {
+  when granaryPhase == 9 and granaryCellOf[$each] == granarySeat.cursor + 1
+  mode: Level
+  forEach: granaryNames
+  setState(state: granarySel, key: region, fromState: granaryRegions, fromKey: $each)
+}
+
+rule "granary-inspect-kind" {
+  when granaryPhase == 10 and granaryCellOf[$each] == granarySeat.cursor + 1
+  mode: Level
+  forEach: granaryNames
+  setState(state: granarySel, key: kind, fromState: granaryKinds, fromKey: $each)
+}
+
+rule "granary-inspect-sku" {
+  when granaryPhase == 11 and granaryCellOf[$each] == granarySeat.cursor + 1
+  mode: Level
+  forEach: granaryNames
+  setState(state: granarySel, key: sku, fromState: granarySkus, fromKey: $each)
+}
+
+rule "granary-inspect-name-empty" {
+  when granaryPhase == 8 and granaryBoard[granarySeat.cursor] == 0
+  mode: Level
+  setState(state: granarySel, key: name, text: "")
+}
+
+rule "granary-inspect-region-empty" {
+  when granaryPhase == 9 and granaryBoard[granarySeat.cursor] == 0
+  mode: Level
+  setState(state: granarySel, key: region, text: "")
+}
+
+rule "granary-inspect-kind-empty" {
+  when granaryPhase == 10 and granaryBoard[granarySeat.cursor] == 0
+  mode: Level
+  setState(state: granarySel, key: kind, text: "")
+}
+
+rule "granary-inspect-sku-empty" {
+  when granaryPhase == 11 and granaryBoard[granarySeat.cursor] == 0
+  mode: Level
+  setState(state: granarySel, key: sku, text: "")
+}
 
 // ---- Seated play at the table -----------------------------------------------------------------------------------------
 // Seat 1 sits down with the context button (the board's engage block) and moves the cursor with the shared tabletop page

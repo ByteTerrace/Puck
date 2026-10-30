@@ -136,7 +136,7 @@ public sealed class GranaryContentLawTests(ITestOutputHelper output) {
             collection: Court.SpawnPoints,
             filter: static point => (point.Id == "granaries")
         );
-        foreach (var rule in new[] { "granary-locate", "granary-water-coverage", "granary-power-coverage", "granary-irrigation-stage", "granary-power-stage", "granary-inspect-piece" }) {
+        foreach (var rule in new[] { "granary-locate", "granary-water-coverage", "granary-power-coverage", "granary-irrigation-stage", "granary-power-stage", "granary-inspect-name" }) {
             Assert.Contains(
                 collection: Court.Rules!,
                 filter: row => (row.Name.ToString() == rule)
