@@ -67,7 +67,12 @@ transfer ends, expression rows — with an infix key as the index (`game[from]`,
 reads its gate closed (`world.rule.trace` shows `zones [<spelling> -> <zone|none>]`);
 `forEach: "$zones"` iterates the table, and `forEach: "$bodies"` iterates the
 live bodies (refused on a decision, `BodiesUnserved` on a document with no
-bodies). Rule-authored
+bodies). `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
+leaving later bindings' latches untouched, and the work sheet prices its
+firings at `n`; author it where the gate already admits that few (a batch
+window over a distinct ordinal row, one held piece), since an over-priced
+judge rule also shrinks every search candidate's allowance
+([rules](../../../../docs/reference/state/rules.md#bound-how-many-bindings-fire)). Rule-authored
 transfers resolve their `key`, `from`, and `to` before each transaction step;
 direct mutations use literal keys and zone names. Pattern costs use the declared source capacity and actual token-expression
 cost, and pattern read sets include attribute and expression dependencies.

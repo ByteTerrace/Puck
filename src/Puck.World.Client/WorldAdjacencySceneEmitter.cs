@@ -570,15 +570,15 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     continue;
                 }
 
-                var position = Vector3.Lerp(
-                    value1: neighbour.PreviousPosition(index: entity),
-                    value2: neighbour.CurrentPosition(index: entity),
-                    amount: alpha
+                var position = WorldPoseInterpolation.Position(
+                    previous: neighbour.PreviousPosition(index: entity),
+                    current: neighbour.CurrentPosition(index: entity),
+                    alpha: alpha
                 );
-                var orientation = Quaternion.Lerp(
-                    quaternion1: neighbour.PreviousOrientation(index: entity),
-                    quaternion2: neighbour.CurrentOrientation(index: entity),
-                    amount: alpha
+                var orientation = WorldPoseInterpolation.Orientation(
+                    previous: neighbour.PreviousOrientation(index: entity),
+                    current: neighbour.CurrentOrientation(index: entity),
+                    alpha: alpha
                 );
                 var address = neighbour.EntityAddress(index: entity);
 

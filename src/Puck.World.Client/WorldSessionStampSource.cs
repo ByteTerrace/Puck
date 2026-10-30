@@ -41,10 +41,10 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     /// <inheritdoc/>
     public WorldLook Look(int index) => m_mirror.Look(index: index);
     /// <inheritdoc/>
-    public Quaternion Orientation(int index) => Quaternion.Lerp(
-        amount: m_mirror.InterpolationAlpha,
-        quaternion1: m_mirror.PreviousOrientation(index: index),
-        quaternion2: m_mirror.CurrentOrientation(index: index)
+    public Quaternion Orientation(int index) => WorldPoseInterpolation.Orientation(
+        alpha: m_mirror.InterpolationAlpha,
+        previous: m_mirror.PreviousOrientation(index: index),
+        current: m_mirror.CurrentOrientation(index: index)
     );
     /// <inheritdoc/>
     public string? PlacementId(int index) => m_mirror.PlacementId(index: index);
@@ -55,10 +55,10 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     public WorldPoseCarries Carries => m_mirror.Carries;
 
     /// <inheritdoc/>
-    public Vector3 Position(int index) => Vector3.Lerp(
-        amount: m_mirror.InterpolationAlpha,
-        value1: m_mirror.PreviousPosition(index: index),
-        value2: m_mirror.CurrentPosition(index: index)
+    public Vector3 Position(int index) => WorldPoseInterpolation.Position(
+        alpha: m_mirror.InterpolationAlpha,
+        previous: m_mirror.PreviousPosition(index: index),
+        current: m_mirror.CurrentPosition(index: index)
     );
     /// <inheritdoc/>
     public bool TryInhabitantBody(string placementId, out int index) {

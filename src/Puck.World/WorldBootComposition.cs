@@ -709,7 +709,7 @@ public static class WorldBootComposition {
                 // Under lockstep an ordinary still converges over one fresh jitter period, so it is the same image for
                 // the same tick whatever temporal history the display's frames built before it.
                 stillSamples: ((sp.GetService<PresentPacingControl>() is { } pacing)
-                    ? (Func<int>)(() => (pacing.TickLocked ? ((int)SdfTemporalSamples.Period) : 0))
+                    ? (Func<int>)(() => (pacing.TickLocked ? ((int)SdfWorldPackage.TemporalPeriod) : 0))
                     : null),
                 worldFile: Path.GetFileName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath)
             );

@@ -99,6 +99,10 @@ public static partial class WorldFactsCompiler {
                 );
 
                 if (decision is not null) {
+                    if (compiled.MaxFirings > 0) {
+                        throw new RuleException(detail: "'maxFirings' bounds a rule's sweep, and a decision chooses per binding on its own period", refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
+                    }
+
                     var controls = new List<CellAccess>();
 
                     RuleDataflow.CollectGate(gate: compiled.Gate, into: controls);

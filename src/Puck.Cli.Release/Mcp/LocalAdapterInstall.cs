@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Confinement;
 using Puck.Launcher;
 using Puck.Launcher.Release;
 
@@ -6,14 +7,8 @@ namespace Puck.Cli.Mcp;
 
 internal static class LocalAdapterInstall {
     public static async Task<string> ActivateAsync(string build, string install, CancellationToken token) {
-        Directory.CreateDirectory(path: install);
-        FileStream lease;
-
-        while (true) {
-            token.ThrowIfCancellationRequested();
-            try { lease = new FileStream(Path.Combine(path1: install, path2: "development.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); break; } catch (IOException) { await Task.Delay(cancellationToken: token, millisecondsDelay: 200).ConfigureAwait(continueOnCapturedContext: false); }
-        }
-        using (lease) {
+        // Publication writes release content into the install root; the pruner holds the same lease while it deletes.
+        using (await InstallLeases.AcquireAsync(cancellationToken: token, fileName: InstallLeases.PublicationLockFileName, installRoot: install).ConfigureAwait(continueOnCapturedContext: false)) {
             var pointer = Path.Combine(path1: install, path2: "current");
             var current = (File.Exists(path: pointer) ? File.ReadAllText(path: pointer).Trim() : "0.0.0");
             var ready = Path.Combine(path1: build, path2: "puck-build-ready");
@@ -25,7 +20,7 @@ internal static class LocalAdapterInstall {
             var version = $"0.0.{sequence}";
 
             if (!ReleaseVersion.IsStrictlyGreaterThan(left: version, right: current)) { return current; }
-            var source = new LocalBuildReleaseSource(buildDirectory: build, sourceDirectory: Path.Combine(path1: install, path2: "development-source"));
+            var source = new LocalBuildReleaseSource(buildDirectory: build, sourceDirectory: Path.Combine(path1: install, path2: InstallPruner.LocalSourceDirectoryName));
             var anchor = source.Publish("puck.operator", "development", version, Path.Combine(path1: install, path2: "development-key.pk8"), sequence);
 
             if (!File.Exists(path: ready) || (File.ReadAllText(path: ready).Trim() != stamp)) {
@@ -49,9 +44,17 @@ internal static class LocalAdapterInstall {
             return version;
         }
     }
+    // Proves health with the registration the CLI's entry point took before it loaded anything else.
     public static void Healthy(string install) {
         var version = new DirectoryInfo(path: AppContext.BaseDirectory).Name;
+        var cleared = HealthGateFile.ClearHealthy(cacheRoot: install, registration: InstallRegistration.RegisterProcess(cancellationToken: CancellationToken.None), version: version);
 
-        HealthGateFile.ClearHealthy(install, version, AppContext.BaseDirectory);
+        if (cleared.Pruned is { } pruned) {
+            Console.Error.WriteLine(value: ((pruned.Skipped is { } skipped)
+                ? $"puck-mcp: pruning skipped: {skipped}"
+                : (($"puck-mcp: pruned {pruned.DeletedVersions.Count} version(s) and {pruned.DeletedObjects} object(s); kept {string.Join(separator: ", ", values: pruned.KeptVersions)}" +
+                    ((pruned.RunningVersions.Count == 0) ? "" : $" ({string.Join(separator: ", ", values: pruned.RunningVersions)} running)")) +
+                    ((pruned.Refused.Count == 0) ? "" : $"; refused {string.Join(separator: "; ", values: pruned.Refused)}"))));
+        }
     }
 }

@@ -69,9 +69,11 @@ public readonly record struct RulePinnedCell(int RowOrdinal, CellKey Key, long L
 /// <param name="Multiplier">The evaluations per tick — one, the iterated row's capacity, or the pair count.</param>
 /// <param name="Cost">The orthogonal rule cost components: setup, check, effects.</param>
 /// <param name="CheckUnits">The check units: Setup + Multiplier x Check.</param>
-/// <param name="FiringUnits">The firing units: Multiplier x Effects.</param>
+/// <param name="FiringUnits">The firing units: Firings x Effects.</param>
 /// <param name="WorkUnits">The line's isolated total: CheckUnits + FiringUnits.</param>
 /// <param name="Discriminators">The literal cells the gate pins, in cell order.</param>
+/// <param name="Firings">The most evaluations per tick that can fire: the multiplier, or the rule's
+/// <see cref="CompiledRule.MaxFirings"/> when that is smaller.</param>
 public readonly record struct RuleWorkContributor(
     string Name,
     bool IsInteraction,
@@ -80,7 +82,8 @@ public readonly record struct RuleWorkContributor(
     RuleWork CheckUnits,
     RuleWork FiringUnits,
     RuleWork WorkUnits,
-    IReadOnlyList<RulePinnedCell> Discriminators
+    IReadOnlyList<RulePinnedCell> Discriminators,
+    long Firings
 );
 public static partial class RuleWorkBudget {
     private sealed class ExclusionNode {
@@ -152,8 +155,9 @@ public static partial class RuleWorkBudget {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         var cost = rule.CostBreakdown(context: context);
+        var firings = Firings(multiplier: multiplier, rule: rule);
         var checkUnits = (cost.Setup + (multiplier * cost.Check));
-        var firingUnits = (multiplier * cost.Effects);
+        var firingUnits = (firings * cost.Effects);
 
         return new RuleWorkContributor(
             CheckUnits: checkUnits,
@@ -164,6 +168,7 @@ public static partial class RuleWorkBudget {
                     contradictory: out _,
                     gate: rule.Gate
                 )),
+            Firings: firings,
             FiringUnits: firingUnits,
             IsInteraction: isInteraction,
             Multiplier: multiplier,
@@ -171,9 +176,22 @@ public static partial class RuleWorkBudget {
             WorkUnits: (checkUnits + firingUnits)
         );
     }
-    /// <summary>Counts, per cell, how many evaluations per tick can write it: each rule's write set times its
-    /// multiplier, where a write addressing a row without a literal key counts against every cell of that row,
-    /// including every cell any gate pins.</summary>
+    /// <summary>Returns how many of a rule's evaluations per tick can fire: its multiplier, bounded by the rule's
+    /// <see cref="CompiledRule.MaxFirings"/>, which the evaluator enforces by ending the sweep.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="multiplier">The rule's evaluations per tick.</param>
+    /// <returns>The firings.</returns>
+    public static long Firings(CompiledRule rule, long multiplier) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+
+        return ((rule.MaxFirings > 0)
+            ? Math.Min(val1: multiplier, val2: rule.MaxFirings)
+            : multiplier
+        );
+    }
+    /// <summary>Counts, per cell, how many evaluations per tick can write it: each rule's write set times the firings
+    /// its multiplier allows (<see cref="Firings"/>), where a write addressing a row without a literal key counts
+    /// against every cell of that row, including every cell any gate pins.</summary>
     /// <param name="rules">The rules with their multipliers.</param>
     /// <returns>The writer counts, keyed by (row ordinal, key ordinal).</returns>
     public static Dictionary<(int RowOrdinal, CellKey Key), long> CountWriters(IReadOnlyList<(CompiledRule Rule, long Multiplier)> rules) {
@@ -183,7 +201,9 @@ public static partial class RuleWorkBudget {
         var byRow = new Dictionary<int, long>();
         var writes = new List<CellAccess>();
 
-        foreach (var (rule, multiplier) in rules) {
+        foreach (var (rule, evaluations) in rules) {
+            var multiplier = Firings(multiplier: evaluations, rule: rule);
+
             writes.Clear();
             rule.CollectWrites(into: writes);
 
@@ -228,7 +248,8 @@ public static partial class RuleWorkBudget {
         return writers;
     }
     /// <summary>Returns how many evaluations one tick's cost is multiplied by: the iterated row's cell capacity, the
-    /// zone table's entry count, the document's body capacity for a body sweep, or 1 for a rule evaluated once.</summary>
+    /// zone table's entry count, the document's body capacity for a body sweep, the pool's capacity for a pool sweep, or
+    /// 1 for a rule evaluated once.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="context">The context the rule was resolved against.</param>
     /// <returns>The multiplier.</returns>
@@ -243,6 +264,9 @@ public static partial class RuleWorkBudget {
         if (rule.ForEachZones) {
             return (rule.Zones?.Indices.Length ?? 1);
         }
+        if (rule.PoolForEach is { } pool) {
+            return pool.Capacity;
+        }
         if (rule.ForEachOrdinal < 0) {
             return 1L;
         }
@@ -250,7 +274,7 @@ public static partial class RuleWorkBudget {
         return context.RowCapacity(rowOrdinal: rule.ForEachOrdinal);
     }
     /// <summary>Returns what one sweep of a rule costs before its first evaluation: one unit per key the sweep
-    /// snapshots, which is the iterated row's capacity, the zone table's entry count or the body capacity, and nothing for a rule
+    /// snapshots, which is the iterated row's capacity, the zone table's entry count, the body capacity or the pool's capacity, and nothing for a rule
     /// evaluated once.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="context">The context the rule was resolved against.</param>
@@ -258,7 +282,7 @@ public static partial class RuleWorkBudget {
     public static RuleWork ForEachSetup(CompiledRule rule, IRuleCostContext context) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.Iteration is null))
+        return (((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.Iteration is null) && (rule.PoolForEach is null))
             ? RuleWork.Zero
             : RuleWork.Known(units: ForEachCount(
                 context: context,

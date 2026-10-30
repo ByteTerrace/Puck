@@ -475,6 +475,7 @@ public sealed class WorldRuleWorkBudgetExclusionLawTests {
             Name: $"phase{value}",
             IsInteraction: false,
             Multiplier: 1,
+            Firings: 1,
             Cost: new RuleCost(
                 Check: 10,
                 Effects: 100,

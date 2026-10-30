@@ -38,31 +38,51 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The scheduler's separate saved-pose/input-capacity defect has a focused
   boundary test; it is not the established cause of this slow gallery boot.
   See [mesh baking](mesh-bake.md#groups-poses-and-materials).
-- Visibility is a per-probe 16×16 octahedral depth map. Each texel traces four
-  subtexel directions against the existing mesh hierarchy and stores first-hit
-  mean metres and mean-squared metres as two FP16 values. Misses end at the
-  lighting trace reach (at most 128 m, keeping squared metres representable).
-  Do not shorten that reach to the local gather radius: boundary probes also
-  support receivers outside the window, and a short miss creates dark distance bands.
-  Depth is traced at the first sweep and reused by the later bounce sweeps.
-- The receiver samples four depth texels bilinearly in its direction from the
-  relocated probe. Taps reflect across the octahedron's identified edges,
-  reversing the other coordinate. Interpolate the moments before computing
-  variance; clamp negative variance from FP16 rounding to zero. Before the mean,
-  visibility is one; beyond it, the one-sided Chebyshev bound is
-  `variance / (variance + (distance - mean)²)`. Cube it, then crush values
-  below 0.2 by `visibility³ / 0.04`. Keep `SdfMeshProbeDepth.Visibility`
-  and `sdfMeshProbeDepthVisibility` together, including seam taps and rounding.
-  Projection and seam addressing reuse `SdfOctahedral` and
-  `field/sdf-octahedral.hlsli`, shared with the sky map and mesh normals.
-  A finite blocker shades its sampled angular footprint. There are no first-hit
-  planes, neighbour separation vetoes, suspect shares or mutual gather shares.
+- Visibility is a per-probe 12×12 octahedral first-hit surface map. Each texel
+  traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
+  full in-window receiver support including relocation. Each word holds an FP16
+  ray distance and two signed octahedral normal bytes. A
+  negative distance explicitly marks a miss and its reach. Receivers beyond
+  that measured support receive nothing. Depth is traced on the first sweep
+  and reused for later bounces; sky still uses the full-reach radiance rays.
+- Four reflected angular taps reconstruct local surface patches from first-hit
+  positions and signed octahedral normal bytes. Join taps only when their normals
+  agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:
+  opposite faces and separate parallel walls stay separate. Interpolate a patch's
+  positions/normals before testing the signed receiver gap; extending each tangent
+  plane separately shadowed visible curved receivers (the sphere law is red at
+  visibility zero on that implementation). A sparsely sampled curved surface
+  also needs its normal gradient. During the first sweep, fit curvature from
+  compatible points/normals in each texel's reflected 3×3 angular neighbourhood
+  and store one FP16 value per texel; an unsupported neighbourhood stores NaN.
+  The gather interpolates compatible local quadratic coefficients and intersects their entering root along
+  the receiver ray. Testing only a tangent/chord plane returned 0.574 visibility
+  for an exact-segment-visible receiver in the small-curve witness. An unsupported
+  tap casts no blocker; a distinct local hit supports the normal-gradient fit.
+  Curvature zero retains the exact plane intersection. The common-plane fast path
+  reduces that same quadratic to one signed gap and reuses the decoded normal,
+  avoiding four general fits in CPU bounce reads and pixels. Fade a patch over
+  `DepthSurfaceFade` (2 cm, less than normal bias), then combine its blocked angular coverage.
+  The flat-surface law also rejects radial-distance interpolation: it returned
+  48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
+  No radial moments or squared-distance field remain. Misses supply no blocker.
+  Coverage closes from half to three-quarter support; a minority hit cannot
+  extend a finite block over the footprint. Tests remain confined to these four
+  angular taps: no 26-ray whole-sphere planes, neighbour separation, suspect sets
+  or cross-probe vetoes return. Keep `SdfMeshProbeDepth.Visibility` and
+  `sdfMeshProbeDepthVisibility` together, including signed normal decoding,
+  seam reflection, patch compatibility, gaps and coverage. Projection/addressing
+  reuse `SdfOctahedral` / `field/sdf-octahedral.hlsli`.
 - Gather weight is the cell's trilinear share times
-  `max(0, dot(normal, directionToProbe))²` times depth visibility. This continuous
+  `smoothstep(0, spacing / 2, dot(normal, probe - receiver))` times depth visibility. This continuous
   positive-hemisphere weight excludes probes behind a surface without switching
   the whole gather between front and back sets. It also prevents grazing depth
   uncertainty behind a thin wall from admitting a bright exterior probe.
-  The CPU bounce read and the pixel read use the same rule.
+  Squared angular cosines gave probes relocated close to a floor a strong pole
+  directly above each lattice centre; the distance fade removes those repeated
+  floor spots without changing the stored lighting. Past the boundary, blend
+  this distance fade toward one over the first cell outside, as below. The CPU
+  bounce read and pixel read use the same rule, without squaring the final weight.
 - At the volume boundary clamp the lookup, then test the actual receiver,
   pushed `NormalBias` (0.05 m) along its normal, against depth. Never bias by
   spacing or test the clamped position: either can carry a receiver through a
@@ -79,6 +99,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   for the refill's duration. Reproduce a boundary finding by posing past the
   published window and taking a presented capture before the refill lands; a
   settled capture or a pose before the first trace hides it.
+  That orientation correction is still limited by the measured depth reach:
+  the local surface map rejects a receiver beyond its short support even when
+  the boundary-facing factor is one. It supplies no coarse far-field coverage;
+  a large refill can therefore leave the old window unable to light the moved
+  receiver. Keep that coverage finding separate from the orientation correction.
 - Read `world.probe <x> <y> <z> [<nx> <ny> <nz>]` for each corner's origin,
   offset, back-face share, validity, sweeps, cubes and weight terms.
   Each valid corner also reports an exact mesh-segment `reference-clear` check,
@@ -97,6 +122,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   completed cells retain their measurements when a move adds new cells, and
   bounce reads use the current cache clamped to that window. A full tour and a
   direct teleport need not have the same bounce history.
+  Match the executed camera commands too: replacing an unanswered input recenter
+  with `view.recenter 1` resets the authored orbit/boom and can reverse a chase
+  view. Recapture the baseline with the same measured commands before attributing
+  those image differences to lighting. Explicit camera eyes/targets avoid this.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
@@ -128,46 +157,47 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   old coordinates** until every new slot has a measured sample. Never publish
   unwritten cells as darkness or initialize them to unoccluded sky. Before the
   first scene has supplied any volume, there is no measured indirect light.
-- A record is 275 words (1,100 bytes): 19 words of key, cubes, light visibility
-  and origin, then 256 packed moment pairs. Medium's 12,288 active probes use
-  12.890625 MiB; High's 36,864 use 38.671875 MiB. The table and CPU staging
-  reserve the High capacity per residency. The staged `GpuRegion` has one
-  38.671875 MiB device buffer, two host upload buffers of that capacity plus
-  copy headers, and a native shadow; `m_volume` adds another capacity-sized
-  CPU array. Those five payloads total 193.359375 MiB before cache and batch
-  storage. A cache block holds 284 words (1,136 bytes) per probe, including its
-  uncompressed cubes; retained cells and previous-generation blocks add to it.
-  Neighbour masks, their 26 rays and cross-probe cube filtering are deleted.
-- Each published probe contains its own measured cubes, exactly as the CPU
-  bounce lookup reads them. Averaging neighbouring cubes imports another probe's
-  sky or wall radiance through a doorway, even when the receiver's own depth
-  test is correct. The 1,024 depth rays also measure the probe's sky cube,
-  cosine weighted with the octahedron's solid-angle Jacobian; this reduces
-  sky variance without borrowing visibility. Later bounce sweeps reuse this
-  geometry-only sky measurement along with the depth map. The first-hit
-  moments use the same solid-angle weighting within each texel.
-- A probe stands in the open (`SdfMeshIrradiance.Place`). A lattice centre
-  inside geometry (the PRIMITIVES sign at x = 23, y ≈ 3; a stair flight) or
-  within `Clearance` (0.1 m) of a surface (a partition face at an odd metre)
-  moves to the nearest point of its cell that stands at least `Clearance` from
-  every surface with its rays mostly meeting front faces: first pushed off the
-  nearest surface along its normal, then over a lattice a quarter of the
-  spacing apart out to the cell's faces. Among nearby candidates, prefer fewer
-  first hits within a spacing, charging for distance from the centre. Keep this
-  openness score with depth moments to condition the map near surfaces. The
-  nearest-clear-only experiment did not eliminate grazing marks; those captures
-  also still had neighbour cube filtering, so they do not isolate placement as
-  the cause of light leaks. Later sweeps stand where the first did.
-  The offset rides the record; the gather (`sdfMeshProbesAt`, `Gather`) and the
-  meter (`TryMeter`) read the centre plus the offset. The trilinear share stays
-  the cell's. A cell no surface reaches within its half diagonal is wholly inside
-  or wholly outside and tries no candidate; a probe no candidate frees stays
-  invalid at its centre, and the invalid flag makes the shader's written-key
-  test fail, so its share goes to the corners that answer. An enclosure
-  narrower than twice the clearance still holds no probe and meters by camera
-  trace. `SdfMeshIrradianceLawTests.AProbeOnAWallFaceOrInsideGeometryMovesIntoTheOpenAndABuriedOneStaysInvalid`
-  pins the on-face, pillar and buried cases.
-- Depth moments and the radiance cubes are sampled spatial support, not
+- A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
+  packed first-hit surface words and 72 packed normal-gradient words.
+  Medium's 12,288 probes use 11.015625 MiB; High's 36,864 use 33.046875 MiB.
+  The table starts at one inert record and both
+  it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
+  existing frame-ring retirement; increment the binding revision when its buffer
+  changes. Keep the old table and coordinates until every new slot is measured.
+  Five full payloads (device, two uploads, native shadow, CPU volume) total
+  55.078125 MiB at Medium or 165.234375 MiB at High, before headers, cache,
+  batches and temporary retired buffers, versus the former 193.359375 MiB
+  reservation at either tier. Upload buffers can shrink after small flushes;
+  live `world.probe` GI diagnostics report actual device/upload/shadow/header
+  and CPU-volume bytes. Cache blocks hold 244 words (976 bytes) per probe.
+  Publication compares/uploads changed slots only, coalesced into runs.
+- Each published probe contains its own measured cubes, exactly as the CPU bounce
+  read sees them. Sky and surface radiance use the same full-reach rays, so an
+  opening cannot count as sky in one sample set and a bounced hit in another.
+  Every probe uses the same precomputed spherical Fibonacci quadrature per tier;
+  cell-specific random rotations stamped spatial noise into homogeneous lighting
+  (the uniform-ceiling witness spans 1.256–1.476 before this correction). Sharing
+  directions correlates sampling error without borrowing any neighbour's light.
+  Camera traces use that same quadrature. Depth rays do no sky measurement.
+  Later bounces recompute the two radiance cubes together and reuse only the
+  geometry-only surface map. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
+- A probe stands in the open (`SdfMeshIrradiance.Place`). A centre inside geometry
+  or within `Clearance` (0.1 m) first tries the nearest surface's clear exit, then
+  the cell's quarter-spacing lattice nearest-first. Every candidate must stand
+  clear of all surfaces and pass the back-face validity test; a short 32-ray
+  local rejection precedes a full radiance trace. The former openness score is
+  deleted: it moved a probe one metre off a 10 cm slab, and neighbouring floor
+  cells could choose different storeys. Increasing clearance did not fix the
+  sparse-curve shadow. The thin-slab witness takes the nearest safe exit (0.175 m
+  at Medium), rather than the openness winner.
+  Later sweeps keep the first origin. Offset XYZ rides the record and every
+  gather/meter read uses the relocated origin; trilinear share stays the cell's.
+  A cell no surface reaches within its half diagonal is wholly inside or outside
+  and tries no candidates. A cell no candidate frees remains invalid at its
+  centre; the shader rejects its invalid flag. Narrow enclosures without any
+  valid lattice centre meter by camera trace. The placement and thin-slab CPU
+  witnesses cover face, pillar, buried and nearest-clear cases.
+- Angular surface support and the radiance cubes are sampled spatial support, not
   exact receiver visibility. Inspect corners and openings with
   `world.debug-view indirect`, separately from `ao` and `shadow`, and compare
   final shading and `world.exposure`. Check an outdoor view and move across
@@ -227,7 +257,7 @@ Turn `gallery.lights.all on` and leave the blinds down. Additional fixed
 
 The SPHERE (`finding-sphere-step`) must shade continuously across its front,
 without a split or patch from the plinth or hanging sign. The floor is shadowed in
-`shadow`; do not attribute an indirect-view line to sun cascades. Depth moments remain sampled support; a receiver all depth tests reject has
+`shadow`; do not attribute an indirect-view line to sun cascades. Angular surfaces remain sampled support; a receiver all depth tests reject has
 no measured light.
 The SPIN dotted ceiling seam reproduces in
 beauty but not in `indirect`, `normals` or `shadow`

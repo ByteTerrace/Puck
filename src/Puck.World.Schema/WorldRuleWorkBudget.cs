@@ -354,14 +354,20 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
             );
         }
 
+        var firings = ((rule.MaxFirings > 0)
+            ? $", firings priced at maxFirings={rule.MaxFirings}"
+            : string.Empty);
+
         return ((rule.ForEachOrdinal >= 0)
             ? $"forEach '{definition.StateCatalog.Descriptors[rule.ForEachOrdinal].Name}' row capacity={RuleWorkBudget.ForEachCount(
                 rule: rule,
                 context: WorldFactsCompiler.Context(definition: definition)
-            )}"
+            )}{firings}"
             : (rule.ForEachBodies
-                ? $"forEach {RuleFacts.ForEachBodies} body capacity={definition.Population.Capacity}"
-                : "no forEach — priced once")
+                ? $"forEach {RuleFacts.ForEachBodies} body capacity={definition.Population.Capacity}{firings}"
+                : ((rule.PoolForEach is { } pool)
+                    ? $"pool sweep over '{pool.Name}' capacity={pool.Capacity}{firings}"
+                    : "no forEach — priced once"))
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>

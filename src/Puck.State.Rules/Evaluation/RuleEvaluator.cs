@@ -400,6 +400,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             latch.BeginSweep();
             var poolAggregate = RuleOutcome.Idle;
             var bindingsSpan = m_host.InstanceBindings;
+            var poolFirings = 0;
 
             foreach (var handle in snapshot) {
                 if (
@@ -409,10 +410,20 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 ) {
                     continue;
                 }
+
+                var poolBinding = new LatchKey(Left: slotKey.Ordinal, Right: -1, LeftGeneration: handle.Generation);
+
+                if ((rule.MaxFirings > 0) && (poolFirings >= rule.MaxFirings)) {
+                    latch.Touch(binding: poolBinding);
+                    continue;
+                }
                 bindingsSpan[rule.PoolBindingSlot] = handle;
-                var outcome = EvaluateOnce(applied: out var moved, binding: new LatchKey(Left: slotKey.Ordinal, Right: -1, LeftGeneration: handle.Generation), bindings: bindings, latch: latch, rule: rule, stepTicks: stepTicks);
+                var outcome = EvaluateOnce(applied: out var moved, binding: poolBinding, bindings: bindings, latch: latch, rule: rule, stepTicks: stepTicks);
 
                 applied |= moved;
+                if (outcome != RuleOutcome.Idle) {
+                    poolFirings++;
+                }
                 if ((outcome == RuleOutcome.Refused) || ((outcome == RuleOutcome.Fired) && (poolAggregate == RuleOutcome.Idle))) {
                     poolAggregate = outcome;
                 }
@@ -428,17 +439,26 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         latch.BeginSweep();
 
         var aggregate = RuleOutcome.Idle;
+        var firings = 0;
 
         foreach (var key in m_eachKeyScratch) {
+            var eachBinding = new LatchKey(
+                Left: key.Ordinal,
+                Right: -1,
+                LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
+            );
+
+            // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
+            // the tick that reaches it instead of being closed by the sweep's end.
+            if ((rule.MaxFirings > 0) && (firings >= rule.MaxFirings)) {
+                latch.Touch(binding: eachBinding);
+                continue;
+            }
             m_host.BoundEachKey = key;
 
             var outcome = EvaluateOnce(
                 applied: out var moved,
-                binding: new LatchKey(
-                    Left: key.Ordinal,
-                    Right: -1,
-                    LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
-                ),
+                binding: eachBinding,
                 bindings: bindings,
                 latch: latch,
                 rule: rule,
@@ -446,6 +466,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             );
 
             applied |= moved;
+            if (outcome != RuleOutcome.Idle) {
+                firings++;
+            }
             if (
                 (outcome == RuleOutcome.Refused) ||
                 ((outcome == RuleOutcome.Fired) && (aggregate == RuleOutcome.Idle))

@@ -495,6 +495,9 @@
           "xunit.v3": "[4.*, )"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.launcher": {
         "type": "Project",
         "dependencies": {
@@ -503,11 +506,15 @@
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Input": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.Hosting": "[10.*, )"
+          "Microsoft.Extensions.Hosting": "[10.*, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       },
       "puck.launcher.stub": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Puck.Confinement": "[1.0.0, )"
+        }
       },
       "puck.overlays": {
         "type": "Project",

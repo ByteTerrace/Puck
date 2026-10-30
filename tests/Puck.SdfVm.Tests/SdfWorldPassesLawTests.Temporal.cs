@@ -78,7 +78,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var preceding = rig.HistoryFrames();
 
         if (tainted) { rig.Filling = true; }
-        Assert.Equal(expected: (tainted ? ((int)SdfTemporalSamples.Period) : 0), actual: rig.Passes.DiscardTaintedState(instance: "world"));
+        Assert.Equal(expected: (tainted ? ((int)SdfWorldPackage.TemporalPeriod) : 0), actual: rig.Passes.DiscardTaintedState(instance: "world"));
         Assert.Equal(expected: 0, actual: rig.Passes.DiscardTaintedState(instance: "world"));
         rig.Produce();
         Assert.Equal(expected: (tainted ? 0u : (preceding + 1u)), actual: rig.HistoryFrames());
@@ -338,7 +338,7 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.Selected.DebugMode = 1;
         rig.Produce();
         rig.Selected.DebugMode = 0;
-        for (var sample = 0U; (sample < SdfTemporalSamples.Period); sample++) {
+        for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
             rig.Produce();
             Assert.False(condition: rig.Stood(), userMessage: $"sample {sample}");
             Assert.Equal(expected: sample, actual: rig.HistoryFrames());
@@ -353,7 +353,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding() {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.75f);
 
-        for (var frame = 0U; (frame <= SdfTemporalSamples.Period); frame++) {
+        for (var frame = 0U; (frame <= SdfWorldPackage.TemporalPeriod); frame++) {
             rig.Produce();
         }
         Assert.True(condition: rig.Stood());
@@ -363,7 +363,7 @@ public sealed partial class SdfWorldPassesLawTests {
             var preceding = rig.HistoryFrames();
 
             rig.RenderGrid = grid;
-            for (var sample = 0U; (sample < SdfTemporalSamples.Period); sample++) {
+            for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
                 rig.Produce();
                 Assert.False(condition: rig.Stood(), userMessage: $"grid {grid}, sample {sample}");
                 Assert.Equal(expected: ((preceding + sample) + 1u), actual: rig.HistoryFrames());
@@ -444,11 +444,11 @@ public sealed partial class SdfWorldPassesLawTests {
     public void ARenderGridDipRendersAFullPeriodBeforeStandingAgain() {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: true, renderScale: 0.5f);
 
-        for (var frame = 0; (frame <= SdfTemporalSamples.Period); frame++) { rig.Produce(); }
+        for (var frame = 0; (frame <= SdfWorldPackage.TemporalPeriod); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
         foreach (var scale in new[] { 0.25f, 0.5f }) {
             rig.ResolvedScale = scale;
-            for (var sample = 0U; (sample < SdfTemporalSamples.Period); sample++) {
+            for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
                 rig.Produce();
                 Assert.False(condition: rig.Stood(), userMessage: $"scale {scale}, sample {sample}");
             }
@@ -465,7 +465,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void AParkedViewShownAgainStartsANewEpochOnlyWhereItReconstructs(bool temporal) {
         using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal);
 
-        for (var frame = 0; (frame <= SdfTemporalSamples.Period); frame++) { rig.Produce(); }
+        for (var frame = 0; (frame <= SdfWorldPackage.TemporalPeriod); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
         rig.Parked = true;
         for (var frame = 0; (frame < 3); frame++) {
@@ -478,7 +478,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.True(condition: rig.Stood());
             return;
         }
-        for (var sample = 0U; (sample < SdfTemporalSamples.Period); sample++) {
+        for (var sample = 0U; (sample < SdfWorldPackage.TemporalPeriod); sample++) {
             if (sample != 0U) { rig.Produce(); }
             Assert.False(condition: rig.Stood(), userMessage: $"sample {sample} after it is shown again");
             Assert.Equal(expected: sample, actual: rig.HistoryFrames());

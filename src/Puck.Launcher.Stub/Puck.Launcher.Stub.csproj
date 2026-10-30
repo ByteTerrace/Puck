@@ -7,4 +7,9 @@
         <PuckLayer>Composition roots</PuckLayer>
         <RootNamespace>Puck.Launcher.Stub</RootNamespace>
     </PropertyGroup>
+    <ItemGroup>
+        <!-- The update lease and the launched version's registration are the same handle-held directories the
+             launcher's pruner and registration use; the stub stays otherwise BCL-only. -->
+        <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
+    </ItemGroup>
 </Project>

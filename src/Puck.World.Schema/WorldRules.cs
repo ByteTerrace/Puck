@@ -17,6 +17,8 @@ namespace Puck.World;
 /// <param name="Zones">The rule's zone table (<see cref="Rule.Zones"/>), which every <c>$zones[&lt;index&gt;]</c> in
 /// the rule selects from, or <see langword="null"/>.</param>
 /// <param name="PoolForEach">A generation-aware lexical pool iteration, or none.</param>
+/// <param name="MaxFirings">The most bindings of one sweep that may fire (<see cref="Rule.MaxFirings"/>), or
+/// <see langword="null"/> for every binding.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 [method: JsonConstructor]
 public sealed record WorldRule(
@@ -28,7 +30,8 @@ public sealed record WorldRule(
     [property: JsonPropertyOrder(5)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDecision? Decision = null,
     IReadOnlyList<RuleLocal>? Locals = null,
     IReadOnlyList<string>? Zones = null,
-    RulePoolIteration? PoolForEach = null
+    RulePoolIteration? PoolForEach = null,
+    int? MaxFirings = null
 ) : Rule(
     Name: Name,
     Effects: Effects,
@@ -37,7 +40,8 @@ public sealed record WorldRule(
     ForEach: ForEach,
     Locals: Locals,
     Zones: Zones,
-    PoolForEach: PoolForEach
+    PoolForEach: PoolForEach,
+    MaxFirings: MaxFirings
 ) {
     /// <summary>Initializes a world rule over an engine rule, adding the optional choice policy.</summary>
     /// <param name="rule">The engine rule.</param>
@@ -51,7 +55,8 @@ public sealed record WorldRule(
         Decision: decision,
         Locals: rule.Locals,
         Zones: rule.Zones,
-        PoolForEach: rule.PoolForEach
+        PoolForEach: rule.PoolForEach,
+        MaxFirings: rule.MaxFirings
     ) {
     }
 }

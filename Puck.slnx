@@ -26,6 +26,7 @@
         <Project Path="src/Puck.Cli.Worktrees/Puck.Cli.Worktrees.csproj" />
         <Project Path="src/Puck.Cli.Worlds/Puck.Cli.Worlds.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />
+        <Project Path="src/Puck.Confinement/Puck.Confinement.csproj" />
         <Project Path="src/Puck.DirectX.Presentation/Puck.DirectX.Presentation.csproj" />
         <Project Path="src/Puck.DirectX/Puck.DirectX.csproj" />
         <Project Path="src/Puck.Embeddings/Puck.Embeddings.csproj" />

@@ -132,13 +132,15 @@ public static class WorldArtifactBuild {
 
         var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot);
 
-        if (!WorldArtifactKey.TryCompute(
+        var keyed = WorldArtifactKey.TryCompute(
             buildArguments: [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject), .. properties],
             key: out var key,
             reason: out var unkeyed,
             repositoryRoot: repositoryRoot,
             roots: roots
-        )) {
+        );
+
+        if (!keyed) {
             // No key can name these sources, so this run builds under a name no other run can ask for.
             key = $"unkeyed-{Guid.NewGuid():N}";
             Console.Error.WriteLine(value: $"{verb}: {unkeyed}; the Puck.World build this run makes is not reused.");
@@ -192,7 +194,7 @@ public static class WorldArtifactBuild {
             }
 
             // Builds of other source states queue here; the key's own lock above already serializes this state.
-            using var slot = (leaseRoot is null)
+            using var slot = ((leaseRoot is null)
                 ? null
                 : CliLease.AcquireAsync(
                     clock: TimeProvider.System,
@@ -201,7 +203,12 @@ public static class WorldArtifactBuild {
                     name: "build",
                     root: leaseRoot(),
                     wait: CliProcess.RemainingBudget(budget: timeout, clock: clock)
-                ).GetAwaiter().GetResult();
+                ).GetAwaiter().GetResult());
+
+            if (SourcesChanged()) {
+                error = "the checkout's sources changed while waiting to build Puck.World; request the build again.";
+                return false;
+            }
             var staging = store.CreateStaging(key: key);
 
             Console.Error.WriteLine(value: $"{verb}: building Puck.World once (Release) for source state {key}.");
@@ -225,6 +232,11 @@ public static class WorldArtifactBuild {
             if (!built) {
                 RunDirectory.TryDelete(path: staging);
 
+                return false;
+            }
+            if (SourcesChanged()) {
+                RunDirectory.TryDelete(path: staging);
+                error = "the checkout's sources changed while building Puck.World; the build was discarded.";
                 return false;
             }
 
@@ -257,6 +269,15 @@ public static class WorldArtifactBuild {
             error = $"the Puck.World build store {store.Root} failed: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
+        }
+
+        bool SourcesChanged() {
+            if (!keyed) { return false; }
+            var (currentRoots, _) = WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot);
+            return (!WorldArtifactKey.TryCompute(
+                buildArguments: [.. CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject), .. properties],
+                key: out var currentKey, reason: out _, repositoryRoot: repositoryRoot, roots: currentRoots
+            ) || (currentKey != key));
         }
     }
 }

@@ -1,6 +1,10 @@
 {
   "version": 1,
   "dependencies": {
-    "net11.0": {}
+    "net11.0": {
+      "puck.confinement": {
+        "type": "Project"
+      }
+    }
   }
 }

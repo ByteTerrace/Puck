@@ -16,6 +16,12 @@ using Puck.Storage;
 
 using Constants = Puck.Actors.Constants;
 
+// This apphost ships inside the CLI's installed payload, so it registers as a holder of its version before it loads
+// anything else.
+if (!Puck.Confinement.InstallRegistration.TryRegisterProcess(refusal: out var refusal)) {
+    Console.Error.WriteLine(value: refusal);
+    Environment.Exit(exitCode: 2);
+}
 var builder = WebApplication.CreateBuilder(args: args);
 var configuration = builder.Configuration;
 var services = builder.Services;

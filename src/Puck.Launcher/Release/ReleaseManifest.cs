@@ -135,15 +135,21 @@ public static class ReleaseCanonicalizer {
             return;
         }
 
+        // The applier writes these two files into every version directory beside its payload, so neither may be a payload
+        // file or the directory a payload file sits in. A path a deserialized document omits is null, which
+        // IsPortablePath refuses.
+        var first = (file.Path ?? "").Split(separator: '/')[0];
+
         if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
-            file.Path.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "state-generation")) {
+            first.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "state-generation") ||
+            first.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: InstallRecord.FileName)) {
             errors.Add(item: new(
-                Message: "a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved 'state-generation' name, and no device names or alternate streams.",
+                Message: $"a file path must be a portable relative path with non-empty forward-slash-separated segments, no '.' or '..' segments, no reserved 'state-generation' or '{InstallRecord.FileName}' name as its first segment, and no device names or alternate streams.",
                 Path: $"{path}.path"
             ));
         } else if (
             (seenPaths is not null) &&
-            !seenPaths.Add(item: file.Path)
+            !seenPaths.Add(item: file.Path!)
         ) {
             errors.Add(item: new(
                 Message: $"path '{file.Path}' is declared more than once.",

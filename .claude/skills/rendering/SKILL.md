@@ -244,6 +244,48 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
   (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
   the draw there.
+- **Reprojection interpolates displacement.** `sdfPreviousPoint` in
+  `frame/sdf-reprojection.hlsli` adds the triangle's weighted vertex movements
+  to the current hit. Unchanged vertices return that hit exactly before any
+  barycentric calculation: a long, thin triangle's float Gram determinant can
+  cancel to zero, and rebuilding a second world position can invent motion on
+  a still surface. `SdfReprojectionDeviceLawTests` includes this thin-triangle
+  witness on both backends. Check the static `motion` view when history fails
+  to accumulate; unchanged geometry must show valid, zero object motion.
+- **A receiver's depth belongs to the output ray.** Different jittered rays
+  hitting one grazing plane can have very different ray distances. Project each
+  tap's tangent plane onto the output pixel's unjittered ray before storing or
+  validating its receiver depth (`sdfHistoryReceiverDistance`). Identity and the
+  relative depth tolerance stay unchanged. The reprojection device witness
+  maps two samples at distances 64 and 32 onto the same receiver depth 128.
+- **Stationary reconstruction keeps a complete jitter window.** The resolve's
+  history surface retains each phase's color, coverage, transport and weight.
+  Replacing one phase and summing in fixed order removes periodic newest-phase
+  bias and keeps samples the current neighborhood misses. Moving and reactive
+  pixels use the clipped resolve while their window fills. A stationary window
+  keeps its validated receiver while the footprint still sees it; choosing a
+  new thin adjoining face each phase can reject the window on the next phase.
+  The window describes an output footprint, which can sample different receiver
+  identities on opposite jitter phases at a static silhouette. If ordinary
+  receiver validation rejects it, retain the bounded window only after proving
+  the unjittered camera is exactly unchanged, every tap is nonreactive, and each
+  visible tap's previous point equals its current point. This extra motion check
+  runs only for rejected footprints. A displaced camera keeps ordinary receiver
+  rejection; a stationary current receiver alone does not prove no disocclusion.
+  The package owns
+  `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
+  HLSL. A layout change needs a host with the matching history allocation before
+  loading its kernels. Account for this output-sized history in GPU memory.
+  Preserve a constant coverage component exactly before half packing and after
+  averaging the phases: bound the convex mean by its samples. A rounded value
+  just below one becomes 0.9995 in half storage and invents a background share
+  on an opaque surface. The analytic resolve device witness checks full coverage.
+- **Coincident exposed faces cannot accumulate a stable receiver.** Check
+  `world.debug-view material-id` when a static patch changes identity or never
+  completes its phase window. Separate meshes sharing an exposed plane can
+  alternate winners as jitter or a refresh changes rasterization. Fix the
+  authored overlap, rather than weakening receiver rejection. A slab owns its
+  horizontal finish; a wall or lintel meeting it ends at the slab's underside.
 - **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
   a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
   fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.
@@ -277,43 +319,33 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   volume's visibility bits (`SdfLight.IsTraced`, `sdfMeshLightVisibility`): a
   fixture that lights through a slab is an anchored light or a volume that
   holds no probe there. `world.exposure` reads each view's EV and meter.
-- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and the
-  gather feeds the indirect light, the reflection and every traced light's
-  visibility; a probe artefact (a band along a wall) shows in
-  `world.debug-view indirect` apart from the direct light. The volume a view
-  reads is filtered over the neighbours each probe sees
-  (`SdfMeshIrradiance.Filter`), and a probe lights only what lies on its side
-  of the first-hit planes of its 26 lattice rays, the four about the receiver's
-  direction blended (`sdfMeshProbePlaneVisibility`): a leak through a wall
-  none of those rays meets, or a storey the 2 m lattice straddles, is the
-  lattice's coarseness, and a soft dark patch beside a finite blocker is the
-  cone of the rays that hit it. Only an answering probe that survives the
-  separation test itself can separate another's suspect admission
-  (`sdfMeshProbeSeparate`), and the separating plane is the blocker's whole
-  half-space, so a finite blocker between two probes can over-darken what both
-  see. A probe stands in the open: a lattice centre inside geometry or within
-  `SdfMeshIrradianceProbe.Clearance` of a surface moves to the nearest clear
-  point of its cell (`SdfMeshIrradiance.Place`) and carries the offset in its
-  record, which every position read uses; one no point frees is invalid and
-  gives its share to the corners that answer. See [mesh GI](references/mesh-gi.md).
-  Without separation a probe just above a roof or beside a
-  doorway lights the room's upper walls in jagged patches through the rays
-  that cleared the edge. Never use an axis-depth half-space for initial visibility, which
-  rejects every receiver beyond a plinth, and never push the receiver by a
-  share of the spacing: the push (`SdfMeshIrradianceProbe.NormalBias`) and the
-  planes' fade (`DepthFade`) are metres under the thinnest wall and floor,
-  since a wall pixel where it meets a floor is level with that surface and a
-  surface facing a near wall must not read the room beyond it. Debug a
-  probe artefact with `world.probe <x> <y> <z> [<nx> <ny> <nz>]` first (each
-  corner's position, offset, inside share, validity, neighbours, cubes and
-  weight terms at a receiver), and only then by splitting the gather in a
-  scratch edit of the `indirect` case in `debug/sdf-debug-views.hlsli` (each
-  corner's share, or magenta where no probe answers) and
-  `world.shaders.reload`. The views stage's local adaptation (`render.exposure.local`, in
-  `sdfLightStage`) reads the same gather's indirect light as part of each
-  surface's illumination, so a surface lit wrongly by the volume is also
-  exposed wrongly by it. A nested
-  world's views read their own volume at their own authored tier.
+- **The irradiance volume is read once a pixel** (`sdfMeshProbesAt`), and that
+  gather supplies indirect light, reflections and traced static-light visibility.
+  Each probe publishes its own measured cubes, without neighbour filtering.
+  Visibility uses a 12×12 octahedral first-hit surface map, one bounded ray
+  per texel. Each word packs ray distance and two signed normal bytes;
+  negative distance marks a measured miss. Four reflected angular taps reconstruct compatible surface patches before
+  testing signed receiver gaps and blocked coverage. Radial depth interpolation rejects
+  coplanar receivers at grazing angles, so no mean/squared-distance pair remains.
+  Keep `SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` together.
+  The sky cube comes from the same full-reach radiance rays as bounced light.
+  Surface support stays within the angular taps; no neighbour vetoes or suspect sets return.
+  The first sweep caches FP16 normal gradients from each texel's local angular
+  neighbourhood. Interpolate compatible quadratic coefficients and intersect
+  their entering root; a tangent alone shadowed
+  the visible side of sparsely sampled curved geometry. The sparse-curve law
+  checks against exact mesh segments. No triangle-footprint clipping is used.
+  Gather weights are trilinear share × a half-spacing smooth distance fade in front of the receiver × depth
+  visibility. The actual receiver is biased by `NormalBias` metres, never by
+  spacing; clamping the lookup must not move the visibility-test receiver.
+  A zero-weight gather supplies no measured indirect or traced static light.
+  Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
+  its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
+  stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
+  its exact reference segment distinguishes sampling errors from cube content.
+  Local adaptation consumes this same gather, so an irradiance error also
+  changes exposure. See [mesh GI](references/mesh-gi.md) for sampling, storage,
+  boundary behavior and the fixed-camera checks on both backends.
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances

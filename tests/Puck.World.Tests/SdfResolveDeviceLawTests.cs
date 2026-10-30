@@ -68,6 +68,20 @@ public sealed class SdfResolveDeviceLawTests {
         Check(color: native, value: 0f, width: RenderWidth, x: 7, y: 8);
         Check(color: native, value: 1f, width: RenderWidth, x: 8, y: 8);
 
+        // Eight equally weighted grays 0/7 .. 7/7 have mean 1/2. At phase zero the current neighborhood is black;
+        // at phase seven it is white. Neither phase may clamp the other seven out of a stationary window. Its old
+        // receiver is a surface while these taps miss: a static silhouette can sample different identities per phase.
+        foreach (var phase in new[] { 0u, 7u }) {
+            var stationary = Run(extension: extension, height: RenderHeight, services: services,
+                sharpness: 1f, width: RenderWidth, stationaryPhase: phase);
+
+            Check(color: stationary, value: 0.5f, width: RenderWidth, x: ((phase == 0u) ? 2u : 13u), y: 8);
+            var disoccluded = Run(extension: extension, height: RenderHeight, services: services,
+                sharpness: 1f, width: RenderWidth, stationaryPhase: phase, displacedCamera: true);
+
+            Check(color: disoccluded, value: (phase / 7f), width: RenderWidth, x: ((phase == 0u) ? 2u : 13u), y: 8);
+        }
+
         foreach (var poison in new[] { Half.NaN, Half.PositiveInfinity, Half.NegativeInfinity }) {
             var recovered = Run(extension: extension, height: RenderHeight, services: services,
                 sharpness: 1f, width: RenderWidth, poisonedHistory: poison);
@@ -90,8 +104,9 @@ public sealed class SdfResolveDeviceLawTests {
         }
         Assert.Equal(expected: ((Half)1f), actual: color[(offset + 3)]);
     }
-    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false, bool narrowChromaHistory = false) {
-        var temporal = (poisonedHistory.HasValue || poisonCurrent || narrowChromaHistory);
+    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false, bool narrowChromaHistory = false, uint? stationaryPhase = null, bool displacedCamera = false) {
+        var seededHistory = (narrowChromaHistory || stationaryPhase.HasValue);
+        var temporal = (poisonedHistory.HasValue || poisonCurrent || seededHistory);
         var parameters = SdfWorldInterfaces.ResolveParameters;
         var block = new byte[parameters.SizeBytes];
 
@@ -105,7 +120,7 @@ public sealed class SdfResolveDeviceLawTests {
             void Float(string member, float value, int lane = 0) => Word(member: member, value: BitConverter.SingleToUInt32Bits(value: value), lane: lane);
 
             Word(member: SdfWorldPackage.Temporal, value: 1u);
-            Word(member: SdfWorldPackage.HistoryFrames, value: 1u);
+            Word(member: SdfWorldPackage.HistoryFrames, value: (stationaryPhase is { } phase ? (SdfWorldPackage.TemporalPeriod + phase) : 1u));
             Float(member: SdfWorldPackage.ViewRight, value: 1f);
             Float(lane: 1, member: SdfWorldPackage.ViewUp, value: 1f);
             Float(lane: 2, member: SdfWorldPackage.ViewForward, value: 1f);
@@ -113,6 +128,7 @@ public sealed class SdfResolveDeviceLawTests {
             Float(member: SdfWorldPackage.AspectRatio, value: 1f);
             Float(member: SdfWorldPackage.FarDistance, value: 40f);
             Float(lane: 3, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(member: SdfWorldPackage.PreviousView, value: (displacedCamera ? 0.1f : 0f));
             Float(lane: 4, member: SdfWorldPackage.PreviousView, value: 1f);
             Float(lane: 7, member: SdfWorldPackage.PreviousView, value: 0.5f);
             Float(lane: 9, member: SdfWorldPackage.PreviousView, value: 1f);
@@ -147,17 +163,34 @@ public sealed class SdfResolveDeviceLawTests {
         using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height), usage: GpuBufferUsage.Storage) : null);
         var historyInputBytes = new byte[checked((int)(((SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width) * height))];
 
-        if (narrowChromaHistory) {
+        if (seededHistory) {
             for (var pixel = 0; (pixel < (width * height)); pixel++) {
                 // A miss's identity and ray distance are zero; its eight samples of finite history have full weight.
                 var offset = checked((int)(((pixel * SdfWorldPackage.HistorySurfaceWords) + 1) * sizeof(uint)));
 
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: historyInputBytes.AsSpan(start: offset),
                     value: (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)8f))) << 16));
+                if (stationaryPhase.HasValue) {
+                    void Write(uint word, uint value) => BinaryPrimitives.WriteUInt32LittleEndian(
+                        destination: historyInputBytes.AsSpan(start: checked((int)(((pixel * SdfWorldPackage.HistorySurfaceWords) + word) * sizeof(uint)))), value: value);
+                    var tap = MathF.Exp(x: -4.08f);
+                    var weight = ((1f + (2f * tap)) * (1f + (2f * tap)));
+
+                    Write(word: 0u, value: 1u);
+                    Write(word: (SdfWorldPackage.HistoryWindowOffset - 1u), value: ((1u << ((int)SdfWorldPackage.TemporalPeriod)) - 1u));
+                    for (var phase = 0u; phase < SdfWorldPackage.TemporalPeriod; phase++) {
+                        var gray = BitConverter.HalfToUInt16Bits(value: ((Half)(phase / 7f)));
+                        var first = (SdfWorldPackage.HistoryWindowOffset + (phase * SdfWorldPackage.HistorySampleWords));
+
+                        Write(word: first, value: (((uint)gray) | (((uint)gray) << 16)));
+                        Write(word: (first + 1u), value: (((uint)gray) | (((uint)BitConverter.HalfToUInt16Bits(value: ((Half)1f))) << 16)));
+                        Write(word: (first + 4u), value: BitConverter.HalfToUInt16Bits(value: ((Half)weight)));
+                    }
+                }
             }
         }
-        using var historyInput = (narrowChromaHistory ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)historyInputBytes.Length), usage: GpuBufferUsage.Storage) : null);
-        using var historySeed = (narrowChromaHistory ? services.BufferFactory.CreateHostVisible(data: historyInputBytes, name: default, usage: GpuBufferUsage.Storage) : null);
+        using var historyInput = (seededHistory ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)historyInputBytes.Length), usage: GpuBufferUsage.Storage) : null);
+        using var historySeed = (seededHistory ? services.BufferFactory.CreateHostVisible(data: historyInputBytes, name: default, usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
         // Every record a miss. Each output pixel's transport occupies the structured element declared by the resolve
         // interface, including both packed words.
@@ -355,7 +388,7 @@ public sealed class SdfResolveDeviceLawTests {
             var transportBytes = new byte[checked((int)transport.SizeBytes)];
 
             transportReadback.Read(destination: transportBytes);
-            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent && !narrowChromaHistory)
+            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent && (!seededHistory || displacedCamera))
                 ? SdfSurfaceTransport.SampleWord(distance: 0f).Low : 0u);
 
             for (var pixel = 0; (pixel < (width * height)); pixel++) {

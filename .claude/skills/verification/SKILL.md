@@ -16,6 +16,20 @@ that session.
 
 ## The landing bar
 
+A queued World build can outlive a cancelled start. Do not change a checkout's
+sources until its build has finished. The artifact resolver checks the source
+key after build admission and after compilation, and discards a build if either
+check changed; a capture run must still confirm its implementation through live
+counters before accepting measurements.
+
+Retain each prepared `WorldArtifact` lease until its last comparison leg exits.
+Stopping a preparation World releases that lease, and other lanes' normal cache
+retention can evict the build while a GPU batch queues. Keep builds outside the
+GPU hold, and give capture tours a separate bounded leg when frame-budget
+sampling and timing would consume their deadline. Preflight console recipes
+after integration: memory compaction is `host.memory collect`; renderer-only
+probe help is absent in a headless World.
+
 Steps 1 to 3 make a lane ready for a batch. Steps 4 and 5 need a windowed World,
 so the integration lane's sweep reads them
 ([orchestration](../orchestration/SKILL.md#land-in-batches)).
@@ -156,12 +170,13 @@ Keep such a functional boot separate from a performance comparison: require
 readiness, settled bakes and completed timestamp windows, and record concurrent
 work when a quiet measurement is unavailable.
 
-An empty shared lease directory can report an unnamed holder indefinitely:
-`CliLease.IsStale` cannot reclaim missing metadata. Diagnose it under the
-existing exclusive `.guard` file, never by the absence of a World alone.
-If that guard is available and the directory is empty while it is held,
-removing only the empty directory lets the normal `puck lease` acquire again.
-Never unlink the guard file or remove a directory containing holder metadata.
+The exclusive `.guard` handle proves lease ownership; holder metadata is
+diagnostic. A Windows reader can delay directory deletion after a World exits,
+leaving an alive adapter PID in that metadata. `CliLease` always releases the
+guard, tolerates delayed cleanup, and replaces leftover metadata once it owns
+the guard. Its metadata readers permit deletion, and an unreadable queue ticket
+counts as occupied until it can be read or disappears. Let the verb recover;
+never unlink the guard or infer ownership from the absence of a World alone.
 
 A scratch repository for CLI experiments needs its own `Puck.slnx` (and a
 `git init`), or the verb silently uses the shared `.claude/leases` and joins

@@ -30,7 +30,7 @@ Every rule has a name and at least one effect. The rest is optional:
 | Locals | Values computed once per evaluation, in declared order, before the gate. The gate and every effect can read them. A local is never stored; it lives for one evaluation. | `price` |
 | Gate | The predicate that must hold. A rule with no gate always holds. | `coins >= price` |
 | Mode | Whether a holding gate fires on every evaluation (`Level`, the default) or only when it opens (`Edge`). | `Edge` |
-| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, and `rule name for each x in pool` once per live pool instance. | none |
+| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, and `rule name for each x in pool` once per live pool instance. `maxFirings: n` ends an iterating sweep once `n` bindings have fired. | none |
 | Effects | The ordered changes the rule attempts when it fires. | two assignments |
 | Zones | A table of ordered piles the rule can select from at runtime. | none |
 
@@ -297,6 +297,37 @@ the next sweep, and a removed key is still visited in this one. `$each` names
 the bound key itself, so reordering or removal can't redirect it to another
 cell. Any keyed row can supply keys, including a `Text` row, even though a
 numeric reduction can't aggregate text.
+
+### Bound how many bindings fire
+
+A sweep's firings are priced at the iterated row's capacity, because any binding
+might fire. A rule whose gate admits only a few bindings at a time says so with
+`maxFirings`:
+
+```puck
+rule "read-batch" {
+  when reading == 1 and ordinal[$each] >= cursor and ordinal[$each] < cursor + 8
+  forEach: stones
+  maxFirings: 8
+  seen[$each] = 1
+}
+```
+
+Once that many bindings have fired (a refused firing counts too) the sweep
+stops for this tick. Every binding after it keeps its latch exactly as it
+stood, as if the sweep hadn't reached it: an open edge stays held, and a Level
+binding fires on a later tick that reaches it. The work sheet prices the rule's
+firings, and the writes it counts against an exclusive cell, at `maxFirings`
+instead of at the row's capacity; checks are still priced for every binding.
+
+The bound is enforced, so it's honest whatever the gate does. When the gate
+already admits at most that many bindings (a batch window over an ordinal row
+whose values are distinct, a match against one held piece, or a firing that
+closes the gate for every later binding) nothing about the rule's behavior
+changes. When it doesn't, the bindings past the bound wait, and a Level gate
+that stays open for an early binding can keep a later one waiting indefinitely.
+Only an iterating rule (`forEach` or a pool sweep) takes `maxFirings`, it must be
+at least 1, and a decision refuses it.
 
 ## Choose Level or Edge
 
@@ -778,8 +809,9 @@ covers what a host does with each call.
   expression to at most 256 tokens and 64 shared subprograms.
 - **A bounded tick.** A document's rules are priced statically at their worst
   case, and the whole sheet must stay within 4,250,000 work units per tick; the
-  compiler doesn't accept an average-case estimate. See [Rule analysis,
-  scheduling, and work budgets](analysis.md).
+  compiler doesn't accept an average-case estimate. A rule that fires only a few
+  of its bindings states it with `maxFirings`, which the evaluator enforces. See
+  [Rule analysis, scheduling, and work budgets](analysis.md).
 - **No stepping debugger.** A trace records one line of facts per evaluation;
   there is no call stack to step through.
 - **No built-in game nouns.** The engine knows nothing about cards, pieces, or
