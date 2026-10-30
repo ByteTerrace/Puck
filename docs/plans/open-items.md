@@ -297,12 +297,6 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   - [medium] The CLI computes `ScenarioBootShape` over the raw staged JSON with unresolved `basis`/`imports` while the server compares the composed definition, so a census row whose inhabiting placement comes from an import lands on a shared worker and the server aborts it ("requires its own worker") (`TestCommand.Batch.cs:10-19`, `WorldPersistence.Scenarios.cs:83-91`).
   - [low] `RestoreCheckpointCore` delivers the restored definition to attached sinks before `ResetClockSeeds` and `GrantTable.SyncState`, so a projection sink seeding trait clocks reads the previous scenario's seeds (presentation only) (`WorldPersistence.Scenarios.cs:138-142`, `WorldPersistence.Checkpoint.cs:1048`).
 
-- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels`
-  fails on the integration tip, twice alone: the tick-1 inspect line, which
-  should name only seat 2's strafe sample, also carries `action.forward:Bipolar=0(0)`
-  in a `revision=1 epoch=1` channel listing. The fixture is the in-code default
-  document, and no controls change touches inspection; the commit that broke it
-  is not isolated. CI's suite run is red until it is fixed.
 - [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (boot-reuse-report.md, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
 
 - [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
@@ -883,6 +877,16 @@ answer.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] The debug world sits at the rule-work ceiling: the granaries lane
+  raised `RuleCapacity.MaxWorkUnitsPerTick` from 4,000,000 to 4,250,000
+  (`src/Puck.State/Rule.cs`) because the plain debug world was about 10k units
+  from the chess search's minimum and the granary board broke validation by
+  23k; it also phases its rules one a tick over twelve because the pricing
+  counts rules gated on different values of one slot as the dearest, not the
+  sum. The card tables add more. Decide the cause before the next raise: is the
+  static price far above measured tick cost (measure a busy tick against the
+  price), should the search draw from its own budget, and does the slot-gating
+  rule price what one tick can actually run? (from: granaries lane)
 - [medium] A scratch test using `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed over two minutes of CPU during preparation without a
   generated world or a diagnostic; moving the console command and the closing
@@ -915,8 +919,6 @@ hang, then the pre-`main` language findings.
 Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
-
-- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels` (`tests/Puck.World.Server.Tests/ReplayInspectLawTests.cs:41`) fails on the integration head on a seat-2 `forward` channel event, most likely since c7-findings changed `replay.inspect` and `world.history` to print a segment's driven lanes by bank address (`segment p1 2s [@3=1] by console`). Decide whether the law or the read-back is right (the input decision's tape-names item in this packet) and make them agree. (from: companion-build lane, confirmed by the lead)
 
 - [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
@@ -968,6 +970,9 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
+  `mutate` over `section:state` to write six feed rows; scope it to those rows if
+  the extension grant vocabulary allows. (from: the lead, landing granaries)
 - Complete the independent review: federation interruption, recovery and
   revocation schedules; authorization and disclosure composition; deployed Azure
   identity, storage and key policy; aggregate hostile-input budgets; and
@@ -1451,6 +1456,13 @@ material defect needs no taste call); new content and art on the owner's call.
   optimisation cannot live in a deterministic guest), the learned policy frozen
   into an addon that is a pure function of its inputs; start with one committed
   test cartridge with a known win condition.
+
+- The granary board ([granaries.md](../../worlds/debug/granaries.md)): the owner's own
+  run against the live resource group is outstanding (the command is in that guide; the
+  fixture configuration stands in for it everywhere else). A piece's look carries its
+  account's kind only, since a deal's variants read one row; SKU and region are rows the
+  lectern reads. The pieces are dealt placements, not bodies, so a seated player inspects
+  and cannot yet pick one up; moving a piece (`deal.preserve`, `reflow`) is unused here.
 
 ### Agent tooling and skills
 
