@@ -75,12 +75,10 @@ let barRing = {
   id: "play-bars"
   label: "Bar"
   entries [
-    { id: "barStandard", command: "controls.bar", text: "standard single", sources: null }
-    { id: "barKeys", command: "controls.bar", text: "keys single", sources: null }
-    { id: "barPad", command: "controls.bar", text: "pad single", sources: null }
-    { id: "barWings", command: "controls.bar", text: "wings wings", sources: null }
-    { id: "barSidebars", command: "controls.bar", text: "sidebars wings", sources: null }
-    { id: "barSingle", command: "player.binding-bar", text: "model single", sources: null }
+    { id: "barWings", command: "controls.bar", text: "wings single", sources: null }
+    { id: "barWingsFull", command: "controls.bar", text: "wings wings", sources: null }
+    { id: "barSidebars", command: "controls.bar", text: "sidebars single", sources: null }
+    { id: "barSidebarsFull", command: "controls.bar", text: "sidebars wings", sources: null }
     { id: "barCompact", command: "controls.bar.compact", sources: null }
     { id: "barFull", command: "controls.bar.full", sources: null }
   ]

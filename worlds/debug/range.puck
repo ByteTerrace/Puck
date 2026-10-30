@@ -456,18 +456,6 @@ bindingOverlays [
             ]
           }
         }
-        {
-          chord ["rt"]
-          group: "play"
-          page {
-            id: "pad-rt"
-            inherits: "base"
-            label: "Debug"
-            entries [
-              { command: "world.rates", id: "dbgRates", label: "Rates A/B", text: "toggle", sources ["gamepad.back"] }
-            ]
-          }
-        }
       ]
     }
   }
