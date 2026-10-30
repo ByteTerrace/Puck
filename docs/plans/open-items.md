@@ -41,9 +41,9 @@ resolves their edits to this file at merge.
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), the per-swap state load, then the schema switch.
 5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
-   break (`WorldTestBatch.cs:89`), then boot reuse across differing scenarios
-   (in flight: boot-reuse) and `--reproduce`, which still costs as much again as
-   the ordinary run.
+   break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
+   `--reproduce`, including the unexplained Go CPU regression in the loaded
+   boot-reuse comparison.
 6. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
@@ -263,31 +263,42 @@ holds the fixed poses and the approaches already rejected.
 
 ### Test runner and replay
 
-Owner: boot-reuse follow-up (runner), replay specialist · medium and low ·
-Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then reuse
-one host across differing scenarios (in flight: boot-reuse).
+Owner: test runner and replay specialist · medium and low ·
+Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
+replica cost and repeat the paired CPU measurements on a quiet machine.
 
-- Decide (the lead's call): boot reuse boots the shared base once, checkpoints
-  it, and applies each scenario's own rows, rules and state after the restore,
-  behind a defined reset boundary (grants, journals, addons, machines,
-  subscriptions, input and sibling instances) shown equal to a fresh host on
-  representative scenarios; `--reproduce` stays exact and independent, never
-  sampled.
+- [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (`.claude/scratch/boot-reuse-report.md`, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
 
-- Boot-once never reuses a boot in practice: every `puck test` run on the
-  trimmed set prints one worker process but `host-boots` equal to `world-runs`
-  (28/28 hall, 24/24 chess, 20/20 go, every file), because a worker restores a
-  checkpoint only between scenarios whose boot shape is identical and each
-  generated test world differs. Every scenario still pays a 2-4 s host boot plus
-  about 3 s of authored-phase overhead even at a few ticks, now the larger share
-  of scenario time. Boot the shared base once, restore its checkpoint, then
-  apply each scenario's own rows, rules and state, keeping determinism and
-  `--reproduce` exact.
-- `--reproduce` cost: a reproduction runs every scenario again, so it costs
-  about as much as the ordinary run (chess 1,107 s ordinary against 2,846 s
-  with reproduction, go 546 against 1,357, hall 468 against 1,070, in
-  single shared-machine samples). Boot reuse above lowers both legs; then
-  measure what the replica itself spends.
+- [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
+  Compatible scenarios now restore pristine session lanes into their own
+  admitted rows, seeds and rules, rebind gates and clock seeds, and recompose
+  seed-derived geometry where needed. Replay departure continuation and queued
+  seat-route edges are cleared at the reset boundary. All 18 debug test files
+  (84 scenarios), ordinary and `--reproduce --jobs 1`, report one host boot per
+  worker/file; all 428 verdict, state and reproduction artifacts match the
+  control byte for byte. The measured pair is integration `f9ab3d912` against
+  boot-reuse `eabf68e08`; the lane's scratch hand-back retains per-file CPU and
+  hall/chess phase tables. Few-tick profiles do not show a fixed three-second
+  authored startup delay.
+- `--reproduce` cost: the complete loaded-machine boot-reuse comparison uses
+  3,352.27 → 3,590.33 whole-process-tree CPU seconds (+7.1%), while ordinary
+  runs use 1,456.67 → 1,396.70 seconds (−4.1%). Go accounts for most of the
+  reproduction increase (865.73 → 1,152.02 seconds). Its first scenario was
+  already slower before any cross-scenario restore; an isolated fresh-host
+  pair for that same scenario instead uses 101.77 → 94.95 seconds with exact
+  artifacts. The cause remains unconfirmed: repeat paired per-file timings on
+  a quiet machine and profile the replica before attributing this to either
+  contention or host reuse.
+- [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
+  and night references admit a separate full `debug` authority. Its root's
+  stopped-machines import does not stop that companion's six machines;
+  each root tick advances four authorities. Reused Hall scenarios reach their
+  first completed tick in tens of milliseconds, and Alchemy's one-tick cases
+  spend 53–154 ms in authored work excluding export: the measured seconds are
+  not a fixed three-second authored startup delay. Have the scenario-fixture
+  lane remove the avoidable companion workload while preserving the scenarios'
+  claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
+  from: boot-reuse profiling; the machine contribution is not isolated.)
 - [low] `WorldTestBatch`'s loop breaks on `batch.m_failed`, which stops the retry
   of a leg that failed to open but also every remaining leg after any earlier
   failure (a `--reproduce` divergence) wherever the next leg needs a fresh host,
@@ -1024,17 +1035,9 @@ Owner: suites lane · ordinary · Next: measure the two unmeasured suites' class
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · ordinary · Next: the launcher's version pruning (the MCP
-development install grows 340 MB a CLI rebuild).
+Owner: delivery lane · ordinary · Next: measure deriving the eleven addon guest
+`.wasm` modules from source against edit-to-running.
 
-- The launcher cleans up past versions (the owner's ruling): after an install is
-  proven, keep `current`, `last-good` and the most recent N other versions
-  (N from the user's settings), delete the rest, and drop `objects` no kept
-  version references. Today nothing prunes: `UpdateOptions.KeepVersions`
-  (default 2, also `host.update.keepVersions`) is only validated and echoed by
-  `update.status`. The MCP development install (`.claude/mcp-install`) reached
-  8 versions and 3.8 GB before a manual prune; there `last-good` also stayed two
-  days behind a `current` that served a whole session, unexplained.
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
   is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
@@ -1042,8 +1045,6 @@ development install grows 340 MB a CLI rebuild).
   CI job that loads an addon, so measure that cost against edit-to-running
   first. A hand-written fixture module (the transpiler sample's 8-byte
   `Samples/addons/rules.wasm`) is source.
-- Give the counters workloads `.puck` sources: `tests/Puck.Counters/debug.world.json`
-  and `avatar.world.json` are committed JSON derived from `debug.puck`.
 - Finish the shared shader cache ([freshness](../reference/shaders.md#freshness)):
   no GitHub run has yet shown the restored Windows build, the silo image build
   and a repeated `shader-bytecode` job compiling nothing (`0 compiled`); a local

@@ -9,7 +9,7 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>A worker retains its native host while consecutive scenarios have identical boot state.</summary>
+/// <summary>A worker retains its native host while consecutive scenarios share its boot composition.</summary>
 internal sealed class WorldTestBatch {
     private sealed record Leg(string World, string Directory, int ExitAfterSeconds, string BootShape, bool Reproduce = false, string? CacheDirectory = null);
 
@@ -45,6 +45,7 @@ internal sealed class WorldTestBatch {
     private long m_bootTicks;
     private long m_restoreTicks;
     private long m_authoredTicks;
+    private long m_firstTickTicks;
 
     private string WorkingWorld => Path.Combine(path1: m_workingDirectory, path2: Path.GetFileName(path: m_legs[m_index].World));
 
@@ -121,6 +122,7 @@ internal sealed class WorldTestBatch {
             .ToDictionary(path => Path.GetRelativePath(path: path, relativeTo: stateRoot), File.ReadAllBytes) : []);
         m_control = Get<TextCommandSource>().CreateSession(Principal.Console);
         Get<WorldTestRun>().Exported += FreezeLeg;
+        Get<WorldTestRun>().FirstTick += () => m_firstTickTicks = (Stopwatch.GetTimestamp() - m_runStarted);
         Get<WorldTestRun>().Progress += tick => Console.WriteLine(value: $"[test.batch: tick {tick}]");
         instances.Admitted += Observe;
         StartLeg(freshHost: true);
@@ -182,6 +184,9 @@ internal sealed class WorldTestBatch {
             Get<Puck.World.Client.WorldClient>().ResetInputTimeline();
             Get<WorldHistory>().Off();
             Get<WorldInstanceHost>().RestoreScenario(checkpoint: checkpoint);
+            // Restoring a crossed seat's boot claim is not a live handoff. Its queued edge would admit input
+            // before tick one, whereas a fresh host first admits it during ordinary post-step synchronization.
+            Get<Puck.World.Client.WorldSeatAuthorityRouter>().DiscardPendingRouteChanges();
             RestoreStateFiles();
         }
         Get<WorldTestRun>().Reset(WorkingWorld, Path.Combine(path1: leg.Directory, path2: "out"));
@@ -241,6 +246,7 @@ internal sealed class WorldTestBatch {
                 bootMilliseconds = Milliseconds(ticks: m_bootTicks),
                 restoreMilliseconds = Milliseconds(ticks: m_restoreTicks),
                 authoredMilliseconds = Milliseconds(ticks: m_authoredTicks),
+                firstTickMilliseconds = Milliseconds(ticks: m_firstTickTicks),
                 exportMilliseconds = Milliseconds(ticks: run.ExportTicks),
                 replayMilliseconds = Milliseconds(ticks: replayTicks),
                 otherMilliseconds = Milliseconds(ticks: (((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),

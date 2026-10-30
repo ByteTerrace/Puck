@@ -25,6 +25,9 @@ public sealed partial class WorldServer {
     // A re-drive's departures, held until the recorded rollback that restores each one.
     private readonly Dictionary<(ulong TransferId, int Slot), (WorldDetachedBody Body, FixedQ4816 TravelTurn)> m_redrivenDepartures = new();
 
+    // Rollback bodies belong to one re-drive, not to the authority checkpoint being restored.
+    internal void ResetRedrivenDepartures() => m_redrivenDepartures.Clear();
+
     /// <summary>Gets or sets the observer of every source body a crossing detaches or restores: the source-scoped
     /// transfer id, the body index, and whether the body came back (a rollback) rather than left. It hears each one
     /// inside the authority operation that made it, so its position among the authority's inputs is the decision's
