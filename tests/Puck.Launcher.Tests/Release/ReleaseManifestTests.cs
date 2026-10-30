@@ -302,11 +302,13 @@ public sealed class ReleaseManifestTests {
     [Theory]
     public void Validate_RefusesNonPortableChannel(string channel) =>
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => (error.Path == "channel"));
-    // The applier writes both names into every version directory beside its payload; a payload file of either name would
-    // be overwritten after its hash was verified.
+    // The applier writes both names into every version directory beside its payload: a payload file of either name would
+    // be overwritten after its hash was verified, and a payload directory of either name makes the write fail.
     [InlineData("state-generation")]
     [InlineData("install-record.json")]
     [InlineData("Install-Record.JSON")]
+    [InlineData("install-record.json/data.bin")]
+    [InlineData("STATE-GENERATION/nested/data.bin")]
     [Theory]
     public void Validate_RefusesReservedPayloadFiles(string name) {
         var document = ValidDocument();
