@@ -29,41 +29,41 @@ resolves their edits to this file at merge.
 1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): the
    debug world runs at 7-8 FPS on Direct3D 12 and 4 FPS on Vulkan at every
    sweep stop, quiet; find what each frame waits on.
-1. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
+2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
-2. [Bake detail](#bake-detail): measure static curvature refinement and local
+3. [Bake detail](#bake-detail): measure static curvature refinement and local
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
-3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a hot-reload code revision as one invalidation contract (emitter revisions
    and the static field), then the persisted caches keyed by the modules as
    built; a product of edited code under the unedited identity is the hazard.
-4. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), then the schema switch.
-5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
+6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
    break (`WorldTestBatch.cs:89`), then delete complete-boot reuse and make the
    per-tick authority hash incremental, as the quiet measurement supports.
-6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-7. [Residency and streaming](#residency-and-streaming): the measurements, then
+8. [Residency and streaming](#residency-and-streaming): the measurements, then
    near-first ordering of bake, store loads and landing; the card tables are
    its test case.
-8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
-   it in `panes` and answers under pause, then the diagnostics' windowed checks
-   and the developer exhibits.
-10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+    it in `panes` and answers under pause, then the diagnostics' windowed checks
+    and the developer exhibits.
+11. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
-11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+12. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
-12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+13. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
