@@ -21,8 +21,37 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Scene readiness is `SdfMeshPathBake.IrradiancePending`, not the whole bake's
   `Pending`: only opaque static groups enter the scene. An animated rebake,
   glass or a diagnostic slice must not postpone its first measurement or a
-  refresh. `world.wait bakes` still waits for all geometry; an initial
+  refresh. While opaque static groups are still pending, a non-lockstep frame
+  builds the scene from those landed (`ScenePendingDue`: no build running, the
+  previous scene's trace finished, at least `PendingSceneInterval` since the
+  last build began, and at least one static draw: an empty scene would measure
+  open sky where walls have yet to land), so the volume and the meter answer
+  during a cold bake instead of after it. Waiting for the whole bake left every
+  view `meter=none source=held` and every shaded face black for the ten minutes
+  of a cold debug-world bake. A lockstep frame still waits for the whole bake.
+  `world.wait bakes` still waits for all geometry; an initial
   `world.exposure` reading with `meter=none` is not a backend-parity result.
+- The volume has three levels (`SdfMeshIrradianceProbe.Levels`): the tier's
+  window, then two 32×12×32 windows of 8 m and 32 m cells
+  (`SdfMeshIrradiance.LevelSpacing`), their slots after the finer levels' in one
+  table, each described by a `meshIrradianceLevels` row (first cell, packed
+  dims) and a spacing in `meshIrradianceVolume` (zero until the level first
+  publishes). Each level publishes on its own once every slot of its window is
+  measured. A receiver reads the finest level whose window holds it within its
+  boundary probes (`Select`, `sdfMeshProbesAt`), the coarsest past every window.
+  Never let a coarser level answer inside a finer window: at 25 m a 32 m probe's
+  angular tap is metres wide, its patch test cannot resolve a thin wall the fine
+  probe measured, and the wall law reads visibility 1 through it. Where the
+  level's bounded gather is zero, the same probes answer unbounded
+  (`SdfMeshProbeDepth.Visibility(bounded: false)`): a miss no longer rejects a
+  receiver past its reach, but a measured hit still blocks. That read reports
+  `measured=0` in `world.probe` and gives traced static lights zero visibility.
+  It replaces the earlier rule that a receiver with no answering probe reads
+  black: far gallery walls and outdoor shaded faces past the old 64 m window
+  drew pure black.
+- Each level's window centres on the box of the cameras of every view the
+  residency renders when it fits in the window's middle, and on the first view's
+  camera alone when it does not (`WindowLow`).
 - A cold bake with `world.wait bakes` still pending, `sdf.mesh-gi.scenes=0`,
   and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
   Read the wait's bake description twice: its meshes, pending groups,
@@ -86,8 +115,9 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - At the volume boundary clamp the lookup, then test the actual receiver,
   pushed `NormalBias` (0.05 m) along its normal, against depth. Never bias by
   spacing or test the clamped position: either can carry a receiver through a
-  thin wall. An unwritten or invalid probe contributes nothing. No answering
-  probe means no measured indirect light, and a depth miss has finite reach.
+  thin wall. An unwritten or invalid probe contributes nothing. A depth miss has
+  finite reach in the measured read; the extended read (above) drops only that
+  bound.
 - Past the boundary the facing term eases to one over the first cell outside
   (`outside` in `sdfMeshProbesAt` and `Gather`). Every boundary probe lies on the
   window's side of such a receiver, so the hemisphere weight would light only
@@ -99,11 +129,9 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   for the refill's duration. Reproduce a boundary finding by posing past the
   published window and taking a presented capture before the refill lands; a
   settled capture or a pose before the first trace hides it.
-  That orientation correction is still limited by the measured depth reach:
-  the local surface map rejects a receiver beyond its short support even when
-  the boundary-facing factor is one. It supplies no coarse far-field coverage;
-  a large refill can therefore leave the old window unable to light the moved
-  receiver. Keep that coverage finding separate from the orientation correction.
+  This easing applies only past the coarsest window, the one level a receiver
+  outside reads; inside it the coarser levels supply far-field coverage, and the
+  extended read lights a receiver past every probe's reach.
 - Read `world.probe <x> <y> <z> [<nx> <ny> <nz>]` for each corner's origin,
   offset, back-face share, validity, sweeps, cubes and weight terms.
   Each valid corner also reports an exact mesh-segment `reference-clear` check,
@@ -139,6 +167,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   the sample's actual origin. A blocked segment requires a fresh measurement,
   even within one cell. Refresh once when the volume's bounce sweeps finish.
   `world.counters sdf.mesh-gi` counts `camera-traces`; steady reads add none.
+  At a camera cut the meter reads `fresh`: a sample is reused only from the very
+  position, so the reading after a teleport depends on where the camera stands,
+  not where it stood. `SdfViewExposures` keeps a cut owed until a reading
+  arrives and snaps to that first reading.
   This camera sample never writes the volume or relaxes surface visibility.
   If the scene is unavailable or the camera is inside opaque geometry, retain
   the previous exposure, local-adaptation meter and sky visibility. The authored
@@ -155,19 +187,20 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   immediately. Clear the CPU cache and staging volume only when the layout
   changes. On a resize or window move, retain the uploaded GPU table **and its
   old coordinates** until every new slot has a measured sample. Never publish
-  unwritten cells as darkness or initialize them to unoccluded sky. Before the
-  first scene has supplied any volume, there is no measured indirect light.
+  unwritten cells as darkness or initialize them to unoccluded sky. Until a
+  level first publishes, the parameters are disabled and views light as without
+  the volume (harmonic sky ambient and authored fill).
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
-  Medium's 12,288 probes use 11.015625 MiB; High's 36,864 use 33.046875 MiB.
+  Medium's three levels hold 36,864 probes in 33.046875 MiB; High's 61,440 in
+  55.078125 MiB.
   The table starts at one inert record and both
   it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
   existing frame-ring retirement; increment the binding revision when its buffer
   changes. Keep the old table and coordinates until every new slot is measured.
   Five full payloads (device, two uploads, native shadow, CPU volume) total
-  55.078125 MiB at Medium or 165.234375 MiB at High, before headers, cache,
-  batches and temporary retired buffers, versus the former 193.359375 MiB
-  reservation at either tier. Upload buffers can shrink after small flushes;
+  165.234375 MiB at Medium or 275.390625 MiB at High, before headers, cache,
+  batches and temporary retired buffers. Upload buffers can shrink after small flushes;
   live `world.probe` GI diagnostics report actual device/upload/shadow/header
   and CPU-volume bytes. Cache blocks hold 244 words (976 bytes) per probe.
   Publication compares/uploads changed slots only, coalesced into runs.

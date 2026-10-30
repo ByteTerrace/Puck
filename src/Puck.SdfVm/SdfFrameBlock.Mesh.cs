@@ -111,23 +111,30 @@ public static partial class SdfFrameBlock {
             first += ((uint)lattice.Samples);
         }
     }
-    /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>); a disabled
-    /// volume writes zeros, and views then light as without indirect light.</summary>
+    /// <summary>Writes the irradiance volume the views pass reads (<see cref="SdfMeshIrradiance"/>): whether views read
+    /// it, then each level's spacing and window; a disabled volume, or a level not published, writes zeros, and views
+    /// then light as without that level.</summary>
     /// <param name="block">The pass block <see cref="Write"/> filled.</param>
     /// <param name="volume">The volume's parameters.</param>
     public static void WriteMeshIrradiance(Span<byte> block, in SdfMeshIrradianceParameters volume) {
         var offset = Offset(member: SdfWorldPackage.MeshIrradianceVolume);
-        var low = Offset(member: SdfWorldPackage.MeshIrradianceLow);
-        var dims = (volume.Enabled ? ((uint)volume.Dims.X) | (((uint)volume.Dims.Y) << 10) | (((uint)volume.Dims.Z) << 20) : 0u);
+        var levels = Offset(member: SdfWorldPackage.MeshIrradianceLevels);
 
         WriteUInt32(block: block, offset: offset, value: (volume.Enabled ? 1u : 0u));
-        WriteSingle(block: block, offset: (offset + sizeof(uint)), value: (volume.Enabled ? volume.Spacing : 0f));
-        WriteUInt32(block: block, offset: (offset + (2 * sizeof(uint))), value: dims);
-        WriteUInt32(block: block, offset: (offset + (3 * sizeof(uint))), value: 0u);
-        WriteUInt32(block: block, offset: low, value: unchecked((uint)volume.Low.X));
-        WriteUInt32(block: block, offset: (low + sizeof(uint)), value: unchecked((uint)volume.Low.Y));
-        WriteUInt32(block: block, offset: (low + (2 * sizeof(uint))), value: unchecked((uint)volume.Low.Z));
-        WriteUInt32(block: block, offset: (low + (3 * sizeof(uint))), value: 0u);
+        for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) {
+            // A level not published keeps its probe counts, which place every coarser level's slots, and reads as absent
+            // by its zero spacing.
+            var window = (volume.Enabled ? volume.Window(level: level) : default);
+            var present = window.Present;
+            var dims = ((uint)window.Dims.X) | (((uint)window.Dims.Y) << 10) | (((uint)window.Dims.Z) << 20);
+            var row = (levels + (level * 16));
+
+            WriteSingle(block: block, offset: (offset + ((1 + level) * sizeof(uint))), value: (present ? window.Spacing : 0f));
+            WriteUInt32(block: block, offset: row, value: unchecked((uint)window.Low.X));
+            WriteUInt32(block: block, offset: (row + sizeof(uint)), value: unchecked((uint)window.Low.Y));
+            WriteUInt32(block: block, offset: (row + (2 * sizeof(uint))), value: unchecked((uint)window.Low.Z));
+            WriteUInt32(block: block, offset: (row + (3 * sizeof(uint))), value: dims);
+        }
     }
 
     private static void WriteRow(Span<byte> block, int offset, Vector3 value, float w) {

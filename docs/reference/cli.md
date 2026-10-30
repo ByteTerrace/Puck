@@ -198,6 +198,10 @@ A running `puck` holds the installed tool, so close whatever launched one
 first: the editor's language server, an MCP client's server. The uninstall
 otherwise fails with `The file exists` and leaves the earlier install in place.
 
+An agent reinstalls the global tool this way whenever it finds it stale (a
+verb it needs is missing, or `puck --version` names an older revision), without
+asking (the owner's ruling).
+
 `puck --version` names the revision it was packed from. The package version
 does not change between commits, so a reinstall that reports the old revision
 restored the earlier package from the NuGet cache; remove

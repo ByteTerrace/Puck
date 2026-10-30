@@ -19,7 +19,7 @@ before code.
 | Materials | `shade/shade-weathering.hlsli`, `shade/shade-layers.hlsli`, called from `passes/sdf-light-stage.hlsli` | No slope, altitude or curvature rule, though weathering's up-facing `deposit` and its curvature edges are such rules in fragment form. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
 | Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
-| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. At the summit the owner saw every view `meter=none source=held`: the meter never answered, so EV 11.5 plus 2.5 held and the rock blew out ([lighting packet](open-items.md#lighting-and-gi), which also chose an image meter). At a cut the EV snaps to whatever the cache answers ([sweep packet](open-items.md#sweep-and-visual-checks)). |
+| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. It meters from the static meshes landed so far during a cold bake, and a cut snaps to the first reading taken at the camera itself. It still cannot see dynamic meshes or anchored lights ([lighting packet](open-items.md#lighting-and-gi), which chose an image meter). |
 | Residency | [residency decision](../decisions/residency.md), `SdfMeshDemand`, `SdfMeshChunks` | Near-first has landed; chunks are 8 m bins of one contour and do not stream. Terrain tiles (the decision's step 7) are unbuilt. |
 
 ## Design
@@ -108,10 +108,9 @@ eases as now, and **a cut snaps to the frame's own histogram**, so the EV after
 a teleport depends only on the destination's picture. A rendered frame always
 has an image, so `held` leaves the exposure path with the camera-trace cache.
 The probe meter stays for local adaptation and the air light
-(`SdfViewExposures.MeteredOf`, `AirLightOf`), so why it answered nothing at the
-summit is found in the same step: `TryMeter` refuses with no window, with no
-installed scene (`RefreshScene` runs only while no bake is pending), and when
-the camera trace sees more than `InsideShare` back faces. Display-referred constants the views pass divides by the
+(`SdfViewExposures.MeteredOf`, `AirLightOf`); it refuses with no window, before
+the first static mesh lands, and when the camera trace sees more than
+`InsideShare` back faces. Display-referred constants the views pass divides by the
 exposure (the unbound screen glass) move to the composite or read the previous
 frame's EV, settled by measurement. `world.exposure` reads the buffer back. The
 first check is the lighting packet's 18% grey card under a manual EV, which

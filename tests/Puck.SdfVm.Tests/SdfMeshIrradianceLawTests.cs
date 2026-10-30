@@ -160,7 +160,10 @@ public sealed class SdfMeshIrradianceLawTests {
         var description = volume.Describe();
         var count = long.Parse(description.Split("depth-rays=")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
 
-        Assert.InRange(count, 1L, (((((long)parameters.Dims.X) * parameters.Dims.Y) * parameters.Dims.Z) * 256L));
+        var probes = 0L;
+
+        for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) { probes += parameters.Window(level: level).Count; }
+        Assert.InRange(count, 1L, (probes * 256L));
     }
     [Fact]
     public void AProbesPublishedSkyIsItsOwnMeasuredVisibility() {
@@ -213,7 +216,7 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX, cells, weights, reports));
         var hidden = Assert.Single(collection: reports, predicate: r => (r.Cell == (0, 0, 0)));
 
-        Assert.True(condition: (hidden.Visibility < 0.001f), userMessage: $"through-wall visibility={hidden.Visibility}");
+        Assert.True(condition: (hidden.Visibility < 0.001f), userMessage: $"through-wall visibility={hidden.Visibility} {string.Join(separator: " | ", values: volume.DescribeProbes(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX))}");
     }
     [Fact]
     public void ASphereBelowAHangingSignReadsContinuouslyAcrossItsProbeColumn() {
@@ -494,20 +497,25 @@ public sealed class SdfMeshIrradianceLawTests {
             parameters = volume.Stage(bakePending: false, frame: frame, tier: tier, write: memory => {
                 wrote = true;
                 words = memory.ToArray();
-                for (var offset = 0; (offset < words.Length); offset += SdfMeshIrradianceProbe.ProbeWords) {
-                    Assert.NotEqual(expected: 0u, actual: words[offset] & SdfMeshIrradianceProbe.WrittenFlag);
-                }
             });
+            // A publication holds every slot of every level it publishes, each its own cell's probe.
             if (wrote) {
-                for (var z = parameters.Low.Z; (z < (parameters.Low.Z + parameters.Dims.Z)); z++) {
-                    for (var y = parameters.Low.Y; (y < (parameters.Low.Y + parameters.Dims.Y)); y++) {
-                        for (var x = parameters.Low.X; (x < (parameters.Low.X + parameters.Dims.X)); x++) {
-                            var slot = SdfMeshIrradiance.SlotOf(dims: parameters.Dims, x: x, y: y, z: z);
+                var first = 0;
 
-                            Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag,
-                                actual: words[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag);
+                for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) {
+                    var window = parameters.Window(level: level);
+
+                    for (var z = window.Low.Z; window.Present && (z < (window.Low.Z + window.Dims.Z)); z++) {
+                        for (var y = window.Low.Y; (y < (window.Low.Y + window.Dims.Y)); y++) {
+                            for (var x = window.Low.X; (x < (window.Low.X + window.Dims.X)); x++) {
+                                var slot = (first + SdfMeshIrradiance.SlotOf(dims: window.Dims, x: x, y: y, z: z));
+
+                                Assert.Equal(expected: SdfMeshIrradiance.KeyOf(x: x, y: y, z: z) | SdfMeshIrradianceProbe.WrittenFlag,
+                                    actual: words[(slot * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag);
+                            }
                         }
                     }
+                    first += window.Count;
                 }
             }
             Thread.Sleep(millisecondsTimeout: 20);
@@ -753,5 +761,104 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.True(condition: (SdfMeshProbeDepth.Visibility(surfaces: depth, toward: new Vector3(x: 1f, y: 0f, z: 0f)) < 0.05f));
         Assert.Equal(1f, SdfMeshProbeDepth.Visibility(surfaces: depth, toward: new Vector3(x: 0.4f, y: 0f, z: 0f)));
+    }
+
+    // A long sunlit floor under a camera at its west end, beyond the finest window's reach.
+    private static SdfFrame OpenFloor() {
+        var lights = new SdfLights();
+
+        lights.Set(index: 0, light: new SdfLight(Color: Vector3.One, Direction: Vector3.Normalize(value: new Vector3(x: 0.3f, y: 1f, z: 0.2f)), Kind: SdfLightKind.Directional, Param: 0f, Shadows: true, Weight: 1000f));
+        lights.Count = 1;
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
+
+        return Frame() with {
+            FarDistance = 400f,
+            IndirectBounces = 0,
+            Lights = lights,
+            MeshDraws = [Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -20f), high: new Vector3(x: 300f, y: 0f, z: 20f)))],
+        };
+    }
+    /// <summary>THE LAW: a surface past the finest window reads a coarser level's measured light, never the absence of a
+    /// measurement. On a sunlit floor whose camera stands 60 m away, the floor's top reads the second level's probes as
+    /// measured, with weight; one past every window still reads its nearest probes' light, unmeasured, and a traced
+    /// light's visibility there is zero.</summary>
+    [Fact]
+    public void ASurfacePastTheFinestWindowReadsACoarserLevelsMeasuredLight() {
+        var volume = new SdfMeshIrradiance();
+        var (parameters, words) = Trace(frame: OpenFloor() with { TickLocked = true }, tier: SdfIndirectTier.Medium, volume: volume);
+
+        Assert.True(condition: parameters.Middle.Present && parameters.Far.Present);
+        Assert.Equal(expected: 8f, actual: parameters.Middle.Spacing);
+
+        var far = volume.DescribeProbes(point: new Vector3(x: 60f, y: 0f, z: 0f), normal: Vector3.UnitY)[0];
+
+        Assert.Contains(expectedSubstring: "level=1 measured=1", actualString: far);
+        Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: far);
+
+        var beyond = volume.DescribeProbes(point: new Vector3(x: 2000f, y: 0f, z: 0f), normal: Vector3.UnitY)[0];
+
+        Assert.Contains(expectedSubstring: "level=2 measured=0", actualString: beyond);
+        Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: beyond);
+        Assert.Equal(expected: 0f, actual: volume.LightVisibility(lightIndex: 0, normal: Vector3.UnitY, point: new Vector3(x: 2000f, y: 0f, z: 0f)));
+        Assert.True(condition: (words.Length == ((parameters.Window(level: 0).Count + parameters.Middle.Count + parameters.Far.Count) * SdfMeshIrradianceProbe.ProbeWords)));
+    }
+    /// <summary>THE LAW: the meter answers while the bake still lands static meshes: a frame with the bake pending builds
+    /// a scene from the meshes it has, the probes trace it, and the meter reads; a pending bake with no static mesh landed
+    /// builds no scene, since an empty one would measure open sky where walls have yet to land; a lockstep frame builds
+    /// none while its bake is pending.</summary>
+    [Fact]
+    public void TheMeterAnswersWhileTheBakeStillLands() {
+        var lit = Frame();
+        // In the upper room, under its point light.
+        var frame = lit with {
+            IndirectBounces = 0,
+            Views = [lit.Views[0] with { Camera = CameraSnapshot.LookAt(fieldOfViewRadians: 1f, position: new Vector3(x: 0.5f, y: 5.5f, z: 0.5f), target: new Vector3(x: 1.5f, y: 5.5f, z: 0.5f), viewportHeight: 4u, viewportWidth: 4u) }],
+        };
+        var volume = new SdfMeshIrradiance();
+        var deadline = DateTime.UtcNow.AddSeconds(value: 120d);
+
+        do {
+            _ = volume.Stage(bakePending: true, frame: frame, tier: SdfIndirectTier.Medium, write: static _ => { });
+            Thread.Sleep(millisecondsTimeout: 20);
+        } while (volume.Settling && (DateTime.UtcNow < deadline));
+
+        Assert.NotNull(@object: volume.DiagnosticScene(frame: frame));
+        Assert.True(condition: volume.TryMeter(forward: Vector3.UnitX, luminance: out var luminance, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out var source));
+        Assert.Equal(expected: SdfExposureMeterSource.Probes, actual: source);
+        Assert.True(condition: (luminance > 0f));
+
+        var bare = new SdfMeshIrradiance();
+
+        _ = bare.Stage(bakePending: true, frame: (frame with { MeshDraws = [] }), tier: SdfIndirectTier.Medium, write: static _ => { });
+        Assert.Null(@object: bare.DiagnosticScene(frame: (frame with { MeshDraws = [] })));
+        Assert.False(condition: bare.TryMeter(forward: Vector3.UnitX, luminance: out _, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out _));
+
+        var locked = new SdfMeshIrradiance();
+
+        _ = locked.Stage(bakePending: true, frame: (frame with { TickLocked = true }), tier: SdfIndirectTier.Medium, write: static _ => { });
+        Assert.Null(@object: locked.DiagnosticScene(frame: frame));
+    }
+    /// <summary>THE LAW: a camera cut snaps to the first reading after it. A cut the meter cannot read yet stays owed,
+    /// so the frame that first reads takes its target at once rather than easing from the exposure before the cut.</summary>
+    [Fact]
+    public void ACutSnapsToTheFirstReadingAfterIt() {
+        var frame = Frame() with {
+            IndirectBounces = 0,
+            TickLocked = true,
+            Exposure = new SdfExposure(Adaptation: 0.75f, Compensation: 0f, Ev100: 15f, Local: 0f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
+        };
+        var volume = new SdfMeshIrradiance();
+
+        _ = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
+        Assert.True(condition: volume.TryMeter(forward: frame.Views[0].Camera.Forward, luminance: out var lit, position: frame.Views[0].Camera.Position, skyVisibility: out _, source: out _));
+
+        var exposures = new SdfViewExposures();
+        var cut = frame with { Views = [frame.Views[0] with { CutRevision = 1 }] };
+
+        exposures.Stage(frame: frame, irradiance: new SdfMeshIrradiance(), seconds: 0.01d);
+        exposures.Stage(frame: cut, irradiance: new SdfMeshIrradiance(), seconds: 0.01d);
+        Assert.Contains(expectedSubstring: "meter=none", actualString: exposures.Describe()[0]);
+        exposures.Stage(frame: cut, irradiance: volume, seconds: 0.01d);
+        Assert.Equal(expected: SdfPhotometry.ExposureOf(ev100: frame.Exposure.Target(luminance: lit)), actual: exposures.MultiplierOf(view: 0), precision: 6);
     }
 }
