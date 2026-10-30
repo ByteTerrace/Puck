@@ -469,13 +469,13 @@ template granaryStore(name, body, roof) {
 }
 
 // ---- Finding each piece's cell ----------------------------------------------------------------------------------------
-// The board's rules run one phase a tick, in a cycle of nine (`granaryPhase`), so the tick's rule work is priced as the
+// The board's rules run one phase a tick, in a cycle of twelve (`granaryPhase`), so the tick's rule work is priced as the
 // dearest phase rather than the sum of them all: the stale cells are cleaned, each piece is found, the occupancy follows,
 // the two coverage rows are read, the tallies are counted and the lectern reads the piece under the cursor. A change
-// settles within one cycle, 0.3 s.
+// settles within one cycle, 0.4 s.
 rule "granary-phase" {
   mode: Level
-  granaryPhase = (granaryPhase + 1) % 9
+  granaryPhase = (granaryPhase + 1) % 12
 }
 
 // The tiles' channels `tile` and `bit0`..`bit3` code the cell a piece stands on: an account's cell is the sum of the bits
@@ -603,24 +603,25 @@ rule "granary-feed-live" {
 }
 
 // What the lectern shows for the piece under the cursor, and nothing for an empty cell.
-rule "granary-inspect-piece" {
-  when granaryPhase == 8 and granaryCellOf[$each] == granarySeat.cursor + 1
-  mode: Level
-  forEach: granaryNames
-  setState(state: granarySel, key: name, fromState: granaryNames, fromKey: $each)
-  setState(state: granarySel, key: region, fromState: granaryRegions, fromKey: $each)
-  setState(state: granarySel, key: kind, fromState: granaryKinds, fromKey: $each)
-  setState(state: granarySel, key: sku, fromState: granarySkus, fromKey: $each)
+template granaryInspect(field, source, phase) {
+  rule $"granary-inspect-{field}" {
+    when granaryPhase == phase and granaryCellOf[$each] == granarySeat.cursor + 1
+    mode: Level
+    forEach: granaryNames
+    setState(state: granarySel, key: field, fromState: source, fromKey: $each)
+  }
+
+  rule $"granary-inspect-{field}-empty" {
+    when granaryPhase == phase and granaryBoard[granarySeat.cursor] == 0
+    mode: Level
+    setState(state: granarySel, key: field, text: "")
+  }
 }
 
-rule "granary-inspect-empty" {
-  when granaryPhase == 8 and granaryBoard[granarySeat.cursor] == 0
-  mode: Level
-  setState(state: granarySel, key: name, text: "")
-  setState(state: granarySel, key: region, text: "")
-  setState(state: granarySel, key: kind, text: "")
-  setState(state: granarySel, key: sku, text: "")
-}
+granaryInspect(name, granaryNames, 8)
+granaryInspect(region, granaryRegions, 9)
+granaryInspect(kind, granaryKinds, 10)
+granaryInspect(sku, granarySkus, 11)
 
 // ---- Seated play at the table -----------------------------------------------------------------------------------------
 // Seat 1 sits down with the context button (the board's engage block) and moves the cursor with the shared tabletop page
@@ -805,7 +806,7 @@ state {
     }
     row { name: "granaryPowerSelected", kind: "Text", value: granaryReachVolume[0], visibility {} }
     row { name: "granaryPowerPatch", kind: "Text", value: granaryReachPatch[0], visibility {} }
-    slot granaryPhase = 0 bounds(0..8)
+    slot granaryPhase = 0 bounds(0..11)
     slot granaryIrrigationRequest = 0 bounds(0..2)
     slot granaryIrrigationStage = 0 bounds(0..2)
     slot granaryPowerRequest = 0 bounds(0..2)

@@ -99,12 +99,12 @@ Ordinary rules read `influence(water, granaryStores)[$each]` to address a dealt
 child. The result counts distinct other providers covering the centre of the
 target's first occupation volume, several matching volumes from one provider count
 once, a missing target reads absent and a present target outside coverage reads
-zero. The board's rules run one phase a tick in a cycle of nine (`granaryPhase`:
+zero. The board's rules run one phase a tick in a cycle of twelve (`granaryPhase`:
 clean the stale cells, find the pieces, follow the occupancy, read the water and
 power coverage, count the tallies, read the piece under the cursor), because the
 engine prices a tick's rule work as the dearest of rules gated on different
 values of one slot; a change to the feed or a stage settles within one cycle,
-0.3 s. Coverage rows write only when a value changes, and an account that leaves
+0.4 s. Coverage rows write only when a value changes, and an account that leaves
 has its cells cleaned on the cycle after its piece goes.
 
 A placement's `spatial` array describes named local volumes. `Occupation` reserves
