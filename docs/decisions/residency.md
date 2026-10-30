@@ -148,8 +148,14 @@ Each step is taken when the measured need appears:
 4. **Mapped demand through portal faces**, replacing the blanket baking share.
 5. **Eviction under the byte budget**, with coarse levels owning compacted
    vertices so dropping a fine level frees its vertices, not only its indices.
-6. **Authored areas**, when a world shows the need: doors that close, a
-   mispredicted sightline, a world over budget.
+6. **Authored areas**, tried first on the gallery's floors: each level an area,
+   the stairwell, the lift shaft and the window bands its openings (the outdoors
+   is then an area beside every floor). Distance and projected size misjudge
+   floors, since the level above is a few metres away behind a slab; an occupied
+   floor and its neighbours through openings rank first, and under a lowered
+   budget unoccupied floors evict first. The measure is time until the occupied
+   floor has landed, with and without the areas. Approaching an opening raises
+   the next floor gradually; nothing switches at a trigger.
 7. **Terrain tiles** (the valley plan's step 4) as units in the same selector,
    then the moons through routed residency.
 
@@ -160,11 +166,14 @@ simulation design and needs its own consensus. Card tables depend on none of thi
 work; the board game room on level 2 against a spawn in the lobby makes them a
 test case for step 2.
 
-## The owner's calls
+## The owner's rulings on look and policy
 
-- What a late or over-budget group shows: the coarse level, the fallback colour,
-  fog, or nothing; and whether level and residency switches fade or cut.
-- Whether the debug world gets doors that close, and whether the gallery
-  authors areas or relies on the passive rule.
-- The resident-byte target machine: the RTX 4070 now, the Steam Deck later.
-- Door feel: how long a standard door takes to open.
+- A group that has not landed, or was evicted, shows its coarsest level, which
+  stays resident within the far distance; where no level is resident it reads
+  as distance haze in the world's sky colour, never a hole.
+- Level-of-detail switches cut, since the projected-error rule already places
+  them below a pixel; a group that lands late fades in with a short dither.
+- Closing doors come after the floors: one door in the standard package, its
+  opening time authored there, once the scheduler and areas have landed.
+- The RTX 4070 sets the resident-byte target now; the Steam Deck is a second
+  qualification on the same budget mechanism when Deck work starts.

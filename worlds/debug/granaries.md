@@ -36,12 +36,11 @@ the file is host approval and never imported world content:
 | `granaries.fixture.extensions.json` | `observation.fixture` | Six synthetic accounts in four kinds, for tests and headless runs |
 | `granaries.offline.extensions.json` | `observation.fixture` | A provider that fails every read, to show the offline line |
 
-The live configuration commits no credential. It names the resource group by
-name (an absolute ID with the subscription works too); the provider signs in as the person who runs the
-World (`azureCli`: `az login`) or, in a deployment, as a managed identity, and
-the subscription is the one visible subscription that holds the group (a read
-refuses when none or several do). The `observation.fixture` provider is built in
-to every World host.
+The live configuration commits no credential. It names the resource group by its
+absolute ID, the authored subscription included (the engine never discovers a
+subscription); the provider signs in as the person who runs the World (`azureCli`:
+`az login`) or, in a deployment, as a managed identity. The `observation.fixture`
+provider is built in to every World host.
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices all --extensions-config-file worlds/hosting/granaries.extensions.json

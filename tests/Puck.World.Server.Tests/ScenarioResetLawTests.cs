@@ -8,6 +8,45 @@ namespace Puck.World.Server.Tests;
 /// <summary>A scenario's terminal tape and input mask never cross the next scenario's boot boundary.</summary>
 public sealed class ScenarioResetLawTests {
     [Fact]
+    public void ScenarioDeliveryReadsTheRestoredClockSeeds() {
+        var row = new WorldStateRow(CellName.Parse(candidate: "phase"), CellKind.Fixed,
+            Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(rawBits: 16384))]);
+        var definition = Fixtures.BuildDocument().WithWorldState(rows: [row]) with {
+            TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "clock", State: "phase")]),
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var server = fixture.Server;
+
+        Assert.True(condition: server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var boot, reason: out var reason), userMessage: reason);
+        var expected = server.ClockSeeds["clock"];
+
+        server.ResetClockSeeds(definition: definition.WithWorldState(rows: [row with {
+            Cells = [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(rawBits: 49152))],
+        }]));
+        Assert.NotEqual(expected, server.ClockSeeds["clock"]);
+        var sink = new SeedSink(seed: () => server.ClockSeeds["clock"]);
+        using var attached = server.AttachSink(sink: sink);
+
+        sink.Seeds.Clear();
+
+        server.Persistence.RestoreScenario(checkpoint: boot!);
+
+        Assert.Equal(expected: [expected], actual: sink.Seeds);
+    }
+
+    private sealed class SeedSink(Func<ulong> seed) : IClientSink {
+        public List<ulong> Seeds { get; } = [];
+
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => Seeds.Add(item: seed());
+        public void DeliverAnswer(in QueryAnswer answer) { }
+        public void DeliverComposition(WorldComposition composition) { }
+        public void DeliverSessionLever(WorldSessionLever lever) { }
+        public void DeliverSnapshot(in WorldSnapshot snapshot) { }
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+    }
+
+    [Fact]
     public void AProbeRetainsInputAfterTheProducerReusesItsBorrowedBuffers() {
         using var run = new WorldHistoryHarness(on: false);
         var submission = Fixtures.Input(server: run.Fixture.Server, link: run.Transport, body: 0,
