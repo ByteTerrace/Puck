@@ -287,8 +287,11 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         placements: fixture.Server.Definition.Placements
     )!.ShownPrototypeId;
 
+    /// <summary>A reused scenario host shares one boot: the preceding scenario's run swapped the responsive collider,
+    /// and restoring the boot brings back the shape its seed shows before the first tick. A scenario whose seed
+    /// differs is refused: it boots its own host.</summary>
     [Fact]
-    public void AScenarioSeedRestoresItsResponsiveColliderBeforeTheFirstTick() {
+    public void AScenarioRestoreBringsBackItsSeedsResponsiveColliderBeforeTheFirstTick() {
         var basis = CrossingDocument();
         var placement = basis.Placements[0];
 
@@ -302,26 +305,35 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
                 }],
             }],
         };
-        WorldDefinition Scenario(long value) => basis.WithWorldState(rows: [basis.AuthoredState[0] with {
-            Cells = [new StateCell(CellName.Parse(candidate: "0"), CellValue.Int(value: value))],
-        }]);
-        using var fixture = Fixtures.FreshServer(definition: Scenario(value: 0));
-        var server = fixture.Server;
+        // The loader settles which state entries hold before admission, so a boot shows and collides as its seed.
+        WorldDefinitionAdmission Scenario(long value) {
+            var json = WorldDefinitionSerialization.Serialize(definition: basis.WithWorldState(rows: [basis.AuthoredState[0] with {
+                Cells = [new StateCell(CellName.Parse(candidate: "0"), CellValue.Int(value: value))],
+            }]));
 
-        Assert.True(condition: server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), userMessage: reason);
-        foreach (var value in new[] { 5L, 0L, 5L }) {
-            var definition = Scenario(value: value);
-            var json = WorldDefinitionSerialization.Serialize(definition: definition);
+            Assert.True(condition: WorldDefinitionLoader.TryLoadForAdmission(json, "scenario.world.json", out var admission, out var reason,
+                catalog: TestMachines.Catalog()), userMessage: reason);
+            return admission!;
+        }
+        foreach (var (seed, run) in new[] { (5L, 0L), (0L, 5L) }) {
+            using var fixture = Fixtures.FreshServer(definition: Scenario(value: seed).Definition);
+            var server = fixture.Server;
+            var shown = PrototypeOf(fixture: fixture);
+            var collider = Assert.Single(collection: server.Population.DiagnosticColliders).Collider;
 
-            Assert.True(condition: WorldDefinitionLoader.TryLoadForAdmission(json, "scenario.world.json", out var admission, out reason,
-                catalog: server.Machines.ValidationCatalog), userMessage: reason);
-            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: admission!, boot: boot!));
-            using var fresh = Fixtures.FreshServer(definition: admission!.Definition);
+            Assert.Equal(((seed >= 3) ? TargetCreation : BaseCreation), shown);
+            Assert.True(condition: server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), userMessage: reason);
+            server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: Principal.Console, Row: CounterRow,
+                Key: "0", Value: run, Kind: WorldDocumentWriteKind.Set));
+            fixture.Step();
+            Assert.NotEqual(collider, Assert.Single(collection: server.Population.DiagnosticColliders).Collider);
 
-            Assert.Equal(PrototypeOf(fixture: fresh), PrototypeOf(fixture: fixture));
-            Assert.Equal(Assert.Single(collection: fresh.Server.Population.DiagnosticColliders).Collider,
-                Assert.Single(collection: server.Population.DiagnosticColliders).Collider);
+            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: Scenario(value: seed), boot: boot!));
+            Assert.Equal(shown, PrototypeOf(fixture: fixture));
+            Assert.Equal(collider, Assert.Single(collection: server.Population.DiagnosticColliders).Collider);
             Assert.Equal(1UL, server.NextInputTick);
+
+            Assert.Throws<InvalidOperationException>(testCode: () => server.Persistence.ScenarioCheckpoint(admission: Scenario(value: run), boot: boot!));
         }
     }
     /// <summary>The row climbs 1/tick from a rule with no gate; the swap lands the moment it reaches 3, not
