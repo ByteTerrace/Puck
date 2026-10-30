@@ -209,6 +209,37 @@ public sealed class TestCommandLawTests {
             comparisonType: StringComparison.OrdinalIgnoreCase
         );
     }
+    [Fact]
+    public void AFailedLegDoesNotStopTheLegsThatNeedAFreshHost() {
+        using var directory = new TemporaryDirectory(prefix: "puck-test-batch-continue-");
+        var worldPath = directory.WriteText(
+            name: "generated/scenario/test.world.json",
+            text: """{"schema":"puck.world.definition.v1","schedule":{"exportTick":1,"settleTicks":1,"rows":[]}}"""
+        );
+        var failing = directory.PathOf(name: "worlds/000000/run1");
+        var following = directory.PathOf(name: "worlds/000001/run1");
+
+        // The first leg fails as a reproduction divergence would, after it ran; the next needs a host of its own.
+        _ = Directory.CreateDirectory(path: Path.Combine(path1: failing, path2: "timing.json"));
+        var batchPath = directory.WriteText(
+            name: "batch.json",
+            text: System.Text.Json.JsonSerializer.Serialize(value: new[] {
+                new { World = worldPath, Directory = failing, ExitAfterSeconds = 120, Reproduce = false, },
+                new { World = worldPath, Directory = following, ExitAfterSeconds = 120, Reproduce = false, },
+            })
+        );
+        var process = CliProcess.RunCaptured(
+            fileName: "dotnet",
+            arguments: [Artifact(), "--devices", "none", "--test-batch", batchPath],
+            cancellationToken: TestContext.Current.CancellationToken,
+            input: string.Empty,
+            timeout: TimeSpan.FromSeconds(value: 60)
+        );
+
+        Assert.Equal(expected: 1, actual: process.ExitCode);
+        Assert.Equal(expected: "1", actual: File.ReadAllText(path: Path.Combine(path1: failing, path2: "exit-code")));
+        Assert.Equal(expected: "0", actual: File.ReadAllText(path: Path.Combine(path1: following, path2: "exit-code")));
+    }
 
     private static string Artifact() => (File.Exists(path: Path.GetFullPath(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "../../Puck.World/release/Puck.World.dll")))
         ? Path.GetFullPath(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "../../Puck.World/release/Puck.World.dll"))

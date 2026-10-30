@@ -40,8 +40,7 @@ resolves their edits to this file at merge.
    and the static field), then the persisted caches keyed by the modules as
    built; a product of edited code under the unedited identity is the hazard.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
-   cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
-   answer), then the schema switch.
+   schema switch, then the pick answer.
 6. [Test runner and replay](#test-runner-and-replay): make the per-tick
    authority hash incremental, as the quiet measurement supports.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
