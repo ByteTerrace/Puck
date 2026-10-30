@@ -105,11 +105,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Sweep and visual checks
 
 Owner: sweep follow-up, with the lead scheduling the GPU slot · medium ·
-Next: fix the prelude (dismiss the chess toast, wait in shorter steps),
-reproduce the companion overlaps, then one paired windowed tour (about 18
-minutes of GPU) when no lane holds the GPU, compared stop by stop.
+Next: reproduce the companion overlaps, then one paired windowed tour (about 18
+minutes of GPU) when no lane holds the GPU, compared stop by stop, with
+`--attach` on one World for both runs.
 
-- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. Settle the lighting state before each stop (indirect and exposure converged, a fixed camera-trace history) or compare against a baseline taken in the same World session. (from: bake-scale lane)
+- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter reads the cached camera-trace sample ring (`SdfMeshIrradiance`), whose reuse depends on where the camera stood before. The tour now reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms or refutes the cause. If it confirms, make the meter's camera sample a function of the present camera alone (or clear the ring on a cut) rather than settling around it. (from: bake-scale lane)
 
 - Finish sweep-honest's paired motion qualification. Its first final tour
   measures all 23 windowed signals and captures all 64 stops cleanly, and 62
@@ -125,12 +125,6 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
   captures have not shown it. A cold Direct3D 12 run stayed at tick 0 until its
   nine-minute deadline with the render stack waiting on an upload fence; that
   cold stall's cause is unconfirmed.
-- The prelude's `world.state.cell.set chessDemo enabled 0` leaves its HUD toast
-  in every still although `world.row.set hud.defaults enabled false` ran before
-  it, and on a loaded machine its `world.wait 300` is refused outright (the
-  attachment's answer falls due before the release tick), so every later still
-  carries that refusal; dismiss the toast and wait in shorter steps
-  (`worlds/debug/sweep.json`).
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42: the first recovered tour counted three events, at ticks 861 to 3997,
   after a clean initial watchdog reading, and `watchdog.after-tour` correctly
@@ -591,16 +585,13 @@ timed on a quiet machine.
 
 ### Debug tools
 
-Owner: debug-world tools lane (specialist) · medium · Next: the pick
-(`world.view.pick` addresses the presented world view by default, lists it in
-`panes`, and answers under `world.rate pause`), qualified in one windowed pass;
-then the diagnostics' windowed checks, then the three developer exhibits.
+Owner: debug-world tools lane (specialist) · medium · Next: the diagnostics'
+windowed checks, then the three developer exhibits.
 
-- [medium] Under `world.rate pause` the pick has stayed pending with no answer;
-  the hold now claims a paused World answers, bounded by the call's deadline
-  (`Picking.cs`), which only a windowed run shows. The default view and the
-  `panes` listing are done (`world.view.pick <x> <y>`, `view instance:<name>`);
-  the paused run is owed. (from: owner walkthrough)
+- [low] A pick on a screen's face names `screen=<index>` and no placement, and a
+  derived face (a creation's own screen) does not name the placement it belongs
+  to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
+  group of the program's segments no instance owns names nothing.
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -985,10 +976,9 @@ answer.
   that session. Evidence and start ids are in the controls hand-back.
 
 - [x] [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The merged lease path now counts an unreadable or undeletable ticket as occupied, opens holder metadata with deletion sharing, and always releases its exclusive guard even when metadata cleanup is delayed. The guard, rather than an alive adapter PID in leftover metadata, proves ownership. Sixteen focused lease cases pass, including lane rotation and the Windows delayed-deletion reproduction. (from: bars-and-pick and probe-depth-fix lanes)
-- [low] `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
 
 
-- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
+- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. (from: operator-toasts lane)
 
 - A connected Claude Code session keeps a tool's old output schema when the MCP
   front switches to a backend whose schemas changed: the first `puck_adapter`

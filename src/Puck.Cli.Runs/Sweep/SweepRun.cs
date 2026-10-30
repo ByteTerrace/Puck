@@ -21,6 +21,8 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     // The ticks between the tick a stop's lines and bakes settled at and the start of its pinned timeline: the room a
     // call needs to arm the timeline and the capture before the World reaches them.
     private const int LeadTicks = 30;
+    // The most ticks one tour wait call holds: a second of the default rate.
+    private const ulong WaitChunkTicks = 30UL;
     // The suffix of a failure signal read again after the tour.
     private const string RecheckSuffix = ".after-tour";
 
@@ -206,6 +208,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             var png = (pinned ? world.Capture(output: out capture, tick: captureTick) : null);
             string? motion = null;
             string? relative = null;
+            string? exposure = null;
             double? changed = null;
 
             if (pinned && (png is null)) {
@@ -255,6 +258,17 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                         status = SweepStatus.Red;
                     }
                 }
+
+                // The held tick's exposure: a still that differs from its baseline's in every pixel is usually this, which a
+                // meter reading that depends on the World's history moves. A World without a renderer has none to read.
+                var metered = world.Run(script: "world.exposure");
+
+                exposure = (metered.Ok ? SweepEvidence.ExposureReading(output: metered.Output) : null);
+                if (changed > tour.AmberFraction) {
+                    var note = SweepEvidence.ExposureNote(before: baseline?.ExposureFor(name: stop.Name), after: exposure);
+
+                    if (note is not null) { reasons.Add(item: note); }
+                }
             }
 
             foreach (var line in (stop.After ?? [])) {
@@ -267,7 +281,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
             }
 
             progress.WriteLine(value: $"sweep: still {stop.Name} {status}");
-            stills.Add(item: new SweepStillResult(Capture: capture.Trim(), ChangedFraction: changed, File: relative, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: reasons, Status: status, Motion: motion));
+            stills.Add(item: new SweepStillResult(Capture: capture.Trim(), ChangedFraction: changed, File: relative, Group: (stop.Group ?? "tour"), Name: stop.Name, Note: stop.Note, Reasons: reasons, Status: status, Motion: motion, Exposure: exposure));
         }
 
         return new SweepTourResult(
@@ -325,7 +339,26 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     // Why the World can no longer be driven, or null while it can.
     private string? Stopped() => (world.Gone ? "the World's attachment closed" : world.Budget.Reason);
     // Tick waits advance a bounded interval; readiness waits and coordinator round trips leave authority held.
-    private SweepAnswer TourLine(string line) => world.Run(script: TickWaits(script: line), timeoutSeconds: 120);
+    private SweepAnswer TourLine(string line) {
+        if (!TryTickWait(line: line, ticks: out var ticks) || (ticks <= WaitChunkTicks)) {
+            return world.Run(script: TickWaits(script: line), timeoutSeconds: 120);
+        }
+
+        // A tick wait is refused when the World's rate cannot complete it before its call's answer is due, and a loaded
+        // machine's rate falls with the load, so a long wait is several calls of a few ticks each, each with a deadline of its own.
+        var answer = new SweepAnswer(Ok: true, Output: string.Empty, Refusals: []);
+
+        for (var remaining = ticks; (remaining > 0UL) && answer.Ok; remaining -= Math.Min(val1: remaining, val2: WaitChunkTicks)) {
+            answer = world.Run(script: $"world.rate resume\nworld.wait {Math.Min(val1: remaining, val2: WaitChunkTicks).ToString(provider: CultureInfo.InvariantCulture)}\nworld.rate pause", timeoutSeconds: 120);
+        }
+
+        return answer;
+    }
+    private static bool TryTickWait(string line, out ulong ticks) {
+        ticks = 0UL;
+
+        return (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait ") && ulong.TryParse(provider: CultureInfo.InvariantCulture, result: out ticks, s: line[11..], style: NumberStyles.None));
+    }
     private static string TickWaits(string script) => string.Join(separator: '\n', values: script.Split('\n').Select(selector: static line =>
         ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait ") && (ulong.TryParse(line[11..], out _) || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait until ")))
             ? $"world.rate resume\n{line}\nworld.rate pause" : line)));
