@@ -297,12 +297,6 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   - [medium] The CLI computes `ScenarioBootShape` over the raw staged JSON with unresolved `basis`/`imports` while the server compares the composed definition, so a census row whose inhabiting placement comes from an import lands on a shared worker and the server aborts it ("requires its own worker") (`TestCommand.Batch.cs:10-19`, `WorldPersistence.Scenarios.cs:83-91`).
   - [low] `RestoreCheckpointCore` delivers the restored definition to attached sinks before `ResetClockSeeds` and `GrantTable.SyncState`, so a projection sink seeding trait clocks reads the previous scenario's seeds (presentation only) (`WorldPersistence.Scenarios.cs:138-142`, `WorldPersistence.Checkpoint.cs:1048`).
 
-- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels`
-  fails on the integration tip, twice alone: the tick-1 inspect line, which
-  should name only seat 2's strafe sample, also carries `action.forward:Bipolar=0(0)`
-  in a `revision=1 epoch=1` channel listing. The fixture is the in-code default
-  document, and no controls change touches inspection; the commit that broke it
-  is not isolated. CI's suite run is red until it is fixed.
 - [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (boot-reuse-report.md, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
 
 - [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
@@ -916,7 +910,7 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
-- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels` (`tests/Puck.World.Server.Tests/ReplayInspectLawTests.cs:41`) fails on the integration head on a seat-2 `forward` channel event, most likely since c7-findings changed `replay.inspect` and `world.history` to print a segment's driven lanes by bank address (`segment p1 2s [@3=1] by console`). Decide whether the law or the read-back is right (the input decision's tape-names item in this packet) and make them agree. (from: companion-build lane, confirmed by the lead)
+- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels` (`tests/Puck.World.Server.Tests/ReplayInspectLawTests.cs:41`) fails on the integration head on a seat-2 `forward` channel event, most likely since c7-findings changed `replay.inspect` and `world.history` to print a segment's driven lanes by bank address (`segment p1 2s [@3=1] by console`): the tick-1 inspect line, which should name only seat 2's strafe sample, also carries `action.forward:Bipolar=0(0)` in a `revision=1 epoch=1` channel listing, on the in-code default document, failing alone too. CI's suite run is red until it is fixed. Decide whether the law or the read-back is right (the input decision's tape-names item in this packet) and make them agree. (from: companion-build lane, confirmed by the lead)
 
 - [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
