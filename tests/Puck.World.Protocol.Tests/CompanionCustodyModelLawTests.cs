@@ -846,6 +846,26 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         Assert.NotEqual(expected: CustodyKind.Pending, actual: Title(s: s, Ids.C1).Kind);
     }
 
+    // ---- the step-1 review's counterexamples ----------------------------------------------------------------------
+
+    [Fact]
+    public void AnUncertainRecordFencesEveryVerificationAtHome() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.HopQuery);
+        // Home's release lands but its answer is lost: home is latched on a record about the title, not about the key.
+        s = Drive(s: s, "append UncertainLanded H");
+        s = Drive(s: s, "install 2");
+        Assert.True(condition: s.Nodes[0].Latched);
+        s = Drive(s: s, "deliver B>H:HopQuery");
+        Assert.Contains(collection: s.Network, filter: static m => (m.Kind == MsgKind.HopQueryReply) && m.Arg.EndsWith("=-1", StringComparison.Ordinal));
+        s = Converge(s: s);
+        Assert.Equal(expected: CustodyKind.Released, actual: Title(s: s, Ids.C1).Kind);
+    }
+
     // ---- the explorer ---------------------------------------------------------------------------------------------
 
     private static Node[] Route(string route) => route.Select(static c => Enum.Parse<Node>(value: c.ToString())).ToArray();

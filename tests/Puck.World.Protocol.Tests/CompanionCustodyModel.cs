@@ -1174,7 +1174,7 @@ public static class CustodyModel {
                 continue;
             }
             if (view.Hops.TryGetValue(key: (msg.Key, member.Id), value: out var existing)) {
-                answers.Add(item: $"{member.Id}={(home.UncertainAbout(key: msg.Key) ? "Unavailable" : (view.Custody[member.Id].Installed ? "Released" : existing.Next.ToString()))}");
+                answers.Add(item: $"{member.Id}={(home.Latched ? "Unavailable" : (view.Custody[member.Id].Installed ? "Released" : existing.Next.ToString()))}");
                 continue;
             }
             if (!view.Custody.TryGetValue(key: member.Id, value: out var custody)) {
@@ -1256,7 +1256,8 @@ public static class CustodyModel {
                 (custody.Kind == CustodyKind.Pending) &&
                 (custody.PendingKey == msg.Key) &&
                 !custody.Installed &&
-                !home.UncertainAbout(key: msg.Key);
+                // A latched home cannot call any grant current: the record it is uncertain about may end the title.
+                !home.Latched;
 
             return $"{id}={(granted ? hop!.Next : -1)}";
         });

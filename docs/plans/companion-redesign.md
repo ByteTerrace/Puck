@@ -119,7 +119,10 @@ An append answers `Durable`, `Refused` or `Uncertain`. After `Uncertain` the aut
 latches: it appends nothing until it recovers (checkpoint plus log redo), it acts on
 nothing from the uncertain record on (a landed record is suspended, as the escrow suspends
 an uncertain arrival: it embodies nothing, grants nothing and verifies nothing until
-recovery reads the log), and about that record it answers `Uncertain`.
+recovery reads the log), and about that record it answers `Uncertain`. Home's verification
+is fenced by the whole latch, not only by the key the uncertain record names: a release
+or a recall carries no key and may still end the title, so a latched home confirms no
+grant at all.
 
 | Record | Refused | Uncertain |
 |---|---|---|
@@ -477,7 +480,7 @@ dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c 
 The build lane runs the model check at every step of section 9, and every change to this
 protocol (the model, the spec, or the engine code that implements a transition) runs it
 before landing; a protocol change is made in the model first and the model check is its
-evidence. It takes about a quarter of an hour on the lead machine and a few hundred megabytes; the ordinary suite stays
+evidence. It takes seven to seventeen minutes on the lead machine, by load, and a few hundred megabytes; the ordinary suite stays
 under a minute. Scopes combine fault classes
 (two companions with admission failure, partial landing, crash and loss in one scope; log
 failures with crashes on the onward route; repeated deadlines so a shed image fails more
@@ -521,6 +524,7 @@ attempt is in flight.
 | Round 5: failed landings have no generation effect | `AFailedLandingStillAdvancesTheSlotGeneration` |
 | Round 5: the onward route never combines a log fault with a crash | the `AB` `Log \| Crash` scope's budget of two |
 | Round 5: recall of a pending title contradicts the fence | `APendingTitleWaitsForItsHopBeforeARecall` |
+| Step-1 review: verification fenced only by the uncertain record's key | `AnUncertainRecordFencesEveryVerificationAtHome` |
 
 Writing and running the model changed the protocol before any reviewer could, in round two
 (`Pending` must be waited on; a dangling lease blocks returns until it expires; a stale
