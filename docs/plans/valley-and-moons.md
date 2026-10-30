@@ -150,6 +150,16 @@ queries and 2,172 support evaluations; on a 22 degree slope at 368 m, 49 and
 witnesses. The rule budget rises 112,392 units a tick, to 2,896,179, for the
 eight recovery wedges.
 
+Each sector now collides as one field collider over its masses and relief
+(`FixedStaticColliderKind.Field`), so the Moth stands on the drawn rock: at the
+owner's summit spot (422.65, −5.51) she grounds at 290.70 m where the masses
+alone held her at 289.16 m, and at rest `body.where` reads no change over 60
+ticks on the 58 degree face, the 22 degree slope or the summit. Its price (headless, a loaded
+machine, per tick): the Moth standing on the north rim spends about 70 field
+queries and 422 relieved-field samples (a six-octave sample costs about 3.4 µs
+there, the unrelieved masses alone 0.3 µs), and the world's other bodies about
+315 envelope reads that prove them clear with no relieved sample.
+
 The bake reaches these numbers because a scoped creation's relief declares its
 detail (`CreationNoiseDocument.DetailSpacing`: a quarter of the wavelength of
 the finest octave carrying a sixteenth of the amplitude, 1.56 m here) and the
@@ -161,8 +171,8 @@ The gallery's NOISE exhibit, the world's other scoped noise creation, bakes at
 The CPU audit measures a sector against a fixed-point field that now reads a
 514 m superellipsoid radius at full precision (through its Q16 inverse it read
 surface points 0.06 to 0.85 m off, with no gradient at a 1 mm probe), and it
-reads chunked static unions whole. What the terrain still lacks, contact on the
-drawn relief first, is the [terrain packet](open-items.md#the-valleys-terrain).
+reads chunked static unions whole. What the terrain still lacks is the
+[terrain packet](open-items.md#the-valleys-terrain).
 
 **Heightfield source: not added.** Measured analytic terrain does not fail the
 edit bar (one sector rebakes alone; its CPU bake is 24 to 43 s on a loaded

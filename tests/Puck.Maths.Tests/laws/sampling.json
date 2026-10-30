@@ -1211,6 +1211,14 @@
       {
         "Type": "Puck.Maths.Pcg3dLatticeNoise",
         "Name": "ValueNoise01"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "ValueNoise3"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "Fbm3"
       }
     ],
     "Legs": [
@@ -1239,6 +1247,33 @@
         "Against": "the corner extraction FixedQ4816.FromRawBits(Pcg3d(nx, nz, seed).X >> 16), formed directly against the PUBLIC Pcg3d rather than through ValueNoise01's own private corner step",
         "Shared": "the public Pcg3d hash: at a whole-cell boundary the quintic fade is exactly zero on both axes so the bilinear blend collapses onto the near corner, tying the two public members together rather than checking either against an outside reference",
         "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "ValueNoise3 stays inside its documented [-1, 1) band over 256 drawn points across the signed Q48.16 lattice with drawn lane seeds",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "ValueNoise3 at the 256 drawn points' whole lattice cells",
+        "Against": "twice the corner fraction FixedQ4816.FromRawBits(Pcg3d(cell ^ seeds).X >> 16) less one, formed against the PUBLIC Pcg3d",
+        "Shared": "the public Pcg3d hash: at a whole lattice point all three quintic fades are exactly zero, so the trilinear blend collapses onto the near corner",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "Fbm3 at the 256 drawn points (scaled into a small domain) with drawn octave counts 0..8, gains in [0, 1] and lacunarities in [1, 4]",
+        "Against": "the octaves' weighted sum formed in the test: ValueNoise3 at the point times lacunarity to the octave, seeded by the base seed plus the octave with its Y and Z lanes keyed by HashStreamA and HashStreamB, weighted by gain to the octave",
+        "Shared": "ValueNoise3, the identical member: the leg pins the octave walk (its seeds, scaling order and weights), which the relief op the bake draws and contact reads both sum through",
+        "Citation": "ValueNoise3 is pinned in this law's lattice-point leg against the public Pcg3d, which this law's first leg pins classically against the BigInteger reference",
         "Absolute": ""
       }
     ]

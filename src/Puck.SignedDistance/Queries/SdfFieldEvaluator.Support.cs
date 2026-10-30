@@ -18,6 +18,9 @@ public sealed partial class SdfFieldEvaluator {
             SdfOp.Onion or
             SdfOp.Dilate or
             SdfOp.CellDisplace or
+            // Creation relief: inside the scope that holds it, the pop's 1/L makes the relieved field a lower bound on
+            // the distance to the drawn surface, which a solid's contact reads (a collider follows the drawn solid).
+            SdfOp.NoiseDisplace or
             SdfOp.SymmetryPlane or
             SdfOp.PushField or
             SdfOp.PopField => true,
@@ -26,7 +29,7 @@ public sealed partial class SdfFieldEvaluator {
     }
     /// <summary>Gets the ops the evaluator interprets under <see cref="SdfFieldReading.Render"/> alone, each with a point
     /// rule mirroring <c>mapCore</c>'s case (<c>SdfFieldEvaluator.RenderOps.cs</c>) and an inclusion rule: every warp,
-    /// fold and relief the renderer draws but no contact field reads. <see cref="SdfOp.TransformDynamic"/> stays out of
+    /// fold and per-shape relief the renderer draws but no contact field reads. <see cref="SdfOp.TransformDynamic"/> stays out of
     /// both readings: the evaluator carries no per-frame transform table to resolve a slot against, and the mesh audit
     /// poses each slot as a translate and rotate before it reads a group (<c>SdfMeshAudit.Field</c>).</summary>
     public static IReadOnlyList<SdfOp> RenderWarpOps { get; } = [
@@ -41,7 +44,6 @@ public sealed partial class SdfFieldEvaluator {
         SdfOp.CellJitter,
         SdfOp.LaneErode,
         SdfOp.Displace,
-        SdfOp.NoiseDisplace,
     ];
     /// <summary>Returns whether the evaluator interprets <paramref name="op"/> under a reading; a program holding any other
     /// op is refused at construction.</summary>

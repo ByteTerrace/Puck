@@ -328,29 +328,11 @@ public sealed partial class SdfFieldEvaluator {
     // e^value through the base-two kernel: 2^(value·log2 e), zero far below and the carrier's ceiling far above.
     private static FixedQ4816 Exp(FixedQ4816 value) => FixedQ4816.Exp2(value: (value * Log2E));
 
-    // The render reading's field ops past Onion, CellDisplace and Dilate (EditField): Displace adds the separable sine
-    // relief and NoiseDisplace the normalized fBm value noise, both at the folded point.
+    // The render reading's field op past Onion, CellDisplace, Dilate and NoiseDisplace (EditField): Displace adds the
+    // separable sine relief at the folded point.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static FixedQ4816 RenderEditField(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance) {
-        if (instruction.Op == SdfOp.Displace) {
-            return (resultDistance + (instruction.Data0W * ((FixedQ4816.Sin(angle: (instruction.Data0X * localPosition.X)) * FixedQ4816.Sin(angle: (instruction.Data0Y * localPosition.Y))) * FixedQ4816.Sin(angle: (instruction.Data0Z * localPosition.Z)))));
-        }
-
-        var q = (localPosition * instruction.Data0X);
-        var octaveAmplitude = FixedQ4816.One;
-        var noiseSum = FixedQ4816.Zero;
-        var octaves = (int)instruction.Blend;
-
-        for (var octave = 0u; (octave < octaves); octave++) {
-            var octaveSeed = unchecked(instruction.Shape + octave);
-
-            noiseSum += (octaveAmplitude * ValueNoise3(q: q, seedX: octaveSeed, seedY: unchecked(octaveSeed * Pcg3dLatticeNoise.HashStreamA), seedZ: unchecked(octaveSeed * Pcg3dLatticeNoise.HashStreamB)));
-            q *= instruction.Data0W;
-            octaveAmplitude *= instruction.Data0Z;
-        }
-
-        return (resultDistance + ((instruction.Data0Y * instruction.Data1X) * noiseSum));
-    }
+    private static FixedQ4816 RenderEditField(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance) =>
+        (resultDistance + (instruction.Data0W * ((FixedQ4816.Sin(angle: (instruction.Data0X * localPosition.X)) * FixedQ4816.Sin(angle: (instruction.Data0Y * localPosition.Y))) * FixedQ4816.Sin(angle: (instruction.Data0Z * localPosition.Z)))));
     // SDF_OP_LANE_ERODE under no dynamic slot: every lane reads zero. The erosion the next shape takes, in world units,
     // or null when the shape is skipped outright (t at or past one).
     private static FixedQ4816? LaneErodeAmount(in CompiledInstruction instruction, FixedVector3 localPosition) {
@@ -360,43 +342,10 @@ public sealed partial class SdfFieldEvaluator {
             return null;
         }
 
-        var noise = (Half + (Half * ValueNoise3(q: (localPosition * instruction.Data0W), seedX: Pcg3dLatticeNoise.HashStreamA, seedY: Pcg3dLatticeNoise.HashStreamB, seedZ: Pcg3dLatticeNoise.HashTumble)));
+        var noise = (Half + (Half * Pcg3dLatticeNoise.ValueNoise3(q: (localPosition * instruction.Data0W), seedX: Pcg3dLatticeNoise.HashStreamA, seedY: Pcg3dLatticeNoise.HashStreamB, seedZ: Pcg3dLatticeNoise.HashTumble)));
         var ragged = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: (t + (((noise - Half) * LaneErodeRaggedAmount) * ((Four * t) * (FixedQ4816.One - t)))));
 
         return (ragged * instruction.Data1X);
-    }
-    // sdfValueNoise3: one PCG3D hash per lattice corner, quintic-smoothed trilinear blend, in [-1, 1].
-    private static FixedQ4816 ValueNoise3(FixedVector3 q, uint seedX, uint seedY, uint seedZ) {
-        var cx = (q.X.Value >> FixedQ4816.FractionBitCount);
-        var cy = (q.Y.Value >> FixedQ4816.FractionBitCount);
-        var cz = (q.Z.Value >> FixedQ4816.FractionBitCount);
-        var ux = Quintic(t: (q.X - FixedQ4816.FromInteger(value: cx)));
-        var uy = Quintic(t: (q.Y - FixedQ4816.FromInteger(value: cy)));
-        var uz = Quintic(t: (q.Z - FixedQ4816.FromInteger(value: cz)));
-        var c000 = Corner(cx: cx, cy: cy, cz: cz);
-        var c100 = Corner(cx: (cx + 1L), cy: cy, cz: cz);
-        var c010 = Corner(cx: cx, cy: (cy + 1L), cz: cz);
-        var c110 = Corner(cx: (cx + 1L), cy: (cy + 1L), cz: cz);
-        var c001 = Corner(cx: cx, cy: cy, cz: (cz + 1L));
-        var c101 = Corner(cx: (cx + 1L), cy: cy, cz: (cz + 1L));
-        var c011 = Corner(cx: cx, cy: (cy + 1L), cz: (cz + 1L));
-        var c111 = Corner(cx: (cx + 1L), cy: (cy + 1L), cz: (cz + 1L));
-        var x00 = FixedQ4816.Lerp(amount: ux, from: c000, to: c100);
-        var x10 = FixedQ4816.Lerp(amount: ux, from: c010, to: c110);
-        var x01 = FixedQ4816.Lerp(amount: ux, from: c001, to: c101);
-        var x11 = FixedQ4816.Lerp(amount: ux, from: c011, to: c111);
-        var y0 = FixedQ4816.Lerp(amount: uy, from: x00, to: x10);
-        var y1 = FixedQ4816.Lerp(amount: uy, from: x01, to: x11);
-
-        return ((FixedQ4816.Lerp(amount: uz, from: y0, to: y1) * Two) - FixedQ4816.One);
-
-        FixedQ4816 Corner(long cx, long cy, long cz) =>
-            Fraction(hash: Pcg3dLatticeNoise.Pcg3d(x: (unchecked((uint)cx) ^ seedX), y: (unchecked((uint)cy) ^ seedY), z: (unchecked((uint)cz) ^ seedZ)).X);
-    }
-    private static FixedQ4816 Quintic(FixedQ4816 t) {
-        var t3 = ((t * t) * t);
-
-        return (t3 * ((t * ((t * FixedQ4816.FromInteger(value: 6L)) - FixedQ4816.FromInteger(value: 15L))) + FixedQ4816.FromInteger(value: 10L)));
     }
     private static FixedVector3 WithComponent(FixedVector3 point, int axis, FixedQ4816 value) => new(
         X: ((axis == 0) ? value : point.X),

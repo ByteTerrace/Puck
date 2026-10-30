@@ -45,8 +45,10 @@ public readonly record struct WorldContactCensus(
     long UnsupportedPlacementCount,
     ulong SolidBakeHash = 0UL
 ) {
+    /// <summary>Gets the field colliders derived from placements: one per stamped copy of a relieved creation.</summary>
+    public long PlacementFieldCount { get; init; }
     /// <summary>Gets all analytic colliders derived from placements.</summary>
-    public long PlacementColliderCount => (((PlacementSphereCount + PlacementBoxCount) + PlacementCylinderCount) + PlacementPlaneCount);
+    public long PlacementColliderCount => ((((PlacementSphereCount + PlacementBoxCount) + PlacementCylinderCount) + PlacementPlaneCount) + PlacementFieldCount);
     /// <summary>Gets all analytic colliders.</summary>
-    public long SolidCount => (((SphereCount + BoxCount) + CylinderCount) + PlaneCount);
+    public long SolidCount => ((((SphereCount + BoxCount) + CylinderCount) + PlaneCount) + PlacementFieldCount);
 }

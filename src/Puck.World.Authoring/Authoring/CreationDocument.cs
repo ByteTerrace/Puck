@@ -219,8 +219,8 @@ public sealed record ShapeDocument(
 public sealed record CreationPartDocument(string Id, int ShapeId);
 /// <summary>The creation-level noise-relief facet: bounded hash-lattice fBm displacement
 /// (<see cref="SdfProgramBuilder.NoiseDisplace"/>) applied to the creation's whole composed field inside its stamp
-/// scope — irregular rock, terrain, bark. Render-only relief: contact and colliders ride the un-displaced base
-/// shapes, so keep <see cref="Amplitude"/> small on walkable surfaces. Static-stamp placements only — the dynamic
+/// scope — irregular rock, terrain, bark. A solid placement collides with the relieved surface: the analytic provider
+/// compiles each copy as one field collider over its contact shapes and this relief. Static-stamp placements only — the dynamic
 /// stamp pool emits per-shape instances a creation-level field op cannot span, so an animated (framed) creation, an
 /// attached or inhabited placement, and a body look all refuse it at validation. The noise samples the creation's
 /// local frame, so every stamped copy carries identical relief; a mirrored copy samples the un-mirrored pattern.</summary>

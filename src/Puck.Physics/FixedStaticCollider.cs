@@ -20,6 +20,9 @@ public enum FixedStaticColliderKind : byte {
     ChamferedBox,
     /// <summary>An oriented Lp ball with independently scaled radii.</summary>
     Superellipsoid,
+    /// <summary>The zero set of <see cref="FixedStaticCollider.Field"/>'s scalar field in the collider's frame: a
+    /// relieved creation collides with the surface its bake draws.</summary>
+    Field,
 }
 /// <summary>A deterministic depenetration response without any body-state or gameplay policy.</summary>
 /// <param name="Normal">The unit push direction.</param>
@@ -41,7 +44,9 @@ public readonly record struct FixedContactPush(FixedVector3 Normal, FixedQ4816 P
 /// <param name="Radius">The rounded box's offset radius; Extent carries its inner half-extents.</param>
 /// <param name="Chamfer">The inset chamfer of a lifted chamfered box.</param>
 /// <param name="Exponent">The superellipsoid's Lp exponent.</param>
-public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default, FixedQ4816 Chamfer = default, FixedQ4816 Exponent = default) {
+/// <param name="Field">A field collider's surface, read in the frame of <paramref name="Center"/> and
+/// <paramref name="Rotation"/>; its local half-extent about that centre is in <paramref name="Extent"/>.</param>
+public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, FixedVector3 Center, FixedVector3 Extent, FixedQuaternion Rotation = default, FixedQ4816 Radius = default, FixedQ4816 Chamfer = default, FixedQ4816 Exponent = default, FixedColliderField? Field = null) {
     // The point of a segment nearest to a point: the point less the one segment witness every segment query shares.
     private static FixedVector3 ClosestOnSegment(FixedVector3 point, FixedVector3 start, FixedVector3 end) =>
         (point - FixedDynamicBodyContacts.ClosestDelta(
@@ -173,6 +178,16 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     public static FixedStaticCollider Superellipsoid(FixedVector3 center, FixedQuaternion rotation, FixedVector3 radii, FixedQ4816 exponent) =>
         new(Kind: FixedStaticColliderKind.Superellipsoid, Center: center, Extent: radii,
             Rotation: rotation.Normalize(), Exponent: exponent);
+    /// <summary>Creates a field collider: the zero set of a scalar field read in the frame of a centre and rotation.</summary>
+    /// <param name="center">The frame's world origin, which is also the centre its extent bounds the surface about.</param>
+    /// <param name="rotation">The frame-to-world rotation; normalized on entry.</param>
+    /// <param name="halfExtent">The surface's half-extent along the frame's axes about the centre.</param>
+    /// <param name="field">The field.</param>
+    /// <returns>The <see cref="FixedStaticColliderKind.Field"/> collider.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="field"/> is <see langword="null"/>.</exception>
+    public static FixedStaticCollider FieldSurface(FixedVector3 center, FixedQuaternion rotation, FixedVector3 halfExtent, FixedColliderField field) =>
+        new(Kind: FixedStaticColliderKind.Field, Center: center, Extent: halfExtent, Rotation: rotation.Normalize(),
+            Field: (field ?? throw new ArgumentNullException(paramName: nameof(field))));
     /// <summary>Creates a static box turned by a rotation: an axis-aligned box when the rotation carries every box axis
     /// exactly onto a world axis, so an unturned or quarter-turned box keeps the world-axis fast path, and an oriented
     /// box otherwise.</summary>
@@ -248,6 +263,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     /// chooses world X. A half-space has no finite support and is refused.</summary>
     public FixedVector3 SupportPoint(FixedVector3 direction) {
         if (Kind == FixedStaticColliderKind.HalfSpace) { throw new InvalidOperationException(message: "A half-space has no finite support point."); }
+        if (Kind == FixedStaticColliderKind.Field) { throw new InvalidOperationException(message: "A field collider has no support map."); }
         var unit = ((direction == FixedVector3.Zero) ? FixedVector3.UnitX : direction.Normalize());
 
         if (Kind == FixedStaticColliderKind.Sphere) { return (Center + (unit * Extent.X)); }
@@ -274,7 +290,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     /// sweep may skip its exact query.</summary>
     /// <returns>The padded half-extent, in metres; <see langword="null"/> for a half-space, which has no bounds.</returns>
     public FixedVector3? WorldHalfExtent() {
-        if (Kind == FixedStaticColliderKind.HalfSpace) { return null; }
+        if ((Kind == FixedStaticColliderKind.HalfSpace) || ((Kind == FixedStaticColliderKind.Field) && (Field?.Bounded != true))) { return null; }
         var padding = new FixedVector3(X: BoundsPadding, Y: BoundsPadding, Z: BoundsPadding);
 
         if (Kind == FixedStaticColliderKind.Sphere) { return (new FixedVector3(X: Extent.X, Y: Extent.X, Z: Extent.X) + padding); }
@@ -311,7 +327,9 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
         in FixedBodyColliderVolume volume,
         FixedQ4816 skin,
         out FixedContactPush push
-    ) => (((volume.Kind == FixedBodyColliderKind.Ellipsoid) && (Kind != FixedStaticColliderKind.HalfSpace))
+    ) => ((Kind == FixedStaticColliderKind.Field)
+        ? FixedFieldColliderContact.TryPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume)
+        : ((volume.Kind == FixedBodyColliderKind.Ellipsoid) && (Kind != FixedStaticColliderKind.HalfSpace))
         ? FixedConvexContact.TryPush(collider: in this, orientation: in orientation, position: position,
             push: out push, skin: skin, volume: in volume)
         : Kind switch {
