@@ -244,6 +244,48 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
   (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
   the draw there.
+- **Reprojection interpolates displacement.** `sdfPreviousPoint` in
+  `frame/sdf-reprojection.hlsli` adds the triangle's weighted vertex movements
+  to the current hit. Unchanged vertices return that hit exactly before any
+  barycentric calculation: a long, thin triangle's float Gram determinant can
+  cancel to zero, and rebuilding a second world position can invent motion on
+  a still surface. `SdfReprojectionDeviceLawTests` includes this thin-triangle
+  witness on both backends. Check the static `motion` view when history fails
+  to accumulate; unchanged geometry must show valid, zero object motion.
+- **A receiver's depth belongs to the output ray.** Different jittered rays
+  hitting one grazing plane can have very different ray distances. Project each
+  tap's tangent plane onto the output pixel's unjittered ray before storing or
+  validating its receiver depth (`sdfHistoryReceiverDistance`). Identity and the
+  relative depth tolerance stay unchanged. The reprojection device witness
+  maps two samples at distances 64 and 32 onto the same receiver depth 128.
+- **Stationary reconstruction keeps a complete jitter window.** The resolve's
+  history surface retains each phase's color, coverage, transport and weight.
+  Replacing one phase and summing in fixed order removes periodic newest-phase
+  bias and keeps samples the current neighborhood misses. Moving and reactive
+  pixels use the clipped resolve while their window fills. A stationary window
+  keeps its validated receiver while the footprint still sees it; choosing a
+  new thin adjoining face each phase can reject the window on the next phase.
+  The window describes an output footprint, which can sample different receiver
+  identities on opposite jitter phases at a static silhouette. If ordinary
+  receiver validation rejects it, retain the bounded window only after proving
+  the unjittered camera is exactly unchanged, every tap is nonreactive, and each
+  visible tap's previous point equals its current point. This extra motion check
+  runs only for rejected footprints. A displaced camera keeps ordinary receiver
+  rejection; a stationary current receiver alone does not prove no disocclusion.
+  The package owns
+  `TemporalPeriod` and `HistorySurfaceWords`; the generator carries both into
+  HLSL. A layout change needs a host with the matching history allocation before
+  loading its kernels. Account for this output-sized history in GPU memory.
+  Preserve a constant coverage component exactly before half packing and after
+  averaging the phases: bound the convex mean by its samples. A rounded value
+  just below one becomes 0.9995 in half storage and invents a background share
+  on an opaque surface. The analytic resolve device witness checks full coverage.
+- **Coincident exposed faces cannot accumulate a stable receiver.** Check
+  `world.debug-view material-id` when a static patch changes identity or never
+  completes its phase window. Separate meshes sharing an exposed plane can
+  alternate winners as jitter or a refresh changes rasterization. Fix the
+  authored overlap, rather than weakening receiver rejection. A slab owns its
+  horizontal finish; a wall or lintel meeting it ends at the slab's underside.
 - **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
   a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
   fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.

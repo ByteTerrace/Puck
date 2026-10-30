@@ -649,6 +649,16 @@ check the flag: the owner may be holding the pad.
   answer lacks) is reported unmeasured and fails the run like red
   ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
 
+After an attached sweep tour, check `body.where 0` and `world.rate` before another
+reproduction: the tour leaves authority paused and the seat in its final
+destination (the night field in the debug plan), rather than the boot world.
+An unqualified `body.pose` then moves that destination's body.
+
+`WorldPoseInterpolation` preserves identical snapshot positions exactly and
+normalizes identical orientations without blending them. Weighted endpoint sums
+can move equal floats as presentation alpha changes; local, neighbour and session
+body consumers share this guard so stopped attachments stay still.
+
 Verify game behavior by running the game (`AGENTS.md` rule 3). Write a test only
 where running cannot show the behavior. Standalone runners, record directories
 and `--validate-*` flags are banned.

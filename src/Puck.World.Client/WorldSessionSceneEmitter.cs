@@ -346,14 +346,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             ):
                 var alpha = mirror.InterpolationAlpha;
 
-                return (Vector3.Lerp(
-                    amount: alpha,
-                    value1: mirror.PreviousPosition(index: entity.Index),
-                    value2: mirror.CurrentPosition(index: entity.Index)
-                ), Quaternion.Lerp(
-                    amount: alpha,
-                    quaternion1: mirror.PreviousOrientation(index: entity.Index),
-                    quaternion2: mirror.CurrentOrientation(index: entity.Index)
+                return (WorldPoseInterpolation.Position(
+                    alpha: alpha,
+                    previous: mirror.PreviousPosition(index: entity.Index),
+                    current: mirror.CurrentPosition(index: entity.Index)
+                ), WorldPoseInterpolation.Orientation(
+                    alpha: alpha,
+                    previous: mirror.PreviousOrientation(index: entity.Index),
+                    current: mirror.CurrentOrientation(index: entity.Index)
                 ));
             default:
                 return (Vector3.Zero, Quaternion.Identity);
@@ -690,17 +690,17 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 continue;
             }
 
-            var position = Vector3.Lerp(
-                value1: m_mirror.PreviousPosition(index: index),
-                value2: m_mirror.CurrentPosition(index: index),
-                amount: alpha
+            var position = WorldPoseInterpolation.Position(
+                previous: m_mirror.PreviousPosition(index: index),
+                current: m_mirror.CurrentPosition(index: index),
+                alpha: alpha
             );
             // Quaternion.Lerp is the nlerp: shortest-path dot-sign flip and renormalize — the SAME formula
             // Client.WorldClient.UpdateRenderPoses uses.
-            var orientation = Quaternion.Lerp(
-                quaternion1: m_mirror.PreviousOrientation(index: index),
-                quaternion2: m_mirror.CurrentOrientation(index: index),
-                amount: alpha
+            var orientation = WorldPoseInterpolation.Orientation(
+                previous: m_mirror.PreviousOrientation(index: index),
+                current: m_mirror.CurrentOrientation(index: index),
+                alpha: alpha
             );
             var address = m_mirror.Address(index: index);
 

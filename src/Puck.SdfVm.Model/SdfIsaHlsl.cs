@@ -337,11 +337,13 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", value: SdfMeshIrradianceProbe.DepthNormalScale);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE", value: SdfMeshIrradianceProbe.DepthSurfaceFade);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP", value: SdfMeshIrradianceProbe.DepthSurfaceJoinGap);
-        declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfTemporalSamples.Period), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).");
+        declarations.Section(title: "The temporal resolve: the history surface's words an output pixel (SdfWorldPackage.HistorySurfaceWords), the jitter period in samples (SdfWorldPackage.TemporalPeriod), the weight a history saturates at, one period, and the weight one carrying a remembered sub-pixel feature saturates at (SdfTemporalSamples.FeaturePeriods periods).");
         declarations.Count(name: "SDF_HISTORY_SURFACE_WORDS", value: SdfWorldPackage.HistorySurfaceWords);
-        declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfTemporalSamples.Period);
-        declarations.Real(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfTemporalSamples.Period);
-        declarations.Real(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfTemporalSamples.Period * SdfTemporalSamples.FeaturePeriods));
+        declarations.Count(name: "SDF_HISTORY_WINDOW_OFFSET", value: SdfWorldPackage.HistoryWindowOffset);
+        declarations.Count(name: "SDF_HISTORY_SAMPLE_WORDS", value: SdfWorldPackage.HistorySampleWords);
+        declarations.Count(name: "SDF_TEMPORAL_PERIOD", value: SdfWorldPackage.TemporalPeriod);
+        declarations.Real(name: "SDF_HISTORY_WEIGHT_CAP", value: SdfWorldPackage.TemporalPeriod);
+        declarations.Real(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfWorldPackage.TemporalPeriod * SdfTemporalSamples.FeaturePeriods));
         declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);

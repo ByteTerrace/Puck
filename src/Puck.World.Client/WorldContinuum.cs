@@ -176,16 +176,16 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
                 // A remote mirror owns its snapshot arrival clock. Reusing the boot world's fixed-step fraction here
                 // makes every asynchronously arriving neighbour snapshot jump backward before advancing again.
                 var alpha = neighbour.InterpolationAlpha;
-                var neighbourPosition = Vector3.Lerp(
-                    value1: neighbour.PreviousPosition(index: entityIndex),
-                    value2: neighbour.CurrentPosition(index: entityIndex),
-                    amount: alpha
+                var neighbourPosition = WorldPoseInterpolation.Position(
+                    previous: neighbour.PreviousPosition(index: entityIndex),
+                    current: neighbour.CurrentPosition(index: entityIndex),
+                    alpha: alpha
                 );
-                var neighbourOrientation = Quaternion.Normalize(value: Quaternion.Lerp(
-                    quaternion1: neighbour.PreviousOrientation(index: entityIndex),
-                    quaternion2: neighbour.CurrentOrientation(index: entityIndex),
-                    amount: alpha
-                ));
+                var neighbourOrientation = WorldPoseInterpolation.Orientation(
+                    previous: neighbour.PreviousOrientation(index: entityIndex),
+                    current: neighbour.CurrentOrientation(index: entityIndex),
+                    alpha: alpha
+                );
                 var mapped = WorldAdjacencySceneEmitter.MapPoseIntoSource(
                     position: neighbourPosition,
                     orientation: neighbourOrientation,
