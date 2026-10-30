@@ -20,18 +20,31 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
 
     [Fact]
     public void HealthClearingRequiresTheSelectedExecutableAndTheInstallLease() {
+        foreach (var version in new[] { "1.0.0", "1.0.1" }) {
+            Directory.CreateDirectory(path: Version(version: version));
+            File.WriteAllText(path: Path.Combine(path1: Version(version: version), path2: "app.dll"), contents: version);
+        }
         PendingHealth();
-        HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, version: "1.0.0", runningDirectory: Version(version: "1.0.0"));
+        using var oldImage = new MappedImage(path: Path.Combine(path1: Version(version: "1.0.0"), path2: "app.dll"));
+        using var newImage = new MappedImage(path: Path.Combine(path1: Version(version: "1.0.1"), path2: "app.dll"));
+        using var old = oldImage.Register(installRoot: m_root.RootPath);
+        using var selected = newImage.Register(installRoot: m_root.RootPath);
+
+        Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: old, version: "1.0.0").Cleared);
         Assert.True(condition: File.Exists(path: Marker));
         // Reading the new pointer must not let an old executable report the new version healthy.
-        HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, version: "1.0.1", runningDirectory: Version(version: "1.0.0"));
+        Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: old, version: "1.0.1").Cleared);
         Assert.True(condition: File.Exists(path: Marker));
         using (StubInstall.AcquireUpdateLease(installRoot: m_root.RootPath)) {
-            HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, version: "1.0.1", runningDirectory: Version(version: "1.0.1"));
+            Assert.False(condition: HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, registration: selected, version: "1.0.1").Cleared);
             Assert.True(condition: File.Exists(path: Marker));
         }
-        HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, version: "1.0.1", runningDirectory: Version(version: "1.0.1"));
+        var cleared = HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, keepVersions: 0, registration: selected, version: "1.0.1");
+
+        Assert.True(condition: cleared.Cleared);
         Assert.False(condition: File.Exists(path: Marker));
+        // The pass that follows keeps both: current, and the version the old process holds.
+        Assert.Equal(expected: ["1.0.0"], actual: cleared.Pruned!.RunningVersions);
     }
     [InlineData(false)]
     [InlineData(true)]

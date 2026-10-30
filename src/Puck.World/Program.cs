@@ -609,7 +609,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             Channel: updateChannel,
             CheckInterval: updateCheckInterval,
             InstalledVersion: updateInstalledVersion,
-            KeepVersions: (updateSection?.KeepVersions ?? 2),
+            KeepVersions: (updateSection?.KeepVersions ?? Puck.Launcher.Release.AddSelfUpdateDefaults.KeepVersions),
             TrustAnchor: releaseTrustAnchor
         ),
         releaseSource: releaseSource

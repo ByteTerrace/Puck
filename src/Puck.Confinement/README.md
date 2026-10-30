@@ -1,0 +1,84 @@
+# Puck.Confinement
+
+Puck.Confinement holds a directory open by handle and resolves every name below
+it relative to that handle, one component at a time, refusing a link (a symbolic
+link, a junction or any other reparse point) instead of following it. Reads,
+writes, renames and deletions act on handles, never on a path checked earlier,
+so what a caller reaches stays below the held directory whatever is renamed or
+replaced on the paths around it. It references only the BCL, so the launcher
+stub can use it without the rest of the engine.
+
+## Usage
+
+`ConfinedDirectory.Open` walks a path from its volume root and refuses a link in
+any component; `Puck.Storage` uses it for blob storage and host configuration
+reads. `ConfinedDirectory.OpenAnchor` opens a directory the host chose as the
+operating system resolves it and confines everything below; the launcher uses it
+for an install root. From a held directory:
+
+- `Child`, `OpenFile` and `Entries` open and list relative to the handle.
+- `TryAcquireLock` and `AcquireLock` take a persistent lock file's exclusive lock.
+- `TryHoldShared` registers the handle as a holder of its directory, and
+  `TryOpenChildForRemoval` opens a child for removal, which fails while any other
+  process holds it.
+- `MoveTo` moves a directory held for removal into another held directory, and
+  `DeleteTree` and `DeleteChild` remove a tree step by step through handles; a
+  link anywhere refuses the removal there.
+- `IsMapped` reports whether a file in the directory backs one of this process's
+  memory mappings, which the launcher uses to confirm the version directory a
+  process was loaded from.
+- `Identity` is the file system's identity of the held directory, for comparing
+  two handles whatever paths reached them.
+
+## Platforms
+
+Windows and Linux x64 are supported; every other platform refuses with
+`PlatformNotSupportedException`.
+
+On Windows, every lookup below a handle is `NtCreateFile` with that handle as
+`OBJECT_ATTRIBUTES.RootDirectory` and `FILE_OPEN_REPARSE_POINT`, and a held
+directory is open with read-type access and without `FILE_SHARE_DELETE`, so no
+other open can rename or delete it while it is held. Renames use
+`FileRenameInformation` with a `RootDirectory` through `NtSetInformationFile`
+(kernel32's `SetFileInformationByHandle` refuses a rename with a root handle), and
+deletions set `FileDispositionInformationEx` with POSIX semantics on the entry's
+own handle. Sources: the Windows Driver Kit reference for
+[NtCreateFile](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntcreatefile),
+[FILE_RENAME_INFORMATION](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)
+and
+[FILE_DISPOSITION_INFORMATION_EX](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information_ex),
+and the Win32 reference for
+[GetFileInformationByHandleEx](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex).
+Measured on Windows 11 (NTFS): a held directory handle that requests only
+`FILE_READ_ATTRIBUTES` takes no part in sharing checks, so the handle requests
+`FILE_LIST_DIRECTORY`; an open file inside a directory denies renaming the
+directory even when that file shares delete; `K32GetMappedFileNameW` reports the
+name a mapped file was opened by, not its current name.
+
+On Linux x64, every lookup is `openat`, `fstatat`, `renameat2` or `unlinkat`
+relative to a held descriptor with `O_NOFOLLOW` or `AT_SYMLINK_NOFOLLOW`, listing
+reads the descriptor's `/proc/self/fd` link, and holding a directory is an
+`flock` on its descriptor. A move is made by name and then checked against the
+held descriptor's identity, and undone when another directory had taken the
+name. A mapping is matched by its inode and current path in `/proc/self/maps`,
+because the device number printed there differs from `stat`'s on btrfs
+subvolumes. Sources: the
+[openat(2)](https://man7.org/linux/man-pages/man2/openat.2.html),
+[flock(2)](https://man7.org/linux/man-pages/man2/flock.2.html),
+[rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html),
+[unlink(2)](https://man7.org/linux/man-pages/man2/unlink.2.html) and
+[proc_pid_maps(5)](https://man7.org/linux/man-pages/man5/proc_pid_maps.5.html)
+pages.
+
+This capability defends what a caller asks it to do. It is not a sandbox for
+other code running as the same OS identity.
+
+## Verification
+
+`InstallPruneLawTests` in the [launcher tests](../../tests/Puck.Launcher.Tests/README.md)
+and `ConfinedStorageLawTests` in `Puck.World.Server.Tests` exercise real
+directories, links, concurrent replacement and held removals on both platforms.
+
+## Documentation
+
+📚 [Engine architecture](../../docs/architecture/README.md) · 🛠️ [Development](../../docs/development/README.md)

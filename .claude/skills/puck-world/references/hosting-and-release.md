@@ -188,9 +188,17 @@ owns provider-neutral configuration; the Azure README owns Azure provider keys. 
 ## Production silo verification
 
 Desktop update recovery lives in `Puck.Launcher/Release`, including the startup
-health writer (`HealthGateFile`, not `Program`). It holds the same persistent
-`update.lock` as the stub and updater, checks both current and the executable
-directory, then deletes the health marker. The applier promotes current to
+health writer (`HealthGateFile`, not `Program`). Its hosted service first
+registers the process (`InstallRegistration`: waits for `update.lock` without a
+deadline, confirms by identity that `versions/<name>` is the directory its entry
+assembly was loaded from, and holds it until exit, or fails the start with the
+reason). It then holds the same persistent `update.lock` as the stub and
+updater, checks that current names the registered version, deletes the health
+marker and runs one `InstallPruner` pass. Pruning and its invariants are in the
+[launcher README](../../../../src/Puck.Launcher/README.md#pruning-past-versions);
+every removal goes through `Puck.Confinement`'s handle-held directories, never a
+path, and the stub holds its child's version the same way. `InstallPruneLawTests`
+pins each review finding against it. The applier promotes current to
 last-good only with no marker, then writes pending health before swapping current;
 two applies before a launch must never promote an unstarted version. Missing/corrupt state generations refuse rollback.
 Replay reservation precedes the durable recovery intent; interruption between

@@ -9442,11 +9442,11 @@ export type WorldPrototype = {
          */
         direction?: unknown;
         /**
-         * KindSurface: how far along Direction the probe searches, world units. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing.
+         * KindSurface: how far along Direction the probe searches, in creation units: world units at the body's scale of one, and multiplied by its scale, as its shapes are. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing.
          */
         reach?: unknown;
         /**
-         * KindSurface: how far off the hit surface, along its normal, the tip is placed (null = 0 — the tip lands on the surface). The thickness of a boot's sole or the gap a claw keeps.
+         * KindSurface: how far off the hit surface, along its normal, the tip is placed, in creation units as Reach is (null = 0 — the tip lands on the surface). The thickness of a boot's sole or the gap a claw keeps.
          */
         standoff?: unknown;
         /**
@@ -9491,7 +9491,7 @@ export type WorldPrototype = {
          */
         replant?: {
           /**
-           * The drift that starts a step, world units, in (0, MaxDistance].
+           * The drift that starts a step, in creation units (world units at the body's scale of one, multiplied by its scale), in (0, MaxDistance].
            */
           distance: number;
           /**
@@ -9499,7 +9499,7 @@ export type WorldPrototype = {
            */
           seconds: number;
           /**
-           * The arc's peak lift, world units, in [0, MaxHeight].
+           * The arc's peak lift, in creation units as Distance is, in [0, MaxHeight].
            */
           height: number;
         } | null;
@@ -13199,7 +13199,7 @@ export type WorldUpdateDefaults = {
    */
   checkIntervalSeconds?: number | null;
   /**
-   * The number of most-recent staged versions to retain beyond the current one. Null = the app's own default.
+   * The number of most recently installed versions the launcher keeps beyond the current, last-good, pending and running ones. Null = the app's own default.
    */
   keepVersions?: number | null;
 };

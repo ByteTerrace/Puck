@@ -1,38 +1,51 @@
 using Microsoft.Extensions.Hosting;
 using Puck.Assets;
+using Puck.Confinement;
 using System.Text.Json;
 
 namespace Puck.Launcher.Release;
 
 /// <summary>
-/// Clears the stub's health attempt counter (<c>Puck.Launcher.Stub.StubHealth</c>'s file, an independent reader —
-/// the two sides share the file's shape by convention, not by reference, since the stub takes no project reference
-/// at all) once this process reports healthy. Registered by <see cref="LauncherServiceRegistration.AddSelfUpdate"/>
-/// as a hosted service that clears on <see cref="IHostApplicationLifetime.ApplicationStarted"/> — the one
-/// "hosting completed startup" signal both <c>HeadlessTickHostedService</c> and <c>LauncherWindowHostedService</c>
-/// already depend on, reused here rather than inventing a second liveness signal.
+/// Registers this process as a holder of the version it runs from (<see cref="InstallRegistration"/>), then clears the
+/// stub's health attempt counter (<c>Puck.Launcher.Stub.StubHealth</c>'s file, an independent reader: the two sides
+/// share the file's shape by convention) once this process reports healthy, and prunes past versions. Registered by
+/// <see cref="LauncherServiceRegistration.AddSelfUpdate"/> as a hosted service that registers on start, failing the
+/// start with the reason when its version directory was removed or replaced, and clears on
+/// <see cref="IHostApplicationLifetime.ApplicationStarted"/>, the one "hosting completed startup" signal both
+/// <c>HeadlessTickHostedService</c> and <c>LauncherWindowHostedService</c> already depend on.
 /// </summary>
 /// <param name="applicationLifetime">The host lifetime whose <see cref="IHostApplicationLifetime.ApplicationStarted"/> marks healthy.</param>
-/// <param name="options">Names the install root and the version this process reports itself as.</param>
-internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime applicationLifetime, UpdateOptions options) : IHostedService {
+/// <param name="options">Names the install root, the version this process reports itself as, and how many past versions to keep.</param>
+internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime applicationLifetime, UpdateOptions options) : IHostedService, IDisposable {
     private readonly IHostApplicationLifetime m_applicationLifetime = applicationLifetime;
     private readonly UpdateOptions m_options = options;
 
+    // Held until the container disposes this service at host shutdown; process exit releases it in any case.
+    private InstallRegistration? m_registration;
+
+    /// <inheritdoc/>
+    public void Dispose() => m_registration?.Dispose();
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken) {
+        var registration = (m_registration ??= InstallRegistration.RegisterEntryAssembly(cancellationToken: cancellationToken, installRoot: m_options.CacheRoot));
+
         m_applicationLifetime.ApplicationStarted.Register(callback: () => HealthGateFile.ClearHealthy(
             cacheRoot: m_options.CacheRoot,
-            version: m_options.InstalledVersion,
-            runningDirectory: AppContext.BaseDirectory
+            keepVersions: m_options.KeepVersions,
+            registration: registration,
+            version: m_options.InstalledVersion
         ));
-
         return Task.CompletedTask;
     }
     /// <inheritdoc/>
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
-/// <summary>The health attempt counter's clearing half — see <see cref="SelfUpdateHealthGateHostedService"/>.</summary>
+/// <summary>What <see cref="HealthGateFile.ClearHealthy"/> proved and pruned.</summary>
+/// <param name="Cleared">Whether this process was the selected install and its pending health marker was cleared.</param>
+/// <param name="Pruned">The prune pass that followed clearing, or <see langword="null"/> when nothing was cleared.</param>
+public sealed record HealthClearResult(bool Cleared, InstallPruneResult? Pruned);
+/// <summary>The health attempt counter's clearing half; see <see cref="SelfUpdateHealthGateHostedService"/>.</summary>
 public static class HealthGateFile {
     private sealed record HealthRecord(string Version, int Attempts);
 
@@ -43,31 +56,36 @@ public static class HealthGateFile {
     public static void MarkPending(string cacheRoot, string version) => AtomicFile.WriteAllText(
         path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"),
         contents: JsonSerializer.Serialize(value: new HealthRecord(Attempts: 0, Version: version)));
-    /// <summary>Deletes the health marker only for the process still selected by current, under the install lease.
-    /// A busy install leaves the marker intact; an older process cannot bless a newer selected install.</summary>
+    /// <summary>Deletes the health marker only for the process still selected by current, under the install lease, then
+    /// runs one <see cref="InstallPruner.Prune"/> pass. The process is the selected one when its registration holds
+    /// <c>versions/&lt;version&gt;</c> (identity, not path spelling, decided that) and current names that version. A
+    /// busy install leaves the marker intact; an older process cannot bless a newer selected install and never prunes.</summary>
     /// <param name="cacheRoot">The install root (the same directory the stub reads <c>state/health.json</c> under).</param>
     /// <param name="version">The version to clear.</param>
-    /// <param name="runningDirectory">The actual executable directory, independent of the mutable current pointer.</param>
-    public static void ClearHealthy(string cacheRoot, string version, string runningDirectory) {
+    /// <param name="registration">This process's registration.</param>
+    /// <param name="keepVersions">The number of most recently installed versions kept beyond the protected ones.</param>
+    /// <returns>Whether the marker was cleared, and what the prune pass did.</returns>
+    public static HealthClearResult ClearHealthy(string cacheRoot, string version, InstallRegistration registration, int keepVersions = AddSelfUpdateDefaults.KeepVersions) {
+        ArgumentNullException.ThrowIfNull(argument: registration);
+        var comparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+        if (!string.Equals(a: registration.Version, b: version, comparisonType: comparison)) {
+            return new HealthClearResult(Cleared: false, Pruned: null);
+        }
         try {
-            Directory.CreateDirectory(path: cacheRoot);
-            using var lease = new FileStream(path: Path.Combine(path1: cacheRoot, path2: "update.lock"), mode: FileMode.OpenOrCreate,
-                access: FileAccess.ReadWrite, share: FileShare.None);
+            using var root = ConfinedDirectory.OpenAnchor(create: false, path: cacheRoot);
+            using var lease = root?.TryAcquireLock(name: InstallLeases.UpdateLockFileName);
             var currentPath = Path.Combine(path1: cacheRoot, path2: "current");
 
-            if (!File.Exists(path: currentPath) || (File.ReadAllText(path: currentPath).Trim() != version)) {
-                return;
-            }
-            var expected = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: Path.Combine(path1: cacheRoot, path2: "versions", path3: version)));
-            var actual = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: runningDirectory));
-
-            if (!string.Equals(a: expected, b: actual,
-                comparisonType: (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))) {
-                return;
+            if ((lease is null) || !File.Exists(path: currentPath) || !string.Equals(a: File.ReadAllText(path: currentPath).Trim(), b: version, comparisonType: StringComparison.Ordinal)) {
+                return new HealthClearResult(Cleared: false, Pruned: null);
             }
             File.Delete(path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"));
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
             // Startup remains unproven if a concurrent update or unavailable install prevents clearing.
+            return new HealthClearResult(Cleared: false, Pruned: null);
         }
+        // Pruning takes the publication lease before the update lease, so it runs after this one is released.
+        return new HealthClearResult(Cleared: true, Pruned: InstallPruner.Prune(installRoot: cacheRoot, keepVersions: keepVersions));
     }
 }

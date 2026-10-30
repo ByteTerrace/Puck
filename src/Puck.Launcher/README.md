@@ -151,9 +151,60 @@ filesystems.
 Activation writes pending health before changing current, so successive updates
 cannot bless a version that has never started.
 The selected executable clears that marker after startup, under `update.lock`,
-only when both its version and actual executable directory match `current`.
-An old or concurrently replaced process leaves it intact. The stub refuses
-missing or corrupt state generations rather than guessing rollback compatibility.
+only when its registration (below) holds `versions/<current>`. An old or
+concurrently replaced process leaves it intact. The stub refuses missing or
+corrupt state generations rather than guessing rollback compatibility.
+
+### Pruning past versions
+
+After clearing, `InstallPruner` deletes past versions. It keeps `current`,
+`last-good`, the version a pending `install-intent.json` names, every version a
+live process holds, and the `UpdateOptions.KeepVersions` most recently installed
+others, then deletes the content-addressed objects nothing kept references (a
+pending intent and a local release source's channel manifests count as
+references). Install order is the `sequence` the applier writes into
+`versions/<version>/install-record.json`, never version precedence; a payload
+file of that name (or `state-generation`) is refused by manifest validation. A
+kept version without a record keeps the content pins of the files it holds, so
+it never blocks the sweep.
+
+Every step acts through `Puck.Confinement`'s `ConfinedDirectory` handles opened
+from the install root: nothing is looked up or deleted by a path checked
+earlier, and no link is followed. These are the invariants a review checks:
+
+- **Never outside the root.** Every lookup is relative to an open directory
+  handle with no-follow semantics (`openat`/`O_NOFOLLOW` on Linux, `NtCreateFile`
+  with a `RootDirectory` and `FILE_OPEN_REPARSE_POINT` on Windows). A link
+  anywhere refuses that entry; renaming or replacing a directory the pass holds
+  either fails (Windows: held without `FILE_SHARE_DELETE`) or leaves the pass
+  acting on the held object (Linux).
+- **Never a live version.** A version is removable only through
+  `TryOpenChildForRemoval`, which fails while any process holds it: an
+  exclusive `flock` against holders' shared locks on Linux, a delete-access open
+  against holders' sharing mode on Windows. Holders are the stub (from before it
+  starts the child until the child exits) and every process itself
+  (`InstallRegistration`, which `AddSelfUpdate`'s hosted service and the operator
+  adapter run at start). The kernel releases a hold when its process exits.
+- **Registration is serialized with removal.** Registration waits for
+  `update.lock` without a deadline; the pass holds `publication.lock` then
+  `update.lock` throughout. A registering process then confirms by identity that
+  `versions/<name>` is the directory its entry assembly was loaded from (the
+  mapped file's inode and current path on Linux; on Windows the mapped file's
+  open-time name, whose directory the runtime's open file pins), or fails its
+  launch with the reason. Whether a process runs from the install at all is the
+  identity of its image's parent directory, never a path spelling.
+- **Removal is atomic from a reader's view.** A version leaves `versions/` whole
+  by one move into `trash/` (by handle on Windows; `renameat2` checked against
+  the held handle's identity on Linux), then is deleted there through the same
+  handle. The next pass empties what an interrupted one left in `trash/`.
+- **Fail closed.** A busy lease, a linked `trash/`, a malformed intent or an
+  unsupported platform (anything but Windows and Linux x64) skips the pass; a
+  store whose channel manifest does not parse keeps all its objects; a kept
+  version whose files cannot be read stops the sweep for that pass.
+
+The stager replaces an earlier partial staging of the same version with the same
+removal (`InstallPruner.RemoveVersion`), so it too is refused while a process
+runs from it.
 Document-authored `update.cacheRoot` is a relative subdirectory of the host's
 updates directory; only trusted local update configuration may choose an
 absolute install root.

@@ -360,7 +360,8 @@ public sealed record WorldHostDefaults(
 /// An absolute install root belongs in trusted local update configuration, never in a world document.</param>
 /// <param name="CheckIntervalSeconds">Seconds between automatic <c>update.check</c> attempts. Null = the app's own
 /// default; <c>0</c> disables automatic checking (a manual <c>update.check</c> still works).</param>
-/// <param name="KeepVersions">The number of most-recent staged versions to retain beyond the current one. Null = the app's own default.</param>
+/// <param name="KeepVersions">The number of most recently installed versions the launcher keeps beyond the current,
+/// last-good, pending and running ones. Null = the app's own default.</param>
 public sealed record WorldUpdateDefaults(
     string? Channel = null,
     string? CacheRoot = null,

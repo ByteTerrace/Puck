@@ -21,6 +21,8 @@
         <!-- AttestationReleaseVerifier checks a release manifest's signature via the sequence replay-defence
              route (Release/AttestationReleaseVerifier.cs). -->
         <ProjectReference Include="../Puck.Attestation/Puck.Attestation.csproj" />
+        <!-- Install pruning and process registration act through ConfinedDirectory handles (Release/InstallPruner.cs). -->
+        <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Input/Puck.Input.csproj" />
     </ItemGroup>

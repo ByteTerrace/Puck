@@ -11,7 +11,7 @@ var installRoot = AppContext.BaseDirectory.TrimEnd(
 FileStream updateLease;
 try {
     updateLease = StubInstall.AcquireUpdateLease(installRoot: installRoot);
-} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
     Console.Error.WriteLine(value: $"[stub: install is busy or unavailable — {exception.Message}]");
     return 2;
 }
@@ -80,6 +80,15 @@ switch (decision) {
 
         break;
 }
+Puck.Confinement.ConfinedDirectory heldVersion;
+try {
+    heldVersion = StubInstall.HoldVersion(installRoot: installRoot, version: launchVersion);
+} catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or PlatformNotSupportedException)) {
+    Console.Error.WriteLine(value: $"[stub: could not hold version {launchVersion} for its launch — {exception.Message}]");
+    return 2;
+}
+// Held from before the child starts until it exits, so pruning never removes the version the child runs from.
+using var heldVersionLifetime = heldVersion;
 StubHealth.IncrementAndFlush(
     installRoot: installRoot,
     version: launchVersion

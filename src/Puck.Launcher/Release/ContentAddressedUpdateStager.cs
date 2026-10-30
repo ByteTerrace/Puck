@@ -83,9 +83,12 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
         // A previous attempt can stop after writing files but before UpdateService persists an install intent.
         // A later signed manifest for this version may omit some of those files. Its payload is the complete
         // file set, so rebuild the inactive directory instead of inheriting undeclared executable content.
-        // The caller holds the install lease and has excluded the current version before entering staging.
-        if (Directory.Exists(path: versionDirectory)) {
-            Directory.Delete(path: versionDirectory, recursive: true);
+        // The caller holds the install lease and has excluded the current version before entering staging. The removal is
+        // a prune's: refused while a process runs from the directory, and never through a link.
+        try {
+            _ = InstallPruner.RemoveVersion(installRoot: m_cacheRoot, version: manifest.Version);
+        } catch (IOException error) {
+            return UpdateStageResult.Refuse(reason: $"the earlier staging of '{manifest.Version}' cannot be replaced: {error.Message}");
         }
 
         foreach (var file in payload.Files) {

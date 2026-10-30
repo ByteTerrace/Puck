@@ -304,11 +304,16 @@ public sealed class ReleaseManifestTests {
     public void Validate_RefusesNonPortableChannel(string channel) =>
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => error.Path == "channel");
 
-    [Fact]
-    public void Validate_RefusesReservedStateGenerationPayloadFile() {
+    // The applier writes both names into every version directory beside its payload; a payload file of either name would
+    // be overwritten after its hash was verified. install-record.json is the round-2 finding against version pruning.
+    [InlineData("state-generation")]
+    [InlineData("install-record.json")]
+    [InlineData("Install-Record.JSON")]
+    [Theory]
+    public void Validate_RefusesReservedPayloadFiles(string name) {
         var document = ValidDocument();
         document = document with {
-            Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = "state-generation" }] }],
+            Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = name }] }],
         };
 
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => error.Path == "payloads[0].files[0].path");
