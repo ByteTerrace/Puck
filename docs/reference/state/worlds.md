@@ -184,7 +184,10 @@ Puck.World extends the rule compiler the way any host does (see
   `recently`, and `timerElapsed` belong to body programs; a rule that uses one
   is refused with `RuleRefusal.PredicateKindInadmissible`. `pose` and
   `poseCell` teleport: the client snaps the body and its contact state is
-  dropped. `poseCell(…, glide: true)` instead moves the body as continuous
+  dropped. A `poseCell` teleport stands the body at `rollDegrees` and
+  `pitchDegrees` (a creation authored on its edge, a playing card, lies flat at
+  90 or -90); a body keeps a pitch only under a motion program that runs
+  `ResolveDriveFrame`, within its kit's `turn.maxPitch`. `poseCell(…, glide: true)` instead moves the body as continuous
   motion, keeping its attitude, velocity and contact state, so a client
   interpolates it; a rule that steps a body along a topology every tick (the
   debug world's lift car) glides it.
