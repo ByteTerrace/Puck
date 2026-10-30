@@ -38,7 +38,7 @@ public sealed record InstallPruneResult(
 /// <para>A kept version's objects are the pins its install record names, or, for a version without a record, the
 /// content pins of the regular files it holds (a link is never a staged object). A pending intent's and a local
 /// release source's channel manifests' objects are kept too. A malformed intent skips the pass, and a store whose
-/// manifest does not parse keeps all its objects.
+/// manifest does not parse or validate keeps all its objects; a version whose install record cannot be read is kept.
 /// Platforms other than Windows and Linux x64 skip the pass.</para>
 /// </summary>
 public static class InstallPruner {
@@ -136,10 +136,13 @@ public static class InstallPruner {
             } else if (entry.Kind == ConfinedEntryKind.Directory) {
                 InstallRecord? record = null;
 
-                if (Attempt(action: () => { using var version = versions!.Child(name: entry.Name); record = ((version is null) ? null : InstallRecord.TryRead(version: version)); },
-                    entry: $"{VersionsDirectoryName}/{entry.Name}", refused: refused)) {
-                    installed.Add(item: (entry.Name, record));
+                // A record that cannot be read might rank the version among the kept ones, so the version is kept and
+                // its objects come from the files it holds.
+                if (!Attempt(action: () => { using var version = versions!.Child(name: entry.Name); record = ((version is null) ? null : InstallRecord.TryRead(version: version)); },
+                    entry: $"{VersionsDirectoryName}/{entry.Name}: its install record cannot be read, so it is kept", refused: refused)) {
+                    _ = protectedNames.Add(item: entry.Name);
                 }
+                installed.Add(item: (entry.Name, record));
             }
         }
         // Most recent install first; unrecorded versions last, in a fixed order.
@@ -255,13 +258,19 @@ public static class InstallPruner {
     private static (string? Version, IReadOnlyList<string> Objects) ReadIntent(ConfinedDirectory root) {
         if (ReadBounded(directory: root, name: "install-intent.json") is not { } bytes) { return (null, []); }
         using var intent = JsonDocument.Parse(utf8Json: bytes);
-        var manifest = (((intent.RootElement.ValueKind == JsonValueKind.Object) && intent.RootElement.TryGetProperty(propertyName: "manifest", value: out var element))
+        var manifest = Valid(manifest: (((intent.RootElement.ValueKind == JsonValueKind.Object) && intent.RootElement.TryGetProperty(propertyName: "manifest", value: out var element))
             ? element.Deserialize<ReleaseManifest>(options: DocumentJsonOptions.Shared)
-            : null);
+            : null), what: "the pending install intent");
 
-        return ((manifest is { Version: { Length: > 0 } version })
-            ? (version, ManifestObjects(manifest: manifest).ToArray())
-            : throw new JsonException(message: "the pending install intent names no manifest version"));
+        return (manifest.Version, ManifestObjects(manifest: manifest).ToArray());
+    }
+    // A manifest that is absent or fails structural validation names nothing reliable, so the caller keeps everything it
+    // might protect: a malformed intent skips the pass, and a malformed channel manifest keeps its store's objects.
+    private static ReleaseManifest Valid(ReleaseManifest? manifest, string what) {
+        if (manifest is null) { throw new JsonException(message: $"{what} names no manifest"); }
+        var errors = ReleaseCanonicalizer.Validate(document: manifest);
+
+        return ((errors.Count == 0) ? manifest : throw new JsonException(message: $"{what} holds a manifest that fails validation: {errors[0]}"));
     }
     // The content pins of every file a version without an install record holds: what it was staged from.
     private static List<string> ObjectsHeld(ConfinedDirectory versions, string name) {
@@ -344,7 +353,7 @@ public static class InstallPruner {
             store?.Dispose();
         }
     }
-    // The objects every channel manifest directly under a store names; a manifest that does not parse throws.
+    // The objects every channel manifest directly under a store names; a manifest that does not parse or validate throws.
     private static List<string> ChannelObjects(ConfinedDirectory store) {
         var hexes = new List<string>();
 
@@ -353,8 +362,8 @@ public static class InstallPruner {
             using var directory = store.Child(name: channel.Name);
 
             if ((directory is null) || (ReadBounded(directory: directory, name: "manifest.json") is not { } bytes)) { continue; }
-            hexes.AddRange(collection: ManifestObjects(manifest: (JsonSerializer.Deserialize<ReleaseManifest>(options: DocumentJsonOptions.Shared, utf8Json: bytes)
-                ?? throw new JsonException(message: $"'{channel.Name}/manifest.json' holds no manifest"))));
+            hexes.AddRange(collection: ManifestObjects(manifest: Valid(manifest: JsonSerializer.Deserialize<ReleaseManifest>(options: DocumentJsonOptions.Shared, utf8Json: bytes),
+                what: $"'{channel.Name}/manifest.json'")));
         }
         return hexes;
     }

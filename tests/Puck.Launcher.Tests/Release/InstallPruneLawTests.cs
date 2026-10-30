@@ -269,7 +269,7 @@ public sealed class InstallPruneLawTests : IDisposable {
         // An intent that cannot be read may name any version, so nothing is pruned.
         _ = Stage(version: "1.0.5");
         File.WriteAllText(path: Path.Combine(path1: Root, path2: "install-intent.json"), contents: "{}");
-        Assert.Contains(expectedSubstring: "names no manifest version", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        Assert.Contains(expectedSubstring: "names no manifest", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["1.0.0", "1.0.1", "1.0.2", "1.0.5"], actual: VersionNames());
     }
     [Fact]
@@ -347,6 +347,50 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.Empty(collection: again.DeletedVersions);
         Assert.Equal(expected: 0, actual: again.DeletedObjects);
         Assert.Equal(expected: pruned, actual: Tree());
+    }
+    // Metadata that cannot be read or does not validate keeps what it might protect: a version whose install record
+    // cannot be read is kept, a record with an invalid pin falls back to the content pins of the version's files, a
+    // channel manifest that fails validation keeps its store's objects, and an intent whose manifest fails validation
+    // skips the pass.
+    [Fact]
+    public void MetadataThatCannotBeReadOrValidatedKeepsWhatItMightProtect() {
+        var older = Install(version: "0.9.0", healthy: true);
+        var lastGood = Install(version: "1.0.0", healthy: true);
+        var current = Install(version: "1.0.1");
+        var orphan = Objects.Put(content: "nothing references this"u8);
+        var sourceRoot = Path.Combine(path1: Root, path2: InstallPruner.LocalSourceDirectoryName);
+        var stale = new ContentAddressedStore(root: sourceRoot).Put(content: "named by no valid manifest"u8);
+        var olderRecord = Path.Combine(path1: Version(version: "0.9.0"), path2: InstallRecord.FileName);
+
+        File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName), contents: """{"sequence":2,"files":["invalid"]}""");
+        Directory.CreateDirectory(path: Path.Combine(path1: sourceRoot, path2: "development"));
+        File.WriteAllText(path: Path.Combine(path1: sourceRoot, path2: "development", path3: "manifest.json"), contents: "{}");
+        InstallPruneResult unreadable;
+
+        if (OperatingSystem.IsWindows()) {
+            using (new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: olderRecord, share: FileShare.None)) {
+                unreadable = Prune(keepVersions: 0);
+            }
+        } else {
+            File.SetUnixFileMode(mode: UnixFileMode.None, path: olderRecord);
+            unreadable = Prune(keepVersions: 0);
+            File.SetUnixFileMode(mode: (UnixFileMode.UserRead | UnixFileMode.UserWrite), path: olderRecord);
+        }
+        Assert.Contains(expected: "0.9.0", collection: unreadable.KeptVersions);
+        Assert.Equal(expected: ["0.9.0", "1.0.0", "1.0.1"], actual: VersionNames());
+        Assert.True(condition: Objects.Contains(pin: older), userMessage: "the version with an unreadable record lost its object");
+        Assert.True(condition: Objects.Contains(pin: orphan), userMessage: "the sweep ran without knowing every kept version's objects");
+
+        var readable = Prune(keepVersions: 0);
+
+        Assert.Equal(expected: ["0.9.0"], actual: readable.DeletedVersions);
+        Assert.True(condition: Objects.Contains(pin: lastGood), userMessage: "a record with an invalid pin lost its version's object");
+        Assert.True(condition: Objects.Contains(pin: current));
+        Assert.False(condition: Objects.Contains(pin: orphan));
+        Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(pin: stale, root: sourceRoot)), userMessage: "a store whose manifest fails validation was swept");
+        Assert.Contains(collection: readable.Refused, filter: static reason => reason.Contains(value: "fails validation", comparisonType: StringComparison.Ordinal));
+        File.WriteAllText(path: Path.Combine(path1: Root, path2: "install-intent.json"), contents: """{"manifest":{"version":"1.0.1"}}""");
+        Assert.Contains(expectedSubstring: "fails validation", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
     }
     public void Dispose() => m_directory.Dispose();
 }
