@@ -184,7 +184,7 @@ public sealed partial class WorldBody {
         var planarVelocity = (m_planarVelocity + m_overlayVelocity).ToVector3();
         var timerSuffix = string.Join(separator: ",", values: m_actionStateDefinitions.Select(selector: (definition, slot) => (definition, slot))
             .Where(predicate: item => (item.definition.Kind == ActionStateKind.Timer))
-            .Select(selector: item => $"{item.definition.Name}:{((double)FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: StateTimer(slot: item.slot))):0.###}"));
+            .Select(selector: item => FormattableString.Invariant(formattable: $"{item.definition.Name}:{((double)FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: StateTimer(slot: item.slot))):0.###}")));
         var verticalVelocity = ((double)m_verticalVelocity);
         var scale = ((double)m_scale);
         var com = (IsRigid
