@@ -26,9 +26,10 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): the
-   debug world runs at 7-8 FPS on Direct3D 12 and 4 FPS on Vulkan at every
-   sweep stop, quiet; find what each frame waits on.
+1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
+   display lit the debug world holds p50 16.67 ms at every stop, but a frame
+   carrying a 30 Hz tick (8 to 14 ms) misses the blank; cut the tick's cost on
+   the frame thread.
 2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
@@ -163,31 +164,36 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
 
 ### Frame time on the lead machine
 
-Owner: rendering and host performance specialist · high · Next: find what the
-frame waits on (per-view GPU time from `world.counters gpu` timestamps, then
-drop session views, screens and the desktop capture one at a time), then fix it
-and re-read these stops.
+Owner: simulation and host performance specialist · high · Next: take the 30 Hz
+tick off the frame-time budget (its cost first, by a thread-time trace of the
+rim's tick, then the [simulation tick](#simulation-tick-off-the-frame-thread)
+packet), and re-read these stops on a quiet machine.
 
-- [high] The RTX 4070 is nowhere near 60 FPS at any sweep stop. A quiet windowed
-  Direct3D 12 World at 1280x900, bakes settled, `world.lockstep off`, reads 121-140
-  ms average per iteration (7-8 FPS) at the lobby (`debug.go gallery`), level 1
-  (`debug.go gallery-level-1`), the boardroom, the card table (`debug.go cards`)
-  and the valley rim (`body.pose 0 386 470 0 0 0`), three `host.frames` readings
-  of 45-90 ticks each with temporal on and three with it off. Temporal changes
-  nothing (lobby 131-135 ms on, 130-137 ms off; rim 135-136 on, 127-131 off):
-  every reading has produce 98-116 ms and simulate 21-29 ms, the slowest
-  iterations 210-265 ms. Machine load was 8-16 %, and the World used about 1.3
-  cores. A `dotnet-sampled-thread-time` trace of the lobby has the frame thread
-  on CPU for only 1.9 s of 8 s (75 % of that in `FixedStepPump.Step`, rule
-  evaluation 35 %), so most of produce is spent outside managed code. Vulkan at
-  the lobby reads 212-273 ms per iteration with produce only 25-37 ms and the
-  frame's `begin` (the wait for the previous frame) 380-413 ms, which points at
-  the GPU. Counted work at the lobby: `world` 11.5 M vertices and 794 draws,
-  `beacon-eye` 5.2 M, and session views of the garden and night field about
-  25 M more. Unconfirmed: whether the GPU itself is saturated (no utilization
-  was sampled during the run) and which view costs it. The busiest managed
-  non-frame thread is the desktop screen's capture feed
-  (`Win32GraphicsCaptureFeed`, 3.3 s of CPU in 8 s). (from: quiet-measure)
+- [high] Steady 60 FPS is not held: frames that carry a tick miss the vertical
+  blank. The 7 to 8 FPS readings were the display powered off (the
+  [hazard](../development/contributing.md#hardware-and-toolchain-cautions); the
+  window now holds a display request). With the compositor running, a windowed
+  Direct3D 12 World at 1280x900, highest settings (shadows high, temporal on,
+  native scale), `world.lockstep off`, reads p50 16.67 ms at every stop, and
+  over 20 ms in 34 of 585 iterations at the lobby (p99 25.0), 62 of 581 at level
+  1 (p99 25.9), 20 of 593 at the boardroom (p99 24.5), 32 of 589 at the cards
+  (p99 25.1) and 218 of 534 at the valley rim (avg 18.7, p99 28.9); the machine
+  carried other lanes' builds (50 to 75 % CPU). Each slow iteration is one
+  fixed step of 8 to 14 ms (about 12 ms at the rim) plus produce of 6 to 7 ms on
+  the frame thread. The GPU is not the limit: at P0 the lobby's frame is
+  `world` 8.0 ms, the session views about 2 ms together and `beacon-eye`
+  0.4 ms (`world.gpu-timing timeline`). Vulkan under the same load reads avg
+  17.5 ms at the lobby and 19.8 to 26.5 ms elsewhere, with produce 8 to 11 ms
+  against Direct3D 12's 6 to 7. (from: frame-time)
+- [low] A reading taken while the compositor is not composing still looks like
+  a slow frame. `GUID_CONSOLE_DISPLAY_STATE` read "off" for whole readings at
+  60 FPS, so it cannot flag one; a present-side signal (the frame-latency wait
+  reaching its bound, or the queue idle behind the back buffer) would. The
+  Linux windows hold no display request (Wayland's idle inhibit, X11's
+  screensaver suspend). (from: frame-time)
+- [low] `WorldGpuTiming` (`world.gpu-timing` and its `timeline`) has no CPU
+  test over a fake runtime, so its lines rely on a live render root.
+  (from: frame-time)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
