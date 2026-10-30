@@ -94,7 +94,11 @@ separate systems.
   Antigravity proposed rings at fixed metre radii; Claude and Codex the
   projected-size rule, adopted because it follows the existing ruling, holds at
   any scale from a card to a mountain, and needs no tuning. The coarsest level
-  stays resident within the far distance while the budget allows.
+  stays resident within the far distance while the budget allows. A group that
+  has not landed has no recorded error yet, so the work that lands it (its
+  lattices, its store load, its words in the mesh region) is ordered by the
+  same rule with its planned box standing in: the box's diagonal in display
+  pixels over the distance to the box (`SdfMeshDemand`).
 - **An area only adds demand.** While a demand point stands in an area, the area
   and its neighbours through open or soon-to-open openings are demanded whole.
   It raises priority and never lowers it, so an author uses it where the passive
