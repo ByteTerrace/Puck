@@ -267,6 +267,8 @@ Owner: test runner and replay specialist · medium and low ·
 Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
 replica cost and repeat the paired CPU measurements on a quiet machine.
 
+- [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (`.claude/scratch/boot-reuse-report.md`, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
+
 - [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
   Compatible scenarios now restore pristine session lanes into their own
   admitted rows, seeds and rules, rebind gates and clock seeds, and recompose
