@@ -496,8 +496,13 @@ internal static class WorldBenchmarks {
         return ((samples[(samples.Length / 2)] * 1000.0) / Stopwatch.Frequency);
     }
 
-    // The certified sweep's work and the immutable field's bounds work it spends, in report order.
+    // The analytic solver's work, the certified sweep's work and the immutable field's bounds work it spends, in report
+    // order.
     private static readonly WorkKind[] ContactWorkKinds = [
+        FixedStaticContactWork.Resolves,
+        FixedStaticContactWork.Queries,
+        FixedStaticContactWork.ConvexQueries,
+        FixedStaticContactWork.Supports,
         FixedContactSweepWork.Sweeps,
         FixedContactSweepWork.BoundsQueries,
         SdfBoundsCache.Evaluations,
@@ -508,6 +513,10 @@ internal static class WorldBenchmarks {
     ];
 
     private static long[] ReadContactWork() => [
+        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.Resolves),
+        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.Queries),
+        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.ConvexQueries),
+        FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.Supports),
         FixedContactSweepWork.Process.Read(kind: FixedContactSweepWork.Sweeps),
         FixedContactSweepWork.Process.Read(kind: FixedContactSweepWork.BoundsQueries),
         SdfBoundsCache.ProcessWork.Read(kind: SdfBoundsCache.Evaluations),

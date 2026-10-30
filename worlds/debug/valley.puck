@@ -3,7 +3,7 @@
 // shoulders from the standard terrain library (../standard/terrain.puck), with fBm relief seeded per sector. The floor
 // (debug.puck's "floor") runs on under the walls, so no slab edge shows. An overlook deck stands near the summit of the
 // south-west sector, and a body that falls out of the world is stood back up on the floor below the sector it fell from,
-// not at one global spawn. valley.md beside this file has the plan's numbers.
+// not at one global spawn. docs/plans/valley-and-moons.md records the bake, contact and audit numbers it was measured at.
 //
 //   compass 0 is world +Z (north), 90 world +X (east)
 //   the floor is clear to the walls' feet, 205 to 230 m from the origin: every exhibit, the hall, the studio, the camera
@@ -43,7 +43,10 @@ let overlookFace = (overlookCentre - (overlookSector.radial * squareRoot((1 - (o
 // The deck's radial half-depth, its across half-width, and how far its inner edge stands out from the face.
 let deckDepth = 14
 let deckWidth = 18
-let deckReach = 18
+let deckReach = 10
+// The parapet's half thickness: the bake refines a plate to its half thickness (mesh-bake.md), so a thin rail refines
+// the whole overlook union to it.
+let parapetHalf = 0.3
 
 let compassRadians = 0.017453292519943295
 
@@ -72,7 +75,7 @@ spawnPoints: concat(
       id: $"valley-{sector.name}"
       position [
         (recoveryRadius * sine((sector.compass * compassRadians)))
-        0.05
+        0.05,
         (recoveryRadius * cosine((sector.compass * compassRadians)))
       ]
       yawDegrees: sector.compass
@@ -82,9 +85,9 @@ spawnPoints: concat(
     {
       id: "overlook"
       position [
-        ((overlookFace - 10) * sine((overlookSector.compass * compassRadians)))
-        (deckHeight + 0.05)
-        ((overlookFace - 10) * cosine((overlookSector.compass * compassRadians)))
+        (((overlookFace - deckReach) + 4) * sine((overlookSector.compass * compassRadians))),
+        (deckHeight + 0.05),
+        (((overlookFace - deckReach) + 4) * cosine((overlookSector.compass * compassRadians)))
       ]
       yawDegrees: overlookSector.compass
     }
@@ -157,7 +160,7 @@ prototypes {
     }
   }
 
-  // The overlook's deck, its parapet and the buttress under its overhang, in the south-west sector's frame (author +Z
+  // The overlook's deck and its parapet, cantilevered from the south-west face, in the sector's frame (author +Z
   // out from the centre). No relief, so the deck collides where it is drawn.
   prototype "valley-overlook" {
     document {
@@ -182,24 +185,18 @@ prototypes {
       }
       shape Box "parapet-front" {
         material: valleyDeck
-        position [0, (deckHeight + 0.55), ((overlookFace - deckReach) + 0.15)]
-        scale [deckWidth, 0.55, 0.15]
+        position [0, (deckHeight + 0.55), ((overlookFace - deckReach) + parapetHalf)]
+        scale [deckWidth, 0.55, parapetHalf]
       }
       shape Box "parapet-left" {
         material: valleyDeck
-        position [(deckWidth - 0.15), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
-        scale [0.15, 0.55, deckDepth]
+        position [(deckWidth - parapetHalf), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
+        scale [parapetHalf, 0.55, deckDepth]
       }
       shape Box "parapet-right" {
         material: valleyDeck
-        position [(0.15 - deckWidth), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
-        scale [0.15, 0.55, deckDepth]
-      }
-      shape Superellipsoid "buttress" {
-        exponent: 2
-        material: valleyRock
-        position [0, (deckHeight - 26), (overlookFace - 2)]
-        scale [14, 26, 12]
+        position [(parapetHalf - deckWidth), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
+        scale [parapetHalf, 0.55, deckDepth]
       }
     }
   }
@@ -214,10 +211,9 @@ rule "fall-recovery" {
   mode: Level
   forEach: $bodies
   for wedge in valleyWedges {
-    if (
-      (((bodyPosition(each, x) * wedge.c1) - (bodyPosition(each, z) * wedge.s1)) >= 0)
-      and (((bodyPosition(each, x) * wedge.c2) - (bodyPosition(each, z) * wedge.s2)) < wedge.edge)
-    ) {
+    if ((bodyPosition(each, x) * wedge.c1) - (bodyPosition(each, z) * wedge.s1)) >= 0 and (
+        (bodyPosition(each, x) * wedge.c2) - (bodyPosition(each, z) * wedge.s2)
+      ) < wedge.edge {
       pose(key: $each, spawnPoint: $"valley-{wedge.name}")
     }
   }

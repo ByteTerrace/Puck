@@ -131,7 +131,13 @@ laws exercise that boundary.
   geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
   thickness or a rounded profile's radius, a thirty-second of a warped shape's
   smallest half-extent, or a thirty-second of a cellular relief's wavelength. The tightest applies, at
-  placement scale; a scoped creation keeps its tightest shape's spacing.
+  placement scale; a scoped creation keeps its tightest shape's spacing, or its
+  noise relief's (`CreationNoiseDocument.DetailSpacing`: a quarter of the
+  wavelength of the finest octave carrying a sixteenth of the amplitude) where
+  that is finer. Refinement stops at eight cells a coarse axis, and a scoped
+  creation's coarse lattice spans its bound sphere about the creation's origin,
+  so a terrain sector centred on its ring's centre bakes at 2.8 m, not its
+  declared 1.56 m (`docs/plans/valley-and-moons.md`).
   A bound alone misses thin strands and leaves warped corners under-resolved.
   Convex rounding reads the scaled polygon's inradius and extrusion clamp;
   warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is

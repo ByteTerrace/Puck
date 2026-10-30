@@ -1,6 +1,6 @@
-// The debug world: the flat floor of a caldera (valley.puck) under a clear day, with axis markers beside the spawn, reference cubes and
-// the Moth avatar to walk it, and an open-fronted coloured room beside them for judging indirect light. Its portals
-// are paintings in the gallery hall's east wing (paintings.puck): two onto other lands, the garden (garden.puck) and
+// The debug world: a caldera's flat floor (valley.puck) under a clear day, with axis markers beside the spawn, reference
+// cubes and the Moth avatar to walk it, and an open-fronted coloured room beside them for judging indirect light. Its
+// portals are paintings in the gallery hall's east wing (paintings.puck): two onto other lands, the garden (garden.puck) and
 // the night field (night.puck), two facing each other across the room, and the endless fall's floor and ceiling. It is
 // the plain starting point the island is built up from, in engine: boot its package with `--world worlds/debug`, edit
 // this source, and `world.reload` recompiles it in place. debug.md beside it says how to demo and inspect the portals.
@@ -451,4 +451,3 @@ render {
     clearDayAir()
   }
 }
-
