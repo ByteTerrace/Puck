@@ -109,7 +109,7 @@ public sealed partial class WorldCreationInstances {
     // Geometry keeps its authored transform slots; the bound may ride a member shared by the group's motion.
     // Groups with independent motion or followers retain the conservative creation-root bound. The group's instance
     // declares the finest spacing its members ask of the bake (SharedDetail); the probe's, with no document, none.
-    private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden, CreationMotionPlan? motion, Vector3 boundOffset) {
+    private static void EmitGroup(SdfProgramBuilder builder, CreationDocument? document, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, float materialScale, bool probeWorstCase, int boundSlot, float boundRadius, bool ownInstance, bool[]? hidden, CreationMotionPlan? motion, Vector3 boundOffset) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -159,7 +159,7 @@ public sealed partial class WorldCreationInstances {
                 steps: shape.Steps,
                 morph: shape.Morph,
                 inGroupScope: true,
-                material: WorldPlacementStamper.MaterialForShape(builder, paletteIds[((shape.Material ?? 0) % paletteIds.Length)], shape, placementScale),
+                material: WorldPlacementStamper.MaterialForShape(builder, paletteIds[((shape.Material ?? 0) % paletteIds.Length)], shape, materialScale),
                 onion: ((shape.Onion ?? 0f) * placementScale),
                 placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
@@ -223,10 +223,12 @@ public sealed partial class WorldCreationInstances {
         );
 
         if (live is not null) { picks?.Materials(prototype: live.Creation.Id, ids: paletteIds); }
-        var placementScale = (probeWorstCase
-            ? maxPlacementScale
-            : (live?.Scale ?? 1f)
-        );
+        // A live creation's geometry is emitted at its own size, in its slots' own units: PackTransforms gives every slot
+        // the registration's scale (DynamicTransform.Scale), the bake samples each group in its slot's units and the
+        // group's draws scale it, so a body drawn at another size keeps every mesh. Its material layers stay in world
+        // units, at the registration's scale, since the slots' poses the shading reads are world poses.
+        var placementScale = (probeWorstCase ? maxPlacementScale : 1f);
+        var materialScale = (live?.Scale ?? 1f);
 
         // The mesh rides the registration's root, drawn by the mesh pass rather than emitted into the program, so the
         // probe reserves nothing for it; the material is this build's registration of its palette entry.
@@ -338,7 +340,7 @@ public sealed partial class WorldCreationInstances {
                     ? carried[index]
                     : paletteIds[((placed?.Material ?? 0) % paletteIds.Length)]);
 
-                material = WorldPlacementStamper.MaterialForShape(builder, material, placed!, placementScale);
+                material = WorldPlacementStamper.MaterialForShape(builder, material, placed!, materialScale);
                 var panelMaterial = ((placed?.Panel is { } placedPanel)
                     ? paletteIds[(placedPanel.Material % paletteIds.Length)]
                     : 0);
@@ -505,6 +507,7 @@ public sealed partial class WorldCreationInstances {
                 ownInstance: !coupled,
                 paletteIds: paletteIds,
                 placementScale: placementScale,
+                materialScale: materialScale,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
                 shapes: shapes,

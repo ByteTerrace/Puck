@@ -35,6 +35,35 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.True(bake.TryTakeForFrame(0, out var batch));
         Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
     }
+    // A body drawn at another size keys the geometry and the skin poses of its own size, since its slots carry the scale
+    // and the bake reads another slot in the group's own units.
+    [Fact]
+    public void AScaledBodyKeysTheGeometryOfItsOwnSize() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+
+        builder.BeginInstanceDynamic(0, Vector3.Zero, 2);
+        builder.ResetPoint().TransformDynamic(0).Box(halfExtents: new Vector3(0.3f), round: 0f, material: material);
+        builder.ResetPoint().TransformDynamic(1).Sphere(material: material, radius: 0.2f);
+        builder.EndInstance();
+        var program = builder.Build();
+        var turn = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.7f);
+
+        DynamicTransform[] Body(float scale) => [
+            new DynamicTransform(new Vector3(5, 0, 2), turn) { Scale = scale },
+            new DynamicTransform((new Vector3(5, 0, 2) + Vector3.Transform((new Vector3(0, 0.6f, 0.1f) * scale), turn)), turn) { Scale = scale },
+        ];
+        SdfMeshBakeGroup Group(float scale) => SdfMeshBakeGroup.Plan(program, Body(scale), 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)).Single(group => group.Dynamic);
+
+        var full = Group(1f);
+        var quarter = Group(0.25f);
+
+        Assert.Equal(full.Sealed, quarter.Sealed);
+        Assert.Equal(full.Geometry.Poses[1].Position, quarter.Geometry.Poses[1].Position);
+        // A scale that is not positive reads as one.
+        Assert.Equal(1f, SdfMeshGeometryBuilder.UnitsOf(default));
+        Assert.Equal(0.25f, SdfMeshGeometryBuilder.UnitsOf(Body(0.25f)[0]));
+    }
     [Fact]
     public void AnUnrepresentableSkinIsRefusedBeforeAnyBakeIsQueued() {
         var builder = new SdfProgramBuilder();

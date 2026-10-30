@@ -70,12 +70,14 @@ public sealed partial class SdfMeshPathBake {
 
         var (ownPosition, ownOrientation) = PoseOf(transform: transforms[group.Slot]);
         var inverse = Quaternion.Inverse(value: ownOrientation);
+        // The members' poses as the geometry keys them: in the group's own units.
+        var units = SdfMeshGeometryBuilder.UnitsOf(transform: transforms[group.Slot]);
         var drifted = false;
 
         moved = !group.Seeded;
         for (var member = 0; (member < slots.Length); member++) {
             var (position, orientation) = PoseOf(transform: transforms[slots[member]]);
-            var relative = Vector3.Transform(rotation: inverse, value: (position - ownPosition));
+            var relative = (Vector3.Transform(rotation: inverse, value: (position - ownPosition)) / units);
             var turn = Quaternion.Normalize(value: (inverse * orientation));
 
             group.CurrentPositions![member] = relative;
@@ -117,6 +119,7 @@ public sealed partial class SdfMeshPathBake {
         group.Replaces = old;
         group.DrawnPosition = old.DrawnPosition;
         group.DrawnOrientation = old.DrawnOrientation;
+        group.DrawnScale = old.DrawnScale;
         Replace(group: group, index: index);
         m_drawnMeshes = -1;
         if (Library.TryTake(geometry: group.Sealed, materials: group.MaterialOrder, mesh: out var baked)) {

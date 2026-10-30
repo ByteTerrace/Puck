@@ -222,6 +222,23 @@ laws exercise that boundary.
   `SDF_MESH_BAKE_POSES`), so a mesh is a function of its geometry: a body moving
   while it bakes bakes whole, and two boots of one device bake alike. The
   contour is the mesh, already in that frame.
+- **A dynamic body bakes at its own size.** The pool (`WorldCreationInstances.EmitOne`)
+  and the rig catalog emit a body's geometry in its slots' own units, whatever
+  its look's or `bodies.scale` register's scale, and every slot carries that
+  scale (`DynamicTransform.Scale`; positions stay world positions, and field
+  transforms stay rigid). The geometry builder reads another slot's offset from
+  the group's slot in the group's units (`SdfMeshGeometryBuilder.RelativePose`,
+  `UnitsOf`), as the settle watch does, so the key, the detail and the lattice
+  are the full-size body's; the group's draw matrix takes the scale
+  (`SdfMeshPathBake.Dress`), and a member's vertex takes the draw's scale
+  (`sdfMeshDrawScale`, the current and previous positions). A body crossing a
+  portal pair of two sizes (Wonderland) bakes nothing and draws its full-size
+  mesh scaled. Its material layers stay in world units at its scale, since the
+  shading reads the slots' world poses. Never fold a body's scale back into its
+  emitted geometry: a quarter-size body then keys new geometry and bakes four
+  times coarser relative to itself. A slice (`world.slice`) walks the field
+  through the frame's rigid transforms, so it shows a scaled body at its own
+  size about its slots.
 - **Materials are point-sampled, not taken from the lattice.** Each final
   quad's quarters and vertices are sampled through `sdfMeshBakePoints` (a staged
   World table the residency writes before the upload); a quad whose quarters

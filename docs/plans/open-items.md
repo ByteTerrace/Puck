@@ -148,6 +148,16 @@ holds the fixed poses and the approaches already rejected.
 
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
+- [low] A quarter-size Moth (Wonderland) shows thin bright lines under her back
+  band plates' lower edges that the full-size Moth at the same relative framing
+  does not, though both draw one mesh (`world.debug-view normals` matches): a
+  shading length in world units does not follow a body's scale (candidates: the
+  cascades' depth bias and texel, the surface pass's AO and shadow tap radii,
+  `SdfMeshIrradianceProbe.NormalBias`). Pose `body.pose 6.16 0.07 30.43 23 0 0`
+  at scale 0.25 with `view.override camera look 6.40 0.30 31.05 6.16 0.24 30.43`;
+  the full-size twin is `view.override camera look 7.12 0.99 32.91 6.16 0.75 30.43`
+  at scale 1. (from: bake-scale)
+
 - Decide (the lead's call): Exposure: a GPU luminance meter (log-average of the
   view's HDR output with a highlight clamp) drives auto-exposure, the probe
   meter kept for local adaptation, because the probe meter cannot see dynamic
@@ -1116,27 +1126,19 @@ Owner: maths lane · ordinary · Next: the float duration fields' schema migrati
   checked against a deterministic Miller-Rabin oracle; Intel (Alder Lake) and
   Zen 2 timings are unmeasured.
 
-### Dynamic body scale and the mesh bake
+### Bake detail
 
-Owner: specialist lane (rendering, sdf-authoring) · one high from the owner's
-walkthrough · Next: find where the dynamic (articulated) bake path keys and
-bakes by world scale, since `SdfMeshInstance.Matrix` already applies `Scale` at
-draw and a local-instance asset bakes once; extend that path to the body.
+Owner: specialist lane (rendering, sdf-authoring) · ordinary · Next: measure
+the static round-section term's cost with `puck mesh audit --cpu`.
 
-- Decide (the lead's call): a dynamic body's geometry and detail are defined in
-  its creation space; its body scale rides the draw transform, bounds, normals
-  and clipping, with no re-bake per scale and no avatar-specific exception; a
-  detail tier by screen size comes later.
-
-- [high] Crossing the Wonderland door (scale 0.25) misses the mesh cache for 180 groups of the Moth (`[sdf.mesh-bake] miss ... geometry new to its set`; 3679 dispatches, 13.4 M samples, 14.65 s) and the full-size meshes keep drawing until it finishes, so the Moth reads large and warped; after it the small Moth is visibly degraded: white slivers along every stripe edge of the back plates, lumpy squashed boots, ragged pads, because the bake's detail is set in world units and a 0.25-scale body gets a mesh four times coarser relative to itself. A dynamic body's bake must not depend on its world scale: bake in local space at its own detail, scale at draw, detail tier by screen size. Poses: `body.pose 6.16 0.07 30.43 23` at scale 0.25, orbit `view.override camera look 6.75 0.32 30.75 6.16 0.24 30.43` and `6.40 0.30 31.05 6.16 0.24 30.43`; captures w07-* in `.claude/scratch/walkthrough/` (the lead's machine). (from: owner walkthrough)
-- Bake detail beside it: static placements' plain round shapes still bake at
+- Static placements' plain round shapes still bake at
   15 mm (`ShapeDetail` reads no round section); giving them `BodyDetail`'s
   curvature term rebakes the world, so measure its cost first
   (`puck mesh audit --cpu`). A dynamic group refines its whole bound toward its
   finest member: `SdfMeshBakeGroup.PlanGroups` records per-member regions only
   for static instances and merges every member's detail into one
-  `DetailLow`/`DetailHigh` box (`src/Puck.SdfVm/SdfMeshBakeGroup.cs:310-321`),
-  where per-member regions would let a thin member declare its own detail.
+  `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
+  member declare its own detail.
 
 ### Temporal shimmer and cadence flicker
 
