@@ -26,42 +26,50 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
+1. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the owner-visible
+   sub-cell features (stair holes and flipped faces, blind slats, shell seams)
+   fixed at the root in the bake. In flight: bake-seams (principal).
+2. [Lighting and GI](#lighting-and-gi): nothing renders black (sky fill on
+   shaded faces, probes or sky outside the window) and the meter meters during
+   a bake. In flight: lighting-robust.
+3. [The valley's terrain](#the-valleys-terrain): contact on the drawn relief
+   (in flight: relief-contact), then the terrain pass (docs/plans/terrain-pass.md).
+4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
    carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
    lobby and the rim, so take the next ranked costs (rule evaluation, snapshot
    delivery, the scoped replay hash) and re-read the stops windowed.
-2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
+5. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
-3. [Bake detail](#bake-detail): measure static curvature refinement and local
+6. [Bake detail](#bake-detail): measure static curvature refinement and local
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
-4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+7. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a reboot for an edit outside `PuckHotReload`, and the windowed C# loop timed
    on a quiet machine.
-5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+8. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    schema switch, then the pick answer.
-6. [Test runner and replay](#test-runner-and-replay): make the per-tick
+9. [Test runner and replay](#test-runner-and-replay): make the per-tick
    authority hash incremental, as the quiet measurement supports.
-7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
-   the owner's direction; Klondike first on the revived rules and SDF faces,
-   headless, its look in the lead's window.
-8. [Residency and streaming](#residency-and-streaming): near-first has landed;
-   next, GI on the same demand points and the measurements still open.
-9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
-   inverted sheets along the divider; the colliders report's remaining reds are
-   the valley relief's ([the valley's terrain](#the-valleys-terrain)).
-10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+10. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+    the owner's direction; Klondike first on the revived rules and SDF faces,
+    headless, its look in the lead's window.
+11. [Residency and streaming](#residency-and-streaming): near-first has landed;
+    next, GI on the same demand points and the measurements still open.
+12. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
+    inverted sheets along the divider; the colliders report's remaining reds are
+    the valley relief's ([the valley's terrain](#the-valleys-terrain)).
+13. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
     it in `panes` and answers under pause, then the diagnostics' windowed checks
     and the developer exhibits.
-11. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+14. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
-12. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+15. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
-13. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
