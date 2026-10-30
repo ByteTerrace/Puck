@@ -1,8 +1,13 @@
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 public sealed partial class WorldInstanceHost {
+    // The onward hops the crossing being applied was granted by another title authority: each is given up if the
+    // crossing does not depart with it.
+    private List<(WorldInstance Row, WorldTransferKey Key, WorldEntityAddress Incarnation, string Home)> m_foreignGrants = [];
+
     // One companion a crossing carries: the body it leaves, the ordinal of the member it follows in the cohort, and the
     // leaf it carries (its role, home and driver; the ticket comes from its title authority's grant).
     private readonly record struct CompanionMember(int Slot, int FollowsOrdinal, WorldTransferCompanion Leaf);
@@ -99,7 +104,7 @@ public sealed partial class WorldInstanceHost {
                     key: key
                 );
             } else {
-                answers = ((server.CustodyHomes?.Invoke(arg: home.Key) is { } door)
+                answers = ((server.CustodyPeers?.Invoke(arg: home.Key) is { } door)
                     ? door.RequestHop(
                         destination: destination,
                         key: key,
@@ -117,6 +122,9 @@ public sealed partial class WorldInstanceHost {
                 var answer = ((index < answers.Count) ? answers[index] : default);
                 var expected = checked((member.Mobility!.Value.Epoch + 1UL));
 
+                if ((answer.Verdict == WorldHopVerdict.Granted) && !string.Equals(a: home.Key, b: authority, comparisonType: StringComparison.Ordinal)) {
+                    m_foreignGrants.Add(item: (source, key, incarnations[index], home.Key));
+                }
                 if ((answer.Verdict == WorldHopVerdict.Granted) && (answer.Incarnation == incarnations[index]) && (answer.Next == expected)) {
                     reservationMembers[ordinal] = member with {
                         Companion = member.Companion! with {
@@ -136,6 +144,22 @@ public sealed partial class WorldInstanceHost {
                         channel: "world.transfer",
                         text: $"[world.transfer: transfer={key.TransferId} companion {incarnations[index]} stays — its title authority answered {((answer.Incarnation == incarnations[index]) ? answer.Verdict.ToString() : "nothing")}]"
                     );
+                }
+            }
+        }
+    }
+    // Tells each title authority of every hop this custodian settled under its title, until it acknowledges: home
+    // settles the hop from the destination's own word and the acknowledgement is recorded here, one record each.
+    private void NotifySettledHops() {
+        foreach (var row in m_instances.Values.ToArray()) {
+            var owed = row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.OwedHopNotices());
+
+            foreach (var (key, incarnation, home) in owed) {
+                if (
+                    (row.Server.CustodyPeers?.Invoke(arg: home)?.SettleHop(incarnation: incarnation, key: key, source: row.Server.AuthorityIdentity) == true) &&
+                    (row.Server.RecordCustody(reason: out _, record: new WorldCrossingRecord.HopAcked(Incarnation: incarnation, Key: key)) != WorldCrossingDurability.Durable)
+                ) {
+                    break;
                 }
             }
         }

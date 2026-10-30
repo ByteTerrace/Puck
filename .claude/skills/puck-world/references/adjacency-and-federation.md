@@ -369,10 +369,10 @@ request-local `MemberId`; a companion carries `WorldTransferCompanion` (role,
 followed member id, home, driver, ticket). Before the reservation the source
 asks the title authority for each hop: home records one `Hop` for its own
 companions (`WorldServer.AuthorizeOwnHop`), a custodian asks home through
-`IWorldCustodyHome.RequestHop`; only a granted companion carries a ticket.
+`IWorldCustodyPeer.RequestHop`; only a granted companion carries a ticket.
 `WorldServer.ReserveTransfer` and `CommitTransfer` ask home, off the gate and
 once per call, whether each companion's grant is current
-(`IWorldCustodyHome.ConfirmHops`, resolved by `WorldServer.CustodyHomes`), so an
+(`IWorldCustodyPeer.ConfirmHops`, resolved by `WorldServer.CustodyPeers`), so an
 answer never outlives the decision it was asked for; a latched home confirms
 nothing. The escrow decides companions member by member (`Role`, `Duplicate`,
 `Full`, `Unverified` in `WorldTransferReservationReply.Refusals`, the leased
@@ -382,9 +382,20 @@ refused; the arrival record and its tape entry name only what landed, with
 each member's generation. The source reads the landed ids
 (`IWorldPeerCall.TryLanded`; the federation status leaf carries them), settles
 per member, restores the rest, and the drain settles home's own hops from its
-own departure and settlement records (`OwedOwnHopSettlements`). The federation
-lane carries `HopQuery`/`HopQueryReply` and `HopRequest`/`HopAnswer`, each
-answered for the connection's authenticated namespace. Laws:
+own departure and settlement records (`OwedOwnHopSettlements`). A custodian's
+hop settles by the destination's word: after each drain the custodian sends
+home a notice for every companion its settled departures carried
+(`OwedHopNotices`, until a `HopAcked`), and home asks the hop's destination
+(`IWorldCustodyPeer.QueryCustody`, served only to the incarnation's minting
+authority, answered from the arrival the destination folded, its commit, lease
+or uncertainty, or a tombstone written first) and records `HopDone` from that
+answer alone. A notice for a hop home never recorded cancels it. A granted
+onward hop the crossing did not depart with is given up the same way when the
+crossing ends. An authority that still owes a notice or a settlement of its own
+hop is not reaped until the drain that makes it. The federation lane carries
+`HopQuery`/`HopQueryReply`, `HopRequest`/`HopAnswer`,
+`CustodyQuery`/`CustodyReply` and `HopSettled`/`HopSettledAck`, each answered
+for the connection's authenticated namespace. Laws:
 `CompanionCrossingLawTests`.
 
 Entity identity is `WorldEntityAddress(authority, index, generation)`.

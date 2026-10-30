@@ -299,7 +299,7 @@ public sealed partial class WorldInstanceHost {
                             }
                         );
                         m_remoteAuthorities[routeName] = routeAuthority;
-                        RegisterRemoteCustodyHome(remote: routeAuthority);
+                        RegisterRemoteCustodyPeer(remote: routeAuthority);
                         publishedEndpoint = EndpointFor(
                             authority: routeAuthority,
                             identity: routeName,

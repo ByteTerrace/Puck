@@ -904,6 +904,70 @@ public sealed class WorldPeerHost : IDisposable {
 
         return true;
     }
+    // A companion's title authority asks this destination what it holds under a hop's key, or a custodian tells this
+    // title authority it settled a hop. The asker is the namespace this connection authenticated as; a settlement
+    // notice must name a key that namespace minted.
+    private async Task<bool> ServeCompanionHopAsync(Stream stream, string sourceAuthority, Credential credential, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeCompanionHop(
+            body: body.Span,
+            failure: out var failure,
+            incarnation: out var incarnation,
+            key: out var key
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"{kind} — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+        if (kind == WorldFederationRequest.CustodyQuery) {
+            var answer = ExecuteAuthenticated(credential: credential, operation: () => m_server.QueryCustody(
+                asker: sourceAuthority,
+                incarnation: incarnation,
+                key: key
+            ));
+
+            await WorldFederationCodec.WriteResponseAsync(
+                body: new[] { ((byte)answer) },
+                ct: ct,
+                kind: WorldFederationResponse.CustodyReply,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+        if (!string.Equals(a: key.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the settlement notice names a transfer namespace this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        // Settling asks the hop's destination, which may be another peer: it runs outside this authority's gate.
+        _ = ExecuteAuthenticated(credential: credential, operation: static () => true);
+
+        var acked = m_server.SettleHop(
+            incarnation: incarnation,
+            key: key,
+            source: sourceAuthority
+        );
+
+        await WorldFederationCodec.WriteResponseAsync(
+            body: new[] { (acked ? (byte)1 : (byte)0) },
+            ct: ct,
+            kind: WorldFederationResponse.HopSettledAck,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
     // A custodian asks this authority, as a companion's title authority, to authorize its onward hop. The custodian is
     // the namespace this connection authenticated as, and the crossing's key must be one that namespace minted.
     private async Task<bool> ServeHopRequestAsync(Stream stream, string sourceAuthority, Credential credential, ReadOnlyMemory<byte> body, CancellationToken ct) {
@@ -1068,6 +1132,17 @@ public sealed class WorldPeerHost : IDisposable {
                     body: body,
                     credential: credential,
                     ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.CustodyQuery:
+            case WorldFederationRequest.HopSettled:
+                return await ServeCompanionHopAsync(
+                    body: body,
+                    credential: credential,
+                    ct: ct,
+                    kind: kind,
                     sourceAuthority: sourceAuthority,
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);

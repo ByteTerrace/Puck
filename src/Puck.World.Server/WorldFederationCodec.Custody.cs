@@ -193,6 +193,41 @@ public static partial class WorldFederationCodec {
             reader: ref reader
         );
     }
+    /// <summary>Encodes one companion's hop: the hop's key and the companion, the leaf a custody query and a settlement
+    /// notice share.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <returns>The encoded leaf.</returns>
+    public static byte[] EncodeCompanionHop(WorldTransferKey key, WorldEntityAddress incarnation) {
+        var writer = new WireWriter();
+
+        writer.WriteString(value: key.SourceAuthority);
+        writer.WriteUInt64(value: key.TransferId);
+        WorldWireLeaves.WriteEntityAddress(
+            address: incarnation,
+            writer: writer
+        );
+        return writer.ToArray();
+    }
+    /// <summary>Decodes a leaf written by <see cref="EncodeCompanionHop"/>.</summary>
+    /// <param name="body">The leaf bytes.</param>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="failure">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
+    public static bool TryDecodeCompanionHop(ReadOnlySpan<byte> body, out WorldTransferKey key, out WorldEntityAddress incarnation, out WireFailure failure) {
+        var reader = new WireReader(bytes: body);
+
+        key = new WorldTransferKey(
+            SourceAuthority: reader.ReadRequiredString(field: "hop key source authority"),
+            TransferId: reader.ReadUInt64()
+        );
+        incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
+        return Finish(
+            failure: out failure,
+            reader: ref reader
+        );
+    }
     /// <summary>Encodes a transfer's status and, for a committed transfer, the request-local ids it landed.</summary>
     /// <param name="status">The status.</param>
     /// <param name="landed">The landed ids, or <see langword="null"/>.</param>

@@ -56,6 +56,11 @@ public enum WorldFederationRequest : byte {
     HopQuery = 15,
     /// <summary>Ask a companion's title authority to authorize the authenticated custodian's onward hop.</summary>
     HopRequest = 16,
+    /// <summary>Ask a hop's destination, as the companion's authenticated title authority, what it holds under the
+    /// hop's key.</summary>
+    CustodyQuery = 17,
+    /// <summary>Tell a companion's title authority that the authenticated custodian settled its hop.</summary>
+    HopSettled = 18,
 }
 /// <summary>The federation response kinds an authority writes back.</summary>
 public enum WorldFederationResponse : byte {
@@ -101,6 +106,10 @@ public enum WorldFederationResponse : byte {
     HopQueryReply = 15,
     /// <summary>Home's answers to a hop request.</summary>
     HopAnswer = 16,
+    /// <summary>A destination's custody answer.</summary>
+    CustodyReply = 17,
+    /// <summary>Whether home recorded a hop's settlement and acknowledges the notice.</summary>
+    HopSettledAck = 18,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -947,6 +956,8 @@ public static partial class WorldFederationCodec {
         WorldFederationRequest.Status => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.HopQuery => MaxFrameBytes,
         WorldFederationRequest.HopRequest => MaxFrameBytes,
+        WorldFederationRequest.CustodyQuery => (4 * WireLimits.MaxStringBytes),
+        WorldFederationRequest.HopSettled => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.AcknowledgeTransfer => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Route => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.ObserveTraveler => (4 * WireLimits.MaxStringBytes),
@@ -967,6 +978,8 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Status => ((2 + sizeof(int)) + (sizeof(int) * WorldBodiesLimits.CapacityCeiling)),
         WorldFederationResponse.HopQueryReply => MaxFrameBytes,
         WorldFederationResponse.HopAnswer => MaxFrameBytes,
+        WorldFederationResponse.CustodyReply => sizeof(byte),
+        WorldFederationResponse.HopSettledAck => sizeof(byte),
         WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),

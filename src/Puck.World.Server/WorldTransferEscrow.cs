@@ -1883,6 +1883,29 @@ public sealed partial class WorldTransferEscrow {
         },
         Slots: [.. ordinals.Select(selector: ordinal => arrival.Slots[ordinal])]
     );
+    // What this destination holds for a companion under a hop's key, from durable facts alone: its arrival record (kept
+    // in the custody reducer whatever became of the transaction), a commit without companions, an uncertain arrival, a
+    // live lease, or the key's death, made durable before it is answered.
+    internal WorldCustodyAnswer CustodyAnswer(WorldTransferKey key, WorldEntityAddress incarnation) {
+        if (Custody.ArrivalHolds(incarnation: incarnation, key: key) is { } landed) {
+            return (landed ? WorldCustodyAnswer.Landed : WorldCustodyAnswer.NotLanded);
+        }
+        if (IsUncertain(key: key, reason: out _)) {
+            return WorldCustodyAnswer.Uncertain;
+        }
+        if (m_committed.Contains(item: key) || (m_spent.TryGetValue(key: key, value: out var spent) && spent.Committed)) {
+            return WorldCustodyAnswer.NotLanded;
+        }
+        if (m_leases.ContainsKey(key: key)) {
+            return WorldCustodyAnswer.Reserved;
+        }
+
+        var reason = string.Empty;
+
+        return ((AnswerMissing(key: key, reason: ref reason) == WorldTransferStatus.Missing)
+            ? WorldCustodyAnswer.Dead
+            : WorldCustodyAnswer.Uncertain);
+    }
     /// <summary>Returns the request-local ids a committed transfer landed here, or <see langword="null"/> when this
     /// destination holds no commit for the key (none yet, refused, or acknowledged).</summary>
     /// <param name="sourceAuthority">The source namespace.</param>

@@ -2,12 +2,12 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
-public sealed partial class WorldServer : IWorldCustodyHome {
+public sealed partial class WorldServer : IWorldCustodyPeer {
     /// <summary>Gets or sets how this authority reaches a companion's title authority by its identity: the door a
     /// destination confirms a hop through and a custodian asks for an onward hop through. Installed by the host that
     /// owns the authority; <see langword="null"/>, or a resolver that answers <see langword="null"/> for an identity,
     /// leaves every companion of that home unverified.</summary>
-    public Func<string, IWorldCustodyHome?>? CustodyHomes { get; set; }
+    public Func<string, IWorldCustodyPeer?>? CustodyPeers { get; set; }
 
     /// <inheritdoc/>
     public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination) {
@@ -46,6 +46,64 @@ public sealed partial class WorldServer : IWorldCustodyHome {
             members: members,
             source: source
         ));
+    }
+    /// <inheritdoc/>
+    public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) {
+        ArgumentNullException.ThrowIfNull(argument: asker);
+
+        return ExecuteAuthorityOperation(operation: () => (
+            !string.Equals(a: incarnation.Authority, b: asker, comparisonType: StringComparison.Ordinal)
+                ? WorldCustodyAnswer.Unauthorized
+                : ((m_uncertainCrossing is not null)
+                    ? WorldCustodyAnswer.Uncertain
+                    : m_transferEscrow.CustodyAnswer(
+                        incarnation: incarnation,
+                        key: key
+                    ))
+        ));
+    }
+    /// <inheritdoc/>
+    public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        // Decided under the gate; the destination is asked off it, and the settlement recorded under it again.
+        var (settled, destination) = ExecuteAuthorityOperation(operation: () => {
+            var custody = m_transferEscrow.Custody;
+
+            if (custody.IsHopDone(incarnation: incarnation, key: key)) {
+                return (true, (string?)null);
+            }
+            if (custody.HopOf(incarnation: incarnation, key: key) is not { } hop) {
+                // A notice that reaches home before its hop cancels the hop: no destination can hold a lease on a hop
+                // home never granted.
+                return ((custody.TitleOf(incarnation: incarnation) is not null) && (RecordCustodyHeld(
+                    reason: out _,
+                    record: new WorldCrossingRecord.HopDone(Arrived: false, Incarnation: incarnation, Key: key)
+                ) == WorldCrossingDurability.Durable), (string?)null);
+            }
+            // Only the hop's own source gives it up, and home's own hops settle from home's own records.
+            return (false, ((string.Equals(a: hop.From, b: source, comparisonType: StringComparison.Ordinal) && !string.Equals(a: hop.From, b: AuthorityIdentity, comparisonType: StringComparison.Ordinal))
+                ? hop.To
+                : null));
+        });
+
+        if (settled || (destination is null) || (CustodyPeers?.Invoke(arg: destination) is not { } door)) {
+            return settled;
+        }
+
+        var answer = door.QueryCustody(
+            asker: AuthorityIdentity,
+            incarnation: incarnation,
+            key: key
+        );
+
+        if (answer is not (WorldCustodyAnswer.Landed or WorldCustodyAnswer.NotLanded or WorldCustodyAnswer.Dead)) {
+            return false;
+        }
+        return ExecuteAuthorityOperation(operation: () => m_transferEscrow.Custody.IsHopDone(incarnation: incarnation, key: key) || (RecordCustodyHeld(
+            reason: out _,
+            record: new WorldCrossingRecord.HopDone(Arrived: (answer == WorldCustodyAnswer.Landed), Incarnation: incarnation, Key: key)
+        ) == WorldCrossingDurability.Durable));
     }
     /// <summary>Authorizes this authority's own hop: one record naming every listed companion whose title is home,
     /// leaving at its current epoch toward <paramref name="destination"/> under <paramref name="key"/>. A companion whose
@@ -156,7 +214,7 @@ public sealed partial class WorldServer : IWorldCustodyHome {
         Dictionary<(WorldTransferKey, WorldEntityAddress), ulong>? confirmed = null;
 
         foreach (var home in tickets.Where(predicate: ticket => (ticket.Hop == key)).GroupBy(keySelector: static ticket => ticket.Home, comparer: StringComparer.Ordinal)) {
-            if (CustodyHomes?.Invoke(arg: home.Key) is not { } door) {
+            if (CustodyPeers?.Invoke(arg: home.Key) is not { } door) {
                 continue;
             }
 

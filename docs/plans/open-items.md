@@ -869,14 +869,16 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision along the [custody protocol](companion-redesign.md) from step 4 of its
-build plan (settlement by the destination's word). Steps 1 to 3 stand: the
-custody records and their reducer, member ids and per-member verdicts, and hop
-authorization and verification (laws in `CompanionCustodyLawTests`,
-`CompanionCrossingLawTests` and `CompanionCustodyConformanceLawTests`). Until
-the later steps land: an onward hop's title stays pending (step 4 settles it);
-home refuses a companion coming back through a hop (step 5 builds the return
-and re-adoption); an arriving companion has no driver and wears the default kit
+decision along the [custody protocol](companion-redesign.md) from step 5 of its
+build plan (return, re-adoption and the held slot). Steps 1 to 4 stand: the
+custody records and their reducer, member ids and per-member verdicts, hop
+authorization and verification, and settlement by the destination's word (laws
+in `CompanionCustodyLawTests`, `CompanionCrossingLawTests` and
+`CompanionCustodyConformanceLawTests`). Until the later steps land: home
+refuses a companion coming back through a hop (step 5 builds the return and
+re-adoption); a custodian's settlement notice is held in memory between
+drains, so a custodian that dies before sending it relies on home asking on the
+next contact (step 8 makes the retries durable obligations); an arriving companion has no driver and wears the default kit
 and look (step 9); a custodian reaches a remote home only through a remote
 authority its host already opened. The debug world's faerie declares no role
 yet, so it does not travel. The protocol is
@@ -989,6 +991,18 @@ answer.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
+
+- [low] An imported module named `roles` changes how its importer lints. Add a
+  file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
+  accept: true } ]` section and append `import "roles"` to
+  `worlds/standard/standard.puck`: `puck lint --strict
+  worlds/standard/standard.puck` refused with PUCK031 (the fragment validated
+  as a root, failing on `bindingOverlays[0]` missing `document`), while the
+  same row as `companions.puck` imported by that name, or appended to
+  `camera.puck`, linted clean. Seen before the standard package became a
+  schema-less fragment; re-run on the current head, then find why the module's
+  name (a document member's name) changes import resolution or root
+  classification. (from: companion-build-2)
 
 - [low] The work sheet still prices a few shapes above what one tick runs, each
   a candidate for an enforced bound like `maxFirings` rather than an inference:

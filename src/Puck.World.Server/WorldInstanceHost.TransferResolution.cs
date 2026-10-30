@@ -691,7 +691,7 @@ public sealed partial class WorldInstanceHost {
                             narrationHub: m_narration
                         );
                         m_remoteAuthorities[resolvedName] = remote;
-                        RegisterRemoteCustodyHome(remote: remote);
+                        RegisterRemoteCustodyPeer(remote: remote);
                     }
 
                     authority = new WorldPeerCall(
@@ -1010,7 +1010,7 @@ public sealed partial class WorldInstanceHost {
                 );
 
                 m_remoteAuthorities[instanceName] = remote;
-                RegisterRemoteCustodyHome(remote: remote);
+                RegisterRemoteCustodyPeer(remote: remote);
                 definition = loaded;
                 attach = remote.AttachSink;
                 reason = string.Empty;

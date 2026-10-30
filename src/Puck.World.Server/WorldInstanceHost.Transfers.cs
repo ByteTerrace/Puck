@@ -14,7 +14,38 @@ public sealed partial class WorldInstanceHost {
     // point below), abort: every already-landed member returns to its exact source pose, nothing partially
     // lands. No Server.Step of any instance runs between the first detach and the last decision, so a party
     // lands together, aborts together, or never leaves at all.
+    // Runs one crossing, then gives up to its title authority every onward hop the crossing was granted but did not
+    // depart with: home settles such a hop from its destination's word, and the destination's answer kills the key.
     private void ApplyTransfer(in PendingTransfer transfer) {
+        var outer = m_foreignGrants;
+
+        m_foreignGrants = [];
+        try {
+            ApplyTransferCore(transfer: in transfer);
+        } finally {
+            var granted = m_foreignGrants;
+
+            m_foreignGrants = outer;
+            foreach (var (row, key, incarnation, home) in granted) {
+                if (!m_instances.TryGetValue(key: row.Name, value: out var live) || !ReferenceEquals(objA: live, objB: row)) {
+                    continue;
+                }
+                var departed = row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.DepartedWith(
+                    incarnation: incarnation,
+                    transferId: key.TransferId
+                ));
+
+                if (!departed) {
+                    _ = row.Server.CustodyPeers?.Invoke(arg: home)?.SettleHop(
+                        incarnation: incarnation,
+                        key: key,
+                        source: row.Server.AuthorityIdentity
+                    );
+                }
+            }
+        }
+    }
+    private void ApplyTransferCore(in PendingTransfer transfer) {
         // Idempotence: checked first, before this transfer touches anything — a retry-shaped duplicate (the
         // same transfer id submitted again) refuses by name rather than double-landing. A diegetic crossing
         // can never collide here on its own (it always mints a fresh id); only an explicitly-supplied id
@@ -1935,6 +1966,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         SettleOwnHops();
+        NotifySettledHops();
         ReapDeferred();
     }
     /// <summary>Queues a same-process transfer for this host's next <see cref="DrainPendingTransfers"/> call —

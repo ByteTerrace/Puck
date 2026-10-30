@@ -15,7 +15,7 @@ public sealed class CompanionCrossingLawTests {
     private sealed class Rows : IDisposable {
         private readonly List<IDisposable> m_owned = [];
 
-        public Rows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null) {
+        public Rows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null, bool cDeclaresRole = true, Func<int, string?>? cLandingRefusal = null) {
             Host = new WorldInstanceHost(
                 applicationStopping: CancellationToken.None,
                 admitsSpawn: true,
@@ -27,7 +27,7 @@ public sealed class CompanionCrossingLawTests {
             );
             Home = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: companions, peerSlots: peerSlots), name: "row-a");
             B = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, declaresRole: bDeclaresRole, peerSlots: bPeerSlots), landingRefusal: bLandingRefusal, name: "row-b");
-            C = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, peerSlots: 2), name: "row-c");
+            C = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, declaresRole: cDeclaresRole, peerSlots: 2), landingRefusal: cLandingRefusal, name: "row-c");
             foreach (var row in new[] { Home, B, C }) {
                 var store = new MemoryCrossingStore();
 
@@ -310,9 +310,9 @@ public sealed class CompanionCrossingLawTests {
         using var rows = new Rows();
         var companion = rows.Companions[0];
         var questions = 0;
-        var homes = rows.B.Server.CustodyHomes!;
+        var homes = rows.B.Server.CustodyPeers!;
 
-        rows.B.Server.CustodyHomes = authority => new CountingHome(Counted: () => questions++, Inner: homes(arg: authority)!);
+        rows.B.Server.CustodyPeers = authority => new CountingHome(Counted: () => questions++, Inner: homes(arg: authority)!);
         rows.Host.SetPeerCallFault(
             fault: new BeforeCommit(
                 Destination: rows.B.Server,
@@ -345,7 +345,101 @@ public sealed class CompanionCrossingLawTests {
         var hop = rows.Records(row: rows.Home).OfType<WorldCrossingRecord.Hop>().Last();
 
         Assert.Equal(actual: (hop.From, hop.To, hop.Members.Single().Epoch, hop.Members.Single().Next), expected: (rows.B.Server.AuthorityIdentity, rows.C.Server.AuthorityIdentity, 1UL, 2UL));
-        // Home holds the onward hop pending until the destination's word settles it.
+        // The destination's word settled the hop: the title is with the new custodian at the epoch home issued.
+        Assert.Equal(actual: (rows.Title(companion: companion).Kind, rows.Title(companion: companion).Epoch), expected: (WorldCustodyKind.Away, 2UL));
+    }
+
+    // ---- step 4: settlement by the destination's word ----------------------------------------------------------------
+
+    // Model trace HomeResolvesAPendingHopByAnAuthorizedCustodyQuery: the custodian's settlement notice makes home ask the
+    // hop's destination, as the companion's title authority, what it holds; home settles the hop from that answer, and
+    // the custodian records home's acknowledgement. Only the title authority may ask.
+    [Fact]
+    public void HomeResolvesAPendingHopByAnAuthorizedCustodyQuery() {
+        using var rows = new Rows();
+        var companion = rows.Companions[0];
+
+        rows.Cross(from: rows.Home, to: rows.B);
+        rows.Cross(from: rows.B, to: rows.C);
+
+        var title = rows.Title(companion: companion);
+
+        Assert.Equal(actual: (title.Kind, title.Custodian, title.Epoch), expected: (WorldCustodyKind.Away, rows.C.Server.AuthorityIdentity, 2UL));
+        Assert.Contains(collection: rows.Records(row: rows.B), filter: record => record is WorldCrossingRecord.HopAcked acked && (acked.Incarnation == companion));
+        Assert.Contains(collection: rows.Records(row: rows.Home), filter: record => record is WorldCrossingRecord.HopDone { Arrived: true } done && (done.Incarnation == companion) && (done.Key.SourceAuthority == rows.B.Server.AuthorityIdentity));
+
+        var hop = rows.Records(row: rows.Home).OfType<WorldCrossingRecord.Hop>().Last();
+
+        Assert.Equal(actual: rows.C.Server.QueryCustody(asker: rows.B.Server.AuthorityIdentity, incarnation: companion, key: hop.Key), expected: WorldCustodyAnswer.Unauthorized);
+        Assert.Equal(actual: rows.C.Server.QueryCustody(asker: rows.Home.Server.AuthorityIdentity, incarnation: companion, key: hop.Key), expected: WorldCustodyAnswer.Landed);
+    }
+    // Model trace H9_TheSettlementPayloadNamesWhoLandedSoALateGrantMovesNoCustody: the onward destination leaves the
+    // companion out of its commit; the custodian restores it, and home, asking the destination, settles the hop as not
+    // arrived, so the title stays with the custodian at the epoch it held.
+    [Fact]
+    public void AnOnwardHopTheDestinationLeftOutSettlesBackToItsCustodian() {
+        using var rows = new Rows(cLandingRefusal: static ordinal => ((ordinal == 1) ? "refused at the landing" : null));
+        var companion = rows.Companions[0];
+
+        rows.Cross(from: rows.Home, to: rows.B);
+        rows.Cross(from: rows.B, to: rows.C);
+
+        Assert.True(condition: Rows.SlotOf(row: rows.C, incarnation: rows.Player) >= 0);
+        Assert.True(condition: Rows.SlotOf(row: rows.B, incarnation: companion) >= 0);
+
+        var title = rows.Title(companion: companion);
+
+        Assert.Equal(actual: (title.Kind, title.Custodian, title.Epoch), expected: (WorldCustodyKind.Away, rows.B.Server.AuthorityIdentity, 1UL));
+    }
+    // A granted onward hop the destination refuses at reservation never departs: the custodian gives it up, home asks
+    // the destination, and the hop settles back to the custodian.
+    [Fact]
+    public void AnOnwardHopThatNeverDepartsIsGivenUp() {
+        using var rows = new Rows(cDeclaresRole: false);
+        var companion = rows.Companions[0];
+
+        rows.Cross(from: rows.Home, to: rows.B);
+        rows.Cross(from: rows.B, to: rows.C);
+
+        Assert.True(condition: Rows.SlotOf(row: rows.B, incarnation: companion) >= 0);
+
+        var title = rows.Title(companion: companion);
+
+        Assert.Equal(actual: (title.Kind, title.Custodian, title.Epoch), expected: (WorldCustodyKind.Away, rows.B.Server.AuthorityIdentity, 1UL));
+    }
+    // Model trace ASettlementNoticeThatOvertakesItsAuthorizationIsRemembered: a notice that reaches home before the hop
+    // it settles is recorded, so the delayed request is answered Dead and no title is left pending.
+    [Fact]
+    public void ASettlementNoticeThatOvertakesItsAuthorizationIsRemembered() {
+        using var rows = new Rows();
+        var companion = rows.Companions[0];
+
+        rows.Cross(from: rows.Home, to: rows.B);
+
+        var key = new WorldTransferKey(SourceAuthority: rows.B.Server.AuthorityIdentity, TransferId: 99UL);
+
+        Assert.True(condition: rows.Home.Server.SettleHop(incarnation: companion, key: key, source: rows.B.Server.AuthorityIdentity));
+
+        var answer = Assert.Single(collection: rows.Home.Server.RequestHop(
+            destination: rows.C.Server.AuthorityIdentity,
+            key: key,
+            members: [new WorldHopRequestMember(Epoch: 1UL, Incarnation: companion)],
+            source: rows.B.Server.AuthorityIdentity
+        ));
+
+        Assert.Equal(actual: answer.Verdict, expected: WorldHopVerdict.Dead);
+        Assert.Equal(actual: rows.Title(companion: companion).Kind, expected: WorldCustodyKind.Away);
+    }
+    // Model trace HomeHoldsTheSlotOfItsOwnDepartureInDoubt (its settlement half): home's own hop settles from home's
+    // own records alone; a notice from another authority does not settle it.
+    [Fact]
+    public void HomesOwnHopSettlesOnlyFromItsOwnRecords() {
+        using var rows = new Rows();
+        var companion = rows.Companions[0];
+        var key = new WorldTransferKey(SourceAuthority: rows.Home.Server.AuthorityIdentity, TransferId: 98UL);
+
+        Assert.Equal(actual: Assert.Single(collection: rows.Home.Server.AuthorizeOwnHop(destination: rows.B.Server.AuthorityIdentity, incarnations: [companion], key: key)).Verdict, expected: WorldHopVerdict.Granted);
+        Assert.False(condition: rows.Home.Server.SettleHop(incarnation: companion, key: key, source: rows.B.Server.AuthorityIdentity));
         Assert.Equal(actual: rows.Title(companion: companion).Kind, expected: WorldCustodyKind.Pending);
     }
 
@@ -396,12 +490,14 @@ public sealed class CompanionCrossingLawTests {
             TransferId: key.TransferId
         );
     }
-    private sealed record CountingHome(Action Counted, IWorldCustodyHome Inner) : IWorldCustodyHome {
+    private sealed record CountingHome(Action Counted, IWorldCustodyPeer Inner) : IWorldCustodyPeer {
         public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination) {
             Counted();
             return Inner.ConfirmHops(destination: destination, incarnations: incarnations, key: key);
         }
         public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) => Inner.RequestHop(destination: destination, key: key, members: members, source: source);
+        public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) => Inner.QueryCustody(asker: asker, incarnation: incarnation, key: key);
+        public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) => Inner.SettleHop(incarnation: incarnation, key: key, source: source);
     }
     // Forwards every call to the destination's own server, running a hook just before the commit reaches it.
     private sealed record BeforeCommit(WorldServer Destination, Action Hook) : IWorldPeerCall {

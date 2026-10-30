@@ -138,7 +138,7 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
 /// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
-public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldCustodyHome, IDisposable {
+public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldCustodyPeer, IDisposable {
     /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
     private const string UnconfiguredDetail = "this run holds no federation signing identity";
 
@@ -1411,6 +1411,48 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         ) && (answers.Length == incarnations.Count))
             ? answers
             : null);
+    }
+    /// <summary>Asks this peer, as a hop's destination, what it holds for <paramref name="incarnation"/> under
+    /// <paramref name="key"/>: the lane authenticates as <paramref name="asker"/>, the companion's title authority.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="asker">The asking title authority: this lane's authenticated namespace.</param>
+    /// <returns>The answer; <see cref="WorldCustodyAnswer.Uncertain"/> when the peer gave no usable answer.</returns>
+    public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) {
+        _ = TryResolveTransferStep(
+            sourceAuthority: asker,
+            transferId: key.TransferId,
+            kind: WorldFederationRequest.CustodyQuery,
+            body: () => WorldFederationCodec.EncodeCompanionHop(
+                incarnation: incarnation,
+                key: key
+            ),
+            answer: out var answer
+        );
+
+        return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: (WorldCustodyAnswer)answer.Body.Span[0]))
+            ? (WorldCustodyAnswer)answer.Body.Span[0]
+            : WorldCustodyAnswer.Uncertain);
+    }
+    /// <summary>Tells this peer, as a companion's title authority, that <paramref name="source"/> settled its hop: the
+    /// lane authenticates as the source.</summary>
+    /// <param name="key">The hop's key, minted by <paramref name="source"/>.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="source">The settling custodian: this lane's authenticated namespace.</param>
+    /// <returns><see langword="true"/> once the peer acknowledged the notice.</returns>
+    public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) {
+        _ = TryResolveTransferStep(
+            sourceAuthority: source,
+            transferId: key.TransferId,
+            kind: WorldFederationRequest.HopSettled,
+            body: () => WorldFederationCodec.EncodeCompanionHop(
+                incarnation: incarnation,
+                key: key
+            ),
+            answer: out var answer
+        );
+
+        return ((answer.Kind == WorldFederationResponse.HopSettledAck) && (answer.Body.Length == 1) && (answer.Body.Span[0] == 1));
     }
     /// <summary>Asks this peer, as a companion's title authority, to authorize <paramref name="source"/>'s onward hop:
     /// the lane authenticates as the source.</summary>
