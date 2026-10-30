@@ -132,7 +132,6 @@ public sealed partial class SdfMeshPathBake {
 
         group.Mesh = old.Mesh;
         _ = Begin(group: group);
-        PumpLoads();
 
         return true;
     }

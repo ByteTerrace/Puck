@@ -26,12 +26,13 @@ public sealed partial class SdfMeshPathBake {
     // Whether the frame thread has seen every group resident since the groups or a mesh last changed.
     private bool m_allResident;
 
-    // The groups waiting on a store load, and the loaders taking them, at most LoadWorkers at once.
-    private readonly List<Group> m_loadQueue = [];
-    private int m_loaders;
+    // The work waiting off the frame's thread (a store load, a contour stage, a landing), each for its group, and the
+    // workers taking it, at most Workers at once.
+    private readonly List<(Group Group, Action Work)> m_work = [];
+    private int m_workers;
 
-    // The loaders that run at once: one a processor, as the thread pool ran one task a load on.
-    private static int LoadWorkers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
+    // The workers that run at once: one a processor, as the thread pool ran the work before.
+    private static int Workers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
 
     // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
     // priorities stand as they were and the plan's order decides.
@@ -45,38 +46,47 @@ public sealed partial class SdfMeshPathBake {
             group.Priority = Demand.Priority(center: center, half: half);
         }
     }
-    // Starts loaders, under the gate, until LoadWorkers run or every queued load has one.
-    private void PumpLoads() {
-        while ((m_loaders < LoadWorkers) && (m_loaders < m_loadQueue.Count)) {
-            m_loaders++;
-            _ = Task.Run(action: LoadQueued);
-        }
-    }
-    // A loader: loads the queued group of highest priority until none is queued.
-    private void LoadQueued() {
-        try {
-            while (TakeLoad() is { } group) { Load(group: group); }
-        } finally {
-            lock (m_gate) {
-                m_loaders--;
-                PumpLoads();
+    // Queues a group's work off the frame's thread, taken by priority (TakeWork), and starts a worker for it if one is
+    // free. A caller holding the gate, as a restart does, holds every worker back until it releases it, so work queued
+    // together is taken in the priorities it leaves.
+    private void Schedule(Group group, Action work) {
+        lock (m_gate) {
+            m_work.Add(item: (group, work));
+            while ((m_workers < Workers) && (m_workers < m_work.Count)) {
+                m_workers++;
+                _ = Task.Run(action: Work);
             }
         }
     }
-    // Takes the queued load of highest priority, the earliest queued among equals, or null when none is queued.
-    private Group? TakeLoad() {
+    // A worker: runs the queued work of highest priority until none is queued.
+    private void Work() {
+        try {
+            while (TakeWork() is { } work) { work(); }
+        } finally {
+            lock (m_gate) {
+                m_workers--;
+                if ((m_work.Count > 0) && (m_workers < Workers)) {
+                    m_workers++;
+                    _ = Task.Run(action: Work);
+                }
+            }
+        }
+    }
+    // Takes the queued work whose group has the highest priority, the earliest queued among equals, or null when none
+    // is queued.
+    private Action? TakeWork() {
         lock (m_gate) {
             var best = -1;
 
-            for (var index = 0; (index < m_loadQueue.Count); index++) {
-                if ((best < 0) || (m_loadQueue[index].Priority > m_loadQueue[best].Priority)) { best = index; }
+            for (var index = 0; (index < m_work.Count); index++) {
+                if ((best < 0) || (m_work[index].Group.Priority > m_work[best].Group.Priority)) { best = index; }
             }
             if (best < 0) { return null; }
 
-            var group = m_loadQueue[best];
+            var work = m_work[best].Work;
 
-            m_loadQueue.RemoveAt(index: best);
-            return group;
+            m_work.RemoveAt(index: best);
+            return work;
         }
     }
 
@@ -103,8 +113,8 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Stamps, on the frame's thread after the frame's mesh region is staged, each group the bake has finished and
     /// each whose mesh's words the region holds, which <see cref="DescribeResidency"/> times from the bake's start.</summary>
-    /// <param name="tables">The residency's tables, whose mesh region holds a mesh's words or not
-    /// (<see cref="SdfWorldTables.HoldsMesh"/>).</param>
+    /// <param name="tables">The residency's tables, whose mesh region owes a mesh's words or not
+    /// (<see cref="SdfWorldTables.OwesMesh"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="tables"/> is <see langword="null"/>.</exception>
     public void ObserveResidency(SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
@@ -122,13 +132,15 @@ public sealed partial class SdfMeshPathBake {
                 }
                 if (group.LandedAt == 0) { group.LandedAt = now; }
                 if (group.ResidentAt != 0) { continue; }
+                // A mesh is resident once the frame's draws name it and the region owes none of its words; one the
+                // current draws do not name (a template no copy draws) costs the region nothing and counts too.
                 if (group.Mesh is { } mesh) {
-                    var held = true;
+                    var held = (m_drawnMeshes >= 0);
 
                     if (mesh.Chunks.Count == 0) {
-                        held = tables.HoldsMesh(mesh: mesh);
+                        held &= !tables.OwesMesh(mesh: mesh);
                     } else {
-                        foreach (var chunk in mesh.Chunks) { held &= tables.HoldsMesh(mesh: chunk); }
+                        foreach (var chunk in mesh.Chunks) { held &= !tables.OwesMesh(mesh: chunk); }
                     }
                     if (!held) {
                         all = false;
@@ -142,10 +154,10 @@ public sealed partial class SdfMeshPathBake {
     }
 
     /// <summary>Describes the latest bake's residency: its groups, when they landed (finished) and became resident (their
-    /// words in the mesh region) counted from its start, those within <paramref name="radius"/> of a demand point apart,
+    /// words in the mesh region) counted from its start, those within <paramref name="radius"/> of the first demand point (the primary seat's eye) apart,
     /// its store loads, the time its plan and restart took, and the resident meshes' region bytes by level of
     /// detail.</summary>
-    /// <param name="radius">The distance, in metres, from a demand point to a group's demand box within which the group
+    /// <param name="radius">The distance, in metres, from the first demand point to a group's demand box within which the group
     /// counts as near.</param>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeResidency(float radius) {
@@ -157,10 +169,12 @@ public sealed partial class SdfMeshPathBake {
             long vertexBytes = 0;
             Span<long> levelBytes = stackalloc long[3];
             Span<long> levelTriangles = stackalloc long[3];
+            var nearStamps = new List<long>();
+            Group? lastNear = null;
 
             foreach (var group in m_groups) {
                 var (center, half) = WorldBox(group: group);
-                var isNear = (group.HasDemandBox && (Demand.Distance(center: center, half: half) <= radius));
+                var isNear = (group.HasDemandBox && (Demand.Count > 0) && (Demand.DistanceFrom(center: center, half: half, index: 0) <= radius));
 
                 near += (isNear ? 1 : 0);
                 if (group.LandedAt != 0) {
@@ -168,7 +182,11 @@ public sealed partial class SdfMeshPathBake {
                     lastLanded = Math.Max(val1: lastLanded, val2: group.LandedAt);
                     if (isNear) {
                         nearLanded++;
-                        nearLastLanded = Math.Max(val1: nearLastLanded, val2: group.LandedAt);
+                        nearStamps.Add(item: group.LandedAt);
+                        if (group.LandedAt >= nearLastLanded) {
+                            nearLastLanded = group.LandedAt;
+                            lastNear = group;
+                        }
                     }
                 }
                 if (group.ResidentAt != 0) {
@@ -201,7 +219,17 @@ public sealed partial class SdfMeshPathBake {
             var loadSpan = (((m_loadFirst != 0) && (m_loadLast != 0)) ? Stopwatch.GetElapsedTime(startingTimestamp: m_loadFirst, endingTimestamp: m_loadLast).TotalSeconds : 0d);
 
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(stamp: lastLanded, complete: (landed == groups))} all-resident={Since(stamp: lastResident, complete: (resident == groups))}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-radius={radius:0.##}m near={near} near-landed={nearLanded} near-resident={nearResident} near-landed-at={Since(stamp: nearLastLanded, complete: (nearLanded == near))} near-resident-at={Since(stamp: nearLastResident, complete: (nearResident == near))}");
+            // When half and nine tenths of the near groups had landed, and which landed last.
+            nearStamps.Sort();
+            string Share(float share) {
+                var count = (int)MathF.Ceiling(x: (share * near));
+
+                return Since(complete: ((count > 0) && (count <= nearStamps.Count)), stamp: ((count > 0) && (count <= nearStamps.Count)) ? nearStamps[(count - 1)] : 0);
+            }
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-radius={radius:0.##}m near={near} near-landed={nearLanded} near-resident={nearResident} near-half-at={Share(share: 0.5f)} near-ninety-at={Share(share: 0.9f)} near-landed-at={Since(stamp: nearLastLanded, complete: (nearLanded == near))} near-resident-at={Since(stamp: nearLastResident, complete: (nearResident == near))}");
+            if (lastNear is not null) {
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : (lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static")}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
+            }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
 

@@ -405,11 +405,11 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    /// <summary>Returns whether the mesh region holds a mesh's words: the latest staged draw list placed it and its words
-    /// are written, so its draws are staged. Read on the frame's thread.</summary>
+    /// <summary>Returns whether the mesh region still owes a mesh's words: the latest staged draw list placed it and its
+    /// draws wait out of the staged records until a frame writes them. Read on the frame's thread.</summary>
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
-    /// <returns><see langword="true"/> when the region holds it.</returns>
-    public bool HoldsMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && !m_meshesOwed.Contains(item: mesh));
+    /// <returns><see langword="true"/> while the region owes it.</returns>
+    public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(item: mesh));
 
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, and the words a frame lands at most.

@@ -864,7 +864,6 @@ public sealed partial class SdfMeshPathBake {
             rebaked++;
         }
         Prioritize();
-        PumpLoads();
         if ((rebaked + loading) > 0) {
             m_dispatches = 0;
             m_samples = 0;
@@ -947,7 +946,7 @@ public sealed partial class SdfMeshPathBake {
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
-        m_loadQueue.Add(item: group);
+        Schedule(group: group, work: () => Load(group: group));
         return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
@@ -1176,7 +1175,7 @@ public sealed partial class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Prepare(final: final, group: group));
+        Schedule(group: group, work: () => Prepare(final: final, group: group));
     }
     // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
     // measured next, or, with none, the gradients the contour reads.
@@ -1274,12 +1273,12 @@ public sealed partial class SdfMeshPathBake {
         group.Next = null;
         group.Contouring = true;
         if (final.Stage != FinalStage.Gradients) {
-            _ = Task.Run(action: () => ChooseCrossings(final: final, group: group));
+            Schedule(group: group, work: () => ChooseCrossings(final: final, group: group));
             return;
         }
 
         group.Final = null;
-        _ = Task.Run(action: () => Contour(group: group, lattice: sampled));
+        Schedule(group: group, work: () => Contour(group: group, lattice: sampled));
     }
     // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
     // linear estimate can instead land on a different face of a corner, supplying the contour with the wrong plane.
@@ -1333,7 +1332,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (creases.Count == 0) {
                 group.Contouring = true;
-                _ = Task.Run(action: () => Split(group: group));
+                Schedule(group: group, work: () => Split(group: group));
                 return;
             }
             group.Creases = [.. creases];
@@ -1415,7 +1414,7 @@ public sealed partial class SdfMeshPathBake {
         group.Points = null;
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Split(group: group));
+        Schedule(group: group, work: () => Split(group: group));
     }
     // Splits a group's contour at its creases, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).
@@ -1456,7 +1455,7 @@ public sealed partial class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        _ = ((group.Skin is null) ? Task.Run(action: () => Advance(group: group)) : Task.Run(action: () => Land(group: group, mesh: Skinned(group: group))));
+        Schedule(group: group, work: ((group.Skin is null) ? () => Advance(group: group) : () => Land(group: group, mesh: Skinned(group: group))));
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
     private void Advance(Group group) {

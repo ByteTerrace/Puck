@@ -171,20 +171,22 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfMeshDemand MeshDemand { get; } = new();
 
     /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
-    /// start, near the demand points and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
+    /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
     /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), the latest program's emission, build and
     /// size, and the irradiance volume's probe cache.</summary>
-    /// <param name="radius">The distance, in metres, from a demand point within which a group counts as near.</param>
+    /// <param name="radius">The distance, in metres, from the primary seat's eye within which a group counts as near.</param>
+    /// <param name="composition">The composed frame source whose programs the residency draws, when its frame source
+    /// wraps one; <see langword="null"/> reads the frame source itself.</param>
     /// <returns>The description, one part a line.</returns>
-    public IReadOnlyList<string> DescribeResidency(float radius) {
-        var composition = (m_frameSource as SdfCompositionFrameSource);
+    public IReadOnlyList<string> DescribeResidency(float radius, SdfCompositionFrameSource? composition = null) {
+        composition ??= (m_frameSource as SdfCompositionFrameSource);
         var program = m_frame?.Program;
 
         return [
             MeshPathBake.DescribeResidency(radius: radius),
             (MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none"),
             (m_tables?.DescribeLanding() ?? "region=none"),
-            string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={ProgramBuilds} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
+            string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={(composition?.ProgramBuilds ?? 0)} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
             MeshIrradiance.DescribeCache(),
         ];
     }

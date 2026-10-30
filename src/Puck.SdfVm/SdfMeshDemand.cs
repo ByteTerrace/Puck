@@ -27,8 +27,10 @@ public sealed class SdfMeshDemand {
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
 
-    /// <summary>Reads the demand points from a frame's views: each view's eye, and its display pixels a metre one metre in
-    /// front of it, from the view's share of the output's height and its field of view.</summary>
+    /// <summary>Reads the demand points from a frame's views: each view's eye, and its pixels a metre one metre in front of
+    /// it, from its own image's height (<see cref="SdfViewSnapshot.DemandHeight"/>) or else its share of the output's
+    /// height, and its field of view. The points keep the views' order, so the first is the primary seat's while that seat
+    /// is presented here.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="height">The output's height in display pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
@@ -49,7 +51,7 @@ public sealed class SdfMeshDemand {
 
             if (view.Elsewhere || !(view.Region.Height > 0f) || !(tan > 0f) || !float.IsFinite(f: camera.Position.X)) { continue; }
             m_points[count] = camera.Position;
-            m_focal[count] = ((MathF.Max(x: 1f, y: (view.Region.Height * height)) * 0.5f) / tan);
+            m_focal[count] = ((MathF.Max(x: 1f, y: ((view.DemandHeight > 0) ? view.DemandHeight : (view.Region.Height * height))) * 0.5f) / tan);
             count++;
         }
         Count = count;
@@ -84,6 +86,12 @@ public sealed class SdfMeshDemand {
 
         return nearest;
     }
+    /// <summary>Returns the distance from one demand point's eye to a box, zero inside it.</summary>
+    /// <param name="index">The point, below <see cref="Count"/>.</param>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <returns>The distance in metres.</returns>
+    public float DistanceFrom(int index, Vector3 center, Vector3 half) => DistanceTo(center: center, half: half, point: m_points[index]);
     /// <summary>Returns a demand point's eye.</summary>
     /// <param name="index">The point, below <see cref="Count"/>.</param>
     /// <returns>The eye's position.</returns>
