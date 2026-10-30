@@ -200,9 +200,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         m_revisionOffsets[m_emitters.Count] = revisionCursor;
-        m_builtRevisions = new int[revisionCursor];
-        m_pendingRevisions = new int[revisionCursor];
-        m_buildingRevisions = new int[revisionCursor];
+        // The last component is the host's own: the code revision every emitter's emission is a product of.
+        m_builtRevisions = new int[(revisionCursor + 1)];
+        m_pendingRevisions = new int[(revisionCursor + 1)];
+        m_buildingRevisions = new int[(revisionCursor + 1)];
         m_transforms = new DynamicTransform[slotCursor];
 
         m_programSlots = slotCursor;
@@ -250,7 +251,23 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         return builder;
     }
     // A build packs, validates and analyses the emitted builder, which owns everything it reads, so it runs on any thread.
-    private static SdfProgram Build(SdfProgramBuilder builder) => builder.Build();
+    private SdfProgram Build(SdfProgramBuilder builder) {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var program = builder.Build();
+
+        Volatile.Write(location: ref m_buildMilliseconds, value: System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started).TotalMilliseconds);
+        return program;
+    }
+
+    private double m_emitMilliseconds;
+    private double m_buildMilliseconds;
+
+    /// <summary>Gets how long, in milliseconds, the latest program's emission took on the frame's thread: every emitter
+    /// writing its instructions into the builder.</summary>
+    public double EmitMilliseconds => Volatile.Read(location: ref m_emitMilliseconds);
+    /// <summary>Gets how long, in milliseconds, the latest program build took on whatever thread ran it: packing,
+    /// validating and analysing the emitted builder.</summary>
+    public double BuildMilliseconds => Volatile.Read(location: ref m_buildMilliseconds);
     // Adopts the program a background build finished, or waits for it in a converging or tick-locked frame, so that frame
     // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
     // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
@@ -344,6 +361,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 }
             }
         }
+
+        // A hot-reload edit to any emission code re-emits every emitter, as a moved component of each would.
+        var code = m_revisionOffsets[m_emitters.Count];
+
+        m_pendingRevisions[code] = Puck.Abstractions.CodeRevision.Current;
+        moved |= (m_pendingRevisions[code] != m_builtRevisions[code]);
 
         return moved;
     }
@@ -552,6 +575,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         moved |= layoutChanged;
 
         if ((m_building is null) && ((m_program is null) || moved)) {
+            var emitted = System.Diagnostics.Stopwatch.GetTimestamp();
             var builder = EmitProgram(
                 context: new SdfEmitContext(
                     Probe: false,
@@ -564,6 +588,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 previous: m_program
             );
 
+            Volatile.Write(location: ref m_emitMilliseconds, value: System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: emitted).TotalMilliseconds);
             Array.Copy(
                 sourceArray: m_pendingRevisions,
                 destinationArray: m_buildingRevisions,

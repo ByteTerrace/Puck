@@ -368,15 +368,26 @@ two things, and the watch output says which:
   applies to the running World: `dotnet watch : C# and Razor changes applied in
   45ms`, and the World prints `[world.hot-reload] applied revision N: <types>`.
   The first edit after the watch starts pays for loading the compiler
-  workspace (14 s under load); later ones take well under a second. A cache
-  holding a product of code compares `CodeRevision.Current`
-  (`src/Puck.Abstractions/CodeRevision.cs`, the process's
-  `MetadataUpdateHandler`) and derives again when it moved: every compiled
-  camera rig (`WorldCameraRigCompiler.Cache`) and everything the frame presenter
-  derives from a delivered definition (cameras and faces, screens, speakers,
-  text, decals, the emitted scene and the static field) rebuild on the next
-  frame, so an edit to that code shows without a reload. Simulation state,
-  baked meshes and installed shader pipelines are untouched.
+  workspace (14 s under load); later ones take well under a second.
+  `CodeRevision` (`src/Puck.Abstractions/CodeRevision.cs`, the process's
+  `MetadataUpdateHandler`) is the one invalidation contract for products of
+  code. A cache held in memory compares `CodeRevision.Current`, or holds its
+  entries in a `CodeDerivedTable`, and derives again when it moved: every
+  compiled camera rig (`WorldCameraRigCompiler.Cache`), everything the frame
+  presenter derives from a delivered definition (cameras and faces, screens,
+  speakers, text, decals, the static field), the composed scene program (the
+  composition host owns a code-revision component of its rebuild watch, so
+  every emitter re-emits) and the retained placement emissions rebuild on the
+  next frame, so an edit to that code shows without a reload. A persisted
+  product folds `CodeRevision.AppliedTo` into its identity: empty until an
+  update touches a type the product reads, then a token unique to the process
+  and that update. The compile cache and its source declarations (the
+  compiler's modules), the compiled world (the engine build's modules) and the
+  mesh store (the types the bake's closure declares members of) key what a
+  hot-reloaded process reads and writes apart from the build's own entries,
+  which an update elsewhere leaves standing; the entries it writes are orphans
+  the stores' retention trims. Simulation state and installed shader pipelines
+  are untouched.
 - **A rude edit** (a new field or a changed layout in a struct) prints `Restart
   is needed to apply the changes.`, and the watch rebuilds and reboots the
   World: 28 s from saving to `Application started` under heavy load. A build
@@ -920,6 +931,21 @@ unverified when no device run exists.
   Otherwise `WaitForExit()` can complete with a null `ExitCode`, and a runner can
   mistake a successful build for a failure. Retain the worker's handle too when
   reading its final CPU time after a longer coordinator run.
+- A windowed frame-time reading needs the compositor composing. Once the lead
+  machine's user has been idle past the display timeout (15 minutes there),
+  Windows powers the monitor off and the compositor retires presents on a slow
+  fallback: a World without a display request then reads 7 to 8 FPS on
+  Direct3D 12 and about 4 on Vulkan at every stop, whatever the render scale,
+  detail or shadows, while `world.gpu-timing timeline` shows each frame's GPU
+  work done in one contiguous span and the queue then idle, the GPU at P5 or
+  P8 clocks. The signature is a `host.frames` reading whose `wait` or `begin`
+  runs to about 100 ms, or whose `produce` sits in
+  `SdfWorldTables.SubmitUpload`'s fence wait, with the GPU idle. The Windows
+  window's `PowerRequestDisplayRequired` request keeps composition running for
+  a World's life; a host or tool without one (another engine's window, an
+  older build) needs the display woken first, and
+  `GUID_CONSOLE_DISPLAY_STATE` notifications kept reading "off" there while
+  frames ran at 60 FPS, so they are no test of it.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with

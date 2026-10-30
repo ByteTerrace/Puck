@@ -27,8 +27,9 @@ public sealed partial class AdmissionArrivalLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document(admission: [Arrivals(domain: SourceAuthority)]));
         var escrow = new WorldTransferEscrow(fixture.Server);
         var saved = escrow.Capture();
+        // Spread over eight sources, so the history fills before any one source's share of the key ledger does.
         var committed = Enumerable.Range(count: WorldTransferLimits.Transactions, start: 1).Select(selector: index =>
-            new WorldTransferCommittedCheckpoint(new WorldTransferKey(SourceAuthority: SourceAuthority, TransferId: ((ulong)index)), [], [], [])).ToArray();
+            new WorldTransferCommittedCheckpoint(new WorldTransferKey(SourceAuthority: (((index % 8) == 1) ? SourceAuthority : $"source-{(index % 8)}"), TransferId: ((ulong)index)), [], [], [])).ToArray();
 
         escrow.Restore(checkpoint: saved with { Committed = committed });
         var request = Request(identity: null, transferId: (((ulong)WorldTransferLimits.Transactions) + 1));

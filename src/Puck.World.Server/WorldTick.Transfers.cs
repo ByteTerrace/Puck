@@ -304,7 +304,8 @@ public sealed partial class WorldTick {
 
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.RetireMobility(mobility: in credential));
     }
-    /// <summary>Returns the destination's idempotent view of a source-scoped transfer.</summary>
+    /// <summary>Returns the destination's view of a source-scoped transfer. A <see cref="WorldTransferStatus.Missing"/>
+    /// answer is final: the key is tombstoned before it is given (<see cref="WorldTransferEscrow.Status"/>).</summary>
     internal WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Status(
             sourceAuthority: sourceAuthority,

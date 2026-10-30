@@ -119,6 +119,10 @@ public sealed class WorldInstance : IDisposable {
     /// <summary>This row's own next transfer id counter — advances by exactly one per transfer this row
     /// SOURCES, a pure function of enqueue order, never wall-clock, RNG, or tick-of-entry.</summary>
     public ulong NextTransferId { get; set; }
+    /// <summary>Gets or sets the first transfer id this lifetime of the row has not durably allocated: a reservation under
+    /// an id at or above it first writes an allocation record to the row's crossing log, so a restart never mints an id
+    /// a peer may already hold.</summary>
+    public ulong AllocatedTransferIds { get; set; }
     /// <summary>Gets the ids of the transfers this row has sourced and drained — the duplicate check every queued transfer
     /// from this lifetime of the row passes before it touches anything.</summary>
     public WorldDrainedTransferIds DrainedTransfers { get; } = new();

@@ -21,7 +21,7 @@ public sealed class SdfMeshStoreLawTests {
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
         var writer = new SdfMeshLibrary(store: store);
 
-        writer.StoreEmpty(geometry: Geometry, identity: Identity);
+        writer.StoreEmpty(geometry: Geometry, identity: Identity, persist: true);
         Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out var palette, mesh: out var stored, refusal: out var refusal));
         Assert.Null(@object: stored);
         Assert.Null(@object: refusal);
@@ -30,7 +30,9 @@ public sealed class SdfMeshStoreLawTests {
 
         Assert.True(condition: reader.TryLoad(Identity, Geometry, [4, 9], out var loaded, out _));
         Assert.Null(@object: loaded);
-        Assert.True(condition: reader.HoldsEmpty(geometry: Geometry));
+        Assert.True(condition: reader.HoldsEmpty(geometry: Geometry, identity: Identity));
+        // An empty result is the identity's that found it.
+        Assert.False(condition: reader.HoldsEmpty(geometry: Geometry, identity: (Identity + 1)));
         Assert.False(condition: reader.TryLoad((Identity + 1), Geometry, [], out _, out _));
         _ = Assert.Throws<ArgumentException>(testCode: () => store.Write(geometry: Geometry, identity: Identity, materials: [4], mesh: null));
     }

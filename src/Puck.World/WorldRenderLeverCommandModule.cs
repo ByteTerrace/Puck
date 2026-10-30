@@ -555,6 +555,28 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.residency",
+            description: "Reads the world residency's mesh residency: world.residency [radius] (metres, default 8). Echoes the latest bake's groups and when they landed (finished) and became resident (their words in the mesh region), counted from the bake's start, both for every group and for the groups whose planned box lies within the radius of the primary seat's camera (the occupied area), with when half and nine tenths of those landed and which landed last; its store loads and their span; the time its plan and restart took; the resident meshes' region bytes by level of detail; the store's reads, bytes and read and decode thread-seconds; the mesh region's held, used, written and owed bytes and the frames and seconds it owed words; the latest program's instances, words, builds and its emission and build milliseconds; and the irradiance volume's probe cache bytes. 'pending' marks a time not reached yet. Presentation only; reads change nothing.",
+            handler: (_, args) => {
+                var radius = 8f;
+
+                if (args.Count == 1) {
+                    if (!args.TryFloats(count: 1, start: 0, values: out var values) || !float.IsFinite(f: values[0]) || (values[0] < 0f)) {
+                        return CommandResult.Error(output: "[world.residency: expected [radius], a finite number of metres, zero or more]");
+                    }
+                    radius = values[0];
+                } else if (args.Count > 1) {
+                    return CommandResult.Error(output: "[world.residency: expected [radius], a finite number of metres, zero or more]");
+                }
+                if (renderProbe.Residency is not { } node) {
+                    return new CommandResult(Output: "[world.residency: renderer not built yet]");
+                }
+
+                return new CommandResult(Output: $"[world.residency: {string.Join(separator: Environment.NewLine, values: node.DescribeResidency(composition: renderProbe.Composition, radius: radius))}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.probe",
             description: "Reads the settled irradiance probes about a point: world.probe <x> <y> <z> [<nx> <ny> <nz>]. A changing trace or pending publication is marked unsettled with the published GPU and live CPU windows. Otherwise echoes spacing, window, answering corners and total weight for a receiver facing the normal (up by default), then each corner's cell, relocated position, offset, back-face share, validity, sweeps, measured cubes' mean sky and luminance, and weight terms: trilinear share, positive normal cosine, octahedral depth visibility and final weight. reference-clear is the exact static-mesh segment check for diagnosing sampling; it never changes the gather.",
             handler: (_, args) => {

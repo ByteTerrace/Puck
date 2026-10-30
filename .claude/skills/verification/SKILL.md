@@ -59,7 +59,12 @@ so the integration lane's sweep reads them
    workload instead. A frame over 16.7 ms that a change caused turns the batch
    red and the culprit is bisected out, whatever else passed. A reported speed-up
    is measured in frame time, never inferred from one phase: a tick that fell
-   from 247 ms to 61 ms is still four frames late.
+   from 247 ms to 61 ms is still four frames late. A reading at 7 to 8 FPS
+   whatever the load, with the GPU idle and `wait` or `begin` near 100 ms, is
+   the compositor's fallback for a powered-off display, not the frame
+   ([the hazard](../../../docs/development/contributing.md#hardware-and-toolchain-cautions));
+   `world.gpu-timing timeline` shows where the queue's work and its idle gaps
+   fall.
 5. The player's body seen, for a change that reaches what draws bodies (stamps,
    clips, fades, cameras, portals): the sweep patrols the area and reads the
    result (`world.patrol <x0> <z0> <x1> <z1> <step>` in a windowed World with its
@@ -274,6 +279,25 @@ nothing.
 In xUnit v3, `Assert.Throws`, `Record.Exception` and their async forms rethrow
 the skip exception, so a test that wraps a call which can skip reports
 **Skipped** instead of failing; catch it with `try`/`catch` and assert on it.
+
+## The companion custody model check
+
+`CompanionCustodyModelLawTests` (`tests/Puck.World.Protocol.Tests`) is the
+executable model of the companion custody protocol
+([the specification](../../../docs/plans/companion-redesign.md#8-the-model)). Its
+named traces and small scopes run with the ordinary suite; its large scopes
+(over about 100,000 states each, several minutes and a few hundred megabytes in
+all) are explicit tests carrying `Category=ModelCheck`:
+
+```text
+dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release --no-build --explicit on --filter-trait Category=ModelCheck
+```
+
+The lane building the protocol runs the model check at every step, and every
+change to the protocol (the model, its specification, or the engine code that
+implements a transition) runs it before landing: the protocol is changed in the
+model first, and the model check is the evidence. Without `--explicit on` the
+filter selects nothing.
 
 ## What uses the GPU
 

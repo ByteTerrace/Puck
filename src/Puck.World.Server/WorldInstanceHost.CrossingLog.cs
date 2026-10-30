@@ -135,10 +135,14 @@ public sealed partial class WorldInstanceHost {
     /// <summary>Redoes, in order, every crossing record <paramref name="row"/>'s restored checkpoint does not reflect:
     /// the records at or past the checkpoint's crossing sequence, read back from the row's durable crossing log. An
     /// arrival lands its cohort again through the row's own escrow; a departure detaches its cohort again and puts the
-    /// transfer back in doubt; a settlement publishes the cohort's forwarding routes or returns it home. The ordinary
-    /// drain then reconciles whatever is still in doubt with its destination, so the traveler ends arrived or never
-    /// departed. Call after <see cref="Admit"/> and <see cref="RestoreRow"/>, before the row steps; a fresh row with
-    /// no checkpoint redoes its whole log.</summary>
+    /// transfer back in doubt; a settlement publishes the cohort's forwarding routes or returns it home; an allocation
+    /// raises the row's next transfer id past every id it allocated; a lease raises its source's floor and leaves its
+    /// key dead until an arrival later in the log lands it; a tombstone kills its key, and a live lease the checkpoint
+    /// holds for it. Each record sets the fate of the key it names, so the redo is a fold whose result does not depend on
+    /// how the records are split across calls: a silo redoes its journal one record at a time, a restarted row all at
+    /// once. The ordinary drain then reconciles whatever is still in doubt with
+    /// its destination, so the traveler ends arrived or never departed. Call after <see cref="Admit"/> and
+    /// <see cref="RestoreRow"/>, before the row steps; a fresh row with no checkpoint redoes its whole log.</summary>
     /// <param name="row">The restored row.</param>
     /// <param name="entries">The row's crossing log, in any order; records the checkpoint reflects are skipped.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -177,6 +181,21 @@ public sealed partial class WorldInstanceHost {
                     RedoSettlement(
                         row: row,
                         settlement: settlement
+                    );
+                    break;
+                case WorldCrossingRecord.Lease lease:
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoLease(
+                        floor: lease.Floor,
+                        key: lease.Key
+                    ));
+                    break;
+                case WorldCrossingRecord.Tombstone tombstone:
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoTombstone(key: tombstone.Key));
+                    break;
+                case WorldCrossingRecord.Allocation allocation:
+                    row.NextTransferId = Math.Max(
+                        val1: row.NextTransferId,
+                        val2: allocation.Next
                     );
                     break;
                 default:

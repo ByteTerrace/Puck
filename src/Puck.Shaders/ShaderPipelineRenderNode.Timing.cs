@@ -18,6 +18,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private string? m_timingRefusal;
     private long m_timingFrames;
     private double m_timingLatest;
+    private (double Start, double End) m_timingLatestSpan;
     private long m_timingLatestSubmission;
     private long m_timingRefusedFaultsRevision;
 
@@ -54,6 +55,10 @@ public sealed partial class ShaderPipelineRenderNode {
     /// numbers it: the newest submission read back, whichever frame slot held it. Zero while <see cref="Timings"/> is
     /// empty.</summary>
     public long LatestTimingSubmission => (Timings.IsEmpty ? 0L : m_timingLatestSubmission);
+    /// <summary>Gets when the latest timed submission's first timed pass began and its last timed pass ended, in
+    /// milliseconds on the recording queue's timestamp clock, which every node on that queue shares; (0, 0) while
+    /// <see cref="Timings"/> is empty. Two nodes' spans compare only when they come from the same queue.</summary>
+    public (double Start, double End) LatestTimingSpan => (Timings.IsEmpty ? default : m_timingLatestSpan);
     /// <summary>Gets the logical bytes of timestamp readback buffers still owned, including disabled slots awaiting fences.</summary>
     public ulong TimingReadbackBytes {
         get { var bytes = 0UL; foreach (var slot in m_timingSlots) { if (slot.Readback is not null) { bytes += ((ulong)slot.Bytes.Length); } } return bytes; }
@@ -204,12 +209,17 @@ public sealed partial class ShaderPipelineRenderNode {
             var pool = slot.Pool!;
             var mask = ((pool.ValidBits == 64) ? ulong.MaxValue : ((1UL << ((int)pool.ValidBits)) - 1));
             var frame = 0d;
+            var first = ulong.MaxValue;
+            var last = 0UL;
 
             for (var pass = 0; (pass < slot.Recorded.Length); pass++) {
                 if (!slot.Recorded[pass]) { continue; }
                 var start = BinaryPrimitives.ReadUInt64LittleEndian(source: slot.Bytes.AsSpan(start: (pass * 16)));
                 var end = BinaryPrimitives.ReadUInt64LittleEndian(source: slot.Bytes.AsSpan(start: ((pass * 16) + 8)));
                 var value = (((unchecked((end - start)) & mask) * pool.NanosecondsPerTick) / 1_000_000);
+
+                first = Math.Min(val1: first, val2: start);
+                last = Math.Max(val1: last, val2: end);
 
                 m_timingCompleted = true;
                 var entry = m_timings[pass];
@@ -226,6 +236,9 @@ public sealed partial class ShaderPipelineRenderNode {
             if (slot.Submission > m_timingLatestSubmission) {
                 m_timingLatest = frame;
                 m_timingLatestSubmission = slot.Submission;
+                if (last >= first) {
+                    m_timingLatestSpan = (((first * pool.NanosecondsPerTick) / 1_000_000), ((last * pool.NanosecondsPerTick) / 1_000_000));
+                }
             }
             m_timingFrames++;
         }

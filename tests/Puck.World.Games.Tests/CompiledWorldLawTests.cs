@@ -69,6 +69,57 @@ public sealed class CompiledWorldLawTests {
         Assert.Equal(expected: DeterministicCounts(work: fresh.Work), actual: DeterministicCounts(work: cached.Work));
     }
     [Fact]
+    public void AChunkRegeneratedUnderAHeldSourceCountsTheOneParseACompleteHitCounts() {
+        using var directory = new TemporaryDirectory();
+        var path = WriteWorld(directory: directory, patchSource: PatchBeside);
+        var cache = new CompiledWorldCache(directory: directory.PathOf(name: "state/compiled"));
+
+        // A boot from the composed bytes: a compiled world keyed by their source hash answers without an authored parse.
+        (WorldDefinitionAdmission Admission, CompiledWorldResolution Resolution, WorldBootWork Work) BootBytes() {
+            var work = new WorldBootWork();
+            var request = cache.For(catalogFingerprint: Catalog.CompositionFingerprint, documentPath: path);
+
+            using (WorldBootWork.Attribute(work: work)) {
+                Assert.True(
+                    condition: WorldDefinitionLoader.TryLoadForAdmission(
+                        admission: out var admission,
+                        catalog: Catalog,
+                        catalogFingerprint: Catalog.CompositionFingerprint,
+                        compiled: request,
+                        documentDirectory: Path.GetDirectoryName(path: path),
+                        reason: out var refusal,
+                        sourceName: path,
+                        utf8: File.ReadAllBytes(path: path)
+                    ),
+                    userMessage: refusal
+                );
+
+                return (admission!, request.Resolution!, work);
+            }
+        }
+
+        _ = BootBytes();
+
+        var complete = BootBytes();
+        var file = cache.FileFor(documentPath: path);
+
+        Assert.Empty(collection: complete.Resolution.Derived);
+        Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: File.ReadAllBytes(path: file), header: out var header, reason: out var reason), userMessage: reason);
+        File.WriteAllBytes(bytes: CompiledWorld.Encode(chunks: [.. container.Chunks.Where(predicate: static chunk => (chunk.Code != CurvatureChunk.Instance.Code))], header: header), path: file);
+
+        var regenerated = BootBytes();
+
+        Assert.Equal(expected: ["DEFN", "ASST"], actual: Codes(codes: regenerated.Resolution.Kept));
+        Assert.Equal(expected: ["CURV"], actual: Codes(codes: regenerated.Resolution.Derived));
+        Assert.Equal(expected: file, actual: regenerated.Resolution.WrittenTo);
+        // The boot that rewrites the missing chunk under the held source's header parses nothing a complete hit does not.
+        Assert.Equal(expected: complete.Work.Read(kind: WorldBootWork.Parses), actual: regenerated.Work.Read(kind: WorldBootWork.Parses));
+        Assert.Equal(expected: DeterministicCounts(work: complete.Work), actual: DeterministicCounts(work: regenerated.Work));
+        Assert.Equal(expected: Canonical(admission: complete.Admission), actual: Canonical(admission: regenerated.Admission));
+        Assert.True(condition: CompiledWorld.TryDecode(container: out _, content: File.ReadAllBytes(path: file), header: out var rewritten, reason: out reason), userMessage: reason);
+        Assert.Equal(expected: header, actual: rewritten);
+    }
+    [Fact]
     public void ACompiledWorldBesideTheDocumentIsTakenAndNothingIsWritten() {
         using var directory = new TemporaryDirectory();
         var path = WriteWorld(directory: directory, patchSource: PatchBeside);

@@ -108,6 +108,16 @@ public sealed class SdfMeshIrradiance {
 
     private readonly Lock m_gate = new();
     private readonly ProbeCache m_cache = new();
+
+    /// <summary>Describes the probe cache the volume keeps across window moves: its probes, its table's capacity and
+    /// bytes, and the bytes of the probe blocks its entries hold. Safe to read from any thread; a trace landing meanwhile
+    /// can leave it a block off.</summary>
+    /// <returns>One line of <c>key=value</c> pairs.</returns>
+    public string DescribeCache() {
+        var (table, blocks, capacity) = m_cache.Bytes();
+
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"probe-cache-probes={m_cache.Count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B");
+    }
     // The trace's candidates and a batch's results, kept across batches and traces: one trace runs at a time.
     private readonly List<((int X, int Y, int Z) Cell, int Sweeps, float Distance)> m_candidates = [];
     private ProbeData[] m_results = [];
@@ -1382,6 +1392,8 @@ public sealed class SdfMeshIrradiance {
 
         private readonly float[] m_floats = new float[(count * FloatsPerProbe)];
 
+        public long Bytes => (((long)m_floats.Length) * sizeof(float));
+
         public Span<float> Sky(int index) => m_floats.AsSpan(length: 6, start: (index * FloatsPerProbe));
         public Span<Vector3> Radiance(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: ((index * FloatsPerProbe) + 6)));
         public Span<uint> Depth(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: DepthWords, start: ((index * FloatsPerProbe) + 24)));
@@ -1406,6 +1418,28 @@ public sealed class SdfMeshIrradiance {
 
         // The probes cached.
         public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
+
+        // The bytes the cache holds: its table's arrays and every probe block an entry names, each block once. Read without
+        // the gate, so a trace landing meanwhile can leave it a block off.
+        public (long Table, long Blocks, int Capacity) Bytes() {
+            if (Volatile.Read(location: ref m_table) is not { } table) { return (0, 0, 0); }
+
+            var capacity = table.Keys.Length;
+            var tableBytes = (((long)capacity) * ((((3 * sizeof(int)) + sizeof(int)) + sizeof(int)) + System.Runtime.CompilerServices.Unsafe.SizeOf<Probe>()));
+            var blocks = new HashSet<ProbeBlock>(comparer: ReferenceEqualityComparer.Instance);
+            var blockBytes = 0L;
+
+            for (var slot = 0; (slot < capacity); slot++) {
+                if (Volatile.Read(location: ref table.Used[slot]) == 0) { continue; }
+
+                var entry = table.Entries[slot];
+
+                if ((entry.Current.Block is { } current) && blocks.Add(item: current)) { blockBytes += current.Bytes; }
+                if (entry.HasPrevious && (entry.Previous.Block is { } previous) && blocks.Add(item: previous)) { blockBytes += previous.Bytes; }
+            }
+
+            return (tableBytes, blockBytes, capacity);
+        }
 
         // Forgets every probe; the next write starts a table of the capacity the cache last reached.
         public void Clear() {

@@ -224,6 +224,17 @@ polls and the timer paces, until a poll sees a present displayed. The wait
 takes the swapchain under external synchronization, so it stays on the
 presenting thread and every call has a bound.
 
+Presents retire only as the desktop compositor composes, so a display Windows
+has powered off paces the window, not the frame. The compositor then retires
+presents on a slow fallback: the frame-latency wait runs to its 100 ms bound,
+or a queue submission waits behind the back buffer, and the debug world on the
+RTX 4070 read 7 to 8 FPS on Direct3D 12 and about 4 on Vulkan at every stop
+while its GPU work for a frame finished in about 40 ms at idle clocks. The
+Windows window therefore holds a `PowerRequestDisplayRequired` power request
+while it is open, as a game's window does (pad input does not reset the
+display's idle timer), and a World booted that way on the same idle machine
+read 60 FPS from its first reading.
+
 The rate follows the display. Automatic pacing (`host.targetHertz: 0`)
 presents on every refresh of whatever signal the display runs, and a signal
 the host cannot read is still paced by its vertical blank. An explicit target

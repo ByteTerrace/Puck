@@ -10,8 +10,8 @@ namespace Puck.World.Server.Tests;
 /// returning the cohort, until the destination recovers from its crossing log; the log then decides. Every crash point
 /// between the source's departure record, the arrival record, the destination's recovery and the source's settlement
 /// ends with exactly one traveler, on the destination exactly when the record landed. The red legs answer the lost
-/// answer as a refusal: the source settles home while the record may be durable, and a recovered destination lands the
-/// traveler a second time.</summary>
+/// answer as a refusal: the source settles home while the record may be durable, and the destination's next record
+/// takes the arrival's sequence again, leaving a log no recovery can redo.</summary>
 public sealed class CrossingUncertaintyLawTests {
     // Steps long enough for any destination lease taken during the crossing to expire.
     private const int PastEveryLease = 90;
@@ -110,8 +110,9 @@ public sealed class CrossingUncertaintyLawTests {
                 transferId: transferId
             )
         );
+        // The lease record took sequence 0; the arrival record is the uncertain one.
         Assert.Equal(
-            expected: 0UL,
+            expected: 1UL,
             actual: destination.UncertainCrossing
         );
         world.Step(ticks: PastEveryLease);
@@ -120,8 +121,9 @@ public sealed class CrossingUncertaintyLawTests {
             actual: world.CountTraveler()
         );
         Assert.Single(collection: world.Host.CaptureRow(row: world.Source.Instance).InDoubtTransfers);
+        // The allocation of the transfer's id and its departure.
         Assert.Equal(
-            expected: 1,
+            expected: 2,
             actual: world.SourceLog.Count
         );
 
@@ -149,7 +151,7 @@ public sealed class CrossingUncertaintyLawTests {
             expectedSubstring: "suspended"
         );
 
-        // The control: another traveler reserves, but its arrival is not recorded behind the uncertain one.
+        // Another traveler is not suspended, but its lease cannot be recorded behind the uncertain arrival either.
         var other = Reservation(
             incarnation: new WorldEntityAddress(
                 Authority: "machine-a/boot",
@@ -159,36 +161,16 @@ public sealed class CrossingUncertaintyLawTests {
             sourceAuthority: "machine-a/boot",
             transferId: 7
         );
-        var reserved = destination.ReserveTransfer(request: other);
+        var latched = destination.ReserveTransfer(request: other);
 
-        Assert.True(
-            condition: reserved.Accepted,
-            userMessage: reserved.Reason
-        );
-        Assert.Equal(
-            expected: WorldTransferStatus.Missing,
-            actual: destination.CommitTransfer(
-                members: [new WorldTransferCommitMember(
-                    Profile: null,
-                    Arrival: WorldTransferArrival.Spawn,
-                    BodyMotionProgramName: "grounded",
-                    Position: default,
-                    YawRadians: default,
-                    PlanarVelocity: default,
-                    VerticalVelocity: default
-                )],
-                reason: out var latched,
-                sourceAuthority: other.SourceAuthority,
-                transferId: other.TransferId
-            )
-        );
+        Assert.False(condition: latched.Accepted);
         Assert.Contains(
-            actualString: latched,
+            actualString: latched.Reason,
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "is uncertain"
         );
         Assert.Equal(
-            expected: (lands ? 1 : 0),
+            expected: (lands ? 2 : 1),
             actual: world.DestinationLog.Count
         );
     }
@@ -299,38 +281,24 @@ public sealed class CrossingUncertaintyLawTests {
             status: ((WorldTransferStatus)verdict)
         ));
     }
-    [InlineData(Recovery.InPlace)]
-    [InlineData(Recovery.BothRestart)]
-    [Theory]
-    public void ARefusalForADurableArrival_DuplicatesTheTravelerOnceTheDestinationRecovers(Recovery recovery) {
+    [Fact]
+    public void ARefusalForADurableArrival_LeavesALogNoRecoveryCanRedo() {
         using var world = CrossingWorld.Build();
 
         // The red leg: the lost answer is reported as a refusal, so the source settles home and restores the traveler
-        // while the arrival record is already durable.
+        // while the arrival record is already durable, and the key's tombstone takes the arrival's sequence again.
         world.DestinationLog.LoseAnswerOn = typeof(WorldCrossingRecord.Arrival);
         world.DestinationLog.LostAnswerLands = true;
         world.DestinationLog.LostAnswer = WorldCrossingDurability.Refused;
         _ = world.Cross();
         Assert.True(condition: world.TravelerAt(row: world.Source));
 
-        var recovered = Recover(
-            recovery: recovery,
-            world: world
-        );
+        var refused = Assert.Throws<ArgumentException>(testCode: world.RecoverDestination);
 
-        try {
-            recovered.Step(ticks: PastEveryLease);
-            Assert.Equal(
-                expected: 2,
-                actual: recovered.CountTraveler()
-            );
-        } finally {
-            if (!ReferenceEquals(
-                objA: recovered,
-                objB: world
-            )) {
-                recovered.Dispose();
-            }
-        }
+        Assert.Contains(
+            actualString: refused.Message,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "skips or repeats sequence"
+        );
     }
 }

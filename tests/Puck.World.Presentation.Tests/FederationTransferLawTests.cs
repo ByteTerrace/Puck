@@ -316,7 +316,7 @@ public sealed partial class FederationTransferLawTests {
             transferId: request.TransferId,
             members: [altered],
             reason: out var alteredReason
-        ) == WorldTransferStatus.Missing));
+        ) == WorldTransferStatus.Committed));
         Assert.Contains(
             actualString: alteredReason,
             comparisonType: StringComparison.Ordinal,
@@ -609,7 +609,7 @@ public sealed partial class FederationTransferLawTests {
                 request.TransferId,
                 [member with { ActionContinuity = alternative }],
                 out var reason
-            ) == WorldTransferStatus.Missing));
+            ) == WorldTransferStatus.Committed));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -621,8 +621,12 @@ public sealed partial class FederationTransferLawTests {
             request.SourceAuthority,
             request.TransferId,
             [member],
-            out _
-        ) == WorldTransferStatus.Missing));
+            out var mutatedReason
+        ) == WorldTransferStatus.Committed));
+        Assert.Contains(
+            actualString: mutatedReason,
+            expectedSubstring: "different commit"
+        );
         Assert.True(
             condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
@@ -702,7 +706,7 @@ public sealed partial class FederationTransferLawTests {
                 request.TransferId,
                 [member with { ActionContinuity = carried }],
                 out reason
-            ) == WorldTransferStatus.Missing));
+            ) == WorldTransferStatus.Committed));
             Assert.Contains(
                 actualString: reason,
                 expectedSubstring: "different commit"
@@ -1508,6 +1512,8 @@ public sealed partial class FederationTransferLawTests {
                     CatalogRig: 0,
                     Mobility: mobility
                 )],
+                // The previous crossing's acknowledgement was lost, so the source has not settled it.
+                SourceFloor = (crossing - 1UL),
             };
 
             Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
@@ -1524,13 +1530,20 @@ public sealed partial class FederationTransferLawTests {
                 1,
                 fixture.Server.TransferTableCounts.ActiveTransactions
             );
+            // The superseded commit's payload is retired, but its key still answers Committed to a source that lost
+            // the answer, and the source's floor keeps the ledger to that row and the floor.
             if (crossing > 60) {
                 Assert.Equal(
-                    WorldTransferStatus.Missing,
+                    WorldTransferStatus.Committed,
                     fixture.Server.TransferStatus(
                         sourceAuthority: SourceAuthority,
                         transferId: (crossing - 1UL)
                     )
+                );
+                // The floor, the superseded key and the live commit.
+                Assert.Equal(
+                    3,
+                    fixture.Server.TransferTableCounts.TransferKeys
                 );
             }
 
@@ -1677,6 +1690,8 @@ public sealed partial class FederationTransferLawTests {
                     CatalogRig: 0,
                     Mobility: mobility
                 )],
+                // Every earlier crossing was acknowledged, so the source has settled it.
+                SourceFloor = crossing,
             };
             var reservation = fixture.Server.ReserveTransfer(request: request);
 
@@ -1729,8 +1744,9 @@ public sealed partial class FederationTransferLawTests {
                 sourceAuthority: SourceAuthority,
                 transferId: crossing
             );
+            // The acknowledged key keeps its outcome; the source's rising floor keeps its ledger to one row and a floor.
             Assert.Equal(
-                WorldTransferStatus.Missing,
+                WorldTransferStatus.Committed,
                 fixture.Server.TransferStatus(
                     sourceAuthority: SourceAuthority,
                     transferId: crossing
@@ -1739,6 +1755,11 @@ public sealed partial class FederationTransferLawTests {
             Assert.Equal(
                 0,
                 fixture.Server.TransferTableCounts.ActiveTransactions
+            );
+            Assert.InRange(
+                actual: fixture.Server.TransferTableCounts.TransferKeys,
+                high: 2,
+                low: 1
             );
             Assert.Equal(
                 1,
@@ -2109,6 +2130,8 @@ public sealed partial class FederationTransferLawTests {
         writer.WriteString(value: "seam");
         writer.WriteBoolean(value: false);
         writer.WriteBoolean(value: true);
+        // The source's settled floor.
+        writer.WriteUInt64(value: 0UL);
         writer.WriteInt32(value: 1);
         writer.WriteInt32(value: 0);
         writer.WriteString(value: "origin/world");
