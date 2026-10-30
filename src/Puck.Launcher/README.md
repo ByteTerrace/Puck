@@ -30,7 +30,11 @@ pump never asks. A loop that produces frames calls
 render root.
 
 The windowed and headless loops hand `FixedStepPump.Advance` the wall time
-they sampled and take every step it covers. The offscreen loop's time is its
+they sampled and take every step it covers, for at most one step's period of
+wall time: once a call's steps have spent that long, the whole steps still due
+are shed and the capture pin rebased by them, as the quarter-second clamp
+(`maxFrameTicks`) does. So a step that costs more than its period slows the
+World rather than the frame. The offscreen loop's time is its
 tick count: it calls `FixedStepPump.TryStep`, which runs at most one step
 whatever the interval was, and composes one frame for that step, so a slow
 frame delays the next tick instead of bursting several (see

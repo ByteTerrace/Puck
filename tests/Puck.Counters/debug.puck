@@ -1,0 +1,61 @@
+// The debug world's shadow counters workload: fixes one 1920x1080 camera at (0, 2.5, 7) looking at (0, 0.8, 0) over the
+// debug world's ground, reference cubes and Moth, driven offscreen by shadow.script.txt.
+
+schema: "puck.world.definition.v1"
+basis: "../../worlds/debug/debug"
+documentId: "counters-debug"
+
+host {
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  height: 1080
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  targetHertz: 0
+  width: 1920
+}
+
+cameras [
+  {
+    name: "counters-cam"
+    anchor: null
+    renderHeight: 1080
+    renderWidth: 1920
+    rig {
+      version: "puck.camera.program.v1"
+      name: "counters-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+]
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout {
+    $replace: true
+  }
+
+  layout "counters" {
+    seatCount: 0
+    slots [
+      {
+        camera: "counters-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+}

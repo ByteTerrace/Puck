@@ -14,7 +14,8 @@ namespace Puck.Launcher;
 /// </summary>
 /// <remarks><para>It has two ways to be driven, one per pacing rule. A host paced to the wall clock (a window's present
 /// cadence, or a headless waitable-timer loop) hands <see cref="Advance"/> the wall interval it sampled, and the pump
-/// turns it into every whole step now due, several after a slow host frame. A host whose time is its own iteration count
+/// turns it into every whole step now due, several after a slow host frame, for at most one step's period of wall
+/// time. A host whose time is its own iteration count
 /// (the offscreen host, one step per produced frame, and an unpaced headless run) calls <see cref="TryStep"/>, which runs
 /// at most one step whatever the interval was. Not thread-safe: driven from one pump thread per boot shape, same as the
 /// state it wraps.</para>
@@ -45,6 +46,7 @@ public sealed class FixedStepPump {
     private readonly Func<bool>? m_mayStep;
     private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation m_simulation;
+    private readonly IInputClock? m_wallClock;
 
     private ulong m_accumulatorTicks;
     private ulong m_completedStepCount;
@@ -66,8 +68,12 @@ public sealed class FixedStepPump {
     /// <param name="holdsClock">Whether this pump holds its clock for owed frames: before every step it asks
     /// <see cref="IFixedStepSimulation.HoldsClock"/>, and a step the simulation holds is withheld (see
     /// <see cref="Advance"/>). Windowed and offscreen hosts hold; a headless host does not.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true) {
+    /// <param name="wallClock">The wall clock, in engine ticks, a catch-up burst of <see cref="Advance"/> is bounded
+    /// by: once a burst has spent one step's period of wall time, the whole steps still due are discarded.
+    /// <see langword="null"/> bounds a burst by simulated time alone.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="simulation"/>, <paramref name="inputRouter"/> or
+    /// <paramref name="registry"/> is <see langword="null"/>.</exception>
+    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true, IInputClock? wallClock = null) {
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: inputRouter);
         ArgumentNullException.ThrowIfNull(argument: registry);
@@ -78,6 +84,7 @@ public sealed class FixedStepPump {
         m_beforeStep = beforeStep;
         m_holdsClock = holdsClock;
         m_mayStep = mayStep;
+        m_wallClock = wallClock;
         CaptureOriginTicks = captureOriginTicks;
 
         // The console text door's OWN sink — bound to the Console principal when the router built it (InputRouter's
@@ -89,19 +96,22 @@ public sealed class FixedStepPump {
     /// numerator (<c>Puck.Hosting.FrameContext.AccumulatorTicks</c>).</summary>
     public ulong AccumulatorTicks => m_accumulatorTicks;
     /// <summary>The input clock's tick origin newly captured input is measured against — rebased by every host
-    /// interval the pump does not step (a runaway wall-clock delta <see cref="Advance"/> clamps, steps it discards or
-    /// withholds, and whatever an interval handed to <see cref="TryStep"/> exceeds its one step by), so newly captured
-    /// input stays due now rather than waiting out host time the simulation never steps.</summary>
+    /// interval the pump does not step (a runaway wall-clock delta <see cref="Advance"/> clamps, steps it discards,
+    /// withholds or sheds from a burst that spent its wall time, and whatever an interval handed to
+    /// <see cref="TryStep"/> exceeds its one step by), so newly captured input stays due now rather than waiting out
+    /// host time the simulation never steps.</summary>
     public ulong CaptureOriginTicks { get; private set; }
     /// <summary>The exact engine time this pump has advanced the simulation by.</summary>
     public ulong ElapsedTicks => m_elapsedTicks;
 
     /// <summary>Creates the pump every launcher host loop drives: it drains the console before every step, holds the
-    /// first step until piped standard input no longer can hold it, and stops stepping once <c>quit</c> has run.</summary>
+    /// first step until piped standard input no longer can hold it, stops stepping once <c>quit</c> has run, and bounds
+    /// a catch-up burst by the wall time <paramref name="inputClock"/> reads.</summary>
     /// <param name="simulation">The registered fixed-step simulation, or <see langword="null"/> when none is.</param>
     /// <param name="inputRouter">The router registered with <paramref name="simulation"/>.</param>
     /// <param name="registry">The command registry.</param>
-    /// <param name="inputClock">The input clock whose current reading pins the capture origin.</param>
+    /// <param name="inputClock">The input clock whose current reading pins the capture origin, and the wall clock a
+    /// burst is bounded by.</param>
     /// <param name="textSource">The console text source drained before every step.</param>
     /// <param name="output">The buffered console output flushed after every drain.</param>
     /// <param name="terminal">The terminal whose exit request stops stepping.</param>
@@ -151,14 +161,15 @@ public sealed class FixedStepPump {
                 return (started && !terminal.IsExitRequested);
             },
             registry: registry,
-            simulation: simulation
+            simulation: simulation,
+            wallClock: inputClock
         );
     }
     /// <summary>Consumes one sampled wall-clock delta: clamps a runaway frame to <paramref name="maxFrameTicks"/>
     /// (rebasing <see cref="CaptureOriginTicks"/> by the dropped remainder), accumulates it, and runs every whole
     /// <paramref name="stepTicks"/>-sized step now due — drain, snapshot, apply, step, in that order, every time.</summary>
-    /// <param name="deltaTicks">The sampled wall-clock delta since the previous call.</param>
-    /// <param name="maxFrameTicks">The runaway-frame clamp.</param>
+    /// <param name="deltaTicks">The sampled wall-clock delta since the previous call, in engine ticks.</param>
+    /// <param name="maxFrameTicks">The runaway-frame clamp on simulated time, in engine ticks.</param>
     /// <param name="stepTicks">The step size in engine ticks for steps run by THIS call. May differ from the value
     /// a previous call used (see remarks) — the pump's own bookkeeping stays correct either way.</param>
     /// <returns>The number of whole steps run.</returns>
@@ -176,7 +187,14 @@ public sealed class FixedStepPump {
     /// <para>A pump that holds its clock asks <see cref="IFixedStepSimulation.HoldsClock"/> before every step, after
     /// the drain and the <c>mayStep</c> gate. A held step ends the call and discards the whole steps still due, with
     /// the capture pin rebased, exactly as a gated one does: the time spent waiting for the frame is never stepped,
-    /// so the simulation neither passes the tick the frame must show nor bursts once the frame is served.</para></remarks>
+    /// so the simulation neither passes the tick the frame must show nor bursts once the frame is served.</para>
+    /// <para>A pump given a wall clock also bounds the burst by the wall time it has spent: once the steps of one call
+    /// have taken one step's period of wall time, the whole steps still due are discarded and the capture pin rebased
+    /// by them, exactly as for a clamped frame. A call always takes its first due step. So while a step costs less than
+    /// its period the World catches up after a slow frame, and once a step costs more, each call takes one step: the
+    /// World runs slower than real time and the frame stays one step long, instead of every frame running the burst a
+    /// quarter second owes. What a step computes from its state and its snapshot is unchanged; only how much
+    /// simulated time a slow frame catches up is.</para></remarks>
     public int Advance(ulong deltaTicks, ulong maxFrameTicks, ulong stepTicks) {
         // The host time a clamp drops is never stepped, but a holding pump still withholds it: a capture's hold budget
         // is spent in host time, so a slow frame charges its whole interval, never only the clamped part.
@@ -195,6 +213,7 @@ public sealed class FixedStepPump {
 
         var stepCount = 0;
         var ratePerSecond = m_simulation.RatePerSecond;
+        var burstStartTicks = (m_wallClock?.NowTicks ?? 0UL);
 
         while (m_accumulatorTicks >= stepTicks) {
             var heldTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
@@ -223,6 +242,19 @@ public sealed class FixedStepPump {
             // A step that owes the host a frame (a capture armed for its tick) ends the burst here, keeping the
             // time still due: the host composes the frame showing this tick, and its next call resumes the catch-up.
             if (m_simulation.AwaitsFrame) {
+                break;
+            }
+
+            if (
+                (m_wallClock is { } wallClock) &&
+                (m_accumulatorTicks >= stepTicks) &&
+                ((wallClock.NowTicks - burstStartTicks) >= stepTicks)
+            ) {
+                var shedTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
+
+                CaptureOriginTicks += shedTicks;
+                m_accumulatorTicks -= shedTicks;
+
                 break;
             }
         }
