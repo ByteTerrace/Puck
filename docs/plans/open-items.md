@@ -44,19 +44,22 @@ resolves their edits to this file at merge.
    break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
    `--reproduce`, including the unexplained Go CPU regression in the loaded
    boot-reuse comparison.
-6. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+   the owner's direction; Klondike first on the revived rules and SDF faces,
+   headless, its look in the lead's window.
+7. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-7. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+8. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
    it in `panes` and answers under pause, then the diagnostics' windowed checks
    and the developer exhibits.
-8. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+9. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
    chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
    then one paired windowed tour when no lane holds the GPU.
-9. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
-   isolate the temporal-off cadence blink first, then why history never
-   resolves the jitter.
-10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+10. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+    isolate the temporal-off cadence blink first, then why history never
+    resolves the jitter.
+11. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -1237,6 +1240,64 @@ the drawn relief. The measured state is in the
   squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
   large radius.
 
+### Card tables in the board game room
+
+Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
+ordinary, the owner's direction · Next: the Klondike table, headless first,
+its look batched into the lead's window.
+
+The owner wants proper card tables in the gallery: physical cards on a table,
+played by sitting at it like the chess, Go, Reversi and Alchemy tables, which
+fill the board game room's four spots (`worlds/debug/shapes.md`). The cards
+need room of their own beside it on level 2; where is the lane's layout call,
+the look the owner's review.
+
+- Prior art, quarantined, to revive rather than rewrite (rule 7):
+  - Rules: `experimental/src/Puck.World/Assets/worlds/games/` holds Klondike
+    (draw one or three), Spider (one, two or four suits), FreeCell, the
+    `solitaire.puck` collection that switches between them and keeps each
+    deal, and poker with a hand-strength judge; deals use the seeded shuffle
+    stream and replay. They ran as state rows and rules with the console as
+    their only surface. The directory also holds backgammon, dominoes,
+    mancala, hidden ranks and word spy for later tables.
+  - Card faces: `experimental/worlds/genesis/cards.basis.puck`, all 52 faces as
+    SDF shapes. `card.hlsl` beside it was the side-by-side reference shader the
+    SDF look was built against, and `card.puck` holds the compare views and
+    hero cameras; the look is already SDF data and needs no shader.
+  - Laws: `experimental/tests/Puck.World.Games.Tests` (Solitaire deal and
+    rules, poker hand strength) as prior art for `test` blocks.
+- The mechanism exists: the tabletop (`src/Puck.World.Schema/README.md`,
+  discrete boards, cards and turns) and the chess table's pattern (rigid pieces,
+  a judge that reads the settled table, the context button to sit, the cursor
+  and pick button to play). A card table reuses both; no card engine.
+- The deck (faces, backs, card size) is a design any author imports, so it goes
+  to `worlds/standard/`; the tables and the room stay in `worlds/debug/`. One
+  baked mesh per face, shared by every table, so a second table adds no bake.
+1. Klondike: revive the module and the faces to the current language, a table
+   with the cards as bodies on the tabletop, deal from the seeded stream, play
+   by pick and context with the console still driving it, and `test` blocks for
+   a deal and a legal and an illegal move with `--reproduce`.
+2. Spider and FreeCell as the same table's game switch (`solitaire.puck`).
+3. Poker: seats, computer players and the hand judge; its own step.
+- Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
+  stress case for nearest-first bake order
+  ([streaming](#residency-and-streaming)).
+
+### Residency and streaming
+
+Owner: rendering and world-architecture lanes · design · Next: the
+three-family consensus (in flight: `.claude/scratch/consensus-streaming/`),
+reconciled into a decision record, then its first step.
+
+The owner's question: as the world grows, how the area around the player is
+built and kept first, and how far to take it. The owner's position: passive
+help from the engine everywhere (such as distance rings with hysteresis) and an
+explicit choice authors make (Metroid Prime style areas behind doors) are
+complementary; the open question is whether portals are the right abstraction
+for the explicit route or complementary to it. Starting points: P20 item 4 in
+the [rendering plan](rendering.md#p20--visibility-areas-and-residency) and the
+valley plan's step 4 ([valley](valley-and-moons.md)).
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction · one
@@ -1285,8 +1346,8 @@ material defect needs no taste call); new content and art on the owner's call.
   glass may lose its tint).
 - The board game room: the owner reviews its look (the tables share the chess
   table's wood, the Go board a flat kaya face, the Reversi board green felt);
-  more games for the free table spot at (65, 30.6), and addon seats at the
-  tables.
+  addon seats at the tables; card tables have their own packet
+  ([card tables](#card-tables-in-the-board-game-room)).
 - An elements-and-combat yard toward MMO action combat
   ([combat decision](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input);
   the quarantined `arena.puck` district is the rules' prior art):
