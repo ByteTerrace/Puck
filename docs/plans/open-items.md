@@ -1441,12 +1441,11 @@ measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built)
   - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal` clamps its factor to at least 2, so a small creation declaring 1.5625 m spacing still subdivides its existing ~15 mm lattice (`src/Puck.World.Client/WorldPlacementStamper.cs:770`).
   - [medium] `physics.contact` adds three or four shared `CompareExchange` updates to every surviving convex query whether or not a counters reader exists (`src/Puck.Physics/FixedStaticContactWork.cs:51`): count per thread or per tick and publish on read.
 
-- Contact on the drawn relief has landed (a field collider per relieved copy,
-  [terrain pass](terrain-pass.md#contact-on-the-drawn-relief)). Next: the
-  windowed `world.debug-view report colliders` over the valley, which had 12
-  red findings over 22 witnesses on the masses' colliders and must read 0, and
-  the Moth's feet on the drawn mesh at `valley-slope`. Headless, the report's
-  collision-versus-authored-field comparison reads 0 red over 9,442 witnesses.
+- At `valley-slope` on Vulkan (a fresh World, bakes still pending at the
+  capture) the frame is blown out to white around the Moth with every view at
+  `meter=none source=held` (EV 11.5 plus 2.5); the Direct3D 12 capture of the
+  same pose read normally. The image meter (terrain pass step 1) owns it;
+  check whether Vulkan only shows it before its bakes settle.
 - Field-collider cost: a Moth standing on relief spends about 70 field queries
   and 420 relieved samples a tick, each six octaves of value noise (about
   3.4 µs on a loaded machine). If the quiet rim p99 misses its bar, cut the
