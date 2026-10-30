@@ -28,7 +28,9 @@ A few rules apply to every limit on this page:
 > Work units are heuristic prices that aren't calibrated against CPU time. A
 > document that stays under `RuleCapacity.MaxWorkUnitsPerTick` has a bounded
 > amount of rule work per tick, but that bound doesn't guarantee how long a tick
-> takes. See
+> takes. The search jobs share the same ceiling: what the rules' sheet leaves is
+> their allowance, so an over-priced rule shrinks every search. A rule that fires
+> only a few of its bindings is priced by its enforced `maxFirings`. See
 > [Rule analysis, scheduling, and work budgets](analysis.md).
 
 ## Declarations
@@ -108,6 +110,7 @@ A few rules apply to every limit on this page:
 | Limit | Value | Constant | Explained in |
 |---|---|---|---|
 | Rule work per tick | 4,250,000 work units | `RuleCapacity.MaxWorkUnitsPerTick` | [Rule analysis, scheduling, and work budgets](analysis.md) |
+| Firings in one iterating sweep | Every binding, or the rule's `maxFirings` (at least 1) | `Rule.MaxFirings` | [Rules and firing](rules.md#bound-how-many-bindings-fire) |
 | Locals per rule, including implicit ones | 64 | `RuleCapacity.MaxLocalsPerRule` | [Rules and firing](rules.md) |
 | Top-level effects per rule | 256 | `RuleCapacity.MaxEffectsPerRule` | [Rules and firing](rules.md) |
 | Effects in a transaction or its `onFailure` list | 256 | `RuleCapacity.MaxTransactionEffects` | [Rules and firing](rules.md#recover-from-a-refused-step) |

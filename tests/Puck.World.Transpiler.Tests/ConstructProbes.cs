@@ -336,6 +336,7 @@ internal static class ConstructProbes {
             Source: Rule(body: """
                     mode: Edge
                     forEach: deck
+                    maxFirings: 1
                     when hp == 1
                     flag = 1
                 """)

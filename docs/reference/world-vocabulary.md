@@ -320,7 +320,7 @@ Printed back as `replays`; otherwise the generic value path. Every field of the 
 ### `rule`
 
 ```puck
-rule "name" { [local …]* [when Gate] [mode: …] [forEach: …] [decision { … }] <effect>* }
+rule "name" { [local …]* [when Gate] [mode: …] [forEach: …] [maxFirings: N] [decision { … }] <effect>* }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
@@ -328,6 +328,7 @@ rule "name" { [local …]* [when Gate] [mode: …] [forEach: …] [decision { �
 | `name` (required) | header | name | — | `name` | — | The rule's name, which a group claims it by and a trace reports. |
 | `mode:` | property | enumeration (`Edge`, `Level`) | — | `mode` | — | Whether the rule fires on the gate becoming true or on every tick it is true. |
 | `forEach:` | property | reference | — | `forEach` | — | What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, or `$bodies` for every live body in ascending index order. |
+| `maxFirings:` | property | number | — | `maxFirings` | — | The most bindings of one iterating sweep that may fire in a tick; the sweep stops there, the rest wait for a later tick, and the work sheet prices the rule's firings at this number instead of the iterated row's capacity. |
 | `effects` (required) | body | statements | — | `effects` | — | The effect statements the rule fires, in written order; a rule with none is refused. |
 
 Printed back as `rule` when the node carries `effects`, `name`, and every predicate and effect target in it has a sugar spelling that reparses to the same tree; otherwise the generic value path, for the whole `rules` array. Every field of the node the description does not name prints as an ordinary property.

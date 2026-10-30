@@ -57,6 +57,13 @@ namespace Puck.State;
 /// indices with <c>$each</c> bound to each.</param>
 /// <param name="PoolForEach">The declared pool and typed lexical binding to snapshot and visit once per live
 /// instance, or <see langword="null"/> for ordinary row/no iteration. It cannot appear beside <paramref name="ForEach"/>.</param>
+/// <param name="MaxFirings">The most bindings of one sweep that may fire, or <see langword="null"/> for every binding the
+/// sweep visits. Only an iterating rule (<paramref name="ForEach"/> or <paramref name="PoolForEach"/>) takes it. Once that
+/// many bindings have fired (or been refused) in a tick, the sweep stops: the bindings after it keep their latches and
+/// wait for a later tick, exactly as if the sweep had not reached them. The work sheet prices the rule's firings, and the
+/// writes they count against exclusive cells, at this number rather than at the iterated row's capacity, so a rule whose
+/// gate already admits only a few bindings at a time (a batch window over an ordinal, a key matching one cell) states
+/// what it runs and is priced by it.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record Rule(
     [property: JsonPropertyOrder(0)] CellName Name,
@@ -66,7 +73,8 @@ public record Rule(
     [property: JsonPropertyOrder(4)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? ForEach = null,
     [property: JsonPropertyOrder(6)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<RuleLocal>? Locals = null,
     [property: JsonPropertyOrder(7)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Zones = null,
-    [property: JsonPropertyOrder(8)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RulePoolIteration? PoolForEach = null
+    [property: JsonPropertyOrder(8)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] RulePoolIteration? PoolForEach = null,
+    [property: JsonPropertyOrder(9)][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? MaxFirings = null
 );
 /// <summary>One rule-level pool sweep. The evaluator snapshots full instance handles at the beginning of its pass,
 /// so releasing a snapshot member cannot make a later reclaim of its slot appear in that same pass.</summary>

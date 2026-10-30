@@ -783,6 +783,19 @@ decision (the companion lands inert in the live debug world today; the lead's ca
 between the consensus split), then the uncertain crossing, opened by a two-silo
 failover witness.
 
+- [medium] A rule firing costs the world host far more than the work sheet
+  prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`
+  runs `WorldServer.ValidateStateTransaction` and the commit runs
+  `CommitStateTransaction`, and both clear and flag a per-row array, walk every
+  row, and re-run `WorldInputRuntime.TryValidate` (a `TrySelect` per input owner)
+  and `TrySynchronize` whatever the firing wrote. A thread-time sample of a
+  headless debug World put an idle tick's rule pass near 3.6 ms for about 5,600
+  evaluations and 94 firings, about 15 µs a firing with roughly three quarters
+  of it in the input runtime, while a chess judge candidate (the search's
+  arena host, no world transaction) ran near its price at the sheet's 1.7 ns a
+  unit. Make validation and commit proportional to the rows the firing touched
+  and revalidate input only when a row input selection reads changed, then price
+  what remains per firing. (from: rule-budget lane)
 - [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
 - [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
@@ -868,16 +881,14 @@ answer.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
-- [medium] The debug world sits at the rule-work ceiling: the granaries lane
-  raised `RuleCapacity.MaxWorkUnitsPerTick` from 4,000,000 to 4,250,000
-  (`src/Puck.State/Rule.cs`) because the plain debug world was about 10k units
-  from the chess search's minimum and the granary board broke validation by
-  23k; it also phases its rules one a tick over twelve because the pricing
-  counts rules gated on different values of one slot as the dearest, not the
-  sum. The Klondike table fits by 15,000 units, about what a test world adds (see the card tables). Decide the cause before the next raise: is the
-  static price far above measured tick cost (measure a busy tick against the
-  price), should the search draw from its own budget, and does the slot-gating
-  rule price what one tick can actually run? (from: granaries lane)
+- [low] The work sheet still prices a few shapes above what one tick runs, each
+  a candidate for an enforced bound like `maxFirings` rather than an inference:
+  `companion-interest-*` is about 170 running-minimum rules, every one able to
+  fire in a tick (about 380,000 units, real worst-case work that one
+  nearest-point reduction would replace); a write whose key isn't literal counts
+  against every pinned cell of its row in `CountWriters`; a transfer between
+  piles a live zone table picks prices its disclosure term by the square of the
+  piles (see the card tables). (from: rule-budget lane)
 - [medium] A scratch test using `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed over two minutes of CPU during preparation without a
   generated world or a diagnostic; moving the console command and the closing
@@ -1299,18 +1310,16 @@ Klondike table stands north of the Go table in the board game room
   request over the piles and the table follows; no settled table is read.
   Letting a hand lift a card with `body.carry` and judging where it lands would
   be a second input path beside the cursor.
-- The rules' work-budget cost is the table's price, and Klondike with its table (200,000 units of the sheet)
-  leaves the debug world 15,000 units over the chess search's need under the
-  4,250,000 ceiling (3,159,000 of the sheet, the search needing 1,075,835 of
-  the rest). What kept it there: a transfer between named piles costs a few
-  thousand where one between piles a live zone table picks costs about 140,000
-  (the disclosure term grows with the square of the piles the table reaches),
-  so every deal step, gather step and move is a rule of its own pinned on its
-  literal piles, and the table reads one pile a tick (`kSync.scan`), which the
-  sheet prices as the dearest pile. Spider's and FreeCell's piles and a second
-  deck add to that sheet with nothing left to spare, so step 2 needs the open
-  question under Language and authoring answered first (the static price against
-  measured tick cost, a search budget of its own), not another raise.
+- The rules' work-budget cost is the table's price: Klondike with its table is
+  about 200,000 units of the sheet. With the batched Go reads and the one-piece
+  chess moves priced by their `maxFirings`, the debug world's sheet is about
+  2,550,000 of the 4,250,000 ceiling and the chess search needs about 600,000 of
+  the remaining 1,700,000, which leaves Spider and FreeCell about 1,100,000.
+  A transfer between named piles costs a few thousand where one between piles a
+  live zone table picks costs about 140,000 (the disclosure term grows with the
+  square of the piles the table reaches), so every deal step, gather step and
+  move is a rule of its own pinned on its literal piles, and the table reads one
+  pile a tick (`kSync.scan`), which the sheet prices as the dearest pile.
 1. Spider and FreeCell as the same table's game switch (`solitaire.puck`): each
    game lays its piles on the `kSlots` graph and answers the seat through the
    same mailbox; Spider's 104 cards need 52 more bodies (`cardBodies`).

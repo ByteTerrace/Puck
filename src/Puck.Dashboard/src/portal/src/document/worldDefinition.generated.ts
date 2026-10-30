@@ -11404,6 +11404,10 @@ export type WorldRule = {
    * The declared pool and typed lexical binding to snapshot and visit once per live instance, or null for ordinary row/no iteration. It cannot appear beside ForEach.
    */
   poolForEach?: RulePoolIteration | null;
+  /**
+   * The most bindings of one sweep that may fire, or null for every binding the sweep visits. Only an iterating rule (ForEach or PoolForEach) takes it. Once that many bindings have fired (or been refused) in a tick, the sweep stops: the bindings after it keep their latches and wait for a later tick, exactly as if the sweep had not reached them. The work sheet prices the rule's firings, and the writes they count against exclusive cells, at this number rather than at the iterated row's capacity, so a rule whose gate already admits only a few bindings at a time (a batch window over an ordinal, a key matching one cell) states what it runs and is priced by it.
+   */
+  maxFirings?: number | null;
 };
 
 export type WorldScheduleExpectation = "Submitted" | "Refused";
