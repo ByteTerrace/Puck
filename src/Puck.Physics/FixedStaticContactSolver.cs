@@ -142,13 +142,16 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 colliderCenter: collider.Center, colliderExtent: extent)) {
                 continue;
             }
-            if (collider.TryGetPush(
+            var pushes = collider.TryGetPush(
                 orientation: in orientation,
                 position: position,
                 push: out var push,
                 skin: ContactSkin,
                 volume: in volume
-            )) {
+            );
+
+            FixedStaticContactWork.Process.CountQuery(pushed: pushes);
+            if (pushes) {
                 var blockClimb = (push.IsEdge &&
                     (FixedVector3.Dot(left: push.Normal, right: up) > FixedQ4816.Zero) &&
                     (FixedVector3.Dot(left: movement.RejectFrom(unitAxis: up), right: push.Normal) < FixedQ4816.Zero));
@@ -246,6 +249,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, ReadOnlySpan<FixedVector3?> colliderExtents = default,
         FixedColliderCandidates candidates = default) {
+        FixedStaticContactWork.Process.CountResolve();
         if (!FixedVector3.TrySubtract(difference: out var movement, left: position, right: previousPosition)) {
             position = previousPosition;
             return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);

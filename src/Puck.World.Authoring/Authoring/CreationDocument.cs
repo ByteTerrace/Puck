@@ -255,6 +255,38 @@ public sealed record CreationNoiseDocument(
     /// <summary>The smallest per-octave lacunarity.</summary>
     public const float MinLacunarity = 1f;
 
+    /// <summary>The share of the relief's amplitude below which an octave is too faint for the bake to resolve.</summary>
+    public const float ResolvedOctaveShare = 1f / 16f;
+
+    /// <summary>Returns the spacing a bake resolves this relief at: a quarter of the wavelength of the finest octave that
+    /// carries at least <see cref="ResolvedOctaveShare"/> of the amplitude, in creation units. A static creation declares
+    /// it as its detail (<c>SdfInstanceRange.Detail</c>), so a lattice sized by the creation's extent does not alias the
+    /// relief away; fainter octaves fall under the lattice and are drawn only as the field's shading.</summary>
+    /// <returns>The spacing, in creation units; zero for a facet with no positive frequency.</returns>
+    public float DetailSpacing() {
+        var octaves = Math.Clamp(value: (Octaves ?? 4), min: 1, max: SdfProgramBuilder.MaxNoiseOctaves);
+        var gain = Math.Clamp(value: (Gain ?? 0.5f), min: MinGain, max: MaxGain);
+        var lacunarity = Math.Clamp(value: (Lacunarity ?? 2f), min: MinLacunarity, max: MaxLacunarity);
+        var total = 0f;
+        var power = 1f;
+
+        for (var octave = 0; (octave < octaves); octave++) {
+            total += power;
+            power *= gain;
+        }
+
+        var frequency = MathF.Abs(x: Frequency);
+        var share = 1f;
+
+        // The first octave carries the largest share, so the walk always keeps it.
+        for (var octave = 1; (octave < octaves); octave++) {
+            share *= gain;
+            if ((share / total) < ResolvedOctaveShare) { break; }
+            frequency *= lacunarity;
+        }
+
+        return ((frequency > 0f) ? (0.25f / frequency) : 0f);
+    }
     /// <summary>Returns the derived march step factor of this facet's resolved parameters.</summary>
     /// <returns>The multiplicative step factor (1 = inert).</returns>
     public float StepFactor() => SdfProgram.NoiseDisplaceStepFactor(

@@ -1,6 +1,6 @@
 # Puck.Cli.Worktrees.Tests
 
-These laws hold `puck worktree-report`: refs, worktree listings, status and git files survive the report; patch-equivalent
+These laws hold `puck worktree-report` and `puck lanes` (the roster reads each worktree, matches leases to lanes, marks stalls and changes nothing): refs, worktree listings, status and git files survive the report; patch-equivalent
 cherry-picks and merged history count as landed; one unlanded commit blocks removal.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.

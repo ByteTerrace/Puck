@@ -146,6 +146,10 @@ fallback in the same change, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+- [high] Regression: the Moth reads half dark (a hard vertical split down her head and body, the left half near black) at the chess-table pose on the integration head, where the owner's walkthrough showed her evenly lit at the same pose. `normals` and `indirect` are smooth and even on her and the sun's `shadow` is black indoors, so the dark half is direct light other than the sun, or its occlusion. Candidates landed since the walkthrough: bake-scale (`9cca256dc`: scale in the draw matrix and normals), lift-lag (`5f840ca49`: the presentation query field rebuilt only when a solid creation changes), mcp-batch (`80484a58f`: replica deliveries keep the state arena). Pose `body.pose 56.49 9.07 20.87 181 0 0 0`, `view.override camera look 56.454 12.92 17.786 56.489 10.07 20.871 55`; captures in `.claude/scratch/lead-window/` (`moth-split-*.png`, and `moth-walkthrough-same-pose.png` from before). (from: the lead's verification window)
+
+- [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
+
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
 - [low] A quarter-size Moth (Wonderland) shows thin bright lines under her back
@@ -871,6 +875,8 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
+- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels` (`tests/Puck.World.Server.Tests/ReplayInspectLawTests.cs:41`) fails on the integration head on a seat-2 `forward` channel event, most likely since c7-findings changed `replay.inspect` and `world.history` to print a segment's driven lanes by bank address (`segment p1 2s [@3=1] by console`). Decide whether the law or the read-back is right (the input decision's tape-names item in this packet) and make them agree. (from: companion-build lane, confirmed by the lead)
+
 - [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
 - Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
@@ -1196,6 +1202,40 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 - An editor program on the in-world computer (beside the desktop share and the typing tutor), on text screens, the in-world keyboard and pane focus, talking to a language server: `.puck` first (`puck lsp` exists), then C# through a Roslyn language server. Saving writes the file, the watch applies it, and the editor shows the outcome on its screen (applied, rude edit and resumed, or the compiler's errors).
 - `.puck` edits in game are the sooner win: they are data, replayable and deterministic, and need no compiler.
 - Development only: editing C# runs arbitrary code, so it needs the SDK on the machine and an explicit grant to the owner's seat; published builds do not hot reload.
+
+### The valley's terrain
+
+Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
+Next: the lead's window over the sweep tour's `valley` stops, then contact on
+the drawn relief. The measured state is in the
+[plan](valley-and-moons.md#phase-1-the-valley-as-built).
+
+- Valley review findings (Codex review of the valley merge `be0f38692`):
+  - [medium] The superellipsoid's product-first rounding misclassifies small superellipsoids and disagrees with the HLSL: exponent 2, all radii 1/1024 m, p = (1/256, 0, 0) gives −1/1024 m on the CPU and +3/1024 m on the GPU, so contact and the drawn surface disagree at small sizes (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836`). One formula, exact at both ends of the radius range, on both sides.
+  - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal` clamps its factor to at least 2, so a small creation declaring 1.5625 m spacing still subdivides its existing ~15 mm lattice (`src/Puck.World.Client/WorldPlacementStamper.cs:770`).
+  - [medium] `physics.contact` adds three or four shared `CompareExchange` updates to every surviving convex query whether or not a counters reader exists (`src/Puck.Physics/FixedStaticContactWork.cs:51`): count per thread or per tick and publish on read.
+
+- Contact rides the unrelieved masses: creation noise is render-only, so a body
+  on a wall floats over or sinks into the drawn relief by up to its amplitude
+  (4 m on the sectors). The fixed-point render reading already evaluates
+  `NoiseDisplace` deterministically; analytic contact needs a collider whose
+  surface is the relieved field, with a step bound for the sweep.
+- A standing body creeps downslope on a curved superellipsoid: 2 cm a second on
+  a 22 degree slope and 7 cm a second on a 58 degree one (`body.where` over 30
+  ticks at rest, north sector).
+- A scoped static creation's instance bound is a sphere about the creation's
+  origin (`WorldPlacementStamper`'s scoped branch), 770 m in radius for a sector
+  centred on the ring's centre, so the bake's eight-cells-a-coarse-axis cap, not
+  the relief's declared 1.56 m, sets its 2.8 m cell. A bound about the shapes
+  would let the declared detail through; measure the triangles it costs first
+  (about 3.5 times a sector's 266,000).
+- Creation limits sized for props bound terrain: noise amplitude at most 4 m
+  (`CreationNoiseDocument.MaxAmplitude`) and smooth blends at most 0.5 m
+  (`CreationDocument.MaxSmooth`), so a 300 to 430 m wall reads as a few smooth
+  masses with metre-scale rock.
+- The CPU evaluator's capsule reads its segment parameter through a Q16 inverse
+  squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
+  large radius.
 
 ### Debug world content
 

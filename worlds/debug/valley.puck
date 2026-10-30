@@ -1,0 +1,221 @@
+// The valley: the debug world's floor is the flat bottom of a caldera whose walls rise close around it. Eight
+// sectors ring the floor, one creation and one solid placement each, so each is edited and baked on its own: a main
+// mass and two shoulders from the standard terrain library (../standard/terrain.puck), with fBm relief seeded per
+// sector. The floor (debug.puck's "floor") runs on under the walls, so no slab edge shows. An overlook deck stands
+// near the summit of the south-west sector, and a body that falls out of the world is stood back up on the floor
+// below the sector it fell from, not at one global spawn. docs/plans/valley-and-moons.md records the bake, contact
+// and audit numbers it was measured at.
+//
+//   compass 0 is world +Z (north), 90 world +X (east)
+//   the floor is clear to the walls' feet, 205 to 230 m from the origin: every exhibit, the hall, the studio, the
+//   camera course, the devices and the rate range (x -112, z 118 at its far corner, 163 m out) stand inside 170 m
+//   the combat yard (north, x 24 .. 50, z 40 .. 66) and the climate wing (east, x 72 .. 122, z 12 .. 28) are
+//   reserved on the floor; nothing here stands there
+
+import "../standard/terrain"
+
+let valleyRock = 0
+let valleyDeck = 1
+
+// Each sector's macro form: its bearing, where the floor plane cuts its main mass, how high that mass rises, the mass's
+// half-extents out from the centre and along the ring, and the seed of its relief.
+let valleySectors = [
+  { name: "north", compass: 0, foot: 230, peak: 380, radial: 280, across: 230, seed: 101 }
+  { name: "north-east", compass: 45, foot: 215, peak: 330, radial: 260, across: 220, seed: 102 }
+  { name: "east", compass: 90, foot: 225, peak: 300, radial: 270, across: 240, seed: 103 }
+  { name: "south-east", compass: 135, foot: 210, peak: 350, radial: 290, across: 220, seed: 104 }
+  { name: "south", compass: 180, foot: 220, peak: 430, radial: 300, across: 240, seed: 105 }
+  { name: "south-west", compass: 225, foot: 215, peak: 360, radial: 280, across: 230, seed: 106 }
+  { name: "west", compass: 270, foot: 220, peak: 300, radial: 260, across: 230, seed: 107 }
+  { name: "north-west", compass: 315, foot: 205, peak: 340, radial: 270, across: 220, seed: 108 }
+]
+
+// The fraction of each main mass's vertical half-extent below the floor plane (terrainMass's sink).
+let valleySink = 0.3
+
+// The overlook: a deck at deckHeight on the south-west sector's inner face, standing out over the floor. The face's
+// distance from the centre at that height follows the main mass's ellipse (terrainMass, exponent 2).
+let overlookSector = { compass: 225, foot: 215, peak: 360, radial: 280 }
+let deckHeight = 345
+let overlookHalfHeight = (overlookSector.peak / (1 - valleySink))
+let overlookCentre = (overlookSector.foot + (overlookSector.radial * squareRoot((1 - (valleySink * valleySink)))))
+let overlookRise = ((deckHeight + (overlookHalfHeight * valleySink)) / overlookHalfHeight)
+let overlookFace = (overlookCentre - (overlookSector.radial * squareRoot((1 - (overlookRise * overlookRise)))))
+// The deck's radial half-depth, its across half-width, and how far its inner edge stands out from the face.
+let deckDepth = 14
+let deckWidth = 18
+let deckReach = 10
+// The parapet's half thickness: the bake refines a plate to its half thickness (mesh-bake.md), so a thin rail refines
+// the whole overlook union to it.
+let parapetHalf = 0.3
+
+let compassRadians = 0.017453292519943295
+
+// Each sector's recovery wedge, compass - 22.5 .. compass + 22.5: a point (x, z) lies in it where
+// x·cos(a) − z·sin(a) ≥ 0 at the wedge's first edge a and < edge at its second, the north wedge's edge a hair over 0 so
+// that the origin itself lies in exactly one wedge.
+let valleyWedges = map(
+  valleySectors,
+  (sector, index) => {
+    name: sector.name
+    c1: cosine(((sector.compass - 22.5) * compassRadians))
+    s1: sine(((sector.compass - 22.5) * compassRadians))
+    c2: cosine(((sector.compass + 22.5) * compassRadians))
+    s2: sine(((sector.compass + 22.5) * compassRadians))
+    edge: ((index == 0) ? 0.001 : 0)
+  }
+)
+
+// The floor spot a fallen body is stood back on: 190 m out toward its sector, facing the centre.
+let recoveryRadius = 190
+
+spawnPoints: concat(
+  map(
+    valleySectors,
+    sector => {
+      id: $"valley-{sector.name}"
+      position [
+        (recoveryRadius * sine((sector.compass * compassRadians)))
+        0.05,
+        (recoveryRadius * cosine((sector.compass * compassRadians)))
+      ]
+      yawDegrees: sector.compass
+    }
+  ),
+  [
+    {
+      id: "overlook"
+      position [
+        (((overlookFace - deckReach) + 4) * sine((overlookSector.compass * compassRadians))),
+        (deckHeight + 0.05),
+        (((overlookFace - deckReach) + 4) * cosine((overlookSector.compass * compassRadians)))
+      ]
+      yawDegrees: overlookSector.compass
+    }
+  ]
+)
+
+placements {
+  for sector in valleySectors {
+    placement $"valley-{sector.name}" {
+      prototype: $"valley-{sector.name}"
+      position [0, 0, 0]
+      yawDegrees: (sector.compass + terrainYaw)
+      solid
+    }
+  }
+
+  placement "valley-overlook" {
+    prototype: "valley-overlook"
+    position [0, 0, 0]
+    yawDegrees: (overlookSector.compass + terrainYaw)
+    solid
+  }
+}
+
+prototypes {
+  for sector in valleySectors {
+    prototype $"valley-{sector.name}" {
+      document {
+        name: $"valley-{sector.name}"
+        schema: "puck.creation.v1"
+        palette [
+          {
+            color: "#7D7366"
+            roughness: 0.95
+            specular: 0.02
+          }
+        ]
+        terrainRelief(seed: sector.seed)
+        terrainMass(
+          label: "main",
+          foot: sector.foot,
+          peak: sector.peak,
+          radial: sector.radial,
+          across: sector.across,
+          sink: valleySink,
+          material: valleyRock
+        )
+        terrainMass(
+          label: "shoulder-left",
+          foot: (sector.foot + 40),
+          peak: (sector.peak * 0.78),
+          radial: (sector.radial * 0.8),
+          across: (sector.across * 0.6),
+          offset: (sector.across * 0.75),
+          sink: valleySink,
+          material: valleyRock
+        )
+        terrainMass(
+          label: "shoulder-right",
+          foot: (sector.foot + 25),
+          peak: (sector.peak * 0.86),
+          radial: (sector.radial * 0.75),
+          across: (sector.across * 0.55),
+          offset: (0 - (sector.across * 0.75)),
+          sink: valleySink,
+          material: valleyRock
+        )
+        terrainFloorCut(top: (sector.peak + 10))
+      }
+    }
+  }
+
+  // The overlook's deck and its parapet, cantilevered from the south-west face, in the sector's frame (author +Z
+  // out from the centre). No relief, so the deck collides where it is drawn.
+  prototype "valley-overlook" {
+    document {
+      name: "valley-overlook"
+      schema: "puck.creation.v1"
+      palette [
+        {
+          color: "#7D7366"
+          roughness: 0.95
+          specular: 0.02
+        }
+        {
+          color: "#9A958B"
+          roughness: 0.85
+          specular: 0.03
+        }
+      ]
+      shape Box "deck" {
+        material: valleyDeck
+        position [0, (deckHeight - 1), ((overlookFace - deckReach) + deckDepth)]
+        scale [deckWidth, 1, deckDepth]
+      }
+      shape Box "parapet-front" {
+        material: valleyDeck
+        position [0, (deckHeight + 0.55), ((overlookFace - deckReach) + parapetHalf)]
+        scale [deckWidth, 0.55, parapetHalf]
+      }
+      shape Box "parapet-left" {
+        material: valleyDeck
+        position [(deckWidth - parapetHalf), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
+        scale [parapetHalf, 0.55, deckDepth]
+      }
+      shape Box "parapet-right" {
+        material: valleyDeck
+        position [(parapetHalf - deckWidth), (deckHeight + 0.55), ((overlookFace - deckReach) + deckDepth)]
+        scale [parapetHalf, 0.55, deckDepth]
+      }
+    }
+  }
+}
+
+// Forty metres under the floor a body is out of the world, whichever way it got there (a wall's outer face, a
+// seam): the rule stands it back up on the floor below the sector it fell from.
+let recoveryFloor = -40
+
+rule "fall-recovery" {
+  when bodyPosition(each, y) < recoveryFloor
+  mode: Level
+  forEach: $bodies
+  for wedge in valleyWedges {
+    if ((bodyPosition(each, x) * wedge.c1) - (bodyPosition(each, z) * wedge.s1)) >= 0 and (
+        (bodyPosition(each, x) * wedge.c2) - (bodyPosition(each, z) * wedge.s2)
+      ) < wedge.edge {
+      pose(key: $each, spawnPoint: $"valley-{wedge.name}")
+    }
+  }
+}
