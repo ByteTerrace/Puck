@@ -440,7 +440,21 @@ the fault budget with the visited set held as 128-bit digests of that text (two 
 64-bit folds), reports states, quiescent states converged, depth, wall time and peak
 managed memory per scope, and caps each scope (1.5 million states, or 4 million for the two
 combined two-companion scopes; the measured cost is about 100 MB of managed memory per
-million states). Scopes combine fault classes
+million states).
+
+The traces and the small scopes (under about 100,000 states) run with the ordinary suite.
+The large scopes are the **model check**, explicit tests carrying `Category=ModelCheck`:
+
+```text
+dotnet build tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release -nodeReuse:false
+dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release --no-build --explicit on --filter-trait Category=ModelCheck
+```
+
+The build lane runs the model check at every step of section 9, and every change to this
+protocol (the model, the spec, or the engine code that implements a transition) runs it
+before landing; a protocol change is made in the model first and the model check is its
+evidence. It takes several minutes and a few hundred megabytes; the ordinary suite stays
+under a minute. Scopes combine fault classes
 (two companions with admission failure, partial landing, crash and loss in one scope; log
 failures with crashes on the onward route; repeated deadlines so a shed image fails more
 than once; a custodian with one slot fewer than home so a cohort exhausts its companion

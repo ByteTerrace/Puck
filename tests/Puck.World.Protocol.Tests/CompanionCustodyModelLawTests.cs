@@ -18,36 +18,48 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
     // Each scope: the player's route, how many companions follow, slots a custodian offers, whether B declares the
     // role, the fault classes enabled, how many faults a trace may carry, how many of one class (partitions and
     // deadlines allow one more), and the scope's state cap (measured at about 100 MB of managed memory per million).
-    public static TheoryData<string, int, int, bool, Fault, int, int, int> Scopes => new() {
+    // The small scopes run with the ordinary suite; the large ones (over about 100,000 states) are the model check,
+    // run by the build lane and by any change to the protocol:
+    //   dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release --no-build --explicit on --filter-trait Category=ModelCheck
+    public static TheoryData<string, int, int, bool, Fault, int, int, int> SmallScopes => new() {
         { "A", 1, 3, true, Fault.Loss | Fault.Dup | Fault.Reconnect, 2, 2, 1_500_000 },
-        { "A", 1, 3, true, Fault.Crash | Fault.Deadline | Fault.Disconnect, 3, 2, 1_500_000 },
-        { "A", 1, 3, true, Fault.Log | Fault.Crash | Fault.Disconnect, 3, 2, 1_500_000 },
         { "A", 1, 3, true, Fault.Loss | Fault.Deadline | Fault.Reconnect, 3, 2, 1_500_000 },
         { "A", 1, 3, true, Fault.Partition | Fault.Disconnect | Fault.Reconnect, 2, 1, 1_500_000 },
         { "A", 1, 3, true, Fault.Install | Fault.Recall | Fault.Disconnect, 3, 2, 1_500_000 },
         { "A", 1, 3, true, Fault.Deadline | Fault.Forge | Fault.Disconnect, 2, 1, 1_500_000 },
         { "A", 1, 3, true, Fault.Write | Fault.Census | Fault.Disconnect | Fault.Recall, 3, 1, 1_500_000 },
         { "A", 1, 3, true, Fault.All, 1, 1, 1_500_000 },
+        { "A", 2, 3, true, Fault.Crash | Fault.Log, 2, 1, 1_500_000 },
+        { "A", 2, 2, true, Fault.Loss | Fault.Disconnect | Fault.Admission, 2, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Disconnect | Fault.Partition, 1, 1, 1_500_000 },
+        { "AH", 1, 3, true, Fault.Loss, 1, 1, 1_500_000 },
+        { "AB", 2, 3, true, Fault.None, 0, 1, 1_500_000 },
+        { "ABH", 1, 3, true, Fault.None, 0, 1, 1_500_000 },
+    };
+    public static TheoryData<string, int, int, bool, Fault, int, int, int> LargeScopes => new() {
+        { "A", 1, 3, true, Fault.Crash | Fault.Deadline | Fault.Disconnect, 3, 2, 1_500_000 },
+        { "A", 1, 3, true, Fault.Log | Fault.Crash | Fault.Disconnect, 3, 2, 1_500_000 },
         { "A", 2, 3, true, Fault.Loss | Fault.Crash | Fault.Admission | Fault.Install, 4, 2, 4_000_000 },
         { "A", 2, 3, true, Fault.Admission | Fault.Disconnect, 2, 2, 1_500_000 },
         { "A", 2, 3, true, Fault.Install | Fault.Recall | Fault.Disconnect, 2, 1, 1_500_000 },
-        { "A", 2, 3, true, Fault.Crash | Fault.Log, 2, 1, 1_500_000 },
-        { "A", 2, 2, true, Fault.Loss | Fault.Disconnect | Fault.Admission, 2, 1, 1_500_000 },
         { "AB", 1, 3, true, Fault.Loss | Fault.Crash, 2, 1, 1_500_000 },
         { "AB", 1, 3, true, Fault.Log | Fault.Crash, 1, 1, 1_500_000 },
         { "AB", 1, 3, true, Fault.Forge | Fault.Disconnect | Fault.Recall, 2, 1, 1_500_000 },
         { "AB", 1, 3, true, Fault.Deadline | Fault.Reconnect | Fault.Loss, 1, 1, 1_500_000 },
         { "AB", 1, 3, false, Fault.Disconnect | Fault.Loss, 1, 1, 1_500_000 },
-        { "AB", 1, 3, true, Fault.Disconnect | Fault.Partition, 1, 1, 1_500_000 },
         { "AB", 2, 3, true, Fault.Admission | Fault.Install, 1, 1, 4_000_000 },
-        { "AH", 1, 3, true, Fault.Loss, 1, 1, 1_500_000 },
-        { "AB", 2, 3, true, Fault.None, 0, 1, 1_500_000 },
-        { "ABH", 1, 3, true, Fault.None, 0, 1, 1_500_000 },
     };
 
     [Theory]
-    [MemberData(nameof(Scopes))]
-    public void EveryReachableStateHoldsTheInvariantsAndConverges(string route, int companions, int custodianSlots, bool bAccepts, Fault allowed, int faults, int limit, int cap) {
+    [MemberData(nameof(SmallScopes))]
+    public void EveryReachableStateHoldsTheInvariantsAndConverges(string route, int companions, int custodianSlots, bool bAccepts, Fault allowed, int faults, int limit, int cap) => ExploreScope(route: route, companions: companions, custodianSlots: custodianSlots, bAccepts: bAccepts, allowed: allowed, faults: faults, limit: limit, cap: cap);
+
+    [Theory(Explicit = true)]
+    [Trait("Category", "ModelCheck")]
+    [MemberData(nameof(LargeScopes))]
+    public void EveryReachableStateHoldsTheInvariantsAndConvergesAtScale(string route, int companions, int custodianSlots, bool bAccepts, Fault allowed, int faults, int limit, int cap) => ExploreScope(route: route, companions: companions, custodianSlots: custodianSlots, bAccepts: bAccepts, allowed: allowed, faults: faults, limit: limit, cap: cap);
+
+    private void ExploreScope(string route, int companions, int custodianSlots, bool bAccepts, Fault allowed, int faults, int limit, int cap) {
         var result = Explore(bAccepts: bAccepts, route: Route(route), companions: companions, custodianSlots: custodianSlots, faults: faults, allowed: allowed, limit: limit, cap: cap);
 
         output.WriteLine(message: $"route={route} companions={companions} slots={custodianSlots} B={bAccepts} faults={allowed}x{faults} limit={limit}: {result}");
