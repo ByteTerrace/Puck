@@ -1,4 +1,7 @@
-schema: "puck.world.definition.v1"
+// The standard package is a fragment that refines its importer's rows by id, never a world of its own: it names no
+// schema, so the linter checks it as a module instead of a complete world with no `bare` overlay to refine.
+documentId: "standard"
+
 import "skin"
 import "controls"
 import "camera"
