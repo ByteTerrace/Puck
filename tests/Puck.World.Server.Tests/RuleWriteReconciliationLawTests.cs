@@ -10,28 +10,42 @@ namespace Puck.World.Server.Tests;
 /// brought up to date by both. A drive gate a rule closes refuses drive exactly as one a command closes, and a body
 /// scale written to its register reaches the body whichever writer wrote it.</summary>
 public sealed class RuleWriteReconciliationLawTests {
+    /// <summary>A reused scenario host shares one boot: the preceding scenario's run moved a drive gate, and restoring
+    /// the boot rebinds the gate and clock seeds its seeds derive before the first command. A scenario whose seeds
+    /// differ is refused: it boots its own host.</summary>
     [Fact]
-    public void AScenarioSeedRebindsBootDerivedStateBeforeItsFirstCommand() {
-        var definition = Document(rules: []) with { TimelineRaw = new(Clocks: [new(Name: "quiet", State: "quiet")]) };
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var server = fixture.Server;
-        var clockSeeds = server.ClockSeeds;
+    public void AScenarioRestoreRebindsBootDerivedStateBeforeItsFirstCommand() {
+        foreach (var seed in new[] { 0L, 1L }) {
+            var definition = Scenario(stunned: seed);
+            using var fixture = Fixtures.FreshServer(definition: definition);
+            var server = fixture.Server;
+            var clockSeeds = server.ClockSeeds;
 
-        Assert.True(condition: server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), userMessage: reason);
-        foreach (var value in new[] { 1L, 0L, 1L }) {
-            var scenario = definition.WithWorldState(rows: [.. definition.AuthoredState.Select(selector: row =>
-                ((row.Name.Value == "stunned") ? row with { Cells = [new StateCell(CellName.Parse(candidate: "0"), CellValue.Int(value: value))] } :
-                ((row.Name.Value == "quiet") ? row with { Cells = [], Min = FixedQ4816.FromDouble(value: ((value == 0) ? 0.25 : 0.75)).Value } : row)))]);
-            var admission = WorldDefinitionSerialization.DeserializeForAdmission(
-                utf8Json: WorldDefinitionSerialization.Serialize(definition: scenario), machines: server.Machines.ValidationCatalog);
+            Assert.True(condition: server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), userMessage: reason);
+            server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Key: "0", Kind: WorldDocumentWriteKind.Set,
+                Principal: Principal.Console, Row: "stunned", Value: 1 - seed));
+            fixture.Step();
+            Assert.Equal((seed == 0), server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
 
-            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: admission, boot: boot!));
-            Assert.Equal((value != 0), server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
+            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: Admit(server, definition), boot: boot!));
+            Assert.Equal((seed != 0), server.Grants.TryGetDriveGate(bodyIndex: 0, gateRow: out _));
             Assert.Same(clockSeeds, server.ClockSeeds);
-            Assert.Equal((((value == 0) ? 1UL : 3UL) << 62), clockSeeds["quiet"]);
+            Assert.Equal((((seed == 0) ? 1UL : 3UL) << 62), clockSeeds["quiet"]);
             Assert.Equal(1UL, server.NextInputTick);
+
+            Assert.Throws<InvalidOperationException>(testCode: () => server.Persistence.ScenarioCheckpoint(
+                admission: Admit(server, Scenario(stunned: 1 - seed)), boot: boot!));
         }
     }
+    private static WorldDefinition Scenario(long stunned) {
+        var definition = Document(rules: []) with { TimelineRaw = new(Clocks: [new(Name: "quiet", State: "quiet")]) };
+
+        return definition.WithWorldState(rows: [.. definition.AuthoredState.Select(selector: row =>
+            ((row.Name.Value == "stunned") ? row with { Cells = [new StateCell(CellName.Parse(candidate: "0"), CellValue.Int(value: stunned))] } :
+            ((row.Name.Value == "quiet") ? row with { Cells = [], Min = FixedQ4816.FromDouble(value: ((stunned == 0) ? 0.25 : 0.75)).Value } : row)))]);
+    }
+    private static WorldDefinitionAdmission Admit(WorldServer server, WorldDefinition definition) => WorldDefinitionSerialization.DeserializeForAdmission(
+        utf8Json: WorldDefinitionSerialization.Serialize(definition: definition), machines: server.Machines.ValidationCatalog);
 
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
 
