@@ -36,8 +36,8 @@ resolves their edits to this file at merge.
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
 4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-   the bake's kept groups under a moved identity, a reboot for an edit outside
-   `PuckHotReload`, and the windowed C# loop timed on a quiet machine.
+   a reboot for an edit outside `PuckHotReload`, and the windowed C# loop timed
+   on a quiet machine.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    schema switch, then the pick answer.
 6. [Test runner and replay](#test-runner-and-replay): delete complete-boot reuse
@@ -518,24 +518,14 @@ surviving red findings by cluster, starting with the hall stairs.
   lane. C7's genre sweeps boot each source fresh.
 
 Owner: hot-reload follow-up (boot and build) · ordinary ·
-Next: the bake's kept groups under a moved identity, then a reboot for an edit
-outside `PuckHotReload`, then the windowed C# loop timed on a quiet machine.
+Next: a reboot for an edit outside `PuckHotReload`, then the windowed C# loop
+timed on a quiet machine.
 
 - Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
 
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does.
-- A bake identity that moves under a running residency (an applied update to
-  the bake's code, which the residency follows through
-  `SdfMeshBakeIdentity.UnderRunningCode`, or
-  `world.shaders.reload` of a bake kernel) keys new groups and the store apart,
-  but `SdfMeshPathBake.Keeps` still keeps a group whose geometry is unchanged
-  with the mesh the previous identity baked, until its geometry moves. The fix
-  is one more term in `Keeps` (`old.Identity == Identity.Value`); it is an edit
-  to a bake root, so the next boot of every store rebakes once (314 s on
-  Direct3D 12, 333 s on Vulkan, cold), which is why it was left for the lead
-  to schedule.
 - An applied update leaves the installed SDF pipeline set as it is: the
   pass-pipeline cache is keyed by bytecode, so an edit to the C# that describes
   a pipeline shows only after a reboot.

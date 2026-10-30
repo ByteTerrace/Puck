@@ -5,8 +5,10 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The baked meshes every residency that holds the library shares, by the geometry each was baked from
-/// (<see cref="SdfMeshGeometryBuilder"/>), so a body that crosses into another world takes the mesh its first world baked
-/// instead of baking it again. A program numbers its palette as its emitters register materials, so one body's shapes
+/// (<see cref="SdfMeshGeometryBuilder"/>) and the identity of the bake that meshed it
+/// (<see cref="SdfMeshStore.IdentityOf"/>), so a body that crosses into another world takes the mesh its first world baked
+/// instead of baking it again, and a bake whose identity moved (an edit to its code or kernels) never takes a mesh an
+/// earlier identity baked. A program numbers its palette as its emitters register materials, so one body's shapes
 /// carry other material ids in another world's program; the geometry names each material by its place among the group's
 /// own materials, and a mesh taken into a program whose group carries other ids has its triangle materials renumbered by
 /// place.
@@ -28,16 +30,16 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
     private long m_retainedBytes;
 
-    private readonly LinkedList<SdfMeshGeometry> m_age = new();
-    private readonly Dictionary<SdfMeshGeometry, (long Bytes, LinkedListNode<SdfMeshGeometry> Node)> m_usage = [];
+    private readonly LinkedList<(UInt128 Identity, SdfMeshGeometry Geometry)> m_age = new();
+    private readonly Dictionary<(UInt128 Identity, SdfMeshGeometry Geometry), (long Bytes, LinkedListNode<(UInt128 Identity, SdfMeshGeometry Geometry)> Node)> m_usage = [];
 
     /// <summary>Gets the estimated retained geometry, mesh and material bytes.</summary>
     public long RetainedBytes { get { lock (m_gate) { return m_retainedBytes; } } }
 
     private readonly Lock m_gate = new();
-    private readonly Dictionary<SdfMeshGeometry, List<Variant>> m_meshes = [];
-    // The geometry the latest mesh of each dynamic form was held under (TryTakeForm).
-    private readonly Dictionary<UInt128, SdfMeshGeometry> m_forms = [];
+    private readonly Dictionary<(UInt128 Identity, SdfMeshGeometry Geometry), List<Variant>> m_meshes = [];
+    // The geometry the latest mesh of each dynamic form was held under, by bake identity (TryTakeForm).
+    private readonly Dictionary<(UInt128 Identity, UInt128 Form), SdfMeshGeometry> m_forms = [];
     // Groups sharing geometry also share its disk decode; the variants below hold only material renumberings.
     private readonly ConcurrentDictionary<(UInt128 Identity, SdfMeshGeometry Geometry), Lazy<StoredMesh>> m_reads = new();
 
@@ -70,7 +72,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
-        if (Hold(form: form, geometry: geometry, materials: materials, mesh: mesh)) {
+        if (Hold(form: form, geometry: geometry, identity: identity, materials: materials, mesh: mesh)) {
             _ = Disk?.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh);
         }
     }
@@ -82,40 +84,44 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <param name="form">The form.</param>
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
     /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
+    /// <param name="identity">The taking bake's identity; only a mesh baked under it is taken.</param>
     /// <returns><see langword="true"/> when the library holds a mesh of the form.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public bool TryTakeForm(UInt128 form, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh) {
+    public bool TryTakeForm(UInt128 form, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, UInt128 identity = default) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         SdfMeshGeometry geometry;
 
         lock (m_gate) {
-            if (!m_forms.TryGetValue(key: form, value: out geometry)) {
+            if (!m_forms.TryGetValue(key: (identity, form), value: out geometry)) {
                 mesh = null;
                 return false;
             }
         }
 
-        return TryTake(geometry: geometry, materials: materials, mesh: out mesh);
+        return TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh);
     }
-    /// <summary>Records that a geometry's bake found no surface, so a later group of it, in another program or residency,
-    /// finishes with no mesh rather than baking again. Supplying the bake identity also persists it between runs.</summary>
+    /// <summary>Records that a geometry's bake found no surface, so a later group of it under the same bake identity, in
+    /// another program or residency, finishes with no mesh rather than baking again.</summary>
     /// <param name="geometry">The geometry that meshed nothing.</param>
-    /// <param name="identity">The bake identity to persist the empty result under; null keeps it for this run alone.</param>
-    public void StoreEmpty(SdfMeshGeometry geometry, UInt128? identity = null) {
+    /// <param name="identity">The identity of the bake that found no surface.</param>
+    /// <param name="persist">Whether the empty result is also written to <see cref="Disk"/> under
+    /// <paramref name="identity"/>, to be kept between runs.</param>
+    public void StoreEmpty(SdfMeshGeometry geometry, UInt128 identity = default, bool persist = false) {
         lock (m_gate) {
-            if (m_meshes.ContainsKey(key: geometry)) { return; }
+            if (m_meshes.ContainsKey(key: (identity, geometry))) { return; }
 
-            m_meshes.Add(key: geometry, value: []);
-            Retain(geometry, 256);
+            m_meshes.Add(key: (identity, geometry), value: []);
+            Retain((identity, geometry), 256);
         }
-        if (identity is { } value) { _ = Disk?.Write(geometry: geometry, identity: value, materials: [], mesh: null); }
+        if (persist) { _ = Disk?.Write(geometry: geometry, identity: identity, materials: [], mesh: null); }
     }
-    /// <summary>Returns whether a geometry's bake found no surface (<see cref="StoreEmpty"/>).</summary>
+    /// <summary>Returns whether a geometry's bake under an identity found no surface (<see cref="StoreEmpty"/>).</summary>
     /// <param name="geometry">The geometry.</param>
+    /// <param name="identity">The bake's identity.</param>
     /// <returns><see langword="true"/> when the library holds the geometry as one that meshes nothing.</returns>
-    public bool HoldsEmpty(SdfMeshGeometry geometry) {
-        lock (m_gate) { return (m_meshes.TryGetValue(key: geometry, value: out var variants) && (variants.Count == 0)); }
+    public bool HoldsEmpty(SdfMeshGeometry geometry, UInt128 identity = default) {
+        lock (m_gate) { return (m_meshes.TryGetValue(key: (identity, geometry), value: out var variants) && (variants.Count == 0)); }
     }
     /// <summary>Returns whether <see cref="Disk"/> holds a geometry's mesh under a bake's identity, without reading it.</summary>
     /// <param name="identity">The bake's identity.</param>
@@ -153,10 +159,10 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
             return false;
         }
-        if (result.Mesh is null) { StoreEmpty(geometry: geometry); return true; }
-        _ = Hold(geometry: geometry, materials: result.Materials, mesh: result.Mesh, form: form);
+        if (result.Mesh is null) { StoreEmpty(geometry: geometry, identity: identity); return true; }
+        _ = Hold(geometry: geometry, identity: identity, materials: result.Materials, mesh: result.Mesh, form: form);
 
-        if (TryTake(geometry: geometry, materials: materials, mesh: out mesh)) { return true; }
+        if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) { return true; }
         mesh = (result.Materials.AsSpan().SequenceEqual(materials) ? result.Mesh : Renumber(result.Mesh, result.Materials, materials));
         return true;
     }
@@ -167,17 +173,20 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <param name="geometry">The geometry.</param>
     /// <param name="materials">The taking group's material ids, by their place in the geometry.</param>
     /// <param name="mesh">The mesh, when this returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when the library holds the geometry.</returns>
+    /// <param name="identity">The taking bake's identity; only a mesh baked under it is taken.</param>
+    /// <returns><see langword="true"/> when the library holds the geometry under <paramref name="identity"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh) {
+    public bool TryTake(SdfMeshGeometry geometry, int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh, UInt128 identity = default) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
+        var key = (identity, geometry);
+
         lock (m_gate) {
-            if (!m_meshes.TryGetValue(key: geometry, value: out var variants) || (variants.Count == 0)) {
+            if (!m_meshes.TryGetValue(key: key, value: out var variants) || (variants.Count == 0)) {
                 mesh = null;
                 return false;
             }
-            Touch(geometry);
+            Touch(key);
             foreach (var variant in variants) {
                 if (variant.Materials.AsSpan().SequenceEqual(other: materials)) {
                     mesh = variant.Mesh;
@@ -187,36 +196,38 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
             mesh = Renumber(mesh: variants[0].Mesh, from: variants[0].Materials, to: materials);
             variants.Add(item: new Variant(Materials: materials, Mesh: mesh));
-            Retain(geometry, (BytesOf(mesh) + (materials.LongLength * sizeof(int))));
+            Retain(key, (BytesOf(mesh) + (materials.LongLength * sizeof(int))));
 
             return true;
         }
     }
 
-    // Holds a geometry's first mesh within the byte budget and makes it its form's latest;
-    // false when it held one already.
-    private bool Hold(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128? form) {
+    // Holds a geometry's first mesh under a bake identity within the byte budget and makes it its form's latest under
+    // that identity; false when it held one already.
+    private bool Hold(SdfMeshGeometry geometry, UInt128 identity, SdfMesh mesh, int[] materials, UInt128? form) {
+        var key = (identity, geometry);
+
         lock (m_gate) {
-            if (form is { } shapes) { m_forms[shapes] = geometry; }
-            if (m_meshes.ContainsKey(key: geometry)) { return false; }
-            m_meshes.Add(key: geometry, value: [new Variant(Materials: materials, Mesh: mesh)]);
-            Retain(geometry, ((256 + BytesOf(mesh)) + (materials.LongLength * sizeof(int))));
+            if (form is { } shapes) { m_forms[(identity, shapes)] = geometry; }
+            if (m_meshes.ContainsKey(key: key)) { return false; }
+            m_meshes.Add(key: key, value: [new Variant(Materials: materials, Mesh: mesh)]);
+            Retain(key, ((256 + BytesOf(mesh)) + (materials.LongLength * sizeof(int))));
 
             return true;
         }
     }
     private static long BytesOf(SdfMesh mesh) => checked((((long)SdfMeshRegion.WordsOf(mesh)) * sizeof(uint)));
-    private void Touch(SdfMeshGeometry geometry) {
-        if (!m_usage.TryGetValue(geometry, out var usage)) { return; }
+    private void Touch((UInt128 Identity, SdfMeshGeometry Geometry) key) {
+        if (!m_usage.TryGetValue(key, out var usage)) { return; }
         m_age.Remove(usage.Node);
         m_age.AddLast(usage.Node);
     }
-    private void Retain(SdfMeshGeometry geometry, long bytes) {
-        if (m_usage.TryGetValue(geometry, out var usage)) {
-            m_usage[geometry] = ((usage.Bytes + bytes), usage.Node);
-            Touch(geometry);
+    private void Retain((UInt128 Identity, SdfMeshGeometry Geometry) key, long bytes) {
+        if (m_usage.TryGetValue(key, out var usage)) {
+            m_usage[key] = ((usage.Bytes + bytes), usage.Node);
+            Touch(key);
         } else {
-            m_usage.Add(geometry, (bytes, m_age.AddLast(geometry)));
+            m_usage.Add(key, (bytes, m_age.AddLast(key)));
         }
         m_retainedBytes += bytes;
         while ((m_retainedBytes > ByteBudget) && (m_age.First is { } oldest)) {
@@ -225,9 +236,9 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             m_retainedBytes -= m_usage[victim].Bytes;
             m_usage.Remove(victim);
             m_meshes.Remove(victim);
-            foreach (var read in m_reads.Keys) { if (read.Geometry.Equals(victim)) { _ = m_reads.TryRemove(read, out _); } }
+            _ = m_reads.TryRemove(victim, out _);
             m_age.RemoveFirst();
-            foreach (var form in m_forms.Where(entry => entry.Value.Equals(victim)).Select(entry => entry.Key).ToArray()) { m_forms.Remove(form); }
+            foreach (var form in m_forms.Where(entry => ((entry.Key.Identity == victim.Identity) && entry.Value.Equals(victim.Geometry))).Select(entry => entry.Key).ToArray()) { m_forms.Remove(form); }
         }
     }
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
