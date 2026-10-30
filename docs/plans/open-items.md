@@ -918,56 +918,52 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision along the [custody protocol](companion-redesign.md) from step 5 of its
-build plan (return, re-adoption and the held slot). Steps 1 to 4 stand: the
-custody records and their reducer, member ids and per-member verdicts, hop
-authorization and verification, and settlement by the destination's word (laws
-in `CompanionCustodyLawTests`, `CompanionCrossingLawTests` and
-`CompanionCustodyConformanceLawTests`). Until the later steps land: home
-refuses a companion coming back through a hop (step 5 builds the return and
-re-adoption); a custodian's settlement notice is held in memory between
-drains, so a custodian that dies before sending it relies on home asking on the
-next contact (step 8 makes the retries durable obligations); an arriving companion has no driver and wears the default kit
-and look (step 9); a custodian reaches a remote home only through a remote
-authority its host already opened. The debug world's faerie declares no role
-yet, so it does not travel. The protocol is
-checked by the `CompanionCustodyModel` law in `tests/Puck.World.Protocol.Tests`,
-which the build follows as its oracle. Then the uncertain crossing, opened by a
-two-silo failover witness. Step 5's engine half (the `VerifyReturn` door, the
-`HeldPlacement` predicate the census, inhabitant reconcile and admission read,
-re-adoption into the held slot, `TryEnqueueCompanionReturn`, install-retired
-settlements) is built but has no laws yet.
+decision along the [custody protocol](companion-redesign.md) from step 6 of its
+build plan (separation sweep, stranding, shed and retire). Steps 1 to 5 stand:
+the custody records and their reducer, member ids and per-member verdicts, hop
+authorization and verification, settlement by the destination's word, and the
+return with re-adoption into the held slot (laws in `CompanionCustodyLawTests`,
+`CompanionCrossingLawTests`, `CompanionReturnLawTests`). The engine refines the
+model: `CompanionCustodyRefinementLawTests` runs real authorities under every
+single-fault schedule and requires each peer call and log append to be an
+enabled model transition, comparing the derived state at every drain boundary
+and after each restart; its "deferred" moves are the unbuilt steps. Until the
+later steps land: a separated companion goes home only through
+`TryEnqueueCompanionReturn` (step 6 builds the sweep); a custodian's settlement
+notice is derived from its records and re-sent every drain, but nothing bounds
+the re-sending by the lease deadline (step 8); an arriving companion has no
+driver and wears the default kit and look (step 9); a custodian reaches a remote
+home only through a remote authority its host already opened. The debug world's
+faerie declares no role yet, so it does not travel. Then the uncertain
+crossing, opened by a two-silo failover witness.
 
-The checkpoint-2 review's findings still open (each reproduced on the engine;
-the fixed ones carry laws in `CompanionCrossingLawTests.Review.cs`):
+Still open from the companion build:
 
-- [high] A destination recognises a companion only by the `Companion` leaf the
-  sender supplies: a source that strips it lands home's still-embodied
-  incarnation as an ordinary traveller, with no hop. Any authority's player
-  also carries a home-minted incarnation, so the incarnation's authority alone
-  cannot tell them apart; the destination needs home's word (or a companion mark
-  home mints into the incarnation) for every foreign incarnation it lands.
-- [high] Hop queries over federation coalesce without the full hop key, member
-  list or phase (`WorldRemoteAuthority.cs` `ConfirmHops`): two concurrent
-  queries for different source keys share one answer.
-- [high] A refused arrival's tombstone omits the generations its rolled-back
-  landings burned (`WorldCrossingRecord.Tombstone`), so log recovery reuses them.
-- [high] A partial settlement drops a member whose restoration fails (its source
-  slot reused): `TryPublishCommittedTransfer` and `RedoSettlement` discard
-  `RestoreDetachedMembers`'s leftovers. A rollback-only row cannot carry them,
-  since its reconcile asks the destination, which answers `Committed`; the
-  leftovers need a restore-only obligation of their own in the checkpoint.
-- [medium] The conformance law folds model-generated home records rather than
-  driving engine transitions: replace it with a differential harness that
-  replays the model's explored traces (crashes between appends, recovery from
-  checkpoint plus log, loss, duplication, reconnect, partial landing,
-  supersession, hostile peer messages) on real `WorldServer` and
-  `WorldInstanceHost` instances and compares titles, epochs, embodiments, slots,
-  generations and obligations after every step.
-
-- [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
-
-- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
+- [medium] No law shows the federation correlation of custody steps
+  (`WorldRemoteAuthority`: `HopQuery`, `HopRequest`, `CustodyQuery` and
+  `HopSettled` each keyed by their full question): two concurrent questions
+  about different keys must not share one answer. A witness needs two requests
+  in flight on one lane while the peer holds its gate.
+- [medium] A source gives a reservation up after `TransferRetryCeiling`
+  transient refusals (a lost lane, a latched destination) and abandons the key;
+  the model's source never gives a reservation up, it only re-sends. Step 8
+  bounds the retries by the lease deadline; the model then needs the matching
+  give-up move.
+- [low] Branch `worktree-agent-aefc6b37a2b3dc11c` (companions v1) is superseded
+  for custody and trust by the protocol build, but holds step 9 and 10 prior art
+  no other branch has: `WorldServer.Roles.cs` (`TryRoleVerdict`, visiting
+  drivers mounted per pin under `accept`), the `WorldRole` driver, accept, fuel
+  and budget fields, `CompanionTrustLawTests`' driver laws, and the debug world's
+  faerie split (`companion-body.puck`, role rows in `night` and `garden`). Step 9
+  ports them onto the custody bindings (`WorldCompanionCustody.TryBinding`); keep
+  the branch until then.
+- [medium] Build the rest of the [companion decision](../decisions/companions.md):
+  the destination's role declaration (`accept` the visitor's own pinned driver,
+  the same pin, a substituted driver, or nothing), with `worlds/standard/`
+  declaring `accept`; the player's HUD notice on a refusal; driver grants keyed by
+  placement or role group instead of `body:42`; the faerie's lasting state in
+  registers; `night` declares the companion role with the faerie's pin.
+  (from: companion-driver consensus)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;

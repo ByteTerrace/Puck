@@ -299,6 +299,14 @@ implements a transition) runs it before landing: the protocol is changed in the
 model first, and the model check is the evidence. Without `--explicit on` the
 filter selects nothing.
 
+The engine's half of that evidence is `CompanionCustodyRefinementLawTests`
+(`tests/Puck.World.Server.Tests`, ordinary suite, under a minute): real
+authorities run every single-fault schedule while the model follows, and every
+peer call or crossing-log append the model does not enable is a failure. A change
+to an engine transition runs it beside the model check
+(`--filter-class "*CompanionCustodyRefinementLawTests"`); a move it reports as
+deferred is a protocol step the engine has not built.
+
 ## What uses the GPU
 
 Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
