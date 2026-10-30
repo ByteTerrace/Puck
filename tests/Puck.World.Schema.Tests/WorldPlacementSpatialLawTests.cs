@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.Json;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Xunit;
@@ -40,6 +41,131 @@ public sealed class WorldPlacementSpatialLawTests {
             )]
     );
 
+    private static DocumentVector3 Bound(Func<string?> read) {
+        var value = JsonSerializer.Deserialize<DocumentVector3>(
+            json: "\"state.reach\"",
+            options: DocumentJsonOptions.Shared
+        )!;
+
+        value.Bind(read: read);
+        return value;
+    }
+    private static WorldPlacement[] ReachDocument(Func<string?> reach) {
+        var provider = Placement(
+            "provider",
+            WorldPlacementSpatialRole.Influence,
+            new WorldSpatialShape(
+                Kind: WorldSpatialShapeKind.Box,
+                Center: new DocumentVector3(value: Vector3.Zero),
+                HalfExtents: Bound(read: reach)
+            ),
+            channel: "c"
+        ) with {
+            Position = new DocumentVector3(
+                x: 5f,
+                y: 0f,
+                z: 0f
+            ),
+        };
+
+        return [
+            Placement(
+                "target",
+                WorldPlacementSpatialRole.Occupation,
+                Box(
+                    1f,
+                    1f,
+                    1f
+                )
+            ),
+            provider,
+        ];
+    }
+
+    [Fact]
+    public void AMovedBindingRecompilesOnlyItsVolumeAndAgreesWithACompleteCompile() {
+        var reach = "[1, 1, 1]";
+        var placements = ReachDocument(reach: () => reach);
+        var section = new WorldPlacementsSection(Rows: placements);
+        var before = WorldSpatialQueryCompilation.Resolve(section: section);
+
+        Assert.Equal(
+            0,
+            before.CountInfluences(
+                "c",
+                "target"
+            )
+        );
+        reach = "[6, 1, 1]";
+        var after = WorldSpatialQueryCompilation.Resolve(section: section);
+        var fresh = WorldSpatialQueryCompilation.Compile(placements: placements);
+
+        Assert.NotSame(
+            before,
+            after
+        );
+        Assert.Equal(
+            1,
+            after.CountInfluences(
+                "c",
+                "target"
+            )
+        );
+        Assert.Equal(
+            fresh.Volumes,
+            after.Volumes
+        );
+        Assert.Equal(
+            fresh.Query(bounds: new FixedSpatialAabb(
+                Center: FixedVector3.Zero,
+                Extent: FixedVector3.FromVector3(value: new Vector3(
+                    x: 9f,
+                    y: 9f,
+                    z: 9f
+                ))
+            )).Volumes,
+            after.Query(bounds: new FixedSpatialAabb(
+                Center: FixedVector3.Zero,
+                Extent: FixedVector3.FromVector3(value: new Vector3(
+                    x: 9f,
+                    y: 9f,
+                    z: 9f
+                ))
+            )).Volumes
+        );
+        Assert.Same(
+            after,
+            WorldSpatialQueryCompilation.Resolve(section: section)
+        );
+    }
+    [Fact]
+    public void AnInfluenceReadPricesTheRecompileAWriteCanOweIt() {
+        var operand = new WorldPlacementInfluenceOperand(
+            channel: "c",
+            childKey: null,
+            keyFrom: null,
+            placementId: "target"
+        );
+        var literal = ReachDocument(reach: () => "[1, 1, 1]");
+        var unbound = literal.Select(selector: static placement => (placement with {
+            Spatial = [.. placement.Spatial!.Select(selector: static volume => (volume with {
+                Shape = volume.Shape with { HalfExtents = new DocumentVector3(value: Vector3.One) },
+            }))],
+        })).ToArray();
+
+        Assert.Equal(
+            1L,
+            WorldSpatialQueryCompilation.BoundVolumeCount(placements: literal)
+        );
+        Assert.Equal(
+            2L,
+            operand.Cost(context: WorldFactsCompiler.Context(definition: new WorldDefinition(PlacementsRaw: new WorldPlacementsSection(Rows: unbound)))).Units
+        );
+        Assert.Equal(
+            (2L + (2L * 2L) + 32L),
+            operand.Cost(context: WorldFactsCompiler.Context(definition: new WorldDefinition(PlacementsRaw: new WorldPlacementsSection(Rows: literal)))).Units
+        );
+    }
     [Fact]
     public void AabbCandidatesStillUseExactYawAwareNarrowphase() {
         var first = Placement(
