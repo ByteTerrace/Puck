@@ -378,6 +378,26 @@ authority and cell admission doors inside an atomic arena transaction, and
 every committed command keeps its journal entry, narration, echo and
 completion.
 
+Every state transaction (a rule firing, an addon batch, a console state
+command) validates and commits in proportion to what it wrote
+(`WorldServer.StateTransactions.cs`). The arena's journal names the written
+rows (`StateArena.FlagOpenRows` with a written list); validation checks the
+edit grant of those rows only, the token-domain relations whose member or
+domain row was written, and input selection only for the owners routing a body
+whose selection registers (a body-state selector's counter, or the kit
+assignment's selector register) the transaction touched
+(`WorldInputRuntime.TouchedSelectionBodies`, over
+`StateArena.CollectOpenLaneOrdinals`). The commit resynchronizes those owners
+alone; a write to a drive-gate row resyncs the gate index and every owner. A
+firing that writes nothing input selection reads costs the input runtime
+nothing. Keep it proportional: three selection passes over every owner per
+firing measured 18 % of the headless debug World's tick in a thread-time
+trace, at about 94 firings a tick. The rule-work sheet prices what a commit spends beyond the effects:
+`WorldBodyStateEffect.Cost` adds one owner's revalidation for a selection
+register and the population's whole-body resync (`WorldPopulation.SyncBodyCells`)
+for a scale, kit or look register, and `WorldRuleWorkBudget` adds the gate and
+owner resync to a line that writes a drive-gate row.
+
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
 Every body's named action state — the `state.body` and `state.identity`

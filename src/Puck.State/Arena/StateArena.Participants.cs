@@ -90,6 +90,36 @@ public sealed partial class StateArena {
 
         return true;
     }
+    /// <summary>Appends every lane ordinal the open scopes touched in any of <paramref name="rows"/>: an ordinal whose
+    /// slot in one of those rows was written, and an ordinal that joined or left the lane one of those rows rides. An
+    /// ordinal touched more than once is appended more than once, in journal order.</summary>
+    /// <param name="rows">The lane slot rows' catalog ordinals.</param>
+    /// <param name="ordinals">The list the touched ordinals are appended to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="ordinals"/> is <see langword="null"/>.</exception>
+    public void CollectOpenLaneOrdinals(ReadOnlySpan<int> rows, List<int> ordinals) {
+        ArgumentNullException.ThrowIfNull(argument: ordinals);
+        if (rows.IsEmpty) { return; }
+
+        for (var index = 0; (index < m_journal.Length); index++) {
+            var entry = m_journal[index];
+
+            if (entry.Column == ArenaColumn.LaneRoster) {
+                var lane = LaneOfRoster(rosterIndex: entry.Index);
+
+                foreach (var row in rows) {
+                    if ((row >= lane.FirstOrdinal) && (row < (lane.FirstOrdinal + lane.Count))) {
+                        ordinals.Add(item: (entry.Index - m_layout.LaneRosterBase(lane: lane.Lane)));
+                        break;
+                    }
+                }
+                continue;
+            }
+            if (ArenaColumns.Space(column: entry.Column) != ArenaIndexSpace.LaneSlot) { continue; }
+            var owner = m_layout.RowOf(column: entry.Column, index: entry.Index);
+
+            if ((owner >= 0) && rows.Contains(value: owner)) { ordinals.Add(item: (entry.Index - m_layout[owner].LaneSlotStart)); }
+        }
+    }
     /// <summary>Attempts to read one lane slot for one ordinal.</summary>
     /// <param name="rowOrdinal">The lane slot's catalog ordinal.</param>
     /// <param name="ordinal">The lane ordinal.</param>

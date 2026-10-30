@@ -578,7 +578,9 @@ public sealed partial class WorldInputRuntime {
                     known = selector.TrySelect(Engagement(applications: applications, body: owner.Body, principal: routingPrincipal), out state);
                     break;
                 case WorldInputModeSelectorKind.BodyState when (body is not null):
-                    known = (m_host.Population.TryCandidateInputState(bodyIndex: owner.Body, definition: m_host.Document.Definition, name: selector.Name!, value: out var value) && selector.TrySelect(state: out state, value: value));
+                    var slot = SelectorSlot(family: family);
+
+                    known = ((slot >= 0) && selector.TrySelect(state: out state, value: m_host.Population.ActionStateLane.Counter(ordinal: owner.Body, slot: slot)));
                     break;
                 case WorldInputModeSelectorKind.SeatState:
                     known = (owner.SeatStates.TryGetValue(key: selector.Name!, value: out var label) && selector.TrySelect(state: out state, value: label));

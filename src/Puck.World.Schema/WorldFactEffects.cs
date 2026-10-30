@@ -307,7 +307,33 @@ public sealed class WorldBodyStateEffect : WorldFactEffect {
         );
     }
     /// <inheritdoc/>
-    public override RuleWork Cost(IRuleCostContext context) => (1L + Source.Cost(context: context));
+    /// <remarks>Against a world document, a register the firing's commit derives from adds what that commit spends: an
+    /// input-selection register (an input mode family's body-state selector, or the kit assignment's selector)
+    /// revalidates and resynchronizes the written body's routing owner, one pass over the input families and the kit
+    /// selection each, and a register the population derives a body's scale, kit or look from resyncs every body.</remarks>
+    public override RuleWork Cost(IRuleCostContext context) => ((1L + Source.Cost(context: context)) + CommitCost(context: context));
+
+    private long CommitCost(IRuleCostContext context) {
+        if (context is not WorldFactsCompileContext { Definition: var definition }) { return 0L; }
+        var bodyState = definition.BodyState;
+        var identityState = definition.IdentityState;
+
+        if ((Slot < 0) || (Slot >= (bodyState.Count + identityState.Count))) { return 0L; }
+        var name = ((Slot < bodyState.Count) ? bodyState[Slot].Name : identityState[(Slot - bodyState.Count)].Name);
+        var kit = (definition.Assignment.Select?.BodyState == name);
+        var catalog = WorldInputCatalog.For(definition: definition);
+        var selects = kit;
+
+        foreach (var selector in catalog.Selectors) {
+            selects |= ((selector.Kind == WorldInputModeSelectorKind.BodyState) && (selector.Name == name));
+        }
+        var cost = (selects ? (2L * (catalog.Selectors.Length + 1L)) : 0L);
+
+        if (kit || (definition.Population.Scale == name) || (definition.LookAssignment.Select?.BodyState == name)) {
+            cost += definition.Population.Capacity;
+        }
+        return cost;
+    }
 }
 /// <summary>Writes one fact on the identity a world-addressed body drives under — the body's lane cell and the
 /// identity's persisted row together.</summary>

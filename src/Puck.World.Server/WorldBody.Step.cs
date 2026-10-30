@@ -826,7 +826,11 @@ public sealed partial class WorldBody {
     }
     private void IntegratePlanarAndVerticalVelocity(ref BodyMotionScratch scratch) {
         scratch.Velocity = (m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity)));
-        if (m_grounded && !HoldOwnsVerticalChannel && (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) &&
+        // The support search only re-aims the planar velocity along what lies below: from a body at rest it lands a
+        // zero velocity, and finding nothing keeps the zero it already holds, so a resting body skips its sweeps.
+        var resting = ((m_planarVelocity == FixedVector3.Zero) && (scratch.Velocity == FixedVector3.Zero));
+
+        if (!resting && m_grounded && !HoldOwnsVerticalChannel && (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) &&
             (m_contactField is { } field) && (m_collider is not null)) {
             var contactStep = new BodyContactStep(field: field, entityIndex: scratch.EntityIndex,
                 orientation: scratch.Orientation, up: scratch.Up, volumes: ScaledColliderVolumes());
