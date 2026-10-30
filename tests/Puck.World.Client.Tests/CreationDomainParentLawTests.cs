@@ -319,10 +319,9 @@ public sealed class CreationDomainParentLawTests {
     });
 
     /// <summary>At a look scale other than one the fold still rides the parent's delta frame exactly — the packed
-    /// delta translation is in placement units, like the torso's composed slot — and the emitted chain carries the
-    /// scale as its own Scale op ahead of the fold, leaving the rest translate in creation units and the primitive
-    /// at the shape's own scale (the static stamper's chain, with the carried frame standing in for the placement
-    /// frame). The control: at scale one the same assertions hold with a unit Scale op.</summary>
+    /// delta translation is in placement units, like the torso's composed slot — and the emitted chain is the one a
+    /// look at scale one emits, in the slot's own units, which the slot's scale carries
+    /// (<see cref="DynamicTransform.Scale"/>).</summary>
     [Fact]
     public void DomainShapeFollowsTheParentDeltaInPlacementUnitsAtLookScaleTwo() {
         const float Scale = 2f;
@@ -372,10 +371,12 @@ public sealed class CreationDomainParentLawTests {
             scale: Scale
         ).Instructions.ToArray();
         var engine = CreationFrame.ToEngine(document: creation.Document);
+        // The chain is in the slot's own units, which carries the look's scale.
+        Assert.Equal(expected: Scale, actual: fold.Scale);
         var transformIndex = AssertFoldChain(
             engineRestPosition: engine.Shapes![1].Position.Value,
             program: program,
-            scale: Scale
+            scale: 1f
         );
         // The primitive after the chain is at the shape's OWN scale: the Scale op immediately ahead of its unit
         // sphere carries the authored radius, not radius x 2.

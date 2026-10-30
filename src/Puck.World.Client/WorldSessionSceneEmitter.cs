@@ -325,9 +325,6 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             rigFor: (probeWorstCase
             ? null
             : index => m_emittedRigs[index]),
-            scaleFor: (probeWorstCase
-            ? null
-            : index => m_emittedScales[index]),
             picks: (probeWorstCase ? null : m_picks)
         );
     }

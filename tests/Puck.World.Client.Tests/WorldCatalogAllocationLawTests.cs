@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.World.Client.Tests;
 
 public sealed class WorldCatalogAllocationLawTests {
-    private static SdfProgram Emit(int capacity, int rig, Func<int, bool> active, bool probe = false, int? limit = null, float scale = 1f) {
+    private static SdfProgram Emit(int capacity, int rig, Func<int, bool> active, bool probe = false, int? limit = null) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var materials = Enumerable.Repeat(
@@ -21,7 +21,6 @@ public sealed class WorldCatalogAllocationLawTests {
             probe,
             0,
             _ => rig,
-            _ => scale,
             probeAvatarLimit: limit
         );
         return builder.Build();
@@ -132,8 +131,7 @@ public sealed class WorldCatalogAllocationLawTests {
             var program = Emit(
                 1,
                 rig,
-                _ => true,
-                scale: scale
+                _ => true
             );
 
             for (var phase = 0; (phase < 16); phase++) {

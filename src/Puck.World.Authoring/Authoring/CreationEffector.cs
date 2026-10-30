@@ -13,11 +13,13 @@ namespace Puck.World.Authoring;
 /// <param name="Direction"><see cref="KindSurface"/>: the probe direction in the creation's author frame (see
 /// <see cref="CreationFrame"/>), so it turns with the body — <c>[0, -1, 0]</c> is "below the body", which on a wall-held
 /// body points at the wall's own down. Normalized at canonicalization; zero names no direction and is refused.</param>
-/// <param name="Reach"><see cref="KindSurface"/>: how far along <see cref="Direction"/> the probe searches, world
-/// units. Beyond <see cref="MaxReach"/>, or at zero or less, is refused. A probe that finds nothing eases the
-/// correction out rather than reaching at nothing.</param>
-/// <param name="Standoff"><see cref="KindSurface"/>: how far off the hit surface, along its normal, the tip is placed
-/// (null = 0 — the tip lands on the surface). The thickness of a boot's sole or the gap a claw keeps.</param>
+/// <param name="Reach"><see cref="KindSurface"/>: how far along <see cref="Direction"/> the probe searches, in creation
+/// units: world units at the body's scale of one, and multiplied by its scale, as its shapes are. Beyond
+/// <see cref="MaxReach"/>, or at zero or less, is refused. A probe that finds nothing eases the correction out rather
+/// than reaching at nothing.</param>
+/// <param name="Standoff"><see cref="KindSurface"/>: how far off the hit surface, along its normal, the tip is placed,
+/// in creation units as <paramref name="Reach"/> is (null = 0 — the tip lands on the surface). The thickness of a
+/// boot's sole or the gap a claw keeps.</param>
 /// <param name="Index"><see cref="KindBody"/>: the population entity index whose root pose is the target.</param>
 /// <param name="Offset"><see cref="KindBody"/>: the offset from that body's root, in the creation's author frame
 /// (null = its root exactly).</param>
@@ -86,9 +88,11 @@ public sealed record CreationPlantDocument(
 /// one at a time, so a pair of feet turning in place, or settling into a stance after a stop, takes alternate steps
 /// instead of sliding. Presentation-only, as every effector is.
 /// </summary>
-/// <param name="Distance">The drift that starts a step, world units, in (0, <see cref="MaxDistance"/>].</param>
+/// <param name="Distance">The drift that starts a step, in creation units (world units at the body's scale of one,
+/// multiplied by its scale), in (0, <see cref="MaxDistance"/>].</param>
 /// <param name="Seconds">The step's duration, seconds, in (0, <see cref="MaxSeconds"/>].</param>
-/// <param name="Height">The arc's peak lift, world units, in [0, <see cref="MaxHeight"/>].</param>
+/// <param name="Height">The arc's peak lift, in creation units as <paramref name="Distance"/> is, in
+/// [0, <see cref="MaxHeight"/>].</param>
 public sealed record CreationReplantDocument(float Distance, float Seconds, float Height) {
     /// <summary>The largest <see cref="Distance"/>, world units.</summary>
     public const float MaxDistance = 2f;

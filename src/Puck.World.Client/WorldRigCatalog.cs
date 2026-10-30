@@ -303,14 +303,6 @@ public static class WorldRigCatalog {
             : WorldLookSource.Catalog.DefaultIndex(entityIndex: avatar)
         );
     }
-    private static float ScaleFor(Func<int, float>? scaleFor, int avatar) {
-        var scale = (scaleFor?.Invoke(arg: avatar) ?? 1f);
-
-        return ((float.IsFinite(f: scale) && (scale > 0f))
-            ? scale
-            : 1f
-        );
-    }
 
     /// <summary>Counts the active catalog leaves and their authored VM instructions for diagnostics.</summary>
     /// <param name="isActive">Whether the avatar at an index is active (a server-table or client-view read).</param>
@@ -340,8 +332,9 @@ public static class WorldRigCatalog {
     }
     /// <summary>Emits every active body: animated leaf chains in the detailed band and one root-following capsule in
     /// the coarse crowd band. Each emitted primitive has its own dynamic cull instance.</summary>
-    /// <remarks>A <see cref="WorldLook"/> may pin a catalog rig (<paramref name="rigFor"/>) and a uniform render scale
-    /// (<paramref name="scaleFor"/>). A detailed body's complete pinned rig is written into its maximum-sized
+    /// <remarks>A <see cref="WorldLook"/> may pin a catalog rig (<paramref name="rigFor"/>). Every leaf is emitted at its
+    /// own size in its slot's units; a look's uniform render scale rides the slot (<see cref="PackTransforms"/>), so a
+    /// body drawn at another size keeps its meshes. A detailed body's complete pinned rig is written into its maximum-sized
     /// transform range; no leaf is duplicated or truncated to fit another appearance. A coarse body uses its one
     /// stable root slot. The material spans determine the body count. Probes reserve the largest rig throughout the
     /// detailed band and one capsule for each remaining body.</remarks>
@@ -354,7 +347,6 @@ public static class WorldRigCatalog {
     /// (<see cref="Puck.SdfVm.SdfEmitContext.SlotBase"/>) — the catalog's own ranges start at 0 and are shifted by this
     /// when the absolute slot lane is baked into an instruction.</param>
     /// <param name="rigFor">The catalog rig each body sources its leaves from, or null for the default catalog pick.</param>
-    /// <param name="scaleFor">Each avatar's uniform render scale, or <see langword="null"/> for 1.</param>
     /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many bodies. Null reserves every material-span entry.</param>
     /// <param name="picks">The optional presentation identity table populated for emitted bodies.</param>
     /// <param name="slotFor">The active scene's packed slot offset for each body, or null for catalog-local slots.</param>
@@ -366,7 +358,6 @@ public static class WorldRigCatalog {
         bool probeWorstCase,
         int slotBase,
         Func<int, int>? rigFor = null,
-        Func<int, float>? scaleFor = null,
         int? probeAvatarLimit = null,
         WorldPickMapBuilder? picks = null,
         Func<int, int>? slotFor = null
@@ -397,14 +388,6 @@ public static class WorldRigCatalog {
 
             var firstInstance = builder.InstanceCount;
             var firstSlot = (slotFor?.Invoke(avatar) ?? BodySlotBase(avatar: avatar));
-            var scale = (probeWorstCase
-                ? 1f
-                : ScaleFor(
-                    avatar: avatar,
-                    scaleFor: scaleFor
-                )
-            );
-
 
             var rigRange = (probeWorstCase
                 ? Ranges[LargestRig]
@@ -420,14 +403,14 @@ public static class WorldRigCatalog {
                     ? accentMaterials[avatar]
                     : bodyMaterials[avatar]
                 );
-                var leafScale = (leaf.Scale * scale);
+                var leafScale = leaf.Scale;
 
                 // The catalog's slot ranges are relative to the OWNING emitter's assigned base; the baked instruction
                 // lanes are absolute indices into the composed buffer, so the base is added exactly here.
                 var packedSlot = checked(((slotBase + firstSlot) + offset));
 
                 // The instance center follows the bone without rotating its bound offset. Enclose the local offset
-                // in the radius instead; it is unscaled even when the look shrinks. Keep PrimitiveReach paired with
+                // in the radius instead. Keep PrimitiveReach paired with
                 // the shape dimensions below. A body-wide sphere admits every limb to too many screen tiles.
                 builder.BeginInstanceDynamic(
                     slot: packedSlot,
@@ -539,10 +522,11 @@ public static class WorldRigCatalog {
                 rotation: rootOrientation
             ));
 
+            // The leaves are emitted in their slots' own units (Emit), which the bake samples them in and the draws scale.
             transforms[slot] = new DynamicTransform(
                 Orientation: orientation,
                 Position: position
-            );
+            ) { Scale = scale };
         }
     }
     /// <summary>Resolves the catalog rig a look's geometry sources from: an authored <c>Catalog(Index)</c> pin, or
