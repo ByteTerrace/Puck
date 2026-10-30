@@ -50,19 +50,22 @@ resolves their edits to this file at merge.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+8. [Residency and streaming](#residency-and-streaming): the measurements, then
+   near-first ordering of bake, store loads and landing; the card tables are
+   its test case.
+9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
-   it in `panes` and answers under pause, then the diagnostics' windowed checks
-   and the developer exhibits.
-10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+    it in `panes` and answers under pause, then the diagnostics' windowed checks
+    and the developer exhibits.
+11. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
-11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+12. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     isolate the temporal-off cadence blink first, then why history never
     resolves the jitter.
-12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+13. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -96,6 +99,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   lever's values; first-person feel in the lift and stairwell; the glass
   exhibit on both backends; how indoor rooms read against daylight once the
   image meter drives exposure ([lighting](#lighting-and-gi)).
+- Residency's look and policy: what a late or over-budget group shows and
+  whether switches fade or cut; whether the debug world gets doors that close
+  and the gallery authors areas; the resident-byte target machine; a standard
+  door's opening time ([residency](../decisions/residency.md#the-owners-calls)).
 - Whether a cube projection is wanted for screens on shapes, beside the sphere
   the owner asked for ([curved screens](#screens-on-curved-and-general-sdf-surfaces)).
 - The ideas [awaiting review](#awaiting-the-owners-review).
@@ -1319,18 +1326,35 @@ the look the owner's review.
 
 ### Residency and streaming
 
-Owner: rendering and world-architecture lanes · design · Next: the
-three-family consensus (in flight: `.claude/scratch/consensus-streaming/`),
-reconciled into a decision record, then its first step.
+Owner: rendering lane (rendering, verification) · ordinary · Next: step 1, the
+measurements, then step 2, near-first ordering.
 
-The owner's question: as the world grows, how the area around the player is
-built and kept first, and how far to take it. The owner's position: passive
-help from the engine everywhere (such as distance rings with hysteresis) and an
-explicit choice authors make (Metroid Prime style areas behind doors) are
-complementary; the open question is whether portals are the right abstraction
-for the explicit route or complementary to it. Starting points: P20 item 4 in
-the [rendering plan](rendering.md#p20--visibility-areas-and-residency) and the
-valley plan's step 4 ([valley](valley-and-moons.md)).
+The design is settled in [residency](../decisions/residency.md), from a
+three-family consensus: only presentation follows the observer; portals are
+edges, worlds and optional authored areas are nodes; one selector per
+presentation orders and bounds residency from every demand point; a door never
+waits for loading. The steps, each taken when its measured need appears:
+
+1. Measure: time until everything near the spawn has landed (cold and warm),
+   mesh bytes by level, `ProbeCache` bytes after a hall walk and a valley flight,
+   program build and replan time against placement count, store read rate
+   against the landing rate.
+2. Near-first: order lattices (`SdfMeshPathBake.TryTakeForFrame`), store loads
+   and owed meshes (`SdfWorldTables.MeshRegion`) by priority from demand points;
+   all three run in document order today. The card tables against a lobby spawn
+   are its test case.
+3. GI on the same demand points: the probe window follows every view, not
+   `Views[0]` (`SdfMeshIrradiance.cs:208`); the irradiance scene and its pending
+   gate are scoped to what the window reaches; `ProbeCache` (`:1365`) is
+   byte-bounded.
+4. Mapped demand through portal faces, replacing the blanket baking share
+   (`WorldViewGraphHost.ResetFootprints`).
+5. Eviction under one byte budget across residencies, with coarse levels owning
+   compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
+6. Authored areas (a volume with openings, on an existing volume vocabulary),
+   when a world needs them.
+7. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
+   the moons.
 
 ### Debug world content
 
