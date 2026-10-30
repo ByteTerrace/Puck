@@ -36,10 +36,12 @@ for an install root. From a held directory:
 registration here, because every entry point an installed payload carries, the
 stub and the launcher must share it and this is the one BCL-only project all of
 them reach. `TryRegisterProcess` is the first statement of each such entry point:
-a process whose image directory's grandparent holds `current` waits for
-`update.lock`, confirms by identity that `versions/<name>` is the directory it
-was loaded from, and holds it for the life of the process; one that cannot
-refuses to start. The launcher's pruner never removes a held version (see the
+a process whose own directory sits directly under a `versions/` directory
+belongs to the install root above it, whether or not that root has written
+`current` yet. It waits for `update.lock`, confirms by identity that
+`versions/<name>` is the directory its image (the entry assembly's file, or the
+executable of a single-file app) was loaded from, and holds it for the life of
+the process; one that cannot refuses to start. The launcher's pruner never removes a held version (see the
 [launcher README](../Puck.Launcher/README.md#pruning-past-versions)).
 
 ## Platforms

@@ -111,29 +111,68 @@ public sealed class InstallRegistration : IDisposable {
             throw;
         }
     }
-    /// <summary>Registers this process once, by its entry assembly, and keeps the registration for the life of the
-    /// process (<see cref="Process"/>). A process whose image directory's grandparent is an install root (it holds
-    /// <see cref="InstallLayout.CurrentFileName"/>) registers against it; any other process registers as nothing.</summary>
+    /// <summary>Registers a process by where it runs from. Membership is decided by the process's own directory,
+    /// <paramref name="baseDirectory"/>: a directory directly under one named <see cref="InstallLayout.VersionsDirectoryName"/>
+    /// (or <see cref="InstallLayout.TrashDirectoryName"/>) belongs to the install root above it, whether or not that root
+    /// has published <see cref="InstallLayout.CurrentFileName"/> yet, and registers against it. Any other directory
+    /// registers as nothing. The image whose identity is confirmed is the entry assembly's file, or the process's own
+    /// executable for a single-file app.</summary>
+    /// <param name="baseDirectory">The process's own directory (<see cref="AppContext.BaseDirectory"/>).</param>
+    /// <param name="entryAssemblyLocation">The entry assembly's file, or <see langword="null"/> or empty for a single-file
+    /// app.</param>
+    /// <param name="processPath">The process's executable (<see cref="Environment.ProcessPath"/>).</param>
+    /// <param name="imageAddress">An address inside the image's mapping on Windows; ignored on Linux.</param>
     /// <param name="cancellationToken">Ends the wait for the update lease.</param>
-    /// <returns>This process's registration.</returns>
-    /// <exception cref="InstallRegistrationException">The process runs from an install, but its version directory was
-    /// removed, replaced or is being removed.</exception>
+    /// <returns>The registration; its <see cref="Version"/> is <see langword="null"/> for a process outside any install.</returns>
+    /// <exception cref="InstallRegistrationException">The process sits under an install's <c>versions/</c> but its image
+    /// or install root cannot be confirmed, or its version directory was removed, replaced or is being removed.</exception>
     /// <exception cref="IOException">The install root or the update lease cannot be opened.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> fired while waiting.</exception>
-    [UnconditionalSuppressMessage(category: "SingleFile", checkId: "IL3000", Justification = "A single-file app has an empty entry Location, which registers as nothing before any file API is reached.")]
-    [UnconditionalSuppressMessage(category: "SingleFile", checkId: "IL3002", Justification = "GetHINSTANCE is reached only for an entry assembly loaded from a file, after the empty-Location check.")]
+    /// <exception cref="PlatformNotSupportedException">The platform is neither Windows nor Linux x64.</exception>
+    public static InstallRegistration RegisterImage(string baseDirectory, string? entryAssemblyLocation, string? processPath, nint imageAddress, CancellationToken cancellationToken) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: baseDirectory);
+        var comparison = (OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        var directory = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: baseDirectory));
+        var parent = Path.GetDirectoryName(path: directory);
+        var parentName = ((parent is null) ? "" : Path.GetFileName(path: parent));
+
+        if (!parentName.Equals(comparisonType: comparison, value: InstallLayout.VersionsDirectoryName) &&
+            !parentName.Equals(comparisonType: comparison, value: InstallLayout.TrashDirectoryName)) {
+            return None;
+        }
+        var image = (string.IsNullOrEmpty(value: entryAssemblyLocation) ? processPath : entryAssemblyLocation);
+
+        if (string.IsNullOrEmpty(value: image) || !string.Equals(a: Path.GetDirectoryName(path: Path.GetFullPath(path: image)), b: directory, comparisonType: comparison)) {
+            throw new InstallRegistrationException(message: $"'{directory}' sits under an install's {parentName}/, but the image this process was loaded from is not in it; relaunch through the stub.");
+        }
+        var registration = Register(cancellationToken: cancellationToken, imageAddress: imageAddress, imagePath: image, installRoot: Path.GetDirectoryName(path: parent!)!);
+
+        return ((registration.Version is not null)
+            ? registration
+            : throw new InstallRegistrationException(message: $"'{directory}' sits under an install's {parentName}/, but its install root cannot be confirmed; relaunch through the stub."));
+    }
+    /// <summary>Registers this process once (<see cref="RegisterImage"/> over its own directory, entry assembly and
+    /// executable) and keeps the registration for the life of the process (<see cref="Process"/>).</summary>
+    /// <param name="cancellationToken">Ends the wait for the update lease.</param>
+    /// <returns>This process's registration.</returns>
+    /// <exception cref="InstallRegistrationException">The process sits under an install's <c>versions/</c> but cannot
+    /// confirm it, or its version directory was removed, replaced or is being removed.</exception>
+    /// <exception cref="IOException">The install root or the update lease cannot be opened.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> fired while waiting.</exception>
+    [UnconditionalSuppressMessage(category: "SingleFile", checkId: "IL3000", Justification = "A single-file app's empty entry Location selects its executable, which is the image it was loaded from.")]
+    [UnconditionalSuppressMessage(category: "SingleFile", checkId: "IL3002", Justification = "GetHINSTANCE is reached only for an entry assembly loaded from a file; a single-file app uses its executable's module.")]
     public static InstallRegistration RegisterProcess(CancellationToken cancellationToken) {
         lock (ProcessGate) {
             if (Process is { } registered) { return registered; }
-            if ((Assembly.GetEntryAssembly() is not { Location: { Length: > 0 } location } entry) ||
-                (Path.GetDirectoryName(path: Path.GetDirectoryName(path: Path.GetDirectoryName(path: Path.GetFullPath(path: location)))) is not { } candidate) ||
-                !File.Exists(path: Path.Combine(path1: candidate, path2: InstallLayout.CurrentFileName))) {
-                return (Process = None);
-            }
-            var address = (OperatingSystem.IsWindows() ? Marshal.GetHINSTANCE(m: entry.ManifestModule) : 0);
+            var entry = Assembly.GetEntryAssembly();
+            var location = entry?.Location;
+            var address = ((!OperatingSystem.IsWindows())
+                ? 0
+                : (string.IsNullOrEmpty(value: location) ? ConfinedDirectory.ProcessImageAddress() : Marshal.GetHINSTANCE(m: entry!.ManifestModule)));
 
             try {
-                return (Process = Register(cancellationToken: cancellationToken, imageAddress: address, imagePath: location, installRoot: candidate));
+                return (Process = RegisterImage(baseDirectory: AppContext.BaseDirectory, cancellationToken: cancellationToken, entryAssemblyLocation: location,
+                    imageAddress: address, processPath: Environment.ProcessPath));
             } catch (PlatformNotSupportedException) {
                 // The launcher refuses to prune on this platform too, so nothing can remove the version this runs from.
                 return (Process = None);
