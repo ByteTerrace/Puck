@@ -63,6 +63,7 @@ public static class WorldEffect {
     /// <param name="Speed">The overlay's speed, in world units per second at the body's authored size, times the
     /// body's live scale.</param>
     /// <param name="DurationSeconds">How long the overlay rides.</param>
+    /// <param name="UseMoveDirection">Uses the normalized current movement command when nonzero, falling back to the authored body direction.</param>
     /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
     /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>
     public sealed record PlanarImpulse(
@@ -70,7 +71,8 @@ public static class WorldEffect {
         decimal Speed,
         decimal DurationSeconds,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
-        ActionTarget Target = ActionTarget.Self
+        ActionTarget Target = ActionTarget.Self,
+        bool UseMoveDirection = false
     ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;

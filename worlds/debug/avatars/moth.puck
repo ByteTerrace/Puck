@@ -2,6 +2,8 @@ schema: "puck.world.definition.v1"
 import "../inputs"
 import "../quality"
 import "moth-head"
+import "moth-dash"
+import "../../standard/camera"
 
 // Her real head, about 0.26 m from crown to chin, sits recessed in the unchanged hood with dark lining round it.
 let headScale = 0.7
@@ -308,7 +310,7 @@ bindingOverlays [
                   "mouse.button2"
                 ]
               }
-              // Run while held (Left Shift, West), or switched on and off (N, the left stick's press). The View page's
+              // Run while held (Left Shift), or switched on and off (N, the left stick's press). The View page's
               // left stick press (controls.puck) is autorun.
               {
                 channel: "run"
@@ -317,8 +319,14 @@ bindingOverlays [
                 scale: 1
                 sources [
                   "keyboard.shiftLeft"
-                  "gamepad.buttonWest"
                 ]
+              }
+              {
+                channel: "dash"
+                id: "dash"
+                label: "Dash"
+                scale: 1
+                sources ["gamepad.buttonWest", "keyboard.j"]
               }
               {
                 channel: "run"
@@ -1765,12 +1773,6 @@ defaultSeatKit: "walker"
 
 dynamics [
   {
-    f: 4
-    name: "camera-boom"
-    r: 0
-    zeta: 1
-  }
-  {
     f: 3
     name: "flight-pose"
     r: 0.5
@@ -2082,8 +2084,8 @@ looks {
         // boot jets' flame under the air jump.
         lanes [
           0
-          bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body])
-          bodyState($body, flightFuel) / 1000
+          maximum(bodyState($body, flightFuel) / 1000 * (0.2 + 0.8 * airPose[$body]), dashPose[$body])
+          maximum(bodyState($body, flightFuel) / 1000, dashPose[$body])
           bootBoost[$body]
         ]
         poses {
@@ -2967,6 +2969,7 @@ prototypes {
         exponent: softness
         // The chest turns most of the way back from the hips toward the facing and leads a turn the hips trail.
         swings [
+          { driver: "dash", axis [1, 0, 0], amplitude: 0.4, pivot [0, 1.0765, 0], wave: "linear" }
           {
             driver: "gait"
             axis [0, 1, 0]
@@ -7199,6 +7202,14 @@ prototypes {
       }
 
       drivers [
+        {
+          name: "dash"
+          signal: "state.dashPose.$body"
+          cadence: 1
+          blendInSeconds: 0
+          blendOutSeconds: 0
+          when ["always"]
+        }
         // Her pace in metres per second, the X every gait curve reads.
         {
           name: "pace"
@@ -7761,18 +7772,6 @@ rule "blink-open" {
   blinkAt[$each] = $tick + blinkRest
 }
 
-// The seat camera's feel: pointer orbit at a milliradian a pixel, and the look stick (or a typed player.look) at 3.5
-// radians a second at full deflection. Without it every look input turns the camera by zero.
-seatDefaults {
-  seatCameraFeel {
-    invertPitch: false
-    invertYaw: false
-    pitchSensitivity: 0.001
-    stickLookRate: 3.5
-    yawSensitivity: 0.001
-  }
-}
-
 simulation {
   rateHz: 30
 }
@@ -7795,6 +7794,8 @@ state {
   // Flight mode is fuel the flight holds spend: 1000 while switched on (it drains a thousandth a second), 0 off, so the
   // hover and thrust rows are offered only in flight mode. Jumps counts the jumps left before landing.
   body [
+    { name: "dashCooldown", kind: "Timer", initial: 0 }
+    { name: "dashActive", kind: "Timer", initial: 0 }
     {
       name: "flightFuel"
       kind: "Counter"
@@ -7815,6 +7816,11 @@ state {
   ]
 
   world {
+    row {
+      name: "dashPose"
+      kind: "Fixed"
+      cells [{ key: "0", value: "0", dynamics { row: "flight-pose" } }]
+    }
     row {
       cells [
         {
@@ -8168,4 +8174,18 @@ views {
       yaw: 0
     }
   }
+}
+
+// The simulation timer drives one eased presentation cell for the torso lean and back-pod burn.
+rule "dash-pose-on" {
+  when bodyState(each, dashActive) > 0
+  mode: Edge
+  forEach: dashPose
+  dashPose[$each] = 1
+}
+rule "dash-pose-off" {
+  when bodyState(each, dashActive) == 0
+  mode: Edge
+  forEach: dashPose
+  dashPose[$each] = 0
 }

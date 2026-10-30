@@ -183,6 +183,7 @@ public static class WorldBindingComposer {
     /// <returns>The merged document (its <see cref="BindingProfileDocument.Version"/> is the first non-null layer's).</returns>
     public static BindingProfileDocument Compose(params ReadOnlySpan<BindingProfileDocument?> layers) {
         string? version = null;
+        BindingBarPreferences? bar = null;
         var contexts = new List<BindingContextDefinition>();
         var contextIndexByKey = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var modifiers = new List<BindingModifierDefinition>();
@@ -198,6 +199,16 @@ public static class WorldBindingComposer {
             }
 
             version ??= layer.Version;
+            if (layer.BindingBar is { } preference) {
+                bar = new BindingBarPreferences(
+                    HideUnbound: (preference.HideUnbound ?? bar?.HideUnbound),
+                    Scale: (preference.Scale ?? bar?.Scale),
+                    ContrastBoost: (preference.ContrastBoost ?? bar?.ContrastBoost),
+                    UiScale: (preference.UiScale ?? bar?.UiScale),
+                    Layout: (preference.Layout ?? bar?.Layout),
+                    Model: (preference.Model ?? bar?.Model)
+                );
+            }
 
             // A layer from another schema version must reject LOUDLY here: a stale document deserializes with a
             // null row list, so without this check it would compose as silent nothing instead of failing.
@@ -244,6 +255,7 @@ public static class WorldBindingComposer {
 
         return new BindingProfileDocument(
             Version: (version ?? BindingProfileDocument.CurrentVersion),
+            BindingBar: bar,
             Modifiers: modifiers,
             Chords: composedRows,
             Contexts: ((contexts.Count > 0)

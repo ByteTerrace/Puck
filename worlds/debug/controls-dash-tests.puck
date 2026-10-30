@@ -1,0 +1,88 @@
+// One deterministic ability invariant: movement direction, idle facing, cooldown and swept contact.
+// The small studio uses the real Moth kit and bindings without unrelated debug machines.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "controls-dash-tests"
+
+prototypes {
+  prototype "burst-wall" {
+    document {
+      schema: "puck.creation.v1"
+      name: "burst-wall"
+      palette [{ color: "#888888" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [0.15, 2, 3]
+        material: 0
+      }
+    }
+  }
+}
+placements {
+  placement "burst-wall" {
+    prototype: "burst-wall"
+    position [6, 2, 0]
+    solid
+  }
+}
+
+test "dash follows movement and a second press cannot bypass cooldown" {
+  when {
+    ticks 15
+    seat1: body.pose 0 0.05 0 0 0 0 0
+    seat1: player.signal keyboard.d press
+    seat1: player.signal keyboard.j press
+    ticks 3
+    seat1: player.signal keyboard.j release
+    ticks 4
+    seat1: player.signal keyboard.d release
+    seat1: player.signal keyboard.j press
+    ticks 6
+    seat1: player.signal keyboard.j release
+  }
+  expect {
+    bodyPosition(body, 0, x) > 3
+    bodyPosition(body, 0, x) < 5
+    bodyPosition(body, 0, z) > -0.1
+    bodyPosition(body, 0, z) < 0.1
+    bodyState(body, 0, dashCooldown) > 0
+    bodyState(body, 0, dashActive) == 0
+  }
+}
+
+test "an idle dash follows facing and ends after six ticks" {
+  when {
+    ticks 15
+    seat1: body.pose 0 0.05 0 0 0 0 0
+    seat1: player.signal gamepad.buttonWest press
+    ticks 8
+    seat1: player.signal gamepad.buttonWest release
+  }
+  expect {
+    bodyPosition(body, 0, x) > -0.1
+    bodyPosition(body, 0, x) < 0.1
+    bodyPosition(body, 0, z) > -3.1
+    bodyPosition(body, 0, z) < -2.9
+    bodyState(body, 0, dashCooldown) > 0
+    bodyState(body, 0, dashActive) == 0
+  }
+}
+
+test "the timed burst obeys the same swept wall contact as walking" {
+  when {
+    ticks 15
+    seat1: body.pose 4.5 0.05 0 0 0 0 0
+    seat1: player.signal keyboard.d press
+    seat1: player.signal keyboard.j press
+    ticks 9
+    seat1: player.signal keyboard.j release
+    seat1: player.signal keyboard.d release
+    ticks 3
+  }
+  expect {
+    bodyPosition(body, 0, x) > 5
+    bodyPosition(body, 0, x) < 5.8
+    bodyState(body, 0, dashActive) == 0
+  }
+}
+

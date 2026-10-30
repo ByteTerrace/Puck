@@ -57,6 +57,12 @@ public interface IInputBindings {
     bool HoldsSource(int slot, string source) {
         return false;
     }
+    /// <summary>Returns the immutable active binding context's identity without creating or mutating state.
+    /// A resolver with pages returns a different identity when its active page changes. The router uses
+    /// transitions to discard relative samples captured across a page boundary in the same snapshot.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <returns>An identity stable while that context remains selected, or null for a flat table.</returns>
+    object? ContextToken(int slot) => null;
     /// <summary>Releases one slot's held chord/modifier and press-latch state. Runtime modality transitions use this
     /// seam before held digital controls reassert through the new command surface. Default no-op for stateless
     /// resolvers.</summary>

@@ -23,7 +23,7 @@ public sealed class WheelWriter : IOverlaySeatEmitter<OverlayWheelSeat> {
     public const int MaxRingLabelChars = 16;
     /// <summary>The most rings a published seat may carry — the render-side backstop against the host's declared
     /// <see cref="OverlayCapacity.WheelMaxRings"/>, which the channel's own reservation is sized from.</summary>
-    public const int MaxRings = 3;
+    public const int MaxRings = BindingWheelDefinition.MaxRings;
     /// <summary>The sector-label character clamp — the ONE source <see cref="OverlayChannelLeases"/> reads for this
     /// channel's per-sector text reservation; every sector <c>WriteText</c> call clamps to it.</summary>
     public const int MaxSectorLabelChars = 12;

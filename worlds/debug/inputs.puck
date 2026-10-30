@@ -2,6 +2,7 @@
 schema: "puck.world.definition.v1"
 
 channels [
+  { composition: true, name: "dash", shape: Binary }
   {
     composition: false
     frame: Heading
