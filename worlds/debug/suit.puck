@@ -192,7 +192,11 @@ suitToggle(seat: 1, index: 0)
 // releases a held rise, which a noclip climb out of the suit (noclip.puck) holds, so out of the suit the press must not
 // switch flight mode on even for the tick before the toggle's `suit-off-flight` would switch it off again.
 rule "fly-1" {
-  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0 and bodyState(body, 0, suit) == 1
+  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0 and bodyState(
+      body,
+      0,
+      suit
+    ) == 1
   mode: Level
   setBodyState(key: 0, state: "flightFuel", expression: 1000)
 }

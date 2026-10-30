@@ -59,9 +59,10 @@ public static class DecimalValues {
     /// <param name="literal">The literal.</param>
     /// <param name="authored">The decimal, to the twenty-eight significant digits a <see cref="decimal"/>
     /// carries.</param>
-    /// <returns><see langword="true"/> when the literal kept its text and a <see cref="decimal"/> holds it. A
-    /// magnitude above the type's range, or one so small it would read as zero, returns
-    /// <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> when the literal kept its text and a <see cref="decimal"/> holds every digit
+    /// of it. A magnitude above the type's range, one so small it would read as zero, and one whose digits a
+    /// <see cref="decimal"/> would round away (a scale past twenty-eight places, or more than twenty-eight significant
+    /// digits) return <see langword="false"/>, and the literal stays the <see cref="double"/> it parsed to.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="literal"/> is <see langword="null"/>.</exception>
     public static bool TryAuthored(LiteralExpressionNode literal, out decimal authored) {
         ArgumentNullException.ThrowIfNull(argument: literal);
@@ -77,7 +78,15 @@ public static class DecimalValues {
                 (authored != 0m) ||
                 (literal.Value is not double real) ||
                 (real == 0.0)
-            )
+            ) &&
+            (SignificantDigits(text: literal.RawText) == SignificantDigits(text: authored.ToString(provider: CultureInfo.InvariantCulture)))
         );
+    }
+    // The digits a number spells, without its sign, point, exponent, or the zeros that only place them.
+    private static string SignificantDigits(string text) {
+        var exponent = text.AsSpan().IndexOfAny(value0: 'e', value1: 'E');
+        var mantissa = ((exponent < 0) ? text : text[..exponent]);
+
+        return new string(value: [.. mantissa.Where(predicate: char.IsAsciiDigit)]).Trim(trimChar: '0');
     }
 }

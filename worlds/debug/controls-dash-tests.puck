@@ -85,4 +85,3 @@ test "the timed burst obeys the same swept wall contact as walking" {
     bodyState(body, 0, dashActive) == 0
   }
 }
-

@@ -97,7 +97,9 @@ public static partial class ExpressionSpelling {
 
                 break;
             case ChannelArgument.Zone zone:
-                into.Append(value: RuleFacts.LiveZonePrefix).Append(value: zone.Index).Append(value: ']');
+                // The document spells a live zone's index in its own dialect; in source the brackets hold an ordinary
+                // expression, whose literal keys read differently.
+                into.Append(value: RuleFacts.LiveZonePrefix).Append(value: (SourceDialect ? Reprint(infix: zone.Index) : zone.Index)).Append(value: ']');
 
                 break;
             default:
@@ -200,6 +202,29 @@ public static partial class ExpressionSpelling {
         }
 
         into.Append(value: ')');
+
+        return true;
+    }
+    // A name that is one whole live zone selector prints with its index in the source dialect, where the brackets hold
+    // an ordinary expression; the document spells the index in its own dialect.
+    private static bool TryAppendLiveZone(StringBuilder into, string name) {
+        if (
+            !name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: RuleFacts.LiveZonePrefix
+            ) ||
+            (LiveZoneIndexEnd(
+                bracket: (RuleFacts.LiveZonePrefix.Length - 1),
+                start: 0,
+                text: name
+            ) != (name.Length - 1))
+        ) {
+            return false;
+        }
+
+        into.Append(value: RuleFacts.LiveZonePrefix)
+            .Append(value: Reprint(infix: name[RuleFacts.LiveZonePrefix.Length..^1]))
+            .Append(value: ']');
 
         return true;
     }
@@ -1212,10 +1237,13 @@ public static partial class ExpressionSpelling {
             if (
                 Quoted ||
                 !SourceDialect ||
-                !TryAppendChannel(
+                !(TryAppendChannel(
                     into: into,
                     name: name
-                )
+                ) || TryAppendLiveZone(
+                    into: into,
+                    name: name
+                ))
             ) {
                 into.Append(value: PrintName(
                     name: name,
