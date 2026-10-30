@@ -388,7 +388,7 @@ public sealed class SdfResolveDeviceLawTests {
             var transportBytes = new byte[checked((int)transport.SizeBytes)];
 
             transportReadback.Read(destination: transportBytes);
-            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent && !seededHistory)
+            var expectedLow = (((width == RenderWidth) && (height == RenderHeight) && !poisonCurrent && (!seededHistory || displacedCamera))
                 ? SdfSurfaceTransport.SampleWord(distance: 0f).Low : 0u);
 
             for (var pixel = 0; (pixel < (width * height)); pixel++) {
