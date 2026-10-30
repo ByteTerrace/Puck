@@ -307,7 +307,8 @@ answers with its verdict cell. Starvation is not denial (a starved ordinal is
 retryable). Handle pairs validate at APPLICATION, never at decode. The
 `addon.mutate` refusal catalog declares 11 reasons and maps each to this wire
 vocabulary through `AddonMutateRefusals.ToVerdict`. An addon's applied
-mutation narrates on the console like any other but raises no toast and no
+mutation narrates on the console like any other but raises no toast
+(`WorldToastPolicy`) and no
 `mutation.applied` cue (`WorldPostBuildWiring`'s echo tap), since a guest may
 write every few ticks; its refusals still toast.
 

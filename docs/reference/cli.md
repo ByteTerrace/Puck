@@ -1914,9 +1914,12 @@ processes, container host boots, world runs, and exported authority ticks (exclu
 the extra shutdown ticks). Executable build reuse is reported separately.
 
 Each worker boots through the normal World composition root and restores
-the complete boot checkpoint before each compatible scenario. Only its schedule
-is replaced; differences in state, rules or other boot configuration, including
-staged companions and assets, start a fresh native host in that worker.
+the complete boot checkpoint before each compatible scenario, replacing its
+document-state seeds, rules and schedule. The new arena carries session lanes
+from the pristine checkpoint, never from the preceding scenario. Composition
+differences in the root or any staged companion, or changed asset bytes, start a
+fresh native host. Body-register and field-lattice declarations and cells that
+choose the boot inhabitant census belong to that composition.
 An uncapturable boot runs each scenario in its own native host;
 reproduction still requires a capturable starting checkpoint.
 Native dependency validation, singleton identity in child scopes and caller ownership
@@ -2096,7 +2099,7 @@ puck counters [--world <file>] [--script <file>] [--output <file>]
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `tests/Puck.Counters/debug.world.json` once per backend
+The run boots `tests/Puck.Counters/debug.puck` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
@@ -2116,7 +2119,7 @@ build included, after thirty.
 `--world` and `--script` select another authored `.puck` or JSON workload and its console
 script. Both paths are recorded in the report.
 The [seated-avatar workload](../../tests/Puck.Counters/README.md),
-`avatar.world.json` with `avatar.script.txt`, is the debug world as played.
+`avatar.puck` with `avatar.script.txt`, is the debug world as played.
 The quarantined `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `experimental/tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
@@ -4313,11 +4316,11 @@ can be found. The authoritative asset map and variant rationale live in
 
 ## puck lease—exclusive machine work
 
-Run `puck lease gpu --holder <lane> [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
+Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>`, or replace `gpu` with `heavy` for a heavy suite or `build` for a World build (the one the World build store takes itself). Options precede `--`; the executable receives the remaining argument vector without shell expansion. The child keeps the caller's output streams and exit code. A refused acquisition exits 2; cancellation exits 130 and kills the child tree before releasing the lease.
 
-The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the lane name, UTC acquisition time, process ID and process start ticks on four lines. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
+The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
-Admission is first come, first served. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same four metadata lines as a holder. Only the oldest live ticket may take the guard, so a holder that exits and immediately acquires again queues behind every waiter already there, and a newcomer cannot overtake a long wait. The wait message names the holder and how many tickets are ahead. A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
+Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`probe-depth-fix timing run` is lane `probe-depth-fix`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently, and a lane never served ranks first, so a lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
 
 Heavy suites in `gate` and `affected` use this same lease through admission
 and execution. When a live ancestor already holds it, verified process ancestry

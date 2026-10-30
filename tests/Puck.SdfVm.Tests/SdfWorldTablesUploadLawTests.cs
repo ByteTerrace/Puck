@@ -460,10 +460,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: Table()
         );
 
+        // A screen with no mapping (one showing a glyph decal) clears its mapping rows and keeps its face.
         rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: null, screenIndex: Screen);
         rig.Render(time: 0f);
+
+        var unmapped = new float[table.Length];
+
+        unmapped[((((Screen * Rows) + 6) * 4) + 3)] = ((float)SdfScreenFace.Display);
         Assert.Equal(
-            expected: new byte[(table.Length * sizeof(float))],
+            expected: MemoryMarshal.AsBytes(span: unmapped.AsSpan()).ToArray(),
             actual: Table()
         );
     }

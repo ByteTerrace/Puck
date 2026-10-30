@@ -107,6 +107,11 @@ public sealed class ScenarioResetLawTests {
         later.Dispose();
         earlier.Dispose();
         Assert.Equal(-1, later.Verify());
+        Assert.Equal(-1, earlier.Verify());
+        // A committed departure has no rollback to consume its replay-only body. Restoring the start must
+        // discard that previous re-drive before the same source-scoped transfer id can be used again.
+        Assert.Equal(-1, earlier.Verify());
+        Assert.Equal(-1, later.Verify());
     }
     [Fact]
     public void ADriveStillRunningAtExportIsCancelledBeforeTheNextScenario() {

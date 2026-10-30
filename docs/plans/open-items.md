@@ -41,9 +41,9 @@ resolves their edits to this file at merge.
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), the per-swap state load, then the schema switch.
 5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
-   break (`WorldTestBatch.cs:89`), then boot reuse across differing scenarios
-   (in flight: boot-reuse) and `--reproduce`, which still costs as much again as
-   the ordinary run.
+   break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
+   `--reproduce`, including the unexplained Go CPU regression in the loaded
+   boot-reuse comparison.
 6. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
@@ -57,9 +57,7 @@ resolves their edits to this file at merge.
    isolate the temporal-off cadence blink first, then why history never
    resolves the jitter.
 10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    the catch-up burst bounded by wall time and the wake margin derived from the
-    contact skin, both confirmed in the code and cheap; the thread itself is a
-    design consensus the owner has yet to queue.
+    the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
 
@@ -145,6 +143,8 @@ medium, lows · Next: the high silhouette leak with the zero-weight gather
 fallback in the same change, in flight in probe-depth-fix.
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
+
+- [medium] `SdfShadowVisibilityDeviceLawTests.DirectXPreserves…` and `VulkanPreserves…` fail on `lead/catch-up` with 59530 against an expected 59787. The likely cause is the bright-lines change (an unqueried shadow slot now `SDF_SHADOW_UNQUERIED` 255 and the views filter averaging only queried pixels, commits `e27173ef1` and `1c3509778`): decide whether the law's expectation should follow the corrected visibility (re-derive it from the law's own scene, never by copying the new number) or the change broke a case the law pins. A GPU leg. (from: c7-findings lane)
 
 - Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
 
@@ -273,31 +273,48 @@ holds the fixed poses and the approaches already rejected.
 
 ### Test runner and replay
 
-Owner: boot-reuse follow-up (runner), replay specialist · medium and low ·
-Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then reuse
-one host across differing scenarios (in flight: boot-reuse).
+Owner: test runner and replay specialist · medium and low ·
+Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
+replica cost and repeat the paired CPU measurements on a quiet machine.
 
-- Decide (the lead's call): boot reuse boots the shared base once, checkpoints
-  it, and applies each scenario's own rows, rules and state after the restore,
-  behind a defined reset boundary (grants, journals, addons, machines,
-  subscriptions, input and sibling instances) shown equal to a fresh host on
-  representative scenarios; `--reproduce` stays exact and independent, never
-  sampled.
+- Boot-reuse review findings (Claude review of `e89871067`; none reachable in today's 18 files):
+  - [medium] Field rows (`state.world` rows with a `Field` trait: `initial`, `paint`, `min`/`max`, `medium.heightScale`, draw fills) are dropped from the boot shape; on restore `InstallFields` keeps the lattice cells and `RestoreFieldRegions` restores the first scenario's, and `PaintLatticeDraws` never reruns, so a second scenario differing only in a field row starts on the first's lattice with no error (`WorldPersistence.Scenarios.cs:48-66`, `WorldPersistence.Checkpoint.cs:941`).
+  - [medium] `ScenarioCheckpoint` replaces only `DefinitionJson` and `Arena`; `Undo`, `RuleGroups`, rule and interaction latches, `Decisions` and `Search` stay the first scenario's, so scenarios differing in undo-bearing rule groups throw in `ValidateUndoSnapshot` and the worker loses every remaining leg (`WorldPersistence.Scenarios.cs:109-111`, `WorldPersistence.Undo.cs:19`).
+  - [medium] The CLI computes `ScenarioBootShape` over the raw staged JSON with unresolved `basis`/`imports` while the server compares the composed definition, so a census row whose inhabiting placement comes from an import lands on a shared worker and the server aborts it ("requires its own worker") (`TestCommand.Batch.cs:10-19`, `WorldPersistence.Scenarios.cs:83-91`).
+  - [low] `RestoreCheckpointCore` delivers the restored definition to attached sinks before `ResetClockSeeds` and `GrantTable.SyncState`, so a projection sink seeding trait clocks reads the previous scenario's seeds (presentation only) (`WorldPersistence.Scenarios.cs:138-142`, `WorldPersistence.Checkpoint.cs:1048`).
 
-- Boot-once never reuses a boot in practice: every `puck test` run on the
-  trimmed set prints one worker process but `host-boots` equal to `world-runs`
-  (28/28 hall, 24/24 chess, 20/20 go, every file), because a worker restores a
-  checkpoint only between scenarios whose boot shape is identical and each
-  generated test world differs. Every scenario still pays a 2-4 s host boot plus
-  about 3 s of authored-phase overhead even at a few ticks, now the larger share
-  of scenario time. Boot the shared base once, restore its checkpoint, then
-  apply each scenario's own rows, rules and state, keeping determinism and
-  `--reproduce` exact.
-- `--reproduce` cost: a reproduction runs every scenario again, so it costs
-  about as much as the ordinary run (chess 1,107 s ordinary against 2,846 s
-  with reproduction, go 546 against 1,357, hall 468 against 1,070, in
-  single shared-machine samples). Boot reuse above lowers both legs; then
-  measure what the replica itself spends.
+- [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (`.claude/scratch/boot-reuse-report.md`, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
+
+- [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
+  Compatible scenarios now restore pristine session lanes into their own
+  admitted rows, seeds and rules, rebind gates and clock seeds, and recompose
+  seed-derived geometry where needed. Replay departure continuation and queued
+  seat-route edges are cleared at the reset boundary. All 18 debug test files
+  (84 scenarios), ordinary and `--reproduce --jobs 1`, report one host boot per
+  worker/file; all 428 verdict, state and reproduction artifacts match the
+  control byte for byte. The measured pair is integration `f9ab3d912` against
+  boot-reuse `eabf68e08`; the lane's scratch hand-back retains per-file CPU and
+  hall/chess phase tables. Few-tick profiles do not show a fixed three-second
+  authored startup delay.
+- `--reproduce` cost: the complete loaded-machine boot-reuse comparison uses
+  3,352.27 → 3,590.33 whole-process-tree CPU seconds (+7.1%), while ordinary
+  runs use 1,456.67 → 1,396.70 seconds (−4.1%). Go accounts for most of the
+  reproduction increase (865.73 → 1,152.02 seconds). Its first scenario was
+  already slower before any cross-scenario restore; an isolated fresh-host
+  pair for that same scenario instead uses 101.77 → 94.95 seconds with exact
+  artifacts. The cause remains unconfirmed: repeat paired per-file timings on
+  a quiet machine and profile the replica before attributing this to either
+  contention or host reuse.
+- [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
+  and night references admit a separate full `debug` authority. Its root's
+  stopped-machines import does not stop that companion's six machines;
+  each root tick advances four authorities. Reused Hall scenarios reach their
+  first completed tick in tens of milliseconds, and Alchemy's one-tick cases
+  spend 53–154 ms in authored work excluding export: the measured seconds are
+  not a fixed three-second authored startup delay. Have the scenario-fixture
+  lane remove the avoidable companion workload while preserving the scenarios'
+  claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
+  from: boot-reuse profiling; the machine contribution is not isolated.)
 - [low] `WorldTestBatch`'s loop breaks on `batch.m_failed`, which stops the retry
   of a leg that failed to open but also every remaining leg after any earlier
   failure (a `--reproduce` divergence) wherever the next leg needs a fresh host,
@@ -457,16 +474,11 @@ Owner: debug-world tools lane (specialist) · medium · Next: the pick
 `panes`, and answers under `world.rate pause`), qualified in one windowed pass;
 then the diagnostics' windowed checks, then the three developer exhibits.
 
-- [medium] Naming what is under a pixel fails on the owner's windowed World:
-  `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and
-  `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object
-  is (`primary` resolves to the seat's render instance,
-  `src/Puck.World/WorldViewCommandModule.Picking.cs:48`; `main` names nothing).
-  Make pick address the presented world view by default and list it in
-  `panes`. Under `world.rate pause` the pick has stayed pending with no answer;
+- [medium] Under `world.rate pause` the pick has stayed pending with no answer;
   the hold now claims a paused World answers, bounded by the call's deadline
-  (`Picking.cs:73-100`), which only a windowed run shows. (from: owner
-  walkthrough)
+  (`Picking.cs`), which only a windowed run shows. The default view and the
+  `panes` listing are done (`world.view.pick <x> <y>`, `view instance:<name>`);
+  the paused run is owed. (from: owner walkthrough)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -504,11 +516,10 @@ then the diagnostics' windowed checks, then the three developer exhibits.
 
 ### Simulation tick off the frame thread
 
-Owner: specialist or Astra design lane · two medium, the rest ordinary · Next:
-the catch-up burst bounded by the wall time it has spent and the wake margin
-derived from the contact skin, both confirmed in the code (`FixedStepPump.Advance`,
-`WorldPopulation.Sleep.cs:154`); then the thread's design consensus, once the
-owner queues it.
+Owner: specialist or Astra design lane · ordinary · Next: the thread's design
+consensus, once the owner queues it.
+
+- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
 
 - The thread itself is an idea discussed with the owner and not yet queued:
   a design consensus across the families, which the owner's ruling says starts
@@ -522,9 +533,6 @@ owner queues it.
   console, MCP and live-edit commands marshal through the pump's existing
   queue; lifetime and bounded backpressure are settled before any lock-free
   claim, since a collection pauses both threads.
-
-- [medium] The localized wake around a moving carrier uses a fixed 1 m margin that ignores the configurable contact skin: with a valid `contactSkin` of 2 m, a sleeping sphere resting at skin distance above a lift misses the wake box during small car movements and stays asleep instead of riding (`src/Puck.World.Server/WorldPopulation.Sleep.cs:154`). Derive the margin from the contact skin (and the body's own broadphase radius). (owner: next simulation batch; from: lift-lag review)
-
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
@@ -569,20 +577,6 @@ owner queues it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
-- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
-  host frame clamps its wall delta to a quarter second
-  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
-  then runs every step that delta owes, so once a tick costs more than its
-  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
-  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
-  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
-  burst by the wall time it has spent (drop the rest, rebasing the capture pin
-  as a clamp does), so an over-budget tick slows the World instead of the frame.
-  Two more readings of the same multiplier: eight catch-up steps cost roughly
-  400 ms a frame on a slow gallery boot, where pausing the boot instance took a
-  frame from about 366 ms to 19 ms; and a cold-bake windowed Vulkan boot (nine
-  lanes loading the machine) read simulate peaks of 1.2-2.1 s in 7 or 8
-  catch-up steps over 600 frames averaging 232 ms.
 - [low] Every rigid advance zero-fills the step's capture snapshot
   (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
   body's advance in an EventPipe sample of a lift ride).
@@ -597,9 +591,19 @@ Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
 reversal brake, then a sitting; the rate-limited facing op only if a
 movement-facing scheme returns.
 
+- [medium · owner: controls] Finish the standard extraction's windowed comparison
+  before extending it with zoom, dash or layouts. The shared design now lives in
+  `worlds/standard/`, with Go/Tour, Places and gallery icons refining it in
+  `worlds/debug/controls.puck`. Headless composition and the 23 input scenarios
+  reproduce; stills remain owed because both bounded GPU attempts expired on a
+  live foreign lease. The saved original and paired capture scripts are in the
+  controls worktree's `.claude/scratch/controls-evidence/`; the hand-back is
+  `controls-handback.md` in that worktree's scratch directory. Batch the comparison
+  into the lead's GPU verification window, then resume the three owner items below.
+
 - Binding bar layouts again (the owner's request; with the controls work, which edits the same `controls.puck`). The engine has both switches (`WorldBindingBar.LayoutCell` names the live authored layout; `ModelCell` draws one bar when `single`, every page with the rest as wings otherwise); the debug world authors only `standard` and fixes `barModel.model` at `single`. Recover and author: (1) the linear strips `keys` and `pad` from `controls.puck` at commit `8962c3d5a7` (lines 304-384: `pad` one row, left stick and Back, right stick and press, the face diamond at the right end; `keys` a WASD cross and action keys in a row with camera and function keys above), which the play wheel switched through `state.bar.layout` (`player.state.cell.toggle ... bar layout keys pad`, about line 465); (2) the wings, the WoW addon's modulo layout (commit `e5841bfdad`, `experimental/Puck.Demo/BindingBar/BindingBarLayout.cs`: two mirrored six-slot diamonds, `BarCount` 1 to 5 pushing bars 1-4 outward and downward, at the addon's 600-line reference: button 45 px, centre gap 60 px, anchor 220 px, badge 24/45 at 0.4375) through `ModelCell`; (3) a classical bar with flanking sidebars, never authored, built on the schema's "strip with side columns" (three groups on three anchors); (4) a compact size, which was never a mode (August worlds set `buttonSize 0.075`, `scale 0.72` per world), as a player setting over the layout's scale. Switch layouts, wings and size from play-wheel sectors and a console verb, kept per seat.
 
-- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible engine defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Today the bindable mouse surface is `mouse.left`, `mouse.right`, `mouse.button1/2` and `mouse.motion`: the wheel as a camera input and the middle button need adding to the device input path and its names.
+- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible standard defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Input C7 now supplies the relative Axis2D source `mouse.wheel` (vertical `.y`) and the middle button `mouse.button3`; wire camera zoom and reset through those names and consolidate the existing ring-scroll path so each scroll has one destination.
 - A dash for the Moth (the owner's request): a short, nicely animated burst along the move direction (or facing when idle), bound to the gamepad's west face button (`gamepad.buttonWest`: X on Xbox, Square on PlayStation, Y on Switch Pro; the owner's ruling) on the Move page, whose current West action (the bar shows it as `»`) moves to another slot, with a keyboard equivalent, with a cooldown, a rig animation (lean, trail or thruster flare from the Moth's back thrusters) and deterministic simulation (fixed-point impulse, input from the command snapshot). Rule 7: build it on the existing locomotion and rig drivers, not beside them.
 
 - Make the debug world's dual-stick action play fluid. In: the seat camera
@@ -743,7 +747,7 @@ failover witness.
 
 - [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
-- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (the same pin, a substituted driver, or nothing); refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
+- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -787,33 +791,30 @@ failover witness.
 
 ### MCP and the operator attachment
 
-Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
-only a start's terminal outcome), then the per-swap state load, then the
-schema switch.
+Owner: MCP lane (specialist) · medium · Next: the schema switch, then the pick
+answer.
 
-- An invalid wait argument on a pending operator MCP start caches the argument
-  refusal as the start's completed result: `OperatorMcpFront.Record`
-  (`src/Puck.Mcp/OperatorMcpFront.cs:101-108`) stores any non-pending
-  `puck_world_start_wait` answer under its `startId` and drops the start, so
-  later corrected waits and cancellation return that refusal while the World
-  keeps starting. Read in the source from one headless boot and by two
-  reviewers; run a minimal reproduction, then cache only a start's terminal
-  outcome.
+- [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout, with or without the mcp-batch change (81 of 82 pass). Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`. (from: mcp-batch lane)
+
+- [medium] Investigate a GPU lease held by an older operator worker while no
+  World is advertised and the worker has no direct child process. During the
+  controls extraction, two 1200-second windowed starts expired waiting for that
+  lease; a normal machine process read confirmed the worker was alive, and an
+  exclusive probe confirmed its GPU guard remained held. No foreign process or
+  lease file was changed. The cause is unconfirmed; inspect the owning session
+  and the `OperatorWorlds.WatchAsync`/`Stop` lifecycle, then release it through
+  that session. Evidence and start ids are in the controls hand-back.
+
+- [low] `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
+
+- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
+
 - A connected Claude Code session keeps a tool's old output schema when the MCP
   front switches to a backend whose schemas changed: the first `puck_adapter`
   call after the switch failed with "Structured content does not match the
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
-- [medium] An attached operator session costs the tick a whole state load on
-  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
-  tier) discloses the definition again from the arena, so its mirror's
-  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
-  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
-  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
-  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
-  change to the session without a fresh disclosure of state, or make the load
-  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a
@@ -862,18 +863,9 @@ Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. T
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
 
-- Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
+- [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
-- C7 review findings (Claude review of the input-c7 merge `a977bed08`; no determinism change and no broken caller found):
-  - [medium] `player.bindings` and the help of `body.rig`/`body.channels`/`body.press` read `m_server.Input.DescribeBody(body: slot)`, always the boot authority's body at the seat's number, not the seat's routed authority and entity (`WorldBindingCommandModule.cs:341`, `PlayerCommandModule.cs:129,135,216`): after a portal crossing they show the boot body's mode.
-  - [medium] `world.affordances` (an `anyone` verb) prints live channel values and `DescribeBody(0)` (owner principals, sources, raw values, holds) for boot body 0 without a grant (`WorldBindingCommandModule.cs:482,538`).
-  - [medium] `body.rig` (`anyone`) reads any body's authoritative input from `m_server` or `instance.Server` with no grant check or `WorldStateReadView`, where `instance:` used to refuse (`PlayerCommandModule.Rig.cs:44,46`); `body.channels` checks the same facts against the caller's grant.
-  - [medium] Genre checks that cannot fail on what they claim: shooter and fps Edge rules latch before the mode switch they cover (`worlds/debug/input-genre-controls.puck:107,119`); menu fires before `keyboard.k` and the switch to `panel` (`:123`); board's `forward == 0 and run == 0` is made true by the later releases anyway (`input-genre-debug.puck:16`).
-  - [low] A routed `body.rig` nests a refused `body.channels` answer inside a success line (`PlayerCommandModule.Rig.cs:49-50`).
-  - [low] `replay.inspect` and `world.history` print `segment p1 2s` with no intent, while `replay.md:699-703` still says image-only producers show their changed channels (`WorldReplayEntryDescriber.cs:18-20`).
-  - [low] Every active sample enters `m_pressedControls`, so a source that never sends zero or `Completed` (posture streams at rest, possibly the wheel) stays pressed and lights its bar plate (`InputRouter.cs:518`).
-  - [low] `world.devices` mutates the roster: it inserts pads into first-seen order in the manager's index order, renumbering `gamepadN`, and overwrites the device name with the `GamepadType` name (`WorldPopulationCommandModule.cs:36-40`).
-  - [low] `Retained` on the bar comes from the last switch boundary until the next one, so a kept action released and pressed again still shows retained (`WorldSeatInput.cs:35-38`).
+- Cross-check the Triton's reports against several independent sources (the owner's ruling: SDL is one second opinion, never the specification), then rewrite the input reference's Triton section to cite them: community reverse engineering ([iczero/steam-controller-stuff](https://github.com/iczero/steam-controller-stuff): 0x7b periodic, puck only; [CouchTurtle/sc2-research](https://github.com/CouchTurtle/sc2-research): describes 0x7b, the one Triton input report SDL3 lacks, with 0x42 and 0x43 layouts; [anderstvoss/virtualgamepad#159](https://github.com/anderstvoss/virtualgamepad/issues/159): a 12-byte vendor report, cadence unknown; [mwdmwd/sc26re](https://github.com/mwdmwd/sc26re), [ded811/CounterPuck](https://github.com/ded811/CounterPuck), [jahrekza/steam-controller-plasma-widget](https://github.com/jahrekza/steam-controller-plasma-widget)), the Linux `hid-steam` 2026 controller patches (input reports 0x42, 0x43, 0x45 and 0x79 for wireless events; merge state unconfirmed), and SDL. Decide 0x7b from that agreement and a live capture on the owner's receiver: parse it if its layout is agreed and verified (likely puck link status), otherwise keep ignoring it with the sources cited; check whether 0x79 (wireless events) reaches our parser. (from: the owner)
 
 - The in-world computer runs programs (the owner's direction): the desktop share (live passthrough, not replayable) is one program and a typing tutor is another, switched on the computer itself (a launcher screen, or a pad button or key chord while engaged), with the screen showing which program is live. The tutor is world-native, on C5 and C6: lessons from the home row to words and sentences on its screen, live per-character feedback, words per minute, per-key accuracy, streaks and a run timer, judged from input history so a replay reproduces every keystroke. The in-world keyboard follows the real one: keys sink on press and the next expected key glows, driven by physical key position (scan code) so its layout matches the real keyboard whatever the OS layout, while typed text follows the OS layout; key state is in input history, so a replay animates the same presses. Lighting the real keyboard's keys (an RGB keyboard's next key) is an optional later step on the existing device-output path (pad LEDs, haptics). Order after C7: the keyboard's press animation, the tutor program, program switching, then real-keyboard lighting.
 - Chat typed in the world: a HUD prompt that enters a text-focus mode and
@@ -1051,17 +1043,11 @@ Owner: suites lane · ordinary · Next: measure the two unmeasured suites' class
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · ordinary · Next: the launcher's version pruning (the MCP
-development install grows 340 MB a CLI rebuild).
+Owner: delivery lane · ordinary · Next: measure deriving the eleven addon guest
+`.wasm` modules from source against edit-to-running.
 
-- The launcher cleans up past versions (the owner's ruling): after an install is
-  proven, keep `current`, `last-good` and the most recent N other versions
-  (N from the user's settings), delete the rest, and drop `objects` no kept
-  version references. Today nothing prunes: `UpdateOptions.KeepVersions`
-  (default 2, also `host.update.keepVersions`) is only validated and echoed by
-  `update.status`. The MCP development install (`.claude/mcp-install`) reached
-  8 versions and 3.8 GB before a manual prune; there `last-good` also stayed two
-  days behind a `current` that served a whole session, unexplained.
+- [high] The launcher's version pruning (the owner's ruling: keep `current`, `last-good` and the newest N, delete the rest) was built in `21ab032cf` and reverted in the lead's revert commit after a Codex review found: (high) file probes do not protect a running version on Linux (`dotnet versions/old/Puck.Cli.dll` keeps running and its directory is deleted; `HealthGateFile.cs:164`); (high) the object sweep follows directory symlinks or junctions out of the install root and deletes external files (`:196-198`); (medium) a pending install intent is unprotected (`install-intent.json` persisted, `current` not yet switched, `KeepVersions=0` deletes the target; `:115`); (medium) retention ranks by version precedence, not install recency (`0.0.0-local.9` outranks `local.10`; `:141`); (medium) pruning races the MCP adapter's publication (`LocalAdapterInstall.ActivateAsync` publishes under `development.lock` before `update.lock`; `:191`). Rebuild it with each case as a law: never leave the install root (resolve and refuse reparse points), protect running versions by an OS-independent record (a process registry or lock file each version's process holds), protect the pending intent, order by install time, and share one lock with publication. (owner: delivery; from: delivery review)
+
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
   is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
@@ -1069,8 +1055,6 @@ development install grows 340 MB a CLI rebuild).
   CI job that loads an addon, so measure that cost against edit-to-running
   first. A hand-written fixture module (the transpiler sample's 8-byte
   `Samples/addons/rules.wasm`) is source.
-- Give the counters workloads `.puck` sources: `tests/Puck.Counters/debug.world.json`
-  and `avatar.world.json` are committed JSON derived from `debug.puck`.
 - Finish the shared shader cache ([freshness](../reference/shaders.md#freshness)):
   no GitHub run has yet shown the restored Windows build, the silo image build
   and a repeated `shader-bytecode` job compiling nothing (`0 compiled`); a local
@@ -1195,13 +1179,21 @@ Owner: specialist lane (rendering, sdf-authoring, puck-world) · ordinary · Nex
 - Pointer input on such a screen uses the same projection in fixed point in the simulation (a screen hit for input is computed there, never trusted from the host), so a click on a globe lands on the same picture point live and in replay.
 - General shapes: a frame-projected decal first (gentle curvature); a UV atlas from the mesh bake only if projection proves not enough.
 
+### In-world editing
+
+Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · Next: after the Edit to running packet's invalidation contract, the panes focus and the in-world computer's programs. The owner's direction: edit from inside the game, on an in-world screen or pane, and see the change hot reload.
+
+- Record the code revision in replay tapes and checkpoints (`Puck.Abstractions.CodeRevision`); a replay or restore across a revision refuses with the reason, since rule 4 holds at a fixed code version and an applied simulation edit makes the run before and after it two programs.
+- A rude edit (a new field, a signature the runtime refuses) resumes rather than reboots: checkpoint the World, rebuild, boot, restore, so the player lands where they were instead of at boot (today about 28 s and the place is lost).
+- An editor program on the in-world computer (beside the desktop share and the typing tutor), on text screens, the in-world keyboard and pane focus, talking to a language server: `.puck` first (`puck lsp` exists), then C# through a Roslyn language server. Saving writes the file, the watch applies it, and the editor shows the outcome on its screen (applied, rude edit and resumed, or the compiler's errors).
+- `.puck` edits in game are the sooner win: they are data, replayable and deterministic, and need no compiler.
+- Development only: editing C# runs arbitrary code, so it needs the SDK on the machine and an explicit grant to the owner's seat; published builds do not hot reload.
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction · one
 medium, the rest ordinary · Next: the black slats behind the chess table now (a
 material defect needs no taste call); new content and art on the owner's call.
-
-- [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and

@@ -104,10 +104,11 @@ public static class McpCommand {
             var launch = ((checkout is null)
                 ? null
                 : new OperatorWorldLaunch(
-                    AcquireGpuLease: async (holder, wait, token) => await CliLease.AcquireAsync(
+                    AcquireGpuLease: async (holder, lane, wait, token) => await CliLease.AcquireAsync(
                         cancellationToken: token,
                         clock: TimeProvider.System,
                         holder: holder,
+                        lane: lane,
                         name: "gpu",
                         root: await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false),
                         wait: wait

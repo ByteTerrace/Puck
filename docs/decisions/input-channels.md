@@ -707,8 +707,8 @@ package's basis, garden, night field, and standalone test compositions must
 resolve that owner without redeclaring channels. Confirm and cancel are reusable
 semantic names even before modal packing lands.
 
-Binding migration covers the Moth's base layer, `controls.puck`, `pad.puck`,
-`pad-kit.puck` templates, chess's tabletop context/page, device and desktop
+Binding migration covers the Moth's base layer, the standard controls and
+pad-kit library, the debug control refinement, chess's tabletop context/page, device and desktop
 overlays, identity binding overlays, and live rebind validation. Preserve source
 lists, modifiers, held/chord ordering, inheritance, toggle ownership, label/icon
 resolution, and command grants. Update semantic destinations; do not turn page
@@ -794,6 +794,11 @@ games or genre-specific engine opcodes. Each sweep boots its named source fresh,
 drives the existing input verbs, and reads authored state. The text row demonstrates
 ordered committed input and per-key judgement; the gallery tutor and chat prompt
 remain content work in the input packet.
+
+Each check reads its channels in the epoch after the switch it covers: a kept
+hold reads live with no press edge in the current epoch, a released action reads
+neutral while its key is still down, and the board sweep keeps the locomotion keys
+held through entry and records a `leak` if either reads live there.
 
 Run `puck sweep --plan worlds/debug/<plan>.sweep.json --world <source>`:
 

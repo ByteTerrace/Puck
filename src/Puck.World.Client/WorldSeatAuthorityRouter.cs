@@ -28,6 +28,10 @@ public sealed class WorldSeatAuthorityRouter {
     /// changed since the last delivery. A claim published while nothing subscribes owes no edge.</summary>
     public event Action<int>? RouteChanged;
 
+    /// <summary>Discards queued route edges after an isolated host restores its boot claims; the next ordinary
+    /// post-step synchronization admits input on the same tick as a fresh host.</summary>
+    public void DiscardPendingRouteChanges() => Interlocked.Exchange(location1: ref m_owed, value: 0);
+
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery the world's own
     // instance-addressed verbs use, so a routed answer reports which instance answered.
     private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
@@ -189,7 +193,9 @@ public sealed class WorldSeatAuthorityRouter {
     /// <param name="tagInstance">Whether a non-boot answer is suffixed with its routed instance identity.</param>
     /// <param name="result">The routed answer, on success.</param>
     /// <returns>Whether the slot held a published claim to route through.</returns>
-    public bool TryRouteQuery(int slot, Func<int, WorldQuery> factory, bool tagInstance, out CommandResult result) {
+    /// <param name="caller">The principal whose Observe grant the claim's authority checks, or <see langword="null"/> for
+    /// the door's own principal.</param>
+    public bool TryRouteQuery(int slot, Func<int, WorldQuery> factory, bool tagInstance, out CommandResult result, Principal? caller = null) {
         if (TryRoute(slot: slot) is not { } route) {
             result = default;
 
@@ -206,20 +212,33 @@ public sealed class WorldSeatAuthorityRouter {
             : null
         );
 
-        route.Endpoint.Submissions.Query(
-            query: factory(route.QueryIndex),
-            completion: answer => {
-                var text = ((tag is { } instanceName)
-                    ? WithInstanceTag(
-                        text: answer.Text,
-                        instanceName: instanceName
-                    )
-                    : answer.Text
-                );
+        void Complete(QueryAnswer answer) {
+            var text = ((tag is { } instanceName)
+                ? WithInstanceTag(
+                    text: answer.Text,
+                    instanceName: instanceName
+                )
+                : answer.Text
+            );
 
-                routed = new CommandResult(Output: text) { IsError = answer.Refused };
-            }
-        );
+            routed = new CommandResult(Output: text) { IsError = answer.Refused };
+        }
+
+        if (
+            (caller is { } principal) &&
+            (route.Endpoint.Submissions is IPrincipalServerLink principals)
+        ) {
+            principals.Query(
+                completion: Complete,
+                principal: principal,
+                query: factory(route.QueryIndex)
+            );
+        } else {
+            route.Endpoint.Submissions.Query(
+                completion: Complete,
+                query: factory(route.QueryIndex)
+            );
+        }
 
         result = routed;
 

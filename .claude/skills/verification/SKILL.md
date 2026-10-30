@@ -67,11 +67,23 @@ its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` retains one native host per worker while consecutive boot shapes match, restores its boot authority cohort before each
-compatible scenario, and installs its schedule. Compatibility includes the entire
-boot state and rules of the root and every staged companion; a different world
-starts a fresh native host in the worker. Generated expectation rules count as a difference. The reset
-cancels live tape drives as well as recordings. Session epochs reset only in this
+`puck test` retains one native host per worker while consecutive scenarios share
+its composition, restores its boot authority cohort, and installs each scenario's
+own state seeds, rules and schedule. A fresh arena carries only the pristine
+checkpoint's session lanes; no preceding scenario's values or key ledger enter it.
+Compatibility includes every staged companion and asset, the population's body
+registers and field lattices, and state cells that choose the boot inhabitant census.
+Generated verdict rows and expectation rules do not require another native host.
+Responsive placement holdings are derived from each scenario's seeds; they do not
+split a worker's boot, but restoration recomposes their changed geometry before the
+first command. Drive gates and presentation clock seeds are rebound at the same
+boundary. Restoration rebuilds geometry and population only when their configuration changed.
+Checkpoint restoration discards replay-only departure rollback bodies: a committed
+departure otherwise keeps its source-scoped transfer id and falsely refuses the next
+scenario's replay as a duplicate. The scenario reset
+cancels queued seat-route edges after restoring boot claims; otherwise a prior crossing
+admits the next scenario's input before tick one and changes its first two hashes.
+It also cancels live tape drives as well as recordings. Session epochs reset only in this
 isolated path; a live load preserves retired epochs. Never rewrite
 singleton lifetimes to reuse a provider: that changes captive-dependency validation,
 caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
@@ -86,6 +98,11 @@ when a lane must keep writes isolated; reuse that root across its paired runs.
 An ordinary scheduled boot has no replay probe or `reproduction.json`; a fresh-process
 hash comparison runs `puck test --reproduce` in a separate worker so its proof actually
 compares the recorded ticks.
+
+Each leg's `timing.json` separates boot, restore, authored time, export and replay;
+export is included in authored time. `firstTickMilliseconds` measures the authored
+phase through its first completed tick, including host-service startup on a fresh
+boot. Read it beside the tick count before calling a short scenario's cost fixed.
 
 When profiling a sweep, sample the coordinator and the simultaneous sum of its
 descendants' working sets; report private bytes separately. Do not add individual
@@ -139,6 +156,10 @@ existing exclusive `.guard` file, never by the absence of a World alone.
 If that guard is available and the directory is empty while it is held,
 removing only the empty directory lets the normal `puck lease` acquire again.
 Never unlink the guard file or remove a directory containing holder metadata.
+
+A scratch repository for CLI experiments needs its own `Puck.slnx` (and a
+`git init`), or the verb silently uses the shared `.claude/leases` and joins
+the live queue.
 
 Judge a performance change by code, disassembly and load-independent counts;
 only counts gate it. Wall-clock and GPU timing are evidence read beside those

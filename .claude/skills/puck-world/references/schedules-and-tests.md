@@ -284,10 +284,10 @@ duplicates the probe's most expensive work during reproduction; a check that nee
 per-tick hashes outside `--reproduce` (the fresh-boot versus reused-worker law) takes
 them from a probe in each process, not from the manifest. Each batch leg also writes `timing.json`
 beside its transcripts: boot, restore/arming, authored execution (including export),
-export, reproduction and other overhead in milliseconds, plus the authority-tick
+first completed tick, export, reproduction and other overhead in milliseconds, plus the authority-tick
 observations across running instances. These are diagnostic readings, kept outside
-the deterministic manifest. Worker device caches stay beside its staged documents,
-under the run directory, so a retained run owns its cache writes too.
+the deterministic manifest. Pass `--cache-dir` under lane scratch to isolate device
+cache writes; otherwise workers share the per-user device cache.
 Preparation shares composed
 imports, including authored-value origins, through the existing content-checked
 composition cache; each reader gets a fresh tree. Staging consumes roots without

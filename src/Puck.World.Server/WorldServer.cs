@@ -65,7 +65,16 @@ public enum WorldEditEchoKind {
 /// uses to keep the console's tracked document origin (<c>world.save</c>'s default target, <c>world.status</c>'s
 /// reported source, <c>world.reload</c>'s re-read target) truthful after a runtime rebuild. <see langword="null"/>
 /// for every other outcome, including a successful <c>world.reset</c> (reset targets the base without moving it).</param>
-public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, WorldRebuildOrigin? RebuildOrigin = null);
+/// <param name="Actor">The principal that asked for a grant or revoke, when the echo answers one; unstamped for every
+/// other outcome (a mutation's actor is <see cref="WorldMutation.Principal"/>). Read through
+/// <see cref="ActingPrincipal"/>.</param>
+public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, WorldRebuildOrigin? RebuildOrigin = null, Principal Actor = default) {
+    /// <summary>Gets the principal whose act this outcome answers: the grant or revoke's asker, else the mutation's
+    /// principal; unstamped when the boundary names neither (a rebuild, a lever, a checkpoint).</summary>
+    public Principal ActingPrincipal => (Actor.IsStamped
+        ? Actor
+        : (Mutation?.Principal ?? default));
+}
 /// <summary>
 /// The authoritative world server — one logical instance owning the live <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Every non-intent submission
@@ -243,7 +252,16 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets the phases this world's state clocks read as it was admitted at boot
     /// (<see cref="WorldClockAnchors.Seeds"/>): what a presentation-tier recipient that joins while a clock's row holds
     /// no number seeds the clock from.</summary>
-    public IReadOnlyDictionary<string, ulong> ClockSeeds { get; }
+    public IReadOnlyDictionary<string, ulong> ClockSeeds => m_clockSeeds;
+
+    private readonly Dictionary<string, ulong> m_clockSeeds = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Rebinds a restored scenario's boot phases while preserving the table held by projection sinks.</summary>
+    public void ResetClockSeeds(WorldDefinition definition) {
+        m_clockSeeds.Clear();
+        foreach (var (name, phase) in WorldClockAnchors.Seeds(definition: definition)) { m_clockSeeds.Add(key: name, value: phase); }
+    }
+
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
     public ulong CompletedEngineTicks => m_tick.CompletedEngineTicks;
     /// <summary>Gets the authoritative tick a delivery stands at: the tick and engine tick the step in progress
@@ -547,7 +565,7 @@ public sealed partial class WorldServer : IWorldServerHost {
                 : instanceIdentity)
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
-        ClockSeeds = WorldClockAnchors.Seeds(definition: definition);
+        ResetClockSeeds(definition: definition);
         m_machines = machines;
         if (!machines.TryPrepare(
             admission: admission,

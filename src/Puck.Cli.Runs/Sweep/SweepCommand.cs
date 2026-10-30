@@ -215,6 +215,7 @@ public static partial class SweepCommand {
                             cancellationToken: budget.Token,
                             clock: TimeProvider.System,
                             holder: Verb,
+                            lane: CliLease.LaneOf(checkout: repositoryRoot),
                             name: "gpu",
                             root: CliLease.RootAsync(cancellationToken: budget.Token, checkout: repositoryRoot).GetAwaiter().GetResult(),
                             wait: budget.Bound(wait: TimeSpan.FromMinutes(value: 20))
