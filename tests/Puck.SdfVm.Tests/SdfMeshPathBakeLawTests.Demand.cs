@@ -54,10 +54,11 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Contains(expectedSubstring: "near=1 ", actualString: near.DescribeResidency(radius: 3f));
         Assert.Contains(expectedSubstring: "near=2 ", actualString: near.DescribeResidency(radius: 100f));
     }
-    // A demand point projects a box's diagonal over its distance to the box, no nearer than the near distance, at the
-    // view's display pixels a metre; the nearest point wins, and a hidden view demands nothing.
+    // A box whose diagonal projects past a pixel ranks by the pixels a metre covers at its distance, no nearer than the
+    // near distance, whatever its size; one under a pixel ranks below every such box by the share it covers; the point
+    // that ranks a box highest wins, and a hidden view demands nothing.
     [Fact]
-    public void ADemandPointRanksABoxByTheSizeItProjects() {
+    public void ADemandPointRanksABoxByThePixelsAMetreCoversThere() {
         var demand = new SdfMeshDemand();
         var frame = new SdfFrame(Program: new Puck.SignedDistance.SdfProgramBuilder().Build(), ProgramChanged: false, Time: 0f, Views: [
             ViewAt(eye: Vector3.Zero),
@@ -71,9 +72,12 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: Vector3.Zero, actual: demand.Point(index: 0));
 
         // 500 pixels from the axis to the frame's top over a half-angle tangent of one half: 1000 pixels a metre at 1 m,
-        // and a two-metre diagonal one metre off.
-        Assert.Equal(expected: 2000f, actual: demand.Priority(center: new Vector3(x: 0f, y: 0f, z: -2f), half: Vector3.UnitZ), tolerance: 0.01f);
-        Assert.Equal(expected: (2000f / SdfMeshDemand.NearDistance), actual: demand.Priority(center: Vector3.Zero, half: Vector3.UnitZ), tolerance: 0.01f);
+        // so a box one metre off ranks 1001 whether its diagonal is two metres or two centimetres.
+        Assert.Equal(expected: 1001f, actual: demand.Priority(center: new Vector3(x: 0f, y: 0f, z: -2f), half: Vector3.UnitZ), tolerance: 0.01f);
+        Assert.Equal(expected: 1001f, actual: demand.Priority(center: new Vector3(x: 0f, y: 0f, z: -1.01f), half: new Vector3(x: 0f, y: 0f, z: 0.01f)), tolerance: 0.01f);
+        Assert.Equal(expected: (1f + (1000f / SdfMeshDemand.NearDistance)), actual: demand.Priority(center: Vector3.Zero, half: Vector3.UnitZ), tolerance: 0.01f);
+        // A tenth of a millimetre 100 m off covers a fiftieth of a pixel.
+        Assert.Equal(expected: 0.002f, actual: demand.Priority(center: new Vector3(x: 0f, y: 0f, z: -100f), half: new Vector3(x: 0.0001f, y: 0f, z: 0f)), tolerance: 0.0001f);
         Assert.Equal(expected: 99f, actual: demand.Distance(center: new Vector3(x: 100f, y: 0f, z: 0f), half: Vector3.UnitX), tolerance: 0.001f);
 
         // A draw's box is its host box's: a unit triangle's, moved and doubled by its matrix.

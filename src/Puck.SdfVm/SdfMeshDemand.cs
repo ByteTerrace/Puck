@@ -4,10 +4,11 @@ namespace Puck.SdfVm;
 
 /// <summary>
 /// The demand points one residency's presentation orders its mesh residency by: the eye of every view its latest frame
-/// renders (each seat's camera, the operator's, every layout slot's), each with the display pixels a metre covers one
-/// metre in front of it. A thing's priority is the size its box projects at the demand point that sees it largest
-/// (<see cref="Priority"/>), so the nearest demand point wins and a small thing close by outranks a large one far off; the
-/// bake takes lattices (<see cref="SdfMeshPathBake"/>), its store loads and the mesh region its owed meshes
+/// renders (each seat's camera, the operator's, every layout slot's, every camera filmed for a screen), each with the
+/// pixels a metre covers one metre in front of it. Everything whose box projects past a pixel at a demand point is
+/// demanded, the nearest first by the pixels a metre covers there (<see cref="Priority"/>), so the room a seat stands in
+/// lands before the rest and a coarse camera's surroundings rank below a fine view's at the same distance; the bake takes
+/// lattices and its off-thread work (<see cref="SdfMeshPathBake"/>) and the mesh region its owed meshes
 /// (<see cref="SdfWorldTables"/>) in that order.
 /// <para>Presentation alone reads it: nothing here reaches simulation state, and a mesh is the same whichever order it was
 /// baked or loaded in. A view another residency renders (<see cref="SdfViewSnapshot.Elsewhere"/>) or a hidden one demands
@@ -16,9 +17,8 @@ namespace Puck.SdfVm;
 /// mid-update.</para>
 /// </summary>
 public sealed class SdfMeshDemand {
-    /// <summary>The nearest a demand point is counted to a box, in metres: one it stands inside, or nearer than this,
-    /// projects as though this far off, so every such box ranks above anything farther and the size of what holds the eye
-    /// still orders them.</summary>
+    /// <summary>The nearest a demand point is counted to a box, in metres: one it stands inside, or nearer than this, ranks
+    /// as though this far off, alike with every other such box.</summary>
     public const float NearDistance = 0.25f;
 
     private Vector3[] m_points = new Vector3[4];
@@ -56,18 +56,23 @@ public sealed class SdfMeshDemand {
         }
         Count = count;
     }
-    /// <summary>Returns the display pixels a box's diagonal projects across at the demand point that sees it largest: the
-    /// diagonal over the distance from that point's eye to the box, no nearer than <see cref="NearDistance"/>; zero with no
-    /// demand point.</summary>
+    /// <summary>Returns a box's priority at the demand point that ranks it highest. A box whose diagonal projects past a
+    /// pixel there is demanded, and ranks by the pixels a metre covers at its distance, one plus the point's pixels a
+    /// metre over the distance from its eye to the box, no nearer than <see cref="NearDistance"/>: the nearer, and the
+    /// finer the view, the sooner, whatever the box's size. A box under a pixel ranks below every demanded one, by the
+    /// share of a pixel it covers. Zero with no demand point.</summary>
     /// <param name="center">The box's center, in world space.</param>
     /// <param name="half">The box's half extents along the world axes, none negative.</param>
-    /// <returns>The projected size in display pixels.</returns>
+    /// <returns>The priority: past one for a demanded box, below one for another.</returns>
     public float Priority(Vector3 center, Vector3 half) {
         var diagonal = (2f * half.Length());
         var best = 0f;
 
         for (var index = 0; (index < Count); index++) {
-            best = MathF.Max(x: best, y: ((diagonal * m_focal[index]) / MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index]))));
+            var density = (m_focal[index] / MathF.Max(x: NearDistance, y: DistanceTo(center: center, half: half, point: m_points[index])));
+            var size = (diagonal * density);
+
+            best = MathF.Max(x: best, y: ((size >= 1f) ? (1f + density) : size));
         }
 
         return best;
