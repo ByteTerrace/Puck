@@ -348,6 +348,7 @@ Owner: test runner and replay specialist · medium and low ·
 Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
 replica cost and repeat the paired CPU measurements on a quiet machine.
 
+- [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
   process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
   recursive `Directory.Delete`, which overflows the stack past about 3,500
@@ -1429,6 +1430,7 @@ played by sitting at it like the chess, Go, Reversi and Alchemy tables. The
 Klondike table stands north of the Go table in the board game room
 (`worlds/debug/shapes.md`); the look is the owner's review.
 
+- The lead's window over the Klondike table showed three defects (court figures standing through the cards laid over them, unreadable pips on the dark ground, a layout crammed at the far edge); the standard deck's two variants, the flattened court figures and the centred 10.6 cm layout answer them headless. Next: the lead's windowed look, close and wide, with the script in `worlds/debug/cardtable.md`.
 - Landed: the deck (`worlds/standard/cards.puck`, a library any author imports,
   52 faces and a back as SDF creations), Klondike and the `solitaire.puck`
   collection (`worlds/debug/klondike.puck`, `solitaire.puck`), the table

@@ -126,7 +126,7 @@ public static partial class WorldDecompiler {
             if (row["value"] is { } value) {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
-                    $"  value: \"{WorldExpressionJson.Text(node: value)}\""
+                    $"  value: {Puck.Transpiler.Parsing.PuckStrings.Write(value: FormatArgument(form: WorldArgumentForm.Expression, indentLevel: 1, node: value))}"
                 );
             }
             if (row["maxStates"] is JsonValue budget) {

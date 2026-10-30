@@ -30,20 +30,25 @@ public class CanonicalBasisTests {
     [Fact]
     public void AStaleDocumentBesideItsSourceIsNeverRead() {
         using var directory = new TemporaryDirectory();
-        var avatars = Directory.CreateDirectory(path: directory.PathOf(name: "avatars")).FullName;
-
         var shipped = ShippedWorlds.PathOf(relativePath: "debug/avatars/moth.puck");
 
-        // The source with every file it composes from, at their places relative to it.
+        // The source with every file it composes from, at their places relative to it: the copy lands wherever the
+        // composition's common root puts it, so the root document sits one level above the source's directory.
+        var copied = ShippedWorldDocuments.CopyComposition(
+            directory: directory.RootPath,
+            path: shipped
+        );
+        var avatars = Path.GetDirectoryName(path: copied)!;
+
         File.Copy(
-            destFileName: ShippedWorldDocuments.CopyComposition(
-                directory: directory.RootPath,
-                path: shipped
-            ),
+            destFileName: copied,
             sourceFileName: shipped
         );
 
-        var rootPath = directory.PathOf(name: "courtyard.world.json");
+        var rootPath = Path.Combine(
+            path1: Path.GetDirectoryName(path: avatars)!,
+            path2: "courtyard.world.json"
+        );
         var fromSource = Compose(rootPath: rootPath);
 
         // A document file left beside the source from an earlier compile, carrying a member the source never wrote.

@@ -145,10 +145,10 @@ rule "fps-demonstrated" {
   genreChecks["fps"] = 1
 }
 rule "menu-demonstrated" {
-  when (channel(1, navigate) == 1 and
-    not inputEdge(1, navigate, AxisSample, 0) and
-    confirmPresses == 1 and
-    channel(1, confirm) == 0)
+  when channel(1, navigate) == 1 and not inputEdge(1, navigate, AxisSample, 0) and confirmPresses == 1 and channel(
+      1,
+      confirm
+    ) == 0
   mode: Edge
   genreChecks["menu"] = 1
 }

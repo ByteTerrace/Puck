@@ -98,10 +98,9 @@ public class ProjectionLawTests {
     }
 
     /// <summary>Sources whose document prints back longer than <c>PUCK047</c>'s source limit, so the print half of
-    /// the law cannot close on them. They stay under the format half and under the regeneration gate.
-    /// <c>APrintExcludedSourceStillOutgrowsTheParser</c>, quarantined in <c>experimental/</c> with the source it
-    /// names, fails when an exclusion stops being necessary.</summary>
-    private static readonly string[] PrintExclusions = ["moth-courtyard.puck"];
+    /// the law cannot close on them. They stay under the format half. The card table's fifty-two card creations make a document
+    /// of several megabytes, which its template-generated source never spells out.</summary>
+    private static readonly string[] PrintExclusions = ["debug/cardtable.puck"];
 
     public static TheoryData<string> Constructs() => new(values: ConstructRegistry.Names);
     public static TheoryData<string> ShippedSources() => ShippedWorlds.Sources();

@@ -50,7 +50,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             expected: [(SdfSkyLayerKind.Gradient, "air"), (SdfSkyLayerKind.Disc, "sun"), (SdfSkyLayerKind.Clouds, "cumulus")]
         );
         Assert.Equal(expected: 0.4f, actual: clearDay.Parameters<SdfSkyClouds>(index: 2).Coverage);
-        Assert.Equal(expected: 0.004f, actual: PresetSky(call: "clearDayAir()", section: "atmosphere").Atmosphere.FogDensity);
+        Assert.Equal(expected: 0.0006f, actual: PresetSky(call: "clearDayAir()", section: "atmosphere").Atmosphere.FogDensity);
 
         var starryNight = PresetSky(call: "starryNight(density: 32)");
 

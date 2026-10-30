@@ -19,26 +19,29 @@ import "../standard/cards"
 // again on another pile it plays the move. On the stock it draws, or turns the waste over once the stock is empty.
 
 // The table's placement (its creation's floor 0.5 m under its origin on level 2's floor), the playing surface over the
-// table's origin and the card's size. A card is the deck's 1.76 by 2.48 creation scaled to 8.8 by 12.4 cm.
+// table's origin and the card's size. A card is the deck's 1.76 by 2.48 creation scaled to 10.6 by 14.9 cm, and lies a
+// layer above the one under it: the deck's thickness (0.04 scaled) and its raised rims and pips on both faces.
 let cardTable = [60.8, 8.55, 35.9]
 let cardSurface = 1.309
-let cardScale = 0.05
-let cardHalfWide = 0.044
-let cardHalfTall = 0.062
-let cardLayer = 0.0022
+let cardScale = 0.06
+let cardHalfWide = 0.0528
+let cardHalfTall = 0.0744
+let cardLayer = 0.0034
 
-// The pick grid: 0.035 m cells, the fan's step, in 21 columns (three to a card column) and 27 rows counting from the far
-// (-Z) edge toward the seat. A cell names the pile under it (`kBoard`); a tableau column's depth is read off its row.
-let cardPitch = 0.035
+// The pick grid: 0.04 m cells, the fan's step, in 21 columns (three to a card column) and 27 rows counting from the far
+// (-Z) edge toward the seat, so the whole grid is 0.84 m by 1.08 m and the felt (0.96 m by 1.2 m) frames it evenly. A cell
+// names the pile under it (`kBoard`); a tableau column's depth is read off its row.
+let cardPitch = 0.04
 let cardWide = 21
 let cardDeep = 27
-let cardColumnPitch = 0.105
+let cardColumnPitch = 0.12
 let cardX0 = (0 - ((cardWide * cardPitch) / 2))
 let cardZ0 = (0 - ((cardDeep * cardPitch) / 2))
 let cardCells = (cardWide * cardDeep)
-// The top row's cards stand 1 cm inside the far edge; the tableau's first card starts 2.6 cm under them.
-let cardTopRowZ = (cardZ0 + 0.072)
-let cardTableauZ = (cardZ0 + 0.222)
+// The top row's cards fill the grid's first four rows; the tableau's first card begins at the fifth, so its fan's card j
+// shows its strip on row 5 + j, and the deepest column (six face-down cards and a king to an ace) ends on the last row.
+let cardTopRowZ = (cardZ0 + cardHalfTall + 0.004)
+let cardTableauZ = (cardZ0 + cardPitch * 5 + cardHalfTall)
 
 // The piles' slots: pile z holds up to kCaps[z] cards, its slots numbered from kBase[z] on. Zone 9 is unused; zone 0 is
 // the stock (52 before a deal), 1 the waste, 2 to 8 the tableau, 10 to 13 the foundations.
@@ -155,23 +158,23 @@ template cardOutline(name, color) {
       schema: "puck.creation.v1"
       shape Box "near" {
         material: 0
-        position [0, 0, -0.068]
-        scale [0.05, 0.002, 0.003]
+        position [0, 0, -0.0804]
+        scale [0.0578, 0.002, 0.003]
       }
       shape Box "far" {
         material: 0
-        position [0, 0, 0.068]
-        scale [0.05, 0.002, 0.003]
+        position [0, 0, 0.0804]
+        scale [0.0578, 0.002, 0.003]
       }
       shape Box "left" {
         material: 0
-        position [-0.049, 0, 0]
-        scale [0.003, 0.002, 0.07]
+        position [-0.0578, 0, 0]
+        scale [0.003, 0.002, 0.0834]
       }
       shape Box "right" {
         material: 0
-        position [0.049, 0, 0]
-        scale [0.003, 0.002, 0.07]
+        position [0.0578, 0, 0]
+        scale [0.003, 0.002, 0.0834]
       }
     }
   }
@@ -253,7 +256,7 @@ prototypes {
       shape Box "felt" {
         material: 1
         position [0, 1.3045, 0]
-        scale [0.43, 0.0045, 0.53]
+        scale [0.48, 0.0045, 0.60]
       }
     }
   }
@@ -267,12 +270,12 @@ prototypes {
       shape Box "spot" {
         material: 0
         position [0, 0, 0]
-        scale [0.047, 0.0004, 0.065]
+        scale [0.0568, 0.0004, 0.0784]
       }
     }
   }
 
-  cardDeckPrototypes()
+  cardDeckPrototypes(variant: "light")
 
   // A card's outline, four flat bars round a card.
   cardOutline("cardCursor", "#3FA9F5")
@@ -299,7 +302,7 @@ state {
         id: $"z{z}-{j}",
         centre [
           cardTable[0] + kSlotX[z],
-          cardTable[1] + cardSurface + 0.0012 + cardLayer * j,
+          cardTable[1] + cardSurface + 0.0018 + cardLayer * j,
           cardTable[2] + (kTopRow[z] == 1 ? cardTopRowZ : cardTableauZ + cardPitch * j)
         ]
       }))),
@@ -309,8 +312,6 @@ state {
   ]
 
   world {
-    cardDeckState()
-
     // The pile under each pick cell: the top row's piles over the first four rows, the seven columns below; -1 where
     // the top row has its gap.
     row {
