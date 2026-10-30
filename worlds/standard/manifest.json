@@ -1,0 +1,6 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "standard",
+  "name": "Puck Standard",
+  "entry": "standard"
+}
