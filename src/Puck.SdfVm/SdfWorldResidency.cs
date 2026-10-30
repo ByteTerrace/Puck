@@ -476,6 +476,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ReconcileGlyphAtlas(tables: tables);
         tables.DebugMode = m_debugMode;
         tables.DebugLabel = Name;
+        tables.MeshDemand = MeshDemand;
         BindScreens(
             frame: frame,
             tables: tables

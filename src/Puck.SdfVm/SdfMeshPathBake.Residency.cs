@@ -26,6 +26,60 @@ public sealed partial class SdfMeshPathBake {
     // Whether the frame thread has seen every group resident since the groups or a mesh last changed.
     private bool m_allResident;
 
+    // The groups waiting on a store load, and the loaders taking them, at most LoadWorkers at once.
+    private readonly List<Group> m_loadQueue = [];
+    private int m_loaders;
+
+    // The loaders that run at once: one a processor, as the thread pool ran one task a load on.
+    private static int LoadWorkers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
+
+    // Measures every group still owing a mesh by its demand sphere at the demand points, under the gate; with none, the
+    // priorities stand as they were and the plan's order decides.
+    private void Prioritize() {
+        if (Demand.Count == 0) { return; }
+        foreach (var group in m_groups) {
+            if (group.Done || (group.DemandRadius < 0f)) { continue; }
+
+            var (center, radius) = WorldSphere(group: group);
+
+            group.Priority = Demand.Priority(center: center, radius: radius);
+        }
+    }
+    // Starts loaders, under the gate, until LoadWorkers run or every queued load has one.
+    private void PumpLoads() {
+        while ((m_loaders < LoadWorkers) && (m_loaders < m_loadQueue.Count)) {
+            m_loaders++;
+            _ = Task.Run(action: LoadQueued);
+        }
+    }
+    // A loader: loads the queued group of highest priority until none is queued.
+    private void LoadQueued() {
+        try {
+            while (TakeLoad() is { } group) { Load(group: group); }
+        } finally {
+            lock (m_gate) {
+                m_loaders--;
+                PumpLoads();
+            }
+        }
+    }
+    // Takes the queued load of highest priority, the earliest queued among equals, or null when none is queued.
+    private Group? TakeLoad() {
+        lock (m_gate) {
+            var best = -1;
+
+            for (var index = 0; (index < m_loadQueue.Count); index++) {
+                if ((best < 0) || (m_loadQueue[index].Priority > m_loadQueue[best].Priority)) { best = index; }
+            }
+            if (best < 0) { return null; }
+
+            var group = m_loadQueue[best];
+
+            m_loadQueue.RemoveAt(index: best);
+            return group;
+        }
+    }
+
     // A group's demand sphere in world space: a dynamic group's carried out of its slot's frame by the slot's transform.
     private (Vector3 Center, float Radius) WorldSphere(Group group) {
         if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandRadius); }

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
@@ -330,6 +331,7 @@ public sealed partial class SdfMeshPathBake {
                 Restart(frame: frame);
             }
             m_demandTransforms = frame.DynamicTransforms;
+            Prioritize();
             Settle(frame: frame);
 
             var finished = 0;
@@ -454,10 +456,11 @@ public sealed partial class SdfMeshPathBake {
     public static int FrameBudget(double frameSeconds) =>
         (FrameTaps * ((int)Math.Clamp(value: Math.Floor(d: (frameSeconds / ReferenceFrameSeconds)), min: 1.0, max: MaxFrameShares)));
     /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
-    /// owes one and has none in flight, in the groups' order, up to a batch, and every later call of the same frame answers
-    /// the same, so the frame's mask and bake passes agree. Taking them in order rather than round robin finishes the groups
-    /// first in order first, each landing in the mesh library as it finishes, so a residency the program leaves mid-bake (a
-    /// body crossing into another world) leaves the groups it finished there for the residency it reaches.</summary>
+    /// owes one and has none in flight, the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the
+    /// plan's order among equals, up to a batch, and every later call of the same frame answers the same, so the frame's
+    /// mask and bake passes agree. Taking them by priority rather than round robin finishes the groups about the views
+    /// first, each landing in the mesh library as it finishes, so a residency the program leaves mid-bake (a body crossing
+    /// into another world) leaves the groups it finished there for the residency it reaches.</summary>
     /// <param name="frame">The package frame (<see cref="SdfWorldResidency.PackageFrame"/>).</param>
     /// <param name="batch">The lattices to dispatch and the group each answers, handed back to
     /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>.</param>
@@ -491,10 +494,22 @@ public sealed partial class SdfMeshPathBake {
                     tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
                     m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
                 }
-                for (var index = 0; ((index < m_groups.Count) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)); index++) {
+                var candidates = m_candidates;
+
+                candidates.Clear();
+                for (var index = 0; (index < m_groups.Count); index++) {
                     var group = m_groups[index];
 
-                    if (group.Done || group.InFlight || group.Contouring || (group.Next is not { } next)) { continue; }
+                    if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
+                    candidates.Add(item: (group.Priority, index));
+                }
+                CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
+                foreach (var (_, index) in candidates) {
+                    if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { break; }
+
+                    var group = m_groups[index];
+                    var next = group.Next!.Value;
+
                     if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
                     // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
                     // in a growable input table; charging them here strands a full 65-cubed lattice forever.
@@ -518,6 +533,12 @@ public sealed partial class SdfMeshPathBake {
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
+    // The groups a frame may take a lattice of, by priority, reused frame to frame.
+    private readonly List<(float Priority, int Index)> m_candidates = [];
+
+    // Higher priority first, then the plan's order.
+    private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
+        ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
     private long m_frameTaken = -1;
     private int m_frameBudget = FrameTaps;
 
@@ -842,6 +863,8 @@ public sealed partial class SdfMeshPathBake {
             }
             rebaked++;
         }
+        Prioritize();
+        PumpLoads();
         if ((rebaked + loading) > 0) {
             m_dispatches = 0;
             m_samples = 0;
@@ -924,7 +947,7 @@ public sealed partial class SdfMeshPathBake {
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Load(group: group));
+        m_loadQueue.Add(item: group);
         return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
@@ -1798,6 +1821,9 @@ public sealed partial class SdfMeshPathBake {
         // zero not yet).
         public long LandedAt { get; set; }
         public long ResidentAt { get; set; }
+        // The display pixels its demand sphere projects at the demand point that sees it largest, as of the latest frame
+        // that measured it (SdfMeshDemand.Priority); zero with no demand point.
+        public float Priority { get; set; }
 
         // Takes the demand sphere from the planned box, once.
         public void TakeDemandSphere() {
