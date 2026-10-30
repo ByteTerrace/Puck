@@ -39,11 +39,10 @@ resolves their edits to this file at merge.
    the bake's kept groups under a moved identity, a reboot for an edit outside
    `PuckHotReload`, and the windowed C# loop timed on a quiet machine.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
-   cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
-   answer), then the schema switch.
-6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
-   break (`WorldTestBatch.cs:89`), then delete complete-boot reuse and make the
-   per-tick authority hash incremental, as the quiet measurement supports.
+   schema switch, then the pick answer.
+6. [Test runner and replay](#test-runner-and-replay): delete complete-boot reuse
+   and make the per-tick authority hash incremental, as the quiet measurement
+   supports.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
@@ -372,9 +371,8 @@ holds the fixed poses and the approaches already rejected.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then delete
-complete-boot reuse and make the per-tick authority hash incremental (both
-measured below).
+Next: delete complete-boot reuse and make the per-tick authority hash
+incremental (both measured below).
 
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
@@ -443,13 +441,6 @@ measured below).
   lane remove the avoidable companion workload while preserving the scenarios'
   claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
   from: boot-reuse profiling; the machine contribution is not isolated.)
-- [low] `WorldTestBatch`'s loop breaks on `batch.m_failed`, which stops the retry
-  of a leg that failed to open but also every remaining leg after any earlier
-  failure (a `--reproduce` divergence) wherever the next leg needs a fresh host,
-  so those scenarios report "did not finish successfully" without running; the
-  same-host branch (`CompleteLeg`) keeps going. Break only when opening or
-  starting leg `m_index` failed (`src/Puck.World/WorldTestBatch.cs:89`). (from:
-  reproduce-cost review)
 - [low] `--cache-dir` redirects only the `puck test` workers: the `puck test`
   process itself still persists compiles to the per-user `compilations`
   directory (`src/Puck.Cli.Worlds/WorldsRoot.cs:48`), and `TestCommandLawTests`
