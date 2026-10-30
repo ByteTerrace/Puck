@@ -1,0 +1,223 @@
+# The terrain pass
+
+The owner found the valley's walls soft white masses with metre-scale grain, no
+material, clipped exposure and no sense of distance, and ruled a real terrain
+pass of generic engine capabilities plus two standard terrain material sets,
+natural alpine and stylized painterly
+([valley plan](valley-and-moons.md#the-owners-rulings)). This is the design
+before code.
+
+## What exists
+
+| Area | Where | What limits terrain |
+|---|---|---|
+| Creation relief | `CreationNoiseDocument` (`src/Puck.World.Authoring/Authoring/CreationDocument.cs`), `SdfOp.NoiseDisplace`; GPU `sdfValueNoise3` (`field/sdf-noise.hlsli`), CPU `SdfFieldEvaluator.RenderEditField` (`Queries/SdfFieldEvaluator.RenderOps.cs`) | fBm value noise added to the field: `MaxAmplitude` 4 m, `MaxNoiseOctaves` 8, no ridges, warp or erosion. The evaluator's fixed-point lattice is a second copy beside `Pcg3dLatticeNoise` in `Puck.Maths`. |
+| Smooth blends | `CreationDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
+| The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
+| Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldPlacementStamper.ReliefDetail` | Declares 1.56 m, but the scoped bound is a 770 m sphere about the ring's centre and refinement stops at eight cells a coarse axis, so sectors bake at 2.8 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)): the metre-scale grain. |
+| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relief and smooth blends are render-only. Colliders sit 2.7 to 5.6 m off the drawn relief, the colliders report's last 12 reds ([terrain packet](open-items.md#the-valleys-terrain)); a body creeps downslope at rest. |
+| Materials | `shade/shade-weathering.hlsli`, `shade/shade-layers.hlsli`, called from `passes/sdf-light-stage.hlsli` | No slope, altitude or curvature rule, though weathering's up-facing `deposit` and its curvature edges are such rules in fragment form. |
+| Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
+| Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
+| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. At a cut the EV snaps to whatever that cache answers, so it depends on where the camera stood before ([sweep packet](open-items.md#sweep-and-visual-checks)). The [lighting packet](open-items.md#lighting-and-gi) already chose an image meter. |
+| Residency | [residency decision](../decisions/residency.md), `SdfMeshDemand`, `SdfMeshChunks` | Near-first has landed; chunks are 8 m bins of one contour and do not stream. Terrain tiles (the decision's step 7) are unbuilt. |
+
+## Design
+
+### One relief, three consumers
+
+Terrain relief becomes one generic field op, `TerrainRelief`, replacing
+`NoiseDisplace` (rule 5: the creation `noise` facet migrates and the old op
+goes). Its parameters are authored data on the creation:
+
+- **Kind per band:** fBm, ridged (Musgrave's multifractal: `1 - |n|`, squared,
+  weighted by the previous octave) or billow.
+- **Domain warp:** a low-frequency vector noise offsets the point first.
+- **Erosion mask:** each octave's amplitude is divided by `1 + k·|∇|²` of the
+  sum so far, smoothing slopes and keeping detail in gullies and on ridges; the
+  quintic interpolant's derivative is closed-form.
+- **Octaves from kilometres to centimetres**, one series each consumer cuts at
+  its own spacing. Octaves whose quarter-wavelength is at least the finest
+  declared terrain spacing are geometry: the bake draws them and contact reads
+  them. Finer octaves are shading: they perturb the normal and the material
+  layers, fading where a wavelength falls under two pixel footprints.
+
+The cut derives from the document alone, so the geometric field is the same on
+every machine and nothing feeds back from presentation.
+
+The fixed-point evaluation moves into `Puck.Maths` beside `Pcg3dLatticeNoise`
+(value noise with derivative, the band kinds, the warp); the evaluator's
+private `ValueNoise3` is deleted. The HLSL twin keeps the PCG3D corner hash, so
+CPU and GPU agree to the float blend's LSB as today. The step factor
+(`SdfProgram.NoiseDisplaceStepFactor`'s successor) keeps the undamped bound,
+which the erosion divisor can only lower. Caps become relative: amplitude at
+most half the creation's smallest shape radius (past that, 3D relief detaches
+blobs), smooth radius at most half the smaller blended shape's least
+half-extent. The octave limit rises to 12, about 2 km down to the bake's cell.
+Shading octaves hash on the periodic lattice (`sdfPeriodicNoise3`): a
+centimetre octave 1 km from the origin leaves a float about 2^-7 of a cell.
+
+### Contact on the drawn relief
+
+One field for drawing and contact: a solid placement whose creation carries
+relief, or a smooth blend over the old cap, compiles a **field collider**, a new
+`FixedStaticColliderKind` whose surface is the creation's fixed-point program
+(its geometric octaves), not its primitives. `WorldColliderSet` keeps its grid
+and bounds cull; the narrowphase is `FixedFieldContactSolver`'s volume solve
+(distance plus measured gradient) scoped to that one program. Everything else
+stays analytic, with no world-wide switch to field contact.
+
+**The step bound:** the relieved field reads at most `L` times the true
+distance, `L` the op's step factor, so a body volume advances `f / L` per
+certified step, and the existing interval rule (`RenderEditFieldBounds`: relief
+moves the surface by at most its amplitude) serves the certified sweep. The
+step checks the sweep's 64-query budget (`DefaultSweepBoundsQueryBudget`)
+against the Moth's top speed on relief and fixes whichever falls short.
+
+Grounding and the slope test read the field's normal, so the walkable slope is
+the drawn slope. The downslope creep's cause is found in the same step: a body
+at rest must not move.
+
+### Slope, altitude and curvature materials
+
+A palette slot gains **layers**, up to four, packed into a side table as paints
+are (`SdfProgram.PackPaint`), so the material row grows by one word. Each layer
+is a material response (colour, roughness, specular, optional detail relief)
+over a mask built from:
+
+- slope: the angle between the shading normal and world up, a degree range with
+  softness;
+- altitude: world height range with softness;
+- curvature: the visibility record's mean curvature (convex ridges, concave
+  gullies), the input weathering's edge term already reads;
+- breakup: lattice noise in world space, scale and seed, which jitters each
+  mask's edges.
+
+Solid 3D noise needs no triplanar projection, so steep walls do not stretch.
+Layers evaluate in `sdf-light-stage.hlsli` beside `applyWeathering`, whose
+up-facing `deposit` migrates into layers and is deleted, leaving one slope
+mechanism. A rigid copy's layers read its own frame, as paints do.
+
+### Exposure at its cause
+
+The meter becomes the image's: after `views`, a reduction pass builds a log
+luminance histogram of the lit HDR image, takes a mean between low and high
+percentiles, and writes the target EV into a one-element GPU buffer the
+composite reads, with no readback between a frame and its exposure. Adaptation
+eases as now, and **a cut snaps to the frame's own histogram**, so the EV after
+a teleport depends only on the destination's picture. The probe meter stays for
+local adaptation (`SdfViewExposures.MeteredOf`); the camera-trace cache leaves
+the exposure path. Display-referred constants the views pass divides by the
+exposure (the unbound screen glass) move to the composite or read the previous
+frame's EV, settled by measurement. `world.exposure` reads the buffer back. The
+first check is the lighting packet's 18% grey card under a manual EV, which
+settles the output transfer.
+
+### Distance
+
+- **Aerial perspective:** haze extinction becomes per-channel coefficients per
+  metre (a Rayleigh-weighted blue and a grey Mie term with its forward phase)
+  over the existing height falloff, authored as a visibility range instead of
+  `HazeAmount` over `farDistance`. Haze leaves draw distance, and rock fades
+  toward blue. `SdfAir` and `sdf-atmosphere.hlsli` change together; phase 5's
+  spherical shell replaces this flat model later.
+- **Far shadows:** a terrain cascade from 120 m to the far distance draws static
+  draws at their coarsest level, refreshed only when the sun or a static draw
+  changes, so ridges shadow the walls behind them (beside the open look call on
+  caching far casters, [owner decisions](open-items.md#owner-decisions)).
+
+### What the bake needs
+
+1. **A scoped creation's bound about its shapes**, not its origin, so a
+   sector's declared spacing reaches the lattice.
+2. **Terrain tiles.** A terrain placement declares a tile size; the stamper
+   emits one static instance per tile, bounded by the tile's box, each its own
+   group. A tile bakes at the detail its demand chooses (the residency
+   decision's passive rule: the coarser level's error projected past about a
+   pixel) as a separately keyed geometry, so the coarse tile draws while the
+   fine one bakes, and the selector evicts by priority. Tiles at different
+   spacings meet with skirts, strips hanging below each open edge by the coarser
+   spacing. Contouring a shared border at the coarser spacing instead ties a
+   tile's key to its neighbours' levels, so it is tried only if skirts show.
+   This is the decision's step 7, taken now for terrain alone.
+3. **The finest tile spacing is the relief's geometric cut**, so contact and
+   the nearest drawn mesh agree within the bake's error.
+
+## The two standard material sets
+
+Both live in `worlds/standard/terrain.puck` as templates that emit a terrain
+creation's `palette` block, as `skies.puck`'s `clearDay` emits sky layers, and
+fill the same slots in the same order (`terrainRock`, `terrainLedge`,
+`terrainScree`, `terrainTurf`, `terrainSnow`), so an author switches with one
+call per sector. Overriding a slot or writing a third set is ordinary `.puck`.
+
+- **`terrainAlpine()`**, natural: grey-brown rock with a ridged detail normal,
+  dark ledges on concave curvature, scree on 30 to 40 degree slopes, turf below
+  35 degrees under a treeline altitude, broken snow above an altitude on slopes
+  under 45 degrees, rough dielectrics throughout, and a haze preset with a blue
+  Rayleigh term.
+- **`terrainPainterly()`**, stylized: the same masks with near-zero softness, so
+  slopes and altitudes read as flat bands; saturated hues that shift with
+  altitude and warm on convex curvature; brush-scale breakup and no centimetre
+  detail; a stronger tinted haze. It needs no world-wide `render.toon`, which
+  stays a separate choice.
+
+Each set ships a matching relief preset (alpine: ridged, warped, eroded;
+painterly: billow, broad warp, fewer octaves).
+
+## Order of work
+
+Stills are the sweep's six `valley` stops (`worlds/debug/sweep.json`), settled
+under `world.lockstep` on both backends, before and after on one build pair.
+Frame time is `host.frames` and `world.gpu-timing` at those poses, back to back;
+bake numbers come from `puck mesh audit --cpu --group "(valley-"`.
+
+| Step | Lane | Needs | Target |
+|---|---|---|---|
+| 0. Baseline | lead, GPU | GPU free | Six stills on both backends; frame p50/p99 and per-pass GPU ms at each pose; `world.exposure` at each stop after two tour orders on one World. |
+| 1. Image meter | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it. Composite plus meter costs under 0.2 ms more than the composite alone. |
+| 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
+| 3. `TerrainRelief` op | field/maths C | none | Fixed-point and kernel bakes of one sector match to the triangle (`--cpu` against a stored bake). The exact noise result is pinned by one Maths law. Sector CPU bake time at the same cell is within 1.5× of today's 24 to 43 s. |
+| 4. Relative caps, shape bound, tiles | authoring/bake D | 3 for relief; the bound fix none | A sector bakes at its declared spacing (cell under 1.6 m before tiles). With tiles, demanded triangles at any valley stop stay under today's 2.16 M plus 1.5 M, and the mesh region grows under 150 MB. Warm boot is unchanged; time to the demanded set after a sector edit is under today's sector bake. |
+| 5. Field collider | physics E | 3 | The colliders report finds 0 red over the valley's witnesses (12 today). The Moth on the 58° face has her feet within skin plus bake error of the drawn mesh. Creep at rest is 0. Rim and slope simulate p99 stays at or under 9 ms (8.1 today). `puck test --reproduce` agrees. |
+| 6. Material layers, deposit migrated | rendering/shading F | none | Views pass GPU ms rises at most 10% at `valley-slope`. The register count on Direct3D 12 does not exceed today's. The weathering exhibits' stills are unchanged within the 2% threshold. |
+| 7. Far shadows | rendering A, after 1 | 0 | `valley-rim` shows ridge shadows on the far walls. The shadow passes cost at most 0.5 ms more with the sun still. |
+| 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. The valley is re-authored with each in turn, six stills each, for the owner's pick. |
+
+Steps 1, 2, 3, 6 and 4's bound fix run in parallel from the start, in disjoint
+files. Step 5 and the tiles follow 3; 7 follows 1 in the same lane; 8 closes.
+Steps 1, 2, 6 and 7 need windowed legs on both backends; 3, 4 and 5 are CPU
+work until their stills.
+
+## Risks and owner calls
+
+Risks:
+
+- **Bake identity churn.** Step 3 edits the field kernel, which rebakes every
+  mesh (a cold debug world takes about 440 s); land it once and batch kernel
+  edits. A relief edit afterwards rebakes its own tiles, nearest first.
+- **Field contact cost.** The field solve's worst case is 1,033 samples a
+  capsule, each about twelve octaves of eight hashes, against about 50 convex
+  queries on a slope today. If step 5 misses its p99, contact cuts its octaves
+  coarser, declared as the terrain's spacing so the diagnostics measure it,
+  never as an allowance.
+- **Loose fields.** Warp and large amplitude raise the step factor, slowing the
+  bake and the certified sweep; the erosion mask and the relative cap hold it,
+  read from `creation stats`' clamps.
+- **Register pressure in the views pass** (168 registers on Direct3D 12 drove
+  paints out of the material's live range). Layers load inside their loop.
+- **GI ignores layers.** The irradiance trace bounces base albedo, so snow
+  bounces rock colour; filed if a still shows it.
+- **Tile seams.** Skirts can show at grazing angles from the rim; the shared
+  border is the alternative.
+
+Owner calls:
+
+- Which set the valley wears (ruled: picked later, from step 8's stills).
+- Whether the "pale, bright" +2.5 EV compensation stays once the meter reads the
+  image; it partly offsets the incident meter in dim interiors.
+- How strongly distance fades toward blue: each set's haze preset is a proposal.
+- The sun's direction and time of day for the valley, which decides how much
+  ridge shadow the far walls show.
+- Whether the far terrain cascade may cache at a coarser snap (the existing
+  look call).

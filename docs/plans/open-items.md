@@ -1417,9 +1417,9 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 ### The valley's terrain
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
-Next: the lead's window over the sweep tour's `valley` stops, then contact on
-the drawn relief. The measured state is in the
-[plan](valley-and-moons.md#phase-1-the-valley-as-built).
+Next: the [terrain pass](terrain-pass.md#order-of-work), whose steps take
+the sub-points below (contact in step 5, the caps and bound in step 4). The
+measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built).
 
 - Valley review findings (Codex review of the valley merge `be0f38692`):
   - [medium] The superellipsoid's product-first rounding misclassifies small superellipsoids and disagrees with the HLSL: exponent 2, all radii 1/1024 m, p = (1/256, 0, 0) gives −1/1024 m on the CPU and +3/1024 m on the GPU, so contact and the drawn surface disagree at small sizes (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836`). One formula, exact at both ends of the radius range, on both sides.

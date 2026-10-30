@@ -192,7 +192,8 @@ window; a heightfield is added only if that reading fails.
   exposure meter fixed at its cause, and distance haze, each a generic engine
   capability. The standard package ships **two terrain material sets an author
   chooses, a natural alpine one and a stylized painterly one**; the valley uses
-  one, picked later.
+  one, picked later. The design and its order of work are
+  [the terrain pass](terrain-pass.md).
 
 Still open, for when the work reaches them: whether the moons dominate the day
 or the night, and how long the ascent is.
