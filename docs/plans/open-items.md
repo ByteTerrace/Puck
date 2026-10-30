@@ -29,9 +29,8 @@ resolves their edits to this file at merge.
 1. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the owner-visible
    sub-cell features (stair holes and flipped faces, blind slats, shell seams)
    fixed at the root in the bake. In flight: bake-seams (principal).
-2. [Lighting and GI](#lighting-and-gi): nothing renders black (sky fill on
-   shaded faces, probes or sky outside the window) and the meter meters during
-   a bake. In flight: lighting-robust.
+2. [Lighting and GI](#lighting-and-gi): no dark interval before a cold area's
+   first irradiance level publishes.
 3. [The valley's terrain](#the-valleys-terrain): contact on the drawn relief
    (in flight: relief-contact), then the terrain pass (docs/plans/terrain-pass.md).
 4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
@@ -116,7 +115,7 @@ Next: reproduce the companion overlaps, then one paired windowed tour (about 18
 minutes of GPU) when no lane holds the GPU, compared stop by stop, with
 `--attach` on one World for both runs.
 
-- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter reads the cached camera-trace sample ring (`SdfMeshIrradiance`), whose reuse depends on where the camera stood before. The tour now reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms or refutes the cause. If it confirms, make the meter's camera sample a function of the present camera alone (or clear the ring on a cut) rather than settling around it. (from: bake-scale lane)
+- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter's camera-trace sample ring (`SdfMeshIrradiance`) reused samples by where the camera stood before. A cut now meters fresh at the camera (`TryMeter(fresh:)`) and snaps to that first reading, so the cut's sample no longer depends on history; the probe reading still depends on which cells the trace has cached. The tour reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms whether the remaining difference is the probe cache's. (from: bake-scale lane)
 
 - Finish sweep-honest's paired motion qualification. Its first final tour
   measures all 23 windowed signals and captures all 64 stops cleanly, and 62
@@ -239,8 +238,7 @@ coverage, enclosure, corner and exposure findings; quiet GI qualification at int
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
-- [high] Far surfaces render pure black on every gallery floor (the owner's walkthrough, `.claude/scratch/lead-window/owner-level2-black.png`, level 2 at (47.6, 9.1, 23.3) looking east, bakes all landed at 639 s): picks into the black land on drawn geometry (`hall-shell.palette[0]`, `hall-shaft.palette[2]`), and `world.cull off` changes nothing, so the surfaces draw but receive no light: they lie outside the measured probe window and the "no indirect light until measured" rule gives them zero, with no direct light indoors. Fix at the cause: a surface outside the window gets the nearest measured probes or a sky/ambient term, never black; and the window follows every view (the residency decision's step 3). Confirm on every floor, both backends. (from: the owner's walkthrough)
-- [high] Auto exposure is not metering: on the owner's walkthrough (valley summit, `.claude/scratch/lead-window/owner-valley-summit.png`) `world.exposure` reads `mode=auto ev100=11.5 compensation=2.5` but every view `meter=none source=held`, so the image holds a fixed EV with +2.5 compensation and white terrain blows out. Cause found on the same World: the meter answers nothing until the whole cold bake has landed (`SdfMeshIrradiance.TryMeter` needs an installed scene, and `RefreshScene` runs only while no bake is pending); once all 2,078 groups landed at 639 s, every view metered (lobby view 0 ev100 7.81 from probes). A cold bake, an edit or a residency change therefore leaves the image unmetered for minutes. Fix at the cause: meter from what has landed (or from the camera trace) while the bake runs, never wait for the whole world; then confirm the summit, the lobby and the card table on both backends. (from: the owner's walkthrough)
+- [medium] A cold area lights as without the irradiance volume until its first level publishes: on gallery level 2, arriving by `debug.go`, the Moth and the hall read near-black for about 20 s on both backends, then light correctly (the meter already answers from probes meanwhile). Light from the coarser levels or the sky term the moment a view arrives, so no cut shows a dark interval; then re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the valley summit on both backends, which the landing check did not revisit. (from: the lighting-robust landing check)
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white sun key, hard black shadows with no sky fill, no rim and no aerial haze. A lighting-direction pass (sky colour and fill, sun colour and height, shadow softness, haze) with the owner, after exposure meters; the [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the image meter. (from: the owner's walkthrough)
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
 
@@ -526,7 +524,26 @@ The rendered colliders report's only red findings left are the valley's relief
 
 ### Edit to running, hot reload and boot
 
-- [high] `world.reload` crashes a windowed World: on the owner's third live reload (tuning the wings layout in `worlds/standard/controls.puck` and `worlds/debug/controls.puck`) the next frame threw `InvalidOperationException: Only a staged region that owns its destination grows.` at `GpuRegion.Grow` from `SdfWorldTables.EnsureDynamicTransformCapacity` (`SdfWorldTables.FramePreparation.cs:26`, via `PackDynamicTransforms`), with the bake reporting 2,765 instances and 1,357 dynamic after the reload; the host stopped. Log: `.claude/scratch/lead-window/owner-reload-crash.stderr.log`. The dynamic transform table must grow (or be rebuilt) after a reload raises its count; a reload never stops the host. (from: the owner's walkthrough)
+- [medium] Upload plumbing keys the stored meshes: the bake's code identity
+  (`SdfMeshBakeClosure`) holds `SdfWorldTables.WriteMeshBakePoints`, so changing
+  `GpuRegion.Grow`'s return type changed that method's IL and missed every
+  stored mesh (`[sdf.mesh-bake] miss … the code, 1 member (Puck.SdfVm 1:
+  Puck.SdfVm.SdfWorldTables.WriteMeshBakePoints) changed`), rebaking all 2,078
+  debug-world groups, about nine minutes cold on each backend on the lead
+  machine. How the bake's points reach the GPU cannot change a baked mesh.
+  Bound the closure to the code that decides mesh contents.
+- [low] Growing the program region on `world.reload` waits for the device to go
+  idle (`SdfWorldTables.EnsureProgramCapacity`, `TryWaitIdle`) and rebuilds the
+  region whole. `GpuRegion.Grow` grows any owned region without waiting,
+  but keeps the policy it was created with, while a program can grow past the
+  ring's share of the aperture that `GpuResidency.Select` would stage. Grow it
+  without the idle wait and reselect the policy when the new size crosses the
+  share.
+- [low · unconfirmed] `world.reload` of a debug document that raises
+  `bodies.capacity` validates an `inhabit.count` against the raised capacity,
+  then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
+  is full` and spawns only what the boot's entity table holds. Decide whether a
+  reload grows the live entity table or refuses the raised capacity by name.
 - [high · owner: lead integration] The combined debug document at integration
   45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
   PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for

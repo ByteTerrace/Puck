@@ -146,18 +146,24 @@ worlds are mostly static and their evaluation belongs at edit time rather than
 in the frame.
 
 - **Probes.** A probe sits at the centre of a world cell: 1 m apart in a
-  48×16×48 volume at High (128 rays a probe, three bounces), 2 m apart in a
-  32×12×32 volume at Medium (96 rays, two bounces). The volume follows the first
-  view's camera and is toroidal: a cell's probe lives in the slot its
-  coordinates name modulo the volume's size, keyed by the cell, so a camera move
+  48×16×48 window at High (128 rays a probe, three bounces), 2 m apart in a
+  32×12×32 window at Medium (96 rays, two bounces). Two coarser levels nest
+  about it at every tier, 32×12×32 windows of 8 m and 32 m cells, which reach
+  256 m and 1,024 m. Each level's window centres on the cameras of every view
+  the residency renders when they fit in its middle, and on the first view's
+  alone when they do not, and is toroidal: a cell's probe lives in the slot its
+  coordinates name modulo the window's size, keyed by the cell, so a camera move
   rewrites only the slots of the cells it brings in, and views reject a slot
   holding another cell's probe.
 - **The trace.** `SdfMeshIrradianceScene` gathers every opaque static mesh draw
-  into a bounding volume hierarchy on the thread pool, once those groups have
-  finished baking and reached the dressed frame. Dynamic groups, glass and
-  diagnostic slices do not enter that scene and do not delay it
-  (`SdfMeshPathBake.IrradiancePending`). Probes trace on the pool, nearest the
-  camera first, every probe's first sweep before any second. A probe stores two
+  into a bounding volume hierarchy on the thread pool. While the bake still
+  lands opaque static groups (`SdfMeshPathBake.IrradiancePending`), the scene is
+  built from those landed so far once the previous scene's trace has finished,
+  at most every few seconds, so the volume and the meter answer during a cold
+  bake; a lockstep frame waits for the whole bake. Dynamic groups, glass and
+  diagnostic slices do not enter that scene. Probes trace on the pool, every
+  probe's first sweep before any second, finest level first and nearest the
+  camera first. A probe stores two
   ambient cubes, one value per axis direction: the share of cosine-weighted sky
   its rays reach, and the cosine-weighted mean radiance the static geometry
   sends it, and which static point and spot lights its centre sees, one bit a
@@ -196,7 +202,15 @@ in the frame.
   surface fade is 2 cm, independent of spacing.
   Support ends at 1.5 times the spacing diagonal plus normal bias, while sky
   still traces to lighting reach. Subtexel geometry remains a sampling limit.
-  Empty gathers provide zero indirect and zero traced static-light visibility.
+- **Every surface reads a level.** A receiver reads the finest level whose
+  window holds it, and the coarsest past every window. A coarser level never
+  answers inside a finer window: at that distance its angular support is metres
+  wide and would see through a thin wall a finer probe measured. Where none of
+  the level's probes measured the receiver, the same probes answer past their
+  measured reach, blocked only by the surfaces they measured, so a surface the
+  camera sees never reads the absence of a measurement as black, while a wall a
+  probe saw still hides what lies behind it. Such an extended read gives no
+  traced static light any visibility.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
   exact CPU/HLSL rule and record. `world.probe` marks changing or pending
   publication reads unsettled, naming the GPU and live windows separately.
@@ -210,10 +224,12 @@ in the frame.
   point or spot light's visibility at the surface is the share of those probes
   whose centre sees it (`sdfMeshLightVisibility`), which scales its direct
   term, so a fixture lights nothing through the slab under it; an anchored
-  light is never traced and goes unoccluded. Outside the volume, the lookup
-  clamps to its boundary probes while their depth tests still use the pushed
-  receiver position. They extend only the light their visibility supports;
-  the volume boundary adds no sky. `world.debug-view
+  light is never traced and goes unoccluded. Past the coarsest window, the
+  lookup clamps to its boundary probes while their depth tests still use the
+  pushed receiver position. They extend only the light their visibility
+  supports; the volume boundary adds no sky. Until a level first publishes, the
+  views light as without the volume (the harmonic sky ambient and the authored
+  fill). `world.debug-view
   indirect` shows the volume's light alone. A window's view and a sky layer's
   view of another world read that world's own volume, at the tier its
   `render.indirect` authors, so its meter, fixtures and bounce are its own.
@@ -342,12 +358,14 @@ output by its exposure, the multiplier `1 / (1.2 · 2^EV100)` per nit
 `EV100` fixed or adapts it: the meter reads the irradiance volume about the
 camera, which carries every traced light's bounce, aims for
 `log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
-over the adaptation time of presentation time, snapping at a camera cut
-(`SdfViewExposures`). A camera with no visible lattice probe measures its own
+over the adaptation time of presentation time, snapping to the first reading
+after a camera cut (`SdfViewExposures`); a cut the meter cannot read yet stays
+owed until it can. A camera with no visible lattice probe measures its own
 surroundings through the same radiance tracer. Its six directional values are
 cached by camera cell and scene/lighting generation, with storage bounded by the
 view count. Turning the camera reweights them; movement within the cell reuses
-them only across an unblocked segment from their actual origin. The cache
+them only across an unblocked segment from their actual origin, and never at a
+cut, whose reading is taken where the camera stands. The cache
 refreshes once more when the volume finishes its bounce sweeps, so an early
 measurement does not retain incomplete bounce lighting. The `camera-traces`
 counter under `world.counters sdf.mesh-gi` stays constant on steady reads.

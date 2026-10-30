@@ -87,8 +87,11 @@ public static class SdfMeshProbeDepth {
     /// <c>sdfMeshProbeDepthVisibility</c>; there are no cross-probe or whole-sphere plane vetoes.</summary>
     /// <param name="surfaces">The packed surface map of one probe.</param>
     /// <param name="toward">Receiver minus probe position, after normal bias.</param>
-    /// <returns>Visibility from zero to one; no support beyond a measured miss radius.</returns>
-    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward) {
+    /// <param name="bounded">Whether a receiver past a measured miss's reach is unsupported (zero); when false, only
+    /// measured surfaces block, so a receiver past every probe's reach is extrapolated wherever no measured surface lies
+    /// before it.</param>
+    /// <returns>Visibility from zero to one.</returns>
+    public static float Visibility(ReadOnlySpan<uint> surfaces, Vector3 toward, bool bounded = true) {
         var distance = toward.Length();
 
         if (!(distance > 0f)) { return 1f; }
@@ -123,7 +126,7 @@ public static class SdfMeshProbeDepth {
             var depth = ((float)BitConverter.UInt16BitsToHalf(value: ((ushort)word)));
 
             if (depth < 0f) {
-                if (distance > -depth) { return 0f; }
+                if (bounded && (distance > -depth)) { return 0f; }
                 continue;
             }
             points[corner] = (Directions[index] * depth);

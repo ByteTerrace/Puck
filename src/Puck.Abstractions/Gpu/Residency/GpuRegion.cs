@@ -28,8 +28,10 @@ namespace Puck.Abstractions.Gpu;
 /// A staged region that owns its destination grows (<see cref="Grow"/>) without waiting for its readers: it creates a
 /// larger destination, and its next copy recording clears it and copies the old destination's bytes into it on the GPU
 /// (<see cref="RecordCarry"/>), so growing writes no carried word from the host and leaves the old destination to the
-/// caller, who disposes it once that recording's submission and every earlier reader have completed. Its host copy lives
-/// in native memory, so a large region costs the managed heap nothing and growing it allocates no managed array.
+/// caller, who disposes it once that recording's submission and every earlier reader have completed. A ring or in-place
+/// region grows too, by replacing its host-visible buffers and owing each the whole region, so an owner grows a region
+/// without knowing which policy <see cref="GpuResidency.Select"/> chose for it. The host copy lives in native memory, so a
+/// large region costs the managed heap nothing and growing it allocates no managed array.
 /// </para>
 /// <para>
 /// Such a region can keep a host copy of its leading bytes alone and take the rest from an owner that already holds those
@@ -55,6 +57,15 @@ namespace Puck.Abstractions.Gpu;
 /// </para>
 /// </summary>
 public sealed unsafe class GpuRegion : IDisposable {
+    // The host-visible buffers a ring or in-place region replaced by growing, which its owner disposes together.
+    private sealed class ReplacedBuffers(IGpuBuffer[] buffers) : IDisposable {
+        public void Dispose() {
+            foreach (var buffer in buffers) {
+                buffer.Dispose();
+            }
+        }
+    }
+
     /// <summary>The copy kernel's binding for the destination buffer it writes.</summary>
     public const uint CopyDestinationBinding = 1U;
     /// <summary>The uints of the header a staging buffer leads with: the copy's thread count, its run count, where the
@@ -632,33 +643,35 @@ public sealed unsafe class GpuRegion : IDisposable {
         NativeMemory.Free(ptr: m_contents);
         m_contents = null;
     }
-    /// <summary>Grows a staged region that owns its destination to <paramref name="byteCount"/> bytes without waiting
-    /// for any submission: it creates a destination of the new size, extends <see cref="Contents"/> with zeros, and owes
-    /// its next copy recording a carry (<see cref="RecordCarry"/>) that clears the new destination and copies the old
-    /// one's bytes into it on the GPU, so no word the region held is staged again. Owed words stay owed, the copy sets
-    /// are written again before each slot's next copy, and no staging buffer is created: one grows when a flush owes more
-    /// than it holds.</summary>
-    /// <param name="byteCount">The new size in bytes; larger than <see cref="ByteCount"/>, a whole number of uints and at
-    /// most <see cref="MaxByteCount"/>.</param>
-    /// <returns>The destination the region replaced, which the caller now owns: GPU work recorded before the grow may
-    /// still read it, and the next copy recording's submission reads it once more, so the caller disposes it only once
-    /// every such submission has completed. A region that grows again before a copy recording carries from the
-    /// destination it held at its last recording and returns the one it never wrote.</returns>
-    /// <exception cref="InvalidOperationException">The region is not staged, or its destination is external.</exception>
+    /// <summary>Grows a region that owns its buffers to <paramref name="byteCount"/> bytes under the policy it was
+    /// created with, without waiting for any submission, and extends <see cref="Contents"/> with zeros. A staged region
+    /// creates a destination of the new size and owes its next copy recording a carry (<see cref="RecordCarry"/>) that
+    /// clears the new destination and copies the old one's bytes into it on the GPU, so no word the region held is staged
+    /// again; owed words stay owed, the copy sets are written again before each slot's next copy, and no staging buffer is
+    /// created: one grows when a flush owes more than it holds. A ring or in-place region creates host-visible buffers of
+    /// the new size in the memory <see cref="Memory"/> names, and since a new buffer's contents are undefined, every
+    /// buffer owes the whole region, so each slot's next flush writes all of it.</summary>
+    /// <param name="byteCount">The new size in bytes; larger than <see cref="ByteCount"/>, a whole number of uints, at
+    /// most <see cref="MaxByteCount"/>, and for a uniform region a multiple of
+    /// <see cref="IGpuBindings.ConstantBufferAlignment"/>.</param>
+    /// <returns>What the region replaced, which the caller now owns: a staged region's destination, or a ring's or
+    /// in-place region's host-visible buffers. GPU work recorded before the grow may still read it, and a staged region's
+    /// next copy recording reads its old destination once more, so the caller disposes it only once every such
+    /// submission has completed. A staged region that grows again before a copy recording carries from the destination
+    /// it held at its last recording and returns the one it never wrote.</returns>
+    /// <exception cref="InvalidOperationException">The region's destination is external.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not larger than
-    /// <see cref="ByteCount"/>, not a whole number of uints or past <see cref="MaxByteCount"/>.</exception>
+    /// <see cref="ByteCount"/>, not a whole number of uints, past <see cref="MaxByteCount"/>, or for a uniform region
+    /// not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/>.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
-    public IGpuBuffer Grow(long byteCount) {
+    public IDisposable Grow(long byteCount) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
 
-        if (
-            (Policy != GpuResidencyPolicy.Staged) ||
-            m_external
-        ) {
-            throw new InvalidOperationException(message: "Only a staged region that owns its destination grows.");
+        if (m_external) {
+            throw new InvalidOperationException(message: "A region with an external destination does not grow; its owner sizes the destination.");
         }
         if (
             (byteCount <= ByteCount) ||
@@ -671,7 +684,91 @@ public sealed unsafe class GpuRegion : IDisposable {
                 paramName: nameof(byteCount)
             );
         }
+        if (
+            (m_usage == GpuBufferUsage.Uniform) &&
+            ((((ulong)byteCount) % IGpuBindings.ConstantBufferAlignment) != 0)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: byteCount,
+                message: $"A uniform region holds a multiple of {IGpuBindings.ConstantBufferAlignment} bytes, the constant-buffer view it is bound as.",
+                paramName: nameof(byteCount)
+            );
+        }
 
+        return ((Policy == GpuResidencyPolicy.Staged)
+            ? GrowDestination(byteCount: byteCount)
+            : GrowHostBuffers(byteCount: byteCount)
+        );
+    }
+    // Replaces every host-visible buffer of a ring or in-place region with one of byteCount bytes, created before any is
+    // released so a failed creation leaves the region as it was, and owes the whole grown region in every buffer.
+    private ReplacedBuffers GrowHostBuffers(long byteCount) {
+        var created = new IGpuStorageBuffer[m_hostBuffers.Length];
+
+        try {
+            for (var index = 0; (index < created.Length); index++) {
+                created[index] = ((Memory == GpuHostVisibleMemory.DeviceLocal)
+                    ? m_buffers.CreateHostVisibleDeviceLocal(
+                        name: m_name.At(index: index),
+                        sizeBytes: ((ulong)byteCount),
+                        usage: m_usage
+                    )
+                    : m_buffers.CreateHostVisible(
+                        name: m_name.At(index: index),
+                        sizeBytes: ((ulong)byteCount),
+                        usage: m_usage
+                    )
+                );
+            }
+        } catch {
+            foreach (var buffer in created) {
+                buffer?.Dispose();
+            }
+
+            throw;
+        }
+
+        var replaced = new IGpuBuffer[m_hostBuffers.Length];
+
+        for (var index = 0; (index < created.Length); index++) {
+            replaced[index] = m_hostBuffers[index];
+            _ = m_ownedBuffers.Remove(item: m_hostBuffers[index]);
+            m_hostBuffers[index] = created[index];
+            m_ownedBuffers.Add(item: created[index]);
+        }
+
+        GrowContents(byteCount: byteCount);
+        ByteCount = byteCount;
+
+        foreach (var owed in m_owed) {
+            owed.Clear();
+            owed.Add(
+                length: ((int)(byteCount / sizeof(uint))),
+                start: 0
+            );
+        }
+
+        return new ReplacedBuffers(buffers: replaced);
+    }
+    // Extends the host copy of a region that holds all of it to byteCount bytes, its new tail zero. A zeroed allocation
+    // takes fresh pages the system zeroes as they are first touched, so only the bytes held are copied, where
+    // reallocating would also clear the new tail.
+    private void GrowContents(long byteCount) {
+        var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
+
+        System.Buffer.MemoryCopy(
+            destination: contents,
+            destinationSizeInBytes: byteCount,
+            source: m_contents,
+            sourceBytesToCopy: ByteCount
+        );
+        NativeMemory.Free(ptr: m_contents);
+        m_contents = contents;
+        m_shadowBytes = byteCount;
+        m_knownWords = ((int)(byteCount / sizeof(uint)));
+    }
+    // Grows a staged region's own destination, carrying the old one's bytes into it on the GPU (RecordCarry).
+    private IGpuBuffer GrowDestination(long byteCount) {
         var replacement = m_buffers.CreateDeviceLocal(
             name: m_name,
             sizeBytes: ((ulong)byteCount),
@@ -680,21 +777,9 @@ public sealed unsafe class GpuRegion : IDisposable {
         var replaced = m_destination!;
 
         // The host copy grows with a region that holds all of it; a source keeps the new tail, and the host copy its
-        // shadow. A zeroed allocation takes fresh pages the system zeroes as they are first touched, so only the bytes held
-        // are copied, where reallocating would also clear the new tail.
+        // shadow.
         if (m_source is null) {
-            var contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));
-
-            System.Buffer.MemoryCopy(
-                destination: contents,
-                destinationSizeInBytes: byteCount,
-                source: m_contents,
-                sourceBytesToCopy: ByteCount
-            );
-            NativeMemory.Free(ptr: m_contents);
-            m_contents = contents;
-            m_shadowBytes = byteCount;
-            m_knownWords = ((int)(byteCount / sizeof(uint)));
+            GrowContents(byteCount: byteCount);
         }
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);

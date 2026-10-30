@@ -1048,6 +1048,10 @@ public sealed class GpuResidencyLawTests {
                 expected: ring.Buffer(slot: 0),
                 actual: ring.Buffer(slot: 1)
             );
+            // A uniform region grows by whole views only.
+            _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ring.Grow(byteCount: (alignment + 4)));
+            ring.Grow(byteCount: (alignment * 2)).Dispose();
+            Assert.Equal(expected: ((ulong)(alignment * 2)), actual: ring.Buffer(slot: 1).SizeBytes);
         }
         using (var inPlace = Uniform(byteCount: (alignment * 2), policy: GpuResidencyPolicy.InPlace)) {
             Assert.Same(
@@ -1390,8 +1394,53 @@ public sealed class GpuResidencyLawTests {
             buffer.Write<uint>(data: words.AsSpan(length: count, start: word), destinationOffsetBytes: destinationOffsetBytes);
         }
     }
+    // A region grows under whichever policy GpuResidency.Select gave it: a staged region carries its destination on the
+    // GPU, and a ring or in-place region replaces its host-visible buffers and owes each the whole region, so every slot
+    // then reads the grown region exact, the words held before the grow included. A device whose host-visible
+    // device-local heap is large gives a small per-frame table a ring, where the CPU device's default profile stages it.
+    [Theory]
+    [InlineData(GpuResidencyPolicy.Staged)]
+    [InlineData(GpuResidencyPolicy.Ring)]
+    [InlineData(GpuResidencyPolicy.InPlace)]
+    public void ARegionGrowsUnderEveryPolicyAndEverySlotReadsItExact(GpuResidencyPolicy policy) {
+        const int Slots = 3;
+        var gpu = new UploadModelGpu();
+        using var copy = CopyPipeline(gpu: gpu);
+        using var region = new GpuRegion(
+            bindings: gpu.Services.Bindings,
+            buffers: gpu.Services.BufferFactory,
+            byteCount: 64,
+            copyPipeline: copy,
+            memory: GpuHostVisibleMemory.Host,
+            name: default,
+            policy: policy,
+            recorder: gpu.Services.Recorder,
+            slotCount: Slots
+        );
+        var held = new byte[64];
+
+        new Random(Seed: 11).NextBytes(buffer: held);
+        _ = region.Write(bytes: held, offset: 0);
+        for (var slot = 0; (slot < Slots); slot++) { Copy(gpu: gpu, region: region, slot: slot); }
+
+        var before = Enumerable.Range(start: 0, count: Slots).Select(selector: slot => region.Buffer(slot: slot)).ToArray();
+        var replaced = region.Grow(byteCount: 256);
+
+        Assert.Equal(expected: 256, actual: region.ByteCount);
+        Assert.Equal(expected: held, actual: region.Contents[..64].ToArray());
+        _ = region.Write(bytes: [5, 6, 7, 8], offset: 200);
+
+        for (var slot = 0; (slot < Slots); slot++) {
+            Copy(gpu: gpu, region: region, slot: slot);
+            Assert.NotSame(expected: before[slot], actual: region.Buffer(slot: slot));
+            Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: slot).BufferHandle)[..256]);
+        }
+
+        Assert.Empty(collection: gpu.StateConflicts);
+        replaced.Dispose();
+    }
     [Fact]
-    public void OnlyAStagedRegionOwningItsDestinationGrows() {
+    public void OnlyARegionOwningItsBuffersGrowsAndOnlyAStagedOneShrinks() {
         var gpu = new UploadModelGpu();
         using var copy = CopyPipeline(gpu: gpu);
         using var ring = new GpuRegion(
@@ -1428,7 +1477,7 @@ public sealed class GpuResidencyLawTests {
             slotCount: 2
         );
 
-        _ = Assert.Throws<InvalidOperationException>(testCode: () => ring.Grow(byteCount: 128));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ring.Grow(byteCount: 64));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => external.Grow(byteCount: 128));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Grow(byteCount: 64));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => staged.Grow(byteCount: 130));
@@ -1560,7 +1609,7 @@ public sealed class GpuResidencyLawTests {
 
         _ = region.Write(bytes: [9, 8, 7, 6], offset: 100);
 
-        var replaced = region.Grow(byteCount: Bytes);
+        var replaced = Assert.IsAssignableFrom<IGpuBuffer>(@object: region.Grow(byteCount: Bytes));
 
         Assert.Equal(expected: 4096UL, actual: replaced.SizeBytes);
         Assert.Equal(expected: Bytes, actual: region.ByteCount);
