@@ -92,15 +92,18 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             reason: out var reason
         ), userMessage: reason);
         Assert.Empty(collection: captured!.Population.Entries);
-        var entry = Assert.Single(collection: recovery.Journal.Entries);
+        // The destination's journal holds the arrival's lease and the arrival.
+        var records = recovery.Journal.Entries.Select(selector: entry => {
+            Assert.Equal(expected: WorldAuthorityJournalEntryKind.Crossing, actual: entry.Kind);
+            Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
+                bytes: entry.Encoded.Span,
+                entry: out var decoded,
+                reason: out var decodeReason
+            ), userMessage: decodeReason);
+            return decoded.Record.GetType();
+        }).ToArray();
 
-        Assert.Equal(expected: WorldAuthorityJournalEntryKind.Crossing, actual: entry.Kind);
-        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
-            bytes: entry.Encoded.Span,
-            entry: out var arrival,
-            reason: out reason
-        ), userMessage: reason);
-        Assert.IsType<WorldCrossingRecord.Arrival>(@object: arrival.Record);
+        Assert.Equal(expected: [typeof(WorldCrossingRecord.Lease), typeof(WorldCrossingRecord.Arrival)], actual: records);
 
         var replacement = pair.NewHost();
         using var recoveredInstances = replacement.Instances;

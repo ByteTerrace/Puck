@@ -512,8 +512,12 @@ check the flag: the owner may be holding the pad.
   rebuilds and reboots, and an edit to an unlisted project is refused until the
   watch restarts ([edit to running](../../../docs/development/contributing.md#edit-to-running)).
   A cache holding a product of code compares `CodeRevision.Current`
-  (`Puck.Abstractions`) and derives again when it moved; a new such cache does
-  the same. An agent's verification still boots a fresh World.
+  (`Puck.Abstractions`) or keeps its entries in a `CodeDerivedTable`, and
+  derives again when it moved; a persisted product folds
+  `CodeRevision.AppliedTo` (over the types it reads) into its identity. A new
+  such cache does the same. Laws that apply an update call `AppliedCodeUpdate`
+  (`tests/Shared`) inside `AppliedCodeUpdateCollection`, which runs alone. An
+  agent's verification still boots a fresh World.
 - **Build first.** A failed build leaves the previous binaries in place, so a
   run after it exercises old code and shows nothing about the change, however
   well it behaves. The change is not verified until the build exits 0 after the
