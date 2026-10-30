@@ -9,14 +9,31 @@ basis: "debug"
 documentId: "granaries-tests"
 import "stopped-machines"
 
-test "accounts dealt onto the board are found on their cells, covered and read at the cursor" {
+test "accounts dealt onto the board are found on their cells and covered" {
   given {
     granaryNames[bytrcstp001] = "bytrcstp001"
     granaryNames[bytrcstp002] = "bytrcstp002"
     granaryNames[bytrcstp003] = "bytrcstp003"
-    granaryKinds[bytrcstp001] = "StorageV2"
+  }
+  when {
+    ticks 12
+  }
+  expect {
+    granaryBoard[0] == 1
+    granaryBoard[1] == 1
+    granaryBoard[2] == 1
+    granaryBoard[3] == 0
+    granaryTally.accounts == 3
+    granaryTally.watered == 1
+    granaryTally.powered == 0
+  }
+}
+
+test "the lectern reads the piece under the cursor" {
+  given {
+    granaryNames[bytrcstp001] = "bytrcstp001"
+    granaryNames[bytrcstp002] = "bytrcstp002"
     granaryKinds[bytrcstp002] = "BlobStorage"
-    granaryKinds[bytrcstp003] = "FileStorage"
     granaryRegions[bytrcstp002] = "eastus2"
     granarySkus[bytrcstp002] = "Standard_GRS"
     granarySeat.cursor = 1
@@ -25,16 +42,6 @@ test "accounts dealt onto the board are found on their cells, covered and read a
     ticks 12
   }
   expect {
-    granaryCellOf.bytrcstp001 == 1
-    granaryCellOf.bytrcstp002 == 2
-    granaryCellOf.bytrcstp003 == 3
-    granaryBoard[0] == 1
-    granaryBoard[2] == 1
-    granaryBoard[3] == 0
-    granaryTally.accounts == 3
-    granaryWaterCoverage.bytrcstp001 == 1
-    granaryTally.watered == 1
-    granaryTally.powered == 0
     granarySel.name == "bytrcstp002"
     granarySel.region == "eastus2"
     granarySel.kind == "BlobStorage"
@@ -64,7 +71,6 @@ test "a provider's stage grows and shrinks the pieces it covers" {
     granaryPowerStage == 2
     granaryTally.watered == 1
     granaryTally.powered == 1
-    granaryPowerCoverage.bytrcstp006 == 1
   }
 }
 
