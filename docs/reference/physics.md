@@ -364,7 +364,10 @@ moves through space no sweep proved clear. A solver built with no sweep, for a
 field with no geometry, resolves at the endpoint alone. `FixedContactSweepWork`
 counts the sweeps, their bounds queries, and how many ended in contact or
 exhausted, as the deterministic `physics.sweep` work source; the World registers
-its `Process` ledger, and a law hands its solver a ledger of its own.
+its `Process` ledger, and a law hands its solver a ledger of its own. The
+analytic solver counts into `FixedStaticContactWork.Process`, the
+`physics.contact` source: resolves, exact collider queries, the convex queries
+past their bounds rejection with their support evaluations, and pushes.
 
 A step-sampling sweep has two tunnelling classes the certified sweep closes. A
 field that overstates its distance (a gradient above one) lets a sample-trusting

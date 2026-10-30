@@ -85,6 +85,7 @@ public sealed partial class WorldCreationInstances {
                 normal: out var normalWorld,
                 reads: live.Reads,
                 rootRotation: rootRotation,
+                scale: placementScale,
                 target: out var targetWorld,
                 tipWorld: tipWorld
             );
@@ -108,6 +109,7 @@ public sealed partial class WorldCreationInstances {
                     normal: ref normalWorld,
                     resolved: resolved,
                     rootRotation: rootRotation,
+                    scale: placementScale,
                     target: ref targetWorld
                 );
             } else {
@@ -344,7 +346,7 @@ public sealed partial class WorldCreationInstances {
     // Holds the effector's target, and the contact normal there, where it was when the plant window opened, and
     // reports whether a usable target exists: a latched contact survives a probe that misses this frame, which is the
     // whole point of latching.
-    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, float deltaSeconds, Quaternion rootRotation, ref Vector3 target, ref Vector3 normal, out float contactWeight) {
+    private static bool ApplyPlant(Registration live, CreationDocument document, CreationEffectorDocument effector, int index, bool resolved, float deltaSeconds, Quaternion rootRotation, float scale, ref Vector3 target, ref Vector3 normal, out float contactWeight) {
         contactWeight = 1f;
         if (effector.Plant is not { } plant) {
             live.EffectorPlanted[index] = false;
@@ -365,7 +367,10 @@ public sealed partial class WorldCreationInstances {
 
             return resolved;
         }
-        if (plant.Replant is { } replant) {
+        if (plant.Replant is { } authored) {
+            // A replant's lengths are the body's own, at its scale.
+            var replant = (authored with { Distance = (authored.Distance * scale), Height = (authored.Height * scale) });
+
             if (driverWeight <= WorldGaitDrivers.RestWeight) {
                 return ApplyRestingPlant(
                     deltaSeconds: deltaSeconds,
@@ -666,8 +671,9 @@ public sealed partial class WorldCreationInstances {
     }
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
     // body target that is not live, a state cell that holds no point. The normal is the probed surface's; a body or
-    // state target names no surface and reports world up.
-    private static bool TryResolveTarget(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target, out Vector3 normal) {
+    // state target names no surface and reports world up. A surface probe's reach and standoff are the body's own
+    // lengths, at its scale.
+    private static bool TryResolveTarget(CreationEffectorDocument effector, IWorldStampSource client, WorldStateLease reads, Vector3 tipWorld, Quaternion rootRotation, float scale, out Vector3 target, out Vector3 normal) {
         target = tipWorld;
         normal = Vector3.UnitY;
 
@@ -707,10 +713,10 @@ public sealed partial class WorldCreationInstances {
                     return WorldEffectorSolver.TryProbeSurface(
                         field: client.StaticField,
                         origin: tipWorld,
-                        reach: (goal.Reach?.Value ?? 0f),
+                        reach: ((goal.Reach?.Value ?? 0f) * scale),
                         rootRotation: rootRotation,
                         normal: out normal,
-                        standoff: (goal.Standoff?.Value ?? 0f),
+                        standoff: ((goal.Standoff?.Value ?? 0f) * scale),
                         target: out target,
                         towards: (goal.Direction?.Value ?? Vector3.Zero)
                     );

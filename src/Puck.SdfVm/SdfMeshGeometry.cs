@@ -23,8 +23,9 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// instance's bound center is offset along world axes by the slot's pose when the program was emitted;</item>
 /// <item>a dynamic instance's transform into its own slot by that role rather than the slot's number, which each program
 /// assigns;</item>
-/// <item>a transform into any other slot by that slot's pose in the group's frame (its own slot's, or world space),
-/// rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/> (or the coarser steps <see cref="Snap"/>
+/// <item>a transform into any other slot by that slot's pose in the group's frame (its own slot's, in that slot's own
+/// units (<see cref="DynamicTransform.Scale"/>), so a body drawn at another size keys its geometry alike; or world
+/// space), rounded to <see cref="PositionSteps"/> and <see cref="OrientationSteps"/> (or the coarser steps <see cref="Snap"/>
 /// sets), and, under a slot of the group's own, by
 /// that slot's offset from it, which names the member a vertex of the mesh rides (<see cref="SdfMesh.Members"/>). The bake samples such an instruction
 /// through that slot's transform in the frame, so the shapes of a stamp-pool blend group, each riding its own slot inside
@@ -328,12 +329,14 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         m_firstPose = Math.Min(val1: m_firstPose, val2: slot);
         m_lastPose = Math.Max(val1: m_lastPose, val2: slot);
     }
-    // A slot's pose in the frame of the group's own slot (world space under none), rounded: where a sample the bake
-    // carries into the group's frame lands in that slot's frame. A slot the frame holds no transform for is Missing.
+    // A slot's pose in the frame of the group's own slot (world space under none), in that slot's own units
+    // (DynamicTransform.Scale), rounded: where a sample the bake carries into the group's frame lands in that slot's
+    // frame. A slot the frame holds no transform for is Missing.
     private static Pose RelativePose(int ownSlot, int slot, float positionSteps, float orientationSteps, IReadOnlyList<DynamicTransform> transforms) {
         if ((slot < 0) || (slot >= transforms.Count) || (ownSlot >= transforms.Count)) { return Pose.Missing; }
 
         var (framePosition, frameOrientation) = ((ownSlot < 0) ? (Vector3.Zero, Quaternion.Identity) : PoseOf(transform: transforms[ownSlot]));
+        var frameScale = ((ownSlot < 0) ? 1f : UnitsOf(transform: transforms[ownSlot]));
         var (position, orientation) = PoseOf(transform: transforms[slot]);
         var inverse = Quaternion.Inverse(value: frameOrientation);
         var relative = Quaternion.Normalize(value: (inverse * orientation));
@@ -343,12 +346,18 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
         return new Pose(
             Orientation: new Rounded4(steps: orientationSteps, value: new Vector4(w: relative.W, x: relative.X, y: relative.Y, z: relative.Z)),
-            Position: new Rounded4(steps: positionSteps, value: new Vector4(value: Vector3.Transform(rotation: inverse, value: (position - framePosition)), w: 0f))
+            Position: new Rounded4(steps: positionSteps, value: new Vector4(value: (Vector3.Transform(rotation: inverse, value: (position - framePosition)) / frameScale), w: 0f))
         );
     }
     // A transform's position and orientation, an unset orientation read as the identity, as the bake reads it.
     private static (Vector3 Position, Quaternion Orientation) PoseOf(DynamicTransform transform) =>
         (transform.Position, ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation));
+    /// <summary>Returns the world units one unit of a slot's own geometry spans (<see cref="DynamicTransform.Scale"/>),
+    /// one for a scale that is not finite and positive: what the bake divides another slot's offset from a group's slot
+    /// by, and what the group's draws scale its mesh by.</summary>
+    /// <param name="transform">The slot's transform.</param>
+    /// <returns>The scale.</returns>
+    public static float UnitsOf(DynamicTransform transform) => ((float.IsFinite(f: transform.Scale) && (transform.Scale > 0f)) ? transform.Scale : 1f);
 
     // A vector's components rounded to steps a unit; a component no int holds rounds to int.MinValue.
     [StructLayout(LayoutKind.Sequential)]

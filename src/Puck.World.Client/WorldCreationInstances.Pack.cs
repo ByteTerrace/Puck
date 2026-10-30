@@ -230,6 +230,8 @@ public sealed partial class WorldCreationInstances {
                     packedBefore &&
                     !moved.Everything &&
                     !m_owners.Reseats(owner: index) &&
+                    // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
+                    (transforms[rootSlot].Scale == placementScale) &&
                     HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: (ReachOf(live: live) * placementScale))
                 ) {
                     CarryPose(
@@ -546,11 +548,13 @@ public sealed partial class WorldCreationInstances {
             reads: live.Reads
         );
 
+        // Every slot carries the registration's scale: the creation's geometry is emitted in its slots' own units
+        // (EmitOne), and the bake and the draws read the scale off the slot.
         transforms[rootSlot] = new DynamicTransform(
             Lanes: lanes,
             Orientation: rootRotation,
             Position: rootPosition
-        );
+        ) { Scale = placementScale };
 
         var document = live.Creation.EngineDocument;
         var drivers = document.Drivers;
@@ -658,7 +662,7 @@ public sealed partial class WorldCreationInstances {
                         rotation: rootRotation,
                         value: (live.PartDeltaTranslation[shapeIndex] * placementScale)
                     ))
-                );
+                ) { Scale = placementScale };
 
                 continue;
             }
@@ -693,7 +697,7 @@ public sealed partial class WorldCreationInstances {
                 Lanes: lanes,
                 Orientation: Quaternion.Normalize(value: (rootRotation * rotation)),
                 Position: worldPosition
-            );
+            ) { Scale = placementScale };
         }
         for (var owner = 0; (owner < live.Motion.Owners.Length); owner++) {
             var shapeIndex = live.Motion.Owners[owner];
@@ -705,7 +709,7 @@ public sealed partial class WorldCreationInstances {
 
             transforms[((rootSlot + owner) + 1)] = new DynamicTransform(
                 Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),
-                Orientation: turn, Lanes: lanes);
+                Orientation: turn, Lanes: lanes) { Scale = placementScale };
         }
 
     }

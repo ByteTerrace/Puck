@@ -434,4 +434,43 @@ public sealed class SuperellipsoidLawTests {
             userMessage: $"the grid's worst observed |grad d| was only {worstCase}; it should approach the proven exact 1."
         );
     }
+
+    // THE LAW: a terrain-sized superellipsoid reads its own surface to a few raws and keeps a gradient at a millimetre's
+    // probe. Through the Q16 inverse of a 514 m radius (seven significant bits) these surface points read 0.06 to
+    // 0.85 m off and a 1 mm central difference read no slope at all.
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(300.0)]
+    [InlineData(500.0)]
+    public void ATerrainSizedEllipsoidReadsItsSurfaceAtFullPrecision(double height) {
+        var evaluator = Superellipsoid(exponent: 2f, radii: new Vector3(x: 230f, y: 514f, z: 280f));
+        var z = (280.0 * Math.Sqrt(d: (1.0 - ((height / 514.0) * (height / 514.0)))));
+        const double Step = 0.001;
+
+        Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: Position(x: 0.0, y: height, z: z)));
+        Assert.InRange(actual: (double)distance, low: -0.0005, high: 0.0005);
+        Assert.True(condition: evaluator.TryDistance(distance: out var outward, material: out _, position: Position(x: 0.0, y: height, z: (z + Step))));
+        Assert.True(condition: evaluator.TryDistance(distance: out var inward, material: out _, position: Position(x: 0.0, y: height, z: (z - Step))));
+        Assert.True(condition: (outward > inward), userMessage: $"a 1 mm step across the surface at y = {height} read no slope ({(double)inward} to {(double)outward}).");
+    }
+    // THE LAW: the bounds side encloses the point side on both sides of the scaled ratio's product limit (2^20 m),
+    // where the point side divides first rather than wrap, and across it, where a box holds both forms.
+    [Theory]
+    [InlineData(2f, 1000.0, 0.0)]
+    [InlineData(2f, 1048570.0, 0.0)]
+    [InlineData(2f, 1048580.0, 0.0)]
+    [InlineData(2f, 1048570.0, 20.0)]
+    [InlineData(4f, 1048570.0, 20.0)]
+    [InlineData(4f, 5000000.0, 0.0)]
+    public void ScaledRatioBoundsEncloseThePointValueAcrossTheProductLimit(float exponent, double x, double width) {
+        var evaluator = Superellipsoid(exponent: exponent, radii: new Vector3(x: 230f, y: 514f, z: 280f));
+        var lower = Position(x: x, y: 100.0, z: 50.0);
+        var upper = Position(x: (x + width), y: 100.0, z: 50.0);
+
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: lower, upper: upper));
+        foreach (var at in ((double[])[x, (x + (width / 2.0)), (x + width)])) {
+            Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: Position(x: at, y: 100.0, z: 50.0)));
+            Assert.True(condition: bounds.Contains(value: distance), userMessage: $"[{(double)bounds.Lower}, {(double)bounds.Upper}] misses {(double)distance} at x = {at}.");
+        }
+    }
 }

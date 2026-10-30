@@ -165,6 +165,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
         // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedStaticContactWork.Process);
         // The bodies each tick steps, and the parked rigid bodies a contact-field change wakes.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBodyWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);

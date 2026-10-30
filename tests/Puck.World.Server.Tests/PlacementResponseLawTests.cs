@@ -287,6 +287,43 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         placements: fixture.Server.Definition.Placements
     )!.ShownPrototypeId;
 
+    [Fact]
+    public void AScenarioSeedRestoresItsResponsiveColliderBeforeTheFirstTick() {
+        var basis = CrossingDocument();
+        var placement = basis.Placements[0];
+
+        basis = basis with {
+            Rules = [],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.Sphere(id: TargetCreation, scale: 3f)],
+            PlacementRowsRaw = [placement with {
+                Solid = new WorldSolid(Margin: 0f),
+                Respond = [placement.Respond![0] with {
+                    When = new WorldPlacementResponseCondition.StateCondition(State: CounterRow, Key: "0", Comparison: ExpressionOp.GreaterOrEqual, Value: 3),
+                }],
+            }],
+        };
+        WorldDefinition Scenario(long value) => basis.WithWorldState(rows: [basis.AuthoredState[0] with {
+            Cells = [new StateCell(CellName.Parse(candidate: "0"), CellValue.Int(value: value))],
+        }]);
+        using var fixture = Fixtures.FreshServer(definition: Scenario(value: 0));
+        var server = fixture.Server;
+
+        Assert.True(condition: server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var boot, out var reason), userMessage: reason);
+        foreach (var value in new[] { 5L, 0L, 5L }) {
+            var definition = Scenario(value: value);
+            var json = WorldDefinitionSerialization.Serialize(definition: definition);
+
+            Assert.True(condition: WorldDefinitionLoader.TryLoadForAdmission(json, "scenario.world.json", out var admission, out reason,
+                catalog: server.Machines.ValidationCatalog), userMessage: reason);
+            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: admission!, boot: boot!));
+            using var fresh = Fixtures.FreshServer(definition: admission!.Definition);
+
+            Assert.Equal(PrototypeOf(fixture: fresh), PrototypeOf(fixture: fixture));
+            Assert.Equal(Assert.Single(collection: fresh.Server.Population.DiagnosticColliders).Collider,
+                Assert.Single(collection: server.Population.DiagnosticColliders).Collider);
+            Assert.Equal(1UL, server.NextInputTick);
+        }
+    }
     /// <summary>The row climbs 1/tick from a rule with no gate; the swap lands the moment it reaches 3, not
     /// before.</summary>
     [Fact]
@@ -463,7 +500,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         fixture.Step();
 
         Assert.Equal(expected: 0, actual: fixture.Server.Definition.Placements[0].Holding);
-        Assert.Contains(collection: echoes, filter: static echo => (echo.Rejected && echo.Message.Contains(value: "holding 2 marks an entry past the 1 response entries", comparisonType: StringComparison.Ordinal)));
+        Assert.Contains(collection: echoes, filter: static echo => (echo.Rejected && echo.Message.Contains(comparisonType: StringComparison.Ordinal, value: "holding 2 marks an entry past the 1 response entries")));
     }
     /// <summary>A response lasts exactly as long as its condition: the row shows the entry while the slot holds and
     /// its authored prototype once it stops, and the authored prototype itself is never overwritten.</summary>

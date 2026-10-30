@@ -2,7 +2,7 @@
 ;; `watchdogLog` state rows (watchdog.puck), where `world.state` and the HUD panel read them.
 ;;
 ;; Its invariants, each reported once as it starts to hold and again only after it has cleared:
-;;   below-floor             a body more than 1 m under y = 0, the lowest floor anything stands on (fall-respawn
+;;   below-floor             a body more than 1 m under y = 0, the lowest floor anything stands on (fall-recovery
 ;;                           catches a body at y = -40, long after it fell through);
 ;;   unnormalised-orientation a body whose orientation quaternion is more than 1/64 away from unit length;
 ;;   piece-overlap           a collision begin between two chess pieces (bodies 8 to 39), which rest apart;

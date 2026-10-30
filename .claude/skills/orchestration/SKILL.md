@@ -28,6 +28,22 @@ Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
 what the machine can verify. The owner's direction:
 
+- **Review before landing where a defect does damage before review lands.** Code
+  that deletes files, crosses a trust boundary (grants, federation, admission,
+  credentials) or rewrites persisted data gets its cross-family review before it
+  lands; everything else lands on its evidence and is reviewed alongside. A
+  pruning change that could delete outside its install root and a cap that
+  trusted the sender both landed first and had to be reverted or refixed.
+- **The lead's verification window outranks lane legs.** Windowed checks owed by
+  several lanes are one session the lead runs with GPU priority; it is never
+  queued behind the lanes it verifies.
+- **Speed claims get a quiet window.** The machine is never idle while lanes
+  run, so the lead holds a short quiet window at a natural pause (lanes parked at
+  WIP commits) to re-measure the speedups landed since the last one; a speed
+  claim stands only once measured there.
+- **An Antigravity lane is bounded and always reviewed before it lands**: its
+  output has carried fabricated claims and high findings.
+
 - **Batch, including unrelated areas.** Several lanes work independent areas at
   once, and the integration lane verifies them together in one sweep of the
   debug world
@@ -565,6 +581,14 @@ thing the owner cares about, not machine load alone:
   check that routing still follows fit rather than habit (a reading, not a
   quota);
 - the board's age against the newest lane change.
+
+Read lane state with `puck lanes` ([reference](../../../docs/reference/cli.md#puck-lanesone-line-per-worktree)),
+never an ad hoc scan of the worktrees: one line per worktree with its commits
+ahead, changed files, last commit, newest write, log exit, GPU lease state and a
+`STALL` mark, in seconds, read-only, and without walking `bin/` or `obj/`.
+`puck lanes --watch 0` is the stall watcher: run it as the one background
+monitor, and it prints only a lane finishing, stalling or resuming, a lease
+changing, or a lane appearing or leaving.
 
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the

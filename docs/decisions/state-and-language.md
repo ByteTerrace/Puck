@@ -136,8 +136,7 @@ an old one. The tracked `.world.json` files that remain are quarantined under
 `experimental/`, fixtures whose subject is the JSON document shape itself
 (`tests/Puck.World.Tests/RoundTripDocuments`, the Dashboard portal's workspace),
 or documents that still owe a `.puck` source compiled when needed:
-`tests/Puck.Counters/debug.world.json` and `avatar.world.json` are workloads
-derived from `debug.puck`, and the browser-parity presentation document is a
+the browser-parity presentation document is a
 world in its own right, not a shape fixture.
 
 **D11 — Rule groups are runtime constructs.** A fixpoint group evaluates its

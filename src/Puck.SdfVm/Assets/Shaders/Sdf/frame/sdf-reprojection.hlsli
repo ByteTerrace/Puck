@@ -44,7 +44,7 @@ float3 sdfMeshPreviousPosition(uint record, uint k) {
     if (entry != 0u) {
         uint slot = sdfMeshMemberSlot(record, entry);
 
-        return sdfMeshCarryPoint(record, (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz));
+        return sdfMeshCarryPoint(record, (rotatePointByQuaternion((sdfMeshMemberLocal(entry, object, true) * length(sdfMeshPreviousRow(record, 0u))), sdfPreviousDynamicTransforms[((3u * slot) + 1u)]) + sdfPreviousDynamicTransforms[(3u * slot)].xyz));
     }
 
     return sdfMeshCarryPoint(record, ((object.x * sdfMeshPreviousRow(record, 0u)) + (object.y * sdfMeshPreviousRow(record, 1u)) +
