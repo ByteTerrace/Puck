@@ -57,9 +57,7 @@ resolves their edits to this file at merge.
    isolate the temporal-off cadence blink first, then why history never
    resolves the jitter.
 10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    the catch-up burst bounded by wall time and the wake margin derived from the
-    contact skin, both confirmed in the code and cheap; the thread itself is a
-    design consensus the owner has yet to queue.
+    the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
 
@@ -491,11 +489,10 @@ then the diagnostics' windowed checks, then the three developer exhibits.
 
 ### Simulation tick off the frame thread
 
-Owner: specialist or Astra design lane · two medium, the rest ordinary · Next:
-the catch-up burst bounded by the wall time it has spent and the wake margin
-derived from the contact skin, both confirmed in the code (`FixedStepPump.Advance`,
-`WorldPopulation.Sleep.cs:154`); then the thread's design consensus, once the
-owner queues it.
+Owner: specialist or Astra design lane · ordinary · Next: the thread's design
+consensus, once the owner queues it.
+
+- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
 
 - The thread itself is an idea discussed with the owner and not yet queued:
   a design consensus across the families, which the owner's ruling says starts
@@ -509,9 +506,6 @@ owner queues it.
   console, MCP and live-edit commands marshal through the pump's existing
   queue; lifetime and bounded backpressure are settled before any lock-free
   claim, since a collection pauses both threads.
-
-- [medium] The localized wake around a moving carrier uses a fixed 1 m margin that ignores the configurable contact skin: with a valid `contactSkin` of 2 m, a sleeping sphere resting at skin distance above a lift misses the wake box during small car movements and stays asleep instead of riding (`src/Puck.World.Server/WorldPopulation.Sleep.cs:154`). Derive the margin from the contact skin (and the body's own broadphase radius). (owner: next simulation batch; from: lift-lag review)
-
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
@@ -556,20 +550,6 @@ owner queues it.
   frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
   resize path allocation-free or step the glass extent with hysteresis, and
   re-measure the approach on the RTX 2060.
-- [medium] The fixed-step pump's catch-up multiplies an over-budget tick: a
-  host frame clamps its wall delta to a quarter second
-  (`LauncherWindowHostedService`, `maxFrameTicks`), and `FixedStepPump.Advance`
-  then runs every step that delta owes, so once a tick costs more than its
-  1/30 s period each frame runs 7 or 8 steps and lasts 8 ticks' cost (the
-  lift before its wake fix: about 120 ms ticks, frames of 0.9-1.3 s, the World
-  at a quarter speed). The clamp bounds simulated time, not the frame. Bound a
-  burst by the wall time it has spent (drop the rest, rebasing the capture pin
-  as a clamp does), so an over-budget tick slows the World instead of the frame.
-  Two more readings of the same multiplier: eight catch-up steps cost roughly
-  400 ms a frame on a slow gallery boot, where pausing the boot instance took a
-  frame from about 366 ms to 19 ms; and a cold-bake windowed Vulkan boot (nine
-  lanes loading the machine) read simulate peaks of 1.2-2.1 s in 7 or 8
-  catch-up steps over 600 frames averaging 232 ms.
 - [low] Every rigid advance zero-fills the step's capture snapshot
   (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
   body's advance in an EventPipe sample of a lift ride).
@@ -784,9 +764,10 @@ failover witness.
 
 ### MCP and the operator attachment
 
-Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
-only a start's terminal outcome), then the per-swap state load, then the
-schema switch.
+Owner: MCP lane (specialist) · medium · Next: the schema switch, then the pick
+answer.
+
+- [medium] `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused` (`tests/Puck.Mcp.Tests`) fails on a 15 s `HttpClient` timeout, with or without the mcp-batch change (81 of 82 pass). Also: `world.grants` and `world.affordances` answer in one long `[verb: {json}]` line, so the `puck_exec` filter's `lines` and `match` only narrow them as JSON data; use `world.grants <grantee>` with `maxBytes`. (from: mcp-batch lane)
 
 - [medium] Investigate a GPU lease held by an older operator worker while no
   World is advertised and the worker has no direct child process. During the
@@ -797,35 +778,16 @@ schema switch.
   and the `OperatorWorlds.WatchAsync`/`Stop` lifecycle, then release it through
   that session. Evidence and start ids are in the controls hand-back.
 
-- [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The lease-rotation change counts an undeletable ticket as live on the new CLI; check the start path (the MCP adapter's lease delegate) handles the same error rather than failing the start. Also from the same lane: `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
-
-- [medium] `puck_exec` returns every line's full answer, so `world.affordances` and `world.grants` overflow an agent's token limit. Add an output filter to the tool (selected `lines` or `fields`, a byte cap with an explicit truncation mark) so the agents' own instrument stays usable on large answers. (from: c7-findings lane)
+- [low] `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
 
 - [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
 
-- An invalid wait argument on a pending operator MCP start caches the argument
-  refusal as the start's completed result: `OperatorMcpFront.Record`
-  (`src/Puck.Mcp/OperatorMcpFront.cs:101-108`) stores any non-pending
-  `puck_world_start_wait` answer under its `startId` and drops the start, so
-  later corrected waits and cancellation return that refusal while the World
-  keeps starting. Read in the source from one headless boot and by two
-  reviewers; run a minimal reproduction, then cache only a start's terminal
-  outcome.
 - A connected Claude Code session keeps a tool's old output schema when the MCP
   front switches to a backend whose schemas changed: the first `puck_adapter`
   call after the switch failed with "Structured content does not match the
   tool's output schema" until `/mcp` reconnected, and the front's tool-list
   notification does not refresh it. Keep output schemas additive across a live
   switch, or answer with the schemas the client was given until it reconnects.
-- [medium] An attached operator session costs the tick a whole state load on
-  every placement-response delivery: `WorldSessionSink.DeliverState` (replica
-  tier) discloses the definition again from the arena, so its mirror's
-  `WorldDocumentStateView.Shape` builds a new `StateArena` from the disclosed
-  rows, 280-380 ms a swap on a loaded machine; a lift ride swaps four to six
-  times. `StateArena.TryAdmitImport` clears its large cell-key set for every
-  row (`HashSet.Clear` about a quarter of the load). Deliver a holdings-only
-  change to the session without a fresh disclosure of state, or make the load
-  incremental.
 - The wanted next steps, each with the hook it extends: a batch capture that
   writes a series of stills and answers with a contact sheet
   (`ConsoleControlSession.CaptureAsync` already writes a presented burst to a

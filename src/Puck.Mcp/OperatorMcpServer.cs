@@ -14,14 +14,14 @@ namespace Puck.Mcp;
 /// <summary>Official-SDK stdio adapter for an explicitly trusted local Operator; the session owns Worlds it starts.</summary>
 public static class OperatorMcpServer {
     internal const string Instructions = "Trusted local Operator. Activated builds take effect on the next call; started Worlds and pending starts stay owned by this session across updates. Name your World in every call and inspect state after an unknown outcome before retrying.";
-    internal const string StatusMeanings = "status is completed (returned output or data), submitted (accepted with no output; not an authoritative mutation receipt), refused (error), or unknown (attachment closed or deadline expired after dispatch; inspect state before retrying). truncated marks output cut at the 1048576-character limit. Native JSON returns in data instead of output. A script's commands carry each line by its one-based source line number (the command text is not echoed), and the result names the World (world) only when the call named none.";
+    internal const string StatusMeanings = "status is completed (returned output or data), submitted (accepted with no output; not an authoritative mutation receipt), refused (error), or unknown (attachment closed or deadline expired after dispatch; inspect state before retrying). truncated marks output cut at the 1048576-character limit or at the maxBytes of a puck_exec filter. Native JSON returns in data instead of output. A script's commands carry each line by its one-based source line number (the command text is not echoed), and the result names the World (world) only when the call named none.";
     internal const string TimeoutMsProperty = """{"type":"integer","minimum":1,"maximum":120000,"default":30000,"description":"Deadline in milliseconds; expiry closes the attachment and reports status unknown."}""";
 
     private const string WorldProperty = """{"type":"object","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"},"document":{"type":"string"},"startedUtc":{"type":"string"}},"required":["attachmentId","processId","startedUtc"],"additionalProperties":false}""";
     private const string WorldRefProperty = """{"type":"object","description":"The World the call reached; present only when the call named none.","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"}},"required":["attachmentId","processId"],"additionalProperties":false}""";
 
     private static readonly JsonElement EmptyInput = JsonElement.Parse("""{"type":"object","properties":{},"additionalProperties":false}""");
-    private static readonly JsonElement ExecInput = JsonElement.Parse($$$$$"""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"Console line or newline-separated script (at most 64 nonblank, noncomment lines)."},"timeoutMs":{{{{{TimeoutMsProperty}}}}}},"required":["command"],"additionalProperties":false}""");
+    private static readonly JsonElement ExecInput = JsonElement.Parse($$$$$"""{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":8192,"description":"Console line or newline-separated script (at most 64 nonblank, noncomment lines)."},"lines":{"type":"string","minLength":1,"description":"Output filter, applied to each line's answer: one-based line ranges to keep, such as 1-20,40,60-."},"match":{"type":"string","minLength":1,"description":"Output filter: keep only answer lines containing this text, ignoring case."},"fields":{"type":"array","minItems":1,"items":{"type":"string","minLength":1},"description":"Output filter: keep only these fields, the keys of key=value answers or the property names anywhere in JSON answers."},"maxBytes":{"type":"integer","minimum":256,"maximum":1048576,"description":"Output filter: cut each answer to this many UTF-8 bytes, ending in a truncation mark and setting truncated."},"timeoutMs":{{{{{TimeoutMsProperty}}}}}},"required":["command"],"additionalProperties":false}""");
     private static readonly JsonElement CaptureInput = JsonElement.Parse($$$$$"""{"type":"object","properties":{"tick":{"type":"integer","minimum":0,"description":"settled only: future or current tick to hold and capture after it completes; omitted captures the last completed tick."},"timeoutMs":{{{{{TimeoutMsProperty}}}}},"mode":{"type":"string","enum":["settled","presented"],"default":"settled","description":"settled holds presentation for a converged still; presented reads live frames as displayed."},"frames":{"type":"integer","minimum":1,"maximum":120,"default":1,"description":"presented only: 1 returns the PNG inline; 2..120 writes PNGs and returns a diff report."},"region":{"type":"object","description":"presented only: normalized top-left rectangle (0..1) for diff metrics.","properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"width":{"type":"number","exclusiveMinimum":0,"maximum":1},"height":{"type":"number","exclusiveMinimum":0,"maximum":1}},"required":["x","y","width","height"],"additionalProperties":false}},"additionalProperties":false}""");
     private static readonly JsonElement WorldsOutput = JsonElement.Parse("""{"type":"object","properties":{"worlds":{"type":"array","items":{"type":"object","properties":{"attachmentId":{"type":"string"},"processId":{"type":"integer"},"document":{"type":"string"},"startedUtc":{"type":"string"},"current":{"type":"boolean","default":false},"started":{"type":"boolean","default":false}},"required":["attachmentId","processId","startedUtc"],"additionalProperties":false}}},"required":["worlds"],"additionalProperties":false}""");
     private static readonly JsonElement StartInput = JsonElement.Parse("""{"type":"object","properties":{"document":{"type":"string","minLength":1,"default":"worlds/debug","description":"World package, .puck source, or JSON under the checkout's worlds/ directory."},"checkout":{"type":"string","minLength":1,"description":"Absolute path to the adapter's checkout (default) or a worktree of its repository."},"backend":{"type":"string","enum":["directx","vulkan"],"description":"Graphics backend (--backend); vulkan builds SPIR-V."},"windowed":{"type":"boolean","default":false,"description":"Boot windowed under the GPU lease instead of headless."},"ownerPlay":{"type":"boolean","default":false,"description":"Open physical input devices (--devices all) when the owner asked to play."},"holder":{"type":"string","minLength":1,"description":"GPU lease holder name when windowed; defaults to the checkout's directory name."},"lane":{"type":"string","minLength":1,"description":"The lane the GPU lease rotates between; defaults to the first word of holder, or the checkout's directory name when neither is given."},"timeoutSeconds":{"type":"integer","minimum":1,"maximum":1800,"default":900,"description":"Deadline in seconds covering build, GPU lease, and attachment."}},"additionalProperties":false}""");
@@ -66,6 +66,10 @@ public static class OperatorMcpServer {
         int? frames = null;
         double[]? region = null;
         ulong? tick = null;
+        string[]? fields = null;
+        string? selectedLines = null;
+        string? match = null;
+        int? maxBytes = null;
 
         if (parameters.Arguments is { } arguments) {
             foreach (var (argumentKey, value) in arguments) {
@@ -112,13 +116,38 @@ public static class OperatorMcpServer {
                     capture &&
                     (value.ValueKind == JsonValueKind.Number) &&
                     value.TryGetUInt64(value: out var parsedTick)
-                ) { tick = parsedTick; } else {
+                ) { tick = parsedTick; } else if (
+                    (argumentKey == "lines") &&
+                    exec &&
+                    (value.ValueKind == JsonValueKind.String)
+                ) { selectedLines = value.GetString(); } else if (
+                    (argumentKey == "match") &&
+                    exec &&
+                    (value.ValueKind == JsonValueKind.String)
+                ) { match = value.GetString(); } else if (
+                    (argumentKey == "fields") &&
+                    exec &&
+                    (StringsOf(value: value) is { } parsedFields)
+                ) { fields = parsedFields; } else if (
+                    (argumentKey == "maxBytes") &&
+                    exec &&
+                    (value.ValueKind == JsonValueKind.Number) &&
+                    value.TryGetInt32(value: out var parsedBytes)
+                ) { maxBytes = parsedBytes; } else {
                     return Fail(
                     $"Invalid argument: {argumentKey}.",
                     unknown: false
                 );
                 }
             }
+        }
+        var filter = ConsoleOutputFilter.Create(fields: fields, lines: selectedLines, match: match, maxBytes: maxBytes, refusal: out var invalid);
+
+        if (invalid is not null) {
+            return Fail(
+                $"Invalid argument: {invalid}.",
+                unknown: false
+            );
         }
         if (vectorWrite) {
             if (string.IsNullOrWhiteSpace(value: row)) {
@@ -191,6 +220,7 @@ public static class OperatorMcpServer {
                 (result is null) ||
                 ((client is not LocalControlClient) && !result.IsValidFor(request: request))
             ) { client.Dispose(); return Fail("Host returned an invalid result; inspect state before retrying."); }
+            if (filter is { Active: true }) { result = filter.Apply(response: result); }
             return Result(
                 ((result.Id == 0)
                 ? null
@@ -276,6 +306,12 @@ public static class OperatorMcpServer {
         };
     }
 
+    // The strings of a nonempty array of strings, or null for any other value.
+    private static string[]? StringsOf(JsonElement value) {
+        if ((value.ValueKind != JsonValueKind.Array) || (value.GetArrayLength() == 0) || value.EnumerateArray().Any(predicate: static item => (item.ValueKind != JsonValueKind.String))) { return null; }
+
+        return [.. value.EnumerateArray().Select(selector: static item => item.GetString()!)];
+    }
     // The region argument's x, y, width and height, or null when it is not an object of four numbers; the control
     // request's validation judges the values.
     private static double[]? RegionOf(JsonElement value) {
@@ -314,7 +350,7 @@ public static class OperatorMcpServer {
     );
     internal static Tool ExecTool() => new() {
         Name = "puck_exec",
-        Description = ("Execute a Puck console line or newline-separated script (up to 64 nonblank, noncomment lines and 8192 characters) as the local Operator. Lines queue together on one session and settle in order, so successive simulation commands apply on adjacent ticks and world.wait holds only this script; scripts continue after refusals and report per-line results in commands. Use help (--names, --full, or <prefix>), help world.at, and help world.screenshot to discover commands. " + StatusMeanings),
+        Description = ("Execute a Puck console line or newline-separated script (up to 64 nonblank, noncomment lines and 8192 characters) as the local Operator. Lines queue together on one session and settle in order, so successive simulation commands apply on adjacent ticks and world.wait holds only this script; scripts continue after refusals and report per-line results in commands. Use help (--names, --full, or <prefix>), help world.at, and help world.screenshot to discover commands. A large answer (world.affordances, world.grants) is narrowed, never changing what the command does, by lines (ranges such as 1-20,40), match (lines containing a text), fields (keys of key=value answers or JSON properties) and maxBytes (a cut with an explicit mark); each applies to every line's answer. " + StatusMeanings),
         InputSchema = ExecInput,
         OutputSchema = ResultSchema,
         Annotations = new() { DestructiveHint = true, IdempotentHint = false, OpenWorldHint = true, ReadOnlyHint = false },
