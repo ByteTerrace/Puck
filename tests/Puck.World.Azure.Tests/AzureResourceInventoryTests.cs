@@ -206,6 +206,15 @@ public sealed class AzureResourceInventoryTests {
             3,
             both.Uris.Count
         );
+        foreach (var listing in new string?[] { null, """{"value":[{"subscriptionId":"not-a-guid"}]}""" }) {
+            using var broken = new Wire(listing);
+            using var brokenSource = Source(
+                broken,
+                group: "puck"
+            );
+
+            await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => brokenSource.ReadAsync(cancellationToken: Cancel).AsTask());
+        }
     }
 
     private sealed class Wire(params string?[] replies) : HttpMessageHandler {

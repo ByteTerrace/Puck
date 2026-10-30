@@ -493,6 +493,40 @@ public sealed class WorldObservationLawTests {
         );
     }
     [Fact]
+    public void TheFixtureProviderRefusesWhatItCannotServeByName() {
+        using var empty = JsonDocument.Parse("{}");
+        using var named = JsonDocument.Parse("""{"a":1}""");
+        using var items = JsonDocument.Parse("""{"items":[{"key":"a","fields":{}},{"key":"b","fields":{}}]}""");
+
+        Assert.Throws<ArgumentException>(testCode: () => WorldFixtureObservationProvider.Registration.Create(named.RootElement));
+        using var provider = (WorldFixtureObservationProvider)WorldFixtureObservationProvider.Registration.Create(empty.RootElement);
+
+        Assert.Throws<ArgumentException>(testCode: () => provider.Bind(
+            "operation",
+            "description",
+            empty.RootElement
+        ));
+        Assert.Throws<ArgumentException>(testCode: () => provider.BindObservation(
+            items.RootElement,
+            1
+        ));
+    }
+    [Fact]
+    public void AStatusTableThatIsNotAnIntTableOrIsAFieldsOutputIsRefused() {
+        using var world = Fixtures.FreshServer(DocumentWithFeed());
+
+        foreach (var table in new[] { "observedNames", "observedScores" }) {
+            var configuration = WithFeed(Configuration());
+
+            configuration = configuration with { Observations = [configuration.Observations![0] with { Status = table }] };
+            Assert.ThrowsAny<Exception>(testCode: () => Create(
+                world.Server,
+                new Source(),
+                configuration
+            ));
+        }
+    }
+    [Fact]
     public async Task TheFixtureProviderProjectsItsItemsAndAFailureShowsTheFeedOffline() {
         foreach (var failure in new[] { false, true }) {
             using var world = Fixtures.FreshServer(DocumentWithFeed());
