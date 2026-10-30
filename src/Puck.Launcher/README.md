@@ -151,10 +151,7 @@ filesystems.
 Activation writes pending health before changing current, so successive updates
 cannot bless a version that has never started.
 The selected executable clears that marker after startup, under `update.lock`,
-only when both its version and actual executable directory match `current`, then
-prunes older staged versions beyond `current`, `last-good` and the most recent
-`UpdateOptions.KeepVersions` other versions (skipping any version a running
-process holds open) and drops unreferenced `objects`.
+only when both its version and actual executable directory match `current`.
 An old or concurrently replaced process leaves it intact. The stub refuses
 missing or corrupt state generations rather than guessing rollback compatibility.
 Document-authored `update.cacheRoot` is a relative subdirectory of the host's
