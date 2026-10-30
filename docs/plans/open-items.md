@@ -26,6 +26,10 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
+The [refactoring campaign](#refactoring-campaign) comes first: the owner has
+lifted every test requirement so the next session can seriously improve the
+code (AGENTS.md). The packets below follow it.
+
 1. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the owner-visible
    sub-cell features (stair holes and flipped faces, blind slats, shell seams)
    fixed at the root in the bake. In flight: bake-seams (principal).
@@ -107,6 +111,72 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
 ## Work packets
+
+### Refactoring campaign
+
+Owner: the next session's lead · Next: split the items below into lanes, largest
+payoff first. The owner lifted test requirements for this campaign (AGENTS.md):
+a refactor rewrites or deletes tests freely and is verified by building and
+running what it changed. A `.puck` rewrite proves itself cheaply: `puck compile`
+lowers it to the same JSON as before, except where the look changes on purpose.
+
+Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
+
+- The bake's code identity (`SdfMeshBakeClosure`) holds upload code, so an
+  unrelated change rebakes every stored mesh, about nine minutes per backend
+  (the [hot reload packet](#edit-to-running-hot-reload-and-boot)'s medium). The
+  largest velocity win: narrow the closure to what can change a mesh.
+- Two field-contact solvers: relief contact's `FixedColliderField` measures
+  distance as value over gradient length; `FixedFieldContactSolver` and the field
+  provider (`WorldSolidField`) still read the value as the distance, hover on
+  relieved scopes and spend up to 1,033 samples a capsule. Make them one.
+- Two ways to grow a GPU region: `SdfWorldTables.EnsureProgramCapacity` waits
+  for the device to idle and rebuilds the program region whole, beside
+  `GpuRegion.Grow`, which grows under every residency policy.
+- Two directory removers: `tests/Shared/TemporaryDirectory.cs` still deletes
+  recursively beside the confined removal `RunDirectory.Delete` uses.
+- The bake's contour patches (`GapFill`, `CloseCoarseGaps`, `CloseFineGaps`,
+  `SeamGradient`) may be dead now that boxes are sharp unless rounded; bake-seams-2
+  measures and deletes them if so.
+
+The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
+them verbatim repeats) under-use the language:
+
+- `worlds/debug/avatars/moth.puck` (about 8,200 lines): about 500 left/right
+  names mirrored by hand, about 4,000 decimal literals, about 200 raw
+  quaternions, swing blocks repeating one pivot. Generate both sides from one
+  definition.
+- `worlds/standard/cards.puck` (about 4,400 lines): rank glyphs traced as 314
+  polyline points and about 220 raw quaternions; the engine already draws text
+  (`shape-text-engrave`, `shape-text-ride`). The card faces change look, so the
+  owner reviews them.
+- More than 500 rotations across the worlds are quaternion literals
+  (`[-0.173648, 0, 0, 0.984808]` is 20 degrees about X); `sine` and `cosine` are
+  builtins.
+- `worlds/standard/controls.puck` spells the twelve pad sources twice for
+  sidebars and mirrors the wings tables by hand; bar labels and icons sit in
+  tables apart from their ring entries.
+- `*-tests.puck` scenarios repeat their input lines (one card-table request
+  27 times).
+
+Helpers that belong in the standard package (`worlds/standard/`), transform
+maths first because the others build on it:
+
+- rotation and transform maths: turns about each axis in degrees, axis-angle,
+  composition, and mirroring a position or rotation;
+- a mirrored-pair template emitting both sides of a part from one definition;
+- skies and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`
+  and their air), now in `worlds/debug/skies.puck`;
+- a toggle ability beside `dashAbility` (`suitToggle` and `noclipToggle` are
+  one rule shape);
+- a tabletop kit: grid board, cell placement and piece prototypes, which chess,
+  Go and Reversi each wrote for themselves;
+- a named base-materials palette authors override by id;
+- scenario-step templates (tap, hold, wait until settled, repeated requests);
+- the pad slot list and a mirrored bar-table template in `pad-kit`.
+
+Debug-world-only content stays in `worlds/debug/`: exhibit plinths, section
+signs, places, tours, the alchemy elements and the games' rules.
 
 ### Sweep and visual checks
 

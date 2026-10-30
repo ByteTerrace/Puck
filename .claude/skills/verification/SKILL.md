@@ -14,6 +14,12 @@ owns each verb's flags. When this file and the code disagree, the code wins.
 What the owner says in a session overrides this skill and is written into it in
 that session.
 
+During the refactoring campaign the owner has lifted every test requirement
+([AGENTS.md](../../../AGENTS.md#puck-is-pre-release)): the landing bar below
+reduces to building what a change touched and running what it changed. Suites,
+coverage, red legs and focused tests are optional tools, and a red one holds
+nothing back.
+
 ## The landing bar
 
 A queued World build can outlive a cancelled start. Do not change a checkout's

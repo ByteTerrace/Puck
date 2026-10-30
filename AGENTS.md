@@ -50,12 +50,24 @@ agent works in that mode by default, without asking:
   the owner-only actions (pushing `main`, deploying, anything outside the
   repository). Everything else is yours: decide it, do it, and report what you
   did.
+- **Test requirements are lifted for the refactoring campaign (the owner's
+  ruling).** Major sections of the code are about to be redesigned, and the
+  owner wants that work free. Until the owner restores them, no test, suite,
+  coverage target, gate, red-leg proof or landing-bar check is required of a
+  change, and none holds one back. A refactor rewrites or deletes tests freely
+  (one that stops compiling is deleted, not repaired) and is verified by
+  building what it touched and running what it changed. The suite target and
+  the CI `coverage` job below are suspended; a red test or coverage job is not
+  a stop. Determinism (rule 4) still holds as a property of the code, and the
+  [refactoring packet](docs/plans/open-items.md#refactoring-campaign) holds the
+  queue.
 - Puck is not yet in alpha, and most of what lands now will be broken and
   rebuilt. Verify a change by running it or measuring it. Write a test only
   where running cannot show the behavior and the test will outlive the next
   rewrite. An existing test that a change breaks is updated or deleted in that
   change, never preserved as a constraint.
-- The owner's target for the suite: the smallest set of tests that reaches 100%
+- Suspended during the refactoring campaign above. The owner's target for the
+  suite: the smallest set of tests that reaches 100%
   line coverage, plus a short keep-list of invariant tests the owner approves
   (determinism replay hashes, exact fixed-point results), which coverage alone
   cannot see. Dead internals, duplicates and ledgers that no test and no live
