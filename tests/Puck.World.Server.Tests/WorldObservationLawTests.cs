@@ -413,6 +413,162 @@ public sealed class WorldObservationLawTests {
         Assert.False(condition: Assert.Single(collection: runtime.Observations).Applied);
     }
 
+    private static WorldDefinition DocumentWithFeed() {
+        var document = Document();
+
+        return document with {
+            StateRaw = new(World: [.. document.State,
+            new(
+                CellName.Parse(candidate: "observedFeed"),
+                CellKind.Int,
+                Capacity: 1,
+                Cells: [new(
+                        CellName.Parse(candidate: "status"),
+                        CellValue.Int(value: 0)
+                    )],
+                Visibility: new()
+            )]),
+        };
+    }
+    private static WorldExtensionConfiguration WithFeed(WorldExtensionConfiguration configuration) => configuration with {
+        Clients = [configuration.Clients[0] with { Requests = [.. configuration.Clients[0].Requests, new(Capability: "observe", Subject: "state:observedFeed")] }],
+        Observations = [configuration.Observations![0] with { Status = "observedFeed" }],
+    };
+    private static long Feed(WorldServer server) => Cell(
+        server,
+        "observedFeed",
+        WorldExtensionObservationFeed.StatusKey
+    ).Value.AsInt;
+
+    [Fact]
+    public async Task TheStatusRowTellsAPendingFeedFromALiveOneAndAnOfflineOne() {
+        using var world = Fixtures.FreshServer(DocumentWithFeed());
+        using var provider = new Source { Items = [] };
+        await using var runtime = Create(
+            world.Server,
+            provider,
+            WithFeed(Configuration())
+        );
+
+        // A live feed with nothing in it is not an absent one: the status says live while the collection is empty.
+        Assert.Equal(
+            WorldExtensionObservationFeed.Pending,
+            Feed(world.Server)
+        );
+        await Observe(
+            runtime,
+            world.Server,
+            1
+        );
+        Assert.Equal(
+            WorldExtensionObservationFeed.Live,
+            Feed(world.Server)
+        );
+        Assert.Empty(collection: Names(server: world.Server));
+        provider.Fail = true;
+        await Observe(
+            runtime,
+            world.Server,
+            20,
+            fails: true
+        );
+        Assert.Equal(
+            WorldExtensionObservationFeed.Offline,
+            Feed(world.Server)
+        );
+        provider.Fail = false;
+        provider.Items = [Item("a")];
+        await Observe(
+            runtime,
+            world.Server,
+            40
+        );
+        Assert.Equal(
+            WorldExtensionObservationFeed.Live,
+            Feed(world.Server)
+        );
+        Assert.Equal(
+            new[] { "a" },
+            Names(server: world.Server)
+        );
+    }
+    [Fact]
+    public void TheFixtureProviderRefusesWhatItCannotServeByName() {
+        using var empty = JsonDocument.Parse("{}");
+        using var named = JsonDocument.Parse("""{"a":1}""");
+        using var items = JsonDocument.Parse("""{"items":[{"key":"a","fields":{}},{"key":"b","fields":{}}]}""");
+
+        Assert.Throws<ArgumentException>(testCode: () => WorldFixtureObservationProvider.Registration.Create(named.RootElement));
+        using var provider = (WorldFixtureObservationProvider)WorldFixtureObservationProvider.Registration.Create(empty.RootElement);
+
+        Assert.Throws<ArgumentException>(testCode: () => provider.Bind(
+            "operation",
+            "description",
+            empty.RootElement
+        ));
+        Assert.Throws<ArgumentException>(testCode: () => provider.BindObservation(
+            items.RootElement,
+            1
+        ));
+    }
+    [Fact]
+    public void AStatusTableThatIsNotAnIntTableOrIsAFieldsOutputIsRefused() {
+        using var world = Fixtures.FreshServer(DocumentWithFeed());
+
+        foreach (var table in new[] { "observedNames", "observedScores" }) {
+            var configuration = WithFeed(Configuration());
+
+            configuration = configuration with { Observations = [configuration.Observations![0] with { Status = table }] };
+            Assert.ThrowsAny<Exception>(testCode: () => Create(
+                world.Server,
+                new Source(),
+                configuration
+            ));
+        }
+    }
+    [Fact]
+    public async Task TheFixtureProviderProjectsItsItemsAndAFailureShowsTheFeedOffline() {
+        foreach (var failure in new[] { false, true }) {
+            using var world = Fixtures.FreshServer(DocumentWithFeed());
+            var configuration = WithFeed(Configuration());
+            var settings = (failure
+                ? """{"items":[],"failure":"unauthorised"}"""
+                : """{"items":[{"key":"a","fields":{"name":"a","score":"3","depth":"1"}},{"key":"b","fields":{"name":"b","score":"4","depth":"2"}}]}""");
+
+            configuration = configuration with {
+                Providers = [new("source", WorldFixtureObservationProvider.Type, JsonDocument.Parse("{}").RootElement.Clone())],
+                Observations = [configuration.Observations![0] with { Settings = JsonDocument.Parse(settings).RootElement.Clone() }],
+            };
+            await using var runtime = WorldConfiguredExtensions.Create(
+                configuration,
+                PuckExtensionSet.Compose(extensions: [new WorldServerExtension()]),
+                world.Server,
+                new FakeObjectBlobStore(),
+                new DirectoryObjectStorageTarget("unused"),
+                () => throw new InvalidOperationException(message: "Reads must not capture effect recovery images.")
+            );
+
+            await Observe(
+                runtime,
+                world.Server,
+                1,
+                fails: failure
+            );
+            Assert.Equal(
+                "fixture",
+                Assert.Single(collection: runtime.Observations).Kind
+            );
+            Assert.Equal(
+                (failure ? WorldExtensionObservationFeed.Offline : WorldExtensionObservationFeed.Live),
+                Feed(world.Server)
+            );
+            Assert.Equal(
+                (failure ? Array.Empty<string>() : ["a", "b"]),
+                Names(server: world.Server)
+            );
+        }
+    }
+
     private sealed class Source : IWorldConfiguredProvider, IWorldConfiguredObservationProvider, IWorldExtensionObservationSource {
         public IReadOnlyList<WorldExtensionObservationItem> Items = [];
         public TaskCompletionSource Started { get; } = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);

@@ -234,6 +234,7 @@ Preserve unrelated work; stage explicit paths and inspect the whole index. Commi
 Merge the integration tip into your branch: merge, never rebase.
 Pushing `main`, force-pushing, and deleting a remote branch that holds unmerged work are the owner's: ask first. A remote branch whose work has landed on the integration branch backs up nothing, and the lead deletes it (the owner's ruling).
 Decide, don't ask, except for product/taste decisions and owner-only actions: those above, Azure deployment, package publication, or changes outside this repository.
+The owner's Azure subscription ID is not a secret and may appear in committed configuration (the owner's ruling); credentials, keys and tokens never do.
 End runs with **Needs you**, **Changed**, **Found**; state verification and unconfirmed findings.
 
 Every repository operation is a `puck` verb; [CI](docs/development/ci.md#repository-automation) owns procedures.
