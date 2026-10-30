@@ -648,3 +648,11 @@ The reusable `dashAbility` template is authored in
 instantiates it for her walker kit; her binding is West or J on Move, while
 run remains Shift held or N/left-stick press toggled. Her `dashPose` cell drives
 the torso lean and the existing back-pod burn lanes.
+
+The analytic contact provider sweeps fast displacement in slices no longer than
+half the least support radius of the moving volumes, using the same core radius
+as field sweeps. Each slice reuses the existing endpoint contact solver. Work is
+bounded by `FixedFieldContactSolver.DefaultSweepBoundsQueryBudget`; exhaustion
+keeps the resolved prefix and reports `Unproved`, as the field provider does,
+while an unrepresentable displacement refuses the whole move. Unobstructed
+completed slices conserve the exact raw displacement through the Maths rate carrier.

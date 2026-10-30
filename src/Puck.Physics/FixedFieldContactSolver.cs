@@ -794,9 +794,7 @@ public sealed class FixedFieldContactSolver(
         (ColliderRadius(volume: in volume).Value >= MinimumColliderRadiusRaws);
 
     // The radius a volume's core spheres take half of: a sphere's or capsule's own, or a box's least half extent.
-    private static FixedQ4816 ColliderRadius(in FixedBodyColliderVolume volume) => ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
-        ? FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z))
-        : volume.Radius);
+    private static FixedQ4816 ColliderRadius(in FixedBodyColliderVolume volume) => FixedColliderBounds.MinimumSupportRadius(volume: in volume);
     // A core sphere's radius: half the volume's least radius, so a body resting against a surface keeps half its radius
     // of clearance and its sweep never stalls there.
     private static FixedQ4816 CoreRadius(in FixedBodyColliderVolume volume) =>

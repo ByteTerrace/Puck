@@ -42,7 +42,7 @@ public sealed partial class WorldBody {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         if (PopulationSleeping) { return false; }
 
-        // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
+        // Captured before ExecuteProgram can move m_position — the swept portal-crossing
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
         var previousOrientationForSleep = m_orientation;
