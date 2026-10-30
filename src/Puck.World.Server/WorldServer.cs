@@ -644,6 +644,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         );
         m_profiles = profiles;
         m_transferEscrow = new WorldTransferEscrow(landingRefusal: landingRefusal, server: this);
+        population.Holds = m_transferEscrow.Custody.HeldPlacement;
         m_envelope = envelope;
         // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
         // construction) — the server owns it from here without a second build.

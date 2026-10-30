@@ -1108,7 +1108,7 @@ public sealed partial class WorldTransferEscrow {
             Generations = [.. generations],
             Readopted = (m_relanding
                 ? [.. m_relandReadopted]
-                : []),
+                : [.. landedOrdinals.Where(predicate: ordinal => IsReturn(member: lease.Request.Members[ordinal])).Select(selector: ordinal => lease.Request.Members[ordinal].Mobility!.Value.Incarnation)]),
         };
 
         lease = lease with {
@@ -1278,6 +1278,14 @@ public sealed partial class WorldTransferEscrow {
                 profile: profile,
                 slot: slot
             );
+            // A companion that came home is its placement's inhabitant again, bound as the placement is installed now.
+            if (IsReturn(member: reservationMember) && (Custody.PlacementOf(incarnation: reservationMember.Mobility!.Value.Incarnation) is { } placementId)) {
+                _ = m_server.Population.ReadoptInhabitant(
+                    definition: m_server.Definition,
+                    placementId: placementId,
+                    slot: slot
+                );
+            }
         }
 
         return reply;
@@ -1672,6 +1680,10 @@ public sealed partial class WorldTransferEscrow {
                 }
             }
         }
+        // A held slot waits for its own body: only that companion's verified return binds it.
+        for (var slot = 0; (slot < consumed.Length); slot++) {
+            consumed[slot] |= (Custody.HeldPlacement(slot: slot) is not null);
+        }
 
         if (request.BorderCapacity is { } borderCapacity) {
             var heldAtBorder = (m_leases.Values.Where(predicate: lease => string.Equals(
@@ -1819,14 +1831,18 @@ public sealed partial class WorldTransferEscrow {
     // Decides one companion of a reservation on its own: its role declared here, no body or live lease here naming its
     // incarnation, a ticket for this very hop at the epoch above the one it leaves, home's confirmation that the grant is
     // current (asked for this reservation by this destination's own host, never taken from the sender), and a free peer
-    // slot its source can occupy. A companion coming home is decided by home's own custody instead.
+    // slot its source can occupy. A companion coming home is a return, decided by home's own custody records.
     private (WorldCompanionRefusal Reason, string Detail)? CompanionRefusal(WorldTransferCompanion companion, WorldTransferReservationMember member, WorldTransferKey key, bool[] consumed, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed, out int slot) {
         slot = -1;
         var mobility = member.Mobility!.Value;
         var incarnation = mobility.Incarnation;
 
         if (string.Equals(a: incarnation.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal)) {
-            return (WorldCompanionRefusal.Unverified, "this authority holds the companion's title and does not take it back through a hop");
+            return ReturnRefusal(
+                custodian: key.SourceAuthority,
+                mobility: mobility,
+                slot: out slot
+            );
         }
         if (m_server.Definition.FindRole(name: companion.Role) is null) {
             return (WorldCompanionRefusal.Role, $"this world declares nothing for role '{companion.Role}'");
@@ -1866,9 +1882,41 @@ public sealed partial class WorldTransferEscrow {
         }
         return null;
     }
-    // Whether this commit may land a leased companion: the ticket it carries is the one leased, and home confirmed, for
-    // this commit, the grant at the epoch the lease expects.
-    private bool CommitConfirmed(WorldTransferCompanion? carried, WorldTransferKey key, WorldTransferReservationMember leased) => (
+    // Decides a companion coming home through the one verification door (WorldCompanionCustody.VerifyReturn): the copy
+    // the title says is away, at exactly its custodian and epoch, binds its held slot and never another; home never
+    // refuses it for capacity. A latched home verifies nothing, and a live lease or body naming the incarnation answers
+    // Duplicate until it is gone.
+    private (WorldCompanionRefusal Reason, string Detail)? ReturnRefusal(string custodian, WorldMobilityIdentity mobility, out int slot) {
+        var incarnation = mobility.Incarnation;
+
+        slot = -1;
+        if (m_server.CustodyLatched) {
+            return (WorldCompanionRefusal.Unavailable, "home is latched on a crossing record it cannot yet call durable");
+        }
+        if (Custody.VerifyReturn(custodian: custodian, epoch: mobility.Epoch, incarnation: incarnation) is { } refused) {
+            return (refused, $"home's records do not hold {incarnation} away with '{custodian}' at epoch {mobility.Epoch}");
+        }
+        if (m_mobilityLeases.ContainsKey(key: incarnation) || EmbodiesIncarnation(incarnation: incarnation)) {
+            return (WorldCompanionRefusal.Duplicate, $"a body or a live lease here already names {incarnation}");
+        }
+
+        var held = incarnation.Index;
+
+        if (m_server.Population.IsActive(index: held) || m_leases.Values.Any(predicate: lease => lease.Slots.Contains(value: held))) {
+            return (WorldCompanionRefusal.Duplicate, $"the held slot body:{held} is not yet free");
+        }
+        slot = held;
+        return null;
+    }
+    // Whether this commit may land a leased companion: a return is verified again against home's records as they stand
+    // at the commit (a recall or an install since the lease leaves it out); a hop's ticket is the one leased, and home
+    // confirmed, for this commit, the grant at the epoch the lease expects.
+    private bool CommitConfirmed(WorldTransferCompanion? carried, WorldTransferKey key, WorldTransferReservationMember leased) => (IsReturn(member: leased)
+        ? ((carried?.Ticket == leased.Companion?.Ticket) && !m_server.CustodyLatched && (Custody.VerifyReturn(custodian: key.SourceAuthority, epoch: leased.Mobility!.Value.Epoch, incarnation: leased.Mobility!.Value.Incarnation) is null))
+        : CommitGranted(carried: carried, key: key, leased: leased));
+    // Whether a member is a companion coming back to the authority that holds its title.
+    private bool IsReturn(WorldTransferReservationMember member) => ((member.Companion is not null) && (member.Mobility is { } mobility) && string.Equals(a: mobility.Incarnation.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal));
+    private bool CommitGranted(WorldTransferCompanion? carried, WorldTransferKey key, WorldTransferReservationMember leased) => (
         (carried?.Ticket is { } ticket) &&
         (leased.Companion?.Ticket == ticket) &&
         (m_commitConfirmations is { } confirmed) &&

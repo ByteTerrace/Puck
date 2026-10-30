@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -148,6 +149,91 @@ public sealed partial class WorldInstanceHost {
             }
         }
     }
+    /// <summary>Queues a visiting companion's return to the authority that holds its title: a crossing of its own, under
+    /// a key this custodian allocates durably, carrying the ticket the companion landed with and following no one. Home
+    /// decides it from its own records alone (the copy its title says is away, at exactly this custodian and epoch) and
+    /// re-adopts it into its held slot one epoch above, bound to its placement as installed then; every later refusal is
+    /// narrated at drain time.</summary>
+    /// <param name="sourceInstance">The name of the custodian instance the companion stands in.</param>
+    /// <param name="slot">The companion's body index there.</param>
+    /// <param name="transferId">The queued transfer's id, on success.</param>
+    /// <param name="reason">Why nothing was queued, on failure.</param>
+    /// <returns><see langword="false"/> when <paramref name="sourceInstance"/> runs no such visiting companion at
+    /// <paramref name="slot"/>, or no instance this host runs holds its title.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sourceInstance"/> is <see langword="null"/>.</exception>
+    public bool TryEnqueueCompanionReturn(string sourceInstance, int slot, out ulong transferId, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: sourceInstance);
+
+        transferId = 0UL;
+        if (!m_instances.TryGetValue(key: sourceInstance, value: out var source)) {
+            reason = $"no instance named '{sourceInstance}'";
+            return false;
+        }
+        if (ReturnLeaf(slot: slot, source: source) is not { } leaf) {
+            reason = $"body:{slot} in '{sourceInstance}' is no visiting companion that can go home";
+            return false;
+        }
+        if (m_instances.Values.FirstOrDefault(predicate: row => string.Equals(a: row.Server.AuthorityIdentity, b: leaf.Home, comparisonType: StringComparison.Ordinal)) is not { } home) {
+            reason = $"no instance this host runs holds the title of body:{slot} in '{sourceInstance}' ('{leaf.Home}')";
+            return false;
+        }
+        transferId = EnqueuePending(
+            actingPrincipal: Principal.Console,
+            adjacencyCounterpart: null,
+            arrival: WorldPortalArrival.Spawn,
+            border: null,
+            borderCapacity: null,
+            companionReturn: true,
+            continuum: null,
+            counterpart: null,
+            destination: TransferDestination.Existing(name: home.Name),
+            frozenCohortSlots: null,
+            frozenGenerationId: null,
+            frozenScopeKey: null,
+            fullPolicy: WorldTransferFullPolicy.Retry,
+            holdSeconds: 2.0,
+            partyAllOrNothing: true,
+            posed: null,
+            resolvedDestinationRow: null,
+            scope: TransferScope.Body,
+            sourceCrossingPoint: default,
+            sourceFrame: null,
+            sourceInstance: sourceInstance,
+            sourceSlot: slot,
+            testForceJoinRefusalOrdinal: null
+        );
+        reason = string.Empty;
+        return true;
+    }
+    // The leaf a visiting companion goes home with: the one it landed here with, following no one. Null for a body that
+    // is no visiting companion (this authority's own, or one no arrival here landed as a companion).
+    private static WorldTransferCompanion? ReturnLeaf(WorldInstance source, int slot) => source.Server.ExecuteAuthorityOperation(operation: () => {
+        var server = source.Server;
+
+        if (
+            (((uint)slot) >= ((uint)server.Population.Capacity)) ||
+            !server.Population.IsActive(index: slot) ||
+            (server.Population.ResolveIncarnation(authority: server.AuthorityIdentity, index: slot) is not { } incarnation) ||
+            string.Equals(a: incarnation.Authority, b: server.AuthorityIdentity, comparisonType: StringComparison.Ordinal) ||
+            (server.TransferEscrow.Custody.CarriedOf(incarnation: incarnation) is not { } carried)
+        ) {
+            return null;
+        }
+        return carried with { FollowsMember = null };
+    });
+    // The companions of a departure from their title's home that did not land and whose title an install released while
+    // the departure was in doubt: install wins over the departure, so each is retired, never restored.
+    private static int[] InstallRetired(WorldInstance source, IReadOnlyList<WorldTransferCommitMember> commits, IReadOnlyList<int> landed) => source.Server.ExecuteAuthorityOperation(operation: () => {
+        var server = source.Server;
+        var custody = server.TransferEscrow.Custody;
+
+        return Enumerable.Range(start: 0, count: commits.Count).Where(predicate: ordinal => (
+            (commits[ordinal].Companion?.Ticket is { } ticket) &&
+            string.Equals(a: ticket.Home, b: server.AuthorityIdentity, comparisonType: StringComparison.Ordinal) &&
+            !landed.Contains(value: MemberIdAt(commits: commits, ordinal: ordinal)) &&
+            (custody.TitleOf(incarnation: ticket.Incarnation) is { Installed: true })
+        )).Select(selector: ordinal => MemberIdAt(commits: commits, ordinal: ordinal)).ToArray();
+    });
     // Tells each title authority of every hop this custodian settled under its title, until it acknowledges: home
     // settles the hop from the destination's own word and the acknowledgement is recorded here, one record each.
     private void NotifySettledHops() {

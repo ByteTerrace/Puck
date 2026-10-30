@@ -148,14 +148,20 @@ public sealed partial class WorldInstanceHost {
                     // Once any member can return, never retry the cohort commit—even after a checkpoint.
                     pending = pending with { RollbackOnly = true };
                     m_inDoubtTransfers[index] = pending;
+
+                    var retired = InstallRetired(commits: pending.CommitMembers, landed: [], source: source);
+                    var kept = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
+                    var rollingBack = pending;
+
                     if (
                         !TrySettle(
                         arrived: false,
-                        pending: pending
+                        pending: pending,
+                        retired: retired
                     ) ||
                         !RestoreDetachedMembers(
-                        commits: pending.CommitMembers,
-                        members: pending.Landed,
+                        commits: [.. kept.Select(selector: ordinal => rollingBack.CommitMembers[ordinal])],
+                        members: [.. kept.Select(selector: ordinal => rollingBack.Landed[ordinal])],
                         source: source,
                         transferId: pending.Transfer.TransferId
                     )

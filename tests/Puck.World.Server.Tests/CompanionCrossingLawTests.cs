@@ -9,7 +9,7 @@ namespace Puck.World.Server.Tests;
 /// the member it names, home authorizes every hop it holds the title for, and a destination lands a companion only
 /// under a grant home confirms to it for that very decision. Each law is the engine form of a named trace of the custody
 /// model (<c>CompanionCustodyModelLawTests</c>). Row a is home; its companions follow its seat 0.</summary>
-public sealed class CompanionCrossingLawTests {
+public sealed partial class CompanionCrossingLawTests {
     // Three authorities in one host, each with a durable crossing log: home (row-a) holding the companions, and two
     // custodians. Seat 0 of home is the player; seat 1 keeps home running when the player leaves.
     private sealed class Rows : IDisposable {

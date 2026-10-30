@@ -38,16 +38,21 @@ public sealed partial class WorldInstanceHost {
                     var unlanded = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !landedIds.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
 
                     if (unlanded.Length > 0) {
+                        // A companion whose title an install released meanwhile is retired, never restored.
+                        var retired = InstallRetired(commits: pending.CommitMembers, landed: landedIds, source: source);
+                        var restored = unlanded.Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
+
                         if (!TrySettle(
                             arrived: true,
                             landed: landedIds,
-                            pending: pending
+                            pending: pending,
+                            retired: retired
                         )) {
                             return false;
                         }
                         _ = RestoreDetachedMembers(
-                            commits: [.. unlanded.Select(selector: ordinal => pending.CommitMembers[ordinal])],
-                            members: [.. unlanded.Select(selector: ordinal => pending.Landed[ordinal])],
+                            commits: [.. restored.Select(selector: ordinal => pending.CommitMembers[ordinal])],
+                            members: [.. restored.Select(selector: ordinal => pending.Landed[ordinal])],
                             source: source,
                             transferId: transfer.TransferId
                         );

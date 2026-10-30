@@ -236,6 +236,9 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
         }
         return confirmed;
     }
+    // Whether this authority is latched on a crossing record it cannot yet call durable: home then verifies no return
+    // and confirms no grant, since the record it is uncertain about may end a title. Callers hold the authority gate.
+    internal bool CustodyLatched => (m_uncertainCrossing is not null);
     private bool IsUncertainAboutHeld(WorldTransferKey key) => (m_uncertainCrossing is not null) && (m_uncertainRecord switch {
         WorldCrossingRecord.Hop hop => (hop.Key == key),
         WorldCrossingRecord.HopDone done => (done.Key == key),

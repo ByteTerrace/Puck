@@ -311,10 +311,13 @@ public sealed partial class WorldInstanceHost {
 
         // The companions following this crossing's travelers join its cohort, each named by its member id and bound to
         // the member it follows; each crosses only under a hop its title authority grants.
-        var companions = CompanionsFollowing(
-            members: members,
-            source: source
-        );
+        // A companion's return is its own operation: it follows no one, and home's records alone decide it.
+        var companions = (transfer.CompanionReturn
+            ? []
+            : CompanionsFollowing(
+                members: members,
+                source: source
+            ));
 
         if (companions.Count > 0) {
             members = [.. members, .. companions.Select(selector: static companion => companion.Slot)];
@@ -371,7 +374,19 @@ public sealed partial class WorldInstanceHost {
             // A human is a seat or an admitted remote human, never read from its control source. Anything else (a
             // companion an addon drives, a census bot) crosses autonomous: its driver stays here, so a Live source
             // crosses as Idle, which the destination authors itself without spending its networkPlayers cap.
-            var companion = companions.FirstOrDefault(predicate: candidate => (candidate.Slot == sourceSlot)).Leaf;
+            var companion = (transfer.CompanionReturn
+                ? ReturnLeaf(slot: sourceSlot, source: source)
+                : companions.FirstOrDefault(predicate: candidate => (candidate.Slot == sourceSlot)).Leaf);
+
+            if (transfer.CompanionReturn && (companion is null)) {
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} refused (body:{sourceSlot} in '{sourceInstanceName}' is no visiting companion that can go home)]"
+                    );
+                }
+                return;
+            }
             var human = ((companion is null) && ((sourceSlot < source.Server.Population.LocalSeatCount) || source.Server.Population.IsAdmittedPeer(bodyIndex: sourceSlot)));
 
             reservationMembers[reservationIndex] = new WorldTransferReservationMember(
@@ -895,17 +910,23 @@ public sealed partial class WorldInstanceHost {
                 // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
             }
             var rollback = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true);
+            // A companion whose title an install released while its departure was in doubt is retired, never restored.
+            var retired = (departed
+                ? InstallRetired(commits: commitMembers, landed: [], source: source)
+                : []);
+            var kept = Enumerable.Range(start: 0, count: commitMembers.Count).Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: commitMembers, ordinal: ordinal))).ToArray();
 
             // A departure already made durable is settled home before the cohort returns, so a restart redoes the
             // return instead of asking the destination again.
             if (
                 (departed && !TrySettle(
                 arrived: false,
-                pending: rollback
+                pending: rollback,
+                retired: retired
             )) ||
                 !RestoreDetachedMembers(
-                commits: commitMembers,
-                members: landed,
+                commits: [.. kept.Select(selector: ordinal => commitMembers[ordinal])],
+                members: [.. kept.Select(selector: ordinal => landed[ordinal])],
                 source: source,
                 transferId: transfer.TransferId
             )
@@ -2105,7 +2126,7 @@ public sealed partial class WorldInstanceHost {
         reason = string.Empty;
         return true;
     }
-    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed) {
+    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed, bool companionReturn = false) {
         var source = m_instances.GetValueOrDefault(key: sourceInstance);
         var transferId = ((source is not null)
             ? MintTransferId(source: source)
@@ -2147,7 +2168,8 @@ public sealed partial class WorldInstanceHost {
             PartyAllOrNothing: partyAllOrNothing,
             BorderCapacity: borderCapacity,
             Border: (border ?? "transfer"),
-            Posed: posed
+            Posed: posed,
+            CompanionReturn: companionReturn
         ));
 
         return transferId;
@@ -2352,6 +2374,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="Travellers">The mobility incarnation of each member as the transfer was queued, in
     /// <paramref name="FrozenCohortSlots"/> order (or the one <paramref name="SourceSlot"/>), an entry
     /// <see langword="null"/> for a slot that held no body then; <see langword="null"/> for a live-read party.</param>
+    /// <param name="CompanionReturn">Whether the transfer is a visiting companion's return to its title authority: it
+    /// follows no one and carries the ticket it landed with.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2380,7 +2404,8 @@ public sealed partial class WorldInstanceHost {
         string? RecoveryDestinationName = null,
         PosedTraveller? Posed = null,
         WorldInstance? Source = null,
-        IReadOnlyList<WorldEntityAddress?>? Travellers = null
+        IReadOnlyList<WorldEntityAddress?>? Travellers = null,
+        bool CompanionReturn = false
     );
     // The traveller a pose carries home, by the mobility incarnation it keeps through every handoff, and the pose it
     // lands at standing still.

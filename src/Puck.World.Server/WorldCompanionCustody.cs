@@ -119,9 +119,15 @@ public sealed class WorldCompanionCustody {
     private readonly HashSet<(WorldEntityAddress Incarnation, int Visit)> m_graceElapsed = new();
     private readonly HashSet<WorldEntityAddress> m_retired = new();
     private readonly Dictionary<WorldEntityAddress, (WorldTransferKey Arrival, WorldCompanionBinding Binding, WorldEntityAddress Follows, WorldTransferCompanion Carried)> m_bindings = new();
-    // This authority's departures that carried companions, by transfer id: each companion's member id and incarnation;
-    // and the landed member ids of each one's settlement.
-    private readonly Dictionary<ulong, List<(int MemberId, WorldEntityAddress Incarnation, string Home)>> m_ownDepartures = new();
+    // This authority's departures that carried companions, by transfer id: the authority each went to, each companion's
+    // member id, incarnation and title authority, and the body index every member left; and the landed member ids of
+    // each one's settlement.
+    private readonly Dictionary<ulong, (string Target, List<(int MemberId, WorldEntityAddress Incarnation, string Home)> Carried, (int Slot, string? PlacementId)[] Left)> m_ownDepartures = new();
+    // The placement each title's companion left home from, by its latest departure: what its re-adoption binds it to,
+    // and the placement its held slot is counted for while it is away.
+    private readonly Dictionary<WorldEntityAddress, string> m_placements = new();
+    // The companion leaf each visiting companion last landed here with: its role, title authority, driver and ticket.
+    private readonly Dictionary<WorldEntityAddress, WorldTransferCompanion> m_carried = new();
     // Every arrival here that carried companions, by key: the companions it landed. A destination answers its title
     // authorities from these, whatever became of the transaction since.
     private readonly Dictionary<WorldTransferKey, HashSet<WorldEntityAddress>> m_arrivals = new();
@@ -265,15 +271,19 @@ public sealed class WorldCompanionCustody {
                 break;
             case WorldCrossingRecord.Departure departure: {
                 var carried = new List<(int, WorldEntityAddress, string)>();
+                var transfer = departure.Transfer;
 
-                for (var index = 0; (index < departure.Transfer.CommitMembers.Count); index++) {
-                    var member = departure.Transfer.CommitMembers[index];
+                for (var index = 0; (index < transfer.CommitMembers.Count); index++) {
+                    var member = transfer.CommitMembers[index];
 
                     if (member.Companion?.Ticket is { } ticket) {
                         carried.Add(item: (((member.MemberId < 0) ? index : member.MemberId), ticket.Incarnation, ticket.Home));
                     }
+                    if ((member.Companion is not null) && (index < transfer.Landed.Count) && (transfer.Landed[index].Peer?.PlacementId is { } placementId) && IsHome(authority: transfer.Landed[index].Mobility.Incarnation.Authority)) {
+                        m_placements[transfer.Landed[index].Mobility.Incarnation] = placementId;
+                    }
                 }
-                m_ownDepartures[departure.Transfer.TransferId] = carried;
+                m_ownDepartures[transfer.TransferId] = (transfer.TargetAuthority, carried, [.. transfer.Landed.Select(selector: static member => (member.SourceSlot, member.Peer?.PlacementId))]);
                 break;
             }
             case WorldCrossingRecord.Settlement settlement:
@@ -281,6 +291,11 @@ public sealed class WorldCompanionCustody {
                 break;
             case WorldCrossingRecord.Arrival arrival:
                 m_arrivals[arrival.Value.Key] = [.. arrival.Value.Request.Members.Where(predicate: static member => member.Companion is not null).Select(selector: static member => member.Mobility!.Value.Incarnation)];
+                foreach (var member in arrival.Value.Request.Members) {
+                    if ((member.Companion is { } leaf) && (member.Mobility is { } landed) && !IsHome(authority: landed.Incarnation.Authority)) {
+                        m_carried[landed.Incarnation] = leaf;
+                    }
+                }
                 foreach (var binding in Bindings(arrival: arrival.Value)) {
                     m_bindings[binding.Companion] = (arrival.Value.Key, binding.Binding, binding.Follows, binding.Carried);
                 }
@@ -320,6 +335,8 @@ public sealed class WorldCompanionCustody {
         m_retired.Clear();
         m_bindings.Clear();
         m_ownDepartures.Clear();
+        m_placements.Clear();
+        m_carried.Clear();
         m_ownSettlements.Clear();
         m_arrivals.Clear();
         foreach (var record in history) {
@@ -430,12 +447,12 @@ public sealed class WorldCompanionCustody {
             ) {
                 continue;
             }
-            if (!m_ownDepartures.TryGetValue(key: key.TransferId, value: out var departed) || !departed.Any(predicate: carried => (carried.Incarnation == incarnation))) {
+            if (!m_ownDepartures.TryGetValue(key: key.TransferId, value: out var departed) || !departed.Carried.Any(predicate: carried => (carried.Incarnation == incarnation))) {
                 owed.Add(item: (key, incarnation, false));
                 continue;
             }
             if (m_ownSettlements.TryGetValue(key: key.TransferId, value: out var landed)) {
-                var memberId = departed.First(predicate: carried => (carried.Incarnation == incarnation)).MemberId;
+                var memberId = departed.Carried.First(predicate: carried => (carried.Incarnation == incarnation)).MemberId;
 
                 owed.Add(item: (key, incarnation, landed.Contains(value: memberId)));
             }
@@ -455,22 +472,95 @@ public sealed class WorldCompanionCustody {
     /// <param name="transferId">The departure's transfer id.</param>
     /// <param name="incarnation">The companion.</param>
     /// <returns><see langword="true"/> when the departure record names it.</returns>
-    public bool DepartedWith(ulong transferId, WorldEntityAddress incarnation) => (m_ownDepartures.TryGetValue(key: transferId, value: out var carried) && carried.Any(predicate: member => (member.Incarnation == incarnation)));
+    public bool DepartedWith(ulong transferId, WorldEntityAddress incarnation) => (m_ownDepartures.TryGetValue(key: transferId, value: out var departed) && departed.Carried.Any(predicate: member => (member.Incarnation == incarnation)));
+    /// <summary>Returns the verdict home's records give a companion coming back from <paramref name="custodian"/> at
+    /// <paramref name="epoch"/>: the one door every return reads custody through, at its reservation and again at its
+    /// commit. <see langword="null"/> accepts it: the title is away with exactly that custodian at exactly that epoch.
+    /// A pending title answers <see cref="WorldCompanionRefusal.Pending"/> to a party to its pending hop and
+    /// <see cref="WorldCompanionRefusal.Stale"/> to anyone else; a title at home, or away with another custodian or at
+    /// another epoch, is <see cref="WorldCompanionRefusal.Stale"/>.</summary>
+    /// <param name="incarnation">The returning companion.</param>
+    /// <param name="custodian">The authenticated authority the return comes from.</param>
+    /// <param name="epoch">The custody epoch the returning copy holds.</param>
+    /// <returns>The refusal, or <see langword="null"/> when home takes the companion back.</returns>
+    public WorldCompanionRefusal? VerifyReturn(WorldEntityAddress incarnation, string custodian, ulong epoch) {
+        ArgumentNullException.ThrowIfNull(argument: custodian);
+
+        if (!IsHome(authority: incarnation.Authority)) {
+            return WorldCompanionRefusal.NotMyTitle;
+        }
+        if (!m_titles.TryGetValue(key: incarnation, value: out var title)) {
+            return WorldCompanionRefusal.Stale;
+        }
+        switch (title.Kind) {
+            case WorldCustodyKind.Released:
+                return WorldCompanionRefusal.Released;
+            case WorldCustodyKind.Pending: {
+                var hop = m_hops[(title.PendingKey!.Value, incarnation)];
+
+                return ((string.Equals(a: hop.From, b: custodian, comparisonType: StringComparison.Ordinal) || string.Equals(a: hop.To, b: custodian, comparisonType: StringComparison.Ordinal))
+                    ? WorldCompanionRefusal.Pending
+                    : WorldCompanionRefusal.Stale);
+            }
+            case WorldCustodyKind.Away:
+                return ((string.Equals(a: title.Custodian, b: custodian, comparisonType: StringComparison.Ordinal) && (title.Epoch == epoch))
+                    ? null
+                    : WorldCompanionRefusal.Stale);
+            default:
+                return WorldCompanionRefusal.Stale;
+        }
+    }
+    /// <summary>Returns what holds body index <paramref name="slot"/> for a body that may come back to it: the held slot
+    /// of a title whose hop is pending or that a custodian holds, or a slot one of this authority's departures in doubt
+    /// left. A held slot is never allocated to another body; the census, inhabitant reconciliation and admission all
+    /// read this one predicate.</summary>
+    /// <param name="slot">The body index.</param>
+    /// <returns>The placement the held body belongs to (empty when it belongs to none), or <see langword="null"/> when
+    /// the slot is not held.</returns>
+    public string? HeldPlacement(int slot) {
+        foreach (var title in m_titles.Values) {
+            if ((title.Incarnation.Index == slot) && (title.Kind is WorldCustodyKind.Pending or WorldCustodyKind.Away)) {
+                return m_placements.GetValueOrDefault(key: title.Incarnation, defaultValue: string.Empty);
+            }
+        }
+        foreach (var (transferId, departed) in m_ownDepartures) {
+            if (m_ownSettlements.ContainsKey(key: transferId)) {
+                continue;
+            }
+            foreach (var (left, placementId) in departed.Left) {
+                if (left == slot) {
+                    return (placementId ?? string.Empty);
+                }
+            }
+        }
+        return null;
+    }
+    /// <summary>Returns the placement a title's companion left home from, which its re-adoption binds it to again.</summary>
+    /// <param name="incarnation">The companion.</param>
+    /// <returns>The placement id, or <see langword="null"/> when no departure of this authority carried it from one.</returns>
+    public string? PlacementOf(WorldEntityAddress incarnation) => m_placements.GetValueOrDefault(key: incarnation);
+    /// <summary>Returns the companion leaf a visiting companion last landed here with (its role, title authority, driver
+    /// and the ticket of the hop that brought it), whether or not it was bound to a player.</summary>
+    /// <param name="incarnation">The visiting companion.</param>
+    /// <returns>The leaf, or <see langword="null"/> when no arrival here landed it as a companion.</returns>
+    public WorldTransferCompanion? CarriedOf(WorldEntityAddress incarnation) => m_carried.GetValueOrDefault(key: incarnation);
     /// <summary>Returns the settlement notices this custodian owes other title authorities: every companion its
-    /// settled departures carried under another authority's title, until that authority acknowledged the notice.</summary>
+    /// settled departures carried under another authority's title onward to a third authority, until the title
+    /// authority acknowledged the notice. A return to the title authority owes none: home's own arrival record settles
+    /// it.</summary>
     /// <returns>Each owed notice: the hop's key, the companion, and its title authority.</returns>
     public IReadOnlyList<(WorldTransferKey Key, WorldEntityAddress Incarnation, string Home)> OwedHopNotices() {
         var owed = new List<(WorldTransferKey, WorldEntityAddress, string)>();
         var self = m_authority();
 
-        foreach (var (transferId, carried) in m_ownDepartures.OrderBy(keySelector: static pair => pair.Key)) {
+        foreach (var (transferId, departed) in m_ownDepartures.OrderBy(keySelector: static pair => pair.Key)) {
             if (!m_ownSettlements.ContainsKey(key: transferId)) {
                 continue;
             }
             var key = new WorldTransferKey(SourceAuthority: self, TransferId: transferId);
 
-            foreach (var (_, incarnation, home) in carried) {
-                if (!string.Equals(a: home, b: self, comparisonType: StringComparison.Ordinal) && !m_acked.Contains(item: (key, incarnation))) {
+            foreach (var (_, incarnation, home) in departed.Carried) {
+                if (!string.Equals(a: home, b: self, comparisonType: StringComparison.Ordinal) && !string.Equals(a: home, b: departed.Target, comparisonType: StringComparison.Ordinal) && !m_acked.Contains(item: (key, incarnation))) {
                     owed.Add(item: (key, incarnation, home));
                 }
             }

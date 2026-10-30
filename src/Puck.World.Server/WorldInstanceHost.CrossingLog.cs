@@ -80,7 +80,7 @@ public sealed partial class WorldInstanceHost {
     // that does not land keeps the transfer where it is, and the next drain tries again.
     // A commit member's request-local id: the one it carries, or its ordinal.
     private static int MemberIdAt(IReadOnlyList<WorldTransferCommitMember> commits, int ordinal) => ((commits[ordinal].MemberId < 0) ? ordinal : commits[ordinal].MemberId);
-    private bool TrySettle(InDoubtTransfer pending, bool arrived, IReadOnlyList<int>? landed = null) {
+    private bool TrySettle(InDoubtTransfer pending, bool arrived, IReadOnlyList<int>? landed = null, IReadOnlyList<int>? retired = null) {
         if (pending.SettlementRecorded) {
             return true;
         }
@@ -116,7 +116,7 @@ public sealed partial class WorldInstanceHost {
                         ? [.. ids]
                         : [.. Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Select(selector: ordinal => MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))])
                     : []),
-                Retired: [],
+                Retired: [.. (retired ?? [])],
                 TransferId: pending.Transfer.TransferId
             )
         )) {
@@ -357,12 +357,13 @@ public sealed partial class WorldInstanceHost {
         }
 
         var pending = m_inDoubtTransfers[index] with { RollbackOnly = true };
+        var kept = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !settlement.Retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
 
         pending.SettlementRecorded = true;
         m_inDoubtTransfers[index] = pending;
         if (RestoreDetachedMembers(
-            commits: pending.CommitMembers,
-            members: pending.Landed,
+            commits: [.. kept.Select(selector: ordinal => pending.CommitMembers[ordinal])],
+            members: [.. kept.Select(selector: ordinal => pending.Landed[ordinal])],
             source: row,
             transferId: pending.Transfer.TransferId
         )) {
