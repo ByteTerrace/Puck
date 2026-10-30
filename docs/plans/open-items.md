@@ -523,6 +523,15 @@ The rendered colliders report's only red findings left are the valley's relief
 
 ### Edit to running, hot reload and boot
 
+- [low] `CodeRevisionLawTests.AnAppliedUpdateFoldsIntoTheIdentityOfWhatItTouchedAlone`
+  depends on test order: run with the whole `Puck.Abstractions.Tests` suite it
+  fails at `CodeRevisionLawTests.cs:50` (`AppliedToAssemblies(["Puck.Nowhere"])`
+  reads a revision instead of empty), alone it passes. The sibling
+  `AnUpdateTheRuntimeDidNotNameTouchesEverything` applies a process-wide
+  "touched everything" update that the static `CodeRevision` state keeps. Give
+  the laws an isolated revision state (or one process each) so neither reads
+  the other's update. (from: the lead's landing build)
+
 - [medium] Upload plumbing keys the stored meshes: the bake's code identity
   (`SdfMeshBakeClosure`) holds `SdfWorldTables.WriteMeshBakePoints`, so changing
   `GpuRegion.Grow`'s return type changed that method's IL and missed every
