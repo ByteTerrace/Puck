@@ -39,11 +39,11 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
     public static TheoryData<string, int, int, bool, Fault, int, int, int> LargeScopes => new() {
         { "A", 1, 3, true, Fault.Crash | Fault.Deadline | Fault.Disconnect, 3, 2, 1_500_000 },
         { "A", 1, 3, true, Fault.Log | Fault.Crash | Fault.Disconnect, 3, 2, 1_500_000 },
-        { "A", 2, 3, true, Fault.Loss | Fault.Crash | Fault.Admission | Fault.Install, 4, 2, 4_000_000 },
+        { "A", 2, 3, true, Fault.Loss | Fault.Crash | Fault.Admission | Fault.Install, 4, 2, 6_000_000 },
         { "A", 2, 3, true, Fault.Admission | Fault.Disconnect, 2, 2, 1_500_000 },
         { "A", 2, 3, true, Fault.Install | Fault.Recall | Fault.Disconnect, 2, 1, 1_500_000 },
         { "AB", 1, 3, true, Fault.Loss | Fault.Crash, 2, 1, 1_500_000 },
-        { "AB", 1, 3, true, Fault.Log | Fault.Crash, 1, 1, 1_500_000 },
+        { "AB", 1, 3, true, Fault.Log | Fault.Crash, 2, 1, 4_000_000 },
         { "AB", 1, 3, true, Fault.Forge | Fault.Disconnect | Fault.Recall, 2, 1, 1_500_000 },
         { "AB", 1, 3, true, Fault.Deadline | Fault.Reconnect | Fault.Loss, 1, 1, 1_500_000 },
         { "AB", 1, 3, false, Fault.Disconnect | Fault.Loss, 1, 1, 1_500_000 },
@@ -167,7 +167,7 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         s = Drive(s: s, "crash", optional: true);
         s = Drive(s: s, "heal H-A");
         s = Converge(s: s);
-        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Noticed { What: "recalled" });
+        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Noticed n && n.What.StartsWith("recalled", StringComparison.Ordinal));
         Assert.Contains(collection: s.Nodes[1].Records, filter: static r => r is Retire { Cause: "Stale" });
         Assert.Equal(expected: 2, actual: Title(s: s, Ids.C1).Epoch);
     }
@@ -513,7 +513,7 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
 
         var probe = s.Clone();
 
-        CustodyModel.Deliver(s: probe, msg: new Msg(From: Node.B, To: Node.H, Kind: MsgKind.HopQuery, Key: "A1", Members: [], Arg: Ids.C1.ToString(), Dup: false));
+        CustodyModel.Deliver(s: probe, msg: new Msg(From: Node.B, To: Node.H, Kind: MsgKind.HopQuery, Key: "A1", Members: [], Arg: $"R|{Ids.C1}", Dup: false));
         Assert.Contains(collection: probe.Network, filter: static m => (m.Kind == MsgKind.HopQueryReply) && m.Arg.EndsWith("=-1", StringComparison.Ordinal));
         Assert.Equal(expected: CustodyKind.Away, actual: Title(s: s, Ids.C1).Kind);
         s = Converge(s: s);
@@ -682,6 +682,168 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         s = Drive(s: s, "heal H-A");
         s = Converge(s: s);
         Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C1));
+    }
+
+    // ---- the round-5 review's counterexamples ---------------------------------------------------------------------
+
+    [Fact]
+    public void ADuplicatedReservationAnswerCannotSatisfyTheCommitRecheckAfterARelease() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.HopQueryReply);
+        s = Drive(s: s, "dup H>B:HopQueryReply");
+        s = Drive(s: s, "deliver H>B:HopQueryReply");
+        Assert.Contains(collection: s.Nodes[2].Records, filter: static r => r is Leased { Key: "A1" });
+        s = Drive(s: s, "install 2");
+        s = Drive(s: s, "deliver B>A:Reserved");
+        s = Drive(s: s, "deliver A>B:Commit");
+        // The duplicate of the reservation's answer reaches B while its commit waits on a fresh answer.
+        s = Drive(s: s, "deliver H>B:HopQueryReply");
+        s = Drain(s: s);
+        Assert.DoesNotContain(collection: s.Nodes[2].Records.OfType<Arr>().SelectMany(static a => a.Members), filter: static m => m.Id == Ids.C1);
+        s = Converge(s: s);
+        Assert.Equal(expected: CustodyKind.Released, actual: Title(s: s, Ids.C1).Kind);
+    }
+
+    [Fact]
+    public void AReleaseDuringAPendingHopWaitsForTheHopToResolve() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.Commit);
+        s = Drive(s: s, "deliver A>B:Commit");
+        s = Drive(s: s, "deliver B>H:HopQuery");
+        // Home confirmed the grant for this commit; the release that follows cannot take it back from under the
+        // destination, so the title waits on the hop's own resolution.
+        s = Drive(s: s, "install 2");
+        Assert.Equal(expected: CustodyKind.Pending, actual: Title(s: s, Ids.C1).Kind);
+        s = Drain(s: s);
+        Assert.Contains(collection: s.Nodes[2].Records.OfType<Arr>().SelectMany(static a => a.Members), filter: static m => m.Id == Ids.C1);
+        s = Converge(s: s);
+        Assert.Equal(expected: CustodyKind.Released, actual: Title(s: s, Ids.C1).Kind);
+        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Noticed { What: "released" });
+    }
+
+    [Fact]
+    public void AReconnectAtHomeKeepsThePlacementBinding() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "sweep A:2");
+        s = Drain(s: s);
+        Assert.Equal(expected: (CustodyKind.Home, Node.H, 2), actual: Title(s: s, Ids.C1));
+        s = Drive(s: s, "reconnect");
+        Assert.True(condition: Fold(s: s, Node.H).Follows(id: Ids.C1));
+        s = Drive(s: s, "cross H>B");
+        Assert.Contains(collection: s.Nodes[0].Records.OfType<Minted>(), filter: static m => (m.To == Node.B) && m.MemberIds.Contains(value: Ids.C1));
+        s = Converge(s: s);
+        Assert.Equal(expected: (CustodyKind.Away, Node.B, 3), actual: Title(s: s, Ids.C1));
+    }
+
+    [Fact]
+    public void EveryRecallIsNoticedOnItsOwn() {
+        var s = Start(route: "AB");
+
+        s.Budget.Limit = 2;
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "reconnect");
+        s = Drive(s: s, "recall 2");
+        s = Drive(s: s, "notify recall 2");
+        s = Drive(s: s, "cross H>B");
+        s = Drain(s: s);
+        Assert.Equal(expected: (CustodyKind.Away, Node.B, 3), actual: Title(s: s, Ids.C1));
+        s = Drive(s: s, "disconnect at B");
+        s = Drive(s: s, "reconnect");
+        s = Drive(s: s, "recall 2");
+        s = Converge(s: s);
+        Assert.Equal(expected: 2, actual: s.Nodes[0].Records.Count(static r => r is Noticed n && n.What.StartsWith("recalled", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void AStrandingDoesNotCarryIntoALaterVisit() {
+        var s = Start(route: "AA");
+
+        s.Budget.Limit = 2;
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "sweep A:2");
+        s = Drive(s: s, "drop A>H:Reserve");
+        s = Drive(s: s, "strand A:2");
+        s = Drive(s: s, "elapse A:2");
+        s = Drive(s: s, "reconnect");
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        Assert.Equal(expected: Node.A, actual: s.PlayerAt);
+        s = Drive(s: s, "disconnect at A");
+        // The player's new visit opened a new episode: the companion is stranded again before its grace window runs.
+        Assert.DoesNotContain(collection: CustodyModel.Successors(s: s, faultBudget: int.MaxValue).Select(static p => p.Name), filter: static n => n.StartsWith("shed-mint A:2", StringComparison.Ordinal));
+        s = Drive(s: s, "strand A:2");
+        s = Converge(s: s);
+        Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C1));
+    }
+
+    [Fact]
+    public void AReconnectResendsADelayedReservation() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drive(s: s, "authorize H1");
+        Assert.Contains(collection: s.Network, filter: static m => (m.Kind == MsgKind.Reserve) && (m.Lane == 0));
+        s = Drive(s: s, "reconnect H>A");
+        s = Drive(s: s, "retry reserve H:H1");
+        Assert.Contains(collection: s.Network, filter: static m => (m.Kind == MsgKind.Reserve) && (m.Lane == 1));
+        s = Converge(s: s);
+        Assert.Equal(expected: (CustodyKind.Away, Node.A, 1), actual: Title(s: s, Ids.C1));
+    }
+
+    [Fact]
+    public void AFailedLandingStillAdvancesTheSlotGeneration() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.Commit);
+
+        var slots = s.Nodes[1].Records.OfType<Leased>().Single().Members.Select(static m => m.Slot).ToArray();
+
+        s = Drive(s: s, "append Refused A");
+        s = Drain(s: s);
+        Assert.DoesNotContain(collection: s.Nodes[1].Records, filter: static r => r is Arr);
+        // The commit landed its members and rolled them back when the arrival record was refused: the generations they
+        // took outlive the rollback, so a later landing at those slots is a new occupant.
+        Assert.All(collection: slots, action: slot => Assert.Equal(expected: 1, actual: Fold(s: s, Node.A).SlotGen[slot]));
+        Assert.Equal(expected: (CustodyKind.Home, Node.H, 0), actual: Title(s: s, Ids.C1));
+        _ = Converge(s: s);
+    }
+
+    [Fact]
+    public void APendingTitleWaitsForItsHopBeforeARecall() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.HopSettled);
+        s = Drive(s: s, "drop A>H:HopSettled");
+        s = Drain(s: s);
+        s = Drive(s: s, "disconnect at B");
+        s = Drive(s: s, "reconnect");
+        s = Drive(s: s, "partition H-B");
+        Assert.Equal(expected: CustodyKind.Pending, actual: Title(s: s, Ids.C1).Kind);
+        // B may hold a verified grant and cannot be asked: the title waits in custody, and no recall is offered.
+        Assert.DoesNotContain(collection: CustodyModel.Successors(s: s, faultBudget: int.MaxValue).Select(static p => p.Name), filter: static n => n.StartsWith("recall", StringComparison.Ordinal));
+        s = Drive(s: s, "heal H-B");
+        s = Converge(s: s);
+        Assert.NotEqual(expected: CustodyKind.Pending, actual: Title(s: s, Ids.C1).Kind);
     }
 
     // ---- the explorer ---------------------------------------------------------------------------------------------
