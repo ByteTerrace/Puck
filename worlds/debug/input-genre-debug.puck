@@ -1,0 +1,36 @@
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "debug"
+import "stopped-machines"
+state {
+  world {
+    table genreChecks {
+      action = 0
+      board = 0
+      leak = 0
+    }
+  }
+}
+rule "action-demonstrated" {
+  when bodyState(body, 0, suit) == 0 and channel(1, run) == 1 and channel(1, forward) == 1
+  mode: Edge
+  genreChecks["action"] = 1
+}
+// The sweep holds the run and forward keys through entry, so a zero read here is the entry's release barrier
+// and not the keys coming up.
+rule "board-demonstrated" {
+  when (genreChecks["action"] == 1 and
+    board(engaged, board, 1) == 1 and
+    channel(1, forward) == 0 and
+    channel(1, run) == 0 and
+    play.held == -1)
+  mode: Edge
+  genreChecks["board"] = 1
+}
+rule "board-leak" {
+  when (genreChecks["action"] == 1 and
+    board(engaged, board, 1) == 1 and
+    (channel(1, forward) == 1 or channel(1, run) == 1))
+  mode: Edge
+  genreChecks["leak"] = 1
+}

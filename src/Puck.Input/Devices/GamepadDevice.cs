@@ -247,7 +247,7 @@ public sealed class GamepadDevice : IGamepadConnection {
                     right: TriggerEffectSpec.Off
                 ).AsTask().Wait(millisecondsTimeout: DisposeOutputMilliseconds);
             }
-        } catch (Exception exception) when (exception is AggregateException or IOException or OperationCanceledException or ObjectDisposedException) {
+        } catch (Exception exception) when ((exception is AggregateException or IOException or OperationCanceledException or ObjectDisposedException)) {
             // The pad may already be gone; there is nothing left to stop.
         }
     }
@@ -716,7 +716,7 @@ public sealed class GamepadDevice : IGamepadConnection {
                             firstParsed = false;
                             streamingDeadline = (m_time.GetTimestamp() + m_streamingDeadlineTicks);
                             m_diagnostics?.Invoke($"[gamepad] {Type} receiver slot unpaired; parking");
-                        } else if (!loggedUnparsed) {
+                        } else if (!m_parser.IsIgnoredReport(report: buffer.AsSpan(length: read, start: 0)) && !loggedUnparsed) {
                             // Data is arriving but not in the expected report shape — e.g. the report-mode
                             // subcommand didn't take and the controller is still sending its simple (0x3F) report.
                             loggedUnparsed = true;
@@ -744,7 +744,7 @@ public sealed class GamepadDevice : IGamepadConnection {
                     (m_streamSilenceTicks > 0L) &&
                     ((m_time.GetTimestamp() - lastParsedTimestamp) >= m_streamSilenceTicks)
                 ) {
-                    throw new TimeoutException(message: $"{Type} stopped streaming for {(m_streamSilenceTicks / (double)m_time.TimestampFrequency):F1}s");
+                    throw new TimeoutException(message: $"{Type} stopped streaming for {(m_streamSilenceTicks / ((double)m_time.TimestampFrequency)):F1}s");
                 }
 
                 // A deferred-activation device is a receiver slot that may legitimately sit empty forever, so

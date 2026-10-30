@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Puck.Cli;
 
-/// <summary>Serializes lane work under a shared checkout's lease directory.</summary>
+/// <summary>Serializes lane work under a shared checkout's lease directory, rotating admission between lanes.</summary>
 public sealed class CliLease : IDisposable {
     private readonly FileStream m_gate;
     private readonly string m_directory;
@@ -23,13 +25,16 @@ public sealed class CliLease : IDisposable {
     /// <param name="clock">The deadline and stale-age clock.</param>
     /// <param name="cancellationToken">Cancels acquisition.</param>
     /// <param name="ancestor">Recognizes a live ancestor holder by PID and start ticks, allowing a serialized child lease.</param>
+    /// <param name="lane">The lane the holder works for, which admission rotates between; null takes the holder's first word.</param>
     /// <returns>The held lease.</returns>
-    /// <exception cref="ArgumentException">The name, holder or wait is invalid.</exception>
+    /// <exception cref="ArgumentException">The name, holder, lane or wait is invalid.</exception>
     /// <exception cref="TimeoutException">The lease remains held at the deadline.</exception>
-    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null) {
-        if ((name is not ("build" or "gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)) {
-            throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder, and a nonnegative wait.");
+    public static async Task<CliLease> AcquireAsync(string root, string name, string holder, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken = default, Func<int, long, bool>? ancestor = null, string? lane = null) {
+        if ((name is not ("build" or "gpu" or "heavy")) || string.IsNullOrWhiteSpace(value: holder) || holder.Contains(value: '\n') || holder.Contains(value: '\r') || (wait < TimeSpan.Zero)
+            || ((lane is not null) && (string.IsNullOrWhiteSpace(value: lane) || lane.Contains(value: '\n') || lane.Contains(value: '\r')))) {
+            throw new ArgumentException(message: "A lease requires build, gpu or heavy, a single-line holder and lane, and a nonnegative wait.");
         }
+        lane = (lane?.Trim() ?? DefaultLane(holder: holder));
         Directory.CreateDirectory(path: root);
         var directory = Path.Combine(path1: root, path2: name);
         var started = clock.GetTimestamp();
@@ -43,20 +48,22 @@ public sealed class CliLease : IDisposable {
                 // child lease instead of waiting on their parent; siblings never borrow each other's hold.
                 var metadata = ReadHolder(directory: directory);
 
-                if ((metadata is { Length: 4 }) && int.TryParse(s: metadata[2], result: out var pid) && long.TryParse(s: metadata[3], result: out var ticks) && (ancestor?.Invoke(pid, ticks) == true)) {
+                if ((metadata is { Length: (4 or 5) }) && int.TryParse(s: metadata[2], result: out var pid) && long.TryParse(s: metadata[3], result: out var ticks) && (ancestor?.Invoke(pid, ticks) == true)) {
                     Leave(ticket: ticket);
                     ticket = null;
                     directory = Path.Combine(path1: directory, path2: "child");
                     continue;
                 }
-                // Admission is first come, first served: the lease goes to the oldest live ticket beside it.
+                // Admission rotates between lanes: the lease goes to the oldest ticket of the lane served least recently,
+                // and within a lane first come, first served.
                 var queue = (directory + ".queue");
 
-                if ((ticket is null) || !File.Exists(path: ticket)) { ticket = Enqueue(clock: clock, holder: holder, queue: queue); }
-                var ahead = Ahead(now: clock.GetUtcNow(), ticket: ticket);
+                if ((ticket is null) || !File.Exists(path: ticket)) { ticket = Enqueue(clock: clock, holder: holder, lane: lane, queue: queue); }
+                var place = Admission(now: clock.GetUtcNow(), rotation: (directory + ".rotation"), ticket: ticket);
+                var ahead = place.Ahead;
 
                 if (ahead == 0) {
-                    var lease = TryAcquire(clock: clock, directory: directory, holder: holder);
+                    var lease = TryAcquire(clock: clock, directory: directory, holder: holder, lane: lane);
 
                     if (lease is not null) { return lease; }
                 }
@@ -64,7 +71,7 @@ public sealed class CliLease : IDisposable {
 
                 if (remaining <= TimeSpan.Zero) { throw new TimeoutException(message: $"{name} lease is held or queued at {CliPaths.ToDisplay(fullPath: directory)}; use --wait <seconds> to wait."); }
                 var waitingOn = ((metadata is { Length: > 0 }) ? metadata[0] : null);
-                var report = $"lease: {holder} waiting for {name} lease{((waitingOn is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {waitingOn}")}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead")}.";
+                var report = $"lease: {holder} waiting for {name} lease{((waitingOn is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {waitingOn}")}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {place.Position} of {place.Lanes} in the round")}.";
 
                 if (reported != report) {
                     Console.Error.WriteLine(value: report);
@@ -77,9 +84,11 @@ public sealed class CliLease : IDisposable {
         }
     }
 
-    /// <summary>Takes the next ticket in a queue directory: a file named by a zero-padded sequence, holding the same four holder lines.</summary>
-    private static string Enqueue(string queue, string holder, TimeProvider clock) {
-        Directory.CreateDirectory(path: queue);
+    /// <summary>The lane a holder works for when none is named: the first word of its name.</summary>
+    private static string DefaultLane(string holder) => holder.Split(separator: (char[]?)null, options: StringSplitOptions.RemoveEmptyEntries)[0];
+    /// <summary>The metadata a holder file and a ticket share: holder, UTC time, process id and process start ticks, then the lane
+    /// only when it is not the holder's first word.</summary>
+    private static string[] Metadata(string holder, string lane, TimeProvider clock) {
         using var process = Process.GetCurrentProcess();
         string[] lines = [
             holder,
@@ -88,8 +97,17 @@ public sealed class CliLease : IDisposable {
             process.StartTime.ToUniversalTime().Ticks.ToString(provider: CultureInfo.InvariantCulture),
         ];
 
+        return ((lane == DefaultLane(holder: holder)) ? lines : [.. lines, lane]);
+    }
+    /// <summary>Takes the next ticket in a queue directory: a file named by a zero-padded sequence, holding the same lines as a holder.</summary>
+    private static string Enqueue(string queue, string holder, string lane, TimeProvider clock) {
+        Directory.CreateDirectory(path: queue);
+        var lines = Metadata(clock: clock, holder: holder, lane: lane);
+        var floor = 1L;
+        var denied = 0;
+
         while (true) {
-            var next = 1L;
+            var next = floor;
 
             foreach (var file in Directory.EnumerateFiles(path: queue)) {
                 if (long.TryParse(s: Path.GetFileName(path: file), provider: CultureInfo.InvariantCulture, result: out var sequence) && (sequence >= next)) { next = (sequence + 1); }
@@ -104,37 +122,92 @@ public sealed class CliLease : IDisposable {
                 foreach (var line in lines) { writer.WriteLine(value: line); }
                 return path;
             } catch (IOException) when (File.Exists(path: path)) { }
+            // Windows refuses a name whose deleted file is still held open elsewhere, and the listing may not show it:
+            // take the next sequence, and give up only when the directory itself refuses.
+            catch (UnauthorizedAccessException) when (++denied <= 64) { floor = (next + 1); }
         }
     }
-    /// <summary>Counts the live tickets older than this one, dropping each whose process is gone.</summary>
-    private static int Ahead(string ticket, DateTimeOffset now) {
-        var ahead = 0;
+    /// <summary>Where a ticket stands in the admission order: tickets ahead, its lane's turn among the queued lanes, and how many lanes are queued.</summary>
+    private readonly record struct Place(int Ahead, int Position, int Lanes);
+
+    /// <summary>
+    /// Replays the admission order over the live tickets, dropping each whose process is gone. Each round admits the oldest
+    /// ticket of the lane served least recently, then counts that lane as the most recently served; a ticket whose lane is
+    /// not yet readable is a lane of its own that has never been served.
+    /// </summary>
+    private static Place Admission(string ticket, string rotation, DateTimeOffset now) {
         var mine = Path.GetFileName(path: ticket);
+        var queues = new Dictionary<string, Queue<string>>(comparer: StringComparer.Ordinal);
+        var live = 0;
+        string? mineLane = null;
 
         foreach (var file in Directory.EnumerateFiles(path: Path.GetDirectoryName(path: ticket)!).Order(comparer: StringComparer.Ordinal)) {
-            if (string.CompareOrdinal(strA: Path.GetFileName(path: file), strB: mine) >= 0) { break; }
-            string[]? lines;
+            var id = Path.GetFileName(path: file);
+            string[]? lines = null;
+            var recognized = false;
 
             try {
                 using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: (FileShare.ReadWrite | FileShare.Delete));
                 using var reader = new StreamReader(stream: stream);
 
                 lines = reader.ReadToEnd().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            } catch (IOException) {
-                // Vanished, or being written: a ticket we cannot read yet is counted, never skipped.
-                ahead += (File.Exists(path: file) ? 1 : 0);
-                continue;
+            } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+                // Vanished, being written, or deleted but still held open (Windows answers access denied): a ticket we
+                // cannot read yet is counted, never skipped.
+                if (!File.Exists(path: file)) { continue; }
             }
-            // A ticket whose metadata never became recognizable (its writer died mid-write) is dropped once it is old.
-            var gone = ProcessGone(lines: lines, now: now) ?? ((DateTime.UtcNow - File.GetLastWriteTimeUtc(path: file)) > TimeSpan.FromSeconds(seconds: 10));
+            if (lines is not null) {
+                var exited = ProcessGone(lines: lines, now: now);
 
-            if (gone) {
-                try { File.Delete(path: file); } catch (IOException) { ahead++; }
-            } else {
-                ahead++;
+                recognized = (exited is not null);
+                // A ticket whose metadata never became recognizable (its writer died mid-write) is dropped once it is old.
+                if (exited ?? ((DateTime.UtcNow - File.GetLastWriteTimeUtc(path: file)) > TimeSpan.FromSeconds(seconds: 10))) {
+                    // A ticket the OS will not let go of yet (Windows holds a deleted file open elsewhere) stays counted.
+                    try { File.Delete(path: file); continue; } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
             }
+            var key = (recognized ? ("lane:" + ((lines!.Length == 5) ? lines[4] : DefaultLane(holder: lines[0]))) : ("ticket:" + id));
+            if (!queues.TryGetValue(key: key, value: out var queue)) { queues[key] = queue = new Queue<string>(); }
+            queue.Enqueue(item: id);
+            live++;
+            if (id == mine) { mineLane = key; }
         }
-        return ahead;
+        if (mineLane is null) { return new Place(Ahead: live, Lanes: queues.Count, Position: queues.Count); }
+        var served = queues.Keys.ToDictionary(keySelector: key => key, elementSelector: key => (key.StartsWith(value: "lane:", comparisonType: StringComparison.Ordinal) ? Served(path: LanePath(lane: key[5..], rotation: rotation)) : 0L), comparer: StringComparer.Ordinal);
+        var next = (served.Values.DefaultIfEmpty().Max() + 1);
+        var ahead = 0;
+        var lanes = queues.Count;
+        var position = 0;
+
+        for (var round = 0; ; round++) {
+            var order = queues.Keys.OrderBy(keySelector: key => served[key]).ThenBy(keySelector: key => queues[key].Peek(), comparer: StringComparer.Ordinal).ToList();
+
+            if (round == 0) { position = (order.IndexOf(item: mineLane) + 1); }
+            var turn = order[0];
+
+            if (queues[turn].Peek() == mine) { return new Place(Ahead: ahead, Lanes: lanes, Position: position); }
+            ahead++;
+            queues[turn].Dequeue();
+            served[turn] = next++;
+            if (queues[turn].Count == 0) { queues.Remove(key: turn); }
+        }
+    }
+    private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: lane))));
+    /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
+    private static long Served(string path) {
+        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return 0; }
+    }
+    /// <summary>Records that a lane holds the lease now, as the highest serial any lane has had. Only the guard's owner writes.</summary>
+    private static void Serve(string rotation, string lane) {
+        try {
+            Directory.CreateDirectory(path: rotation);
+            var next = (Directory.EnumerateFiles(path: rotation).Where(predicate: file => (Path.GetExtension(path: file) != ".tmp")).Select(selector: Served).DefaultIfEmpty().Max() + 1);
+            var path = LanePath(lane: lane, rotation: rotation);
+
+            // Written aside and moved over, so a waiter reading the serial never sees it half written.
+            File.WriteAllText(path: (path + ".tmp"), contents: next.ToString(provider: CultureInfo.InvariantCulture));
+            File.Move(destFileName: path, overwrite: true, sourceFileName: (path + ".tmp"));
+        } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private static void Leave(string? ticket) {
         if (ticket is null) { return; }
@@ -142,7 +215,16 @@ public sealed class CliLease : IDisposable {
     }
 
     private static string[]? ReadHolder(string directory) {
-        try { return File.ReadAllLines(path: Path.Combine(path1: directory, path2: "holder")); } catch (IOException) { return null; }
+        try { return File.ReadAllLines(path: Path.Combine(path1: directory, path2: "holder")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>Names the lane a checkout's own runs take the lease for: its directory name, one lane per worktree.</summary>
+    /// <param name="checkout">The working checkout.</param>
+    /// <returns>The checkout directory's name, or <c>checkout</c> for a root directory.</returns>
+    public static string LaneOf(string checkout) {
+        var name = Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: checkout))).Trim();
+
+        return (name.Length == 0) ? "checkout" : name;
     }
 
     /// <summary>Resolves the shared lease directory through the worktree's common Git directory.</summary>
@@ -155,7 +237,7 @@ public sealed class CliLease : IDisposable {
         return Path.Combine(path1: Path.GetDirectoryName(path: common)!, path2: ".claude/leases");
     }
 
-    private static CliLease? TryAcquire(string directory, string holder, TimeProvider clock) {
+    private static CliLease? TryAcquire(string directory, string holder, string lane, TimeProvider clock) {
         FileStream gate;
 
         try {
@@ -171,14 +253,8 @@ public sealed class CliLease : IDisposable {
             }
             Directory.CreateDirectory(path: directory);
             try {
-                using var process = Process.GetCurrentProcess();
-
-                File.WriteAllLines(path: Path.Combine(path1: directory, path2: "holder"), contents: [
-                    holder,
-                    clock.GetUtcNow().ToString(format: "O", formatProvider: CultureInfo.InvariantCulture),
-                    Environment.ProcessId.ToString(provider: CultureInfo.InvariantCulture),
-                    process.StartTime.ToUniversalTime().Ticks.ToString(provider: CultureInfo.InvariantCulture),
-                ]);
+                File.WriteAllLines(path: Path.Combine(path1: directory, path2: "holder"), contents: Metadata(clock: clock, holder: holder, lane: lane));
+                Serve(lane: lane, rotation: (directory + ".rotation"));
                 return new CliLease(directory: directory, gate: gate);
             } catch {
                 Directory.Delete(path: directory, recursive: true);
@@ -198,7 +274,7 @@ public sealed class CliLease : IDisposable {
     }
     /// <summary>Decides from holder or ticket metadata whether its process is gone; null when the metadata is unrecognized.</summary>
     private static bool? ProcessGone(string[] lines, DateTimeOffset now) {
-        if ((lines.Length != 4) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return null; }
+        if ((lines.Length is not (4 or 5)) || !int.TryParse(s: lines[2], result: out var pid) || (pid <= 0) || !long.TryParse(s: lines[3], result: out var ticks)) { return null; }
         try {
             using var process = Process.GetProcessById(processId: pid);
 

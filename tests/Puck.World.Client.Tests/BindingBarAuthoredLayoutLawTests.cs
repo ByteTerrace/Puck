@@ -11,6 +11,20 @@ namespace Puck.World.Client.Tests;
 /// extents) and banks whose plates are normalized into their frame; a control a bank does not place is not shown on
 /// it. A tick only looks up, and the writer only scales pitches to the region.</summary>
 public sealed class BindingBarAuthoredLayoutLawTests {
+    [Fact]
+    public void AToggledActionDoesNotDepressItsPhysicalButton() {
+        var binding = new BindingPageButtonView("key.a", ["key.a"], "test.fire", "fire", null, null, Toggle: true);
+        var view = new BindingPageView("base", "play", null, null, [binding],
+            new Dictionary<string, BindingPageButtonView> { ["key.a"] = binding }.ToFrozenDictionary(), [], []);
+        var destination = new OverlayBindingSlot[1];
+        BindingBarSeatComposer.ComposeBank(view: view, slotSet: ["key.a"],
+            plates: new Dictionary<string, BindingPlatePlacement> { ["key.a"] = new(Vector2.Zero, Vector2.Zero) },
+            resolveBadge: static _ => OverlayResolvedGlyph.None, resolveIcon: static _ => OverlayResolvedGlyph.None,
+            isPressed: static _ => false, isCommandHeld: static _ => true, bankAlpha: 1, text: true,
+            hideUnbound: false, bankOrder: 0, frame: 0, destination: destination);
+        Assert.True(destination[0].Toggled);
+        Assert.False(destination[0].Pressed);
+    }
     private static void AssertPoint(float expectedX, float expectedY, Vector2 actual) {
         Assert.Equal(
             actual: actual.X,

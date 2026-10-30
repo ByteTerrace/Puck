@@ -872,9 +872,9 @@ expire a lock delay, saturate the score and end a game on a blocked spawn, and
 reproduce byte for byte; the `tetromino-clear` canary plays the three-piece
 clear through the real `Puck.World`, `TetrominoTickLawTests` pins a piece's
 life by counters, and the worst-case tick prices at about 109,000 work units.
-The generated [corpus inventory](../../tests/Puck.State.Rebuild.Corpus/inventory.md)
-counts every claimed construct in the game's own source, and a law holds it to
-the claim. The package exposed two language gaps, each closed with laws: a
+The quarantined game-claims law
+(`experimental/tests/Puck.State.Rebuild.Corpus/CorpusInventoryTests.cs`) held
+the game's own source to every construct it claims. The package exposed two language gaps, each closed with laws: a
 compile-time `for` could not stand inside a rule, step or effect list (a step
 parsed it and dropped it), and a computed name that named a rule's local read a
 row of that name instead. The well is simulated but not drawn.

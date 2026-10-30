@@ -357,8 +357,9 @@ public static class WorldPostBuildWiring {
                 (echo.ConnectionId == SubmissionEnvelope.ScopedReplayConnectionId)
             );
 
-            // toast/HUD narration is presentation-only; a headless boot simply has nowhere to paint it.
-            if (!addonApplied && !scopedApplied) {
+            // The toast narrates what a player's own act caused; an operator's act reports through the console row
+            // below and the log (WorldToastPolicy).
+            if (WorldToastPolicy.Narrates(echo: in echo)) {
                 toasts?.Publish(
                     message: echo.Message,
                     isError: echo.Rejected

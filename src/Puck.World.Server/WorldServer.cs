@@ -65,7 +65,16 @@ public enum WorldEditEchoKind {
 /// uses to keep the console's tracked document origin (<c>world.save</c>'s default target, <c>world.status</c>'s
 /// reported source, <c>world.reload</c>'s re-read target) truthful after a runtime rebuild. <see langword="null"/>
 /// for every other outcome, including a successful <c>world.reset</c> (reset targets the base without moving it).</param>
-public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, WorldRebuildOrigin? RebuildOrigin = null);
+/// <param name="Actor">The principal that asked for a grant or revoke, when the echo answers one; unstamped for every
+/// other outcome (a mutation's actor is <see cref="WorldMutation.Principal"/>). Read through
+/// <see cref="ActingPrincipal"/>.</param>
+public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, WorldRebuildOrigin? RebuildOrigin = null, Principal Actor = default) {
+    /// <summary>Gets the principal whose act this outcome answers: the grant or revoke's asker, else the mutation's
+    /// principal; unstamped when the boundary names neither (a rebuild, a lever, a checkpoint).</summary>
+    public Principal ActingPrincipal => (Actor.IsStamped
+        ? Actor
+        : (Mutation?.Principal ?? default));
+}
 /// <summary>
 /// The authoritative world server — one logical instance owning the live <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Every non-intent submission

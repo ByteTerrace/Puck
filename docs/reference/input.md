@@ -152,6 +152,26 @@ second, for a pad that powers off without an event. Parking
 clears coalesced state, pending output, scheduled effects, rumble, motion-fusion
 history, and the player slot before that receiver carries another controller.
 
+`world.devices` observes every streaming manager connection, even a neutral pad
+that has produced no bound action. Discovery does not join a player: it reads
+`unassigned` until ordinary input or an explicit assignment seats it. Router
+classification also records the device before an action is bound.
+
+Triton receiver report `0x7b` is deliberately ignored. The owner's receiver
+`0x28de:0x1304` reports it in a 54-byte HID read; community reverse engineering
+reports it as a periodic vendor report sent only through the puck, about 12 bytes
+long, and it is absent from the [SDL Triton driver](https://github.com/libsdl-org/SDL/blob/main/src/joystick/hidapi/SDL_hidapi_steam_triton.c),
+which handles control state (`0x42`, `0x45`, `0x47`), battery (`0x43`) and pairing
+separately. We assign no control, power or pairing meaning to `0x7b` without a
+verified layout. It publishes no sample, changes no held state, does not refresh
+stream liveness, and does not consume the unknown-report diagnostic. Synthetic
+54-byte reports exercise that policy, and the owner's receiver confirms it live: over
+about 75 seconds streaming, `world.devices` read `gamepad1 'SteamControllerTriton'=unassigned
+battery 94%` before any press, and no unknown-report diagnostic fired for `0x7b`. The
+receiver exposes four controller slots, each dormant until a controller streams. Docked on the
+charging puck it keeps streaming through the receiver and the roster reads
+`charging 95%`; no unknown-report diagnostic fired there either.
+
 ### Motion fusion
 
 The motion-capable parsers map their sensor frames to one right-handed frame

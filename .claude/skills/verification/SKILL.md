@@ -157,6 +157,10 @@ If that guard is available and the directory is empty while it is held,
 removing only the empty directory lets the normal `puck lease` acquire again.
 Never unlink the guard file or remove a directory containing holder metadata.
 
+A scratch repository for CLI experiments needs its own `Puck.slnx` (and a
+`git init`), or the verb silently uses the shared `.claude/leases` and joins
+the live queue.
+
 Judge a performance change by code, disassembly and load-independent counts;
 only counts gate it. Wall-clock and GPU timing are evidence read beside those
 counts, never alone, and run on a quiet machine: the lead keeps every agent's

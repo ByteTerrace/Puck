@@ -31,6 +31,24 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
 
+    // A connected pad the roster has not yet seen is listed without being recorded: the read never reorders the
+    // roster's tokens or renames a device it already knows.
+    private string DescribeDevices() => roster.DescribeDevices(
+        connectedGamepads: ConnectedGamepads(),
+        gamepadStatus: DescribeGamepadStatus
+    );
+    private IEnumerable<(InputDeviceId Device, string Name)> ConnectedGamepads() {
+        if (gamepads is null) {
+            yield break;
+        }
+
+        foreach (var device in gamepads.ConnectedDevices()) {
+            gamepads.TryGetType(deviceId: device, type: out var type);
+
+            yield return (device, type.ToString());
+        }
+    }
+
     // The sequence and its row view, then any per-body selector as select(<body register>: <value>=<row>, …).
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
@@ -621,7 +639,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             name: "world.devices",
             description: "Lists every input device seen this session by its stable token (keyboard1, keyboard2, …, mouse1, mouse2, …, gamepad1, gamepad2, …, camera1, camera2, …) in first-seen order, its name when known, and the player it currently drives (p<N> or unassigned; a slot-sharing device's marker * names the seat's resolved device of its own kind). A gamepad's entry ends with its power then its accessories when it reports them: 'battery N%' (unplugged), 'charging N%', 'not charging N%', 'charged', 'wired' (cable only, no battery), then 'headset' | 'headphones' | 'microphone'; power says nothing while unknown, and a keyboard, mouse or camera has no suffix. The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
             valueKind: CommandValueKind.Digital,
-            handler: _ => new CommandResult(Output: roster.DescribeDevices(gamepadStatus: DescribeGamepadStatus))
+            handler: _ => new CommandResult(Output: DescribeDevices())
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,

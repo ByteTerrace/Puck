@@ -56,7 +56,7 @@ public sealed class CliLeaseTests : IDisposable {
         var path = Path.Combine(path1: directory, path2: "holder");
         using var process = Process.GetCurrentProcess();
 
-        string[] Metadata(DateTimeOffset time, int pid, long start) => ["abandoned", time.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), pid.ToString(provider: CultureInfo.InvariantCulture), start.ToString(provider: CultureInfo.InvariantCulture)];
+        string[] Metadata(DateTimeOffset time, int pid, long start) => ["abandoned", time.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), pid.ToString(provider: CultureInfo.InvariantCulture), start.ToString(provider: CultureInfo.InvariantCulture), "abandoned"];
         var old = (clock.GetUtcNow() - TimeSpan.FromHours(hours: 2));
 
         File.WriteAllLines(path: path, contents: Metadata(time: old, pid: process.Id, start: process.StartTime.ToUniversalTime().Ticks));
@@ -101,6 +101,56 @@ public sealed class CliLeaseTests : IDisposable {
         Assert.Equal(expected: "second", actual: File.ReadAllLines(path: Path.Combine(path1: m_root, path2: "gpu/holder"))[0]);
     }
     [Fact]
+    public async Task AdmissionRotatesBetweenLanesAndStaysFirstComeWithinOne() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(milliseconds: 100);
+        var holder = await Take(holder: "x");
+        var waiting = new List<(string Holder, Task<CliLease> Task)>();
+
+        async Task Queue(string name, string? lane = null) {
+            waiting.Add((name, CliLease.AcquireAsync(root: m_root, name: "gpu", holder: name, lane: lane, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
+            await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick);
+        }
+
+        // Lane a queues three runs before b and c queue one each; the lane is the holder's first word or the explicit lane.
+        await Queue("a one");
+        await Queue("a two");
+        await Queue("a three");
+        await Queue("b one");
+        await Queue("renamed c", lane: "c");
+        var order = new List<string>();
+
+        holder.Dispose();
+        while (waiting.Count > 0) {
+            clock.Advance(by: tick);
+            var admitted = await Task.WhenAny(tasks: waiting.Select(selector: entry => entry.Task)).WaitAsync(cancellationToken: Token);
+            var entry = waiting.Single(predicate: entry => (entry.Task == admitted));
+
+            waiting.Remove(item: entry);
+            order.Add(item: entry.Holder);
+            // The next waiter's timer arms again once it has re-checked its place.
+            using (await admitted) { await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick); }
+        }
+        Assert.Equal(expected: new[] { "a one", "b one", "renamed c", "a two", "a three" }, actual: order);
+    }
+    [Fact]
+    public async Task AFourLineTicketRotatesUnderItsHoldersFirstWord() {
+        var queue = Path.Combine(path1: m_root, path2: "gpu.queue");
+        using var process = Process.GetCurrentProcess();
+
+        // Lane a is the lane served last, and its two older tickets carry no lane line.
+        (await Take(holder: "a probe")).Dispose();
+        foreach (var (sequence, holder) in new[] { ("000000000002", "a one"), ("000000000003", "a two") }) {
+            File.WriteAllLines(path: Path.Combine(path1: queue, path2: sequence), contents: [holder, DateTimeOffset.UtcNow.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), process.Id.ToString(provider: CultureInfo.InvariantCulture), process.StartTime.ToUniversalTime().Ticks.ToString(provider: CultureInfo.InvariantCulture)]);
+        }
+        // Read as lane a, they rank behind the never-served lane b despite being older; read as lanes of their own, they would not.
+        using var other = await Take(holder: "b one");
+
+        Assert.Equal(expected: 4, actual: File.ReadAllLines(path: Path.Combine(path1: m_root, path2: "gpu/holder")).Length);
+        other.Dispose();
+        await Assert.ThrowsAsync<TimeoutException>(testCode: async () => await Take(holder: "a three"));
+    }
+    [Fact]
     public async Task ADeadWaitersTicketIsSkippedAndDropped() {
         var clock = new VirtualClock();
         var queue = Path.Combine(path1: m_root, path2: "gpu.queue");
@@ -110,7 +160,7 @@ public sealed class CliLeaseTests : IDisposable {
         var dead = Path.Combine(path1: queue, path2: "000000000001");
 
         // A power trip leaves the ticket of a process that no longer exists, older than every live waiter.
-        File.WriteAllLines(path: dead, contents: ["dead", clock.GetUtcNow().ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), int.MaxValue.ToString(provider: CultureInfo.InvariantCulture), "1"]);
+        File.WriteAllLines(path: dead, contents: ["dead", clock.GetUtcNow().ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), int.MaxValue.ToString(provider: CultureInfo.InvariantCulture), "1", "dead"]);
         File.WriteAllLines(path: Path.Combine(path1: queue, path2: "000000000002"), contents: ["torn"]);
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -5), path: Path.Combine(path1: queue, path2: "000000000002"));
         using var holder = await Take(holder: "holder");

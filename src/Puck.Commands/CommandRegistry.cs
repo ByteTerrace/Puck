@@ -230,7 +230,7 @@ public sealed partial class CommandRegistry {
         m_wirePathAlt = m_wirePath.GetAlternateLookup<ReadOnlySpan<char>>();
         m_byNameAlt = m_byName.GetAlternateLookup<ReadOnlySpan<char>>();
         m_runner = m_byName[RunCommandName];
-        m_metadata = [.. m_byTextCommand.Values
+        m_metadata = [.. m_byTextCommand.Values.Where(predicate: static definition => !definition.BindingOnly)
             .Select(selector: static definition => definition.Metadata)
             .OrderBy(
                 keySelector: static metadata => metadata.Name,
@@ -290,7 +290,7 @@ public sealed partial class CommandRegistry {
                 throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) is already registered in another command registry. A module must yield a fresh CommandDefinition per registry; a definition's text command carries per-registry parser state.");
             }
 
-            m_root.Subcommands.Add(item: definition.TextCommand);
+            if (!definition.BindingOnly) { m_root.Subcommands.Add(item: definition.TextCommand); }
             m_byTextCommand[definition.TextCommand] = definition;
             ClaimName(
                 name: definition.Name,
@@ -686,7 +686,7 @@ public sealed partial class CommandRegistry {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
             description: "Lists the available commands: help [--full|--names] [<prefix>] — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
-            handler: (context, args) => Help(args: in args, slot: context.Slot),
+            handler: (context, args) => Help(args: in args, caller: context.Principal, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
@@ -1132,6 +1132,9 @@ public sealed partial class CommandRegistry {
     // on, or in a registry with no sink, so it dispatches inline rather than queueing behind a sink whose principal is
     // not its caller's.
     private CommandResult SubmitCore(string line, TextCommandSession? session, Principal principal, int slot, Func<CommandMetadata, bool>? authorize, bool queue) {
+        if (m_byNameAlt.TryGetValue(key: LeadingVerb(line: line), value: out var destination) && destination.BindingOnly) {
+            return UnknownCommand(verb: LeadingVerb(line: line));
+        }
         // A blank line is REFUSED rather than quietly answering None. wire.errors is advertised as the one number that
         // says whether any submitted line silently no-opped, and a blank line is the purest no-op there is; answering
         // success for it made the counter's own promise false. Nothing in the live drain path pays for this: a script's
@@ -1621,12 +1624,15 @@ public sealed partial class CommandRegistry {
     /// <param name="slot">The slot whose authored commands the listing includes (<see cref="AuthoredCommandsFor"/>).</param>
     /// <param name="synopsis">Shortens each description to its first sentence, at most 200 characters, ending in
     /// <c> ...</c> when words were left out.</param>
+    /// <param name="caller">The principal a command's read-back details are checked for; <see langword="null"/> reads
+    /// as the console.</param>
     /// <returns>A newline-separated list of <c>name - description</c> entries, or of names; empty when nothing
     /// matches.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false) {
-        var registered = m_root.Subcommands.Where(predicate: command => ((prefix is not null) || !m_byTextCommand[command].HelpRequiresPrefix))
-            .Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty)));
-        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description));
+    public string BuildHelpText(Func<CommandMetadata, bool>? include = null, string? prefix = null, bool namesOnly = false, int slot = 0, bool synopsis = false, Principal? caller = null) {
+        var asking = (caller ?? Principal.Console);
+        var registered = m_root.Subcommands.Where(predicate: command => !m_byTextCommand[command].BindingOnly)
+            .Select(selector: command => (Metadata: m_byTextCommand[command].Metadata, Description: (command.Description ?? string.Empty), Details: m_byTextCommand[command].HelpDetails));
+        var authored = AuthoredCommandsFor(slot: slot).Commands.Select(selector: static command => (Metadata: AuthoredMetadata(name: command.Name), command.Description, Details: ((Func<int, Principal, string>?)null)));
 
         return string.Join(
             separator: '\n',
@@ -1640,7 +1646,7 @@ public sealed partial class CommandRegistry {
             )
                 .Select(selector: entry => (namesOnly
                     ? entry.Metadata.Name
-                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}"))
+                    : $"{entry.Metadata.Name} - {(synopsis ? Synopsis(description: entry.Description) : entry.Description)}{((entry.Details is not null) ? ("\n  " + entry.Details(slot, asking)) : string.Empty)}"))
         );
     }
 
@@ -1650,22 +1656,21 @@ public sealed partial class CommandRegistry {
     // A description's first sentence, cut at a word boundary within SynopsisCharacters; a line that left words out ends
     // in " ..." so a reader knows `help --full` holds the rest.
     private static string Synopsis(string description) {
-        var end = description.IndexOf(value: ". ", comparisonType: StringComparison.Ordinal);
+        var end = description.IndexOf(comparisonType: StringComparison.Ordinal, value: ". ");
         var sentence = ((end < 0) ? description : description[..(end + 1)]);
 
         if (sentence.Length > SynopsisCharacters) {
-            var cut = sentence.LastIndexOf(value: ' ', startIndex: (SynopsisCharacters - 1));
+            var cut = sentence.LastIndexOf(startIndex: (SynopsisCharacters - 1), value: ' ');
 
             sentence = sentence[..((cut > 0) ? cut : SynopsisCharacters)];
         }
 
         return ((sentence.Length < description.Length) ? $"{sentence.TrimEnd(trimChar: '.')} ..." : sentence);
     }
-
     // help [--full|--names] [<prefix>]: bare help lists the names index; --full or a prefix prints name - description,
     // and --names keeps names alone even with a prefix. A prefix that matches nothing is refused by name, so a mistyped
     // one never answers an empty success.
-    private CommandResult Help(in WireArgs args, int slot) {
+    private CommandResult Help(in WireArgs args, Principal caller, int slot) {
         var full = false;
         var names = false;
         string? prefix = null;
@@ -1692,6 +1697,7 @@ public sealed partial class CommandRegistry {
         }
 
         var text = BuildHelpText(
+            caller: caller,
             namesOnly: (names || (!full && (prefix is null))),
             prefix: prefix,
             slot: slot,
@@ -1807,11 +1813,11 @@ public sealed partial class CommandRegistry {
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup
     /// <see cref="BindingVocabularyCheck"/> consumers resolve a binding document's <c>Command</c> strings through.
-    /// Covers exactly the names <see cref="Submit"/> can dispatch — every module-registered command and its aliases,
+    /// Covers exactly the names <see cref="Submit"/> can dispatch — public module-registered commands and aliases,
     /// AND the registry's own <c>help</c>/<c>wire.ack</c>/<c>wire.errors</c>, which answer here as
     /// <see cref="CommandBindability.Unbindable"/>. A vocabulary check therefore refuses a binding row naming one of
     /// them by its bindability, with a message about what it is, rather than calling a verb the registry dispatches
-    /// unknown.</summary>
+    /// unknown. Internal compiled destinations remain available by interned id only.</summary>
     /// <param name="name">The command name or alias to resolve.</param>
     /// <param name="metadata">When this method returns, the command's declared facts, or the default when the name
     /// is unknown.</param>
@@ -1823,7 +1829,7 @@ public sealed partial class CommandRegistry {
         if (m_idByName.TryGetValue(
             key: name,
             value: out var id
-        )) {
+        ) && !m_definitionById[id].BindingOnly) {
             metadata = m_metadataById[id];
 
             return true;

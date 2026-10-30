@@ -15,7 +15,7 @@ public sealed class BindingBarChordHintLawTests {
     private static BindingChordCommandView Chord(string? action, string? label, params string[] sources) => new(
         Action: action,
         Chord: [],
-        Command: "channel.0",
+        Command: "test.forward",
         Held: sources,
         HoldRelease: false,
         Icon: null,

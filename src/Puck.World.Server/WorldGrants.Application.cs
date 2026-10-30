@@ -79,7 +79,8 @@ public sealed partial class WorldGrants {
                 Rejected: false,
                 Kind: WorldEditEchoKind.GrantTable,
                 ConnectionId: connectionId,
-                CorrelationId: correlationId
+                CorrelationId: correlationId,
+                Actor: actor
             ));
 
             return true;
@@ -96,7 +97,8 @@ public sealed partial class WorldGrants {
                 Kind: WorldEditEchoKind.GrantTable,
                 Denied: true,
                 ConnectionId: connectionId,
-                CorrelationId: correlationId
+                CorrelationId: correlationId,
+                Actor: actor
             ));
 
             return false;
@@ -208,7 +210,8 @@ public sealed partial class WorldGrants {
             Rejected: !removed,
             Kind: WorldEditEchoKind.GrantTable,
             ConnectionId: connectionId,
-            CorrelationId: correlationId
+            CorrelationId: correlationId,
+            Actor: actor
         ));
     }
     /// <summary>

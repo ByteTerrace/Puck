@@ -20,13 +20,28 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
 
     // The endpoint's submission door: its link while the endpoint is open, and a door that refuses every submission by
     // name once it is disposed, so nothing composed for the world this endpoint reached is sent through it afterwards.
-    private sealed class RetiringLink(IServerLink inner, CancellationToken retired) : IServerLink {
+    private sealed class RetiringLink(IServerLink inner, CancellationToken retired) : IPrincipalServerLink {
         private static WorldSubmissionResult.Refusal Closed { get; } = new(Code: "world.endpoint.retired", Detail: "the endpoint this submission was made through is closed");
 
         public void Query(WorldQuery query, Action<QueryAnswer> completion) => inner.Query(
             completion: completion,
             query: query
         );
+        // A door that attributes queries passes the caller through; any other stamps its own principal.
+        public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
+            if (inner is IPrincipalServerLink principals) {
+                principals.Query(
+                    completion: completion,
+                    principal: principal,
+                    query: query
+                );
+            } else {
+                inner.Query(
+                    completion: completion,
+                    query: query
+                );
+            }
+        }
         public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => (retired.IsCancellationRequested
             ? 0L
             : inner.SubmitEnvelope(

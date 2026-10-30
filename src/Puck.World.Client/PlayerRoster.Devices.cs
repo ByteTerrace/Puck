@@ -187,11 +187,14 @@ public sealed partial class PlayerRoster {
     /// <param name="gamepadStatus">Optional per-gamepad status lookup (see <see cref="GamepadStatusText"/>), called
     /// only for devices classified as gamepads; <see langword="null"/>, or a <see langword="null"/>/empty result,
     /// leaves the segment bare. The roster holds no gamepad manager of its own, so the caller supplies the lookup.</param>
+    /// <param name="connectedGamepads">Optional gamepads the host sees connected, with their type names. One the roster
+    /// has not observed is listed unassigned after the observed gamepads without being recorded: the read leaves the
+    /// roster's first-seen order, tokens and names unchanged.</param>
     /// <returns>A line of the form
     /// <c>[world.devices: keyboard1=p1* | mouse1=p1* | gamepad1=p2* battery 94% headset | camera1 'Logitech BRIO'=p1 | camera2 'HD Pro Webcam C920'=p1*]</c>;
     /// the status suffix is <c>battery N%</c>, <c>charging N%</c>, <c>not charging N%</c>, <c>charged</c> or
     /// <c>wired</c> (nothing when power is unknown), then <c>headset</c>, <c>headphones</c> or <c>microphone</c>.</returns>
-    public string DescribeDevices(Func<InputDeviceId, string?>? gamepadStatus = null) {
+    public string DescribeDevices(Func<InputDeviceId, string?>? gamepadStatus = null, IEnumerable<(InputDeviceId Device, string Name)>? connectedGamepads = null) {
         var segments = new List<string>(capacity: m_deviceOrder.Count);
 
         foreach (var device in m_deviceOrder) {
@@ -228,6 +231,24 @@ public sealed partial class PlayerRoster {
                 : string.Empty)}{(string.IsNullOrEmpty(value: status)
                 ? string.Empty
                 : $" {status}")}");
+        }
+
+        if (connectedGamepads is not null) {
+            var ordinal = m_deviceOrder.Count(predicate: device => (DeviceKindOf(device: device) == InputDeviceKind.Gamepad));
+
+            foreach (var (device, name) in connectedGamepads) {
+                if (m_deviceOrder.Contains(item: device)) {
+                    continue;
+                }
+
+                ordinal++;
+
+                var status = gamepadStatus?.Invoke(arg: device);
+
+                segments.Add(item: $"gamepad{ordinal} '{name}'=unassigned{(string.IsNullOrEmpty(value: status)
+                    ? string.Empty
+                    : $" {status}")}");
+            }
         }
 
         return $"[world.devices: {string.Join(
@@ -311,7 +332,7 @@ public sealed partial class PlayerRoster {
     public void ObserveDevice(InputDeviceId device, InputDeviceKind kind, string name) {
         ArgumentException.ThrowIfNullOrEmpty(argument: name);
 
-        var firstSeen = !m_deviceKind.ContainsKey(key: device);
+        var firstSeen = !m_deviceOrder.Contains(item: device);
 
         m_deviceKind[device] = kind;
         m_deviceName[device] = name;

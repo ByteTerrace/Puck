@@ -22,6 +22,34 @@ namespace Puck.World.Presentation.Tests;
 /// whichever was assigned to it most recently.
 /// </summary>
 public sealed class PlayerRosterDeviceRosterLawTests {
+    [Fact]
+    public void AStreamingPadIsListedBeforeActivity_AndCanBeNamedAfterRouterClassification() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var pad = InputDeviceId.FromKey(key: "synthetic:28de:1304");
+        roster.ObserveDeviceKind(device: pad, kind: InputDeviceKind.Gamepad);
+        roster.ObserveDevice(device: pad, kind: InputDeviceKind.Gamepad, name: "SteamControllerTriton");
+        Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=unassigned]", roster.DescribeDevices());
+        Assert.False(condition: roster.IsJoined(slot: 1));
+        roster.Confirm(device: pad, actingPrincipal: Principal.Console);
+        Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=p1*]", roster.DescribeDevices());
+    }
+    [Fact]
+    public void AConnectedPadIsListedWithoutBeingRecordedInTheRoster() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var known = InputDeviceId.FromKey(key: "synthetic:28de:1304");
+        var unseen = InputDeviceId.FromKey(key: "synthetic:054c:0ce6");
+        roster.ObserveDeviceKind(device: known, kind: InputDeviceKind.Gamepad);
+        roster.ObserveDevice(device: known, kind: InputDeviceKind.Gamepad, name: "SteamControllerTriton");
+        (InputDeviceId Device, string Name)[] connected = [(unseen, "DualSense"), (known, "Renamed")];
+
+        Assert.Equal(
+            "[world.devices: gamepad1 'SteamControllerTriton'=unassigned | gamepad2 'DualSense'=unassigned]",
+            roster.DescribeDevices(connectedGamepads: connected)
+        );
+        Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=unassigned]", roster.DescribeDevices());
+    }
     private static PlayerRoster BuildRoster(WorldFixture fixture) => new(
         definition: fixture.Server.Definition,
         link: new LoopbackTransport(server: fixture.Server),
@@ -327,8 +355,8 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         });
 
         Assert.Equal(
-            expected: [pad, bare],
-            actual: asked
+            actual: asked,
+            expected: [pad, bare]
         );
         Assert.Contains(
             actualString: line,

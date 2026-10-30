@@ -9,7 +9,28 @@ namespace Puck.World;
 /// <c>replay.inspect</c>'s per-tick line — the kind first, then the target and the values an operator would need to
 /// recognize the line they typed (<c>press p1 forward=1 hold=2s by console</c>), never the whole leaf.</summary>
 public static class WorldReplayEntryDescriber {
-    private static string DescribeCommand(WorldCommand command, WorldChannelTable channels) {
+    // The nonzero lanes of a tape segment's driven intent by bank address: a raw bank belongs to the mapping of the
+    // tick that consumes it, so it is never labelled with a fixed or later table.
+    private static string DescribeIntent(PlayerIntent intent) {
+        var text = new StringBuilder();
+
+        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
+            var value = intent[ordinal];
+
+            if (value == FixedQ4816.Zero) {
+                continue;
+            }
+
+            if (text.Length > 0) {
+                text.Append(value: ' ');
+            }
+
+            text.Append(value: '@').Append(value: ordinal).Append(value: '=').Append(value: WorldReplayInspector.DescribeValue(value: value));
+        }
+
+        return ((text.Length > 0) ? text.ToString() : "idle");
+    }
+    private static string DescribeCommand(WorldCommand command) {
         var entity = WorldReplayInspector.DescribeEntity(index: command.EntityIndex);
         var body = command switch {
             WorldCommand.SnapPose pose => string.Create(
@@ -18,10 +39,7 @@ public static class WorldReplayEntryDescriber {
         ),
             WorldCommand.EnqueueSegment segment => string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"segment {entity} {segment.Seconds:0.##}s{DescribeIntent(
-                channels: channels,
-                intent: segment.Intent
-            )}"
+            handler: $"segment {entity} {segment.Seconds:0.##}s [{DescribeIntent(intent: segment.Intent)}]"
         ),
             WorldCommand.PressChannel press => string.Create(
             provider: CultureInfo.InvariantCulture,
@@ -55,25 +73,6 @@ public static class WorldReplayEntryDescriber {
     private static string DescribeGrant(WorldGrant grant) => $"{grant.Capability.ToString().ToLowerInvariant()} {grant.Subject.Describe()} -> {grant.Grantee.Describe()}{(grant.Exclusive
         ? " exclusive"
         : "")}";
-    // Every non-zero lane of a segment's held intent, named — the vector as the operator typed it.
-    private static string DescribeIntent(PlayerIntent intent, WorldChannelTable channels) {
-        var text = new StringBuilder();
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            if (intent[ordinal] == FixedQ4816.Zero) {
-                continue;
-            }
-
-            text.Append(value: ' ');
-            text.Append(value: (channels.Name(ordinal: ordinal) ?? $"ch{ordinal}"));
-            text.Append(value: '=');
-            text.Append(value: ((channels.Shape(ordinal: ordinal) == ChannelShape.Relative)
-                ? intent.Channels.Relative(ordinal: ordinal).ToString()
-                : WorldReplayInspector.DescribeValue(value: intent[ordinal])));
-        }
-
-        return text.ToString();
-    }
     private static string DescribePeers(IReadOnlyList<WorldPeerEventEntry> entries) {
         var text = new StringBuilder();
 
@@ -121,15 +120,12 @@ public static class WorldReplayEntryDescriber {
 
     /// <summary>Describes one authority/server-event entry.</summary>
     /// <param name="entry">The entry.</param>
-    /// <param name="channels">The recorded world's channel table, for naming a channel ordinal.</param>
     /// <returns>The fragment.</returns>
-    public static string Describe(WorldReplayEntry entry, WorldChannelTable channels) {
+    public static string Describe(WorldReplayEntry entry) {
         ArgumentNullException.ThrowIfNull(argument: entry);
-        ArgumentNullException.ThrowIfNull(argument: channels);
 
         return entry switch {
             WorldReplayEntry.Command command => DescribeCommand(
-            channels: channels,
             command: command.Value
         ),
             WorldReplayEntry.Grant grant => $"grant {DescribeGrant(grant: grant.Value)} by {grant.Actor.Describe()}",

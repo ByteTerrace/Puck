@@ -18,6 +18,7 @@ public sealed class PlayerSignalSourceLawTests {
             roster: null!,
             router: null!,
             seatBindings: null!,
+            seatRouter: null!,
             server: null!,
             windowObservers: null!
         )]);

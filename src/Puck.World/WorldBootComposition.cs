@@ -774,11 +774,14 @@ public static class WorldBootComposition {
             history: sp.GetRequiredService<WorldHistory>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
+        // The toast store is core so a headless World keeps the latest toast `world.hud toast` reads back.
+        services.AddSingleton<OverlayToastStore>();
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
             server: sp.GetRequiredService<WorldServer>(),
             bindings: sp.GetRequiredService<IHudBindingResolver>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
-            facts: sp.GetRequiredService<WorldOverlayFacts>()
+            facts: sp.GetRequiredService<WorldOverlayFacts>(),
+            toasts: sp.GetRequiredService<OverlayToastStore>()
         ));
 
         // The genre-neutral state section's FINE-GRAIN verb surface — world.state.cell.set (one cell, dispatching
@@ -1495,7 +1498,6 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<WorldServer>(),
             theme: sp.GetRequiredService<WorldThemeResolve>()
         ));
-        services.AddSingleton<OverlayToastStore>();
         services.AddSingleton(implementationFactory: static sp => new ConsoleInputSink(
             sessions: sp.GetRequiredService<ConsoleSessionBank>(),
             slotResolver: sp.GetRequiredService<IInputSlotResolver>()

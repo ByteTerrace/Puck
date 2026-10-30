@@ -98,8 +98,11 @@ public static class OperatorMcpFront {
                 if (data.TryGetProperty(propertyName: "world", value: out var reached) && (reached.ValueKind == JsonValueKind.Object) &&
                     reached.TryGetProperty(propertyName: "attachmentId", value: out var attachment)) { owners[attachment.GetString()!] = worker; }
             }
-            if ((tool == "puck_world_start_wait") && (status != "pending") &&
-                (arguments?.TryGetValue(key: "startId", value: out var start) == true) && (start.ValueKind == JsonValueKind.String)) {
+            // Only the start's own terminal outcome is kept: it carries the start's id. An argument refusal or an unknown
+            // id answers without one (or with another's), so it is returned to its caller and the start stays routable.
+            if ((tool == "puck_world_start_wait") && (status != "pending") && (id.ValueKind == JsonValueKind.String) &&
+                (arguments?.TryGetValue(key: "startId", value: out var start) == true) && (start.ValueKind == JsonValueKind.String) &&
+                (start.GetString() == id.GetString())) {
                 var key = start.GetString()!;
 
                 starts.Remove(key: key);

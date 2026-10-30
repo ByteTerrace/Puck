@@ -14,15 +14,16 @@ namespace Puck.Mcp;
 /// <summary>What the Operator adapter needs to start Worlds: the checkout it serves and the machine's GPU lease.</summary>
 /// <param name="Checkout">The adapter's own Puck checkout, the default checkout a start boots from; its repository's
 /// worktrees are the only other checkouts a start accepts.</param>
-/// <param name="AcquireGpuLease">Takes the machine's exclusive GPU lease for a holder, waiting at most the given time,
-/// and returns the held lease, which releases on disposal; throws <see cref="TimeoutException"/> when it stays held.</param>
+/// <param name="AcquireGpuLease">Takes the machine's exclusive GPU lease for a holder and the lane it works for (null
+/// takes the holder's first word), waiting at most the given time, and returns the held lease, which releases on
+/// disposal; throws <see cref="TimeoutException"/> when it stays held.</param>
 /// <param name="ResolveBuild">Resolves the World build of a checkout's current sources, given the checkout and the time
 /// it may take, building it only when no earlier run built those sources; the CLI answers it with its content-keyed
 /// World build store, so the build a start boots can never be older than the sources it boots. Its boolean asks for a
 /// build that carries Vulkan SPIR-V, which a Vulkan start needs.</param>
 public sealed record OperatorWorldLaunch(
     string Checkout,
-    Func<string, TimeSpan, CancellationToken, Task<IDisposable>> AcquireGpuLease,
+    Func<string, string?, TimeSpan, CancellationToken, Task<IDisposable>> AcquireGpuLease,
     Func<string, bool, TimeSpan, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
 );
 /// <summary>The World build a start boots, or why none could be made.</summary>
@@ -117,7 +118,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         string? backend = null;
         string? checkoutArgument = null;
         var document = "worlds/debug";
-        var holder = "puck-mcp";
+        string? holder = null;
+        string? lane = null;
         var ownerPlay = false;
         var seconds = 900;
         var windowed = false;
@@ -135,6 +137,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 ownerPlay = value.GetBoolean();
             } else if ((key == "holder") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n']) < 0)) {
                 holder = value.GetString()!;
+            } else if ((key == "lane") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n']) < 0)) {
+                lane = value.GetString()!;
             } else if ((key == "timeoutSeconds") && (value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= MaxStartSeconds)) {
                 seconds = parsed;
             } else {
@@ -155,6 +159,9 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             return Refuse(output: refusal!);
         }
 
+        // A start that names neither holds the lease for its checkout's lane, one lane per worktree.
+        lane ??= ((holder is null) ? Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: checkout)) : null);
+        holder ??= lane!;
         var path = Path.GetFullPath(path: Path.Combine(path1: checkout, path2: document));
         var worlds = (Path.Combine(path1: checkout, path2: "worlds") + Path.DirectorySeparatorChar);
 
@@ -178,7 +185,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, holder, windowed, ownerPlay, seconds, attachment, progress, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, holder, lane, windowed, ownerPlay, seconds, attachment, progress, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
@@ -219,7 +226,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
         return Result(metadata: metadata);
     }
-    private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string holder,
+    private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string holder, string? lane,
         bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         // The build comes before the GPU lease, so a long build never holds the machine's GPU.
@@ -238,7 +245,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             progress.Stage = "gpu-lease";
 
             try {
-                lease = await launch!.AcquireGpuLease(holder, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                lease = await launch!.AcquireGpuLease(holder, lane, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (TimeoutException error) {
                 resolved.Lease?.Dispose();
 

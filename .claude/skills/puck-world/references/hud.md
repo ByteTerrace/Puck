@@ -45,7 +45,7 @@ a world-level kill switch plus the drawn pointer cursor's per-world policy —
 units, ring radius in px, the bare cursor's core theme role (`WorldThemeRole`), an
 optional visibility predicate; null draws no cursor at all, since the engine
 has none of its own and the live policy is authored in
-`worlds/debug/controls.puck`; whole-row replace semantics on
+`worlds/standard/controls.puck`; whole-row replace semantics on
 `SetHudDefaults`, so a defaults row authored without it clears the cursor). Validated by `hud.CursorInvalid`;
 echoed RESOLVED by `world.hud`; the live pointer state (position, visibility
 verdict, hover target) echoes through `world.view.pointer`
@@ -394,8 +394,15 @@ over `hud.*` (`WorldRowCommandModule`, see [console.md](console.md)):
 Simulation-routed, submitting a mutation and returning `CommandResult.None` —
 NO synchronous echo; the outcome arrives a tick later through
 `WorldServer.EchoTap` (toast, console mirror, stderr), and a rejection
-increments `wire.errors`. The read-backs `world.hud` and `world.hud.template`
-live in `WorldHudCommandModule`, unbindable.
+increments `wire.errors`. A toast narrates what a player's own act caused:
+`WorldToastPolicy` (`Puck.World`) withholds it from an echo whose
+`WorldEditEcho.ActingPrincipal` is `Console` (stdin, an MCP or control
+attachment, a sweep or schedule prelude, the session grants minted at a screen
+session's admission) or `World`, and from an applied addon or scoped-replay
+edit. The console row, stderr and the log carry those outcomes instead. The
+read-backs `world.hud` and `world.hud.template`
+live in `WorldHudCommandModule`, unbindable; `world.hud toast` reads the latest
+toast the store holds (`#<seq> ok|error '<text>'`, or `none`), headless too.
 
 - `world.row.set hud.panels <panel-json>` → `UpsertHudPanel` (whole row,
   elements included — the cross-row transaction boundary).
@@ -430,7 +437,7 @@ its style under `theme.styles` (`glow`, `keycap`, `bar`, `console`, `cursor`,
 `wheel`, `toast`, `hud`), whose colors take a core role (`{ role: Accent }`) or
 their own (`{ color: "#RRGGBB" }`), resolved by `WorldThemeResolve` into the
 token slab's component slots (`OverlayColorRole.ConsoleEcho`, `KeycapBadge`,
-`KeycapBadgeInk`). The debug world's look is `worlds/debug/skin.puck`.
+`KeycapBadgeInk`). The standard skin is `worlds/standard/skin.puck`.
 
 Inline JSON is reconstructed from the raw command text (the tokenizer would
 destroy quotes) and parsed through `WorldJsonPayload.TryParse` against

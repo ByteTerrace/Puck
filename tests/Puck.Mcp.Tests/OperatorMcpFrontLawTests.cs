@@ -73,7 +73,9 @@ public sealed class OperatorMcpFrontLawTests {
                 if (scenario is "pending" or "failed-start") {
                     var args = new Dictionary<string, object?> { ["startId"] = "start-1" };
 
-                    Assert.Equal("pending", (await Call(args: args, name: "puck_world_start_wait")).GetProperty(propertyName: "status").GetString());
+                    // An invalid wait is answered to its caller and does not become the start's result.
+                    Assert.Equal("refused", (await Call(args: new() { ["startId"] = "start-1", ["bogus"] = 1 }, name: "puck_world_start_wait")).GetProperty(propertyName: "status").GetString());
+                    Assert.Equal("pending",(await Call(args: args, name: "puck_world_start_wait")).GetProperty(propertyName: "status").GetString());
                     first.Owned = (scenario == "pending");
                     first.Pending = false;
                     if (first.Owned) {
@@ -142,10 +144,12 @@ public sealed class OperatorMcpFrontLawTests {
                             Owned = false;
                             return Result(data: JsonElement.Parse("""{"status":"stopped"}"""));
                         }
+                        // An argument refusal names no start, as the real backend's does.
+                        if (context.Params.Arguments?.ContainsKey(key: "bogus") == true) { return Result(data: JsonElement.Parse("""{"status":"refused"}""")); }
                         if (Pending) { return Result(data: JsonElement.Parse("""{"status":"pending","startId":"start-1"}""")); }
                         return Result(data: (Owned
-                            ? JsonElement.Parse("""{"status":"started","processId":123,"world":{"attachmentId":"attachment-1"}}""")
-                            : JsonElement.Parse("""{"status":"refused"}""")));
+                            ? JsonElement.Parse("""{"status":"started","startId":"start-1","processId":123,"world":{"attachmentId":"attachment-1"}}""")
+                            : JsonElement.Parse("""{"status":"refused","startId":"start-1"}""")));
                     },
                 },
             });
