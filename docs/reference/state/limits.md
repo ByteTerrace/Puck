@@ -107,7 +107,7 @@ A few rules apply to every limit on this page:
 
 | Limit | Value | Constant | Explained in |
 |---|---|---|---|
-| Rule work per tick | 4,000,000 work units | `RuleCapacity.MaxWorkUnitsPerTick` | [Rule analysis, scheduling, and work budgets](analysis.md) |
+| Rule work per tick | 4,250,000 work units | `RuleCapacity.MaxWorkUnitsPerTick` | [Rule analysis, scheduling, and work budgets](analysis.md) |
 | Locals per rule, including implicit ones | 64 | `RuleCapacity.MaxLocalsPerRule` | [Rules and firing](rules.md) |
 | Top-level effects per rule | 256 | `RuleCapacity.MaxEffectsPerRule` | [Rules and firing](rules.md) |
 | Effects in a transaction or its `onFailure` list | 256 | `RuleCapacity.MaxTransactionEffects` | [Rules and firing](rules.md#recover-from-a-refused-step) |

@@ -12,6 +12,7 @@ public sealed partial class WorldConfiguredExtensions {
         public IWorldExtensionObservationSource Source { get; } = source;
 
         public string? Failure;
+        public long Feed = WorldExtensionObservationFeed.Pending;
         public IReadOnlyList<WorldExtensionObservationItem>? Items;
         public string? LastRefusedField;
         public bool NeedsProjection;
@@ -67,6 +68,19 @@ public sealed partial class WorldConfiguredExtensions {
                     (row.Capacity < settings.MaximumItems)
                 ) { throw new ArgumentException(message: "Observation tables need exclusive ownership and sufficient capacity."); }
             }
+            if (settings.Status is { } statusName) {
+                ValidateName(name: statusName);
+                RequireTable(
+                    kind: CellKind.Int,
+                    name: statusName
+                );
+                _ = ReadTable(
+                    client,
+                    statusName,
+                    CellKind.Int
+                );
+                if (!outputs.Add(item: statusName)) { throw new ArgumentException(message: "Observation tables need exclusive ownership and sufficient capacity."); }
+            }
             if (
                 !providers.TryGetValue(
                 key: settings.Provider,
@@ -95,9 +109,14 @@ public sealed partial class WorldConfiguredExtensions {
                     observation.Items = pending.GetAwaiter().GetResult();
                     observation.Observed = tick;
                     observation.Failure = null;
+                    observation.Feed = WorldExtensionObservationFeed.Live;
                     observation.NeedsProjection = true;
-                } catch (Exception exception) { observation.Failure = exception.GetType().Name; }
+                } catch (Exception exception) {
+                    observation.Failure = exception.GetType().Name;
+                    observation.Feed = WorldExtensionObservationFeed.Offline;
+                }
             }
+            ProjectFeed(observation: observation);
             if (
                 observation.NeedsProjection &&
                 (observation.Items is { } items)
@@ -152,6 +171,28 @@ public sealed partial class WorldConfiguredExtensions {
                 });
             }
         }
+    }
+    private void ProjectFeed(Observation observation) {
+        if (
+            (observation.Settings.Status is not { } statusName) ||
+            (observation.Feed == WorldExtensionObservationFeed.Pending)
+        ) { return; }
+        try {
+            var shown = ReadTable(
+                observation.Client,
+                statusName,
+                CellKind.Int
+            ).FirstOrDefault(predicate: cell => (cell.Key == WorldExtensionObservationFeed.StatusKey));
+
+            if (shown?.Value == observation.Feed) { return; }
+            observation.Client.Submit(mutation: new WorldMutation.UpsertStateCell(
+                Principal: observation.Client.Principal,
+                Row: statusName,
+                Key: WorldExtensionObservationFeed.StatusKey,
+                Value: observation.Feed,
+                Kind: WorldDocumentWriteKind.Set
+            ));
+        } catch (Exception exception) { observation.Failure ??= exception.GetType().Name; }
     }
     private void ProjectObservation(Observation observation, IReadOnlyList<WorldExtensionObservationItem> items) {
         var principal = observation.Client.Principal;

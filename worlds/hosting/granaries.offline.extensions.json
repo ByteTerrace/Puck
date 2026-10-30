@@ -1,0 +1,51 @@
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "debug",
+  "scanEveryTicks": 30,
+  "lineage": "2f9d60a4-c1b7-4a53-9e28-d4b05c3a7f61",
+  "providers": [
+    {
+      "name": "fixture",
+      "type": "observation.fixture",
+      "settings": {}
+    }
+  ],
+  "operations": [],
+  "clients": [
+    {
+      "principal": "console",
+      "operations": [],
+      "requests": [
+        { "capability": "observe", "subject": "state:granaryNames" },
+        { "capability": "observe", "subject": "state:granaryResources" },
+        { "capability": "observe", "subject": "state:granaryRegions" },
+        { "capability": "observe", "subject": "state:granaryKinds" },
+        { "capability": "observe", "subject": "state:granarySkus" },
+        { "capability": "observe", "subject": "state:granaryFeed" },
+        { "capability": "mutate", "subject": "section:state" }
+      ]
+    }
+  ],
+  "connections": [],
+  "observations": [
+    {
+      "name": "partition-accounts",
+      "provider": "fixture",
+      "client": "console",
+      "maximumItems": 16,
+      "refreshTicks": 1800,
+      "status": "granaryFeed",
+      "settings": {
+        "items": [],
+        "failure": "synthetic: the provider is unavailable or unauthorised"
+      },
+      "fields": {
+        "name": "granaryNames",
+        "id": "granaryResources",
+        "region": "granaryRegions",
+        "kind": "granaryKinds",
+        "sku": "granarySkus"
+      }
+    }
+  ]
+}

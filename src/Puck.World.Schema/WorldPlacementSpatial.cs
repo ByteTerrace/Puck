@@ -497,7 +497,7 @@ public static class WorldSpatialQueryCompilation {
     // This is a numeric representability envelope, not a gameplay or world-size ceiling.
     private const long NarrowphaseRawLimit = (1L << 38);
 
-    private static readonly ConditionalWeakTable<WorldPlacementsSection, StrongBox<WorldSpatialQueryIndex>> Cache = new();
+    private static readonly ConditionalWeakTable<WorldPlacementsSection, CompiledIndex> Cache = new();
     private static readonly WorldSpatialQueryIndex Empty = new([]);
 
     private static FixedSpatialAabb BoundsFor(FixedSpatialShape shape) {
@@ -678,7 +678,19 @@ public static class WorldSpatialQueryCompilation {
     );
 
     /// <summary>Compiles all eligible rows in authored order.</summary>
-    public static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements) {
+    public static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements) => Compile(
+        bound: null,
+        placements: placements
+    );
+    // A volume whose center or extents read the live state (a document-value reference) is recorded with the value it
+    // compiled, so Resolve can tell the cached index has gone stale.
+    private static void NoteBound(WorldSpatialShape shape, List<(DocumentVector3 Value, System.Numerics.Vector3 Seen)>? bound) {
+        if (bound is null) { return; }
+        foreach (var value in (ReadOnlySpan<DocumentVector3>)[shape.Center, shape.HalfExtents]) {
+            if (value.Reference is not null) { bound.Add(item: (value, value.Value)); }
+        }
+    }
+    private static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements, List<(DocumentVector3 Value, System.Numerics.Vector3 Seen)>? bound) {
         if (placements is not { Count: > 0 }) {
             return new WorldSpatialQueryIndex([]);
         }
@@ -732,6 +744,10 @@ public static class WorldSpatialQueryCompilation {
             var start = volumes.Count;
 
             foreach (var volume in placement.Spatial) {
+                NoteBound(
+                    bound: bound,
+                    shape: volume.Shape
+                );
                 if (!TryCompileGeometry(
                     volume.Shape,
                     frame,
@@ -818,16 +834,43 @@ public static class WorldSpatialQueryCompilation {
         }
         return volumes;
     }
-    /// <summary>Gets the cached index for one immutable placement-section instance.</summary>
+    /// <summary>Gets the cached index for one immutable placement-section instance, compiled again when a volume that
+    /// reads a state-bound value (a document-value reference) now reads another.</summary>
     public static WorldSpatialQueryIndex Resolve(WorldPlacementsSection? section) {
         if (section is null) {
             return Empty;
         }
-        return Cache.GetValue(
+        var entry = Cache.GetValue(
             section,
-            static value => new StrongBox<WorldSpatialQueryIndex>(value: Compile(placements: value.Rows))
-        ).Value!;
+            static value => Compiled(section: value)
+        );
+
+        if (entry.Bound.Length == 0) { return entry.Index; }
+        foreach (var (value, seen) in entry.Bound) {
+            if (value.Value != seen) {
+                entry = Compiled(section: section);
+                Cache.AddOrUpdate(
+                    key: section,
+                    value: entry
+                );
+                break;
+            }
+        }
+        return entry.Index;
     }
+    private static CompiledIndex Compiled(WorldPlacementsSection section) {
+        var bound = new List<(DocumentVector3 Value, System.Numerics.Vector3 Seen)>();
+        var index = Compile(
+            bound: bound,
+            placements: section.Rows
+        );
+
+        return new CompiledIndex(
+            index,
+            [.. bound]
+        );
+    }
+    private sealed record CompiledIndex(WorldSpatialQueryIndex Index, (DocumentVector3 Value, System.Numerics.Vector3 Seen)[] Bound);
     // Hands a section's compiled index to a section whose rows differ from it only in their holding masks
     // (WorldDefinition.WithPlacementHoldings): the authored volumes it compiles read no shown creation.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {

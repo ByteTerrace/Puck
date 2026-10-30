@@ -35,8 +35,24 @@ public sealed record WorldExtensionObservationItem(string Key, IReadOnlyDictiona
 /// an invariant decimal to Q48.16; Bool: true/false or 1/0; Text: as authored).</param>
 /// <param name="RefreshTicks">Minimum simulation ticks between read attempts, including failures.</param>
 /// <param name="MaximumItems">Complete collection ceiling, 1–128. Rendering admission can impose a smaller practical limit.</param>
+/// <param name="Status">Optional name of an ordinary Int table the host keeps with the feed's state, so authored rules can
+/// tell an empty collection from a feed that is not there: one cell keyed <see cref="WorldExtensionObservationFeed.StatusKey"/>
+/// reads <see cref="WorldExtensionObservationFeed.Pending"/> until a read has finished, <see cref="WorldExtensionObservationFeed.Live"/>
+/// while the last read succeeded and <see cref="WorldExtensionObservationFeed.Offline"/> once it failed (the provider is
+/// unavailable, unauthorised or refused the read). The table is owned exclusively by this observation.</param>
 public sealed record WorldExtensionObservationSettings(string Name, string Provider, string Client, JsonElement Settings,
-    IReadOnlyDictionary<string, string> Fields, int RefreshTicks = 14400, int MaximumItems = 64);
+    IReadOnlyDictionary<string, string> Fields, int RefreshTicks = 14400, int MaximumItems = 64, string? Status = null);
+/// <summary>The values of an observation's <see cref="WorldExtensionObservationSettings.Status"/> cell.</summary>
+public static class WorldExtensionObservationFeed {
+    /// <summary>The key of the one status cell.</summary>
+    public const string StatusKey = "status";
+    /// <summary>No read has finished yet (or the host composed no feed at all).</summary>
+    public const long Pending = 0;
+    /// <summary>The last read succeeded.</summary>
+    public const long Live = 1;
+    /// <summary>The last read failed: the provider is unavailable or unauthorised.</summary>
+    public const long Offline = 2;
+}
 /// <summary>Host read-back for collection freshness and the amount of projected work. Counts describe observed items, not telemetry.</summary>
 /// <param name="Name">Configured observation name.</param>
 /// <param name="Kind">The bound source's own <see cref="IWorldExtensionObservationSource.Kind"/>.</param>
