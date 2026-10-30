@@ -21,6 +21,9 @@ namespace Puck.World;
 public sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     /// <summary>Gets or sets the live composition's program-build counter.</summary>
     public Func<long>? ProgramBuildsSource { get; set; }
+    /// <summary>Gets or sets the frame presenter's composed frame source, whose latest program emission and build
+    /// <c>world.residency</c> times, or <see langword="null"/> before the presenter is built.</summary>
+    public SdfCompositionFrameSource? Composition { get; set; }
 
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];

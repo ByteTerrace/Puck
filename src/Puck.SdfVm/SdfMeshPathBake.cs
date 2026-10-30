@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
@@ -329,6 +330,8 @@ public sealed partial class SdfMeshPathBake {
             if (!ReferenceEquals(objA: frame.Program, objB: m_program)) {
                 Restart(frame: frame);
             }
+            m_demandTransforms = frame.DynamicTransforms;
+            Prioritize();
             Settle(frame: frame);
 
             var finished = 0;
@@ -457,10 +460,11 @@ public sealed partial class SdfMeshPathBake {
     public static int FrameBudget(double frameSeconds) =>
         (FrameTaps * ((int)Math.Clamp(value: Math.Floor(d: (frameSeconds / ReferenceFrameSeconds)), min: 1.0, max: MaxFrameShares)));
     /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
-    /// owes one and has none in flight, in the groups' order, up to a batch, and every later call of the same frame answers
-    /// the same, so the frame's mask and bake passes agree. Taking them in order rather than round robin finishes the groups
-    /// first in order first, each landing in the mesh library as it finishes, so a residency the program leaves mid-bake (a
-    /// body crossing into another world) leaves the groups it finished there for the residency it reaches.</summary>
+    /// owes one and has none in flight, the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the
+    /// plan's order among equals, up to a batch, and every later call of the same frame answers the same, so the frame's
+    /// mask and bake passes agree. Taking them by priority rather than round robin finishes the groups about the views
+    /// first, each landing in the mesh library as it finishes, so a residency the program leaves mid-bake (a body crossing
+    /// into another world) leaves the groups it finished there for the residency it reaches.</summary>
     /// <param name="frame">The package frame (<see cref="SdfWorldResidency.PackageFrame"/>).</param>
     /// <param name="batch">The lattices to dispatch and the group each answers, handed back to
     /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>.</param>
@@ -494,10 +498,22 @@ public sealed partial class SdfMeshPathBake {
                     tickets.Add(item: new SliceTicket(Generation: slice.Generation, Lattice: lattice, Slice: slice));
                     m_takenPoses.Add(item: (0, ReadOnlyMemory<Vector4>.Empty));
                 }
-                for (var index = 0; ((index < m_groups.Count) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)); index++) {
+                var candidates = m_candidates;
+
+                candidates.Clear();
+                for (var index = 0; (index < m_groups.Count); index++) {
                     var group = m_groups[index];
 
-                    if (group.Done || group.InFlight || group.Contouring || (group.Next is not { } next)) { continue; }
+                    if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
+                    candidates.Add(item: (group.Priority, index));
+                }
+                CollectionsMarshal.AsSpan(list: candidates).Sort(comparison: ByPriority);
+                foreach (var (_, index) in candidates) {
+                    if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { break; }
+
+                    var group = m_groups[index];
+                    var next = group.Next!.Value;
+
                     if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) { break; }
                     // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
                     // in a growable input table; charging them here strands a full 65-cubed lattice forever.
@@ -521,6 +537,12 @@ public sealed partial class SdfMeshPathBake {
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
+    // The groups a frame may take a lattice of, by priority, reused frame to frame.
+    private readonly List<(float Priority, int Index)> m_candidates = [];
+
+    // Higher priority first, then the plan's order.
+    private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
+        ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
     private long m_frameTaken = -1;
     private int m_frameBudget = FrameTaps;
 
@@ -717,6 +739,7 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
+        var planned = Stopwatch.GetTimestamp();
         var groups = SdfMeshBakeGroup.Plan(
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
@@ -732,11 +755,13 @@ public sealed partial class SdfMeshPathBake {
 
         lock (m_gate) {
             m_prepared = (program, farDistance, groups);
+            m_planMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: planned).TotalMilliseconds;
         }
     }
 
     // Puts a group at an index of the list, under the gate.
     private void Replace(int index, Group group) {
+        m_allResident = false;
         m_groups[index] = group;
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
     }
@@ -744,9 +769,12 @@ public sealed partial class SdfMeshPathBake {
     // rigid copy), each starting at the coarse lattice over its bounding box. The meshes of the previous program keep
     // drawing until their group's new mesh lands.
     private void Restart(SdfFrame frame) {
+        var restarted = Stopwatch.GetTimestamp();
         var previous = m_groups.ToDictionary(keySelector: static group => group.Selector);
         var identity = Identity.Value;
 
+        m_allResident = false;
+        m_demandTransforms = frame.DynamicTransforms;
         m_program = frame.Program;
         m_groups.Clear();
         m_doneThrough = 0;
@@ -785,6 +813,7 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
+            group.TakeDemandBox();
             if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, identity: identity, old: old)) {
                 Replace(group: old, index: index);
                 continue;
@@ -802,6 +831,7 @@ public sealed partial class SdfMeshPathBake {
                 Library.TryTake(geometry: old.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var renumber)
             ) {
                 old.Renumber(materials: group.MaterialOrder, mesh: renumber);
+                old.ResidentAt = 0;
                 Replace(group: old, index: index);
                 continue;
             }
@@ -843,6 +873,7 @@ public sealed partial class SdfMeshPathBake {
             }
             rebaked++;
         }
+        Prioritize();
         if ((rebaked + loading) > 0) {
             m_dispatches = 0;
             m_samples = 0;
@@ -855,6 +886,11 @@ public sealed partial class SdfMeshPathBake {
             m_loaded = 0;
             m_reported = false;
             m_clock.Restart();
+            m_bakeStarted = restarted;
+            m_loadsQueued = loading;
+            m_loadsDone = 0;
+            m_loadFirst = ((loading > 0) ? restarted : 0);
+            m_loadLast = 0;
             Console.Error.WriteLine(value: $"[sdf.mesh-bake] start residency={Residency} groups={m_groups.Count} baking={rebaked} loading={loading} dynamic={m_groups.Count(predicate: static group => group.Dynamic)} instances={frame.Program.Instances.Count}");
             // The store's account reads its directory, so it runs off the frame's thread.
             if (Library.Disk is { } disk) {
@@ -880,6 +916,7 @@ public sealed partial class SdfMeshPathBake {
         if (replaced) {
             m_drawnMeshes = -1;
         }
+        m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
     // Whether a new program's group stays the group the previous program planned at its selector: the same geometry and
     // materials, or, for a dynamic group, the same form and materials, which are the same shapes in another relative pose,
@@ -908,6 +945,7 @@ public sealed partial class SdfMeshPathBake {
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
     // store refuses its entry; true when it loads.
     private bool Begin(Group group) {
+        group.TakeDemandBox();
         // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
         var center = ((group.Low + group.High) * 0.5f);
         var half = (MathF.Max(x: (group.High.X - group.Low.X), y: MathF.Max(x: (group.High.Y - group.Low.Y), y: (group.High.Z - group.Low.Z))) * 0.5f);
@@ -920,7 +958,7 @@ public sealed partial class SdfMeshPathBake {
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Load(group: group));
+        Schedule(group: group, work: () => Load(group: group));
         return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
@@ -1149,7 +1187,7 @@ public sealed partial class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Prepare(final: final, group: group));
+        Schedule(group: group, work: () => Prepare(final: final, group: group));
     }
     // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
     // measured next, or, with none, the gradients the contour reads.
@@ -1247,12 +1285,12 @@ public sealed partial class SdfMeshPathBake {
         group.Next = null;
         group.Contouring = true;
         if (final.Stage != FinalStage.Gradients) {
-            _ = Task.Run(action: () => ChooseCrossings(final: final, group: group));
+            Schedule(group: group, work: () => ChooseCrossings(final: final, group: group));
             return;
         }
 
         group.Final = null;
-        _ = Task.Run(action: () => Contour(group: group, lattice: sampled));
+        Schedule(group: group, work: () => Contour(group: group, lattice: sampled));
     }
     // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
     // linear estimate can instead land on a different face of a corner, supplying the contour with the wrong plane.
@@ -1306,7 +1344,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (creases.Count == 0) {
                 group.Contouring = true;
-                _ = Task.Run(action: () => Split(group: group));
+                Schedule(group: group, work: () => Split(group: group));
                 return;
             }
             group.Creases = [.. creases];
@@ -1388,7 +1426,7 @@ public sealed partial class SdfMeshPathBake {
         group.Points = null;
         group.Next = null;
         group.Contouring = true;
-        _ = Task.Run(action: () => Split(group: group));
+        Schedule(group: group, work: () => Split(group: group));
     }
     // Splits a group's contour at its creases, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).
@@ -1429,7 +1467,7 @@ public sealed partial class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        _ = ((group.Skin is null) ? Task.Run(action: () => Advance(group: group)) : Task.Run(action: () => Land(group: group, mesh: Skinned(group: group))));
+        Schedule(group: group, work: ((group.Skin is null) ? () => Advance(group: group) : () => Land(group: group, mesh: Skinned(group: group))));
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
     private void Advance(Group group) {
@@ -1552,6 +1590,8 @@ public sealed partial class SdfMeshPathBake {
 
         lock (m_gate) {
             group.Contouring = false;
+            m_loadsDone++;
+            m_loadLast = Stopwatch.GetTimestamp();
             if (refusal is not null) {
                 Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} store refused: {refusal}");
             }
@@ -1571,6 +1611,8 @@ public sealed partial class SdfMeshPathBake {
     // one lands, so the count of drawn meshes alone does not move: the draws are marked stale so Dress lists the new one.
     private void Draw(Group group, SdfMesh? mesh) {
         group.Mesh = mesh;
+        group.ResidentAt = 0;
+        m_allResident = false;
         m_drawnMeshes = -1;
     }
     // Records the bake's wall time once its last group finishes, and reports it.
@@ -1781,6 +1823,27 @@ public sealed partial class SdfMeshPathBake {
         public Quaternion[]? StillOrientations { get; private set; }
         public Vector3[]? StillPositions { get; private set; }
         public float StillSince { get; set; }
+
+        // The box a demand point measures the group by: its planned box, taken before the bake narrows it, as a center and
+        // half extents in world space or, for a dynamic group, its slot's frame and units.
+        public Vector3 DemandCenter { get; private set; }
+        public Vector3 DemandHalf { get; private set; }
+        public bool HasDemandBox { get; private set; }
+        // When the frame thread first saw the group done, and its mesh's words in the mesh region (Stopwatch timestamps;
+        // zero not yet).
+        public long LandedAt { get; set; }
+        public long ResidentAt { get; set; }
+        // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
+        // that measured it (SdfMeshDemand.Priority); zero with no demand point.
+        public float Priority { get; set; }
+
+        // Takes the demand box from the planned box, once.
+        public void TakeDemandBox() {
+            if (HasDemandBox) { return; }
+            DemandCenter = ((Low + High) * 0.5f);
+            DemandHalf = Vector3.Abs(value: ((High - Low) * 0.5f));
+            HasDemandBox = true;
+        }
 
         // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place.
         public void Renumber(int[] materials, SdfMesh mesh) {

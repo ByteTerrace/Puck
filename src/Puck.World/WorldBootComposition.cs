@@ -65,6 +65,7 @@ public static class WorldBootComposition {
     private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
         probe.Transforms.Retarget(target: presenter.MovedTransforms);
         probe.ProgramBuildsSource = () => presenter.Composed.ProgramBuilds;
+        probe.Composition = presenter.Composed;
 
         return presenter;
     }

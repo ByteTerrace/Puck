@@ -47,9 +47,8 @@ resolves their edits to this file at merge.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-8. [Residency and streaming](#residency-and-streaming): the measurements, then
-   near-first ordering of bake, store loads and landing; the card tables are
-   its test case.
+8. [Residency and streaming](#residency-and-streaming): near-first has landed;
+   next, GI on the same demand points and the measurements still open.
 9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
@@ -1503,37 +1502,71 @@ Klondike table stands north of the Go table in the board game room
 
 ### Residency and streaming
 
-Owner: rendering lane (rendering, verification) · ordinary · Next: step 1, the
-measurements, then step 2, near-first ordering.
+Owner: rendering lane (rendering, verification) · ordinary · Next: step 2, GI on
+the same demand points; the open measurements below beside it.
 
 The design is settled in [residency](../decisions/residency.md), from a
 three-family consensus: only presentation follows the observer; portals are
 edges, worlds and optional authored areas are nodes; one selector per
 presentation orders and bounds residency from every demand point; a door never
-waits for loading. The steps, each taken when its measured need appears:
+waits for loading. Near-first ordering has landed (`SdfMeshDemand`, the
+[mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
+and `world.residency [radius]` reads its measures.
 
-1. Measure: time until everything near the spawn has landed (cold and warm),
-   mesh bytes by level, `ProbeCache` bytes after a hall walk and a valley flight,
-   program build and replan time against placement count, store read rate
-   against the landing rate.
-2. Near-first: order lattices (`SdfMeshPathBake.TryTakeForFrame`), store loads
-   and owed meshes (`SdfWorldTables.MeshRegion`) by priority from demand points;
-   all three run in document order today. The card tables against a lobby spawn
-   are its test case.
-3. GI on the same demand points: the probe window follows every view, not
+Measured on the lead machine, Direct3D 12, windowed debug world, spawn posed in
+the lobby (`debug.go desktop`), the machine shared with other lanes and the
+world running at 7 to 8 frames a second; times are wall seconds from the bake's
+start, near is a group's planned box within the radius of the primary seat's
+eye (135 groups within 4 m, 264 within 8 m, of 2,078):
+
+| Cold bake (new bake identity) | near 4 m half / 90% / all | near 8 m half / 90% / all | all groups |
+|---|---|---|---|
+| Plan order (before) | 359 / 366 / 368 s | 359 / 366 / 430 s | 435 s |
+| Near-first (after) | 128 / 136 / 138 s | 136 / 151 / 180 s | 442 s |
+
+The card table on level 2 stands about 45 m from the lobby, outside both radii;
+its own landing time was not read apart. A first near-first build ranked by projected size alone;
+far terrain and shells outranked the lobby's small parts, and the lobby landed
+no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
+
+- Warm boot: the store loads 2,078 groups in 1.1 s (1,152 entries, 319 MB;
+  3.8 thread-seconds reading, 5.8 decoding, about 290 MB/s), and the near area
+  lands at 1.8 s whatever the order; the first staging writes the whole region
+  (1.37 GB) at once. A cold bake owes words on 22 to 35 frames, 2 MiB a frame
+  (`MeshLandingWords`).
+- Mesh bytes by level (region words): vertices 611 MB; level 0 39.6 M
+  triangles, 633 MB; level 1 5.7 M, 90 MB; level 2 2.5 M, 39 MB; 1.37 GB used.
+- `ProbeCache`: 20 MB after the bake at the lobby; 38 MB (30,008 probes: 8 MB
+  table, 30 MB probe blocks) after a nine-stop hall walk, 10 s a stop.
+- Program: 2,842 instances and 3.08 M words emit in 181 to 209 ms on the frame
+  thread and build in 192 to 209 ms; the bake's restart (replan) takes 81 to
+  143 ms on the frame thread.
+- The world's frame carries 53 demand points: the seats, and every camera
+  filmed for a screen or session, each measured in its own image's pixels
+  (`SdfViewSnapshot.DemandHeight`). A window nobody sees still demands
+  everything about its camera; step 3's mapped demand weighs it by its glass.
+- One group in the debug world has a mesh that no draw names, not yet
+  identified; `world.residency` counts it resident, since it costs the region
+  nothing.
+
+1. Measure what the table leaves: `ProbeCache` after a valley flight, program
+   build and replan against more than one placement count, and time to the
+   occupied area after a document edit that renumbers materials (a code edit to
+   the bake closure is the cold row above). `world.residency` reads each.
+2. GI on the same demand points: the probe window follows every view, not
    `Views[0]` (`SdfMeshIrradiance.cs:208`); the irradiance scene and its pending
    gate are scoped to what the window reaches; `ProbeCache` (`:1365`) is
    byte-bounded.
-4. Mapped demand through portal faces, replacing the blanket baking share
+3. Mapped demand through portal faces, replacing the blanket baking share
    (`WorldViewGraphHost.ResetFootprints`).
-5. Eviction under one byte budget across residencies, with coarse levels owning
+4. Eviction under one byte budget across residencies, with coarse levels owning
    compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
-6. Authored areas (a volume with openings, on an existing volume vocabulary),
+5. Authored areas (a volume with openings, on an existing volume vocabulary),
    tried first on the gallery's floors with the stairwell, lift shaft and window
    bands as openings (the owner's suggestion): time until the occupied floor has
    landed, with and without the areas, and floor-first eviction under a lowered
    budget.
-7. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
+6. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
    the moons.
 
 ### Debug world content
