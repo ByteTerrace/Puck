@@ -69,7 +69,8 @@ public sealed class SdfResolveDeviceLawTests {
         Check(color: native, value: 1f, width: RenderWidth, x: 8, y: 8);
 
         // Eight equally weighted grays 0/7 .. 7/7 have mean 1/2. At phase zero the current neighborhood is black;
-        // at phase seven it is white. Neither phase may clamp the other seven out of a stationary window.
+        // at phase seven it is white. Neither phase may clamp the other seven out of a stationary window. Its old
+        // receiver is a surface while these taps miss: a static silhouette can sample different identities per phase.
         foreach (var phase in new[] { 0u, 7u }) {
             var stationary = Run(extension: extension, height: RenderHeight, services: services,
                 sharpness: 1f, width: RenderWidth, stationaryPhase: phase);
@@ -170,6 +171,7 @@ public sealed class SdfResolveDeviceLawTests {
                     var tap = MathF.Exp(x: -4.08f);
                     var weight = ((1f + (2f * tap)) * (1f + (2f * tap)));
 
+                    Write(word: 0u, value: 1u);
                     Write(word: (SdfWorldPackage.HistoryWindowOffset - 1u), value: ((1u << ((int)SdfWorldPackage.TemporalPeriod)) - 1u));
                     for (var phase = 0u; phase < SdfWorldPackage.TemporalPeriod; phase++) {
                         var gray = BitConverter.HalfToUInt16Bits(value: ((Half)(phase / 7f)));

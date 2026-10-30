@@ -249,6 +249,15 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // history the surface under it carries. Validating against every tap keeps an edge's history whichever side of it the
     // jitter puts the nearest-depth tap on; the clip below still bounds what the history contributes. The feature the
     // pixel shows this frame is the most contrasting of its unreactive feature taps.
+    float4 currentRows[6];
+    sdfCurrentViewRows(currentRows);
+    // Jitter changes which side of a static silhouette the footprint samples. Such a footprint has no single
+    // receiver identity shared by every phase. Prove that the camera and every visible tap stand still instead.
+    bool footprintStill = ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0) &&
+        all(currentRows[0].xyz == passGroup.previousView[0].xyz) &&
+        all(currentRows[1] == passGroup.previousView[1]) && all(currentRows[2] == passGroup.previousView[2]) &&
+        all(currentRows[3].xyz == passGroup.previousView[3].xyz) &&
+        all(currentRows[4].xy == passGroup.previousView[4].xy) && all(currentRows[5].xyz == passGroup.previousView[5].xyz));
     uint identities[9];
     float distances[9];
     float centerWeight = -1.0;
@@ -274,6 +283,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             bool feature = sdfResolveFeature(window, (uint)(((dy + 2) * 5) + (dx + 2)), contrast);
 
             float tapReactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
+            footprintStill = (footprintStill && (tapReactive <= 0.0));
 
             uint record = sdfVisibilityRecord(pixel, 0u, render);
             SdfVisibility visibility = sdfLoadVisibility(record);
@@ -331,7 +341,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
 
     accepted = false;
     complete = false;
-    uint historyWord = 0u;
+    uint historyWord = (SDF_HISTORY_SURFACE_WORDS * ((id.y * extent.x) + id.x));
     float2 historyPosition = float2(0.0, 0.0);
     float historyWeightGathered = 0.0;
     uint receiverIdentity = 0u;
@@ -343,8 +353,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     float travel = 1.0e9;
 
     if ((passGroup.historyFrames != 0u) && (passGroup.previousView[0].w != 0.0)) {
-        float4 currentRows[6];
-        sdfCurrentViewRows(currentRows);
         bool moved = false;
         float2 previousPixel = float2(0.0, 0.0);
         float2 currentPixel = float2(0.0, 0.0);
@@ -447,11 +455,29 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     uint phase = (passGroup.historyFrames % SDF_TEMPORAL_PERIOD);
     uint fullMask = ((1u << SDF_TEMPORAL_PERIOD) - 1u);
     uint maskWord = (SDF_HISTORY_WINDOW_OFFSET - 1u);
-    bool stationary = (accepted && (travel <= SdfResolveFeatureTravel) && (reactive <= 0.0));
+    // The ordinary receiver check already covers the interior. Only a rejected footprint needs the more expensive
+    // proof that every tap is stationary before retaining a window across a phase's different receiver selection.
+    footprintStill = (footprintStill && !accepted);
+    [branch] if (footprintStill) {
+        [unroll] for (int dy = -1; dy <= 1; dy++) {
+            [unroll] for (int dx = -1; dx <= 1; dx++) {
+                uint2 pixel = sdfResolveClamp((nearest + int2(dx, dy)), render);
+                uint record = sdfVisibilityRecord(pixel, 0u, render);
+                SdfVisibility visibility = sdfLoadVisibility(record);
+                if (sdfVisibilityHit(visibility)) {
+                    float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
+                    float3 point = (view.position.xyz + (direction * visibility.t));
+                    float3 previousPoint;
+                    footprintStill = (footprintStill && sdfPreviousPoint(record, visibility, point, previousPoint) && all(previousPoint == point));
+                }
+            }
+        }
+    }
+    bool stationary = (footprintStill || (accepted && (travel <= SdfResolveFeatureTravel) && (reactive <= 0.0)));
     // Keep the receiver that carries a stationary window while the footprint still sees it. Picking the nearest
     // non-feature anew every phase can switch to a thin adjoining surface that the following phase misses entirely,
     // rejecting a valid window at an otherwise stationary edge.
-    if (stationary) {
+    if (stationary && accepted) {
         centerIdentity = receiverIdentity;
         centerT = receiverT;
     }
@@ -500,6 +526,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     }
     complete = ((mask == fullMask) && (windowWeight > 1.0e-6));
     if (complete) {
+        accepted = true;
         total = windowWeight;
         // A convex mean stays inside its samples' bounds. Preserve a constant component exactly even when the
         // division's approximate reciprocal rounds just below it before half-float storage (notably full coverage).
