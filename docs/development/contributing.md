@@ -931,6 +931,21 @@ unverified when no device run exists.
   Otherwise `WaitForExit()` can complete with a null `ExitCode`, and a runner can
   mistake a successful build for a failure. Retain the worker's handle too when
   reading its final CPU time after a longer coordinator run.
+- A windowed frame-time reading needs the compositor composing. Once the lead
+  machine's user has been idle past the display timeout (15 minutes there),
+  Windows powers the monitor off and the compositor retires presents on a slow
+  fallback: a World without a display request then reads 7 to 8 FPS on
+  Direct3D 12 and about 4 on Vulkan at every stop, whatever the render scale,
+  detail or shadows, while `world.gpu-timing timeline` shows each frame's GPU
+  work done in one contiguous span and the queue then idle, the GPU at P5 or
+  P8 clocks. The signature is a `host.frames` reading whose `wait` or `begin`
+  runs to about 100 ms, or whose `produce` sits in
+  `SdfWorldTables.SubmitUpload`'s fence wait, with the GPU idle. The Windows
+  window's `PowerRequestDisplayRequired` request keeps composition running for
+  a World's life; a host or tool without one (another engine's window, an
+  older build) needs the display woken first, and
+  `GUID_CONSOLE_DISPLAY_STATE` notifications kept reading "off" there while
+  frames ran at 60 FPS, so they are no test of it.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
   a few hundred MHz) through a whole windowed run, so `host.frames` and
   `world.gpu-timing` read there are no frame-time verdict. Check the clocks with

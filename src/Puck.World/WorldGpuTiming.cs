@@ -51,6 +51,33 @@ internal sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
         }
     }
 
+    // Each timed node's latest submission as a span on the shared queue clock, ordered by start and relative to the
+    // earliest, with the idle gap before each: the queue's own order of work and where it waits.
+    public string DescribeTimeline() {
+        var text = new StringBuilder(value: $"[world.gpu-timing timeline: {(m_operator ? "on" : "off")}");
+
+        if (m_operator && (probe?.Root?.Runtime is { } runtime)) {
+            var spans = new List<(string Name, double Start, double End, double Sum)>();
+
+            for (var index = 0; (index < runtime.Instances.Instances.Count); index++) {
+                if (runtime.Producer(instance: index) is not null) { continue; }
+                var node = runtime.Node(instance: index);
+                var (start, end) = node.LatestTimingSpan;
+
+                if (end > start) { spans.Add(item: (runtime.Instances.Instances[index].Name, start, end, node.LatestTimingMilliseconds)); }
+            }
+            spans.Sort(comparison: static (a, b) => a.Start.CompareTo(value: b.Start));
+            var origin = ((spans.Count > 0) ? spans[0].Start : 0d);
+            var previousEnd = origin;
+
+            foreach (var (name, start, end, sum) in spans) {
+                text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n{(start - origin),10:0.000} +{(end - start),8:0.000} ms passes={sum:0.000} gap={(start - previousEnd),8:0.000} {name}");
+                previousEnd = Math.Max(val1: previousEnd, val2: end);
+            }
+        }
+        return text.Append(value: ']').ToString();
+    }
+
     public string Describe() {
         var state = (m_operator ? "on" : (m_dynamicResolution ? "off (recording for dynamic resolution)" : "off"));
         var text = new StringBuilder(value: $"[world.gpu-timing: {state} window={Puck.Shaders.ShaderPipelineRenderNode.TimingWindow}");

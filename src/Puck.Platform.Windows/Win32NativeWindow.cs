@@ -177,6 +177,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
         EnsureWindowClassRegistered(options: m_options);
         m_windowHandle = CreateWindow(options: m_options);
+        StartDisplayRequest();
     }
 
     public NativeDisplayKind DisplayKind => NativeDisplayKind.Win32;
@@ -391,6 +392,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
 
         EndPointerLock(restore: false);
         ReleasePointerCapture();
+        StopDisplayRequest();
 
         if (m_windowHandle != 0) {
             _ = User32.DestroyWindow(windowHandle: m_windowHandle);

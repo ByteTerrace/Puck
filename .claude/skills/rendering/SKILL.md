@@ -639,6 +639,7 @@ world.cadence off      # a still scene otherwise skips frames and reads near zer
 world.rates off        # far or small work (far cascade, small windows, screens, bodies) otherwise updates at least 30 or 15 times a second
 world.debug-view rates # tint each rated item by its tier; world.rates lists each one's size and tier (worlds/debug/range.md)
 world.counters gpu     # per-pass counted work: dispatches, shape evaluations, texels, uploads
+world.gpu-timing on    # per-pass timestamps; `world.gpu-timing timeline` orders each node's latest span on the queue's clock with the idle gap before it
 world.budget           # program words, instances, scopes, segments
 ```
 
