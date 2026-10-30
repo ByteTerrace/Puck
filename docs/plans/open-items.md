@@ -526,6 +526,7 @@ The rendered colliders report's only red findings left are the valley's relief
 
 ### Edit to running, hot reload and boot
 
+- [high] `world.reload` crashes a windowed World: on the owner's third live reload (tuning the wings layout in `worlds/standard/controls.puck` and `worlds/debug/controls.puck`) the next frame threw `InvalidOperationException: Only a staged region that owns its destination grows.` at `GpuRegion.Grow` from `SdfWorldTables.EnsureDynamicTransformCapacity` (`SdfWorldTables.FramePreparation.cs:26`, via `PackDynamicTransforms`), with the bake reporting 2,765 instances and 1,357 dynamic after the reload; the host stopped. Log: `.claude/scratch/lead-window/owner-reload-crash.stderr.log`. The dynamic transform table must grow (or be rebuilt) after a reload raises its count; a reload never stops the host. (from: the owner's walkthrough)
 - [high · owner: lead integration] The combined debug document at integration
   45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
   PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for
