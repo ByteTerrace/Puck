@@ -298,8 +298,6 @@ public sealed class SdfSampledLattice {
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
     // The measured fine samples a sheet thinner than the fine cell passed beside, and the value each reads (CloseSheets).
     private readonly Dictionary<int, float> m_closed = [];
-    // The coarse samples a gap thinner than the contour's cell passed through, whose values CloseCoarseGaps replaced.
-    private readonly HashSet<int> m_closedCoarse = [];
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -308,8 +306,7 @@ public sealed class SdfSampledLattice {
     /// <param name="samplesY">The samples along Y, at least two.</param>
     /// <param name="samplesZ">The samples along Z, at least two.</param>
     /// <param name="values">One field value per sample, X fastest: negative inside. The lattice keeps the array, and
-    /// rewrites the value of a sample a gap thinner than the contour's cell passes through (<see cref="Refine"/>,
-    /// <see cref="CrossingPoints"/>).</param>
+    /// rewrites a value within one fixed-point step of zero as inside, since a solid holds its surface.</param>
     /// <param name="materials">One material per sample. The lattice keeps the array.</param>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
@@ -383,9 +380,6 @@ public sealed class SdfSampledLattice {
         if (m_factor != 1) {
             throw new InvalidOperationException(message: "The lattice is already refined.");
         }
-
-        // A gap thinner than the fine cell is no gap the fine lattice draws either.
-        CloseCoarseGaps(steps: (1f / factor));
 
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
@@ -1026,16 +1020,11 @@ public sealed class SdfSampledLattice {
         public int Rounds { get; set; }
         public bool Done { get; set; } = ((first == 0f) || (second == 0f));
     }
-    // Closing sheets and gaps changes their edge crossings deliberately; both crossing searches and gradient sampling use
-    // the resulting lattice, prepared once after the refinement answers arrive. A lattice that contours at its own spacing
-    // closes the coarse gaps thinner than its cell here; a refined one closed those thinner than the fine cell in Refine.
+    // Closing sheets changes their edge crossings deliberately; both crossing searches and gradient sampling use the
+    // resulting lattice, prepared once after the refinement answers arrive.
     private void PrepareCrossings() {
         if (m_crossingsPrepared) { return; }
-        if (m_factor == 1) {
-            CloseCoarseGaps(steps: 1f);
-        }
         CloseSheets();
-        CloseFineGaps();
         m_crossingKeys = CrossingEdges();
         m_crossingsPrepared = true;
     }
@@ -1497,17 +1486,8 @@ public sealed class SdfSampledLattice {
             }
         }
     }
-    // Whether the sample a fine key names reads a closed value: a sheet or gap closed at the fine spacing, or a coarse
-    // sample a gap was closed through.
-    private bool Closed(int key) {
-        if (m_closed.ContainsKey(key: key)) { return true; }
-        if (m_closedCoarse.Count == 0) { return false; }
-
-        var (x, y, z) = FineCoordinates(key: key);
-        var factor = m_factor;
-
-        return (((x % factor) == 0) && ((y % factor) == 0) && ((z % factor) == 0) && m_closedCoarse.Contains(item: Index(x: (x / factor), y: (y / factor), z: (z / factor))));
-    }
+    // Whether the sample a fine key names reads the value of a sheet closed at the fine spacing (CloseSheets).
+    private bool Closed(int key) => m_closed.ContainsKey(key: key);
     // A sample's value with the surface counted as solid: a sample on the surface reads inside, a hair under it. A solid
     // holds its boundary, and so does a union of solids that touch: the face two of them share (a tread on its riser, a
     // slab's finish on its ceiling) lies inside the union, though each reads zero there. Counted outside, such a sample
@@ -1520,116 +1500,6 @@ public sealed class SdfSampledLattice {
         var middle = MathF.Abs(value);
 
         return ((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after))));
-    }
-    // The value a sample outside reads once the gap through it is closed, or NaN where no gap thinner than `steps` passes
-    // through it: inside on both sides along some axis, and outside for less than `steps` between them as the line's
-    // values interpolate it. Solids that touch are one solid, but each box's built-in fillet
-    // (SdfSolidGeometry.BoxCornerRadius) rounds the edges of the face two touching boxes share, so a crevice a few
-    // millimetres wide runs inside the union wherever such an edge meets a third solid's face (two treads against a
-    // wall), and a sample that lands in one contours a sliver of faces folded inside the solid. A surface grazing the
-    // line reads small on all three samples and as thick as the step; the neighbours of a sample in a crevice read
-    // small too, since its walls lie beside them, so their depth decides nothing. The sample takes the shallower of its
-    // two neighbours' values: the field across the gap as though it were filled, which keeps a surface the gap opens
-    // onto (a tread over the seam) where the shallower side puts it.
-    private static float GapFill(float steps, float value, ReadOnlySpan<float> low, ReadOnlySpan<float> high) {
-        var fill = float.NaN;
-
-        if (value < 0f) { return fill; }
-        for (var axis = 0; (axis < 3); axis++) {
-            if ((low[axis] < 0f) && (high[axis] < 0f) && (RunThickness(after: high[axis], before: low[axis], value: value) < steps)) {
-                var shallower = MathF.Max(low[axis], high[axis]);
-
-                fill = (float.IsNaN(fill) ? shallower : MathF.Max(fill, shallower));
-            }
-        }
-
-        return fill;
-    }
-    // Closes the gaps thinner than `steps` of the spacing that pass through coarse samples (GapFill), replacing each such
-    // sample's value. Every value the closing reads is the lattice's own, so the order samples close in changes nothing.
-    private void CloseCoarseGaps(float steps) {
-        var closing = new List<(int Index, float Value)>();
-        int[] samples = [m_samplesX, m_samplesY, m_samplesZ];
-        Span<int> at = stackalloc int[3];
-        Span<float> low = stackalloc float[3];
-        Span<float> high = stackalloc float[3];
-
-        for (var z = 0; (z < m_samplesZ); z++) {
-            for (var y = 0; (y < m_samplesY); y++) {
-                for (var x = 0; (x < m_samplesX); x++) {
-                    var index = Index(x: x, y: y, z: z);
-                    var value = m_values[index];
-
-                    if (value < 0f) { continue; }
-                    for (var axis = 0; (axis < 3); axis++) {
-                        at[0] = x;
-                        at[1] = y;
-                        at[2] = z;
-                        if ((at[axis] == 0) || ((at[axis] + 1) >= samples[axis])) {
-                            low[axis] = 0f;
-                            high[axis] = 0f;
-                            continue;
-                        }
-                        at[axis]--;
-                        low[axis] = m_values[Index(x: at[0], y: at[1], z: at[2])];
-                        at[axis] += 2;
-                        high[axis] = m_values[Index(x: at[0], y: at[1], z: at[2])];
-                    }
-
-                    var fill = GapFill(high: high, low: low, steps: steps, value: value);
-
-                    if (!float.IsNaN(fill)) { closing.Add(item: (index, fill)); }
-                }
-            }
-        }
-        foreach (var (index, value) in closing) {
-            m_values[index] = value;
-            m_closedCoarse.Add(item: index);
-        }
-    }
-    // Closes the gaps thinner than the fine cell that pass through measured fine samples (GapFill), as CloseCoarseGaps
-    // closes the coarse lattice's.
-    private void CloseFineGaps() {
-        if (m_factor < 2) {
-            return;
-        }
-
-        var factor = m_factor;
-        int[] fine = [(((m_samplesX - 1) * factor) + 1), (((m_samplesY - 1) * factor) + 1), (((m_samplesZ - 1) * factor) + 1)];
-        var closing = new List<(int Key, float Value)>();
-        Span<int> at = stackalloc int[3];
-        Span<float> low = stackalloc float[3];
-        Span<float> high = stackalloc float[3];
-
-        foreach (var key in m_fineKeys) {
-            if (m_closed.ContainsKey(key: key)) { continue; }
-
-            var (x, y, z) = FineCoordinates(key: key);
-            var value = FineValue(x: x, y: y, z: z);
-
-            if (value < 0f) { continue; }
-            for (var axis = 0; (axis < 3); axis++) {
-                at[0] = x;
-                at[1] = y;
-                at[2] = z;
-                if ((at[axis] == 0) || ((at[axis] + 1) >= fine[axis])) {
-                    low[axis] = 0f;
-                    high[axis] = 0f;
-                    continue;
-                }
-                at[axis]--;
-                low[axis] = FineValue(x: at[0], y: at[1], z: at[2]);
-                at[axis] += 2;
-                high[axis] = FineValue(x: at[0], y: at[1], z: at[2]);
-            }
-
-            var fill = GapFill(high: high, low: low, steps: 1f, value: value);
-
-            if (!float.IsNaN(fill)) { closing.Add(item: (key, fill)); }
-        }
-        foreach (var (key, value) in closing) {
-            m_closed.Add(key: key, value: value);
-        }
     }
     // Every sign-changing lattice edge the contour places a vertex by: the edges of each crossed cell that contours whole,
     // a coarse cell long, and the fine edges of each crossed fine cell of a refined cell. A crossing's gradient is measured
@@ -2034,38 +1904,6 @@ public sealed class SdfSampledLattice {
 
         return sum;
     }
-    // Whether a sample's gradient points at a seam rather than the surface: inside a union, the field is the distance to
-    // the nearest face of the solid the sample lies in, and where that face is one the solid shares with another (a
-    // stair's tread against the wall beside it) or buried in it, the gradient points at a face the union does not have.
-    // The surface a gradient points at lies within the sample's own depth along it, so a step toward it along its
-    // steepest axis rises by at least half that axis's share of the slope, past the surface as well; past a seam the field
-    // falls again, into the other solid. Normals interpolated from such a gradient turn a face beside the seam up to 180
-    // degrees from its facing.
-    private bool SeamGradient(int x, int y, int z) {
-        var value = FineValue(x: x, y: y, z: z);
-
-        if (!(value < 0f)) { return false; }
-
-        var gradient = FineGradient(x: x, y: y, z: z);
-        var (ax, ay, az) = (MathF.Abs(gradient.X), MathF.Abs(gradient.Y), MathF.Abs(gradient.Z));
-        var cell = ContourCell;
-        var (nx, ny, nz) = (x, y, z);
-        float share;
-        float spacing;
-
-        if ((ax >= ay) && (ax >= az)) {
-            (nx, share, spacing) = (((gradient.X > 0f) ? (x + 1) : (x - 1)), ax, cell.X);
-        } else if (ay >= az) {
-            (ny, share, spacing) = (((gradient.Y > 0f) ? (y + 1) : (y - 1)), ay, cell.Y);
-        } else {
-            (nz, share, spacing) = (((gradient.Z > 0f) ? (z + 1) : (z - 1)), az, cell.Z);
-        }
-        if ((nx < 0) || (ny < 0) || (nz < 0) || (nx > ((m_samplesX - 1) * m_factor)) || (ny > ((m_samplesY - 1) * m_factor)) || (nz > ((m_samplesZ - 1) * m_factor))) {
-            return false;
-        }
-
-        return ((FineValue(x: nx, y: ny, z: nz) - value) < ((0.5f * spacing) * share));
-    }
     // A fine sample's material: the sample's own where it was measured, else its nearest coarse sample's.
     private int MaterialAt(int key) {
         var factor = m_factor;
@@ -2136,8 +1974,7 @@ public sealed class SdfSampledLattice {
             var start = (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
             var end = (start + ((axis == 0) ? length : ((axis == 1) ? (length * (CellsX + 1)) : (length * (CellsX + 1) * (CellsY + 1)))));
             // A crossing beside a closed sample lies where the samples put it, a cell's thickness from the sheet's other
-            // face (CloseSheets) or over the gap it fills (CloseCoarseGaps, CloseFineGaps); moved onto the field's own
-            // surface it would cross the sheet or reopen the gap.
+            // face (CloseSheets); moved onto the sheet it would cross it.
             var closed = (owner.Closed(key: start) || owner.Closed(key: end));
 
             if (owner.m_crossingGradients.TryGetValue(key: owner.CrossingKey(axis: axis, length: length, start: start), value: out var measured)) {
@@ -2179,8 +2016,6 @@ public sealed class SdfSampledLattice {
             var fy = (float)(ly - y0);
             var fz = (float)(lz - z0);
             var sum = Vector3.Zero;
-            // The corners whose gradients point at the surface (SeamGradient); every corner where none does.
-            var surface = Vector3.Zero;
 
             for (var corner = 0; (corner < 8); corner++) {
                 var dx = (corner & 1);
@@ -2189,16 +2024,8 @@ public sealed class SdfSampledLattice {
                 var weight = (((dx == 1) ? fx : (1f - fx)) * ((dy == 1) ? fy : (1f - fy))) * ((dz == 1) ? fz : (1f - fz));
 
                 if (weight != 0f) {
-                    var gradient = (owner.FineGradient(x: (x0 + dx), y: (y0 + dy), z: (z0 + dz)) * weight);
-
-                    sum += gradient;
-                    if (!owner.SeamGradient(x: (x0 + dx), y: (y0 + dy), z: (z0 + dz))) {
-                        surface += gradient;
-                    }
+                    sum += (owner.FineGradient(x: (x0 + dx), y: (y0 + dy), z: (z0 + dz)) * weight);
                 }
-            }
-            if (surface.Length() > 1.0e-12f) {
-                sum = surface;
             }
 
             var length = sum.Length();
