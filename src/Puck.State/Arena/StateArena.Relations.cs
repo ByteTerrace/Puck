@@ -8,10 +8,9 @@ public sealed partial class StateArena {
     /// <summary>Validates only relations whose member row or token domain changed. An empty span validates all.</summary>
     public bool TryValidateRelations(ReadOnlySpan<bool> changedRows, out string reason) {
         reason = string.Empty;
-        for (var ordinal = 0; (ordinal < m_rows.Count); ordinal++) {
+        foreach (var ordinal in RelationRows()) {
             ref readonly var layout = ref m_layout[ordinal];
 
-            if (layout.DomainOrdinal < 0) { continue; }
             if (!changedRows.IsEmpty && !changedRows[ordinal] && !changedRows[layout.DomainOrdinal]) { continue; }
             var cursor = 0;
 
@@ -29,5 +28,22 @@ public sealed partial class StateArena {
             }
         }
         return true;
+    }
+
+    // The rows whose keys a token domain bounds, resolved once per layout, so a transaction's relation check walks
+    // the relations and never every row.
+    private ArenaLayout? m_relationLayout;
+    private int[] m_relationRows = [];
+
+    private int[] RelationRows() {
+        if (ReferenceEquals(objA: m_relationLayout, objB: m_layout)) { return m_relationRows; }
+        var rows = new List<int>();
+
+        for (var ordinal = 0; (ordinal < m_layout.RowCount); ordinal++) {
+            if (m_layout[ordinal].DomainOrdinal >= 0) { rows.Add(item: ordinal); }
+        }
+        m_relationRows = [.. rows];
+        m_relationLayout = m_layout;
+        return m_relationRows;
     }
 }

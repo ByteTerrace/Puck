@@ -131,9 +131,15 @@ public static class FixedConvexContact {
     }
     private static bool Contains(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedVector3 d) =>
         (SameSide(a: a, b: b, c: c, opposite: d) && SameSide(a: a, b: c, c: d, opposite: b) && SameSide(a: a, b: d, c: b, opposite: c) && SameSide(a: b, b: d, c: c, opposite: a));
+    // How far beyond the origin a support plane must stand before it proves separation on its own: far wider than any
+    // support map's rounding, so a query this ends is one the full descent would also have ended separated.
+    private static readonly FixedQ4816 SeparationMargin = (FixedQ4816.One / FixedQ4816.FromInteger(value: 16));
+
+    // separatedEarly ends the descent once a support plane proves the origin lies outside the difference by more than
+    // SeparationMargin: a contact query needs only that verdict, while a nearest-point query needs the converged delta.
     private static bool Distance(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, FixedQ4816 skin, Span<Vertex> simplex, out int count,
-        out FixedVector3 delta, out FixedVector3 witness, ref int supportQueries) {
+        out FixedVector3 delta, out FixedVector3 witness, ref int supportQueries, bool separatedEarly = false) {
         count = 1;
         var direction = ((position == FixedVector3.Zero) ? FixedVector3.UnitX : position);
 
@@ -144,6 +150,10 @@ public static class FixedConvexContact {
         for (var iteration = 0; (iteration < 64); iteration++) {
             if (delta.Length <= Tolerance) { return true; }
             var next = Support(collider: in collider, direction: direction, orientation: in orientation, position: position, skin: skin, supportQueries: ref supportQueries, volume: in volume);
+
+            // Every point of the difference lies at or below its support along direction, so a support behind the
+            // origin bounds the separation from below, and no later simplex can come within tolerance of it.
+            if (separatedEarly && (FixedVector3.Dot(left: next.Delta, right: direction) < -SeparationMargin)) { return false; }
             var advance = FixedVector3.Dot(left: (next.Delta - delta), right: direction);
 
             if (advance <= FixedQ4816.Epsilon) { return false; }
@@ -304,7 +314,7 @@ public static class FixedConvexContact {
         }
         Span<Vertex> simplex = stackalloc Vertex[4];
 
-        if (!Distance(collider: in collider, count: out var count, delta: out _, orientation: in localOrientation, position: localPosition, simplex: simplex, skin: skin, supportQueries: ref supportQueries, volume: in volume, witness: out _) ||
+        if (!Distance(collider: in collider, count: out var count, delta: out _, orientation: in localOrientation, position: localPosition, separatedEarly: true, simplex: simplex, skin: skin, supportQueries: ref supportQueries, volume: in volume, witness: out _) ||
             !Penetration(in collider, localPosition, in localOrientation, in volume, skin, simplex[..count], out push, ref supportQueries)) {
             push = default; return false;
         }

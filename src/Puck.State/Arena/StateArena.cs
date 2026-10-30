@@ -606,7 +606,14 @@ public sealed partial class StateArena {
     /// scope commits, so until then this is what says which rows may differ from what it last proved.</summary>
     /// <param name="rows">One flag per catalog ordinal; a written row's flag is set and no flag is cleared.</param>
     /// <exception cref="ArgumentException"><paramref name="rows"/> is shorter than the layout's row count.</exception>
-    public void FlagOpenRows(Span<bool> rows) {
+    public void FlagOpenRows(Span<bool> rows) => FlagOpenRows(rows: rows, written: null);
+    /// <summary>Flags every row the open scopes have written, and appends each ordinal whose flag this call sets to
+    /// <paramref name="written"/>, so a caller can visit and clear only the written rows.</summary>
+    /// <param name="rows">One flag per catalog ordinal; a written row's flag is set and no flag is cleared.</param>
+    /// <param name="written">The list each newly flagged ordinal is appended to, once, in journal order; <see langword="null"/>
+    /// appends nothing.</param>
+    /// <exception cref="ArgumentException"><paramref name="rows"/> is shorter than the layout's row count.</exception>
+    public void FlagOpenRows(Span<bool> rows, List<int>? written) {
         if (rows.Length < m_layout.RowCount) {
             throw new ArgumentException(
                 message: $"the flags cover {rows.Length} rows and the layout declares {m_layout.RowCount}.",
@@ -620,10 +627,9 @@ public sealed partial class StateArena {
             if (entry.Column == ArenaColumn.LaneRoster) {
                 var lane = LaneOfRoster(rosterIndex: entry.Index);
 
-                rows.Slice(
-                    length: lane.Count,
-                    start: lane.FirstOrdinal
-                ).Fill(value: true);
+                for (var ordinal = lane.FirstOrdinal; (ordinal < (lane.FirstOrdinal + lane.Count)); ordinal++) {
+                    if (!rows[ordinal]) { rows[ordinal] = true; written?.Add(item: ordinal); }
+                }
 
                 continue;
             }
@@ -633,8 +639,9 @@ public sealed partial class StateArena {
                 index: entry.Index
             );
 
-            if (row >= 0) {
+            if ((row >= 0) && !rows[row]) {
                 rows[row] = true;
+                written?.Add(item: row);
             }
         }
     }

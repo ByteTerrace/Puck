@@ -158,9 +158,12 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     };
     private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
         var contributors = new List<RuleWorkContributor>(capacity: (rules.Length + interactions.Length));
+        var gate = GateCommitCost(context: context, definition: definition);
+        var writes = new List<Puck.State.CellAccess>();
 
         foreach (var rule in rules) {
             contributors.Add(item: RuleWorkBudget.Contributor(
+                commit: (WritesGate(definition: definition, rule: rule, writes: writes) ? gate : 0L),
                 rule: rule,
                 multiplier: Multiplier(
                     context: context,
@@ -173,6 +176,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
         foreach (var interaction in interactions) {
             contributors.Add(item: RuleWorkBudget.Contributor(
+                commit: (WritesGate(definition: definition, rule: interaction, writes: writes) ? gate : 0L),
                 rule: interaction,
                 multiplier: Multiplier(
                     context: context,
@@ -185,6 +189,25 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
         }
 
         return contributors;
+    }
+    // A firing that writes a drive-gate row resyncs the gate index at its commit, a walk of every gate row's cells, and
+    // then every input owner, one pass over the input families and the kit selection each to validate and to
+    // synchronize, priced as one owner per body the population holds.
+    private static long GateCommitCost(WorldDefinition definition, WorldFactsCompileContext context) {
+        var cells = 0L;
+
+        for (var ordinal = 0; (ordinal < definition.State.Count); ordinal++) {
+            if (definition.State[ordinal].GatesDrive) { cells += context.RowCapacity(rowOrdinal: ordinal); }
+        }
+        return ((cells == 0L) ? 0L : (cells + (definition.Population.Capacity * (2L * (WorldInputCatalog.For(definition: definition).Selectors.Length + 1L)))));
+    }
+    private static bool WritesGate(WorldDefinition definition, CompiledRule rule, List<Puck.State.CellAccess> writes) {
+        writes.Clear();
+        rule.CollectWrites(into: writes);
+        foreach (var write in writes) {
+            if ((write.RowOrdinal >= 0) && (write.RowOrdinal < definition.State.Count) && definition.State[write.RowOrdinal].GatesDrive) { return true; }
+        }
+        return false;
     }
     private static List<(CompiledRule Rule, long Multiplier)> Multiplied(WorldDefinition definition, WorldFactsCompileContext context, CompiledRule[] rules, CompiledRule[] interactions) {
         var result = new List<(CompiledRule, long)>(capacity: (rules.Length + interactions.Length));

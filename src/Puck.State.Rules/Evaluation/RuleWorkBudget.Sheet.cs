@@ -150,11 +150,14 @@ public static partial class RuleWorkBudget {
     /// <param name="multiplier">The evaluations per tick.</param>
     /// <param name="isInteraction">Whether the line is an interaction.</param>
     /// <param name="context">The context the rule was priced against.</param>
+    /// <param name="commit">The work the host's commit of one firing spends beyond what the effects price, added to
+    /// the line's per-firing effects.</param>
     /// <returns>The line.</returns>
-    public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, IRuleCostContext context) {
+    public static RuleWorkContributor Contributor(CompiledRule rule, long multiplier, bool isInteraction, IRuleCostContext context, long commit = 0L) {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
-        var cost = rule.CostBreakdown(context: context);
+        var breakdown = rule.CostBreakdown(context: context);
+        var cost = breakdown with { Effects = (breakdown.Effects + commit) };
         var firings = Firings(multiplier: multiplier, rule: rule);
         var checkUnits = (cost.Setup + (multiplier * cost.Check));
         var firingUnits = (firings * cost.Effects);
