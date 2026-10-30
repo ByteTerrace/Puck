@@ -55,6 +55,58 @@ public static class WorldWireLeaves {
 
         return turn;
     }
+    /// <summary>Writes a <see cref="WorldCompanionBinding"/>.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="binding">The binding.</param>
+    public static void WriteCompanion(WireWriter writer, WorldCompanionBinding binding) {
+        writer.WriteString(value: binding.Role);
+        writer.WriteInt32(value: binding.Follows);
+        writer.WriteNullableString(value: binding.Home);
+        writer.WriteNullableString(value: binding.Driver);
+    }
+    /// <summary>Reads a <see cref="WorldCompanionBinding"/>, refusing a blank role.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The binding.</returns>
+    public static WorldCompanionBinding ReadCompanion(ref WireReader reader) => new(
+        Role: reader.ReadRequiredString(field: "companion role"),
+        Follows: reader.ReadInt32(),
+        Home: reader.ReadNullableString(field: "companion home", maxBytes: 1024),
+        Driver: reader.ReadNullableString(field: "companion driver", maxBytes: 128)
+    );
+    /// <summary>Writes a <see cref="WorldTransferCompanion"/>.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="companion">The crossing companion's carried facts.</param>
+    public static void WriteTransferCompanion(WireWriter writer, WorldTransferCompanion companion) {
+        writer.WriteString(value: companion.Role);
+        writer.WriteOptional(value: companion.Follows, writeValue: WriteEntityAddress);
+        writer.WriteString(value: companion.Home);
+        writer.WriteNullableString(value: companion.Driver);
+    }
+    /// <summary>Reads a <see cref="WorldTransferCompanion"/>, refusing a blank role or home.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The crossing companion's carried facts.</returns>
+    public static WorldTransferCompanion ReadTransferCompanion(ref WireReader reader) => new(
+        Role: reader.ReadRequiredString(field: "transfer companion role"),
+        Follows: reader.ReadOptional(readValue: static (ref WireReader r) => ReadEntityAddress(reader: ref r)),
+        Home: reader.ReadRequiredString(field: "transfer companion home"),
+        Driver: reader.ReadNullableString(field: "transfer companion driver", maxBytes: 128)
+    );
+    /// <summary>Writes a <see cref="WorldAwayCompanion"/>.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="away">The away companion.</param>
+    public static void WriteAwayCompanion(WireWriter writer, WorldAwayCompanion away) {
+        writer.WriteInt32(value: away.Slot);
+        writer.WriteString(value: away.PlacementId);
+        WriteEntityAddress(address: away.Incarnation, writer: writer);
+    }
+    /// <summary>Reads a <see cref="WorldAwayCompanion"/>.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The away companion.</returns>
+    public static WorldAwayCompanion ReadAwayCompanion(ref WireReader reader) => new(
+        Slot: reader.ReadInt32(),
+        PlacementId: reader.ReadRequiredString(field: "away companion placement"),
+        Incarnation: ReadEntityAddress(reader: ref reader)
+    );
     /// <summary>Reads a <see cref="WorldMobilityIdentity"/>.</summary>
     public static WorldMobilityIdentity ReadMobility(ref WireReader reader) => new(
         Incarnation: ReadEntityAddress(reader: ref reader),

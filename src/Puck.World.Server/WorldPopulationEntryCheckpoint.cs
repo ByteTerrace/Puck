@@ -47,5 +47,6 @@ public readonly record struct WorldPopulationEntryCheckpoint(
     WorldIdentityProjection? Profile,
     WorldPopulationNavigationCheckpoint? Navigation = null,
     WorldPopulationFlockCheckpoint Flock = default,
-    WorldPopulationAutonomyCheckpoint Autonomy = default
+    WorldPopulationAutonomyCheckpoint Autonomy = default,
+    WorldCompanionBinding? Companion = null
 );

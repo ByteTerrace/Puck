@@ -113,8 +113,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"addon name '{addon.Name}' is duplicated.");
             }
 
-            if (string.IsNullOrWhiteSpace(value: addon.ModulePath)) {
-                errors.Add(item: $"addon '{addon.Name}' requires a modulePath.");
+            // An empty modulePath names the module by its pin alone, resolved from the process content store.
+            if ((addon.ModulePath is null) || ((addon.ModulePath.Length > 0) && string.IsNullOrWhiteSpace(value: addon.ModulePath))) {
+                errors.Add(item: $"addon '{addon.Name}' requires a modulePath, or an empty one to resolve its pinned module from the content store.");
             }
 
             // The hash is REQUIRED — there is no no-pin sentinel any more. An unpinned module makes the state the

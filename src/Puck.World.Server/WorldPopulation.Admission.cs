@@ -50,6 +50,9 @@ public sealed partial class WorldPopulation {
         body.SetIntentSource(source: inhabit.Source);
         entry.Body = body;
         entry.PlacementId = placement.Id;
+        entry.Companion = ((inhabit.Role is { } role)
+            ? new WorldCompanionBinding(Driver: null, Follows: (inhabit.Follows ?? -1), Home: null, Role: role)
+            : null);
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
         entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(entityIndex: index);
@@ -96,6 +99,7 @@ public sealed partial class WorldPopulation {
 
         player.SetIntentSource(source: (source ?? m_defaultPeerSource));
         entry.Body = player;
+        entry.Companion = null;
         entry.AutonomyState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = (generation ?? checked((entry.Generation + 1)));
@@ -144,6 +148,7 @@ public sealed partial class WorldPopulation {
 
         entry.Body = null;
         entry.PlacementId = null;
+        entry.Companion = null;
         entry.Active = false;
         entry.ProducerState.AcquiredTarget = -1;
         entry.ProducerState.CurveArcRaw = 0L;
@@ -356,6 +361,7 @@ public sealed partial class WorldPopulation {
                 entry.IsRemoteHuman = false;
                 entry.IsAuthorityTransferred = false;
                 entry.PlacementId = null;
+                entry.Companion = null;
                 entry.AdmissionInstalledGrantTemplates = [];
                 entry.AdmissionRevokedKeys.Clear();
                 entry.IdentityDomain = string.Empty;
@@ -761,6 +767,7 @@ public sealed partial class WorldPopulation {
 
         // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
+        RedressCompanions(definition: definition);
         RebuildPlacementOrdinalTable(definition: definition);
         // A structural install can reorder or replace placements at a fixed ordinal without changing their count
         // (WorldPopulation.Step.cs.ReconcileInhabitCounts' own cache resize gate misses that), so every structural
@@ -1241,6 +1248,7 @@ public sealed partial class WorldPopulation {
         entry.ParkedUntilTick = null;
         ClearDesignations(entry: entry);
         entry.PlacementId = null;
+        entry.Companion = null;
         entry.IsAuthorityTransferred = false;
         if (entry.IsRemoteHuman) {
             entry.IsRemoteHuman = false;

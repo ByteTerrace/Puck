@@ -320,6 +320,9 @@ public sealed partial class WorldTick {
         foreach (var scope in Host.ScopedReplaySpan) { scope.BeforeTick(); }
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
+        // Companions that landed or left since the last step change what their role's driver drives and whether a
+        // visiting driver runs, before the guests are pumped.
+        Host.ReconcileRoles(tick: context.Tick);
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
         WorldAdjacencyOwnership.ResolveContinuations(server: Host);

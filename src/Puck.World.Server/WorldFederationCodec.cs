@@ -313,6 +313,9 @@ public static partial class WorldFederationCodec {
         var catalogRig = reader.ReadByte();
         var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var remoteHuman = reader.ReadBoolean();
+        var companion = reader.ReadOptional(
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadTransferCompanion(reader: ref r)
+        );
 
         if (reader.Failed) {
             failure = reader.Failure;
@@ -328,7 +331,8 @@ public static partial class WorldFederationCodec {
             BodyColor: bodyColor,
             CatalogRig: catalogRig,
             Mobility: mobility,
-            RemoteHuman: remoteHuman
+            RemoteHuman: remoteHuman,
+            Companion: companion
         );
         failure = default;
 
@@ -697,6 +701,10 @@ public static partial class WorldFederationCodec {
                 writer: writer
             );
             writer.WriteBoolean(value: member.RemoteHuman);
+            writer.WriteOptional(
+                value: member.Companion,
+                writeValue: WorldWireLeaves.WriteTransferCompanion
+            );
         }
 
         return writer.ToArray();
@@ -715,6 +723,7 @@ public static partial class WorldFederationCodec {
         var writer = new WireWriter(capacity: 4096);
 
         writer.WriteBoolean(value: reply.Accepted);
+        writer.WriteBoolean(value: reply.CompanionRefused);
         writer.WriteString(value: reply.Reason);
         writer.WriteUInt64(value: reply.DeadlineDestinationTick);
         writer.WriteInt32(value: reply.BodyIndices.Count);
@@ -1325,6 +1334,7 @@ public static partial class WorldFederationCodec {
         reply = null;
 
         var accepted = reader.ReadBoolean();
+        var companionRefused = reader.ReadBoolean();
         var reason = reader.ReadString(field: "reservation reply reason");
         var deadline = reader.ReadUInt64();
         var count = reader.ReadCount(
@@ -1376,6 +1386,7 @@ public static partial class WorldFederationCodec {
 
         reply = new WorldTransferReservationReply(
             Accepted: accepted,
+            CompanionRefused: (companionRefused && !accepted),
             BodyIndices: slots,
             DeadlineDestinationTick: deadline,
             DestinationDefinition: definition,

@@ -20,7 +20,9 @@ namespace Puck.World.Server;
 /// <param name="AdmissionGrants">The grant templates the peer's admission installed.</param>
 /// <param name="SourceGrants">The grant rows the peer's principal held here.</param>
 /// <param name="Mobility">The body's mobility credential at the detach, which a rollback installs again.</param>
-public sealed record WorldDetachedBody(int Slot, WorldIdentity? Profile, Vector3 BodyColor, FixedVector3 Position, FixedQ4816 Yaw, WorldBodyTransferState DynamicState, WorldTargetDesignation[] Designations, WorldPeerEventEntry? Peer, IReadOnlyList<WorldAdmissionGrant> AdmissionGrants, IReadOnlyList<WorldGrant> SourceGrants, WorldMobilityIdentity Mobility);
+/// <param name="Companion">The body's companion binding, or <see langword="null"/> for a body that holds no role.</param>
+/// <param name="PlacementId">The placement the body inhabited, or <see langword="null"/>.</param>
+public sealed record WorldDetachedBody(int Slot, WorldIdentity? Profile, Vector3 BodyColor, FixedVector3 Position, FixedQ4816 Yaw, WorldBodyTransferState DynamicState, WorldTargetDesignation[] Designations, WorldPeerEventEntry? Peer, IReadOnlyList<WorldAdmissionGrant> AdmissionGrants, IReadOnlyList<WorldGrant> SourceGrants, WorldMobilityIdentity Mobility, WorldCompanionBinding? Companion = null, string? PlacementId = null);
 public sealed partial class WorldServer {
     // A re-drive's departures, held until the recorded rollback that restores each one.
     private readonly Dictionary<(ulong TransferId, int Slot), (WorldDetachedBody Body, FixedQ4816 TravelTurn)> m_redrivenDepartures = new();
@@ -61,6 +63,8 @@ public sealed partial class WorldServer {
         var yaw = body.FixedYaw;
         var dynamicState = body.CaptureTransferState();
         var designations = m_population.CaptureDesignations(slot: slot);
+        var companion = m_population.Companion(index: slot);
+        var placementId = m_population.InhabitantPlacementId(index: slot);
         WorldPeerEventEntry? peer = null;
         IReadOnlyList<WorldAdmissionGrant> admissionGrants = [];
         IReadOnlyList<WorldGrant> sourceGrants = [];
@@ -78,6 +82,14 @@ public sealed partial class WorldServer {
             slot: slot
         )) {
             return null;
+        }
+        // This world's own companion leaving: its placement keeps counting it and holds its slot until it returns.
+        if ((companion is { Home: null }) && (placementId is { } homePlacement)) {
+            m_population.MarkAway(
+                incarnation: mobility.Incarnation,
+                placementId: homePlacement,
+                slot: slot
+            );
         }
 
         // Dissolving a departing member's rows is administration, symmetric with the admission mint and the rollback
@@ -97,9 +109,11 @@ public sealed partial class WorldServer {
         return new WorldDetachedBody(
             AdmissionGrants: admissionGrants,
             BodyColor: bodyColor,
+            Companion: companion,
             Designations: designations,
             DynamicState: dynamicState,
             Mobility: mobility,
+            PlacementId: placementId,
             Peer: peer,
             Position: position,
             Profile: profile,
@@ -157,6 +171,14 @@ public sealed partial class WorldServer {
             color: detached.BodyColor,
             slot: detached.Slot
         );
+        if (detached.Companion is { } companion) {
+            m_population.ClearAway(incarnation: detached.Mobility.Incarnation);
+            m_population.RestoreCompanion(
+                binding: companion,
+                placementId: detached.PlacementId,
+                slot: detached.Slot
+            );
+        }
         // The restored body postdates the last scale resync, like every other admission door's fresh body.
         m_population.SyncBodyCells(definition: Definition);
         // The restored principal provably holds none of these rows at this moment, so the server administers it.

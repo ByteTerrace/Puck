@@ -80,6 +80,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: static (w, v) => w.WriteInt64(value: v)
         );
         writer.WriteNullableString(value: entry.PlacementId);
+        writer.WriteOptional(
+            value: entry.Companion,
+            writeValue: WorldWireLeaves.WriteCompanion
+        );
         writer.WriteFixedVector(value: entry.SpawnPosition);
         writer.WriteFixed(value: entry.SpawnYaw);
         writer.WriteArray(
@@ -194,6 +198,9 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "population entry placement id",
             maxBytes: MaxStringBytes
         );
+        var companion = reader.ReadOptional(
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadCompanion(reader: ref r)
+        );
         var spawnPosition = reader.ReadFixedVector();
         var spawnYaw = reader.ReadFixed();
         var admissionInstalledGrantTemplates = reader.ReadArray(
@@ -284,6 +291,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             AdmissionRevokedKeys: admissionRevokedKeys,
             Autonomy: autonomy,
             BodyColor: bodyColor,
+            Companion: companion,
             CatalogRig: catalogRig,
             Designations: designations,
             DynamicState: dynamicState,
@@ -377,6 +385,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(items: (section.AttachedSolids ?? []), writeItem: static (w, row) => {
             w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation);
         });
+        writer.WriteArray(items: (section.AwayCompanions ?? []), writeItem: WorldWireLeaves.WriteAwayCompanion);
 
         return writer.ToArray();
     }
@@ -449,6 +458,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
         var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
             readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion()));
+        var away = reader.ReadArray(field: "population away companions", maximum: WorldBodiesLimits.CapacityCeiling,
+            readItem: static (ref WireReader r) => WorldWireLeaves.ReadAwayCompanion(reader: ref r));
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -459,6 +470,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldPopulationCheckpoint(
             AttachedSolids: attached,
+            AwayCompanions: away,
             Entries: entries,
             EventBodies: eventBodies,
             Generations: generations,

@@ -9,6 +9,7 @@ public sealed record WorldPopulationCheckpoint(int SimulatedCount, int Revision,
     IReadOnlyList<(int Support, int Body)> SleepingSupports,
     IReadOnlyList<(int Body, FixedVector3? Acceleration)> SleepingGravity,
     NavigationSharedCheckpoint[]? SharedNavigation = null,
-    WorldAttachedSolidCheckpoint[]? AttachedSolids = null);
+    WorldAttachedSolidCheckpoint[]? AttachedSolids = null,
+    IReadOnlyList<WorldAwayCompanion>? AwayCompanions = null);
 /// <summary>The last sampled transform of an attached solid, before the next tick samples its carrier again.</summary>
 public sealed record WorldAttachedSolidCheckpoint(bool Resolved, FixedVector3 Origin, FixedQuaternion Rotation);

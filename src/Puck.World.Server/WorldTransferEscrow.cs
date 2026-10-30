@@ -20,7 +20,9 @@ namespace Puck.World.Server;
 /// human set Idle before it left). It can only add a human: the destination lands as a human every traveler that
 /// carries the Live source or this statement (<see cref="LandsHuman"/>), so no sender can exempt a body from the
 /// <c>networkPlayers</c> cap.</param>
-public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, bool RemoteHuman = false) {
+/// <param name="Companion">The traveller's companion role, the player it follows, its home and its preferred driver, or
+/// <see langword="null"/> for a traveller that holds no role. Data only: no driver code or add-on memory travels.</param>
+public readonly record struct WorldTransferReservationMember(Principal Principal, int PreferredSlot, WorldIdentityProjection? Identity, IntentSource Source, Vector3 BodyColor, byte CatalogRig, WorldMobilityIdentity? Mobility = null, bool RemoteHuman = false, WorldTransferCompanion? Companion = null) {
     /// <summary>Gets whether the destination lands this traveler as a remote human: through the peer door, with the
     /// arrival's Drive grants and its control following it, counted against the <c>networkPlayers</c> cap. The
     /// destination decides it from what it hands out, never from a sender's claim of autonomy: a traveler that keeps
@@ -29,6 +31,16 @@ public readonly record struct WorldTransferReservationMember(Principal Principal
     /// nothing to drive and so needs no cap (the owner's ruling: a companion is not a networked player).</summary>
     public bool LandsHuman => (Source.IsLive || RemoteHuman);
 }
+/// <summary>What a crossing companion carries besides its body: its role, the incarnation of the player it follows,
+/// the authority that re-adopts it, and the pin of the driver it prefers. The destination decides from its own
+/// <c>roles</c> section what drives it.</summary>
+/// <param name="Role">The role name.</param>
+/// <param name="Follows">The followed player's mobility incarnation, or <see langword="null"/> when it travels home
+/// alone.</param>
+/// <param name="Home">The authority identity of its home.</param>
+/// <param name="Driver">The pin (<c>sha256/…</c>) of the driver it prefers, or <see langword="null"/> when its home
+/// names none.</param>
+public readonly record struct WorldTransferCompanion(string Role, WorldEntityAddress? Follows, string Home, string? Driver);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -124,11 +136,23 @@ public readonly record struct WorldContinuumTrajectory(
     );
 }
 /// <summary>The destination's reservation verdict and assigned body indices.</summary>
-public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition) {
+/// <param name="Accepted">Whether the destination holds the travellers' bodies.</param>
+/// <param name="Reason">The refusal, or empty.</param>
+/// <param name="DeadlineDestinationTick">The destination tick the lease expires at.</param>
+/// <param name="BodyIndices">The body index reserved for each traveller, in member order.</param>
+/// <param name="DestinationDefinition">The destination document the lease binds.</param>
+/// <param name="CompanionRefused">Whether the refusal is the destination's role policy refusing a companion: its
+/// world declares nothing for the role, or will not run the driver it prefers. The source sends such a companion home
+/// and tells its player.</param>
+public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition, bool CompanionRefused = false) {
     /// <summary>Creates a named refusal.</summary>
-    public static WorldTransferReservationReply Refused(string reason) => new(
+    /// <param name="reason">The refusal.</param>
+    /// <param name="companion">Whether the destination's role policy refused a companion.</param>
+    /// <returns>The refusal.</returns>
+    public static WorldTransferReservationReply Refused(string reason, bool companion = false) => new(
         Accepted: false,
         BodyIndices: [],
+        CompanionRefused: companion,
         DeadlineDestinationTick: 0,
         DestinationDefinition: null,
         Reason: reason
@@ -552,6 +576,7 @@ public sealed partial class WorldTransferEscrow {
                 (a.BodyColor != b.BodyColor) ||
                 (a.CatalogRig != b.CatalogRig) ||
                 (a.Mobility != b.Mobility) ||
+                (a.Companion != b.Companion) ||
                 !WorldIdentityProjectionWire.Matches(
                 left: a.Identity,
                 right: b.Identity
@@ -1011,6 +1036,14 @@ public sealed partial class WorldTransferEscrow {
                 profile: profile,
                 slot: slot
             );
+            if (reservationMember.Companion is { } companion) {
+                BindArrivingCompanion(
+                    arrival: member.Arrival,
+                    companion: in companion,
+                    mobility: reservationMember.Mobility!.Value,
+                    slot: slot
+                );
+            }
         }
 
         return reply;
@@ -1331,6 +1364,14 @@ public sealed partial class WorldTransferEscrow {
         ) is { } deadlineRefusal) {
             return WorldTransferReservationReply.Refused(reason: deadlineRefusal);
         }
+        foreach (var member in request.Members) {
+            if (CompanionRefusal(member: in member) is { } companionRefusal) {
+                return WorldTransferReservationReply.Refused(
+                    companion: true,
+                    reason: companionRefusal
+                );
+            }
+        }
 
         // The admission decision runs once, here, against the authenticated source-authority namespace, and the
         // lease carries its verdict to commit: reserve and commit can never disagree about what an arrival is
@@ -1361,7 +1402,7 @@ public sealed partial class WorldTransferEscrow {
             : m_server.Population.LocalSeatCount)];
 
         for (var slot = 0; (slot < consumed.Length); slot++) {
-            consumed[slot] = m_server.Population.IsActive(index: slot);
+            consumed[slot] = m_server.Population.IsActive(index: slot) || m_server.Population.IsAwaySlot(slot: slot);
         }
 
         foreach (var lease in m_leases.Values) {
@@ -1393,11 +1434,20 @@ public sealed partial class WorldTransferEscrow {
 
         for (var index = 0; (index < request.Members.Count); index++) {
             var member = request.Members[index];
-            var slot = PreferredOrLowestFree(
-                consumed: consumed,
-                preferred: member.PreferredSlot,
-                first: firstSlot
-            );
+            // A companion of this world coming home takes back the slot its placement held for it, which no other
+            // traveller may take.
+            var slot = (((member.Companion is not null) &&
+                (member.Mobility is { } returning) &&
+                m_server.Population.TryFindAway(incarnation: returning.Incarnation, slot: out var homeSlot) &&
+                (((uint)homeSlot) < ((uint)consumed.Length)) &&
+                !m_server.Population.IsActive(index: homeSlot) &&
+                !m_leases.Values.Any(predicate: lease => lease.Slots.Contains(value: homeSlot)))
+                ? homeSlot
+                : PreferredOrLowestFree(
+                    consumed: consumed,
+                    preferred: member.PreferredSlot,
+                    first: firstSlot
+                ));
 
             if (slot < 0) {
                 return WorldTransferReservationReply.Refused(reason: $"destination has no free body index for traveler {(index + 1)}; no queue was created");

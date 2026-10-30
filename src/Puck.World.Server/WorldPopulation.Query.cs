@@ -66,6 +66,13 @@ public sealed partial class WorldPopulation {
     private int CountInhabitants(string placementId) {
         var count = 0;
 
+        // An away companion still belongs to its placement, so it is never replaced while it travels.
+        foreach (var away in m_awayCompanions) {
+            if (string.Equals(a: away.PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                count++;
+            }
+        }
+
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             if (string.Equals(
                 a: m_entries[index].PlacementId,
@@ -103,7 +110,8 @@ public sealed partial class WorldPopulation {
 
             if (
                 (entry.PlacementId is null) &&
-                !entry.Active
+                !entry.Active &&
+                !IsAwaySlot(slot: index)
             ) {
                 return index;
             }

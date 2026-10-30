@@ -256,6 +256,8 @@ public static class WorldPostBuildWiring {
         };
 
         services.GetRequiredService<WorldSourceWatch>().Report = report;
+        // A companion a world will not take narrates the player's own crossing, so it reaches the toast.
+        services.GetRequiredService<WorldInstanceHost>().CompanionNotice = message => report(arg1: message, arg2: true);
         var consoleOutput = services.GetRequiredService<BufferedConsoleOutput>();
 
         // A bound value a presentation clamps into its field's domain reaches the same fan-out as a document reload's

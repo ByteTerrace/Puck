@@ -354,7 +354,12 @@ public sealed partial class WorldInstanceHost {
                 BodyColor: traveler.BodyColor,
                 CatalogRig: traveler.CatalogRig,
                 Mobility: traveler.Mobility,
-                RemoteHuman: human
+                RemoteHuman: human,
+                Companion: CompanionMember(
+                    follows: transfer.Companion?.Follows,
+                    slot: sourceSlot,
+                    source: source
+                )
             );
         }
 
@@ -395,6 +400,20 @@ public sealed partial class WorldInstanceHost {
                 m_narration.Narrate(
                     channel: "world.transfer",
                     text: $"[world.transfer: transfer={transferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]"
+                );
+            }
+
+            // A companion its home will not take back stays where it is rather than asking again every tick.
+            if ((transfer.Companion is { Home: true }) && (OccupantIncarnation(instance: source, slot: transfer.SourceSlot) is { } stranded)) {
+                _ = m_strandedCompanions.Add(item: (source.Name, stranded));
+            }
+            if (reservation.CompanionRefused) {
+                RefuseCompanions(
+                    members: members,
+                    reason: reservation.Reason,
+                    source: source,
+                    targetName: targetName,
+                    transfer: in transfer
                 );
             }
 
@@ -1228,6 +1247,9 @@ public sealed partial class WorldInstanceHost {
             target: targetAuthority
         );
 
+        // Each departed player's companions follow it to the same destination in their own crossing.
+        CarryCompanions(pending: pending);
+
         // A SOURCE that this transfer just emptied is reaped by the SAME rule as any other departure.
         ReapIfEmpty(name: transfer.SourceInstance);
     }
@@ -1821,6 +1843,7 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
+        SendSeparatedCompanionsHome();
         ReapDeferred();
     }
     /// <summary>Queues a same-process transfer for this host's next <see cref="DrainPendingTransfers"/> call —
@@ -1965,7 +1988,7 @@ public sealed partial class WorldInstanceHost {
         reason = string.Empty;
         return true;
     }
-    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, ulong? explicitTransferId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed) {
+    private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, ulong? explicitTransferId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed, CompanionPassage? companion = null) {
         var source = m_instances.GetValueOrDefault(key: sourceInstance);
         var transferId = (explicitTransferId ?? ((source is not null)
             ? MintTransferId(source: source)
@@ -2007,7 +2030,8 @@ public sealed partial class WorldInstanceHost {
             PartyAllOrNothing: partyAllOrNothing,
             BorderCapacity: borderCapacity,
             Border: (border ?? "transfer"),
-            Posed: posed
+            Posed: posed,
+            Companion: companion
         ));
 
         return transferId;
@@ -2213,6 +2237,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="Travellers">The mobility incarnation of each member as the transfer was queued, in
     /// <paramref name="FrozenCohortSlots"/> order (or the one <paramref name="SourceSlot"/>), an entry
     /// <see langword="null"/> for a slot that held no body then; <see langword="null"/> for a live-read party.</param>
+    /// <param name="Companion">A companion's own crossing: following its player, or going home. <see langword="null"/>
+    /// for every other transfer.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2241,8 +2267,12 @@ public sealed partial class WorldInstanceHost {
         string? RecoveryDestinationName = null,
         PosedTraveller? Posed = null,
         WorldInstance? Source = null,
-        IReadOnlyList<WorldEntityAddress?>? Travellers = null
+        IReadOnlyList<WorldEntityAddress?>? Travellers = null,
+        CompanionPassage? Companion = null
     );
+    // A companion's own transfer: the incarnation of the player it follows to the destination (none when it travels home
+    // alone), and whether it is going home because it was separated from that player.
+    private readonly record struct CompanionPassage(WorldEntityAddress? Follows, bool Home);
     // The traveller a pose carries home, by the mobility incarnation it keeps through every handoff, and the pose it
     // lands at standing still.
     private readonly record struct PosedTraveller(FixedSpawnPoint Pose, WorldEntityAddress Incarnation);

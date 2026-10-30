@@ -717,6 +717,25 @@ public sealed partial class WorldAddonRuntime {
     // resolves beside the document (WorldDocumentPaths); a relative one in a document with no directory refuses the
     // row by name.
     private static bool TryDescriptorFor(string? documentDirectory, WorldAddonRow row, out AddonDescriptor descriptor, out string? reason) {
+        // An empty modulePath names the module by its pin alone: the process content store holds the bytes, and the
+        // loader verifies them against the same pin before it converts or compiles anything.
+        if (row.ModulePath.Length == 0) {
+            if (
+                !ContentPin.TryParse(text: row.Hash, pin: out var pin) ||
+                !WorldProjectionContent.Shared.Contains(pin: pin)
+            ) {
+                descriptor = default;
+                reason = $"'{row.Name}' could not prepare — its module {row.Hash} is not in the content store";
+                return false;
+            }
+
+            descriptor = DescriptorFor(
+                modulePath: ContentAddressedStore.ObjectPath(pin: pin, root: WorldProjectionContent.Shared.Root),
+                row: row
+            );
+            reason = null;
+            return true;
+        }
         if (!WorldDocumentPaths.TryResolve(
             documentDirectory: documentDirectory,
             path: row.ModulePath,

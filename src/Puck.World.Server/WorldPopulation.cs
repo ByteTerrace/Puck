@@ -532,6 +532,9 @@ public sealed partial class WorldPopulation {
         // frame source and anchor resolver look up by, and the flag that marks a peer as an inhabitant. Set/cleared by
         // ReconcileInhabitants.
         public string? PlacementId { get; set; }
+        // The role this body holds as a companion, the body it follows here, its home and preferred driver; null for
+        // a body that holds no role. Set by an inhabit facet that declares a role and by a companion's landing.
+        public WorldCompanionBinding? Companion { get; set; }
         public PressOutcome PressOutcome { get; set; }
         public FixedVector3 SpawnPosition { get; set; }
         public FixedQ4816 SpawnYaw { get; set; }

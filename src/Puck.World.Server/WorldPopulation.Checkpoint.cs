@@ -65,6 +65,7 @@ public sealed partial class WorldPopulation {
             SleepingGravity: [.. m_sleepGravity.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             SharedNavigation: m_navigation.CaptureShared(),
             AttachedSolids: (m_baseContactField as WorldColliderSet)?.CaptureAttached(),
+            AwayCompanions: [.. m_awayCompanions],
             Revision: m_revision,
             SeatKit: m_seatKit,
             SimulatedCount: m_simulatedCount
@@ -152,6 +153,7 @@ public sealed partial class WorldPopulation {
             Parked: entry.Parked,
             ParkedUntilTick: entry.ParkedUntilTick,
             PlacementId: entry.PlacementId,
+            Companion: entry.Companion,
             SpawnPosition: entry.SpawnPosition,
             SpawnYaw: entry.SpawnYaw,
             AdmissionInstalledGrantTemplates: (alias
@@ -268,6 +270,7 @@ public sealed partial class WorldPopulation {
             entry.IsRemoteHuman = false;
             entry.IsAuthorityTransferred = false;
             entry.PlacementId = null;
+            entry.Companion = null;
             entry.Mobility = null;
             entry.MobilityGeneration = 0;
             entry.AdmissionInstalledGrantTemplates = [];
@@ -342,6 +345,7 @@ public sealed partial class WorldPopulation {
             entry.Parked = captured.Parked;
             entry.ParkedUntilTick = captured.ParkedUntilTick;
             entry.PlacementId = captured.PlacementId;
+            entry.Companion = captured.Companion;
             entry.SpawnPosition = captured.SpawnPosition;
             entry.SpawnYaw = captured.SpawnYaw;
             entry.AdmissionInstalledGrantTemplates = captured.AdmissionInstalledGrantTemplates;
@@ -431,6 +435,7 @@ public sealed partial class WorldPopulation {
             }
         }
 
+        RestoreAwayCompanions(rows: checkpoint.AwayCompanions);
         m_simulatedCount = checkpoint.SimulatedCount;
         m_seatKit = checkpoint.SeatKit;
         m_revision = checkpoint.Revision;
