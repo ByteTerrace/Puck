@@ -16,6 +16,12 @@ that session.
 
 ## The landing bar
 
+A queued World build can outlive a cancelled start. Do not change a checkout's
+sources until its build has finished. The artifact resolver checks the source
+key after build admission and after compilation, and discards a build if either
+check changed; a capture run must still confirm its implementation through live
+counters before accepting measurements.
+
 Steps 1 to 3 make a lane ready for a batch. Steps 4 and 5 need a windowed World,
 so the integration lane's sweep reads them
 ([orchestration](../orchestration/SKILL.md#land-in-batches)).

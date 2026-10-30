@@ -270,12 +270,12 @@ public sealed class CliLease : IDisposable {
 
             return (process.HasExited || (process.StartTime.ToUniversalTime().Ticks != ticks));
         } catch (ArgumentException) { return true; } catch (InvalidOperationException) { return true; } catch (System.ComponentModel.Win32Exception) {
-            // The guard is exclusively ours, but the OS could not answer who owns the metadata. Only then use age.
+            // If the OS cannot inspect this queued process, fall back to the ticket's age.
             return (DateTimeOffset.TryParse(input: lines[1], formatProvider: CultureInfo.InvariantCulture, styles: DateTimeStyles.RoundtripKind, result: out var acquired) && ((now - acquired) > TimeSpan.FromHours(hours: 1)));
         }
     }
 
-    /// <summary>Removes this holder's directory and releases the exclusive guard.</summary>
+    /// <summary>Releases the exclusive guard, attempting to remove metadata whose deletion a reader may delay.</summary>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;

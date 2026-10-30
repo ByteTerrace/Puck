@@ -4325,7 +4325,7 @@ and start ticks admit a `child` lease inside that holder's directory. Sibling
 suites compete for that child lease, so an enclosing lease neither deadlocks
 its own work nor permits its children to overlap. Wait messages name the holder.
 
-The exclusive guard handle proves ownership; holder metadata is diagnostic. Once the oldest waiter owns the guard, it replaces leftover metadata, including missing or malformed data and an alive adapter PID left when a Windows reader delayed cleanup after a World exited. Disposal always releases the guard even when directory deletion is delayed. Metadata readers permit deletion, and an unreadable queue ticket counts as occupied until it can be read or disappears. A live guard never expires. Never unlink its file or remove an active holder manually. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
+The exclusive guard handle proves ownership; holder metadata is diagnostic. Once the admitted waiter owns the guard, it replaces leftover metadata, including missing or malformed data and an alive adapter PID left when a Windows reader delayed cleanup after a World exited. Disposal always releases the guard even when directory deletion is delayed. Metadata readers permit deletion, and an unreadable queue ticket counts as occupied until it can be read or disappears. A live guard never expires. Never unlink its file or remove an active holder manually. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
 
 ## `puck agents link`—native skill discovery
 
