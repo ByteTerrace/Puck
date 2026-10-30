@@ -40,6 +40,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: arrival.Generations,
             writeItem: static (w, generation) => w.WriteInt32(value: generation)
         );
+        writer.WriteArray(
+            items: arrival.Leased,
+            writeItem: static (w, id) => w.WriteInt32(value: id)
+        );
     }
     private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader) {
         var request = ReadReservationRequest(reader: ref reader);
@@ -63,8 +67,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => r.ReadInt32(),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
+        var leased = reader.ReadArray(
+            field: "arrival leased ids",
+            readItem: static (ref WireReader r) => r.ReadInt32(),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
         var arrival = new WorldCrossingArrival(
             Generations: generations,
+            Leased: leased,
             Members: members,
             Readopted: readopted,
             Request: request,

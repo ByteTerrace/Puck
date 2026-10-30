@@ -12,11 +12,15 @@ namespace Puck.World.Server;
 /// title comes home one epoch above the custody it left.</param>
 /// <param name="Generations">The occupant generation each member took where it landed, in member order; empty before the
 /// commit has landed it.</param>
-public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null, IReadOnlyList<int>? Generations = null) {
+/// <param name="Leased">The request-local ids the lease held when the commit landed only part of them, so the partial
+/// verdict outlives the transaction's receipt; empty for an arrival that landed every leased member.</param>
+public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null, IReadOnlyList<int>? Generations = null, IReadOnlyList<int>? Leased = null) {
     /// <summary>Gets the companions this arrival re-adopted at their home; empty for one that re-adopts none.</summary>
     public IReadOnlyList<WorldEntityAddress> Readopted { get; init; } = (Readopted ?? []);
     /// <summary>Gets the occupant generation each member took where it landed, in member order.</summary>
     public IReadOnlyList<int> Generations { get; init; } = (Generations ?? []);
+    /// <summary>Gets the ids the lease held when the commit landed only part of them; empty when it landed them all.</summary>
+    public IReadOnlyList<int> Leased { get; init; } = (Leased ?? []);
     /// <summary>Gets the handoff token this arrival committed under.</summary>
     public WorldTransferKey Key => new(
         SourceAuthority: Request.SourceAuthority,

@@ -131,6 +131,9 @@ public sealed class WorldCompanionCustody {
     // Every arrival here that carried companions, by key: the companions it landed. A destination answers its title
     // authorities from these, whatever became of the transaction since.
     private readonly Dictionary<WorldTransferKey, HashSet<WorldEntityAddress>> m_arrivals = new();
+    // The request-local ids each such arrival landed: the partial verdict its source settles by, kept however the
+    // transaction's receipt is later retired or superseded.
+    private readonly Dictionary<WorldTransferKey, int[]> m_arrivalLanded = new();
     private readonly Dictionary<ulong, int[]> m_ownSettlements = new();
 
     /// <summary>Initializes a new instance of the <see cref="WorldCompanionCustody"/> class for one authority.</summary>
@@ -141,8 +144,9 @@ public sealed class WorldCompanionCustody {
         m_authority = authority;
     }
 
-    /// <summary>Gets every custody record this authority folded, in fold order: what a checkpoint captures.</summary>
-    public IReadOnlyList<WorldCrossingRecord> History => m_history;
+    /// <summary>Gets a copy of every custody record this authority folded, in fold order: what a checkpoint captures. Each
+    /// call returns records of its own, so nothing a caller does to them reaches this authority's history.</summary>
+    public IReadOnlyList<WorldCrossingRecord> History => [.. m_history.Select(selector: Owned)];
     /// <summary>Gets every incarnation a custodian retired here on home's word.</summary>
     public IReadOnlyCollection<WorldEntityAddress> Retired => m_retired;
 
@@ -154,7 +158,7 @@ public sealed class WorldCompanionCustody {
         WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
         WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or WorldCrossingRecord.Stranded or
         WorldCrossingRecord.GraceElapsed or WorldCrossingRecord.Settlement => true,
-        WorldCrossingRecord.Arrival arrival => ((arrival.Value.Readopted.Count > 0) || arrival.Value.Request.Members.Any(predicate: static member => member.Companion is not null)),
+        WorldCrossingRecord.Arrival arrival => ((arrival.Value.Readopted.Count > 0) || (arrival.Value.Leased.Count > 0) || arrival.Value.Request.Members.Any(predicate: static member => member.Companion is not null)),
         WorldCrossingRecord.Departure departure => departure.Transfer.CommitMembers.Any(predicate: static member => member.Companion is not null),
         _ => false,
     };
@@ -291,6 +295,7 @@ public sealed class WorldCompanionCustody {
                 break;
             case WorldCrossingRecord.Arrival arrival:
                 m_arrivals[arrival.Value.Key] = [.. arrival.Value.Request.Members.Where(predicate: static member => member.Companion is not null).Select(selector: static member => member.Mobility!.Value.Incarnation)];
+                m_arrivalLanded[arrival.Value.Key] = [.. arrival.Value.Request.Members.Select(selector: static (member, ordinal) => member.IdAt(ordinal: ordinal))];
                 foreach (var member in arrival.Value.Request.Members) {
                     if ((member.Companion is { } leaf) && (member.Mobility is { } landed) && !IsHome(authority: landed.Incarnation.Authority)) {
                         m_carried[landed.Incarnation] = leaf;
@@ -337,6 +342,7 @@ public sealed class WorldCompanionCustody {
         m_ownDepartures.Clear();
         m_placements.Clear();
         m_carried.Clear();
+        m_arrivalLanded.Clear();
         m_ownSettlements.Clear();
         m_arrivals.Clear();
         foreach (var record in history) {
@@ -467,6 +473,11 @@ public sealed class WorldCompanionCustody {
     public bool? ArrivalHolds(WorldTransferKey key, WorldEntityAddress incarnation) => (m_arrivals.TryGetValue(key: key, value: out var landed)
         ? landed.Contains(item: incarnation)
         : null);
+    /// <summary>Returns the request-local ids the arrival under <paramref name="key"/> landed here, for an arrival that
+    /// carried companions (the only kind that lands part of its cohort).</summary>
+    /// <param name="key">The arrival's key.</param>
+    /// <returns>The landed ids, or <see langword="null"/> when no such arrival landed under the key.</returns>
+    public IReadOnlyList<int>? ArrivalLanded(WorldTransferKey key) => m_arrivalLanded.GetValueOrDefault(key: key);
     /// <summary>Returns whether this authority's departure under <paramref name="transferId"/> carried
     /// <paramref name="incarnation"/>.</summary>
     /// <param name="transferId">The departure's transfer id.</param>

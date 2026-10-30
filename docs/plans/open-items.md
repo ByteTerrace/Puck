@@ -884,7 +884,37 @@ authority its host already opened. The debug world's faerie declares no role
 yet, so it does not travel. The protocol is
 checked by the `CompanionCustodyModel` law in `tests/Puck.World.Protocol.Tests`,
 which the build follows as its oracle. Then the uncertain crossing, opened by a
-two-silo failover witness.
+two-silo failover witness. Step 5's engine half (the `VerifyReturn` door, the
+`HeldPlacement` predicate the census, inhabitant reconcile and admission read,
+re-adoption into the held slot, `TryEnqueueCompanionReturn`, install-retired
+settlements) is built but has no laws yet.
+
+The checkpoint-2 review's findings still open (each reproduced on the engine;
+the fixed ones carry laws in `CompanionCrossingLawTests.Review.cs`):
+
+- [high] A destination recognises a companion only by the `Companion` leaf the
+  sender supplies: a source that strips it lands home's still-embodied
+  incarnation as an ordinary traveller, with no hop. Any authority's player
+  also carries a home-minted incarnation, so the incarnation's authority alone
+  cannot tell them apart; the destination needs home's word (or a companion mark
+  home mints into the incarnation) for every foreign incarnation it lands.
+- [high] Hop queries over federation coalesce without the full hop key, member
+  list or phase (`WorldRemoteAuthority.cs` `ConfirmHops`): two concurrent
+  queries for different source keys share one answer.
+- [high] A refused arrival's tombstone omits the generations its rolled-back
+  landings burned (`WorldCrossingRecord.Tombstone`), so log recovery reuses them.
+- [high] A partial settlement drops a member whose restoration fails (its source
+  slot reused): `TryPublishCommittedTransfer` and `RedoSettlement` discard
+  `RestoreDetachedMembers`'s leftovers. A rollback-only row cannot carry them,
+  since its reconcile asks the destination, which answers `Committed`; the
+  leftovers need a restore-only obligation of their own in the checkpoint.
+- [medium] The conformance law folds model-generated home records rather than
+  driving engine transitions: replace it with a differential harness that
+  replays the model's explored traces (crashes between appends, recovery from
+  checkpoint plus log, loss, duplication, reconnect, partial landing,
+  supersession, hostile peer messages) on real `WorldServer` and
+  `WorldInstanceHost` instances and compares titles, epochs, embodiments, slots,
+  generations and obligations after every step.
 
 - [medium] A rule firing costs the world host far more than the work sheet
   prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`
