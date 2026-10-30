@@ -119,10 +119,9 @@ public enum WorldSpatialQueryMask : byte {
 /// <summary>An immutable per-definition spatial index. Its deterministic AABB BVH is exhaustive over bounded volumes;
 /// exact overlap remains available through the exact yaw-aware narrowphase overloads.</summary>
 public sealed class WorldSpatialQueryIndex {
-    private readonly ImmutableArray<SpatialBvhNode> m_bvh;
+    private readonly Lazy<SpatialBvh> m_bvh;
     private readonly ImmutableArray<int> m_influenceOrder;
     private readonly ImmutableDictionary<string, FixedVector3> m_occupationTargets;
-    private readonly int m_root;
     private readonly ImmutableArray<SpatialQueryUnsupported> m_unsupported;
     private readonly ImmutableArray<CompiledSpatialVolume> m_volumes;
 
@@ -130,20 +129,8 @@ public sealed class WorldSpatialQueryIndex {
     public WorldSpatialQueryIndex(IReadOnlyList<CompiledSpatialVolume> volumes, IReadOnlyList<SpatialQueryUnsupported>? unsupported = null) {
         m_volumes = volumes.ToImmutableArray();
         m_unsupported = (unsupported ?? []).ToImmutableArray();
-        var occupationTargets = ImmutableDictionary.CreateBuilder<string, FixedVector3>(keyComparer: StringComparer.Ordinal);
-
-        foreach (var volume in m_volumes) {
-            if (
-                (volume.Role == WorldPlacementSpatialRole.Occupation) &&
-                !occupationTargets.ContainsKey(key: volume.PlacementId)
-            ) {
-                occupationTargets.Add(
-                    key: volume.PlacementId,
-                    value: volume.Shape.Center
-                );
-            }
-        }
-        m_occupationTargets = occupationTargets.ToImmutable();
+        m_occupationTargets = OccupationTargets(volumes: m_volumes);
+        // The influence order reads only each volume's role, channel and placement, never its geometry.
         m_influenceOrder = Enumerable.Range(
             0,
             m_volumes.Length
@@ -159,26 +146,72 @@ public sealed class WorldSpatialQueryIndex {
         )
             .ThenBy(keySelector: index => index)
             .ToImmutableArray();
-        if (m_volumes.Length == 0) {
-            m_bvh = [];
-            m_root = -1;
-        } else {
-            var order = Enumerable.Range(
-                0,
-                m_volumes.Length
-            ).ToArray();
-            var nodes = new List<SpatialBvhNode>(capacity: ((m_volumes.Length * 2) - 1));
+        m_bvh = BuildLazily(volumes: m_volumes);
+    }
+    // The same volumes with some geometry replaced: nothing but the geometry changed, so the influence order and the
+    // unsupported rows carry over, and the BVH builds only if a broadphase query asks for it.
+    private WorldSpatialQueryIndex(WorldSpatialQueryIndex source, ImmutableArray<CompiledSpatialVolume> volumes, bool occupationMoved) {
+        m_volumes = volumes;
+        m_unsupported = source.m_unsupported;
+        m_influenceOrder = source.m_influenceOrder;
+        m_occupationTargets = (occupationMoved
+            ? OccupationTargets(volumes: volumes)
+            : source.m_occupationTargets
+        );
+        m_bvh = BuildLazily(volumes: volumes);
+    }
 
-            _ = BuildBvh(
-                nodes,
-                order,
-                start: 0,
-                count: order.Length,
-                volumes: m_volumes
-            );
-            m_bvh = nodes.ToImmutableArray();
-            m_root = 0;
+    private static Lazy<SpatialBvh> BuildLazily(ImmutableArray<CompiledSpatialVolume> volumes) => new(valueFactory: () => {
+        if (volumes.Length == 0) { return new SpatialBvh([], -1); }
+        var order = Enumerable.Range(
+            0,
+            volumes.Length
+        ).ToArray();
+        var nodes = new List<SpatialBvhNode>(capacity: ((volumes.Length * 2) - 1));
+
+        _ = BuildBvh(
+            nodes,
+            order,
+            start: 0,
+            count: order.Length,
+            volumes: volumes
+        );
+        return new SpatialBvh(
+            [.. nodes],
+            0
+        );
+    });
+    private static ImmutableDictionary<string, FixedVector3> OccupationTargets(ImmutableArray<CompiledSpatialVolume> volumes) {
+        var occupationTargets = ImmutableDictionary.CreateBuilder<string, FixedVector3>(keyComparer: StringComparer.Ordinal);
+
+        foreach (var volume in volumes) {
+            if (
+                (volume.Role == WorldPlacementSpatialRole.Occupation) &&
+                !occupationTargets.ContainsKey(key: volume.PlacementId)
+            ) {
+                occupationTargets.Add(
+                    key: volume.PlacementId,
+                    value: volume.Shape.Center
+                );
+            }
         }
+        return occupationTargets.ToImmutable();
+    }
+    // The compiled volumes with the given indices replaced, in the same order: an influence or occupation read sees the
+    // new geometry without the whole document compiling again.
+    internal WorldSpatialQueryIndex WithGeometry(IReadOnlyDictionary<int, CompiledSpatialVolume> replacements) {
+        var volumes = m_volumes.ToBuilder();
+        var occupationMoved = false;
+
+        foreach (var (index, volume) in replacements) {
+            occupationMoved |= (volumes[index].Role == WorldPlacementSpatialRole.Occupation);
+            volumes[index] = volume;
+        }
+        return new WorldSpatialQueryIndex(
+            this,
+            volumes.ToImmutable(),
+            occupationMoved
+        );
     }
 
     /// <summary>Gets rows that carried spatial data but cannot be represented by a static index.</summary>
@@ -366,15 +399,17 @@ public sealed class WorldSpatialQueryIndex {
     /// <summary>Finds blocking overlap and reports the visited BVH nodes for bounded planner accounting.</summary>
     public bool HasBlockingOverlap(in CompiledSpatialVolume candidate, out int workUnits) {
         workUnits = 0;
-        if (m_root < 0) {
+        var tree = m_bvh.Value;
+
+        if (tree.Root < 0) {
             return false;
         }
         Span<int> stack = stackalloc int[64];
         var stackCount = 1;
 
-        stack[0] = m_root;
+        stack[0] = tree.Root;
         while (stackCount > 0) {
-            var node = m_bvh[stack[--stackCount]];
+            var node = tree.Nodes[stack[--stackCount]];
 
             workUnits++;
             if (!node.Bounds.Intersects(other: candidate.Bounds)) {
@@ -405,8 +440,9 @@ public sealed class WorldSpatialQueryIndex {
     /// number of BVH nodes inspected and therefore exposes the bounded broadphase cost.</remarks>
     public SpatialQueryResult Query(FixedSpatialAabb bounds, WorldSpatialQueryMask mask = WorldSpatialQueryMask.All) {
         var matches = new List<CompiledSpatialVolume>();
+        var tree = m_bvh.Value;
 
-        if (m_root < 0) {
+        if (tree.Root < 0) {
             return new SpatialQueryResult(
                 Volumes: matches,
                 WorkUnits: 0
@@ -416,11 +452,11 @@ public sealed class WorldSpatialQueryIndex {
         Span<int> stack = stackalloc int[64];
         var stackCount = 1;
 
-        stack[0] = m_root;
+        stack[0] = tree.Root;
         var work = 0;
 
         while (stackCount > 0) {
-            var node = m_bvh[stack[--stackCount]];
+            var node = tree.Nodes[stack[--stackCount]];
 
             work++;
             if (!node.Bounds.Intersects(other: bounds)) {
@@ -489,6 +525,7 @@ public sealed class WorldSpatialQueryIndex {
     }
 
     private readonly record struct SpatialBvhNode(FixedSpatialAabb Bounds, int Left, int Right, int VolumeIndex);
+    private readonly record struct SpatialBvh(ImmutableArray<SpatialBvhNode> Nodes, int Root);
 }
 /// <summary>Compiles authored placement spatial volumes and their world-space fixed query shapes.</summary>
 public static class WorldSpatialQueryCompilation {
@@ -682,15 +719,23 @@ public static class WorldSpatialQueryCompilation {
         bound: null,
         placements: placements
     );
-    // A volume whose center or extents read the live state (a document-value reference) is recorded with the value it
-    // compiled, so Resolve can tell the cached index has gone stale.
-    private static void NoteBound(WorldSpatialShape shape, List<(DocumentVector3 Value, System.Numerics.Vector3 Seen)>? bound) {
-        if (bound is null) { return; }
-        foreach (var value in (ReadOnlySpan<DocumentVector3>)[shape.Center, shape.HalfExtents]) {
-            if (value.Reference is not null) { bound.Add(item: (value, value.Value)); }
-        }
+    // A volume whose center or extents read the live state (a document-value reference) is recorded with the values it
+    // compiled, so Resolve can tell the cached index has gone stale and recompile that volume alone. A volume the index
+    // does not hold (its placement was refused) records no slot, and a change to it compiles the whole document.
+    private static void NoteBound(WorldPlacementSpatialVolume authored, SpatialFrame frame, int slot, List<BoundVolume>? bound) {
+        if (
+            (bound is null) ||
+            ((authored.Shape.Center.Reference is null) && (authored.Shape.HalfExtents.Reference is null))
+        ) { return; }
+        bound.Add(item: new BoundVolume(
+            authored,
+            frame,
+            slot,
+            authored.Shape.Center.Value,
+            authored.Shape.HalfExtents.Value
+        ));
     }
-    private static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements, List<(DocumentVector3 Value, System.Numerics.Vector3 Seen)>? bound) {
+    private static WorldSpatialQueryIndex Compile(IReadOnlyList<WorldPlacement>? placements, List<BoundVolume>? bound) {
         if (placements is not { Count: > 0 }) {
             return new WorldSpatialQueryIndex([]);
         }
@@ -742,12 +787,9 @@ public static class WorldSpatialQueryCompilation {
             }
 
             var start = volumes.Count;
+            var boundStart = (bound?.Count ?? 0);
 
             foreach (var volume in placement.Spatial) {
-                NoteBound(
-                    bound: bound,
-                    shape: volume.Shape
-                );
                 if (!TryCompileGeometry(
                     volume.Shape,
                     frame,
@@ -763,8 +805,23 @@ public static class WorldSpatialQueryCompilation {
                         start,
                         (volumes.Count - start)
                     );
+                    if (bound is not null) {
+                        for (var held = boundStart; (held < bound.Count); held++) { bound[held] = bound[held] with { Slot = -1 }; }
+                    }
+                    NoteBound(
+                        authored: volume,
+                        bound: bound,
+                        frame: frame,
+                        slot: -1
+                    );
                     break;
                 }
+                NoteBound(
+                    authored: volume,
+                    bound: bound,
+                    frame: frame,
+                    slot: volumes.Count
+                );
                 volumes.Add(item: new CompiledSpatialVolume(
                     placement.Id,
                     volume.Name,
@@ -846,20 +903,60 @@ public static class WorldSpatialQueryCompilation {
         );
 
         if (entry.Bound.Length == 0) { return entry.Index; }
-        foreach (var (value, seen) in entry.Bound) {
-            if (value.Value != seen) {
-                entry = Compiled(section: section);
-                Cache.AddOrUpdate(
-                    key: section,
-                    value: entry
-                );
-                break;
-            }
+        var moved = new List<int>();
+
+        for (var held = 0; (held < entry.Bound.Length); held++) {
+            var volume = entry.Bound[held];
+
+            if (
+                (volume.Authored.Shape.Center.Value != volume.Center) ||
+                (volume.Authored.Shape.HalfExtents.Value != volume.HalfExtents)
+            ) { moved.Add(item: held); }
         }
+        if (moved.Count == 0) { return entry.Index; }
+        entry = (Recompiled(
+            entry: entry,
+            moved: moved
+        ) ?? Compiled(section: section));
+        Cache.AddOrUpdate(
+            key: section,
+            value: entry
+        );
         return entry.Index;
     }
+    // Compiles again only the volumes whose bound values moved, in the slots they already hold. A volume whose new
+    // geometry no longer compiles, or that holds no slot, makes the whole document compile again.
+    private static CompiledIndex? Recompiled(CompiledIndex entry, List<int> moved) {
+        var replacements = new Dictionary<int, CompiledSpatialVolume>();
+        var bound = (BoundVolume[])entry.Bound.Clone();
+
+        foreach (var held in moved) {
+            var volume = bound[held];
+
+            if (volume.Slot < 0) { return null; }
+            var seenCenter = volume.Authored.Shape.Center.Value;
+            var seenHalfExtents = volume.Authored.Shape.HalfExtents.Value;
+
+            if (!TryCompileGeometry(
+                volume.Authored.Shape,
+                volume.Frame,
+                out var shape,
+                out var bounds,
+                out _
+            )) { return null; }
+            replacements.Add(
+                key: volume.Slot,
+                value: entry.Index.Volumes[volume.Slot] with { Shape = shape, Bounds = bounds }
+            );
+            bound[held] = volume with { Center = seenCenter, HalfExtents = seenHalfExtents };
+        }
+        return new CompiledIndex(
+            entry.Index.WithGeometry(replacements: replacements),
+            bound
+        );
+    }
     private static CompiledIndex Compiled(WorldPlacementsSection section) {
-        var bound = new List<(DocumentVector3 Value, System.Numerics.Vector3 Seen)>();
+        var bound = new List<BoundVolume>();
         var index = Compile(
             bound: bound,
             placements: section.Rows
@@ -870,7 +967,12 @@ public static class WorldSpatialQueryCompilation {
             [.. bound]
         );
     }
-    private sealed record CompiledIndex(WorldSpatialQueryIndex Index, (DocumentVector3 Value, System.Numerics.Vector3 Seen)[] Bound);
+    /// <summary>Counts the volumes the placements declare that read a state-bound value, the ones a write can move.</summary>
+    /// <param name="placements">The document's placements.</param>
+    /// <returns>The bound volume count.</returns>
+    public static long BoundVolumeCount(IEnumerable<WorldPlacement> placements) => placements.Sum(selector: static placement => (placement.Spatial?.Count(predicate: static volume => ((volume.Shape.Center.Reference is not null) || (volume.Shape.HalfExtents.Reference is not null))) ?? 0));
+    private sealed record BoundVolume(WorldPlacementSpatialVolume Authored, SpatialFrame Frame, int Slot, System.Numerics.Vector3 Center, System.Numerics.Vector3 HalfExtents);
+    private sealed record CompiledIndex(WorldSpatialQueryIndex Index, BoundVolume[] Bound);
     // Hands a section's compiled index to a section whose rows differ from it only in their holding masks
     // (WorldDefinition.WithPlacementHoldings): the authored volumes it compiles read no shown creation.
     internal static void CarryAcrossHolding(WorldPlacementsSection source, WorldPlacementsSection target) {
