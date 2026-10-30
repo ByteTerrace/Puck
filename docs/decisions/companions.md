@@ -23,6 +23,9 @@ answered the product questions.
 - Separated from its player, it goes home. A world that does not take it sends
   it home and tells the player (the owner's direction, adopted as the engine's
   rule below).
+- Federation stays in scope: a companion crosses into a world on another server
+  as it does into a colocated one; the design may not cut remote crossings to
+  avoid their trust and return problems.
 
 ## Code never crosses; the destination decides what runs
 
