@@ -5358,7 +5358,6 @@ public static partial class WorldModelShape {
                 M("drive", typeof(global::System.UInt16), typeof(global::Puck.World.WorldRole), "Drive", Read | Write, static value => ((global::Puck.World.WorldRole)value).Drive),
                 M("observe", typeof(global::System.UInt16), typeof(global::Puck.World.WorldRole), "Observe", Read | Write, static value => ((global::Puck.World.WorldRole)value).Observe),
                 M("followReach", typeof(global::System.Double), typeof(global::Puck.World.WorldRole), "FollowReach", Read | Write, static value => ((global::Puck.World.WorldRole)value).FollowReach),
-                M("driverAddonName", typeof(global::System.String), typeof(global::Puck.World.WorldRole), "DriverAddonName", None),
             ],
             []),
         T(typeof(global::Puck.World.WorldRowAssignment), true, JsonTypeInfoKind.Object, null,

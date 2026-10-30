@@ -66,6 +66,7 @@ public sealed partial class WorldPopulation {
             SharedNavigation: m_navigation.CaptureShared(),
             AttachedSolids: (m_baseContactField as WorldColliderSet)?.CaptureAttached(),
             AwayCompanions: [.. m_awayCompanions],
+            CustodyKey: [.. m_custodyKey],
             Revision: m_revision,
             SeatKit: m_seatKit,
             SimulatedCount: m_simulatedCount
@@ -435,7 +436,7 @@ public sealed partial class WorldPopulation {
             }
         }
 
-        RestoreAwayCompanions(rows: checkpoint.AwayCompanions);
+        RestoreAwayCompanions(custodyKey: checkpoint.CustodyKey, rows: checkpoint.AwayCompanions);
         m_simulatedCount = checkpoint.SimulatedCount;
         m_seatKit = checkpoint.SeatKit;
         m_revision = checkpoint.Revision;

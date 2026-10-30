@@ -198,7 +198,12 @@ public sealed partial class WorldAddonRuntime {
     // mount claim that never became true.
     private static string? BuildCapabilityDisclosureNarration(string name, IReadOnlyList<WorldCapabilityRequest>? requests, IWorldGrantsView grants) {
         var principal = Principal.Addon(name: name);
-        var held = grants.Held(grantee: principal);
+        // A role driver's body authority is derived, not held as rows: its projection names it.
+        IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> held = grants.Held(grantee: principal)
+            .Concat(second: grants.ProjectSubjects(capability: WorldCapability.Drive, principal: principal).Select(selector: static subject => (WorldCapability.Drive, subject)))
+            .Concat(second: grants.ProjectSubjects(capability: WorldCapability.Observe, principal: principal).Select(selector: static subject => (WorldCapability.Observe, subject)))
+            .Distinct()
+            .ToArray();
 
         if (
             ((requests is null) || (requests.Count == 0)) &&

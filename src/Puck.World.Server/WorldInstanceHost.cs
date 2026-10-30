@@ -1350,6 +1350,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             }
         }
 
+        ForgetCompanionsOf(stopping: instance);
         _ = m_instances.Remove(key: name);
         _ = m_deferredReaps.Remove(item: name);
         ForgetResolvedDocuments();

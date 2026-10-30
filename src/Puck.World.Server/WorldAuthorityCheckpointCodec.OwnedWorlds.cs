@@ -100,6 +100,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             mobility: member.Mobility
         );
         writer.WriteByte(value: member.FollowedSeatMask);
+        writer.WriteOptional(value: member.Companion, writeValue: WorldWireLeaves.WriteCompanion);
+        writer.WriteNullableString(value: member.PlacementId);
     }
     private static WorldLandedMemberCheckpoint ReadLandedMember(ref WireReader reader) {
         var sourceSlot = reader.ReadInt32();
@@ -128,10 +130,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         var followedSeatMask = reader.ReadByte();
+        var companion = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireLeaves.ReadCompanion(reader: ref r));
+        var placementId = reader.ReadNullableString(field: "landed member placement id", maxBytes: MaxStringBytes);
 
         return new WorldLandedMemberCheckpoint(
             AdmissionGrants: admissionGrants,
             BodyColor: bodyColor,
+            Companion: companion,
+            PlacementId: placementId,
             Designations: designations,
             DynamicState: dynamicState,
             FollowedSeatMask: followedSeatMask,

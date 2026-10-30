@@ -67,14 +67,14 @@ public sealed class CompanionRoleLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document(roles: [new WorldRole(Name: "companion", Accept: true)]));
         var module = Encoding.UTF8.GetBytes(s: "(module) ;; the visiting driver of " + nameof(ARoleDriverDrivesOnlyItsCompanion));
         var pin = ContentPin.Compute(content: module);
-        var driver = Principal.Addon(name: WorldRole.VisitorAddonName(role: "companion"));
+        var driver = Principal.Addon(name: WorldRole.VisitorAddonName(pin: pin.ToString(), role: "companion"));
         var stray = GrantSubject.Body(index: 0);
 
         _ = WorldProjectionContent.Shared.Put(content: module);
-        Assert.True(condition: fixture.Server.GrantTable.TryGrant(
+        Assert.False(condition: fixture.Server.GrantTable.TryGrant(
             grant: new WorldGrant(Budget: 4, Capability: WorldCapability.Drive, Exclusive: false, Grantee: driver, Subject: stray),
-            reason: out var strayRefusal
-        ), userMessage: strayRefusal);
+            reason: out _
+        ));
 
         var landed = Land(fixture: fixture, transferId: 1, companion: Companion(driver: pin.ToString()));
 

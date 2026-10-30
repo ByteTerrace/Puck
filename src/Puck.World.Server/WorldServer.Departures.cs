@@ -89,6 +89,7 @@ public sealed partial class WorldServer {
         // This world's own companion leaving: its placement keeps counting it and holds its slot until it returns.
         if ((companion is { Home: null }) && (placementId is { } homePlacement)) {
             m_population.MarkAway(
+                epoch: mobility.Epoch,
                 incarnation: mobility.Incarnation,
                 placementId: homePlacement,
                 slot: slot
@@ -175,9 +176,9 @@ public sealed partial class WorldServer {
             slot: detached.Slot
         );
         if (detached.Companion is { } companion) {
-            m_population.ClearAway(incarnation: detached.Mobility.Incarnation);
             m_population.RestoreCompanion(
                 binding: companion,
+                incarnation: detached.Mobility.Incarnation,
                 placementId: detached.PlacementId,
                 slot: detached.Slot
             );

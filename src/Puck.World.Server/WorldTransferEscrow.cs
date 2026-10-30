@@ -40,7 +40,11 @@ public readonly record struct WorldTransferReservationMember(Principal Principal
 /// <param name="Home">The authority identity of its home.</param>
 /// <param name="Driver">The pin (<c>sha256/…</c>) of the driver it prefers, or <see langword="null"/> when its home
 /// names none.</param>
-public readonly record struct WorldTransferCompanion(string Role, WorldEntityAddress? Follows, string Home, string? Driver);
+/// <param name="Custody">The custody token its home issued when it left, which only its home can check and which its
+/// home requires to take it back; <see langword="null"/> for a companion that has none.</param>
+/// <remarks>A destination trusts none of these as authority: <paramref name="Follows"/> binds only a player the same
+/// source authority has already landed here, and a claim on a home slot needs the home's own token.</remarks>
+public readonly record struct WorldTransferCompanion(string Role, WorldEntityAddress? Follows, string Home, string? Driver, string? Custody = null);
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
 public sealed record WorldTransferReservationRequest(
@@ -1038,10 +1042,10 @@ public sealed partial class WorldTransferEscrow {
             );
             if (reservationMember.Companion is { } companion) {
                 BindArrivingCompanion(
-                    arrival: member.Arrival,
+                    arrival: arrival,
                     companion: in companion,
-                    mobility: reservationMember.Mobility!.Value,
-                    slot: slot
+                    index: index,
+                    mobility: reservationMember.Mobility!.Value
                 );
             }
         }
@@ -1365,7 +1369,7 @@ public sealed partial class WorldTransferEscrow {
             return WorldTransferReservationReply.Refused(reason: deadlineRefusal);
         }
         foreach (var member in request.Members) {
-            if (CompanionRefusal(member: in member) is { } companionRefusal) {
+            if (CompanionRefusal(member: in member, request: request) is { } companionRefusal) {
                 return WorldTransferReservationReply.Refused(
                     companion: true,
                     reason: companionRefusal
@@ -1438,7 +1442,7 @@ public sealed partial class WorldTransferEscrow {
             // traveller may take.
             var slot = (((member.Companion is not null) &&
                 (member.Mobility is { } returning) &&
-                m_server.Population.TryFindAway(incarnation: returning.Incarnation, slot: out var homeSlot) &&
+                m_server.Population.TryFindAway(custody: member.Companion?.Custody, incarnation: returning.Incarnation, slot: out var homeSlot) &&
                 (((uint)homeSlot) < ((uint)consumed.Length)) &&
                 !m_server.Population.IsActive(index: homeSlot) &&
                 !m_leases.Values.Any(predicate: lease => lease.Slots.Contains(value: homeSlot)))

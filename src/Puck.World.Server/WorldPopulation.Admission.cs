@@ -767,7 +767,7 @@ public sealed partial class WorldPopulation {
 
         // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
-        RedressCompanions(definition: definition);
+        RebindCompanions(definition: definition);
         RebuildPlacementOrdinalTable(definition: definition);
         // A structural install can reorder or replace placements at a fixed ordinal without changing their count
         // (WorldPopulation.Step.cs.ReconcileInhabitCounts' own cache resize gate misses that), so every structural

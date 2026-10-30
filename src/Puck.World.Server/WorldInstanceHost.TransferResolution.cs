@@ -226,6 +226,15 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
+            // A companion leaves its world only with its player or to go home: its own body at a door into another
+            // world starts nothing, while a door back into its own world moves it as any body.
+            if (
+                (instance.Server.Population.Companion(index: hit.Seat) is not null) &&
+                !string.Equals(a: reference.Document, b: instance.Server.Definition.DocumentId, comparisonType: StringComparison.Ordinal)
+            ) {
+                continue;
+            }
+
             // Mirrors WorldPlacementCommandModule.DescribePortals' own resolution order exactly: the facet's own
             // travel, else the document's portals.portalDefaults.travel, else 'body' when the world declares no
             // portals section.

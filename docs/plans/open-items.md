@@ -756,6 +756,12 @@ opened by a two-silo failover witness.
   registers, and the addon ABI gives a guest no write to its own body's registers (Drive acts on channels only).
   Add a request that writes a declared `state.body` register of a body the guest drives, then move the faerie's
   stream and mood into registers declared in `companion-body.puck`. (from: companion build)
+- [medium] The faerie's portal curiosity (`companion-senses.puck`'s kind-4 points 0.9 m before each painting) can
+  carry it past a painting's glass into the wall behind it, where it stays: posed at (64, 1.6, 39.8) behind the night
+  painting with the Moth at z 35, it moved to (63.86, 1.87, 39.85) and held there. A companion no longer crosses a
+  door into another world on its own, so it no longer escapes by crossing. Find what lets it pass the glass (the
+  rim's carve collides uncarved; an embedding escape is the suspect) and what holds it there, and fix it there.
+  (from: companion build)
 - A companion follows its player through portal doors only. An adjacency seam hands bodies over one at a time
   (`ScanInstanceAdjacencies`), so a companion crosses a seam by itself, unbound from its player's crossing and
   with no role check. Route a companion's seam crossing through `CarryCompanions` like a door's.

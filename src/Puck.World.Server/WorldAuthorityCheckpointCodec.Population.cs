@@ -80,10 +80,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: static (w, v) => w.WriteInt64(value: v)
         );
         writer.WriteNullableString(value: entry.PlacementId);
-        writer.WriteOptional(
-            value: entry.Companion,
-            writeValue: WorldWireLeaves.WriteCompanion
-        );
+        // A continuation hash folds the binding without its custody token, an authority secret no simulation reads.
+        writer.WriteBoolean(value: (entry.Companion is not null));
+        if (entry.Companion is { } companion) {
+            WorldWireLeaves.WriteCompanion(binding: companion, custody: includeAppearance, writer: writer);
+        }
         writer.WriteFixedVector(value: entry.SpawnPosition);
         writer.WriteFixed(value: entry.SpawnYaw);
         writer.WriteArray(
@@ -386,6 +387,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation);
         });
         writer.WriteArray(items: (section.AwayCompanions ?? []), writeItem: WorldWireLeaves.WriteAwayCompanion);
+        writer.WriteBlock(value: (section.CustodyKey ?? []));
 
         return writer.ToArray();
     }
@@ -460,6 +462,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion()));
         var away = reader.ReadArray(field: "population away companions", maximum: WorldBodiesLimits.CapacityCeiling,
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadAwayCompanion(reader: ref r));
+        var custodyKey = reader.ReadBlock(field: "population custody key", maxBytes: 64).ToArray();
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -471,6 +474,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         section = new WorldPopulationCheckpoint(
             AttachedSolids: attached,
             AwayCompanions: away,
+            CustodyKey: custodyKey,
             Entries: entries,
             EventBodies: eventBodies,
             Generations: generations,

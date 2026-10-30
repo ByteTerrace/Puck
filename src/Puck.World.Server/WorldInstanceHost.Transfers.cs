@@ -367,6 +367,7 @@ public sealed partial class WorldInstanceHost {
                 RemoteHuman: human,
                 Companion: CompanionMember(
                     follows: transfer.Companion?.Follows,
+                    mobility: traveler.Mobility,
                     slot: sourceSlot,
                     source: source
                 )
@@ -413,9 +414,10 @@ public sealed partial class WorldInstanceHost {
                 );
             }
 
-            // A companion its home will not take back stays where it is rather than asking again every tick.
-            if ((transfer.Companion is { Home: true }) && (OccupantIncarnation(instance: source, slot: transfer.SourceSlot) is { } stranded)) {
-                _ = m_strandedCompanions.Add(item: (source.Name, stranded));
+            // A companion its home will not take back stays where it is until that home changes, rather than asking
+            // again every tick.
+            if ((transfer.Companion is { Home: true }) && (source.Server.Population.Companion(index: transfer.SourceSlot) is { } strandedBinding)) {
+                Strand(home: FindHome(binding: in strandedBinding), instance: source, slot: transfer.SourceSlot);
             }
             if (reservation.CompanionRefused) {
                 RefuseCompanions(
@@ -623,13 +625,17 @@ public sealed partial class WorldInstanceHost {
                 designations: out var designations,
                 peer: out var peer,
                 admissionGrants: out var admissionGrants,
-                sourceGrants: out var sourceGrants
+                sourceGrants: out var sourceGrants,
+                companion: out var departedCompanion,
+                placementId: out var departedPlacement
             )) {
                 abortReason = $"source member {TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} could not detach after reservation";
                 break;
             }
 
             landed.Add(item: new LandedMember(
+                Companion: departedCompanion,
+                PlacementId: departedPlacement,
                 SourceSlot: sourceSlot,
                 TargetSlot: reservedSlot,
                 Profile: profile,
@@ -1678,7 +1684,7 @@ public sealed partial class WorldInstanceHost {
     // source out from under a transfer still in flight) — see WorldPopulation.TryDetachSeatForTransfer. The
     // Drive/leave standing re-check here is defensive: ApplyTransfer's own pre-check loop already proved it
     // for every still-active member immediately before this runs, and is never load-bearing on its own.
-    private static bool TryDetachAndCaptureMember(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMember(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants, out WorldCompanionBinding? companion, out string? placementId) {
         var captured = source.Server.ExecuteAuthorityOperation(operation: () => {
             var success = TryDetachAndCaptureMemberCore(
                 actingPrincipal: actingPrincipal,
@@ -1696,12 +1702,16 @@ public sealed partial class WorldInstanceHost {
                 sourceName: sourceName,
                 sourceSlot: sourceSlot,
                 transferId: transferId,
-                yaw: out var capturedYaw
+                yaw: out var capturedYaw,
+                companion: out var capturedCompanion,
+                placementId: out var capturedPlacementId
             );
 
-            return (Success: success, Mobility: capturedMobility, Profile: capturedProfile, BodyColor: capturedBodyColor, Position: capturedPosition, Yaw: capturedYaw, State: capturedState, Designations: capturedDesignations, Peer: capturedPeer, AdmissionGrants: capturedAdmissionGrants, SourceGrants: capturedSourceGrants);
+            return (Success: success, Mobility: capturedMobility, Profile: capturedProfile, BodyColor: capturedBodyColor, Position: capturedPosition, Yaw: capturedYaw, State: capturedState, Designations: capturedDesignations, Peer: capturedPeer, AdmissionGrants: capturedAdmissionGrants, SourceGrants: capturedSourceGrants, Companion: capturedCompanion, PlacementId: capturedPlacementId);
         });
 
+        companion = captured.Companion;
+        placementId = captured.PlacementId;
         mobility = captured.Mobility;
         profile = captured.Profile;
         bodyColor = captured.BodyColor;
@@ -1714,7 +1724,9 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = captured.SourceGrants;
         return captured.Success;
     }
-    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants, out WorldCompanionBinding? companion, out string? placementId) {
+        companion = null;
+        placementId = null;
         mobility = default;
         profile = null;
         bodyColor = default;
@@ -1833,6 +1845,8 @@ public sealed partial class WorldInstanceHost {
         peer = detached.Peer;
         admissionGrants = detached.AdmissionGrants;
         sourceGrants = detached.SourceGrants;
+        companion = detached.Companion;
+        placementId = detached.PlacementId;
         return true;
     }
 
@@ -2315,7 +2329,9 @@ public sealed partial class WorldInstanceHost {
         IReadOnlyList<WorldGrant> SourceGrants,
         Principal SourcePrincipal,
         WorldMobilityIdentity Mobility,
-        byte FollowedSeatMask = 0
+        byte FollowedSeatMask = 0,
+        WorldCompanionBinding? Companion = null,
+        string? PlacementId = null
     );
     private sealed record InDoubtTransfer(
         PendingTransfer Transfer,

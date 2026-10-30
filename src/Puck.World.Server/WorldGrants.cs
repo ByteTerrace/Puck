@@ -994,6 +994,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         if (IsStaleSession(principal: principal)) {
             return new GrantVerdict(Rule: GrantRule.NoHold);
         }
+        // A role's driver acts on bodies only through its role, decided from the live bindings, never a grant row.
+        if ((m_host is { } host) && host.TryRoleVerdict(capability: capability, principal: principal, subject: subject, verdict: out var roleVerdict)) {
+            return roleVerdict;
+        }
 
         var own = Holds(
             capability: capability,
@@ -1531,6 +1535,23 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     public GrantSubject[] ProjectSubjects(Principal principal, WorldCapability capability) {
         var projectedSet = new HashSet<GrantSubject>();
 
+        // A role's driver projects the bodies its role derives and, for Observe, the non-body rows it holds; it holds
+        // nothing else (see WorldServer.TryRoleVerdict).
+        var roleDriver = false;
+
+        if (m_host?.RoleProjection(capability: capability, principal: principal) is { } derived) {
+            if (capability == WorldCapability.Drive) {
+                return [.. derived];
+            }
+            if (capability != WorldCapability.Observe) {
+                return [];
+            }
+            roleDriver = true;
+            foreach (var subject in derived) {
+                _ = projectedSet.Add(item: subject);
+            }
+        }
+
         if (
             m_byGrantee.TryGetValue(
             key: principal,
@@ -1539,7 +1560,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             (grants.For(capability: capability) is { } subjects)
         ) {
             foreach (var subject in subjects) {
-                if (IsProjectable(subject: subject)) {
+                if (IsProjectable(subject: subject) && !(roleDriver && (subject.Kind == GrantSubjectKind.Body))) {
                     _ = projectedSet.Add(item: subject);
                 }
             }
@@ -1849,14 +1870,20 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     }
 
     /// <inheritdoc/>
-    public bool TryGetBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget) =>
-        TryGetGrantValue(
+    public bool TryGetBudget(Principal principal, WorldCapability capability, GrantSubject subject, out ushort budget) {
+        // A role's driver spends the budgets its role grants over each body the role derives.
+        if ((m_host is { } host) && host.TryRoleBudget(budget: out budget, capability: capability, principal: principal, subject: subject)) {
+            return true;
+        }
+
+        return TryGetGrantValue(
             capability: capability,
             grantee: principal,
             subject: subject,
             table: m_budgets,
             value: out budget
         );
+    }
     /// <inheritdoc/>
     public bool TryGetChannelReach(Principal principal, GrantSubject subject, WorldChannelTable channels, out ChannelReachMask mask) {
         var found = TryGetInputReach(principal: principal, selection: out var selection, subject: subject);
@@ -1970,6 +1997,15 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <returns><see langword="true"/> when the grant was added.</returns>
     public bool TryGrant(WorldGrant grant, out string reason) {
         if (grant.Consent is { Registers: not 0 }) { reason = "pool consent cannot name target registers"; return false; }
+        if (
+            (m_host is { } roleHost) &&
+            grant.Grantee.TryGetPrincipal(principal: out var grantedPrincipal) &&
+            roleHost.IsRoleDriver(principal: grantedPrincipal) &&
+            ((grant.Capability != WorldCapability.Observe) || (grant.Subject.Kind is GrantSubjectKind.Body or GrantSubjectKind.All))
+        ) {
+            reason = $"{grantedPrincipal.Describe()} drives a companion role: its body authority comes from the role alone, and it holds no {grant.Capability.ToString().ToLowerInvariant()} grant over {grant.Subject.Describe()}";
+            return false;
+        }
         if (m_host is not null) {
             foreach (var name in (grant.Reach?.Channels ?? [])) {
                 if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"reach names undeclared channel '{name}'"; return false; }
@@ -2071,8 +2107,17 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
     /// <inheritdoc/>
     /// <remarks>Bumped by every mutator that changes a principal's held subject sets — <see cref="TryGrant"/>, a
-    /// removing <see cref="Revoke"/>, and the engagement-route helpers below — never by a read.</remarks>
-    public int Revision => m_revision;
+    /// removing <see cref="Revoke"/>, and the engagement-route helpers below, and whenever a role's derived body
+    /// authority moves with the population; reading it first brings that derivation up to date.</remarks>
+    public int Revision {
+        get {
+            m_host?.RefreshRoleAuthority();
+            return m_revision;
+        }
+    }
+
+    // A role driver's derived bodies moved: every handle table and disclosure over the table re-projects.
+    internal void NoteDerivedAuthorityMoved() => m_revision++;
 
     // One grantee's five per-capability subject sets, allocated lazily. A struct held by ref in the dictionary; the
     // sets are reference types so ref-mutation persists.

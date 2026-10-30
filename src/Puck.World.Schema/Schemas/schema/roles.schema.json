@@ -23,7 +23,7 @@
         "default": null
       },
       "accept": {
-        "description": "Whether this world runs a visitor\u0027s own preferred driver, resolved by its pin from the process content store and verified before it mounts, under this world\u0027s Fuel and grants. One visiting driver runs per role; a companion preferring a different pin while one runs is refused at reservation.",
+        "description": "Whether this world runs a visitor\u0027s own preferred driver, resolved by its pin from the process content store and verified before it mounts, under this world\u0027s Fuel. One visiting driver runs per verified pin and drives only the companions that prefer it.",
         "type": "boolean",
         "default": false
       },

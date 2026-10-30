@@ -406,26 +406,44 @@ mapped companion arrival starts from within its role's `followReach` of the door
 and is mirrored through the face to the side its player came out of, so a
 trailing companion never lands behind the destination's door.
 
-The destination decides at reservation (`WorldTransferEscrow.CompanionRefusal`):
-its own companion coming home is always taken, by incarnation, into the slot its
-placement held (`WorldPopulation.MarkAway`/`TryReadoptAway`: the away companion
-counts toward its placement, so a reload spawns no replacement); a world with no
-row for the role refuses; an `accept` row refuses a pin the process content store
-(`WorldProjectionContent.Shared`) cannot resolve and verify, or a second visiting
-pin while one runs. A role refusal answers `CompanionRefused`; the source tells
-the player (`WorldInstanceHost.CompanionNotice`, the toast) and a companion away
-from home goes home. A companion whose player is no longer beside it is sent
-home by the drain's separation sweep. Its home must be an authority this host
-runs; a remote home is reported and the companion stays.
+The destination trusts nothing a sender claims. At reservation
+(`WorldTransferEscrow.CompanionRefusal`) a traveller naming one of this world's
+away companions is taken only with the custody token this world issued as it
+left (`WorldPopulation.CustodyToken`, an HMAC over incarnation and departure
+epoch under a checkpointed per-authority key; the key and token never enter a
+state hash), and then into the slot its placement held (`MarkAway`/
+`TryReadoptAway`: the away companion counts toward its placement, so a reload
+spawns no replacement). A world with no row for the role refuses; an `accept`
+row refuses a pin the process content store (`WorldProjectionContent.Shared`)
+cannot resolve and verify, or one more visiting driver than the document's addon
+ceilings fit, counting present, pending and carried pins. The followed player
+binds at landing only when it is a traveller of the same request or one the same
+source authority landed here and that is still here; otherwise the companion
+follows no one and goes home. A role refusal answers `CompanionRefused`; the
+source tells the player (`WorldInstanceHost.CompanionNotice`, the toast) and a
+companion away from home goes home. The drain's separation sweep sends home a
+companion whose followed player (by verified incarnation, `FollowedBody`) is no
+longer here; one whose home is not running or refused it waits until that home
+starts, restarts or changes its document. A host stopping an instance with a
+visitor in it frees the slot its colocated home held, and a structural install
+re-derives home bindings from their placements and forgets away rows whose
+placement is gone.
 
-`WorldServer.ReconcileRoles` runs before the addon pump: each role's driver
-(its named addon, or the generated `role$<name>` visiting driver) holds Drive and
-Observe over each companion of the role and Observe over the player it follows,
-and every other body hold it has is revoked. An `accept` role mounts its visiting
-driver as an addons row with an empty `modulePath`, resolved by pin from the
-content store, while a visitor of the role is present, and removes it after.
-Started instances mount their own addon runtime (`AddonHostFactory`). Read a
-companion in another instance with `body.where body:<n> instance:<name>`.
+A role driver's body authority is derived, never granted
+(`WorldServer.TryRoleVerdict`, consulted first by `WorldGrants.Allows`,
+`ProjectSubjects` and `TryGetBudget`): Drive and Observe over exactly the
+companions bound to it, at their current generation, and Observe over each one's
+followed player; no Drive, Control, Mutate or Edit over anything else, and
+`TryGrant` refuses it every such row, keeping only Observe over non-body rows
+(the faerie's senses). The derivation refreshes with the population and moves
+the grant table's revision when it changes. A role row's named addon drives all
+its companions; an `accept` role mounts one visiting driver per verified pin
+(`role$<role>$<pin prefix>`, an addons row with an empty `modulePath`), each
+bound to the companions preferring it, and removes it once none does
+(`ReconcileRoles`). Started instances mount their own addon runtime
+(`AddonHostFactory`). Read a companion in another instance with `body.where
+body:<n> instance:<name>`, which answers only a caller that may observe it there
+(`WorldServer.AnswerObservedWhere`).
 
 ## Input and action continuity
 

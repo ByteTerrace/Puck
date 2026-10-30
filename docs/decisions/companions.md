@@ -118,15 +118,27 @@ A companion is an inhabit facet holding a `role` and the local seat it
 the same door, carrying its role, its player's incarnation, its home and its
 preferred driver's pin on the reservation member. Its home publishes the
 driver's module bytes into the process content store as it leaves; an `accept`
-destination verifies them against the pin at reservation and mounts them as an
-addon row named by pin alone. The role, never a body slot, decides the driver's
-grants: Drive and Observe over each companion of the role and Observe over the
-player it follows, re-derived whenever the population moves.
+destination verifies them against the pin at reservation and mounts one driver
+per verified pin, as an addon row named by pin alone, each driving only the
+companions that prefer it.
+
+The destination trusts none of what a sender claims (the cap-trust rule). A
+role driver's body authority is derived from the live bindings wherever a grant
+is checked, never granted: Drive and Observe over exactly its own companions and
+Observe over each one's player, and no other body, control, mutation or edit
+grant can be held by it at all. The followed player binds only when the
+destination verified it: a traveller of the same crossing, or one the same
+source already landed there. Home re-adopts its own companion by incarnation into
+the slot and placement it left, and counts it present while it is away, but only
+a traveller presenting the custody token home issued at departure (keyed to
+the incarnation and departure epoch by a secret only home holds) can claim that
+slot.
 
 A companion that arrives behind its player is set down just through the door
 within its role's follow reach, so it never lands behind the destination's
-door. Home re-adopts its own companion by incarnation into the slot and
-placement it left, and counts it present while it is away.
+door. A companion whose home is not reachable waits until it is, and a home
+forgets an away companion whose placement it no longer authors or whose host
+stopped the world it was in.
 
 Two parts remain open in the transfers packet of the
 [open items](../plans/open-items.md#transfers-federation-and-server): a remote

@@ -45,6 +45,10 @@ public abstract record WorldPendingOpCheckpoint {
 /// once more by a co-hosted commit resolution when it mints the onward forwarded arm's lease.</param>
 /// <param name="FollowedSeatMask">Local roster slots following this member at detach. Retained through partial
 /// route publication so a retry cannot vacate a participant whose route already moved.</param>
+/// <param name="Companion">The member's companion binding at detach, restored by a rollback, or
+/// <see langword="null"/>.</param>
+/// <param name="PlacementId">The placement the member inhabited at detach, restored by a rollback, or
+/// <see langword="null"/>.</param>
 public sealed record WorldLandedMemberCheckpoint(
     int SourceSlot,
     int TargetSlot,
@@ -57,7 +61,9 @@ public sealed record WorldLandedMemberCheckpoint(
     IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
     IReadOnlyList<WorldGrant> SourceGrants,
     WorldMobilityIdentity Mobility,
-    byte FollowedSeatMask = 0
+    byte FollowedSeatMask = 0,
+    WorldCompanionBinding? Companion = null,
+    string? PlacementId = null
 );
 /// <summary>One unresolved or publication-pending transfer's checkpointed state, addressed as data — never the live
 /// <see cref="WorldInstanceHost"/> peer handle a restore re-materializes on demand.</summary>

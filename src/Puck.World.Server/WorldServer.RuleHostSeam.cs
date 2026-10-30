@@ -26,6 +26,18 @@ public sealed partial class WorldServer {
 
     /// <inheritdoc cref="WorldRuleHost.Answer"/>
     public QueryAnswer Answer(WorldQuery query) => m_ruleHost.Answer(query: query);
+    /// <summary>Answers one body's pose read-back for <paramref name="principal"/>, refused by name when the principal
+    /// may not observe that body here: the door an operator's read of another instance's body goes through.</summary>
+    /// <param name="principal">The acting principal.</param>
+    /// <param name="body">The zero-based body index.</param>
+    /// <returns>The pose answer, or a refusal.</returns>
+    public QueryAnswer AnswerObservedWhere(Principal principal, int body) => ((m_grants.Allows(
+        capability: WorldCapability.Observe,
+        principal: principal,
+        subject: GrantSubject.Body(index: body)
+    ) is { IsAllowed: false } denied)
+        ? new QueryAnswer(Refused: true, Text: $"[body.where: {principal.Describe()} cannot observe body:{body} — {denied.DescribeDenial()}]")
+        : Answer(query: new WorldQuery.PlayerWhere(Index: body)));
     /// <inheritdoc cref="WorldRuleHost.AnswerSubmittedQuery"/>
     public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) =>
         m_ruleHost.AnswerSubmittedQuery(

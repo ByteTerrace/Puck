@@ -9,8 +9,8 @@ namespace Puck.World;
 /// <param name="Driver">The <see cref="WorldAddonRow.Name"/> of this world's own addon that drives the role: the same
 /// pinned driver a visitor prefers, or one the author substitutes. Exactly one of this and <paramref name="Accept"/>.</param>
 /// <param name="Accept">Whether this world runs a visitor's own preferred driver, resolved by its pin from the
-/// process content store and verified before it mounts, under this world's <paramref name="Fuel"/> and grants. One
-/// visiting driver runs per role; a companion preferring a different pin while one runs is refused at reservation.</param>
+/// process content store and verified before it mounts, under this world's <paramref name="Fuel"/>. One visiting
+/// driver runs per verified pin and drives only the companions that prefer it.</param>
 /// <param name="Kit">The <see cref="WorldKit.Name"/> an arriving companion moves under. Absent: the default peer kit.
 /// A companion re-adopted by its own home placement wears that placement's kit instead.</param>
 /// <param name="Look">The <see cref="WorldLook.Name"/> an arriving companion wears. Absent: the default look.</param>
@@ -35,14 +35,30 @@ public sealed record WorldRole(
 ) {
     /// <summary>The follow reach a role that authors none holds, in metres.</summary>
     public const double DefaultFollowReach = 2.0;
-    /// <summary>The addon name the visiting driver of a role mounts under: generated, so no authored row can take
-    /// it.</summary>
+    /// <summary>The addon name a visiting driver of a role mounts under: one per verified pin, generated, so no
+    /// authored row can take it.</summary>
     /// <param name="role">The role name.</param>
+    /// <param name="pin">The driver's pin (<c>sha256/…</c>).</param>
     /// <returns>The generated addon name.</returns>
-    public static string VisitorAddonName(string role) => Puck.State.GeneratedName.Join("role", role);
+    public static string VisitorAddonName(string role, string pin) {
+        var hex = pin[(pin.LastIndexOf(value: '/') + 1)..];
 
-    /// <summary>Gets the addon name whose guest drives this role: <see cref="Driver"/>, or the visiting driver's
-    /// generated name for an <see cref="Accept"/> role.</summary>
-    [JsonIgnore]
-    public string DriverAddonName => (Driver ?? VisitorAddonName(role: Name));
+        return Puck.State.GeneratedName.Join("role", role, hex[..Math.Min(val1: 16, val2: hex.Length)]);
+    }
+    /// <summary>Returns whether <paramref name="addonName"/> is spelled as a visiting driver of <paramref name="role"/>,
+    /// which only the engine mounts.</summary>
+    /// <param name="addonName">The addon name.</param>
+    /// <param name="role">The role name.</param>
+    /// <returns><see langword="true"/> for a generated visiting-driver name of the role.</returns>
+    public static bool IsVisitorAddonName(string addonName, string role) => addonName.StartsWith(
+        comparisonType: StringComparison.Ordinal,
+        value: (Puck.State.GeneratedName.Join("role", role) + Puck.State.GeneratedName.Joiner)
+    );
+
+    /// <summary>Returns the addon whose guest drives a companion of this role that prefers <paramref name="pin"/>:
+    /// this world's own <see cref="Driver"/>, or for an <see cref="Accept"/> role the visiting driver of that pin, or
+    /// <see langword="null"/> when an accept role's companion prefers no driver.</summary>
+    /// <param name="pin">The companion's preferred driver pin, or <see langword="null"/>.</param>
+    /// <returns>The driving addon's name, or <see langword="null"/>.</returns>
+    public string? DriverFor(string? pin) => (Driver ?? ((pin is null) ? null : VisitorAddonName(pin: pin, role: Name)));
 }

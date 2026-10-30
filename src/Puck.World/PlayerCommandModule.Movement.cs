@@ -1071,8 +1071,8 @@ internal sealed partial class PlayerCommandModule {
                 ) {
                     return CommandResult.Error(output: "[body.where: instance-targeted body:<n> must name a zero-based body index]");
                 }
-
-                var bodyAnswer = instance.Server.Answer(query: new WorldQuery.PlayerWhere(Index: entity));
+                // A read of another instance's body answers only what the caller may observe there.
+                var bodyAnswer = instance.Server.AnswerObservedWhere(body: entity, principal: context.Principal);
 
                 return new CommandResult(Output: WithInstanceTag(
                     text: bodyAnswer.Text,

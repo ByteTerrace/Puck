@@ -23,6 +23,8 @@ public sealed partial class WorldInstanceHost {
                 DynamicState: member.DynamicState,
                 Mobility: member.Mobility,
                 FollowedSeatMask: member.FollowedSeatMask,
+                Companion: member.Companion,
+                PlacementId: member.PlacementId,
                 Peer: member.Peer,
                 Position: member.Position,
                 SourceGrants: member.SourceGrants,

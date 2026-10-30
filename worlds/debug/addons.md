@@ -287,7 +287,7 @@ steady `companion-steady` look) is [companion-body.puck](companion-body.puck),
 which the night field and the garden import. The debug world names this guest as
 the role's driver (`roles` in [debug.puck](debug.puck)); the standard accepts
 visiting drivers, so in the night field and the garden the faerie's own pinned
-guest mounts as `role$companion`, by its pin from the content store, under that
+guest mounts as `role$companion$<pin prefix>`, by its pin from the content store, under that
 world's fuel and the role's grants. When its player walks through a painting the
 faerie takes its own crossing right after, arriving just through the door; when
 she comes home it is re-adopted into its placement at body 42. A world that
