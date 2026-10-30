@@ -696,6 +696,11 @@ unbindable; `WorldReplayInspector`) prints a saved tape to stdout, every line
   capture seconds, admission tick, event identity, activation and paired hold;
   text prints its Unicode scalar. A switch prints its commit tick/epoch,
   selected tuples, consumed activations, cancellations and kept hold origins.
+  An owner's first appearance and each change of its mode, revision or epoch
+  print a header, `input seat2 mode='…' revision=1 epoch=1`, naming every live
+  action of that mode with its value (`action.strafe:Bipolar=<value>(<raw>)`, or
+  `event-only`) and any hold; that tick's events still name only the channels
+  that changed (`ReplayInspectLawTests`).
   A tape segment (`body.fly`) prints the lanes it drives by bank address,
   `segment p1 2s [@3=1 @35=0.5] by console`: its raw bank belongs to the mapping
   of the tick that consumes it, so no name from a fixed or later table labels it.

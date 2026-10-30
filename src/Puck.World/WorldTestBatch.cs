@@ -174,8 +174,8 @@ internal sealed class WorldTestBatch {
         }, null, TimeSpan.FromSeconds(seconds: leg.ExitAfterSeconds), Timeout.InfiniteTimeSpan);
         source.SourcePath = WorkingWorld;
         if (m_reusable && !freshHost) {
-            if (!WorldDefinitionLoader.TryLoadForAdmission(File.ReadAllBytes(path: WorkingWorld), WorkingWorld, out var admission, out var reason,
-                neighbours: server.Neighbours, catalog: server.Machines.ValidationCatalog, documentDirectory: m_workingDirectory)) {
+            if (!WorldDefinitionLoader.TryLoadFileForAdmission(WorkingWorld, out var admission, out _, out var reason,
+                catalog: server.Machines.ValidationCatalog)) {
                 throw new InvalidOperationException(message: reason);
             }
             var checkpoint = server.Persistence.ScenarioCheckpoint(admission: admission!, boot: m_boot);

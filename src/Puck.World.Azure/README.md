@@ -180,7 +180,7 @@ pipeline to list an explicitly named resource group's resources. The
 shows the complete no-C# wiring. Source settings pin `resourceGroup`, `apiVersion`,
 and `resourceType`; optional `namePrefix` and `excludeNames` narrow membership.
 `resourceGroup` is either an absolute `/subscriptions/<id>/resourceGroups/<name>` ID
-or a bare group name. A bare name commits no subscription: the first read lists the
+or a bare group name. For a bare name, the first read lists the
 credential's enabled subscriptions, asks each for the group, and reads the one that
 holds it, refusing the read when none or several do.
 `fields` maps disclosure names to slash-separated property paths such as `/id`,

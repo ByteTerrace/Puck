@@ -28,17 +28,23 @@ public sealed class ReplayInspectLawTests {
         Assert.Contains(actualString: ranged, expectedSubstring: "forward AxisSample");
         Assert.DoesNotContain(collection: run.Inspect(), filter: line => line.Contains(comparisonType: StringComparison.Ordinal, value: "DIVERGED"));
     }
+    // An owner's first appearance (or a mode switch) prints a header naming its current mode and every live
+    // action's value there, as the input decision's read-back requires; its events still name only what changed.
     [Fact]
     public void EachOwnersEventsNameOnlyItsChangedChannels() {
         using var run = new Recording();
 
         run.Record(secondSeat: true);
         var line = Assert.Single(collection: run.Inspect(), predicate: text => (TickOf(line: text) == 1));
+        var fragments = line.Split(separator: "; ");
+        var sample = Assert.Single(collection: fragments, predicate: text => text.Contains(comparisonType: StringComparison.Ordinal, value: " admittedTick="));
+        var header = Assert.Single(collection: fragments, predicate: text => text.Contains(comparisonType: StringComparison.Ordinal, value: "input seat2 mode="));
 
-        Assert.Contains(actualString: line, expectedSubstring: "seat2 strafe AxisSample");
-        Assert.Contains(actualString: line, expectedSubstring: "raw=-32768");
+        Assert.StartsWith(actualString: sample, expectedStartString: "seat2 strafe AxisSample#");
+        Assert.Contains(actualString: sample, expectedSubstring: "raw=-32768");
+        Assert.Contains(actualString: header, expectedSubstring: "action.strafe:Bipolar=");
+        Assert.Contains(actualString: header, expectedSubstring: "(-32768)");
         Assert.DoesNotContain(actualString: line, expectedSubstring: "seat1");
-        Assert.DoesNotContain(actualString: line, expectedSubstring: "forward");
     }
     [Fact]
     public void AnAuthorityEntryPrintsWithoutAnInputEvent() {
