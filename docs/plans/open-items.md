@@ -26,40 +26,43 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
+1. [Dual-stick play and the Moth's motion](#dual-stick-play-and-the-moths-motion):
+   land the controls review's follow-up branch, whose sliced-sweep fillet fix
+   is a high that blocks the owner's main push.
+2. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
    (depth visibility leaks at every silhouette) with the zero-weight gather
    fallback in the same change, then the trace cost and the wrapped-diffuse sun
    leak. In flight: probe-depth-fix.
-2. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
+3. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
    the walkthrough's other high; `SdfMeshInstance.Matrix` already scales at
    draw, so the fix is in the dynamic bake path's identity and detail.
-3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a hot-reload code revision as one invalidation contract (emitter revisions
    and the static field), then the persisted caches keyed by the modules as
    built; a product of edited code under the unedited identity is the hazard.
-4. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), the per-swap state load, then the schema switch.
-5. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
+6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
    break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
    `--reproduce`, including the unexplained Go CPU regression in the loaded
    boot-reuse comparison.
-6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-7. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-8. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
    it in `panes` and answers under pause, then the diagnostics' windowed checks
    and the developer exhibits.
-9. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
-   chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
-   then one paired windowed tour when no lane holds the GPU.
-10. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+    chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
+    then one paired windowed tour when no lane holds the GPU.
+11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     isolate the temporal-off cadence blink first, then why history never
     resolves the jitter.
-11. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -290,6 +293,12 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   - [medium] The CLI computes `ScenarioBootShape` over the raw staged JSON with unresolved `basis`/`imports` while the server compares the composed definition, so a census row whose inhabiting placement comes from an import lands on a shared worker and the server aborts it ("requires its own worker") (`TestCommand.Batch.cs:10-19`, `WorldPersistence.Scenarios.cs:83-91`).
   - [low] `RestoreCheckpointCore` delivers the restored definition to attached sinks before `ResetClockSeeds` and `GrantTable.SyncState`, so a projection sink seeding trait clocks reads the previous scenario's seeds (presentation only) (`WorldPersistence.Scenarios.cs:138-142`, `WorldPersistence.Checkpoint.cs:1048`).
 
+- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels`
+  fails on the integration tip, twice alone: the tick-1 inspect line, which
+  should name only seat 2's strafe sample, also carries `action.forward:Bipolar=0(0)`
+  in a `revision=1 epoch=1` channel listing. The fixture is the in-code default
+  document, and no controls change touches inspection; the commit that broke it
+  is not isolated. CI's suite run is red until it is fixed.
 - [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (boot-reuse-report.md, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
 
 - [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
@@ -613,13 +622,38 @@ movement-facing scheme returns.
   secondary wings spacing; their appearance remains unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
-- [medium · owner: lead review] Run the required adversarial cross-family
-  review-and-fix pass on controls' engine changes: relative input boundaries,
-  camera state, headless wheel commits, per-seat preferences, timed impulses
-  and the analytic sweep correction. The controls worktree's
-  `.claude/scratch/controls-review-brief.md` names the scope and hunt list.
-  File findings in this packet; review does not block landing, and every high
-  finding must be resolved or explicitly deferred before the owner's main push.
+- [high · owner: lead integration] Land the controls review's follow-up
+  branch. It fixes R1 (high): the sliced analytic sweep measured each slice's
+  edge rule from that slice's start, so a body lowered onto a nearly flat fillet
+  read it as a riser (`RoundedBoxContactLawTests.ANearlyFlatFilletBelowTheFootRemainsWalkable`
+  failed on the landed lane); R2 (medium): it sliced and spent the 64-slice
+  budget in clear space, so a small fast body stopped short and read `Unproved`;
+  R3 (medium): `player.camera.boom` refused input while a wheel was open, an
+  engine policy duplicating the standard's hold-page bindings. The high blocks
+  the owner's main push until this lands.
+- [low · owner: play-feel lane] A timed impulse integrates only inside
+  `IntegratePlanarAndVerticalVelocity` and `IntegrateScratchVelocity`
+  (`WorldBody.Step.cs`, `IntegrateOverlay`). On a body whose motion program has
+  neither op, `planarImpulse` neither moves it nor drains `m_overlayRemaining`, so
+  the burst waits and fires when the body next runs an integrating program.
+  No shipped program lacks one (`walk`; `rangeLoop` is a producer). Failing case,
+  unrun: a kit whose program has no integration takes a rule's `planarImpulse`,
+  then selects a walking kit. Drain or refuse the overlay there.
+- [low · owner: play-feel lane] `dashPose` (`worlds/debug/avatars/moth.puck`)
+  is one cell keyed `"0"`, so only body 0's dash drives the torso lean and pod
+  flare; a second seat's Moth dashes unlit. `airPose`, `airWings` and
+  `bootBoost` share the pattern; key all of them per body together.
+- [low · owner: play-feel lane] `player.binding-bar model <value>`
+  (`WorldBindingCommandModule.BindingBar.cs`) stores any text, and every value
+  but `single` stacks (the `ModelCell` contract): `player.binding-bar model
+  singel` echoes `model=singel` and `world.binding-bar` reads `stacked true` on
+  a headless debug World. Refuse an unknown model by name.
+- [low · owner: play-feel lane] A requested boom distance replaces the orbit
+  op's distance outright (`SdfCameraProgram.Evaluate`, `look.Distance ??
+  orbit.Distance.Resolve`), and `WorldSeatViewState.AuthoredDistance` reads the
+  first orbit op's literal. A scalar-bound orbit distance stops responding after
+  the first scroll; the Moth's is a literal 4.2. Unconfirmed in a world: none
+  binds one yet.
 
 - Make the debug world's dual-stick action play fluid. In: the seat camera
   presents its look at the fraction the body is drawn at, so camera and steered
