@@ -1400,17 +1400,15 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="destination">The asking destination: this lane's authenticated namespace.</param>
     /// <param name="phase">The decision the question belongs to; it correlates the answer to this question alone.</param>
     public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
+        var question = WorldFederationCodec.EncodeHopQuery(key: key, incarnations: incarnations, phase: phase);
+
         _ = TryResolveTransferStep(
             sourceAuthority: destination,
             transferId: key.TransferId,
             kind: WorldFederationRequest.HopQuery,
-            body: () => WorldFederationCodec.EncodeHopQuery(
-                incarnations: incarnations,
-                key: key,
-                phase: phase
-            ),
+            body: () => question,
             answer: out var answer,
-            correlation: $"{key.SourceAuthority}|{(byte)phase}|{string.Join(',', incarnations)}"
+            correlation: Convert.ToHexString(inArray: question)
         );
 
         return (((answer.Kind == WorldFederationResponse.HopQueryReply) && WorldFederationCodec.TryDecodeHopQueryReply(
@@ -1428,16 +1426,15 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="asker">The asking title authority: this lane's authenticated namespace.</param>
     /// <returns>The answer; <see cref="WorldCustodyAnswer.Uncertain"/> when the peer gave no usable answer.</returns>
     public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) {
+        var question = WorldFederationCodec.EncodeCompanionHop(key: key, incarnation: incarnation);
+
         _ = TryResolveTransferStep(
             sourceAuthority: asker,
             transferId: key.TransferId,
             kind: WorldFederationRequest.CustodyQuery,
-            body: () => WorldFederationCodec.EncodeCompanionHop(
-                incarnation: incarnation,
-                key: key
-            ),
+            body: () => question,
             answer: out var answer,
-            correlation: $"{key.SourceAuthority}|{incarnation}"
+            correlation: Convert.ToHexString(inArray: question)
         );
 
         return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: (WorldCustodyAnswer)answer.Body.Span[0]))
@@ -1451,16 +1448,15 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="source">The settling custodian: this lane's authenticated namespace.</param>
     /// <returns><see langword="true"/> once the peer acknowledged the notice.</returns>
     public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) {
+        var question = WorldFederationCodec.EncodeCompanionHop(key: key, incarnation: incarnation);
+
         _ = TryResolveTransferStep(
             sourceAuthority: source,
             transferId: key.TransferId,
             kind: WorldFederationRequest.HopSettled,
-            body: () => WorldFederationCodec.EncodeCompanionHop(
-                incarnation: incarnation,
-                key: key
-            ),
+            body: () => question,
             answer: out var answer,
-            correlation: $"{key.SourceAuthority}|{incarnation}"
+            correlation: Convert.ToHexString(inArray: question)
         );
 
         return ((answer.Kind == WorldFederationResponse.HopSettledAck) && (answer.Body.Length == 1) && (answer.Body.Span[0] == 1));
@@ -1474,17 +1470,15 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <returns>One answer per companion; each <see cref="WorldHopVerdict.Unavailable"/> when the peer gave no usable
     /// answer.</returns>
     public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) {
+        var question = WorldFederationCodec.EncodeHopRequest(key: key, destination: destination, members: members);
+
         _ = TryResolveTransferStep(
             sourceAuthority: source,
             transferId: key.TransferId,
             kind: WorldFederationRequest.HopRequest,
-            body: () => WorldFederationCodec.EncodeHopRequest(
-                destination: destination,
-                key: key,
-                members: members
-            ),
+            body: () => question,
             answer: out var answer,
-            correlation: $"{key.SourceAuthority}|{destination}|{string.Join(',', members.Select(selector: static member => $"{member.Incarnation}@{member.Epoch}"))}"
+            correlation: Convert.ToHexString(inArray: question)
         );
 
         return (((answer.Kind == WorldFederationResponse.HopAnswer) && WorldFederationCodec.TryDecodeHopAnswer(

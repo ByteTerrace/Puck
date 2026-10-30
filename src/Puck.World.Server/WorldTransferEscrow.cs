@@ -1901,6 +1901,9 @@ public sealed partial class WorldTransferEscrow {
         var mobility = member.Mobility!.Value;
         var incarnation = mobility.Incarnation;
 
+        if (!string.Equals(a: companion.Home, b: incarnation.Authority, comparisonType: StringComparison.Ordinal)) {
+            return (WorldCompanionRefusal.Unverified, "the companion's home is not its incarnation's title authority");
+        }
         if (string.Equals(a: incarnation.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal)) {
             return ReturnRefusal(
                 custodian: key.SourceAuthority,

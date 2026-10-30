@@ -95,8 +95,8 @@ public sealed partial class WorldInstanceHost {
         var forwarded = new List<WorldForwardedBodyCheckpoint>();
 
         if (arrived) {
-            foreach (var member in pending.Landed) {
-                if (m_forwardedBodies.TryGetValue(
+            foreach (var (member, ordinal) in pending.Landed.Select(selector: static (member, ordinal) => (member, ordinal))) {
+                if (((landed is null) || landed.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))) && m_forwardedBodies.TryGetValue(
                     key: (source.Server, member.Mobility.Incarnation),
                     value: out var body
                 )) {
@@ -313,14 +313,14 @@ public sealed partial class WorldInstanceHost {
     }
     // Restores the members a settlement did not land; whichever cannot be restored now (its slot is taken) stays a
     // restore-only obligation of the source, retried at every drain and carried by its checkpoint.
-    private void RestoreOrRetain(InDoubtTransfer pending, WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
+    private bool RestoreOrRetain(InDoubtTransfer pending, WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
         if (RestoreDetachedMembers(
             commits: commits,
             members: members,
             source: source,
             transferId: pending.Transfer.TransferId
         )) {
-            return;
+            return true;
         }
         // Settled already, the row asks no destination: it owes only the restoration, neither a commit nor a rollback.
         var retained = pending with {
@@ -333,6 +333,7 @@ public sealed partial class WorldInstanceHost {
 
         retained.SettlementRecorded = true;
         m_inDoubtTransfers.Add(item: retained);
+        return false;
     }
     private void RedoSettlement(WorldInstance row, WorldCrossingRecord.Settlement settlement) {
         var index = m_inDoubtTransfers.FindIndex(match: pending => (string.Equals(
@@ -385,14 +386,12 @@ public sealed partial class WorldInstanceHost {
         var kept = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !settlement.Retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
 
         pending.SettlementRecorded = true;
-        m_inDoubtTransfers[index] = pending;
-        if (RestoreDetachedMembers(
+        m_inDoubtTransfers.RemoveAt(index: index);
+        RestoreOrRetain(
             commits: [.. kept.Select(selector: ordinal => pending.CommitMembers[ordinal])],
             members: [.. kept.Select(selector: ordinal => pending.Landed[ordinal])],
-            source: row,
-            transferId: pending.Transfer.TransferId
-        )) {
-            m_inDoubtTransfers.RemoveAt(index: index);
-        }
+            pending: pending,
+            source: row
+        );
     }
 }

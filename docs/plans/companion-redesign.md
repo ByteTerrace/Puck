@@ -513,7 +513,7 @@ only after a loss (a retry with nothing lost is the duplicate the `Dup` fault pr
 status query may race the delayed commit it asks about, and shedding runs whatever
 attempt is in flight.
 
-**The engine refines the model.** `CompanionCustodyRefinementLawTests`
+**The built crossing paths are checked against the model.** `CompanionCustodyRefinementLawTests`
 (`tests/Puck.World.Server.Tests`, in the ordinary suite) runs real authorities (`CompanionRows`:
 home and two custodians in one host, each with a durable crossing log) while the model follows:
 every peer call at the `IWorldPeerCall` and `IWorldCustodyPeer` seams and every crossing-log append
@@ -529,6 +529,14 @@ strand, shed, retire, resolve) is reported as deferred, not as a failure, and so
 model's per-obligation retry count, which bounds the model's state space where the engine retries
 every drain.
 
+The fixture retains all three authorities and uses local player seats. Its result
+therefore excludes automatic reaping, explicit stop, and remote-player forwarding;
+the adversarial crossing laws separately exercise reaping and a partial onward
+remote-player crossing. It also does not cover two concurrent federation questions
+or sustained transient refusals through the engine's retry ceiling. The deferred
+moves and these exclusions are limits of the refinement claim, not successful
+checks of those behaviours. Persisted autonomous reservation principals use the
+checkpoint 28 / tape 12 shape; incoming federation actors still cannot claim `World`.
 | Finding (spec review) | Trace |
 |---|---|
 | Destinations never verify home's hop authorization | `ADestinationVerifiesHomesHopAuthorization`, `AForgedReturnToHomeIsStale…` |

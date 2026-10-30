@@ -160,6 +160,12 @@ public sealed class WorldCompanionCustody {
     /// <summary>Gets a copy of every custody record this authority folded, in fold order: what a checkpoint captures. Each
     /// call returns records of its own, so nothing a caller does to them reaches this authority's history.</summary>
     public IReadOnlyList<WorldCrossingRecord> History => [.. m_history.Select(selector: Owned)];
+    /// <summary>Gets whether an unsettled title or crossing still requires this authority. An empty population is
+    /// not evidence that its companions are gone: their home and recovery records must remain reachable.</summary>
+    public bool HoldsCustody => m_titles.Values.Any(predicate: static title => title.Kind is WorldCustodyKind.Pending or WorldCustodyKind.Away) ||
+        m_ownDepartures.Keys.Any(predicate: key => !m_ownSettlements.ContainsKey(key: key)) ||
+        (UnsettledOwnKeys().Count > 0) || (OwedHopNotices().Count > 0) || (OwedOwnHopSettlements().Count > 0);
+
     /// <summary>Gets every incarnation a custodian retired here on home's word.</summary>
     public IReadOnlyCollection<WorldEntityAddress> Retired => m_retired;
 

@@ -1062,14 +1062,14 @@ set and component chrome out of the core sets; then the overlay text's advance.
 
 ### Transfers, federation and server
 
-Owner: specialist, transfers and server · medium · Next: build the companion
+Owner: specialist, transfers and server · high · Next: close explicit-stop custody loss, then build the companion
 decision along the [custody protocol](companion-redesign.md) from step 6 of its
 build plan (separation sweep, stranding, shed and retire). Steps 1 to 5 stand:
 the custody records and their reducer, member ids and per-member verdicts, hop
 authorization and verification, settlement by the destination's word, and the
 return with re-adoption into the held slot (laws in `CompanionCustodyLawTests`,
-`CompanionCrossingLawTests`, `CompanionReturnLawTests`). The engine refines the
-model: `CompanionCustodyRefinementLawTests` runs real authorities under every
+`CompanionCrossingLawTests`, `CompanionReturnLawTests`). For retained authorities
+with local player seats, the engine is checked against the model: `CompanionCustodyRefinementLawTests` runs real authorities under every
 single-fault schedule and requires each peer call and log append to be an
 enabled model transition, comparing the derived state at every drain boundary
 and after each restart; its "deferred" moves are the unbuilt steps. Until the
@@ -1084,9 +1084,20 @@ crossing, opened by a two-silo failover witness.
 
 Still open from the companion build:
 
+- [high] Explicit `WorldInstanceHost.TryStop` still removes the custody peer and
+  disposes a row without a custody sweep or a final durable checkpoint. Stop home
+  after its player and companion move away, or stop a custodian with an embodied
+  visitor: the running authority and committed state disappear without an entitled
+  release/return record. Automatic reaping now retains away/pending titles and
+  in-doubt sources, but explicit stop bypasses that guard. Step 8 must implement
+  the stop lifecycle and prove recovery from the final image plus log. The
+  refinement fixture's retained rows do not cover this path. (from:
+  review-companion adversarial pass, R8; owner: transfers and server)
+
 - [medium] No law shows the federation correlation of custody steps
   (`WorldRemoteAuthority`: `HopQuery`, `HopRequest`, `CustodyQuery` and
-  `HopSettled` each keyed by their full question): two concurrent questions
+  `HopSettled` now each keyed by the exact encoded question, replacing ambiguous
+  delimiter joins): two concurrent questions
   about different keys must not share one answer. A witness needs two requests
   in flight on one lane while the peer holds its gate.
 - [medium] A source gives a reservation up after `TransferRetryCeiling`

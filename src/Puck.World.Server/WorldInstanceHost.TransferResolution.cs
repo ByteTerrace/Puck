@@ -55,7 +55,7 @@ public sealed partial class WorldInstanceHost {
                 // next drain is the whole reconciliation loop already does for an unresolved status. The destination is
                 // asked even after it answered Committed once: a settlement that did not land is recorded from the
                 // answer of the drain that records it, so what this source settles is a function of its records and
-                // the destination's word, never of an answer an earlier activation held.
+                // the destination's word. A prior confirmed commit still fences restoration.
                 var status = WorldTransferStatus.Committed;
 
                 if (
@@ -150,6 +150,21 @@ public sealed partial class WorldInstanceHost {
                     continue;
                 }
 
+                if ((status == WorldTransferStatus.Missing) && pending.CommitConfirmed) {
+                    // A committed arrival is monotone. A peer losing or contradicting its record cannot
+                    // authorize restoring the source's image; preserve the departure until it can settle.
+                    if (!pending.ConflictingCommitReported) {
+                        if (m_narration.HasNarrationSink) {
+                            m_narration.Narrate(
+                                channel: "world.transfer",
+                                text: $"[world.transfer: transfer={transfer.TransferId} inconsistent destination status — missing reported after confirmed commit; recovery retained]"
+                            );
+                        }
+                        m_inDoubtTransfers[index] = pending with { ConflictingCommitReported = true };
+                    }
+                    index++;
+                    continue;
+                }
                 if (status == WorldTransferStatus.Missing) {
                     if (!m_instances.TryGetValue(
                         key: pending.Transfer.SourceInstance,
@@ -167,24 +182,20 @@ public sealed partial class WorldInstanceHost {
                     var kept = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
                     var rollingBack = pending;
 
-                    if (
-                        !TrySettle(
-                        arrived: false,
-                        pending: pending,
-                        retired: retired
-                    ) ||
-                        !RestoreDetachedMembers(
-                        commits: [.. kept.Select(selector: ordinal => rollingBack.CommitMembers[ordinal])],
-                        members: [.. kept.Select(selector: ordinal => rollingBack.Landed[ordinal])],
-                        source: source,
-                        transferId: pending.Transfer.TransferId
-                    )
-                    ) {
+                    if (!TrySettle(arrived: false, pending: pending, retired: retired)) {
                         index++;
                         continue;
                     }
 
                     m_inDoubtTransfers.RemoveAt(index: index);
+                    if (!RestoreOrRetain(
+                        commits: [.. kept.Select(selector: ordinal => rollingBack.CommitMembers[ordinal])],
+                        members: [.. kept.Select(selector: ordinal => rollingBack.Landed[ordinal])],
+                        pending: pending,
+                        source: source
+                    )) {
+                        continue;
+                    }
                     if (m_narration.HasNarrationSink) {
                         m_narration.Narrate(
                             channel: "world.transfer",
