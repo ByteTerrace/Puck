@@ -414,9 +414,9 @@ element word enters an engine contract.
 ## A collider follows the drawn solid
 
 A placement collides as the solid it draws, not as a bound around it. A
-circular cylinder collides as its surface. A Box, which every vocabulary draws
-with a built-in fillet, collides as an inner box plus that fillet's radius, read
-from the same source the renderer uses. A shape with no exact contact gets a
+circular cylinder collides as its surface. A Box collides as an inner box plus
+its authored `rounding`, the radius the renderer draws, and as a sharp box
+where its document rounds nothing. A shape with no exact contact gets a
 conservative one that lies inside the drawn solid, never outside it: a body may
 sink a hair into a surface it can't resolve exactly, but it never stands on air.
 How a walker climbs an edge is decided by its step height, not by the contact
@@ -438,8 +438,26 @@ such as an exact chamfered-box collider. The owner confirmed this as a
 consensus of Claude, Codex and Antigravity.
 
 Why: the owner's ruling. Bodies floating at the round dais and at box corners
-were visible flaws. Removing the drawn fillet instead would make plain boxes look
-machined and leave authored rounding needing the same contact anyway.
+were visible flaws.
+
+## A box is sharp unless its document rounds it
+
+A `Box` draws and collides with sharp edges; a fillet is the shape's authored
+`rounding`, the same facet a prism or cylinder takes, clamped by the smallest
+half-extent. No primitive carries a rounding of its own.
+
+Why: a fillet built into every box (4% of its smallest half-extent) was
+sub-cell relief on nearly every box a world is built from (6 mm on a 0.3 m
+wall or slab, 5 mm on a stair tread, under the bake's 15 mm floor and far under
+its 40 to 130 mm cells on a union), so it never read as rounding and showed
+only as the contour's failures around it: a union of touching boxes carried a
+V-groove along every seam two fillets met at and a crevice inside the union
+wherever such a seam met a third face (two treads against a wall, two slabs
+under a strip), and the contour drew holes, flipped slivers and turned normals
+there. The authoring rule says never to sculpt relief finer than the cell, and
+the standard is authored, never baked into a primitive
+([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). A box an author wants soft
+takes `rounding`; touching boxes meet as one solid.
 
 ## A derived product is a cache, never the truth
 

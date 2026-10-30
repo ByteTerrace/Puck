@@ -9,6 +9,8 @@ namespace Puck.World;
 
 // Presentation-only analysis. The authoritative provider inputs are copied on the host thread; no result feeds a solve.
 internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? render = null, WorldDefinitionSource? sourceDocument = null) {
+    private const string UncorrespondedReason = "mesh correspondence uncertified: no nearest triangle within precision search radius or no matching scene";
+
     private readonly WorldDiagnosticTracker m_tracker = new();
     private readonly Dictionary<string, WorldDiagnosticReport> m_reports = new(comparer: StringComparer.Ordinal);
 
@@ -58,6 +60,9 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var meshEvaluated = new HashSet<string>(comparer: StringComparer.Ordinal);
         var failed = new HashSet<string>(comparer: StringComparer.Ordinal);
         var meshFailed = new HashSet<string>(comparer: StringComparer.Ordinal);
+        // Per collider whose witnesses found no retained triangle, how many and the first of them: the coverage finding
+        // names each, so an unknown is a placement to look at rather than a count.
+        var uncorresponded = new SortedDictionary<string, (int Count, Vector3 Witness)>(comparer: StringComparer.Ordinal);
         var frame = render?.Residency?.Frame;
         var scene = (((frame is not null) && Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion) &&
             (render?.Residency?.MeshPathBake.Pending == false)) ? render?.Residency.MeshIrradiance.DiagnosticScene(frame: frame) : null);
@@ -148,8 +153,9 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
                             } else {
                                 Count(comparison: "collision-versus-baked-mesh", red: null);
                                 Count(comparison: "field-versus-baked-mesh", red: null);
-                                Skip(reason: "mesh correspondence uncertified: no nearest triangle within precision search radius or no matching scene");
+                                Skip(reason: UncorrespondedReason);
                                 meshFailed.Add(item: scope);
+                                uncorresponded[scope] = (uncorresponded.TryGetValue(key: scope, value: out var seen) ? ((seen.Count + 1), seen.Witness) : (1, point));
                             }
                         }
                         if (WorldDiagnosticGeometry.ClassifyBoundary(budget: budget, separation: observed) is not { } contradiction) {
@@ -282,7 +288,12 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
             Skip(reason: "view analysis is not implemented");
         }
         foreach (var reason in skipped.Keys) {
-            findings.Add(item: Unknown(reason: reason, subject: "coverage") with { Source = reason });
+            findings.Add(item: Unknown(reason: reason, subject: "coverage") with {
+                Source = reason,
+                Details = (((reason == UncorrespondedReason) && (uncorresponded.Count > 0))
+                    ? uncorresponded.ToDictionary(elementSelector: static entry => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{entry.Value.Count} witnesses, first at {entry.Value.Witness}"), keySelector: static entry => entry.Key)
+                    : null),
+            });
         }
         var coverage = new WorldDiagnosticCoverage(tested, eligible, skipped, (skipped.Count == 0)) { Comparisons = comparisons };
         var report = new WorldDiagnosticReport(snapshot, view, tick, m_tracker.Update(view, tick, findings.Select(selector: f => f with { Coverage = coverage }), complete: (skipped.Count == 0),

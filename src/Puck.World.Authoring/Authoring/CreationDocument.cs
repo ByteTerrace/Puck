@@ -88,9 +88,10 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring.
 /// Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled
 /// local box and a revolve reads <c>scale.z</c> as an offset rather than an extent.</param>
-/// <param name="Rounding">Only for Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units,
-/// finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field
-/// offsets back out, so the shape keeps its authored extent and its edges fillet. Refused by name past
+/// <param name="Rounding">Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own
+/// units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field
+/// offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes
+/// that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past
 /// <see cref="SdfSolidGeometry.MaxRounding"/>.</param>
 /// <param name="Panel">The shape's second-material inset face region (null = none) — see
 /// <see cref="ShapePanelDocument"/>. Render-only; refused by name on a <see cref="SdfSolidPrimitive.Plane"/>, on a

@@ -43,4 +43,9 @@ public readonly record struct SdfInstanceRange(
     public bool BakesSeparately { get; init; }
     /// <summary>Gets whether a dynamic bound's offset is expressed in its slot's rotating local frame.</summary>
     public bool BoundInSlotFrame { get; init; }
+    /// <summary>Gets a static instance's world-axis box, where its emitter knows one tighter than its bound sphere's cube:
+    /// the part of a static union whose surface the bake refines for this instance (<see cref="Detail"/>), so a long,
+    /// thin member refines its own surface rather than its neighbours' across a cube its length wide.
+    /// <see langword="null"/> where the sphere alone bounds the instance.</summary>
+    public (Vector3 Low, Vector3 High)? Box { get; init; }
 }

@@ -27,20 +27,45 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   half a fine cell below the surface. Solids that touch (a stair's treads, a
   board on its table) meet at the surface, and refining that seam chamfered the
   concave crease above it by a cell.
+- **Touching solids are one solid to the contour.** A Box is sharp unless its
+  document rounds it ([decision](../../../../docs/decisions/engine-design.md#a-box-is-sharp-unless-its-document-rounds-it)),
+  so boxes that touch meet with no groove at the seam and no crevice where the
+  seam meets a third face. Inside a union the field is the distance to the
+  nearest face of the solid a sample lies in, which beside a seam is the shared
+  face, so a value and gradient there measure to the seam, not the surface. A
+  transition ring's crossing is therefore searched along its edge as a measured
+  one is (below), and the field correction moves no vertex along a gradient its
+  own triangles face away from (below). The interpolated normal (`TryNormal`)
+  still reads such gradients at a seam, which shades a cell-wide band beside a
+  concave crease where a layer thinner than the cell meets its neighbour (the
+  strips under `hall-floor-3`). Rewriting sub-cell gap samples as inside, or
+  leaving seam-pointing corners out of the interpolated normal, opens holes
+  (open edges) across the debug world's store-wide audit wherever it helps a
+  seam, so the contour does neither: a seam's residue is fixed in the shape
+  language (sharp boxes) or the lattice, not patched in the contour.
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
-  in 20 s. A refinement past its fine-sample budget (`MaxFineSamples`) splits
-  each cell into fewer fine cells, down to two, and contours whole only past
-  that: a sheet thinner than the coarse cell survives any refinement and none
-  of the coarse contour, so an all-or-nothing budget drops a long light strip
-  or keeps it depending on where the coarse samples fall.
+  in 20 s. The fine-sample budget (`MaxFineSamples`) measures the cells the
+  samples cannot resolve first, then each detail region's cells, the region
+  covering the fewest cells first, leaving a region that would carry the count
+  past the budget to the coarse contour, and takes the finest split serving the
+  most regions, down to two fine cells a coarse cell: a member whose region
+  spans a whole union (a slab's 2 cm ceiling finish) costs as much as every
+  other member together, and dropping every region for it left the strips
+  under the slab at the coarse cell, drawn or lost by where the coarse samples
+  fell. A sheet thinner than the coarse cell survives any refinement and none
+  of the coarse contour.
 - **Crossings stay on their lattice edges.** Before measuring crossing normals,
   `SdfSampledLattice.CrossingPoints` and `AnswerCrossings` bracket each zero along
   its sign-changing edge through the bake's existing point batches. Both the
   contour and its gradient requests use that root. Projecting a linear estimate
   along its nearest normal can land on another face of a corner, supplying the
-  wrong tangent plane and serrating the rim. Synthetic transition-ring edges
-  and samples displaced by `CloseSheets` keep their lattice interpolation:
-  their intentional surface differs from the original field.
+  wrong tangent plane and serrating the rim. A transition ring's edge is
+  searched too, bracketed by the signs its interpolated ends give the contour's
+  topology: inside a union the interpolated value is no distance (a 2 cm layer
+  under a 6 cm coarse cell measures to the face it shares with its neighbour),
+  and its linear estimate put a slab's underside a centimetre up inside the
+  slab. Only samples displaced by `CloseSheets` keep their lattice
+  interpolation: their intentional surface differs from the original field.
 - **Features are placed and shaded as features.** A vertex whose crossings'
   planes all meet and turn by over 30 degrees is a feature: it lies on the
   crease, inside its cell (a point past the cell folds the quads around it into
@@ -66,6 +91,10 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   normal shades the other face's quads beside the edge. A gradient shorter than
   a tenth of the field's typical slope straddles a crease and moves nothing
   (`SdfMeshPathBake.KinkGradient`): value over length is no distance there.
+  Nor does one whose gradient turns away from the way its own triangles face
+  (`ContourProjection.Outward`): inside a layer thinner than a cell the
+  gradient points at the seam the layer shares with its neighbour, and the move
+  lifted the vertex onto that seam.
 - **The bake's field is no true distance.** Scopes, flares and non-uniform
   scales read well under the distance (a fifth of it on the Moth's shins). A
   value becomes a distance only over the gradient's magnitude (the bake kernel
@@ -82,7 +111,7 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   interpolated gradients. Such a vertex on a fillet under the cell carries the
   fillet's normal, so `SdfContour.SplitAtCreases` gives the corners of its quads
   that face more than 25 degrees from that normal a copy with their face's
-  normal (a plinth's 6 mm BoxRound fillet at 21 mm cells otherwise shades a
+  normal (a plinth's authored 6 mm fillet at 21 mm cells otherwise shades a
   band a cell wide along every edge). The material cut samples and searches by
   place, not by copy (`SdfMeshMaterialCut`), so the pieces either side of a
   split edge meet at one boundary point.
@@ -163,6 +192,12 @@ laws exercise that boundary.
   so a terrain sector centred on its ring's centre bakes at 2.8 m, not its
   declared 1.56 m (`docs/plans/valley-and-moons.md`).
   A bound alone misses thin strands and leaves warped corners under-resolved.
+  In a static union a member's region is its own world-axis box where the
+  stamper knows one (`SdfInstanceRange.Box`, `CreationStampEmitter.ShapeStampBox`:
+  an unwarped, unfolded primitive), not its bound sphere's cube, which for a
+  48 m strip spans the whole slab it hangs from; and a member whose declared
+  detail is at or past the union's coarse spacing is no region at all
+  (`SdfMeshPathBake.UnionFinal`), since the lattice already resolves it.
   Convex rounding reads the scaled polygon's inradius and extrusion clamp;
   warp extents use `SdfSolidGeometry.HalfExtent`, since a revolve's scale Z is
   an offset and may be zero while its radial extent remains positive. A plate
@@ -173,7 +208,10 @@ laws exercise that boundary.
   floors bakes as one union whose lattice is sized by its height, so a 0.3 m
   slab between two samples never crosses and is dropped while it still
   collides. Give each storey's floor its own prototype and placement
-  (`worlds/debug/hall.puck`), so each is a flat group.
+  (`worlds/debug/hall.puck`), so each is a flat group. Trim set into a large
+  union is the same case: the hall's walls bake at 15 cm, so the cassettes at
+  their window heads, set 2 cm and 5 cm back from the wall's faces, are a row
+  per level and face of their own (`hall-cassettes-*`), each baking at 5 cm.
 - **The coarse narrowing keeps the rows a thin plate lies between.** The
   narrowing (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's
   finest spacing of the surface, beside a sign change, or in a pair of rows a

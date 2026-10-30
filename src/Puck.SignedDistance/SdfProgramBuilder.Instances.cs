@@ -143,10 +143,13 @@ public sealed partial class SdfProgramBuilder {
     /// copy, each with its own tight bound, baked as their union.</param>
     /// <param name="detail">The finest feature, in world units, the instance carries that its bound does not imply; zero
     /// for none, and a negative or non-finite value reads as zero (<see cref="SdfInstanceRange.Detail"/>).</param>
+    /// <param name="box">The instance's world-axis box where it is tighter than the sphere's cube
+    /// (<see cref="SdfInstanceRange.Box"/>); <see langword="null"/> for none. A box with a non-finite or inverted corner
+    /// reads as none.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
     /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false, float detail = 0f) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false, float detail = 0f, (Vector3 Low, Vector3 High)? box = null) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -161,6 +164,7 @@ public sealed partial class SdfProgramBuilder {
         );
         m_openInstanceBakesWithPrevious = bakesWithPrevious;
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
+        m_openInstanceBox = ((box is { } value && float.IsFinite(f: value.Low.X) && float.IsFinite(f: value.Low.Y) && float.IsFinite(f: value.Low.Z) && float.IsFinite(f: value.High.X) && float.IsFinite(f: value.High.Y) && float.IsFinite(f: value.High.Z) && (value.Low.X <= value.High.X) && (value.Low.Y <= value.High.Y) && (value.Low.Z <= value.High.Z)) ? box : null);
 
         return this;
     }
@@ -278,9 +282,10 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox });
 
         m_openInstanceFirst = -1;
+        m_openInstanceBox = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;
 

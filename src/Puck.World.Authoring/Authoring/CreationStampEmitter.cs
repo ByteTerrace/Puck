@@ -1471,6 +1471,45 @@ public static class CreationStampEmitter {
             (((warpedReach + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale)
         );
     }
+    /// <summary>Measures one shape's world-axis box under the stamp transform: its primitive's canonical box
+    /// (<see cref="SdfSolidGeometry.GetLocalBounds"/>) at its scale, turned and placed as the stamp places it, widened by
+    /// a raised panel, <see cref="ShapeDocument.Dilate"/> and <see cref="ShapeDocument.Onion"/> as
+    /// <see cref="ShapeStampBound"/> widens its sphere. For a long, thin shape it is far tighter than that sphere's
+    /// cube.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="shapeIndex">The shape's index in <see cref="CreationDocument.Shapes"/>.</param>
+    /// <param name="transform">The stamp transform.</param>
+    /// <returns>The box's world-space corners; <see langword="null"/> for a shape the box does not hold: one carrying a
+    /// domain fold, a warp, a twist, a bend, an elongation, cellular relief or a sweep, or an unbounded primitive.</returns>
+    public static (Vector3 Low, Vector3 High)? ShapeStampBox(CreationDocument document, int shapeIndex, CreationStampTransform transform) {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var shape = document.Shapes![shapeIndex];
+
+        if ((shape.Domain is { Count: > 0 }) || (shape.Type == SdfSolidPrimitive.Sweep) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Warp is not null) || (shape.Displace is not null) || (shape.Cells is not null) || (shape.Elongate is not null) || ((shape.Twist ?? 0f) != 0f) || ((shape.Bend ?? 0f) != 0f)) {
+            return null;
+        }
+
+        var bounds = SdfSolidGeometry.GetLocalBounds(type: shape.Type);
+
+        if (bounds.IsUnbounded) {
+            return null;
+        }
+
+        var frame = StampFrame.Of(transform: transform);
+        var (position, rotation) = ReflectedShapeTransformFixed(normal: frame.ReflectionNormal, shape: shape);
+        var turn = (frame.Rotation * rotation).Normalize().ToQuaternion();
+        var scale = (EffectiveScale(value: shape.Scale).ToVector3() * transform.Scale);
+        var axisX = Vector3.Transform(value: (Vector3.UnitX * scale.X), rotation: turn);
+        var axisY = Vector3.Transform(value: (Vector3.UnitY * scale.Y), rotation: turn);
+        var axisZ = Vector3.Transform(value: (Vector3.UnitZ * scale.Z), rotation: turn);
+        var center = (StampedPosition(frame: frame, local: position).ToVector3() + (((axisX * bounds.Center.X) + (axisY * bounds.Center.Y)) + (axisZ * bounds.Center.Z)));
+        var raise = ((shape.Panel is { Depth: < 0f } panel) ? -panel.Depth : 0f);
+        var widen = (((raise + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale);
+        var half = (((Vector3.Abs(value: axisX) * bounds.HalfExtents.X) + (Vector3.Abs(value: axisY) * bounds.HalfExtents.Y)) + (Vector3.Abs(value: axisZ) * bounds.HalfExtents.Z)) + new Vector3(value: widen);
+
+        return ((center - half), (center + half));
+    }
     /// <summary>Visits every primitive represented by one materialized stamp transform, computed entirely in fixed
     /// point.</summary>
     /// <param name="document">The creation document.</param>

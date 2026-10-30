@@ -2411,8 +2411,8 @@ public static partial class CreationCanonicalizer {
             if ((shape.Lift is { } lift) && ((shape.Type != SdfSolidPrimitive.Prism) || !Enum.IsDefined(value: lift))) {
                 errors.Add(item: new(Message: "lift requires Prism and one of extrude or revolve.", Path: $"shapes[{i}].lift"));
             }
-            if ((shape.Rounding is { } rounding) && ((shape.Type is not (SdfSolidPrimitive.Prism or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone)) || !float.IsFinite(f: rounding) || (rounding < 0f))) {
-                errors.Add(item: new(Message: "rounding requires Prism, Cylinder or Cone and a finite value of at least zero.", Path: $"shapes[{i}].rounding"));
+            if ((shape.Rounding is { } rounding) && ((shape.Type is not (SdfSolidPrimitive.Box or SdfSolidPrimitive.Prism or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone)) || !float.IsFinite(f: rounding) || (rounding < 0f))) {
+                errors.Add(item: new(Message: "rounding requires Box, Prism, Cylinder or Cone and a finite value of at least zero.", Path: $"shapes[{i}].rounding"));
             }
             if ((shape.Chamfer is { } chamfer) && ((shape.Type is not (SdfSolidPrimitive.Box or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Prism)) || !float.IsFinite(f: chamfer) || (chamfer < 0f))) {
                 errors.Add(item: new(Message: "chamfer requires Box, Cylinder or Prism and a finite value of at least zero.", Path: $"shapes[{i}].chamfer"));

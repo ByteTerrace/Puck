@@ -206,6 +206,14 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
             Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<float>(reference: in detail)));
         }
+        // So does the box a static union refines for the instance.
+        if (!range.IsDynamic && (range.Box is { } box)) {
+            var low = box.Low;
+            var high = box.High;
+
+            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in low)));
+            Hash(source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in high)));
+        }
         m_chainSlot = -1;
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
         if (ownSlot >= 0) {

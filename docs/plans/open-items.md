@@ -60,9 +60,10 @@ code (AGENTS.md). The packets below follow it.
     headless, its look in the lead's window.
 11. [Residency and streaming](#residency-and-streaming): near-first has landed;
     next, GI on the same demand points and the measurements still open.
-12. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
-    inverted sheets along the divider; the colliders report's remaining reds are
-    the valley relief's ([the valley's terrain](#the-valleys-terrain)).
+12. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the valley
+    sectors' buried colliders and the gallery's sub-cell seams; the colliders
+    report's remaining reds are the valley relief's
+    ([the valley's terrain](#the-valleys-terrain)).
 13. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
     it in `panes` and answers under pause, then the diagnostics' windowed checks
     and the developer exhibits.
@@ -558,25 +559,54 @@ Next: make the per-tick authority hash incremental (measured below).
 
 ### Collision versus drawn mesh
 
-Owner: next geometry and bake lane · ordinary · Next: the hall stairs' inverted
-sheets along the divider, then the 178 witnesses with no mesh correspondence.
-The rendered colliders report's only red findings left are the valley's relief
+Owner: next geometry and bake lane · ordinary · Next: the regressions sharp
+boxes left (the item below), then the valley sectors' buried colliders. The rendered
+colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
-- [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). In flight: the bake-seams lane (principal), a root fix to zero defects, superseding the case patches (2dbc758c1 and the unlanded hall-stairs branch). (from: the owner's walkthrough)
-- The hall stairs' mesh carries inverted and doubled faces where flight A's
-  boxes meet the divider (x 12.1) and flight B's meet the east wall (x 12.3 and
-  14.1): `puck mesh audit --cpu --group "(hall-stairs)"` reports 1,557 flipped
-  triangles, 865 folds and 84 open edges, its worst clusters faces at 0.0 mm
-  off the field turned 180 degrees from its gradient (12.100, 5.828, 36.179).
-  The sweep's `finding-flight-a-level-1` stop ("dark patches where flight A
-  meets the wall") is likely this. A face two touching boxes share reads zero
-  in the union's field on both sides; find what samples or refines it, as the
-  touching seam under the Wonderland stairs did.
-- 178 collider witnesses find no retained triangle within the search radius
-  (`mesh correspondence uncertified` in the report's coverage); name their
-  placements and say whether each is a missing draw, a draw outside the static
-  trace scene or a search that should reach it.
+- [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). (from: the owner's walkthrough)
+  Delivered (bake-seams): boxes are sharp unless authored `rounding`; a union's
+  refinement budget serves its thin members' own boxes, smallest first; a
+  transition ring's crossings are searched; the field correction keeps a vertex
+  off a seam's gradient; the cassettes bake as rows of their own. `puck mesh
+  audit --cpu`, tip to delivered: `hall-stairs` 12,251 (1,557 flipped, 84 open
+  edges) to 217 (10 flipped, 0 open); `hall-shell` 9,264 (24 open) to 236 (0
+  open), every `hall-cassettes-*` row 0; `hall-floor-1-dark` 21,124 to 55;
+  `hall-roof` 44 to 0; `wonderland-stairs` 50 to 7; store-wide 473,056 to
+  424,147. `hall-blind-3-north` audits clean, so the blinds' speckle is shading
+  (paint or GI), not the bake.
+  Left, worse than the tip by the audit (the next lane's work): `goTable` 4,213
+  to 15,026 (its flush face prisms' seams: 2,929 flipped), `hall-floor-2` and
+  `-3` 20 to 6,295 (a 3 mm sliver and a shading band a cell wide where the
+  strip at z 30.4 meets the slab, the strip's side against the slab's 2 cm
+  ceiling finish), `wonderland-room` 1,163 to 7,232 and `hall-floor-0` 0 to
+  1,606 (flat floors the budget now refines: their tops read turned 180 degrees
+  against the audit's gradient at y 0.05 and 0.001, unexplained), the lift
+  doors 27 to 2,137, and `device-humble-gaming-deck-television` 0 to 5,010 open
+  edges with sharp boxes. Store-wide open edges rose from 52,181 to 63,591 with
+  sharp boxes alone (63,947 before this lane's refinement work). Every one is a
+  touching-box seam or a thin layer inside a union, whose interior field
+  measures to the seam: the contour's interpolated normals (`TryNormal`) and
+  the ring's crossing gradients still read it. Contour patches that rewrite gap
+  samples (`GapFill`) or drop seam-pointing corners (`SeamGradient`) were
+  measured store-wide and opened more holes than they closed, so they are gone;
+  the fix is a field that is a distance across a seam, or crossings and
+  normals that never read an interior sample. Not yet run: `puck test
+  worlds/debug --jobs 1 --reproduce` (sharp-box colliders change contact at box
+  edges) and a lit, settled windowed look at the stairs (the boot's cold bake
+  ran past the GPU batch; windowed Direct3D 12 and Vulkan boots of this head
+  ran with no fault or refusal in stderr).
+- The 178 witnesses the colliders report counts as `mesh correspondence
+  uncertified` all lie on the valley sectors' terrain masses (`main`,
+  `shoulder-left`, `shoulder-right` of every `valley-*` sector, y between about
+  -380 and -705 m), which the report's coverage finding now names with a
+  first witness each. No draw is missing and no search falls short: the
+  render cuts each mass's buried part away at the floor plane
+  (`terrainFloorCut`, a detail Intersection in `worlds/standard/terrain.puck`)
+  while contact collides each mass whole, so there is no surface to find.
+  Either contact takes the same cut (a body cannot reach under the floor), or
+  the report counts witnesses a detail intersection removes from the drawn
+  field as buried rather than unknown.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
