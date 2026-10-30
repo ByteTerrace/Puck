@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>The seat-owned camera read-back. Camera yaw and pitch participate in camera-relative simulation input,
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
-internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings, WorldWheelFeed? wheel = null) : ICommandModule {
+internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
     // The keys the default reading keeps: where the camera is and looks, how, and what the clearance did to the view.
     private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "mode", "fade", "clearance"];
 
@@ -161,13 +161,12 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.camera.boom",
-            description: "Moves the seat's orbit distance from an Axis2D source's vertical input, within views.seatControl.boom. An open wheel owns scroll input first. The existing boom dynamics ease the eye.",
+            description: "Moves the seat's orbit distance from an Axis2D source's vertical input, within views.seatControl.boom. Which pages bind it, and which bind their own scroll act over it, is authored. The existing boom dynamics ease the eye.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => {
                 if (context.Origin != CommandOrigin.Binding) {
                     return CommandResult.Error(output: "[player.camera.boom: requires an Axis2D binding]");
                 }
-                if (wheel?.IsOpen(slot: context.Slot) == true) { return CommandResult.None; }
                 var seat = roster.Seat(slot: context.Slot);
 
                 if (seat is null) { return CommandResult.Error(output: "[player.camera.boom: no occupied seat]"); }
