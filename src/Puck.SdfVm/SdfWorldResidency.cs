@@ -158,9 +158,21 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // frames before it, which a restart at another plans again.
         frameSource.ObserveBuilds(built: (program, transforms) => {
             if (Volatile.Read(location: ref m_frame) is { } latest) {
+                FollowRunningCode();
                 MeshPathBake.PlanAhead(farDistance: latest.FarDistance, program: program, transforms: transforms);
             }
         });
+    }
+
+    // A hot-reload update applied to code the bake runs keys the meshes it bakes and stores from then on apart from the
+    // build's (SdfMeshBakeIdentity.UnderRunningCode); an update elsewhere leaves the identity, and the store, as they are.
+    private void FollowRunningCode() {
+        var identity = MeshPathBake.Identity;
+        var running = identity.UnderRunningCode(code: SdfMeshBakeClosure.Current);
+
+        if (!ReferenceEquals(objA: identity, objB: running)) {
+            MeshPathBake.Identity = running;
+        }
     }
 
     /// <summary>Gets the residency's name.</summary>
@@ -517,6 +529,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         // The bake takes its batch before the upload, which carries the batch's surface points.
+        FollowRunningCode();
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.

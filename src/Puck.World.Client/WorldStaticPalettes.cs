@@ -2,7 +2,6 @@ using Puck.SignedDistance;
 using Puck.SdfVm;
 using Puck.Text;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 
 namespace Puck.World.Client;
 
@@ -18,7 +17,7 @@ public sealed class WorldStaticPalettes {
     private readonly Dictionary<string, int[]> m_ids = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_filled = new(comparer: StringComparer.Ordinal);
 
-    internal readonly ConditionalWeakTable<WorldPlacement, PlacedEmission> Emissions = new();
+    internal readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, PlacedEmission> Emissions = new();
 
     internal readonly record struct EmissionKey(WorldPrototype Creation, PackedFontAtlasCatalog? Text, bool[]? Hidden, int Material, Vector3 Origin, Quaternion Rotation, ulong Seed, string? Scope, bool Meshes);
     internal sealed record PlacedEmission(EmissionKey Key, SdfProgramBuilder.Emission Program, SdfVolume[] Volumes, SdfMeshDraw[] Draws);

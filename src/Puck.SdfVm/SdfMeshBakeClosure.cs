@@ -59,7 +59,9 @@ public sealed partial class SdfMeshBakeClosure {
     ], comparer: StringComparer.Ordinal);
     private static readonly Lazy<SdfMeshBakeClosure> Running = new(valueFactory: static () => Of(directory: AppContext.BaseDirectory));
 
-    private SdfMeshBakeClosure(SortedDictionary<string, UInt128> members, SortedDictionary<string, string> reasons, string entryVersion) {
+    private SdfMeshBakeClosure(SortedDictionary<string, UInt128> members, SortedDictionary<string, string> reasons, string entryVersion, HashSet<string> types) {
+        m_types = types;
+
         var hash = new XxHash128();
         Span<byte> value = stackalloc byte[16];
 
@@ -90,6 +92,23 @@ public sealed partial class SdfMeshBakeClosure {
     /// it back says why a member is in the closure.</summary>
     public IReadOnlyDictionary<string, string> Reasons { get; }
 
+    // The types that declare a member of the closure, as "assembly!type" with '/' before a nested type's name.
+    private readonly HashSet<string> m_types;
+
+    /// <summary>Returns whether a loaded type declares a member of the closure, so that an update applied to it changes
+    /// what the bake runs (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>, which also offers each type an
+    /// updated type is nested in: a lambda's or iterator's generated type reaches the method that owns it).</summary>
+    /// <param name="type">The loaded type.</param>
+    /// <returns><see langword="true"/> when the closure reads the type.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    public bool Reads(Type type) {
+        ArgumentNullException.ThrowIfNull(argument: type);
+
+        var name = FileLocalChecksum().Replace(input: (type.FullName ?? type.Name), replacement: "__").Replace(oldChar: '+', newChar: '/');
+
+        return m_types.Contains(item: ((type.Assembly.GetName().Name ?? string.Empty) + "!" + name));
+    }
+
     /// <summary>Reads the bake's closure (<see cref="BakeRoots"/>) in the build deployed in a directory from its
     /// assemblies' metadata and IL, without loading them.</summary>
     /// <param name="directory">The directory the build's assemblies are deployed in.</param>
@@ -118,7 +137,7 @@ public sealed partial class SdfMeshBakeClosure {
 
         var members = walk.Run(roots: roots);
 
-        return new SdfMeshBakeClosure(entryVersion: walk.EntryVersion, members: members, reasons: walk.Reasons);
+        return new SdfMeshBakeClosure(entryVersion: walk.EntryVersion, members: members, reasons: walk.Reasons, types: walk.Types);
     }
     /// <summary>Returns the members whose hash differs between two closures' members, with those only one holds, in
     /// ordinal order.</summary>
@@ -207,6 +226,10 @@ public sealed partial class SdfMeshBakeClosure {
         // The store's entry version as the walked build's assembly holds it, known once Run has read it.
         public string EntryVersion { get; private set; } = string.Empty;
         public SortedDictionary<string, string> Reasons { get; } = new(comparer: StringComparer.Ordinal);
+        // The type of each member the walk hashes, as "assembly!type".
+        public HashSet<string> Types { get; } = new(comparer: StringComparer.Ordinal);
+
+        private void Declares(Module module, TypeDefinitionHandle type) => _ = Types.Add(item: (module.Name + "!" + module.FullName(handle: type)));
 
         public SortedDictionary<string, UInt128> Run(IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
             foreach (var (assembly, type, method) in roots) {
@@ -385,6 +408,7 @@ public sealed partial class SdfMeshBakeClosure {
 
             m_current = (module.Name + "!" + module.FullName(handle: type) + " [layout]");
             Reasons[m_current] = m_from[(module, type)];
+            Declares(module: module, type: type);
             if (!definition.BaseType.IsNil && (Resolve(handle: definition.BaseType, module: module) is { } parent)) { Mention(module: parent.Item1, type: parent.Item2); }
             if (baseName is "System.ValueType" or "System.Enum") {
                 // A value type is made wherever it is named, with no constructor call to show it.
@@ -435,6 +459,7 @@ public sealed partial class SdfMeshBakeClosure {
 
             m_current = key;
             Reasons[key] = m_from[(module, method)];
+            Declares(module: module, type: definition.GetDeclaringType());
             Mention(module: module, type: definition.GetDeclaringType());
             text.Append(value: (int)definition.Attributes).Append(value: ' ').Append(value: (int)definition.ImplAttributes).Append(value: ' ').Append(value: signature);
             if ((definition.RelativeVirtualAddress != 0) && !IsCopy(method: method, module: module, signature: signature)) {

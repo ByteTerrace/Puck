@@ -368,15 +368,26 @@ two things, and the watch output says which:
   applies to the running World: `dotnet watch : C# and Razor changes applied in
   45ms`, and the World prints `[world.hot-reload] applied revision N: <types>`.
   The first edit after the watch starts pays for loading the compiler
-  workspace (14 s under load); later ones take well under a second. A cache
-  holding a product of code compares `CodeRevision.Current`
-  (`src/Puck.Abstractions/CodeRevision.cs`, the process's
-  `MetadataUpdateHandler`) and derives again when it moved: every compiled
-  camera rig (`WorldCameraRigCompiler.Cache`) and everything the frame presenter
-  derives from a delivered definition (cameras and faces, screens, speakers,
-  text, decals, the emitted scene and the static field) rebuild on the next
-  frame, so an edit to that code shows without a reload. Simulation state,
-  baked meshes and installed shader pipelines are untouched.
+  workspace (14 s under load); later ones take well under a second.
+  `CodeRevision` (`src/Puck.Abstractions/CodeRevision.cs`, the process's
+  `MetadataUpdateHandler`) is the one invalidation contract for products of
+  code. A cache held in memory compares `CodeRevision.Current`, or holds its
+  entries in a `CodeDerivedTable`, and derives again when it moved: every
+  compiled camera rig (`WorldCameraRigCompiler.Cache`), everything the frame
+  presenter derives from a delivered definition (cameras and faces, screens,
+  speakers, text, decals, the static field), the composed scene program (the
+  composition host owns a code-revision component of its rebuild watch, so
+  every emitter re-emits) and the retained placement emissions rebuild on the
+  next frame, so an edit to that code shows without a reload. A persisted
+  product folds `CodeRevision.AppliedTo` into its identity: empty until an
+  update touches a type the product reads, then a token unique to the process
+  and that update. The compile cache and its source declarations (the
+  compiler's modules), the compiled world (the engine build's modules) and the
+  mesh store (the types the bake's closure declares members of) key what a
+  hot-reloaded process reads and writes apart from the build's own entries,
+  which an update elsewhere leaves standing; the entries it writes are orphans
+  the stores' retention trims. Simulation state and installed shader pipelines
+  are untouched.
 - **A rude edit** (a new field or a changed layout in a struct) prints `Restart
   is needed to apply the changes.`, and the watch rebuilds and reboots the
   World: 28 s from saving to `Application started` under heavy load. A build

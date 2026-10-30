@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.World.Authoring;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -62,7 +61,7 @@ public static class WorldPlacementStamper {
     }
 
     // Each placement row's evaluator verdict, with the creation it showed when judged.
-    private static readonly ConditionalWeakTable<WorldPlacement, QueryVerdict> QueryVerdicts = [];
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, QueryVerdict> QueryVerdicts = new();
 
     private sealed record QueryVerdict(WorldPrototype? Creation, string? Refusal);
 
@@ -76,7 +75,7 @@ public static class WorldPlacementStamper {
     private const float ProbeSpread = 100f;
 
     // Each inline prototype mesh's engine-frame SdfMesh, keyed by the immutable mesh record (MeshOf).
-    private static readonly ConditionalWeakTable<WorldPrototypeMesh, SdfMesh> Meshes = new();
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldPrototypeMesh, SdfMesh> Meshes = new();
 
     /// <summary>Registers a creation's palette (16-slot clamp) with an optional tint lerp, returning program-relative
     /// material ids indexed like the creation's own palette slots.</summary>
@@ -344,7 +343,7 @@ public static class WorldPlacementStamper {
     /// <param name="mesh">The prototype's inline mesh.</param>
     /// <returns>The shared mesh.</returns>
     internal static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
-        createValueCallback: static authored => new SdfMesh(
+        derive: static authored => new SdfMesh(
             indices: TwoSided(indices: authored.Indices),
             positions: authored.EngineVertices.ToArray()
         ),
