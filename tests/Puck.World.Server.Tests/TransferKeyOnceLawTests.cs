@@ -535,9 +535,9 @@ public sealed class TransferKeyOnceLawTests {
         Assert.False(condition: destination.ReserveTransfer(request: Reservation(transferId: 3) with { SourceAuthority = "machine-z/boot" }).Accepted);
     }
 
-    // THE LAW (write ahead): a destination whose log does not take a lease record accepts no reservation and never
-    // leases that key in this activation; one whose log does not take a tombstone answers Uncertain rather than
-    // Missing, and Missing once the tombstone lands, including through an in-place recovery that finds it.
+    // THE LAW (write ahead): a destination whose log refuses a lease record accepts no reservation and changes nothing,
+    // so the key's first durable lease is still its only one; one whose log does not take a tombstone answers Uncertain
+    // rather than Missing, and Missing once the tombstone lands, including through an in-place recovery that finds it.
     [Fact]
     public void ALeaseOrTombstoneTheLogDoesNotTakeIsNeverActedOn() {
         using var world = CrossingWorld.Build();
@@ -549,11 +549,13 @@ public sealed class TransferKeyOnceLawTests {
 
         Assert.False(condition: refused.Accepted);
         Assert.Contains(actualString: refused.Reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "could not be made durable");
-        Assert.False(condition: destination.ReserveTransfer(request: Reservation(transferId: 1)).Accepted);
+        Assert.Equal(expected: 0, actual: LedgerRows(destination: destination));
+        Assert.True(condition: destination.ReserveTransfer(request: Reservation(transferId: 1)).Accepted);
+        Assert.Equal(expected: WorldTransferStatus.Reserved, actual: destination.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 1));
 
         world.DestinationLog.LoseAnswerOn = typeof(WorldCrossingRecord.Tombstone);
-        Assert.Equal(expected: WorldTransferStatus.Uncertain, actual: destination.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 1));
-        Assert.Equal(expected: WorldTransferStatus.Missing, actual: destination.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 1));
+        Assert.Equal(expected: WorldTransferStatus.Uncertain, actual: destination.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 3));
+        Assert.Equal(expected: WorldTransferStatus.Missing, actual: destination.TransferStatus(sourceAuthority: "machine-a/boot", transferId: 3));
 
         // The store loses its answer to a tombstone that lands: Uncertain until recovery finds it.
         world.DestinationLog.LoseAnswerOn = typeof(WorldCrossingRecord.Tombstone);

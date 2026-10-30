@@ -621,8 +621,12 @@ public sealed partial class FederationTransferLawTests {
             request.SourceAuthority,
             request.TransferId,
             [member],
-            out _
-        ) == WorldTransferStatus.Missing));
+            out var mutatedReason
+        ) == WorldTransferStatus.Committed));
+        Assert.Contains(
+            actualString: mutatedReason,
+            expectedSubstring: "different commit"
+        );
         Assert.True(
             condition: (fixture.Server.CommitTransfer(
                 request.SourceAuthority,
