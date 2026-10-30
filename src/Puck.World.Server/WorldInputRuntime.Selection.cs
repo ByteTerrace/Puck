@@ -38,7 +38,9 @@ public sealed partial class WorldInputRuntime {
         m_touchedSeen.Clear();
         var kept = 0;
 
-        foreach (var body in m_touchedBodies) {
+        for (var index = 0; (index < m_touchedBodies.Count); index++) {
+            var body = m_touchedBodies[index];
+
             if (m_touchedSeen.Add(item: body)) { m_touchedBodies[kept++] = body; }
         }
         m_touchedBodies.RemoveRange(count: (m_touchedBodies.Count - kept), index: kept);
