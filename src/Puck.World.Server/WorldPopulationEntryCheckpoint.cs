@@ -25,6 +25,7 @@ public readonly record struct WorldPopulationEntryCheckpoint(
     bool Parked,
     long? ParkedUntilTick,
     string? PlacementId,
+    bool Titled,
     FixedVector3 SpawnPosition,
     FixedQ4816 SpawnYaw,
     IReadOnlyList<WorldAdmissionGrant> AdmissionInstalledGrantTemplates,

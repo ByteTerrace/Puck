@@ -511,6 +511,10 @@ public sealed partial class WorldPopulation {
         // makes ordinary slot reuse invalidate stale mobility without comparing the foreign origin generation.
         public WorldMobilityIdentity? Mobility { get; set; }
         public int MobilityGeneration { get; set; }
+        // Whether this generation's occupant was spawned as an owned traveller (an inhabitant of a placement whose role
+        // this authority holds the title of): the incarnation minted for it carries the title mark. Fixed when the
+        // occupant spawns, so an install that later removes the role never changes the identity its title names.
+        public bool Titled { get; set; }
         // PARK-WITH-GRACE: set by DeactivateSeat/ApplyPeerDisconnected instead of tearing the entry down immediately.
         // While Parked, Active (and, for a peer, IsRemoteHuman) STAY true
         // and Body stays retained (pose/state intact, still in the sim/collider set) — a disconnected body reads

@@ -36,6 +36,7 @@ public sealed class WorldStateHashCompositionLawTests {
         ("flock perception, slot generations and prior travel", WorldStateHashComponent.Flock),
         ("every search job's progress", WorldStateHashComponent.Search),
         ("scoped tape starts, inputs, live hashes and playback cursors", WorldStateHashComponent.ScopedReplays),
+        ("every custody record the authority folded", WorldStateHashComponent.Custody),
     ];
 
     // What the capture fold adds for a cell whose clock has never settled: the unset flag, then the five columns,

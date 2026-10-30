@@ -113,12 +113,18 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// 1 — see <see cref="ResolvedCount"/>.</param>
 /// <param name="Distribution">The region and deterministic fill sequence that place the bodies relative to the
 /// placement root.</param>
+/// <param name="Role">The name of the companion role (<see cref="WorldRole"/>) the body holds: it goes where the player
+/// it follows goes, under the role declaration of each world it enters. Absent: the body holds no role.</param>
+/// <param name="Follows">The 0-based local seat whose player the role's body follows. Required with
+/// <paramref name="Role"/> and refused without it.</param>
 public sealed record WorldPlacementInhabit(
     string? Kit,
     string? Look,
     Puck.World.Protocol.IntentSource Source,
     WorldPlacementInhabitCount? Count = null,
-    WorldDistribution? Distribution = null
+    WorldDistribution? Distribution = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Role = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Follows = null
 ) {
     /// <summary>Gets <see cref="Count"/> as authored — an absent field reads as a literal 1, exactly as before this
     /// facet's count could name a cell.</summary>

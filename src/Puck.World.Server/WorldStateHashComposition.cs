@@ -65,6 +65,8 @@ public enum WorldStateHashComponent : byte {
     Search,
     /// <summary>The scoped tapes' captured starts, accepted inputs, recorded hashes and playback cursors.</summary>
     ScopedReplays,
+    /// <summary>The custody records the authority folded: its titles as home and its custody facts as a custodian.</summary>
+    Custody,
 }
 /// <summary>Composes the world's state hash from named components in one declared order.</summary>
 /// <remarks>
@@ -97,6 +99,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.Flock,
         WorldStateHashComponent.Search,
         WorldStateHashComponent.ScopedReplays,
+        WorldStateHashComponent.Custody,
     ];
     private static readonly WorldStateHashComponent[] PoseOrder = [
         WorldStateHashComponent.PopulationPose,
@@ -147,6 +150,7 @@ public static partial class WorldStateHashComposition {
         WorldStateHashComponent.RuleLatch => "Puck.State.Rules.RuleLatch",
         WorldStateHashComponent.Search => "Puck.State.ArenaSearch",
         WorldStateHashComponent.ScopedReplays => "Puck.World.Server.WorldScopedReplayRuntime",
+        WorldStateHashComponent.Custody => "Puck.World.Server.WorldCompanionCustody",
         WorldStateHashComponent.Seed => "Puck.World.Server.WorldStateHashComposition",
         WorldStateHashComponent.Tick => "Puck.World.Server.WorldServer",
         WorldStateHashComponent.Topologies => "Puck.World.Server.WorldStateHashComposition",

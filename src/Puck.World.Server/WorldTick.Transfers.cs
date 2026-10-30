@@ -201,10 +201,12 @@ public sealed partial class WorldTick {
     /// <param name="transferId">The source-minted transfer id.</param>
     /// <param name="members">The travelers in reservation order.</param>
     /// <param name="reason">The named refusal or uncertainty, or empty on success.</param>
+    /// <param name="confirmed">Home's answers to this destination's question for this commit, keyed by hop key and
+    /// incarnation.</param>
     /// <returns><see cref="WorldTransferStatus.Committed"/> when the commit is authoritative here,
     /// <see cref="WorldTransferStatus.Uncertain"/> while only this authority's recovery can decide, and
     /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
-    internal WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+    internal WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
         if (
             (m_transferAuthorityAllowed is not null) &&
             !m_transferAuthorityAllowed(sourceAuthority)
@@ -213,6 +215,7 @@ public sealed partial class WorldTick {
         }
         var resolvedReason = string.Empty;
         var status = Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Commit(
+            confirmed: confirmed,
             members: members,
             reason: out resolvedReason,
             sourceAuthority: sourceAuthority,
@@ -293,11 +296,16 @@ public sealed partial class WorldTick {
     /// <summary>Reserves destination body indices under a binding transfer lease. The same method backs loopback
     /// colocation and the QUIC authority door; callers never reserve population capacity by inspecting it directly.</summary>
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
+    /// <param name="confirmed">Home's answers to this destination's question for this reservation, keyed by hop key
+    /// and incarnation.</param>
     /// <returns>The destination's verdict and assigned body indices.</returns>
-    internal WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request) =>
+    internal WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) =>
         Host.ExecuteAuthorityOperation(operation: () => (((m_transferAuthorityAllowed is not null) && !m_transferAuthorityAllowed(request.SourceAuthority))
             ? WorldTransferReservationReply.Refused(reason: "closed rewind group refuses an external transfer")
-            : Host.TransferEscrow.Reserve(request: request)));
+            : Host.TransferEscrow.Reserve(
+                confirmed: confirmed,
+                request: request
+            )));
     /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
     internal void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
         var credential = mobility;

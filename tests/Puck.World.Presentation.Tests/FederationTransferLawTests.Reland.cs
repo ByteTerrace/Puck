@@ -8,11 +8,11 @@ using Xunit;
 namespace Puck.World.Presentation.Tests;
 
 public sealed partial class FederationTransferLawTests {
-    // THE LAW: a commit refused at a reserved index that an ordinary join took after the reservation replays as it ran,
-    // and recovery still refuses it. A peer connection skips a leased index, so only a seat's join can take one. The
-    // commit lands its first traveler, is refused at the occupied seat and rolls the landing back; the re-drive needs
-    // only the landed prefix free, reproduces the landing's generation and stops at the recorded traveler without
-    // touching the occupant. Recovery has no recorded stop: an occupied member refuses the whole recorded lease.
+    // THE LAW: a commit refused at a reserved index that an ordinary join took after the reservation replays as it ran.
+    // A peer connection skips a leased index, so only a seat's join can take one. The commit lands its first traveler,
+    // is refused at the occupied seat and rolls the landing back; the tape names only the traveler that landed, so the
+    // re-drive needs only that index free, reproduces the landing's generation and stops at the recorded traveler
+    // without touching the occupant.
     [Fact]
     public void AnArrivalRollbackReplaysWhenALaterReservedSlotWasTaken() {
         using var directory = new TemporaryDirectory(prefix: "puck-arrival-occupied-");
@@ -49,15 +49,7 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(condition: arrival.Outcome.RolledBack);
         Assert.Equal([1], arrival.Outcome.Generations);
         Assert.Equal(-1, tape.Verify(name: "arrivals").Primary.DivergedAt);
-
-        using var recovery = Fixtures.FreshServer();
-
-        Assert.True(condition: recovery.Server.ApplySession(request: join).Accepted);
-        Assert.False(condition: recovery.Server.ExecuteAuthorityOperation(operation: () => recovery.Server.TransferEscrow.TryReland(
-            arrival: DecodeArrival(arrival: arrival),
-            recorded: null, reason: out reason)));
-        Assert.Contains(actualString: reason, expectedSubstring: "occupied");
-        Assert.Equal(0, recovery.Server.Population.Generation(index: 0));
+        Assert.Equal([0], DecodeArrival(arrival: arrival).Slots);
     }
     // THE LAW: an arrival never overwrites a seat an ordinary join took after the reservation. The join is idempotent
     // over an active seat, so the landing refuses an occupied index before admitting anyone: the occupant keeps its

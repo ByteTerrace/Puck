@@ -1013,16 +1013,52 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision along the [custody protocol](companion-redesign.md) (the companion lands
-inert in the live debug world today; two builds of the decision failed review on
-trust, away bookkeeping and the custody key, so the protocol is specified per
-authority and checked by the `CompanionCustodyModel` law in
-`tests/Puck.World.Protocol.Tests`, which the build follows as its oracle), then
-the uncertain crossing, opened by a two-silo failover witness.
+decision along the [custody protocol](companion-redesign.md) from step 6 of its
+build plan (separation sweep, stranding, shed and retire). Steps 1 to 5 stand:
+the custody records and their reducer, member ids and per-member verdicts, hop
+authorization and verification, settlement by the destination's word, and the
+return with re-adoption into the held slot (laws in `CompanionCustodyLawTests`,
+`CompanionCrossingLawTests`, `CompanionReturnLawTests`). The engine refines the
+model: `CompanionCustodyRefinementLawTests` runs real authorities under every
+single-fault schedule and requires each peer call and log append to be an
+enabled model transition, comparing the derived state at every drain boundary
+and after each restart; its "deferred" moves are the unbuilt steps. Until the
+later steps land: a separated companion goes home only through
+`TryEnqueueCompanionReturn` (step 6 builds the sweep); a custodian's settlement
+notice is derived from its records and re-sent every drain, but nothing bounds
+the re-sending by the lease deadline (step 8); an arriving companion has no
+driver and wears the default kit and look (step 9); a custodian reaches a remote
+home only through a remote authority its host already opened. The debug world's
+faerie declares no role yet, so it does not travel. Then the uncertain
+crossing, opened by a two-silo failover witness.
 
-- [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
+Still open from the companion build:
 
-- [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)
+- [medium] No law shows the federation correlation of custody steps
+  (`WorldRemoteAuthority`: `HopQuery`, `HopRequest`, `CustodyQuery` and
+  `HopSettled` each keyed by their full question): two concurrent questions
+  about different keys must not share one answer. A witness needs two requests
+  in flight on one lane while the peer holds its gate.
+- [medium] A source gives a reservation up after `TransferRetryCeiling`
+  transient refusals (a lost lane, a latched destination) and abandons the key;
+  the model's source never gives a reservation up, it only re-sends. Step 8
+  bounds the retries by the lease deadline; the model then needs the matching
+  give-up move.
+- [low] Branch `worktree-agent-aefc6b37a2b3dc11c` (companions v1) is superseded
+  for custody and trust by the protocol build, but holds step 9 and 10 prior art
+  no other branch has: `WorldServer.Roles.cs` (`TryRoleVerdict`, visiting
+  drivers mounted per pin under `accept`), the `WorldRole` driver, accept, fuel
+  and budget fields, `CompanionTrustLawTests`' driver laws, and the debug world's
+  faerie split (`companion-body.puck`, role rows in `night` and `garden`). Step 9
+  ports them onto the custody bindings (`WorldCompanionCustody.TryBinding`); keep
+  the branch until then.
+- [medium] Build the rest of the [companion decision](../decisions/companions.md):
+  the destination's role declaration (`accept` the visitor's own pinned driver,
+  the same pin, a substituted driver, or nothing), with `worlds/standard/`
+  declaring `accept`; the player's HUD notice on a refusal; driver grants keyed by
+  placement or role group instead of `body:42`; the faerie's lasting state in
+  registers; `night` declares the companion role with the faerie's pin.
+  (from: companion-driver consensus)
 - Resolve an uncertain crossing through the authority directory, not a
   colocated row. A silo row whose crossing log answers `Uncertain` cannot write
   the final checkpoint a deactivation needs, so only a silo restart replaces it;
@@ -1112,6 +1148,18 @@ answer.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
+
+- [low] An imported module named `roles` changes how its importer lints. Add a
+  file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
+  accept: true } ]` section and append `import "roles"` to
+  `worlds/standard/standard.puck`: `puck lint --strict
+  worlds/standard/standard.puck` refused with PUCK031 (the fragment validated
+  as a root, failing on `bindingOverlays[0]` missing `document`), while the
+  same row as `companions.puck` imported by that name, or appended to
+  `camera.puck`, linted clean. Seen before the standard package became a
+  schema-less fragment; re-run on the current head, then find why the module's
+  name (a document member's name) changes import resolution or root
+  classification. (from: companion-build-2)
 
 - [low] The work sheet still prices a few shapes above what one tick runs, each
   a candidate for an enforced bound like `maxFirings` rather than an inference:

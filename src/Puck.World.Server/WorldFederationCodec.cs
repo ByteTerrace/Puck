@@ -51,6 +51,16 @@ public enum WorldFederationRequest : byte {
     ObserveTraveler = 13,
     /// <summary>Fetch one prototype disclosed to this observer or traveler.</summary>
     Prototype = 14,
+    /// <summary>Ask a companion's title authority whether a hop to the authenticated destination is currently
+    /// granted.</summary>
+    HopQuery = 15,
+    /// <summary>Ask a companion's title authority to authorize the authenticated custodian's onward hop.</summary>
+    HopRequest = 16,
+    /// <summary>Ask a hop's destination, as the companion's authenticated title authority, what it holds under the
+    /// hop's key.</summary>
+    CustodyQuery = 17,
+    /// <summary>Tell a companion's title authority that the authenticated custodian settled its hop.</summary>
+    HopSettled = 18,
 }
 /// <summary>The federation response kinds an authority writes back.</summary>
 public enum WorldFederationResponse : byte {
@@ -92,6 +102,14 @@ public enum WorldFederationResponse : byte {
     ProjectionDelta = 13,
     /// <summary>The canonical bytes of one authorized prototype body.</summary>
     Prototype = 14,
+    /// <summary>Home's answers to a hop confirmation question.</summary>
+    HopQueryReply = 15,
+    /// <summary>Home's answers to a hop request.</summary>
+    HopAnswer = 16,
+    /// <summary>A destination's custody answer.</summary>
+    CustodyReply = 17,
+    /// <summary>Whether home recorded a hop's settlement and acknowledges the notice.</summary>
+    HopSettledAck = 18,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -166,8 +184,10 @@ public static partial class WorldFederationCodec {
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
     private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
         var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
+        var motion = WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader);
+        var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
 
-        return (WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader) with { Profile = profile });
+        return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
     }
     private static EntitySnapshot ReadEntity(ref WireReader reader, int ordinal) {
         var index = reader.ReadInt32();
@@ -313,6 +333,7 @@ public static partial class WorldFederationCodec {
         var catalogRig = reader.ReadByte();
         var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var remoteHuman = reader.ReadBoolean();
+        var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
 
         if (reader.Failed) {
             failure = reader.Failure;
@@ -321,6 +342,8 @@ public static partial class WorldFederationCodec {
         }
 
         member = new WorldTransferReservationMember(
+            Companion: companion,
+            MemberId: memberId,
             Principal: Principal.Console,
             PreferredSlot: preferred,
             Identity: identity,
@@ -341,6 +364,11 @@ public static partial class WorldFederationCodec {
         );
         WorldWireLeaves.WriteCommitMemberMotion(
             member: member,
+            writer: writer
+        );
+        WorldWireLeaves.WriteMemberIdentity(
+            companion: member.Companion,
+            memberId: member.MemberId,
             writer: writer
         );
     }
@@ -698,6 +726,11 @@ public static partial class WorldFederationCodec {
                 writer: writer
             );
             writer.WriteBoolean(value: member.RemoteHuman);
+            WorldWireLeaves.WriteMemberIdentity(
+                companion: member.Companion,
+                memberId: member.MemberId,
+                writer: writer
+            );
         }
 
         return writer.ToArray();
@@ -717,12 +750,28 @@ public static partial class WorldFederationCodec {
 
         writer.WriteBoolean(value: reply.Accepted);
         writer.WriteString(value: reply.Reason);
+        writer.WriteBoolean(value: reply.Transient);
         writer.WriteUInt64(value: reply.DeadlineDestinationTick);
         writer.WriteInt32(value: reply.BodyIndices.Count);
 
         foreach (var slot in reply.BodyIndices) {
             writer.WriteInt32(value: slot);
         }
+        writer.WriteOptionalClass(
+            value: reply.AcceptedMembers,
+            writeValue: static (w, ids) => w.WriteArray(
+                items: ids,
+                writeItem: static (i, id) => i.WriteInt32(value: id)
+            )
+        );
+        writer.WriteArray(
+            items: reply.Refusals,
+            writeItem: static (w, refusal) => {
+                w.WriteInt32(value: refusal.MemberId);
+                w.WriteByte(value: (byte)refusal.Reason);
+                w.WriteString(value: refusal.Detail);
+            }
+        );
 
         writer.WriteBlock(value: ((reply.DestinationDefinition is { } definition)
             ? EncodeDocument(
@@ -906,6 +955,10 @@ public static partial class WorldFederationCodec {
         WorldFederationRequest.Authenticate => ((MaxProofBytes + MaxChallengeBytes) + (2 * sizeof(int))),
         WorldFederationRequest.Abort => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Status => (2 * WireLimits.MaxStringBytes),
+        WorldFederationRequest.HopQuery => MaxFrameBytes,
+        WorldFederationRequest.HopRequest => MaxFrameBytes,
+        WorldFederationRequest.CustodyQuery => (4 * WireLimits.MaxStringBytes),
+        WorldFederationRequest.HopSettled => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.AcknowledgeTransfer => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Route => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.ObserveTraveler => (4 * WireLimits.MaxStringBytes),
@@ -923,7 +976,11 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.Ack => 0,
         WorldFederationResponse.ProjectionInvalidated => WireLimits.MaxStringBytes,
         WorldFederationResponse.Authenticated => (((2 * sizeof(int)) + WireLimits.MaxStringBytes) + MaxProofBytes),
-        WorldFederationResponse.Status => sizeof(byte),
+        WorldFederationResponse.Status => ((2 + sizeof(int)) + (sizeof(int) * WorldBodiesLimits.CapacityCeiling)),
+        WorldFederationResponse.HopQueryReply => MaxFrameBytes,
+        WorldFederationResponse.HopAnswer => MaxFrameBytes,
+        WorldFederationResponse.CustodyReply => sizeof(byte),
+        WorldFederationResponse.HopSettledAck => sizeof(byte),
         WorldFederationResponse.Challenge => MaxChallengeBytes,
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),
@@ -1329,6 +1386,7 @@ public static partial class WorldFederationCodec {
 
         var accepted = reader.ReadBoolean();
         var reason = reader.ReadString(field: "reservation reply reason");
+        var transient = reader.ReadBoolean();
         var deadline = reader.ReadUInt64();
         var count = reader.ReadCount(
             field: "reservation reply body count",
@@ -1347,6 +1405,40 @@ public static partial class WorldFederationCodec {
 
         for (var index = 0; (index < count); index++) {
             slots[index] = reader.ReadInt32();
+        }
+
+        var acceptedMembers = reader.ReadOptionalClass(readValue: static (ref WireReader r) => r.ReadArray(
+            field: "reservation reply accepted members",
+            readItem: static (ref WireReader i) => i.ReadInt32(),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        ));
+        var refusals = reader.ReadArray(
+            field: "reservation reply refusals",
+            readItem: static (ref WireReader r) => {
+                var memberId = r.ReadInt32();
+                var why = r.ReadByte();
+
+                if (!r.Failed && !Enum.IsDefined(value: (WorldCompanionRefusal)why)) {
+                    r.Fail(
+                        detail: $"companion refusal {why} is not declared",
+                        refusal: WireRefusal.EnumValueUnknown
+                    );
+                }
+
+                return new WorldMemberRefusal(
+                    Detail: r.ReadString(field: "companion refusal detail"),
+                    MemberId: memberId,
+                    Reason: (WorldCompanionRefusal)why
+                );
+            },
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
+
+        if (!reader.Failed && (acceptedMembers is { } leased) && (leased.Length != count)) {
+            reader.Fail(
+                detail: $"reservation reply binds {count} body index(es) to {leased.Length} accepted member(s)",
+                refusal: WireRefusal.PayloadMalformed
+            );
         }
 
         var definitionBytes = reader.ReadBlock(
@@ -1379,11 +1471,15 @@ public static partial class WorldFederationCodec {
 
         reply = new WorldTransferReservationReply(
             Accepted: accepted,
+            AcceptedMembers: acceptedMembers,
             BodyIndices: slots,
+            Refusals: refusals,
             DeadlineDestinationTick: deadline,
             DestinationDefinition: definition,
             Reason: reason
-        );
+        ) {
+            Transient = transient,
+        };
 
         return Finish(
             failure: out failure,

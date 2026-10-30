@@ -21,10 +21,8 @@ public sealed partial class WorldRemoteAuthority {
         ) ||
             !answer.Ok ||
             (answer.Kind != WorldFederationResponse.Status) ||
-            (answer.Body.Length != 1) ||
-            !Enum.IsDefined(value: ((WorldTransferStatus)answer.Body.Span[0]))
+            !WorldFederationCodec.TryDecodeStatus(body: answer.Body.Span, landed: out _, status: out status)
         ) { return false; }
-        status = ((WorldTransferStatus)answer.Body.Span[0]);
         return true;
     }
     /// <summary>Polls a reserved transaction's exact commit without waiting for network I/O. The caller keeps the

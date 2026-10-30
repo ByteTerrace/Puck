@@ -80,6 +80,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeValue: static (w, v) => w.WriteInt64(value: v)
         );
         writer.WriteNullableString(value: entry.PlacementId);
+        writer.WriteBoolean(value: entry.Titled);
         writer.WriteFixedVector(value: entry.SpawnPosition);
         writer.WriteFixed(value: entry.SpawnYaw);
         writer.WriteArray(
@@ -194,6 +195,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "population entry placement id",
             maxBytes: MaxStringBytes
         );
+        var titled = reader.ReadBoolean();
         var spawnPosition = reader.ReadFixedVector();
         var spawnYaw = reader.ReadFixed();
         var admissionInstalledGrantTemplates = reader.ReadArray(
@@ -301,6 +303,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Parked: parked,
             ParkedUntilTick: parkedUntilTick,
             PlacementId: placementId,
+            Titled: titled,
             Position: position,
             ProducerAcquiredTarget: producerAcquiredTarget,
             ProducerActiveCurveIndex: producerActiveCurveIndex,

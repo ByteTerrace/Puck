@@ -32,7 +32,8 @@ public sealed partial class WorldPopulation {
             if (
                 (entry.PlacementId is null) &&
                 !entry.IsRemoteHuman &&
-                !entry.IsAuthorityTransferred
+                !entry.IsAuthorityTransferred &&
+                !IsHeld(index: index)
             ) {
                 count++;
             }
@@ -63,21 +64,31 @@ public sealed partial class WorldPopulation {
 
         return count;
     }
+    // A placement's inhabitants: its bodies here, and the held slots of its bodies away, which a reconcile must not
+    // replace while their titles may bring them back.
     private int CountInhabitants(string placementId) {
         var count = 0;
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
-            if (string.Equals(
+            if (
+                string.Equals(
                 a: m_entries[index].PlacementId,
                 b: placementId,
                 comparisonType: StringComparison.Ordinal
-            )) {
+            ) ||
+                ((m_entries[index].PlacementId is null) && string.Equals(a: HeldPlacement(index: index), b: placementId, comparisonType: StringComparison.Ordinal))
+            ) {
                 count++;
             }
         }
 
         return count;
     }
+    // What holds an empty index for a body that may come back to it, or null when nothing does (Holds).
+    private string? HeldPlacement(int index) => ((!m_entries[index].Active && (Holds is { } holds))
+        ? holds(arg: index)
+        : null);
+    private bool IsHeld(int index) => (HeldPlacement(index: index) is not null);
     private static WorldPlacement? FindInhabited(WorldDefinition definition, string placementId) {
         foreach (var placement in definition.Placements) {
             if (
@@ -103,7 +114,8 @@ public sealed partial class WorldPopulation {
 
             if (
                 (entry.PlacementId is null) &&
-                !entry.Active
+                !entry.Active &&
+                !IsHeld(index: index)
             ) {
                 return index;
             }
@@ -580,9 +592,10 @@ public sealed partial class WorldPopulation {
         return (((entry.Mobility is { } mobility) && (entry.MobilityGeneration == entry.Generation))
             ? mobility.Incarnation
             : new WorldEntityAddress(
-                authority,
-                index,
-                entry.Generation
+                Authority: authority,
+                Generation: entry.Generation,
+                Index: index,
+                Titled: entry.Titled
             )
         );
     }
@@ -657,7 +670,7 @@ public sealed partial class WorldPopulation {
             : new WorldMobilityIdentity(
                 DepartedFrom: here,
                 Epoch: 0UL,
-                Incarnation: here
+                Incarnation: (here with { Titled = entry.Titled })
             ));
     }
 
@@ -1027,7 +1040,8 @@ public sealed partial class WorldPopulation {
             if (
                 (entry.PlacementId is not null) ||
                 entry.IsRemoteHuman ||
-                entry.IsAuthorityTransferred
+                entry.IsAuthorityTransferred ||
+                IsHeld(index: index)
             ) {
                 continue;
             }

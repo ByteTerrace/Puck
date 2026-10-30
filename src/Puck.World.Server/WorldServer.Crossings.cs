@@ -4,6 +4,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     private IWorldCrossingLog? m_crossingLog;
     private ulong? m_uncertainCrossing;
+    private WorldCrossingRecord? m_uncertainRecord;
 
     // Set while the escrow lands a committed cohort: the admissions it makes are the arrival's own consequences.
     internal bool LandingArrival { get; set; }
@@ -22,6 +23,10 @@ public sealed partial class WorldServer {
     /// set at the start of every step while any image is held and once more as the set empties, on the stepping thread
     /// under the authority gate. The replay tape attaches here while it records.</summary>
     public Action<IReadOnlyList<WorldFederatedIntentCheckpoint>>? FederatedIntentTap { get; set; }
+    /// <summary>Gets or sets the observer of every custody record this authority makes durable, at the position among
+    /// its inputs where it became durable, under the authority gate. The replay tape attaches here while it records, and
+    /// its re-drive folds each record through the shadow's custody reducer.</summary>
+    public Action<WorldCrossingRecord>? CustodyTap { get; set; }
     /// <summary>Gets the durable crossing log this authority writes ahead through, or <see langword="null"/> when it
     /// keeps no crossing beyond its own process.</summary>
     public IWorldCrossingLog? CrossingLog => m_crossingLog;
@@ -109,6 +114,7 @@ public sealed partial class WorldServer {
     internal WorldCrossingDurability RecordCrossingHeld(WorldCrossingRecord record, out string reason) {
         if (m_crossingLog is not { } log) {
             reason = string.Empty;
+            FoldDurable(record: record);
             return WorldCrossingDurability.Durable;
         }
         if (m_uncertainCrossing is { } uncertain) {
@@ -128,9 +134,59 @@ public sealed partial class WorldServer {
 
         if (durability == WorldCrossingDurability.Durable) {
             m_transferEscrow.AdvanceCrossingSequence();
+            FoldDurable(record: record);
         } else if (durability == WorldCrossingDurability.Uncertain) {
             m_uncertainCrossing = entry.Sequence;
+            m_uncertainRecord = record;
         }
         return durability;
     }
+    // A durable record's custody effect. An arrival folds where it lands (live, recovery and re-drive alike), so only
+    // the other records fold here.
+    private void FoldDurable(WorldCrossingRecord record) {
+        if ((record is not WorldCrossingRecord.Arrival) && m_transferEscrow.Custody.Concerns(record: record)) {
+            ApplyCustodyRecord(record: record);
+            CustodyTap?.Invoke(obj: record);
+        }
+    }
+
+    /// <summary>Makes one custody record durable and, once it is, folds it through this authority's custody reducer
+    /// and reports it to <see cref="CustodyTap"/>. A record that is refused or uncertain is never folded: an
+    /// uncertain one leaves the authority latched, answering about its key as uncertain, until a recovered activation
+    /// reads whether it landed. One call appends one record, so a crash between two steps finds the state between
+    /// them.</summary>
+    /// <param name="record">The custody record (<see cref="WorldCompanionCustody.Folds"/>, never an arrival).</param>
+    /// <param name="reason">Why the record is not known to be durable, when it is not.</param>
+    /// <returns>What became of the record.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="record"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="record"/> is not a custody record.</exception>
+    public WorldCrossingDurability RecordCustody(WorldCrossingRecord record, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: record);
+        if (!WorldCompanionCustody.Folds(record: record) || (record is WorldCrossingRecord.Arrival)) {
+            throw new ArgumentException(
+                message: $"'{record.GetType().Name}' is not a custody record",
+                paramName: nameof(record)
+            );
+        }
+
+        var refusal = string.Empty;
+        var durability = ExecuteAuthorityOperation(operation: () => RecordCustodyHeld(
+            reason: out refusal,
+            record: record
+        ));
+
+        reason = refusal;
+        return durability;
+    }
+    /// <summary>Returns whether this authority is latched on an uncertain crossing record about
+    /// <paramref name="key"/>: it cannot yet call its answer about that key durable.</summary>
+    /// <param name="key">The transfer key.</param>
+    /// <returns><see langword="true"/> while an uncertain record about the key awaits recovery.</returns>
+    public bool IsUncertainAbout(WorldTransferKey key) => ExecuteAuthorityOperation(operation: () => IsUncertainAboutHeld(key: key));
+
+    // Callers hold the authority gate.
+    internal WorldCrossingDurability RecordCustodyHeld(WorldCrossingRecord record, out string reason) => RecordCrossingHeld(
+        reason: out reason,
+        record: record
+    );
 }

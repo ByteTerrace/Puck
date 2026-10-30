@@ -138,7 +138,7 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
 /// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
-public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDisposable {
+public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldCustodyPeer, IDisposable {
     /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
     private const string UnconfiguredDetail = "this run holds no federation signing identity";
 
@@ -1020,13 +1020,16 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             result: out result
         );
     }
-    private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer) {
+    // Correlation names what a step is about beyond its source-scoped id, so two steps of one kind about different
+    // questions (a hop query about another authority's key, other companions or the other phase) never share an answer.
+    private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer, string correlation = "") {
         answer = default;
 
         if (m_submissionAuthority is { } upstream) {
             return upstream.TryResolveTransferStep(
                 answer: out answer,
                 body: body,
+                correlation: correlation,
                 kind: kind,
                 sourceAuthority: sourceAuthority,
                 transferId: transferId
@@ -1059,6 +1062,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         }
 
         var key = new TransferStepKey(
+            Correlation: correlation,
             Kind: kind,
             SourceAuthority: sourceAuthority,
             TransferId: transferId
@@ -1307,7 +1311,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         );
 
         if (answer.Kind != WorldFederationResponse.Reservation) {
-            return WorldTransferReservationReply.Refused(reason: answer.Describe());
+            // A request or answer the lane lost decided nothing; an unconfigured federation identity never will.
+            return WorldTransferReservationReply.Refused(reason: answer.Describe()) with {
+                Transient = ((answer.Failure.Refusal is WireRefusal.LaneUnavailable or WireRefusal.RequestTimedOut or WireRefusal.ConnectionClosed) && !LacksSigningIdentity()),
+            };
         }
 
         if (
@@ -1350,20 +1357,146 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             answer: out var answer
         );
 
-        if (
-            (answer.Kind != WorldFederationResponse.Status) ||
-            (answer.Body.Length != 1) ||
-            !Enum.IsDefined(value: ((WorldTransferStatus)answer.Body.Span[0]))
-        ) {
+        return (answer.Kind == WorldFederationResponse.Status) && WorldFederationCodec.TryDecodeStatus(
+            body: answer.Body.Span,
+            landed: out _,
+            status: out status
+        );
+    }
+    /// <summary>Reads the request-local ids a committed transfer landed at this peer.</summary>
+    /// <param name="sourceAuthority">The authenticated source namespace.</param>
+    /// <param name="transferId">The transfer id.</param>
+    /// <param name="landed">The landed ids; <see langword="null"/> when the peer holds no commit for the key.</param>
+    /// <returns><see langword="false"/> when the peer returned no usable answer.</returns>
+    public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
+        landed = null;
+
+        _ = TryResolveTransferStep(
+            sourceAuthority: sourceAuthority,
+            transferId: transferId,
+            kind: WorldFederationRequest.Status,
+            body: () => WorldFederationCodec.EncodeTransferKey(
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            ),
+            answer: out var answer
+        );
+
+        if ((answer.Kind != WorldFederationResponse.Status) || !WorldFederationCodec.TryDecodeStatus(
+            body: answer.Body.Span,
+            landed: out var ids,
+            status: out _
+        )) {
             return false;
         }
-
-        status = ((WorldTransferStatus)answer.Body.Span[0]);
-
+        landed = ids;
         return true;
     }
+    /// <summary>Asks this peer, as a companion's title authority, whether each hop under <paramref name="key"/> is
+    /// currently granted to <paramref name="destination"/>: the lane authenticates as the destination, so the peer
+    /// answers for that namespace alone.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnations">The companions.</param>
+    /// <param name="destination">The asking destination: this lane's authenticated namespace.</param>
+    /// <param name="phase">The decision the question belongs to; it correlates the answer to this question alone.</param>
+    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
+        _ = TryResolveTransferStep(
+            sourceAuthority: destination,
+            transferId: key.TransferId,
+            kind: WorldFederationRequest.HopQuery,
+            body: () => WorldFederationCodec.EncodeHopQuery(
+                incarnations: incarnations,
+                key: key,
+                phase: phase
+            ),
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{(byte)phase}|{string.Join(',', incarnations)}"
+        );
 
-    private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind);
+        return (((answer.Kind == WorldFederationResponse.HopQueryReply) && WorldFederationCodec.TryDecodeHopQueryReply(
+            answers: out var answers,
+            body: answer.Body.Span,
+            failure: out _
+        ) && (answers.Length == incarnations.Count))
+            ? answers
+            : null);
+    }
+    /// <summary>Asks this peer, as a hop's destination, what it holds for <paramref name="incarnation"/> under
+    /// <paramref name="key"/>: the lane authenticates as <paramref name="asker"/>, the companion's title authority.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="asker">The asking title authority: this lane's authenticated namespace.</param>
+    /// <returns>The answer; <see cref="WorldCustodyAnswer.Uncertain"/> when the peer gave no usable answer.</returns>
+    public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) {
+        _ = TryResolveTransferStep(
+            sourceAuthority: asker,
+            transferId: key.TransferId,
+            kind: WorldFederationRequest.CustodyQuery,
+            body: () => WorldFederationCodec.EncodeCompanionHop(
+                incarnation: incarnation,
+                key: key
+            ),
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{incarnation}"
+        );
+
+        return (((answer.Kind == WorldFederationResponse.CustodyReply) && (answer.Body.Length == 1) && Enum.IsDefined(value: (WorldCustodyAnswer)answer.Body.Span[0]))
+            ? (WorldCustodyAnswer)answer.Body.Span[0]
+            : WorldCustodyAnswer.Uncertain);
+    }
+    /// <summary>Tells this peer, as a companion's title authority, that <paramref name="source"/> settled its hop: the
+    /// lane authenticates as the source.</summary>
+    /// <param name="key">The hop's key, minted by <paramref name="source"/>.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="source">The settling custodian: this lane's authenticated namespace.</param>
+    /// <returns><see langword="true"/> once the peer acknowledged the notice.</returns>
+    public bool SettleHop(WorldTransferKey key, WorldEntityAddress incarnation, string source) {
+        _ = TryResolveTransferStep(
+            sourceAuthority: source,
+            transferId: key.TransferId,
+            kind: WorldFederationRequest.HopSettled,
+            body: () => WorldFederationCodec.EncodeCompanionHop(
+                incarnation: incarnation,
+                key: key
+            ),
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{incarnation}"
+        );
+
+        return ((answer.Kind == WorldFederationResponse.HopSettledAck) && (answer.Body.Length == 1) && (answer.Body.Span[0] == 1));
+    }
+    /// <summary>Asks this peer, as a companion's title authority, to authorize <paramref name="source"/>'s onward hop:
+    /// the lane authenticates as the source.</summary>
+    /// <param name="key">The crossing's key, minted by <paramref name="source"/>.</param>
+    /// <param name="source">The asking custodian: this lane's authenticated namespace.</param>
+    /// <param name="destination">Where the crossing goes.</param>
+    /// <param name="members">The companions.</param>
+    /// <returns>One answer per companion; each <see cref="WorldHopVerdict.Unavailable"/> when the peer gave no usable
+    /// answer.</returns>
+    public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) {
+        _ = TryResolveTransferStep(
+            sourceAuthority: source,
+            transferId: key.TransferId,
+            kind: WorldFederationRequest.HopRequest,
+            body: () => WorldFederationCodec.EncodeHopRequest(
+                destination: destination,
+                key: key,
+                members: members
+            ),
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{destination}|{string.Join(',', members.Select(selector: static member => $"{member.Incarnation}@{member.Epoch}"))}"
+        );
+
+        return (((answer.Kind == WorldFederationResponse.HopAnswer) && WorldFederationCodec.TryDecodeHopAnswer(
+            answers: out var answers,
+            body: answer.Body.Span,
+            failure: out _
+        ) && (answers.Length == members.Count))
+            ? answers
+            : [.. members.Select(selector: static member => new WorldHopAnswer(Incarnation: member.Incarnation, Next: 0UL, Verdict: WorldHopVerdict.Unavailable))]);
+    }
+
+    private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind, string Correlation = "");
     // One route republish generation: the endpoint to dial and its description, formatted once here so no attempt,
     // narration, or comparison formats it again, and held as one reference so a swap is atomic.
     private sealed class PublishedRoute(EndPoint endpoint) {

@@ -25610,6 +25610,22 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "WorldDistribution"
+              },
+              "role": {
+                "description": "The name of the companion role (WorldRole) the body holds: it goes where the player it follows goes, under the role declaration of each world it enters. Absent: the body holds no role.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "follows": {
+                "description": "The 0-based local seat whose player the role\u0027s body follows. Required with Role and refused without it.",
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [

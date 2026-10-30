@@ -152,6 +152,7 @@ public sealed partial class WorldPopulation {
             Parked: entry.Parked,
             ParkedUntilTick: entry.ParkedUntilTick,
             PlacementId: entry.PlacementId,
+            Titled: entry.Titled,
             SpawnPosition: entry.SpawnPosition,
             SpawnYaw: entry.SpawnYaw,
             AdmissionInstalledGrantTemplates: (alias
@@ -268,6 +269,7 @@ public sealed partial class WorldPopulation {
             entry.IsRemoteHuman = false;
             entry.IsAuthorityTransferred = false;
             entry.PlacementId = null;
+            entry.Titled = false;
             entry.Mobility = null;
             entry.MobilityGeneration = 0;
             entry.AdmissionInstalledGrantTemplates = [];
@@ -342,6 +344,7 @@ public sealed partial class WorldPopulation {
             entry.Parked = captured.Parked;
             entry.ParkedUntilTick = captured.ParkedUntilTick;
             entry.PlacementId = captured.PlacementId;
+            entry.Titled = captured.Titled;
             entry.SpawnPosition = captured.SpawnPosition;
             entry.SpawnYaw = captured.SpawnYaw;
             entry.AdmissionInstalledGrantTemplates = captured.AdmissionInstalledGrantTemplates;

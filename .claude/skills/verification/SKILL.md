@@ -292,7 +292,7 @@ the skip exception, so a test that wraps a call which can skip reports
 executable model of the companion custody protocol
 ([the specification](../../../docs/plans/companion-redesign.md#8-the-model)). Its
 named traces and small scopes run with the ordinary suite; its large scopes
-(over about 100,000 states each, several minutes and a few hundred megabytes in
+(over about 100,000 states each, seven to seventeen minutes by machine load and a few hundred megabytes in
 all) are explicit tests carrying `Category=ModelCheck`:
 
 ```text
@@ -304,6 +304,14 @@ change to the protocol (the model, its specification, or the engine code that
 implements a transition) runs it before landing: the protocol is changed in the
 model first, and the model check is the evidence. Without `--explicit on` the
 filter selects nothing.
+
+The engine's half of that evidence is `CompanionCustodyRefinementLawTests`
+(`tests/Puck.World.Server.Tests`, ordinary suite, under a minute): real
+authorities run every single-fault schedule while the model follows, and every
+peer call or crossing-log append the model does not enable is a failure. A change
+to an engine transition runs it beside the model check
+(`--filter-class "*CompanionCustodyRefinementLawTests"`); a move it reports as
+deferred is a protocol step the engine has not built.
 
 ## What uses the GPU
 
