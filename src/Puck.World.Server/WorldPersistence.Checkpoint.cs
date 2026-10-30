@@ -870,6 +870,7 @@ public sealed partial class WorldPersistence {
             );
         }
 
+        Host.ResetRedrivenDepartures();
         Host.Document.AdoptDefinition(definition: restoredDefinition);
         Host.Document.AdoptBase(
             definition: restoredBase,

@@ -44,7 +44,7 @@ public sealed class TestCommandLawTests {
         Assert.Contains(collection: json.RootElement.GetProperty(propertyName: "echoes").EnumerateArray(), filter: echo => echo.GetProperty(propertyName: "rejected").GetBoolean());
     }
     [Fact]
-    public void DifferentStateAndRulesHaveDifferentBootShapesAndTheirOwnVerdicts() {
+    public void DifferentStateAndRulesReuseOneHostAndKeepTheirOwnVerdicts() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-shapes-");
 
         directory.WriteText(name: "worlds/first.puck", text: """
@@ -65,13 +65,13 @@ public sealed class TestCommandLawTests {
             """);
         var (exit, output) = RunTest(directory.PathOf(name: "worlds"), "--reproduce");
         Assert.True(condition: (exit == 0), userMessage: output);
-        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=2 world-runs=2");
-        var first = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":7},"rules":[],"schedule":{"tick":1}}""");
-        var rescheduled = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":7},"rules":[],"schedule":{"tick":2}}""");
-        var changed = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"value":11},"rules":[],"schedule":{"tick":1}}""");
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=1 world-runs=2");
+        var first = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":7}]}]},"rules":[],"schedule":{"tick":1}}""");
+        var rescheduled = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":7}]}]},"rules":[],"schedule":{"tick":2}}""");
+        var changed = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":11}]}]},"rules":[],"schedule":{"tick":1}}""");
 
         Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: rescheduled));
-        Assert.NotEqual(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: changed));
+        Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: changed));
     }
     [Fact]
     public void OneBootRestoresPristineStateAfterAChangedScenarioAndReplaysEachInput() {
@@ -95,10 +95,14 @@ public sealed class TestCommandLawTests {
               expect { value[0] >= 7 }
             }
             test "changed" {
+              given { value[0] = 11 }
               when {
                 seat1: world.state.cell.set value 0 99
               }
-              expect { value[0] >= 7 }
+              expect {
+                value[0] == 99
+                marker[0] == 7
+              }
             }
             test "pristine again" {
               when {

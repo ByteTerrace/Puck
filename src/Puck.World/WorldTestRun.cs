@@ -80,6 +80,8 @@ internal sealed class WorldTestRun {
     public int AuthorityTicks { get; private set; }
     public long ExportTicks { get; private set; }
 
+    public event Action? FirstTick;
+
     private sealed record Landed(string PrincipalLabel, WorldTickScript.Line Line);
 
     /// <summary>The bound on recorded edit echoes, so a long run cannot grow the manifest without limit.</summary>
@@ -441,6 +443,7 @@ internal sealed class WorldTestRun {
         if (!IsArmed || m_exported) {
             return;
         }
+        if (AuthorityTicks == 0) { FirstTick?.Invoke(); }
         if ((tick % 120) == 0) { Progress?.Invoke(tick); }
         // Replay probes own per-authority tick hashes. A verdict-only run needs only the export and answers;
         // hashing again here duplicates the probe during reproduction and serves no manifest reader.
