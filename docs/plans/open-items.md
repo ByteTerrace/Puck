@@ -60,8 +60,8 @@ resolves their edits to this file at merge.
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
 11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
-    isolate the temporal-off cadence blink first, then why history never
-    resolves the jitter.
+    qualify the original temporal-off blink at a quiet refresh cadence;
+    reconstruction now converges on both backends.
 12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
@@ -143,6 +143,22 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
   qualification was headless, and the original state and physics timings
   regressed, so keep per-file timing and boot and work counts when reading the
   full sweep.
+- Temporal-shimmer's required cross-family renderer review and quiet-machine
+  frame/memory qualification remain with integration. Its C1 source captured
+  all 70 tour stops across three bounded Direct3D runs against the 64-stop base;
+  45 exceed 2 %. Every name, percentage and inspected explanation is in the
+  lane's `tour-final-comparison-notes.md`. New valley geometry, changed motion
+  ticks and a held-lift baseline explain some differences; broad static-lighting
+  differences remain unisolated. A same-World shader comparison at
+  `gather-teal-door-far` changed only 0.008941 % beyond 16 RGB levels between
+  original and current resolve, so that sampled broad lighting change is not
+  explained by the resolve alone. This is not attribution for every stop.
+  The final merge of `lead/catch-up` at `45d6a960c` adds five granary stops beyond
+  that measured plan. Rerun the integrated tour, standing/walking frame readings
+  and gallery/lift body patrol. History grew from 6 to 47 uint words per output
+  pixel: 164 extra bytes per allocated history surface, or 180.18 MiB at
+  1280x900. Measure the actual view/slot allocation; the loaded paired shader
+  readings establish no quiet-machine 60 FPS or VRAM qualification.
 
 ### Lighting and GI
 
@@ -1214,30 +1230,37 @@ the static round-section term's cost with `puck mesh audit --cpu`.
 
 ### Temporal shimmer and cadence flicker
 
-Owner: temporal-shimmer rendering lane (P15 temporal reconstruction) · two
-mediums from the owner's walkthrough · Next: finish the merged head's cold bake,
-measure the stationary-footprint fallback on both backends, and complete the
-comparative tour in bounded groups. The phase window fixes the bulk of the
-shimmer; its prior Vulkan wall burst still changed up to 360 pixels/.821%.
-Frozen-resolve diagnostics and a heat map locate that residual on stationary
-wall boundaries. Receiver-plane depth and a proof of an unchanged camera and
-all footprint taps now protect the phase window there; live validation is pending.
-Material-ID exposed coincident lintel/floor faces, now separated at the slab
-underside. The prior corrected sill's Vulkan burst changed at most one pixel
-with temporal on or off. The exact original off-mode paired-frame cadence
-trigger remains unconfirmed. The grazing-depth, sliver-motion and opaque-coverage
-GPU witnesses, including the new static/displaced-edge cases, pass6/6 on both
-backends (corrected fixture retry6.845s). Client checks pass4/4 after merging
-lead/catch-up3ddc50e03. Direct3D World33764's cold bake finished927.324s;
-its warmed wall burst changed up to414pixels/.945%, max mean|dY|.0049, against
-64pixels/.146%, max mean.0073off. Its pre-settlement captures are invalid;
-latest-source sill and paused-scene controls remain pending. The prior
-full Vulkan tour captured28/64 stops before its 19-minute GPU batch ended;
-its comparison sheets are retained in the lane's scratch report, not a completed
-tour.
+Owner: integration rendering follow-up · medium · Next: exercise the original
+off-mode blink with refresh holds active on a quiet machine. The reconstruction
+item is closed: both windowed backends now converge at the packet's two poses;
+receiver-plane depth, exact stationary motion and the bounded eight-phase
+window are documented in the rendering skill. In 16 presented frames, gallery
+max mean abs dY fell from 1.2785 to 0.0049 on Direct3D and from 1.0677 to 0.0082
+on Vulkan, against adjacent off controls 0.0073 and 0.0093. On-mode changed-pixel
+maxima remain 414/0.945 % and 434/0.990 %, respectively; this is not exact zero.
+The corrected sill changes at most 1 pixel on/6 off on Direct3D, 3 on/4 off on
+Vulkan. The lane's `handback-current.md` retains all before/after bursts and
+the completed 70-stop comparison manifest.
 
-- [medium] Standing still, the far wall of the level 3 gallery shimmers: over region 0.3 0.15 0.38 0.1, 28-34 % of pixels change every presented frame (max |dY| 121.6) with an exact 8-frame period (the jitter sequence) under `world.temporal on`, against 0.03 % under `world.temporal off`; history is likely rejected or clamped every frame on that speckled band (`body.pose 56.43 13.57 32.23 79 0 0`, eye (60.372, 15.8, 32.982) target (56.427, 14.57, 32.234); bursts w04-burst-on/, w04-burst-off/ in `.claude/scratch/walkthrough/` (the lead's machine)). The lift door threshold on level 3 shows the same, 10-16 % per frame (`body.pose 16.15 13.57 37.28 191 0 0`, eye (15.508, 16.895, 33.842) target (16.155, 14.57, 37.279)). (from: owner walkthrough)
-- [medium] The lift door threshold also blinks with temporal off: over region 0.36 0.78 0.32 0.1, pairs of frames 11 presentations apart change 3.18–3.42 % with max |dY| 26.28, then return on the next frame and hold still (frames 1/2 and 12/13 of w06-burst-off/). Magnified stills show sharp triangular patches swapping across the sill. Distinguish surface/depth selection from a cadence-driven lighting refresh (the far shadow cascade's 30 Hz update, a GI update tier, or a nearby screen's refresh); it is independent of temporal reconstruction (bursts w06-burst-on/, w06-burst-off/). The threshold's temporal-on measurement above uses this same region. (from: owner walkthrough)
+- [medium] The original off-mode sill burst has two paired flashes 11
+  presentations apart, 3.18–3.42 % changed with max abs dY 26.28 (w06-burst-off
+  frames 1/2 and 12/13 under `D:/Source/ByteTerrace/Puck/.claude/scratch/walkthrough/`).
+  Region 0.36 0.78 0.32 0.1; `body.pose 16.15 13.57 37.28 191 0 0`;
+  `view.override camera look 15.508 16.895 33.842 16.155 14.57 37.279 55`;
+  lift held open at level 3. The old shaft-lintel lids coincided with the slab
+  top. All 481 and 553 pixels with abs dY > 5 in the two original flashes lie
+  inside that projected lid (2-pixel filter margin). A matched material-ID
+  comparison, with temporal, shadows, AO and indirect off, shows triangular
+  competing material winners before separation and a uniform floor after it.
+  The authored lintels now end at the slab underside; their overlap is fixed.
+  The natural paired blink was not reproduced even in an old-geometry
+  120-frame burst under load. The final runs report `shadow-far.held=0`, so
+  they do not qualify a cadence refresh. Two events do not establish a period;
+  no particular far-shadow, GI or screen refresh is proved responsible.
+  Run a longer quiet-machine on/off burst at this pose on both backends, record
+  presentation/tick metadata and refresh counters, and isolate any remaining
+  step before changing its publication/blending. (from: owner walkthrough;
+  temporal-shimmer source and captures at `c1b214939`)
 
 ### Panes: split screens the player drives
 
