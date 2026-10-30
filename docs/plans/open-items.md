@@ -49,9 +49,10 @@ resolves their edits to this file at merge.
    headless, its look in the lead's window.
 8. [Residency and streaming](#residency-and-streaming): near-first has landed;
    next, GI on the same demand points and the measurements still open.
-9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
-   inverted sheets along the divider; the colliders report's remaining reds are
-   the valley relief's ([the valley's terrain](#the-valleys-terrain)).
+9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the valley
+   sectors' buried colliders and the hall stairs' crease grooves; the colliders
+   report's remaining reds are the valley relief's
+   ([the valley's terrain](#the-valleys-terrain)).
 10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
     it in `panes` and answers under pause, then the diagnostics' windowed checks
     and the developer exhibits.
@@ -483,24 +484,31 @@ Next: make the per-tick authority hash incremental (measured below).
 
 ### Collision versus drawn mesh
 
-Owner: next geometry and bake lane · ordinary · Next: the hall stairs' inverted
-sheets along the divider, then the 178 witnesses with no mesh correspondence.
-The rendered colliders report's only red findings left are the valley's relief
+Owner: next geometry and bake lane · ordinary · Next: the valley sectors'
+buried colliders, then the grooves at the hall stairs' creases. The rendered
+colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
-- The hall stairs' mesh carries inverted and doubled faces where flight A's
-  boxes meet the divider (x 12.1) and flight B's meet the east wall (x 12.3 and
-  14.1): `puck mesh audit --cpu --group "(hall-stairs)"` reports 1,557 flipped
-  triangles, 865 folds and 84 open edges, its worst clusters faces at 0.0 mm
-  off the field turned 180 degrees from its gradient (12.100, 5.828, 36.179).
-  The sweep's `finding-flight-a-level-1` stop ("dark patches where flight A
-  meets the wall") is likely this. A face two touching boxes share reads zero
-  in the union's field on both sides; find what samples or refines it, as the
-  touching seam under the Wonderland stairs did.
-- 178 collider witnesses find no retained triangle within the search radius
-  (`mesh correspondence uncertified` in the report's coverage); name their
-  placements and say whether each is a missing draw, a draw outside the static
-  trace scene or a search that should reach it.
+- The 178 witnesses the colliders report counts as `mesh correspondence
+  uncertified` all lie on the valley sectors' terrain masses (`main`,
+  `shoulder-left`, `shoulder-right` of every `valley-*` sector, y between about
+  -380 and -705 m), which the report's coverage finding now names with a
+  first witness each. No draw is missing and no search falls short: the
+  render cuts each mass's buried part away at the floor plane
+  (`terrainFloorCut`, a detail Intersection in `worlds/standard/terrain.puck`)
+  while contact collides each mass whole, so there is no surface to find.
+  Either contact takes the same cut (a body cannot reach under the floor), or
+  the report counts witnesses a detail intersection removes from the drawn
+  field as buried rather than unknown.
+- The hall stairs still draw a groove facet under the contour's cell where a
+  tread's filleted edge meets the divider or the east wall, its corner normals
+  the wall's (the fillet's notch at the seam's mouth): `puck mesh audit --cpu
+  --group "(hall-stairs)"` reads 953 flipped triangles (290 cm2) and 27 open
+  edges, all within a few centimetres of those creases and the boxes' corners,
+  after the crevice and seam-gradient fix took it from 1,557 flipped (616 cm2),
+  865 folds and 84 open edges. A groove narrower than the cell could close as a
+  crevice does (`SdfSampledLattice.GapFill`) if its crossings were placed on the
+  filled surface rather than in the groove.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
