@@ -91,6 +91,10 @@ other code running as the same OS identity.
 
 ## Verification
 
+`RunDirectorySweepLawTests` in `Puck.Cli.Core.Tests` sweeps a 5,000-deep stale
+run directory on a 256 KB stack and refuses a directory holding a link out of
+the root, which the repository's run-directory policy removes through
+`DeleteTree`.
 `InstallPruneLawTests` in the [launcher tests](../../tests/Puck.Launcher.Tests/README.md)
 and `ConfinedStorageLawTests` in `Puck.World.Server.Tests` exercise real
 directories, links, concurrent replacement and held removals on both platforms.

@@ -101,10 +101,13 @@
         >false</RestorePackagesWithLockFile>
     </PropertyGroup>
 
-    <!-- File apps share the runtime repository lookup and run-directory policy by source, so a bootstrap program needs no CLI build. -->
+    <!-- File apps share the runtime repository lookup and run-directory policy by source, so a bootstrap program needs no CLI build.
+         The policy removes a directory through Puck.Confinement, which a file app has no project reference to reach, so its
+         BCL-only sources are shared too. -->
     <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
         <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="RepositoryPaths.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="RunDirectory.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)src/Puck.Confinement/*.cs" Link="Confinement/%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('OpensGpuDeviceAttribute.cs')))">

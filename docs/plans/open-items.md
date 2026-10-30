@@ -417,14 +417,6 @@ Owner: test runner and replay specialist · medium and low ·
 Next: make the per-tick authority hash incremental (measured below).
 
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
-- [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
-  process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
-  recursive `Directory.Delete`, which overflows the stack past about 3,500
-  levels (a launcher-pruning depth law's red run left one at 5,000). Delete with
-  the pruning lane's iterative, link-refusing confined removal (not yet landed
-  here), and have the sweep refuse a directory it cannot remove rather than
-  crash. (from: the
-  prune-redesign lane)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
   per-tick hashing and recording, not host reuse. Recording slows the authored
   phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s

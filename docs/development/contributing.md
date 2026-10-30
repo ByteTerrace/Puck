@@ -254,7 +254,12 @@ entry costs its next reader a derivation, never a different answer.
 Every directory a run makes under the temporary directory follows one policy,
 `RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
 into the CLI and every test and validation project, and `Directory.Build.props`
-into file apps. A directory is named `<kind><process id>-<token>`: its kind,
+into file apps. Every removal goes through `Puck.Confinement`
+(`ConfinedDirectory.DeleteTree`: iterative, link-refusing), which those projects
+reference (file apps compile its sources), so a tree of any depth cannot
+overflow the removing process's stack; a directory holding a link, or one
+something still holds, is left in place and named in a
+`run directory not removed:` line, and never stops a sweep. A directory is named `<kind><process id>-<token>`: its kind,
 which starts with `puck-` and names its owner, the process that created it, and
 a unique token. A run that passes deletes it. A run that fails keeps it, names
 its absolute path in a `run directory kept: <path>` line, and trims its kind: of

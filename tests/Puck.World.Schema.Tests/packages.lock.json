@@ -339,6 +339,9 @@
           "Parlot": "[2.*, )"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.world.authoring": {
         "type": "Project",
         "dependencies": {
