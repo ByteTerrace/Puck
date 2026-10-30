@@ -1163,6 +1163,13 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateRoles(
+            addonNames: addonNames,
+            definition: definition,
+            errors: errors,
+            kitNames: kitNames
+        );
+
         var (iconNames, iconsAuthored) = ValidateIconography(
             definition: definition,
             errors: errors

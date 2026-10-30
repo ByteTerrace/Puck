@@ -30,6 +30,18 @@ public sealed partial class WorldInstanceHost {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
 
+            // A settled crossing whose unlanded members could not be restored owes their restoration alone.
+            if (pending.RestoreOnly) {
+                if (
+                    m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var restoring) &&
+                    RestoreDetachedMembers(commits: pending.CommitMembers, members: pending.Landed, source: restoring, transferId: pending.Transfer.TransferId)
+                ) {
+                    m_inDoubtTransfers.RemoveAt(index: index);
+                } else {
+                    index++;
+                }
+                continue;
+            }
             if (!TryBindRecoveryDestination(pending: ref pending)) {
                 index++;
                 continue;
@@ -148,14 +160,20 @@ public sealed partial class WorldInstanceHost {
                     // Once any member can return, never retry the cohort commit—even after a checkpoint.
                     pending = pending with { RollbackOnly = true };
                     m_inDoubtTransfers[index] = pending;
+
+                    var retired = InstallRetired(commits: pending.CommitMembers, landed: [], source: source);
+                    var kept = Enumerable.Range(start: 0, count: pending.CommitMembers.Count).Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
+                    var rollingBack = pending;
+
                     if (
                         !TrySettle(
                         arrived: false,
-                        pending: pending
+                        pending: pending,
+                        retired: retired
                     ) ||
                         !RestoreDetachedMembers(
-                        commits: pending.CommitMembers,
-                        members: pending.Landed,
+                        commits: [.. kept.Select(selector: ordinal => rollingBack.CommitMembers[ordinal])],
+                        members: [.. kept.Select(selector: ordinal => rollingBack.Landed[ordinal])],
                         source: source,
                         transferId: pending.Transfer.TransferId
                     )
@@ -691,6 +709,7 @@ public sealed partial class WorldInstanceHost {
                             narrationHub: m_narration
                         );
                         m_remoteAuthorities[resolvedName] = remote;
+                        RegisterRemoteCustodyPeer(remote: remote);
                     }
 
                     authority = new WorldPeerCall(
@@ -1009,6 +1028,7 @@ public sealed partial class WorldInstanceHost {
                 );
 
                 m_remoteAuthorities[instanceName] = remote;
+                RegisterRemoteCustodyPeer(remote: remote);
                 definition = loaded;
                 attach = remote.AttachSink;
                 reason = string.Empty;
@@ -1143,6 +1163,27 @@ public sealed partial class WorldInstanceHost {
                 ? Local.Server.ReserveTransfer(request: request)
                 : Remote!.Reserve(request: request with { PeerAdmission = true })
         ));
+        public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
+            if (Fault is not null) {
+                return Fault.TryLanded(
+                    landed: out landed,
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                );
+            }
+            if (Local is not null) {
+                landed = Local.Server.TransferLanded(
+                    sourceAuthority: sourceAuthority,
+                    transferId: transferId
+                );
+                return true;
+            }
+            return Remote!.TryLanded(
+                landed: out landed,
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            );
+        }
         public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
             if (Fault is not null) {
                 return Fault.TryStatus(

@@ -3323,3 +3323,4 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
 | `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |
 | `replays[].name` | `WorldScopedReplay.Name` | a replay scope identity, local to the replays section |
+| `roles[].name` | `WorldRole.Name` | a companion role name, which crossing companions carry and destinations declare |

@@ -140,6 +140,7 @@ public sealed partial class WorldReplayTape {
             TransferId: arrival.Request.TransferId
         ));
         m_liveServer.FederatedIntentTap = held => m_currentAuthority.Add(item: new WorldReplayEntry.FederatedIntents(Held: held));
+        m_liveServer.CustodyTap = record => m_currentAuthority.Add(item: new WorldReplayEntry.Custody(Encoded: WorldAuthorityCheckpointCodec.EncodeCrossingRecord(record: record)));
         m_liveServer.ServerEventTap = serverEvent => {
             switch (serverEvent) {
                 case WorldServerEvent.PeerAdmitted admitted:
@@ -174,6 +175,7 @@ public sealed partial class WorldReplayTape {
         m_liveServer.DepartureTap = null;
         m_liveServer.CrossingTap = null;
         m_liveServer.FederatedIntentTap = null;
+        m_liveServer.CustodyTap = null;
     }
     // The one place the taps attach or detach: the capture runs while a recording is armed or a history is on, never
     // during a live drive (the drive feeds recorded input through the server's own doors) and never while a history

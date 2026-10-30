@@ -1,0 +1,54 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "A world\u0027s declaration for one companion role: who drives a body that holds the role here and what it wears. A companion is admitted only where its role is declared; a destination that declares nothing for its role refuses it at reservation, and it stays with its custodian.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The role\u0027s name, unique within the document.",
+        "type": "string"
+      },
+      "driver": {
+        "description": "The Name of this world\u0027s own addon that drives the role: the same pinned driver a visitor prefers, or one the author substitutes. Exactly one of this and Accept.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "accept": {
+        "description": "Whether this world runs a visitor\u0027s own preferred driver, resolved by its pin.",
+        "type": "boolean",
+        "default": false
+      },
+      "kit": {
+        "description": "The Name an arriving companion moves under. Absent: the default peer kit. A companion re-adopted by its own home placement wears that placement\u0027s kit instead.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "look": {
+        "description": "The look an arriving companion wears. Absent: the default look.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false,
+    "title": "WorldRole"
+  },
+  "default": null
+}

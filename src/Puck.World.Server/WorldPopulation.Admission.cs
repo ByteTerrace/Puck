@@ -63,6 +63,19 @@ public sealed partial class WorldPopulation {
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
     }
+    /// <summary>Advances an inactive body index's occupant generation without seating anyone, as a landing that was rolled
+    /// back did: recovery redoes a refused commit's burned generations through it so the slot's next occupant is a new
+    /// generation here too.</summary>
+    /// <param name="index">The body index.</param>
+    /// <exception cref="InvalidOperationException">The index is active.</exception>
+    public void BurnGeneration(int index) {
+        var entry = m_entries[index];
+
+        if (entry.Active) {
+            throw new InvalidOperationException(message: $"body:{index} is active; its generation advances with its occupant");
+        }
+        entry.Generation = checked((entry.Generation + 1));
+    }
     // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
@@ -701,26 +714,10 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            entry.KitIndex = kitIndex;
-            entry.LookIndex = ResolveInhabitLook(placement: placement);
-            entry.Body?.SetIntentSource(source: placement.Inhabit!.Source);
-            entry.Body?.RecompileKit(
-                tuning: m_kits[kitIndex].Tuning,
-                actions: m_kits[kitIndex].Actions,
-                actionThresholds: m_kits[kitIndex].ActionThresholds,
-                actionShapes: m_kits[kitIndex].ActionShapes,
-                channels: m_kits[kitIndex].Channels,
-                roleMask: m_kits[kitIndex].RoleMask,
-                roleOrdinals: m_kits[kitIndex].RoleOrdinals,
-                actionState: m_kits[kitIndex].ActionState,
-                program: m_kits[kitIndex].BodyMotionProgram,
-                programs: m_bodyMotionPrograms,
-                collider: m_kits[kitIndex].Collider,
-                rigid: m_kits[kitIndex].Rigid,
-                carry: m_kits[kitIndex].Carry,
-                maxSmoothError: m_fixedMotion.MaxSmoothError,
-                holds: m_kits[kitIndex].Holds,
-                tether: m_kits[kitIndex].Tether
+            BindInhabitant(
+                entry: entry,
+                kitIndex: kitIndex,
+                placement: placement
             );
         }
 
@@ -768,6 +765,76 @@ public sealed partial class WorldPopulation {
         // rather than trusting a raw value that may now belong to a different row entirely.
         InvalidateInhabitCountCache();
         m_revision++;
+    }
+    /// <summary>Gets or sets what holds an empty body index for a body that may come back to it (a companion whose title
+    /// is away or whose hop is pending, or a body a departure in doubt left), answering the placement the held body
+    /// belongs to (empty for none) or <see langword="null"/> for an index nothing holds. A held index is never
+    /// allocated: the census, inhabitant reconciliation and admission skip it, and a placement counts its held indices
+    /// as inhabitants, so a reload never replaces a body that is away. The authority that owns this population installs
+    /// it from its custody records; <see langword="null"/> holds nothing.</summary>
+    public Func<int, string?>? Holds { get; set; }
+
+    /// <summary>Binds a companion that came home to the placement it left from, as that placement is installed now: the
+    /// body index becomes the placement's inhabitant again with the placement's kit, look and intent source, owned by
+    /// the placement's lifecycle rather than by a transfer. The landing already wrote its carried state and mobility.</summary>
+    /// <param name="slot">The body index the companion landed at: its held slot.</param>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="placementId">The placement the companion left from.</param>
+    /// <returns><see langword="true"/> when the placement still exists and resolves a kit; <see langword="false"/>
+    /// leaves the body as a transferred entity.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="placementId"/> is
+    /// <see langword="null"/>.</exception>
+    public bool ReadoptInhabitant(int slot, WorldDefinition definition, string placementId) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: placementId);
+
+        if (
+            (((uint)(slot - LocalSeatCount)) >= PeerCapacity) ||
+            !m_entries[slot].Active ||
+            (FindInhabited(definition: definition, placementId: placementId) is not { } placement) ||
+            (ResolveInhabitKit(definition: definition, placement: placement) is not { } kitName) ||
+            (ResolveKitOrNull(name: kitName) is not { } kitIndex)
+        ) {
+            return false;
+        }
+
+        var entry = m_entries[slot];
+
+        entry.PlacementId = placement.Id;
+        entry.IsAuthorityTransferred = false;
+        BindInhabitant(
+            entry: entry,
+            kitIndex: kitIndex,
+            placement: placement
+        );
+        RebuildPlacementOrdinalTable(definition: definition);
+        m_revision++;
+        return true;
+    }
+    // An inhabitant's binding to its placement as installed now: the kit (recompiled in place, its pose kept), the look
+    // and the intent source. A structural reconcile and a re-adoption bind here.
+    private void BindInhabitant(Entry entry, WorldPlacement placement, byte kitIndex) {
+        entry.KitIndex = kitIndex;
+        entry.LookIndex = ResolveInhabitLook(placement: placement);
+        entry.Body?.SetIntentSource(source: placement.Inhabit!.Source);
+        entry.Body?.RecompileKit(
+                tuning: m_kits[kitIndex].Tuning,
+                actions: m_kits[kitIndex].Actions,
+                actionThresholds: m_kits[kitIndex].ActionThresholds,
+                actionShapes: m_kits[kitIndex].ActionShapes,
+                channels: m_kits[kitIndex].Channels,
+                roleMask: m_kits[kitIndex].RoleMask,
+                roleOrdinals: m_kits[kitIndex].RoleOrdinals,
+                actionState: m_kits[kitIndex].ActionState,
+                program: m_kits[kitIndex].BodyMotionProgram,
+                programs: m_bodyMotionPrograms,
+                collider: m_kits[kitIndex].Collider,
+                rigid: m_kits[kitIndex].Rigid,
+                carry: m_kits[kitIndex].Carry,
+                maxSmoothError: m_fixedMotion.MaxSmoothError,
+                holds: m_kits[kitIndex].Holds,
+                tether: m_kits[kitIndex].Tether
+            );
     }
 
     // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in

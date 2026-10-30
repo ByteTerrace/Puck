@@ -1342,6 +1342,7 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldInputPattern), nameof(WorldInputPattern.Held), "shared logical input channel names"),
         new(typeof(WorldEffect.ConsumeInput), nameof(WorldEffect.ConsumeInput.Pattern), "a shared semantic input-pattern name"),
         new(typeof(WorldScopedReplay), nameof(WorldScopedReplay.Name), "a replay scope identity, local to the replays section"),
+        new(typeof(WorldRole), nameof(WorldRole.Name), "a companion role name, which crossing companions carry and destinations declare"),
         new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
         new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),

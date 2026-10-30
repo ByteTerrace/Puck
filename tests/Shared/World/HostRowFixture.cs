@@ -46,7 +46,9 @@ internal sealed class HostRow : IDisposable {
     /// directly, never resolved by path).</summary>
     /// <param name="name">The row's console-facing instance name.</param>
     /// <param name="definition">The document to boot from, or <see langword="null"/> for <see cref="Fixtures.BuildDocument"/>.</param>
-    public static HostRow Build(string name, WorldDefinition? definition = null) {
+    /// <param name="landingRefusal">The admission policy the escrow evaluates at each commit member's ordinal, or
+    /// <see langword="null"/> to admit every member.</param>
+    public static HostRow Build(string name, WorldDefinition? definition = null, Func<int, string?>? landingRefusal = null) {
         var bytes = WorldDefinitionSerialization.Serialize(definition: (definition ?? Fixtures.BuildDocument()));
         var doc = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
         var population = new WorldPopulation(definition: doc);
@@ -72,7 +74,8 @@ internal sealed class HostRow : IDisposable {
             envelope: new WorldRenderEnvelope(),
             machines: machines,
             instanceIdentity: name,
-            narrationSink: new WorldConsoleNarrationSink()
+            narrationSink: new WorldConsoleNarrationSink(),
+            landingRefusal: landingRefusal
         );
         var link = new LoopbackTransport(server: server);
         var instance = new WorldInstance(

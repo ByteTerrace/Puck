@@ -39,6 +39,7 @@ kind.
 | `prototypes` | the document | section | `prototypes` | The creation documents this world places. |
 | `record` | the document | block | `(nothing)` | A typed field set instantiated by pools. |
 | `replays` | the document | section | `replays` | Scoped input programs whose first live drive records a starting state and per-tick scope hashes; later drives restore and verify only that scope. |
+| `roles` | the document | section | `roles` | The companion roles a world takes: each runs a visitor's own pinned driver (accept) or names one of the world's addons, and may dress an arriving companion in a kit and look. |
 | `rule` | the document | block | `rules[]` | One reactive rule: a gate, its working values, and the effects it fires. |
 | `rules` | the document | block | `rules[]` | A shared header for several rules: its gate, locals and properties apply to every member. |
 | `set` | the document | statement | `sets[]` | One named set over the positions of a board, a zone, or a family, which `boardCombine` and `writeSet` read by name. |
@@ -316,6 +317,14 @@ replays [ { name: … rows [ … ] bodies [ … ] seats [ … ] control: … dur
 ```
 
 Printed back as `replays`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
+
+### `roles`
+
+```puck
+roles [ { name: … accept: … | driver: … kit: … look: … } ]
+```
+
+Printed back as `roles`; otherwise the generic value path. Every field of the node the description does not name prints as an ordinary property.
 
 ### `rule`
 

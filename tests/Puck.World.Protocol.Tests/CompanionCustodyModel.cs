@@ -54,8 +54,10 @@ public sealed record Minted(string Key, Node To, int[] MemberIds, string? Image 
 public sealed record Leased(string Key, Node From, Member[] Members) : Rec {
     public override string Canon => $"Leased({Key}<{From}:{string.Join(',', Members.Select(static m => m.Canon))})";
 }
-public sealed record Dead(string Key) : Rec {
-    public override string Canon => $"Dead({Key})";
+/// <summary>A key is dead here. <paramref name="Burned"/> names the slots a commit landed members at before it rolled
+/// them back: the generations they took outlive the rollback.</summary>
+public sealed record Dead(string Key, int[]? Burned = null) : Rec {
+    public override string Canon => $"Dead({Key}{(((Burned?.Length ?? 0) > 0) ? $":b{string.Join(',', Burned!)}" : "")})";
 }
 public sealed record Dep(string Key, Node To, Member[] Members, bool Shed) : Rec {
     public override string Canon => $"Dep({Key}>{To}:{string.Join(',', Members.Select(static m => m.Canon))}{(Shed ? ":shed" : "")})";
@@ -92,11 +94,12 @@ public sealed record Noticed(int Id, string What) : Rec {
 public sealed record Install(int Id) : Rec {
     public override string Canon => $"Install({Id})";
 }
-public sealed record Stranded(int Id) : Rec {
-    public override string Canon => $"Stranded({Id})";
+/// <summary>The companion was found separated during the player's <paramref name="Visit"/>th visit here.</summary>
+public sealed record Stranded(int Id, int Visit) : Rec {
+    public override string Canon => $"Stranded({Id}:v{Visit})";
 }
-public sealed record GraceElapsed(int Id) : Rec {
-    public override string Canon => $"Grace({Id})";
+public sealed record GraceElapsed(int Id, int Visit) : Rec {
+    public override string Canon => $"Grace({Id}:v{Visit})";
 }
 /// <summary>The driver wrote the companion's durable state while it stood here at <paramref name="Epoch"/>.</summary>
 public sealed record Write(int Id, int Epoch) : Rec {
@@ -145,6 +148,8 @@ public sealed class Custody {
     // Whether the recall's epoch exceeded every epoch issued before it (later issuance is the recalled lineage's own).
     public bool RecallSuperseded = true;
     public bool Installed;
+    // The epoch of every recall home recorded for this title; each one owes its own notice.
+    public List<int> Recalls = new();
 }
 
 /// <summary>What one authority's durable records say.</summary>
@@ -165,17 +170,24 @@ public sealed class View {
     public Dictionary<(string Key, int Id), HopEntry> Hops = new();
     public HashSet<(string Key, int Id)> HopsDone = new();
     public HashSet<(string Key, int Id)> Acked = new();
-    public HashSet<int> StrandedIds = new();
-    public HashSet<int> GraceIds = new();
+    // Stranding and its grace window belong to one visit of the player here: a later visit opens a new episode.
+    public HashSet<(int Id, int Visit)> StrandedIds = new();
+    public HashSet<(int Id, int Visit)> GraceIds = new();
     public HashSet<string> Noticed = new(StringComparer.Ordinal);
     public int Humans;
     public int MintedCount;
     public int ShedCount;
+    // How many times the player has been placed here (joined, landed, or restored by a rollback).
+    public int PlayerVisits;
 
     public string ImageOf(string key) => (ImageOfAttempt.TryGetValue(key, out var image) ? image : key);
     public bool Has(int id) => Bodies.ContainsKey(key: id);
     public Body? Body(int id) => (Bodies.TryGetValue(key: id, value: out var body) ? body : null);
-    public bool Follows(int id) => (Body(id: id) is { Follows: { } followed, FollowsSlot: var slot, FollowsGen: var gen } && (slot >= 0) && (Body(id: followed) is { } player) && (player.Slot == slot) && (player.Gen == gen));
+    public bool Stranded(int id) => StrandedIds.Contains(item: (id, PlayerVisits));
+    public bool GraceElapsed(int id) => GraceIds.Contains(item: (id, PlayerVisits));
+    // A binding with no generation is home's placement binding: it follows whoever holds the home seat. A visiting
+    // binding names the generation its followed member landed at.
+    public bool Follows(int id) => (Body(id: id) is { Follows: { } followed, FollowsSlot: var slot, FollowsGen: var gen } && (slot >= 0) && (Body(id: followed) is { } player) && (player.Slot == slot) && ((gen < 0) || (player.Gen == gen)));
     public IEnumerable<(string Key, int Id, bool Arrived)> UnackedSettles(Node node) {
         foreach (var (key, settle) in Settles) {
             if (!Mints.TryGetValue(key: key, value: out var minted) || (minted.To == Node.H) || (node == Node.H)) {
@@ -426,7 +438,7 @@ public static class CustodyModel {
         if (node.Id == Node.H) {
             view.Bodies[Ids.Player] = new Body { Id = Ids.Player, Slot = 0 };
             for (var id = Ids.C1; id < (Ids.C1 + companions); id++) {
-                view.Bodies[id] = new Body { Id = id, Slot = (id - 1), Follows = Ids.Player, FollowsSlot = 0, FollowsGen = 0 };
+                view.Bodies[id] = new Body { Id = id, Slot = (id - 1), Follows = Ids.Player, FollowsSlot = 0, FollowsGen = -1 };
                 view.Custody[id] = new Custody { HeldSlot = (id - 1) };
             }
         }
@@ -434,6 +446,7 @@ public static class CustodyModel {
             switch (rec) {
                 case PlayerJoined:
                     view.Bodies[Ids.Player] = new Body { Id = Ids.Player, Slot = 0, Gen = ++view.SlotGen[0] };
+                    view.PlayerVisits++;
                     break;
                 case PlayerLeft:
                     _ = view.Bodies.Remove(key: Ids.Player);
@@ -457,9 +470,15 @@ public static class CustodyModel {
                     break;
                 case Dead dead:
                     _ = view.DeadKeys.Add(item: dead.Key);
+                    foreach (var slot in (dead.Burned ?? [])) {
+                        view.SlotGen[slot]++;
+                    }
                     break;
                 case Arr arr:
                     view.Arrs[arr.Key] = arr;
+                    if (arr.Members.Any(static m => m.IsPlayer)) {
+                        view.PlayerVisits++;
+                    }
                     foreach (var member in arr.Members) {
                         view.SlotGen[member.Slot] = member.Gen;
                         var followed = ((member.Follows is { } f) ? arr.Members.FirstOrDefault(m => m.Id == f) : null);
@@ -479,7 +498,7 @@ public static class CustodyModel {
                             custody.MaxIssued = Math.Max(custody.MaxIssued, member.Epoch);
                             view.Bodies[member.Id].Follows = Ids.Player;
                             view.Bodies[member.Id].FollowsSlot = 0;
-                            view.Bodies[member.Id].FollowsGen = (view.Body(id: Ids.Player)?.Gen ?? view.SlotGen[0]);
+                            view.Bodies[member.Id].FollowsGen = -1;
                         }
                     }
                     break;
@@ -503,14 +522,19 @@ public static class CustodyModel {
                             if (settle.Landed.Contains(value: member.Id) || settle.Retired.Contains(value: member.Id)) {
                                 continue;
                             }
-                            // A restored companion follows only a player restored by the same departure.
+                            // A restored companion abroad follows only a player restored by the same departure; at home it
+                            // takes its placement's binding again.
                             var followed = ((member.Follows is { } f) ? restored.Members.FirstOrDefault(m => m.Id == f) : null);
+                            var placement = ((node.Id == Node.H) && Ids.IsCompanion(id: member.Id));
 
                             view.Bodies[member.Id] = new Body {
                                 Id = member.Id, Epoch = member.Epoch, Hop = member.Hop, Image = member.Image, Slot = member.Slot, Gen = member.Gen,
-                                Follows = member.Follows, FollowsSlot = (followed?.Slot ?? -1), FollowsGen = (followed?.Gen ?? -1),
+                                Follows = (placement ? Ids.Player : member.Follows), FollowsSlot = (placement ? 0 : (followed?.Slot ?? -1)), FollowsGen = (placement ? -1 : (followed?.Gen ?? -1)),
                                 ArrKey = ((node.Id == Node.H) ? "" : "restored:" + settle.Key),
                             };
+                            if (member.IsPlayer) {
+                                view.PlayerVisits++;
+                            }
                         }
                     }
                     break;
@@ -530,7 +554,13 @@ public static class CustodyModel {
                     break;
                 case HopDone done:
                     _ = view.HopsDone.Add(item: (done.Key, done.Id));
-                    if (view.Hops.TryGetValue(key: (done.Key, done.Id), value: out var settledHop) && view.Custody.TryGetValue(key: done.Id, value: out var title) && !title.Installed && !superseded.Contains(item: (done.Key, done.Id))) {
+                    // A release waits on the hop that was pending when it was installed; that hop's resolution ends the title.
+                    if (view.Custody.TryGetValue(key: done.Id, value: out var ending) && ending.Installed) {
+                        if ((ending.Kind == CustodyKind.Pending) && (ending.PendingKey == done.Key)) {
+                            ending.Kind = CustodyKind.Released;
+                            ending.PendingKey = "";
+                        }
+                    } else if (view.Hops.TryGetValue(key: (done.Key, done.Id), value: out var settledHop) && view.Custody.TryGetValue(key: done.Id, value: out var title) && !superseded.Contains(item: (done.Key, done.Id))) {
                         if (done.Arrived) {
                             title.Kind = CustodyKind.Away;
                             title.Custodian = settledHop.To;
@@ -560,7 +590,8 @@ public static class CustodyModel {
                         recalled.Recalled = true;
                         recalled.RecallImage = recalled.KnownImage;
                         recalled.RecallEpoch = recall.NewEpoch;
-                        view.Bodies[recall.Id] = new Body { Id = recall.Id, Epoch = recall.NewEpoch, Image = recalled.KnownImage, Slot = recalled.HeldSlot, Gen = ++view.SlotGen[recalled.HeldSlot], Follows = Ids.Player, FollowsSlot = 0, FollowsGen = (view.Body(id: Ids.Player)?.Gen ?? view.SlotGen[0]) };
+                        recalled.Recalls.Add(item: recall.NewEpoch);
+                        view.Bodies[recall.Id] = new Body { Id = recall.Id, Epoch = recall.NewEpoch, Image = recalled.KnownImage, Slot = recalled.HeldSlot, Gen = ++view.SlotGen[recalled.HeldSlot], Follows = Ids.Player, FollowsSlot = 0, FollowsGen = -1 };
                     }
                     break;
                 case Noticed noticed:
@@ -569,16 +600,20 @@ public static class CustodyModel {
                 case Install install:
                     if (view.Custody.TryGetValue(key: install.Id, value: out var released)) {
                         released.Installed = true;
-                        released.Kind = CustodyKind.Released;
-                        released.PendingKey = "";
+                        // A pending hop's destination may hold home's confirmation for its commit: the title stays
+                        // pending until that hop resolves, and is released then.
+                        if (released.Kind != CustodyKind.Pending) {
+                            released.Kind = CustodyKind.Released;
+                            released.PendingKey = "";
+                        }
                         _ = view.Bodies.Remove(key: install.Id);
                     }
                     break;
                 case Stranded stranded:
-                    _ = view.StrandedIds.Add(item: stranded.Id);
+                    _ = view.StrandedIds.Add(item: (stranded.Id, stranded.Visit));
                     break;
                 case GraceElapsed grace:
-                    _ = view.GraceIds.Add(item: grace.Id);
+                    _ = view.GraceIds.Add(item: (grace.Id, grace.Visit));
                     break;
                 case Write write:
                     if (view.Body(id: write.Id) is { } written) {
@@ -636,12 +671,13 @@ public static class CustodyModel {
                     case Recall recall when ((recall.Id - 1) == slot):
                         gen++;
                         break;
+                    case Dead dead when (dead.Burned ?? []).Contains(value: slot):
+                        gen++;
+                        break;
                 }
             }
             return gen;
         }
-        // The generation of the player at slot 0 as the companion's binding at index would record it.
-        int PlayerGenAt(int index) => SlotGenAt(slot: 0, index: index);
         int KnownImageBefore(int id, int index) {
             for (var j = index - 1; j >= 0; j--) {
                 switch (records[j]) {
@@ -678,7 +714,7 @@ public static class CustodyModel {
                         var followed = ((landed.Follows is { } f) ? arr.Members.FirstOrDefault(m => m.Id == f) : null);
                         var follows = (readopted ? Ids.Player : (landed.Follows ?? -1));
                         var followsSlot = (readopted ? 0 : (followed?.Slot ?? -1));
-                        var followsGen = (readopted ? PlayerGenAt(index: i) : (followed?.Gen ?? -1));
+                        var followsGen = (readopted ? -1 : (followed?.Gen ?? -1));
 
                         embodied[id] = new ShadowBody(Epoch: landed.Epoch, Slot: landed.Slot, Gen: landed.Gen, Image: landed.Image + WritesAfter(id: id, index: i), Follows: follows, FollowsSlot: followsSlot, FollowsGen: followsGen);
                         decided = true;
@@ -692,7 +728,9 @@ public static class CustodyModel {
                         if ((dep is not null) && (dep.Members.FirstOrDefault(m => m.Id == id) is { } restored) && !settle.Landed.Contains(value: id) && !settle.Retired.Contains(value: id)) {
                             var followed = ((restored.Follows is { } f) ? dep.Members.FirstOrDefault(m => m.Id == f) : null);
 
-                            embodied[id] = new ShadowBody(Epoch: restored.Epoch, Slot: restored.Slot, Gen: restored.Gen, Image: restored.Image + WritesAfter(id: id, index: i), Follows: restored.Follows ?? -1, FollowsSlot: (followed?.Slot ?? -1), FollowsGen: (followed?.Gen ?? -1));
+                            embodied[id] = (((node.Id == Node.H) && Ids.IsCompanion(id: id))
+                                ? new ShadowBody(Epoch: restored.Epoch, Slot: restored.Slot, Gen: restored.Gen, Image: restored.Image + WritesAfter(id: id, index: i), Follows: Ids.Player, FollowsSlot: 0, FollowsGen: -1)
+                                : new ShadowBody(Epoch: restored.Epoch, Slot: restored.Slot, Gen: restored.Gen, Image: restored.Image + WritesAfter(id: id, index: i), Follows: restored.Follows ?? -1, FollowsSlot: (followed?.Slot ?? -1), FollowsGen: (followed?.Gen ?? -1)));
                             decided = true;
                         }
                         break;
@@ -705,7 +743,7 @@ public static class CustodyModel {
                         decided = true;
                         break;
                     case Recall recall when (recall.Id == id):
-                        embodied[id] = new ShadowBody(Epoch: recall.NewEpoch, Slot: id - 1, Gen: SlotGenAt(slot: id - 1, index: i), Image: KnownImageBefore(id: id, index: i) + WritesAfter(id: id, index: i), Follows: Ids.Player, FollowsSlot: 0, FollowsGen: PlayerGenAt(index: i));
+                        embodied[id] = new ShadowBody(Epoch: recall.NewEpoch, Slot: id - 1, Gen: SlotGenAt(slot: id - 1, index: i), Image: KnownImageBefore(id: id, index: i) + WritesAfter(id: id, index: i), Follows: Ids.Player, FollowsSlot: 0, FollowsGen: -1);
                         decided = true;
                         break;
                 }
@@ -713,29 +751,34 @@ public static class CustodyModel {
             if (!decided && (node.Id == Node.H) && ((id == Ids.Player) || (Ids.IsCompanion(id: id) && (id < (Ids.C1 + companions))))) {
                 embodied[id] = ((id == Ids.Player)
                     ? new ShadowBody(Epoch: 0, Slot: 0, Gen: 0, Image: 0, Follows: -1, FollowsSlot: -1, FollowsGen: -1)
-                    : new ShadowBody(Epoch: 0, Slot: id - 1, Gen: 0, Image: WritesAfter(id: id, index: -1), Follows: Ids.Player, FollowsSlot: 0, FollowsGen: 0));
+                    : new ShadowBody(Epoch: 0, Slot: id - 1, Gen: 0, Image: WritesAfter(id: id, index: -1), Follows: Ids.Player, FollowsSlot: 0, FollowsGen: -1));
             }
         }
         if (node.Id != Node.H) {
             return (embodied, custody);
         }
         for (var id = Ids.C1; id < (Ids.C1 + companions); id++) {
-            if (records.OfType<Install>().Any(r => r.Id == id)) {
-                custody[id] = "Released";
+            var installAt = records.ToList().FindIndex(r => (r is Install install) && (install.Id == id));
+
+            if (installAt < 0) {
+                custody[id] = CustodyBefore(id: id, count: records.Count);
                 continue;
             }
-            var decided = false;
+            // A release installed while a hop was pending ends the title once that hop resolves.
+            var before = CustodyBefore(id: id, count: installAt);
+            var pendingKey = (before.StartsWith("Pending:", StringComparison.Ordinal) ? before["Pending:".Length..] : null);
 
-            for (var i = records.Count - 1; (i >= 0) && !decided; i--) {
+            custody[id] = (((pendingKey is not null) && !records.Skip(installAt + 1).Any(r => (r is HopDone d) && (d.Id == id) && (d.Key == pendingKey))) ? before : "Released");
+        }
+        return (embodied, custody);
+
+        string CustodyBefore(int id, int count) {
+            for (var i = count - 1; i >= 0; i--) {
                 switch (records[i]) {
                     case Arr arr when arr.Readopted.Contains(value: id):
-                        custody[id] = $"Home:H@{arr.Members.First(m => m.Id == id).Epoch}";
-                        decided = true;
-                        break;
+                        return $"Home:H@{arr.Members.First(m => m.Id == id).Epoch}";
                     case Recall recall when (recall.Id == id):
-                        custody[id] = $"Home:H@{recall.NewEpoch}";
-                        decided = true;
-                        break;
+                        return $"Home:H@{recall.NewEpoch}";
                     case HopDone done when (done.Id == id): {
                         var hopAt = records.Take(i).ToList().FindIndex(r => (r is Hop h) && (h.Key == done.Key) && h.Members.Any(m => m.Id == id));
 
@@ -751,25 +794,18 @@ public static class CustodyModel {
                         var hop = (Hop)records[hopAt];
                         var entry = hop.Members.First(m => m.Id == id);
 
-                        custody[id] = (done.Arrived ? $"Away:{hop.To}@{entry.Next}" : ((hop.From == Node.H) ? $"Home:H@{entry.Epoch}" : $"Away:{hop.From}@{entry.Epoch}"));
-                        decided = true;
-                        break;
+                        return (done.Arrived ? $"Away:{hop.To}@{entry.Next}" : ((hop.From == Node.H) ? $"Home:H@{entry.Epoch}" : $"Away:{hop.From}@{entry.Epoch}"));
                     }
                     case Hop hop when hop.Members.Any(m => m.Id == id):
                         // Cancelled before it was recorded: no custody effect.
                         if (records.Take(i).Any(r => (r is HopDone d) && (d.Key == hop.Key) && (d.Id == id))) {
                             break;
                         }
-                        custody[id] = $"Pending:{hop.Key}";
-                        decided = true;
-                        break;
+                        return $"Pending:{hop.Key}";
                 }
             }
-            if (!decided) {
-                custody[id] = "Home:H@0";
-            }
+            return "Home:H@0";
         }
-        return (embodied, custody);
     }
 
     // ---- helpers --------------------------------------------------------------------------------------------------
@@ -817,7 +853,13 @@ public static class CustodyModel {
     }
     private static string Mint(View view, Node at) => $"{at}{view.MintedCount + 1}";
     private static Member Carry(Body body, int? follows) => new(Id: body.Id, Epoch: body.Epoch, Hop: body.Hop, Image: body.Image, Follows: follows, Slot: body.Slot, Gen: body.Gen);
-    private static bool InFlight(ModelState s, Node from, string key, MsgKind kind, string arg = "") => s.Network.Any(m => (m.From == from) && (m.Key == key) && (m.Kind == kind) && ((arg.Length == 0) || m.Arg.StartsWith(arg, StringComparison.Ordinal)));
+    // A request counts as in flight only on the sender's current connection to its receiver: one sent on a connection
+    // since replaced may still execute there, but nothing will answer it on this one, so the sender sends again.
+    private static bool InFlight(ModelState s, Node from, string key, MsgKind kind, string arg = "") => s.Network.Any(m => (m.From == from) && (m.Key == key) && (m.Kind == kind) && (m.Lane == s.At(node: from).Connections[(int)m.To]) && ((arg.Length == 0) || m.Arg.StartsWith(arg, StringComparison.Ordinal)));
+    // A destination asks home once for its reservation (phase R) and again for its commit (phase C); an answer counts
+    // only for the request of its own phase that is waiting for it, so neither a late nor a duplicated answer to the
+    // reservation's question can stand for the commit's.
+    private static string Verification(string key, int id, char phase) => $"{key}:{id}:{phase}";
     private static bool Reachable(ModelState s, Node a, Node b) => (a == b) || (s.LinkUp[(int)a, (int)b] && s.LinkUp[(int)b, (int)a]);
     // Custodians offer fewer slots than home, so a cohort can exhaust a destination's companion capacity.
     private static int FreeSlot(ModelState s, View view, NodeState node, HashSet<int> taken) {
@@ -894,20 +936,19 @@ public static class CustodyModel {
         var refusals = new List<string>();
         var taken = new HashSet<int>();
         var player = msg.Members.FirstOrDefault(static m => m.IsPlayer);
+        var playerRefused = false;
 
+        // The player is decided under the destination's own door and cap; a refused player refuses the whole reservation
+        // once the cohort's companions have been asked about, since the destination verifies the hop before it decides.
         if (player is not null) {
-            if ((view.Humans + 1) > HumanCap) {
-                Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
-                return;
-            }
             var slot = ((to.Id == Node.H) ? 0 : FreeSlot(s: s, view: view, node: to, taken: taken));
 
-            if ((slot < 0) || ((to.Id == Node.H) && view.Bodies.Values.Any(static b => b.Slot == 0))) {
-                Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
-                return;
+            if (((view.Humans + 1) > HumanCap) || (slot < 0) || ((to.Id == Node.H) && view.Bodies.Values.Any(static b => b.Slot == 0))) {
+                playerRefused = true;
+            } else {
+                _ = taken.Add(item: slot);
+                accepted.Add(item: player with { Slot = slot });
             }
-            _ = taken.Add(item: slot);
-            accepted.Add(item: player with { Slot = slot });
         }
         foreach (var member in msg.Members.Where(static m => !m.IsPlayer)) {
             string? refusal = null;
@@ -926,9 +967,9 @@ public static class CustodyModel {
             } else {
                 // Home's authorization of this hop, verified with home itself, never taken from the sender; one query
                 // per key asks about every companion the reservation carries.
-                if (!to.Verified.TryGetValue(key: $"{msg.Key}:{member.Id}", value: out var next)) {
-                    if (!InFlight(s: s, from: to.Id, key: msg.Key, kind: MsgKind.HopQuery)) {
-                        Send(s: s, from: to.Id, to: Node.H, kind: MsgKind.HopQuery, key: msg.Key, members: [], arg: string.Join(',', msg.Members.Where(static m => !m.IsPlayer).Select(static m => m.Id)));
+                if (!to.Verified.TryGetValue(key: Verification(key: msg.Key, id: member.Id, phase: 'R'), value: out var next)) {
+                    if (!InFlight(s: s, from: to.Id, key: msg.Key, kind: MsgKind.HopQuery, arg: "R|")) {
+                        Send(s: s, from: to.Id, to: Node.H, kind: MsgKind.HopQuery, key: msg.Key, members: [], arg: "R|" + string.Join(',', msg.Members.Where(static m => !m.IsPlayer).Select(static m => m.Id)));
                     }
                     to.Held[msg.Key] = msg;
                     return;
@@ -951,6 +992,10 @@ public static class CustodyModel {
             }
         }
         _ = to.Held.Remove(key: msg.Key);
+        if (playerRefused) {
+            Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
+            return;
+        }
         if (accepted.Count == 0) {
             Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: ((refusals.Count > 0) ? refusals[0].Split(':')[1] : "Empty"));
             return;
@@ -1132,7 +1177,7 @@ public static class CustodyModel {
                 continue;
             }
             if (view.Hops.TryGetValue(key: (msg.Key, member.Id), value: out var existing)) {
-                answers.Add(item: $"{member.Id}={(home.UncertainAbout(key: msg.Key) ? "Unavailable" : existing.Next.ToString())}");
+                answers.Add(item: $"{member.Id}={(home.Latched ? "Unavailable" : (view.Custody[member.Id].Installed ? "Released" : existing.Next.ToString()))}");
                 continue;
             }
             if (!view.Custody.TryGetValue(key: member.Id, value: out var custody)) {
@@ -1156,7 +1201,7 @@ public static class CustodyModel {
             }
         }
         if (grantable.Count > 0) {
-            if (TryRecord(node: home, rec: new Hop(Key: msg.Key, From: from, To: to, Members: grantable.ToArray()))) {
+            if (TryRecord(node: home, rec: new Hop(Key: msg.Key, From: from, To: to, Members: [.. grantable]))) {
                 answers.AddRange(collection: grantable.Select(static g => $"{g.Id}={g.Next}"));
             } else {
                 answers.AddRange(collection: grantable.Select(static g => $"{g.Id}=Unavailable"));
@@ -1204,33 +1249,42 @@ public static class CustodyModel {
     // A destination's verification establishes a currently valid grant: the hop is this title's pending hop now, not
     // merely a record once written, and home can call it durable.
     private static void OnHopQuery(ModelState s, NodeState home, View view, Msg msg) {
-        var answers = msg.Arg.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).Select(id => {
+        var phase = msg.Arg[..2];
+        var answers = msg.Arg[2..].Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).Select(id => {
+            // A released title grants nothing more, though its pending hop stays open until it resolves.
             var granted = view.Hops.TryGetValue(key: (msg.Key, id), value: out var hop) &&
                 (hop.To == msg.From) &&
                 !view.HopsDone.Contains(item: (msg.Key, id)) &&
                 view.Custody.TryGetValue(key: id, value: out var custody) &&
                 (custody.Kind == CustodyKind.Pending) &&
                 (custody.PendingKey == msg.Key) &&
-                !home.UncertainAbout(key: msg.Key);
+                !custody.Installed &&
+                // A latched home cannot call any grant current: the record it is uncertain about may end the title.
+                !home.Latched;
 
             return $"{id}={(granted ? hop!.Next : -1)}";
         });
 
-        Send(s: s, from: Node.H, to: msg.From, kind: MsgKind.HopQueryReply, key: msg.Key, members: [], arg: string.Join(';', answers));
+        Send(s: s, from: Node.H, to: msg.From, kind: MsgKind.HopQueryReply, key: msg.Key, members: [], arg: phase + string.Join(';', answers));
     }
     private static void OnHopQueryReply(ModelState s, NodeState at, Msg msg) {
-        foreach (var answer in msg.Arg.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
+        var phase = msg.Arg[0];
+        var waiting = ((phase == 'R') ? at.Held : at.HeldCommits);
+
+        // An answer no request of its phase waits for is spent: it was given for a question already decided.
+        if (!waiting.TryGetValue(key: msg.Key, value: out var held)) {
+            return;
+        }
+        foreach (var answer in msg.Arg[2..].Split(';', StringSplitOptions.RemoveEmptyEntries)) {
             var parts = answer.Split('=');
 
-            at.Verified[$"{msg.Key}:{parts[0]}"] = int.Parse(s: parts[1]);
+            at.Verified[Verification(key: msg.Key, id: int.Parse(s: parts[0]), phase: phase)] = int.Parse(s: parts[1]);
         }
-        if (at.Held.TryGetValue(key: msg.Key, value: out var held)) {
-            _ = at.Held.Remove(key: msg.Key);
+        _ = waiting.Remove(key: msg.Key);
+        if (phase == 'R') {
             OnReserve(s: s, to: at, view: Fold(s: s, at: at.Id), msg: held);
-        }
-        if (at.HeldCommits.TryGetValue(key: msg.Key, value: out var heldCommit)) {
-            _ = at.HeldCommits.Remove(key: msg.Key);
-            OnCommit(s: s, to: at, view: Fold(s: s, at: at.Id), msg: heldCommit);
+        } else {
+            OnCommit(s: s, to: at, view: Fold(s: s, at: at.Id), msg: held);
         }
     }
     // The commit lands the leased members that the destination still admits, at the generation their slots take, with a
@@ -1253,11 +1307,11 @@ public static class CustodyModel {
         // A custodian lands a companion only under home's grant as it stands at the commit: the reservation's answer is
         // spent, so the commit is held until home answers again.
         if (to.Id != Node.H) {
-            var unverified = lease.Members.Where(m => !m.IsPlayer && !lease.RefusedAtCommit.Contains(value: m.Id) && !to.Verified.ContainsKey(key: $"{msg.Key}:{m.Id}")).Select(static m => m.Id).ToArray();
+            var unverified = lease.Members.Where(m => !m.IsPlayer && !to.Verified.ContainsKey(key: Verification(key: msg.Key, id: m.Id, phase: 'C'))).Select(static m => m.Id).ToArray();
 
             if (unverified.Length > 0) {
-                if (!InFlight(s: s, from: to.Id, key: msg.Key, kind: MsgKind.HopQuery)) {
-                    Send(s: s, from: to.Id, to: Node.H, kind: MsgKind.HopQuery, key: msg.Key, members: [], arg: string.Join(',', unverified));
+                if (!InFlight(s: s, from: to.Id, key: msg.Key, kind: MsgKind.HopQuery, arg: "C|")) {
+                    Send(s: s, from: to.Id, to: Node.H, kind: MsgKind.HopQuery, key: msg.Key, members: [], arg: "C|" + string.Join(',', unverified));
                 }
                 to.HeldCommits[msg.Key] = msg;
                 return;
@@ -1265,6 +1319,12 @@ public static class CustodyModel {
         }
         _ = to.HeldCommits.Remove(key: msg.Key);
 
+        // The commit's answers are spent by this decision.
+        var answered = to.Verified.Where(p => p.Key.StartsWith(msg.Key + ":", StringComparison.Ordinal) && p.Key.EndsWith(":C", StringComparison.Ordinal)).ToDictionary(static p => p.Key, static p => p.Value, StringComparer.Ordinal);
+
+        foreach (var spent in answered.Keys) {
+            _ = to.Verified.Remove(key: spent);
+        }
         var landing = new List<Member>();
         var readopted = new List<int>();
 
@@ -1281,7 +1341,7 @@ public static class CustodyModel {
                         continue;
                     }
                     readopted.Add(item: leased.Id);
-                } else if (to.Verified[$"{msg.Key}:{leased.Id}"] != (leased.Epoch + 1)) {
+                } else if (answered[Verification(key: msg.Key, id: leased.Id, phase: 'C')] != (leased.Epoch + 1)) {
                     // Home's grant is no longer current (settled, superseded or released): the companion is not landed.
                     continue;
                 } else if (view.Has(id: leased.Id)) {
@@ -1310,8 +1370,9 @@ public static class CustodyModel {
             if (to.Latched) {
                 Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.Uncertain, key: msg.Key, members: []);
             } else {
+                // The members landed and were rolled back with the refused record: their slots keep the generations.
                 _ = to.Leases.Remove(key: msg.Key);
-                _ = TryRecord(node: to, rec: new Dead(Key: msg.Key));
+                _ = TryRecord(node: to, rec: new Dead(Key: msg.Key, Burned: [.. landing.Select(static m => m.Slot)]));
                 Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.Missing, key: msg.Key, members: []);
             }
             return;
@@ -1623,16 +1684,16 @@ public static class CustodyModel {
                     yield return ($"retire {node.Id}:{id}", next);
                 }
                 // The grace window opens when the companion is found separated.
-                if (separated && !view.StrandedIds.Contains(item: id)) {
+                if (separated && !view.Stranded(id: id)) {
                     var next = s.Clone();
 
-                    _ = TryRecord(node: next.Nodes[i], rec: new Stranded(Id: id));
+                    _ = TryRecord(node: next.Nodes[i], rec: new Stranded(Id: id, Visit: view.PlayerVisits));
                     yield return ($"strand {node.Id}:{id}", next);
                 }
                 // Shed: the window has passed with the companion still here, whatever attempt is in flight. The stranded
                 // custodian first allocates the shed key through the common allocator (one record), then detaches the
                 // companion into a durable return record under it and frees the slot (one record).
-                var shedReady = separated && view.StrandedIds.Contains(item: id) && view.GraceIds.Contains(item: id) && !view.InDoubt.Any(d => d.Members.Any(m => m.Id == id));
+                var shedReady = separated && view.Stranded(id: id) && view.GraceElapsed(id: id) && !view.InDoubt.Any(d => d.Members.Any(m => m.Id == id));
                 var shedKey = view.Mints.Values.FirstOrDefault(m => m.Shed && m.MemberIds.Contains(value: id) && !view.Deps.ContainsKey(key: m.Key) && !view.Settled.Contains(item: m.Key))?.Key;
 
                 if (shedReady && (shedKey is null)) {
@@ -1695,10 +1756,11 @@ public static class CustodyModel {
         foreach (var id in s.CompanionIds) {
             var custody = views[0].Custody[id];
 
-            if (custody.Recalled && !views[0].Noticed.Contains(item: $"{id}:recalled")) {
+            // Each recall owes its own notice.
+            if (custody.Recalls.FirstOrDefault(e => !views[0].Noticed.Contains(item: $"{id}:recalled@{e}"), -1) is var unnoticed && (unnoticed >= 0)) {
                 var next = s.Clone();
 
-                _ = TryRecord(node: next.Nodes[0], rec: new Noticed(Id: id, What: "recalled"));
+                _ = TryRecord(node: next.Nodes[0], rec: new Noticed(Id: id, What: $"recalled@{unnoticed}"));
                 yield return ($"notify recall {id}", next);
             }
             if (custody.Installed && !views[0].Noticed.Contains(item: $"{id}:released")) {
@@ -1774,13 +1836,13 @@ public static class CustodyModel {
             }
             // A destination's held reservation asks home again.
             foreach (var (key, held) in node.Held) {
-                if (InFlight(s: s, from: node.Id, key: key, kind: MsgKind.HopQuery) || (node.Retries.GetValueOrDefault(key: $"verify:{key}") >= RetryLimit)) {
+                if (InFlight(s: s, from: node.Id, key: key, kind: MsgKind.HopQuery, arg: "R|") || (node.Retries.GetValueOrDefault(key: $"verify:{key}") >= RetryLimit)) {
                     continue;
                 }
                 var next = s.Clone();
 
                 next.Nodes[i].Retries[$"verify:{key}"] = node.Retries.GetValueOrDefault(key: $"verify:{key}") + 1;
-                Send(s: next, from: node.Id, to: Node.H, kind: MsgKind.HopQuery, key: key, members: [], arg: string.Join(',', held.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: $"{key}:{m.Id}")).Select(static m => m.Id)));
+                Send(s: next, from: node.Id, to: Node.H, kind: MsgKind.HopQuery, key: key, members: [], arg: "R|" + string.Join(',', held.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: Verification(key: key, id: m.Id, phase: 'R'))).Select(static m => m.Id)));
                 yield return ($"retry verify {node.Id}:{key}", next);
             }
         }
@@ -1881,10 +1943,10 @@ public static class CustodyModel {
             }
             // Grace windows.
             for (var i = 1; i < 3; i++) {
-                foreach (var id in views[i].StrandedIds.Where(id => !views[i].GraceIds.Contains(item: id) && views[i].Has(id: id))) {
+                foreach (var id in s.CompanionIds.Where(id => views[i].Stranded(id: id) && !views[i].GraceElapsed(id: id) && views[i].Has(id: id))) {
                     var next = s.Clone();
 
-                    _ = TryRecord(node: next.Nodes[i], rec: new GraceElapsed(Id: id));
+                    _ = TryRecord(node: next.Nodes[i], rec: new GraceElapsed(Id: id, Visit: views[i].PlayerVisits));
                     next.Budget.Deadlines++;
                     next.Budget.Faults++;
                     yield return ($"elapse {(Node)i}:{id}", next);
@@ -1914,8 +1976,8 @@ public static class CustodyModel {
                     var next = s.Clone();
                     var node = next.Nodes[i];
 
-                    foreach (var member in held.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: $"{key}:{m.Id}"))) {
-                        node.Verified[$"{key}:{member.Id}"] = -1;
+                    foreach (var member in held.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: Verification(key: key, id: m.Id, phase: 'R')))) {
+                        node.Verified[Verification(key: key, id: member.Id, phase: 'R')] = -1;
                     }
                     _ = node.Held.Remove(key: key);
                     OnReserve(s: next, to: node, view: Fold(s: next, at: (Node)i), msg: held);
@@ -1926,7 +1988,7 @@ public static class CustodyModel {
             }
         }
         if (budget.Allows(fault: Fault.Install) && (budget.Installs < budget.Limit)) {
-            foreach (var id in s.CompanionIds.Where(id => home.Custody[id].Kind != CustodyKind.Released)) {
+            foreach (var id in s.CompanionIds.Where(id => !home.Custody[id].Installed)) {
                 var next = s.Clone();
 
                 _ = TryRecord(node: next.Nodes[0], rec: new Install(Id: id));
@@ -2178,10 +2240,14 @@ public static class CustodyModel {
             foreach (var id in s.CompanionIds.Where(id => view.Has(id: id))) {
                 var body = view.Body(id: id)!;
                 // Read from the recorded binding: the followed member id, the slot it landed at and its generation there.
-                var live = (body.Follows is { } f) && (body.FollowsSlot >= 0) && (view.Body(id: f) is { } player) && (player.Slot == body.FollowsSlot) && (player.Gen == body.FollowsGen) && (f == Ids.Player);
+                var live = (body.Follows is { } f) && (body.FollowsSlot >= 0) && (view.Body(id: f) is { } player) && (player.Slot == body.FollowsSlot) && ((body.FollowsGen < 0) || (player.Gen == body.FollowsGen)) && (f == Ids.Player);
 
                 if (view.Follows(id: id) != live) {
                     throw new ModelViolation(message: $"{(Node)i}: {id}'s binding (follows {body.Follows} at slot {body.FollowsSlot}) disagrees with the live follow");
+                }
+                // The placement binding, which follows the home seat at any generation, is home's alone.
+                if ((i != 0) && (body.FollowsSlot >= 0) && (body.FollowsGen < 0)) {
+                    throw new ModelViolation(message: $"{(Node)i}: {id} carries home's placement binding abroad");
                 }
                 if ((body.Follows is { } followed) && (followed != Ids.Player)) {
                     throw new ModelViolation(message: $"{(Node)i}: {id} is bound to {followed}, which is not a player");
@@ -2297,8 +2363,8 @@ public static class CustodyModel {
             }
             var view = Fold(s: state, at: (Node)i);
 
-            foreach (var id in view.StrandedIds.Where(id => !view.GraceIds.Contains(item: id) && view.Has(id: id)).ToArray()) {
-                _ = TryRecord(node: node, rec: new GraceElapsed(Id: id));
+            foreach (var id in state.CompanionIds.Where(id => view.Stranded(id: id) && !view.GraceElapsed(id: id) && view.Has(id: id)).ToArray()) {
+                _ = TryRecord(node: node, rec: new GraceElapsed(Id: id, Visit: view.PlayerVisits));
                 passed = true;
             }
             foreach (var (key, outbound) in node.Outbound.ToArray()) {
@@ -2312,8 +2378,8 @@ public static class CustodyModel {
                 ReserveWhenAuthorized(s: state, at: node, key: key);
             }
             foreach (var (key, held) in node.Held.ToArray()) {
-                foreach (var member in held.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: $"{key}:{m.Id}"))) {
-                    node.Verified[$"{key}:{member.Id}"] = -1;
+                foreach (var member in held.Members.Where(m => !m.IsPlayer && !node.Verified.ContainsKey(key: Verification(key: key, id: m.Id, phase: 'R')))) {
+                    node.Verified[Verification(key: key, id: member.Id, phase: 'R')] = -1;
                 }
                 _ = node.Held.Remove(key: key);
                 OnReserve(s: state, to: node, view: Fold(s: state, at: (Node)i), msg: held);
@@ -2360,7 +2426,7 @@ public static class CustodyModel {
             var custody = home.Custody[id];
             var embodied = Enumerable.Range(0, 3).Where(i => views[i].Has(id: id)).ToArray();
 
-            if (custody.Recalled && !home.Noticed.Contains(item: $"{id}:recalled")) {
+            if (custody.Recalls.Any(e => !home.Noticed.Contains(item: $"{id}:recalled@{e}"))) {
                 throw new ModelViolation(message: $"recall of {id} without a notice");
             }
             if (custody.Installed && !home.Noticed.Contains(item: $"{id}:released")) {

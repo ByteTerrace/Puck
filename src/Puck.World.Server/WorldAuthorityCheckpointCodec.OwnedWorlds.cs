@@ -100,6 +100,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             mobility: member.Mobility
         );
         writer.WriteByte(value: member.FollowedSeatMask);
+        writer.WriteOptionalClass(
+            value: member.Companion,
+            writeValue: WorldWireLeaves.WriteTransferCompanion
+        );
+        writer.WriteBoolean(value: member.Shed);
     }
     private static WorldLandedMemberCheckpoint ReadLandedMember(ref WireReader reader) {
         var sourceSlot = reader.ReadInt32();
@@ -128,10 +133,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         var followedSeatMask = reader.ReadByte();
+        var companion = reader.ReadOptionalClass(readValue: static (ref WireReader r) => WorldWireLeaves.ReadTransferCompanion(reader: ref r));
+        var shed = reader.ReadBoolean();
 
         return new WorldLandedMemberCheckpoint(
             AdmissionGrants: admissionGrants,
             BodyColor: bodyColor,
+            Companion: companion,
+            Shed: shed,
             Designations: designations,
             DynamicState: dynamicState,
             FollowedSeatMask: followedSeatMask,
@@ -155,6 +164,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: row.MemberCount);
         writer.WriteBoolean(value: row.RollbackOnly);
         writer.WriteBoolean(value: row.CommitConfirmed);
+        writer.WriteBoolean(value: row.RestoreOnly);
         writer.WriteOptionalClass(
             value: row.Continuation,
             writeValue: WriteTransferContinuation
@@ -195,6 +205,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var memberCount = reader.ReadInt32();
         var rollbackOnly = reader.ReadBoolean();
         var commitConfirmed = reader.ReadBoolean();
+        var restoreOnly = reader.ReadBoolean();
         var continuation = reader.ReadOptionalClass(
             readValue: ReadTransferContinuation
         );
@@ -223,6 +234,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Continuation: continuation,
             Landed: landed,
             MemberCount: memberCount,
+            RestoreOnly: restoreOnly,
             RollbackOnly: rollbackOnly,
             SourceDeadlineTick: sourceDeadlineTick,
             SourceInstance: sourceInstance,

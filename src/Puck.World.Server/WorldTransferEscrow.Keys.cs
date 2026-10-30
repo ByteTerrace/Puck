@@ -103,7 +103,7 @@ public sealed partial class WorldTransferEscrow {
     // or already durably dead answers at once, and any other is tombstoned in the crossing log and takes its row only
     // once the tombstone is durable. A key the ledger cannot admit, or whose tombstone is not known to be durable,
     // changes nothing and answers Uncertain, since only a later answer can be final.
-    private WorldTransferStatus AnswerMissing(WorldTransferKey key, ref string reason) {
+    private WorldTransferStatus AnswerMissing(WorldTransferKey key, ref string reason, IReadOnlyList<int>? burned = null) {
         if (IsBelowFloor(key: key) || (m_spent.TryGetValue(key: key, value: out var spent) && spent.Durable)) {
             return WorldTransferStatus.Missing;
         }
@@ -114,7 +114,7 @@ public sealed partial class WorldTransferEscrow {
 
         var durability = m_server.RecordCrossingHeld(
             reason: out var detail,
-            record: new WorldCrossingRecord.Tombstone(Key: key)
+            record: new WorldCrossingRecord.Tombstone(Burned: burned, Key: key)
         );
 
         if (durability != WorldCrossingDurability.Durable) {
@@ -175,13 +175,18 @@ public sealed partial class WorldTransferEscrow {
         );
         RedoDeath(key: key);
     }
-    /// <summary>Redoes a crossing-log tombstone: the key is dead, and a live lease the recovered checkpoint holds for it
-    /// is released. A committed key is never tombstoned, since <see cref="Commit"/> and <see cref="Status"/> answer it
-    /// Committed. The caller holds the authority gate.</summary>
+    /// <summary>Redoes a crossing-log tombstone: the key is dead, a live lease the recovered checkpoint holds for it is
+    /// released, and every slot the refused commit landed at takes the generation that landing burned. A committed key
+    /// is never tombstoned, since <see cref="Commit"/> and <see cref="Status"/> answer it Committed. The caller holds the
+    /// authority gate.</summary>
     /// <param name="key">The dead key.</param>
-    internal void RedoTombstone(WorldTransferKey key) {
+    /// <param name="burned">The body indices the refused commit landed at before rolling them back.</param>
+    internal void RedoTombstone(WorldTransferKey key, IReadOnlyList<int> burned) {
         ReleaseLease(key: key);
         RedoDeath(key: key);
+        foreach (var slot in burned) {
+            m_server.Population.BurnGeneration(index: slot);
+        }
     }
     // A redone durable death: admitted when it was recorded, so it enters without the bounds.
     private void RedoDeath(WorldTransferKey key) {

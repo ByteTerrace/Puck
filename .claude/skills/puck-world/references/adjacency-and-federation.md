@@ -329,6 +329,75 @@ refusal, since the store reconciles its own commit point. Laws:
 `CrossingUncertaintyLawTests` (each crash point, with red legs replaying the
 refusal) and `WorldSiloCrossingRecoveryLawTests`.
 
+### Companion custody records
+
+An owned traveller's title, custody and epoch (the
+[custody protocol](../../../../docs/plans/companion-redesign.md)) are a fold of
+its authorities' custody records: `Hop`, `HopDone`, `HopAcked`, `Recall`,
+`Noticed`, `Release`, `Retire`, `Stranded` and `GraceElapsed` in
+`WorldCrossingRecord`, plus an `Arrival` whose `Readopted` list brings a title
+home. `WorldServer.RecordCustody` appends one record per call through the same
+crossing log and folds it into `WorldTransferEscrow.Custody`
+(`WorldCompanionCustody`) only once it is durable; an uncertain one latches
+the authority (`WorldServer.IsUncertainAbout(key)`) and folds only on recovery.
+The one reducer, `WorldCompanionCustody.Apply`, is what the escrow checkpoint
+restores (it carries the folded history), what `RecoverCrossings` redoes, and
+what a tape's `WorldReplayEntry.Custody` re-drives; the history folds into the
+authoritative hash (`WorldStateHashComponent.Custody`). Home holds titles only
+for incarnations it minted (`TitleOf` answers `null` otherwise); a release
+installed while a hop is pending keeps the title pending until that hop's
+`HopDone`. `Settlement` names its landed and retired member ids; every other
+member is restored. `WorldServer.ApplyCustodyRecord` is the one fold door (live,
+recovery and re-drive) and carries out a `Retire` on the body. Laws:
+`CompanionCustodyLawTests` (engine forms of the model's named traces, recovery
+cuts, and a tick-for-tick replay with its red leg) and
+`CompanionCustodyConformanceLawTests`, which folds the model's own explored home
+record sequences through the engine reducer at every cut and across a
+checkpoint split.
+
+### Companions in a crossing
+
+A placement's `inhabit.role` and `inhabit.follows` (a local seat) make its one
+body a companion; a document's `roles` section declares what it takes
+(`accept` a visitor's pinned driver, or a `driver` of its own; the standard
+package's `companions.puck` declares `accept`). The source host adds the
+companions that follow a crossing's travelers to its cohort
+(`WorldInstanceHost.Companions.cs`): at home those whose placement follows the
+crossing seat while the title is home, abroad those whose arrival bound them
+to the crossing member's slot and generation. Every member carries a
+request-local `MemberId`; a companion carries `WorldTransferCompanion` (role,
+followed member id, home, driver, ticket). Before the reservation the source
+asks the title authority for each hop: home records one `Hop` for its own
+companions (`WorldServer.AuthorizeOwnHop`), a custodian asks home through
+`IWorldCustodyPeer.RequestHop`; only a granted companion carries a ticket.
+`WorldServer.ReserveTransfer` and `CommitTransfer` ask home, off the gate and
+once per call, whether each companion's grant is current
+(`IWorldCustodyPeer.ConfirmHops`, resolved by `WorldServer.CustodyPeers`), so an
+answer never outlives the decision it was asked for; a latched home confirms
+nothing. The escrow decides companions member by member (`Role`, `Duplicate`,
+`Full`, `Unverified` in `WorldTransferReservationReply.Refusals`, the leased
+ids in `AcceptedMembers`), lands them through the entity door, and leaves out
+at the commit a companion whose grant is no longer current or whose landing is
+refused; the arrival record and its tape entry name only what landed, with
+each member's generation. The source reads the landed ids
+(`IWorldPeerCall.TryLanded`; the federation status leaf carries them), settles
+per member, restores the rest, and the drain settles home's own hops from its
+own departure and settlement records (`OwedOwnHopSettlements`). A custodian's
+hop settles by the destination's word: after each drain the custodian sends
+home a notice for every companion its settled departures carried
+(`OwedHopNotices`, until a `HopAcked`), and home asks the hop's destination
+(`IWorldCustodyPeer.QueryCustody`, served only to the incarnation's minting
+authority, answered from the arrival the destination folded, its commit, lease
+or uncertainty, or a tombstone written first) and records `HopDone` from that
+answer alone. A notice for a hop home never recorded cancels it. A granted
+onward hop the crossing did not depart with is given up the same way when the
+crossing ends. An authority that still owes a notice or a settlement of its own
+hop is not reaped until the drain that makes it. The federation lane carries
+`HopQuery`/`HopQueryReply`, `HopRequest`/`HopAnswer`,
+`CustodyQuery`/`CustodyReply` and `HopSettled`/`HopSettledAck`, each answered
+for the connection's authenticated namespace. Laws:
+`CompanionCrossingLawTests`.
+
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and
 `WorldSeatAuthorityRouter` publishes the complete claim with CAS. Rendering,

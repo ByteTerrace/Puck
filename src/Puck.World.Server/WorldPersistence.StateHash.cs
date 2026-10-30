@@ -13,6 +13,9 @@ public sealed partial class WorldPersistence {
                 Host.Tick.AppendRoutedInputHash(hash: ref hash);
                 Host.Tick.AppendFederatedInputHash(hash: ref hash);
                 break;
+            case WorldStateHashComponent.Custody:
+                Host.TransferEscrow.Custody.AppendStateHash(hash: ref hash);
+                break;
             case WorldStateHashComponent.ScopedReplays:
                 hash.Add(value: ((uint)Host.ScopedReplays.Count));
                 foreach (var scope in Host.ScopedReplaySpan) { scope.AppendStateHash(hash: ref hash); }

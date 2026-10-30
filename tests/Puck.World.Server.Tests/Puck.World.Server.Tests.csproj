@@ -39,6 +39,8 @@
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/UploadModelGpu.cs" Link="UploadModelGpu.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
+        <!-- The custody model is the conformance oracle the engine's custody reducer is checked against. -->
+        <Compile Include="../Puck.World.Protocol.Tests/CompanionCustodyModel.cs" Link="Custody/CompanionCustodyModel.cs" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/World/AdmissionWireFixture.cs" Link="World/AdmissionWireFixture.cs" />
