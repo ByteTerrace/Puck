@@ -29,6 +29,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
 
+    /// <summary>The pixels high the view's own image is when it renders into one apart from the residency's output (a
+    /// camera filmed for a screen, a session's window), which the mesh demand measures projected sizes in
+    /// (<see cref="SdfMeshDemand"/>); zero, the default, for a view whose region places it in the residency's
+    /// output.</summary>
+    public uint DemandHeight { get; init; }
+
     /// <summary>The render-scale ceiling in (0, 1], quantized by <see cref="RenderGraphExtent"/> into
     /// <see cref="RenderCeiling"/>. Scratch is allocated at that fraction of the view's output extent; its published
     /// output keeps its full extent. Zero or less reads as native.</summary>

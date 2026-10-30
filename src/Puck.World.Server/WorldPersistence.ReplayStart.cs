@@ -11,8 +11,8 @@ public sealed partial class WorldPersistence {
         bytes => WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: Host.Configuration.DocumentDirectory,
             utf8Json: bytes, machines: Host.Machines.ValidationCatalog));
 
-    /// <summary>A computed identity for a composed boot. Only the command schedule may differ.</summary>
-    public static string ScenarioBootShape(byte[] json) {
+    // A computed identity for a serialized definition: every member except the command schedule.
+    private static string ConfigurationShape(byte[] json) {
         using var document = JsonDocument.Parse(json);
         using var hash = SHA256.Create();
         using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: hash);
@@ -27,28 +27,16 @@ public sealed partial class WorldPersistence {
         stream.FlushFinalBlock();
         return Convert.ToHexStringLower(inArray: hash.Hash!);
     }
-    /// <summary>Attaches a compatible scenario's schedule to its complete pristine boot checkpoint.</summary>
-    public WorldAuthorityCheckpoint ScenarioCheckpoint(WorldAuthorityCheckpoint boot, WorldDefinitionAdmission admission) {
-        var json = WorldDefinitionSerialization.Serialize(definition: admission.Definition);
-
-        // Fields, row ordinals, rule groups, latches, decisions and search all derive from this document.
-        // Replacing only its arena cannot make the rest of a different boot's checkpoint compatible.
-        if (ScenarioBootShape(json: json) != ScenarioBootShape(json: boot.Server.DefinitionJson)) {
-            throw new InvalidOperationException(message: "Scenario changes boot configuration; it requires its own worker.");
-        }
-        m_checkpointAdmissions.Add(key: json, value: admission);
-        return boot with {
-            Server = boot.Server with { DefinitionJson = json, BaseDefinitionJson = json },
-        };
-    }
-    /// <summary>Restarts module memory and restores a checkpoint into an already composed compatible authority.</summary>
-    public void RestoreScenario(WorldAuthorityCheckpoint checkpoint) {
+    /// <summary>Restarts module memory and restores a replay's starting checkpoint into this authority, reinstalling the
+    /// definition's geometry, machines and population first when the run edited its configuration.</summary>
+    /// <param name="checkpoint">The checkpoint captured when the replay probe attached.</param>
+    public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint) {
         lock (Host.AuthorityGate) {
             var admission = CheckpointAdmission(json: checkpoint.Server.DefinitionJson);
             var definition = admission.Definition;
-            // The previous run may have edited geometry or machine configuration after boot.
-            if (ScenarioBootShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) !=
-                ScenarioBootShape(json: checkpoint.Server.DefinitionJson)) {
+            // The run may have edited geometry or machine configuration after the checkpoint.
+            if (ConfigurationShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) !=
+                ConfigurationShape(json: checkpoint.Server.DefinitionJson)) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }

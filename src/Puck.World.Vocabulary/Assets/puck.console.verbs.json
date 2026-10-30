@@ -300,6 +300,7 @@
     { "name": "world.reload", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.render-scale", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.reset", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.residency", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.responses", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.revoke", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.rigid", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },

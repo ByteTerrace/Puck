@@ -41,15 +41,13 @@ resolves their edits to this file at merge.
    on a quiet machine.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    schema switch, then the pick answer.
-6. [Test runner and replay](#test-runner-and-replay): delete complete-boot reuse
-   and make the per-tick authority hash incremental, as the quiet measurement
-   supports.
+6. [Test runner and replay](#test-runner-and-replay): make the per-tick
+   authority hash incremental, as the quiet measurement supports.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
-8. [Residency and streaming](#residency-and-streaming): the measurements, then
-   near-first ordering of bake, store loads and landing; the card tables are
-   its test case.
+8. [Residency and streaming](#residency-and-streaming): near-first has landed;
+   next, GI on the same demand points and the measurements still open.
 9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
    inverted sheets along the divider; the colliders report's remaining reds are
    the valley relief's ([the valley's terrain](#the-valleys-terrain)).
@@ -105,11 +103,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Sweep and visual checks
 
 Owner: sweep follow-up, with the lead scheduling the GPU slot · medium ·
-Next: fix the prelude (dismiss the chess toast, wait in shorter steps),
-reproduce the companion overlaps, then one paired windowed tour (about 18
-minutes of GPU) when no lane holds the GPU, compared stop by stop.
+Next: reproduce the companion overlaps, then one paired windowed tour (about 18
+minutes of GPU) when no lane holds the GPU, compared stop by stop, with
+`--attach` on one World for both runs.
 
-- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. Settle the lighting state before each stop (indirect and exposure converged, a fixed camera-trace history) or compare against a baseline taken in the same World session. (from: bake-scale lane)
+- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter reads the cached camera-trace sample ring (`SdfMeshIrradiance`), whose reuse depends on where the camera stood before. The tour now reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms or refutes the cause. If it confirms, make the meter's camera sample a function of the present camera alone (or clear the ring on a cut) rather than settling around it. (from: bake-scale lane)
 
 - Finish sweep-honest's paired motion qualification. Its first final tour
   measures all 23 windowed signals and captures all 64 stops cleanly, and 62
@@ -125,12 +123,6 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop.
   captures have not shown it. A cold Direct3D 12 run stayed at tick 0 until its
   nine-minute deadline with the render stack waiting on an upload fence; that
   cold stall's cause is unconfirmed.
-- The prelude's `world.state.cell.set chessDemo enabled 0` leaves its HUD toast
-  in every still although `world.row.set hud.defaults enabled false` ran before
-  it, and on a loaded machine its `world.wait 300` is refused outright (the
-  attachment's answer falls due before the release tick), so every later still
-  carries that refusal; dismiss the toast and wait in shorter steps
-  (`worlds/debug/sweep.json`).
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42: the first recovered tour counted three events, at ticks 861 to 3997,
   after a clean initial watchdog reading, and `watchdog.after-tour` correctly
@@ -377,8 +369,7 @@ holds the fixed poses and the approaches already rejected.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: delete complete-boot reuse and make the per-tick authority hash
-incremental (both measured below).
+Next: make the per-tick authority hash incremental (measured below).
 
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
@@ -389,33 +380,6 @@ incremental (both measured below).
   here), and have the sweep refuse a directory it cannot remove rather than
   crash. (from: the
   prune-redesign lane)
-- [medium] Delete complete-boot checkpoint reuse and keep the warm worker
-  (decided on the quiet measurement). Under the complete identity no two
-  scenarios of a file share a composed document: alchemy boots 8 hosts for 8
-  scenarios, Go 15 for 15, and boot-reuse-2's suite 83 for 84, so restoring the
-  pristine checkpoint saves at most one warm boot (about 3.3 s) per suite run.
-  What does pay is the worker process staying alive: its first boot is 8.5-9.2 s
-  and every later boot in it 3.1-3.5 s. The reuse path still costs on every run:
-  the coordinator composes and canonicalizes every staged `.world.json` of every
-  scenario to compute `BatchShape` (`src/Puck.Cli.Worlds/Test/TestCommand.Batch.cs`),
-  part of the 30-55 s of coordinator preparation per file below, and the
-  scenario-restore machinery (`WorldPersistence.ScenarioCheckpoint`,
-  `WorldInstanceHost.RestoreScenario`, the seat-route and input-timeline resets
-  in `WorldTestBatch.StartLeg`) carries the hazards the verification skill lists.
-  Boot every scenario fresh in the warm worker, delete the shape comparison and
-  the scenario restore, and re-time alchemy and Go. Quiet readings (load under
-  15 % before each run, about 25-38 % during, the run's own work), `--jobs 1`,
-  whole-process-tree CPU by job object:
-
-  | File, mode | Runs | Wall s, median (spread) | CPU s, median (spread) | Host boots |
-  |---|---:|---:|---:|---:|
-  | alchemy, ordinary | 3 | 113.1 (113.0-115.8) | 208.9 (205.6-209.0) | 8 |
-  | alchemy, `--reproduce` | 3 | 214.5 (213.9-215.8) | 351.2 (350.8-353.1) | 8 |
-  | Go, ordinary | 1 | 243.2 | 515.7 | 15 |
-  | Go, `--reproduce`, traced | 1 | 604.7 | 1,065.0 | 15 |
-
-  Chess, the whole-suite `--jobs 1`/`--reproduce`/`--jobs 2` runs and two more
-  Go runs were not reached in the measurement window. (from: quiet-measure)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
   per-tick hashing and recording, not host reuse. Recording slows the authored
   phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
@@ -434,7 +398,17 @@ incremental (both measured below).
   about 15 %) the rest. Make the per-tick hash incremental (fold only changed
   arena columns and changed body continuations), and find whether a headless
   test worker's session mirrors have any reader before delivering to them;
-  then re-time Go.
+  then re-time Go. The hash is one sequential FNV-1a stream over the
+  components in `WorldStateHashComposition.AuthoritativeOrder`, so an
+  incremental form changes its structure to a combination of per-segment
+  digests (hash values change, which rule 4 allows) and needs a change signal
+  at every write path: the arena's numeric columns are row-local
+  `ArenaColumnBuffer<T>` arrays but text, vector, visibility and observation
+  columns, import, restore, growth and relayout write beside them; a body's
+  continuation (`WorldAuthorityCheckpointCodec.WriteContinuationEntry`) has no
+  version at all. A missed signal makes the hash stale and a divergence
+  invisible, so land it with a law that compares the incremental digest against
+  a full recompute over the same states, tick by tick, in `--reproduce`.
   Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
   (from: quiet-measure)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
@@ -590,16 +564,13 @@ timed on a quiet machine.
 
 ### Debug tools
 
-Owner: debug-world tools lane (specialist) · medium · Next: the pick
-(`world.view.pick` addresses the presented world view by default, lists it in
-`panes`, and answers under `world.rate pause`), qualified in one windowed pass;
-then the diagnostics' windowed checks, then the three developer exhibits.
+Owner: debug-world tools lane (specialist) · medium · Next: the diagnostics'
+windowed checks, then the three developer exhibits.
 
-- [medium] Under `world.rate pause` the pick has stayed pending with no answer;
-  the hold now claims a paused World answers, bounded by the call's deadline
-  (`Picking.cs`), which only a windowed run shows. The default view and the
-  `panes` listing are done (`world.view.pick <x> <y>`, `view instance:<name>`);
-  the paused run is owed. (from: owner walkthrough)
+- [low] A pick on a screen's face names `screen=<index>` and no placement, and a
+  derived face (a creation's own screen) does not name the placement it belongs
+  to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
+  group of the program's segments no instance owns names nothing.
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -984,10 +955,9 @@ answer.
   that session. Evidence and start ids are in the controls hand-back.
 
 - [x] [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The merged lease path now counts an unreadable or undeletable ticket as occupied, opens holder metadata with deletion sharing, and always releases its exclusive guard even when metadata cleanup is delayed. The guard, rather than an alive adapter PID in leftover metadata, proves ownership. Sixteen focused lease cases pass, including lane rotation and the Windows delayed-deletion reproduction. (from: bars-and-pick and probe-depth-fix lanes)
-- [low] `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
 
 
-- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. The windowed capture after the sweep prelude (no toast on screen) is owed: `world.hud toast` answers `none` headless. (from: operator-toasts lane)
+- [low] Operator writes no longer toast (`WorldToastPolicy`), but the `mutation.applied` audio cue still fires for them; the same rule applies to cues. A refused grant from an addon or peer without authority carries no actor and still toasts, which is right but bypasses the new `Actor` field. (from: operator-toasts lane)
 
 - A connected Claude Code session keeps a tool's old output schema when the MCP
   front switches to a backend whose schemas changed: the first `puck_adapter`
@@ -1515,37 +1485,71 @@ Klondike table stands north of the Go table in the board game room
 
 ### Residency and streaming
 
-Owner: rendering lane (rendering, verification) · ordinary · Next: step 1, the
-measurements, then step 2, near-first ordering.
+Owner: rendering lane (rendering, verification) · ordinary · Next: step 2, GI on
+the same demand points; the open measurements below beside it.
 
 The design is settled in [residency](../decisions/residency.md), from a
 three-family consensus: only presentation follows the observer; portals are
 edges, worlds and optional authored areas are nodes; one selector per
 presentation orders and bounds residency from every demand point; a door never
-waits for loading. The steps, each taken when its measured need appears:
+waits for loading. Near-first ordering has landed (`SdfMeshDemand`, the
+[mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
+and `world.residency [radius]` reads its measures.
 
-1. Measure: time until everything near the spawn has landed (cold and warm),
-   mesh bytes by level, `ProbeCache` bytes after a hall walk and a valley flight,
-   program build and replan time against placement count, store read rate
-   against the landing rate.
-2. Near-first: order lattices (`SdfMeshPathBake.TryTakeForFrame`), store loads
-   and owed meshes (`SdfWorldTables.MeshRegion`) by priority from demand points;
-   all three run in document order today. The card tables against a lobby spawn
-   are its test case.
-3. GI on the same demand points: the probe window follows every view, not
+Measured on the lead machine, Direct3D 12, windowed debug world, spawn posed in
+the lobby (`debug.go desktop`), the machine shared with other lanes and the
+world running at 7 to 8 frames a second; times are wall seconds from the bake's
+start, near is a group's planned box within the radius of the primary seat's
+eye (135 groups within 4 m, 264 within 8 m, of 2,078):
+
+| Cold bake (new bake identity) | near 4 m half / 90% / all | near 8 m half / 90% / all | all groups |
+|---|---|---|---|
+| Plan order (before) | 359 / 366 / 368 s | 359 / 366 / 430 s | 435 s |
+| Near-first (after) | 128 / 136 / 138 s | 136 / 151 / 180 s | 442 s |
+
+The card table on level 2 stands about 45 m from the lobby, outside both radii;
+its own landing time was not read apart. A first near-first build ranked by projected size alone;
+far terrain and shells outranked the lobby's small parts, and the lobby landed
+no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
+
+- Warm boot: the store loads 2,078 groups in 1.1 s (1,152 entries, 319 MB;
+  3.8 thread-seconds reading, 5.8 decoding, about 290 MB/s), and the near area
+  lands at 1.8 s whatever the order; the first staging writes the whole region
+  (1.37 GB) at once. A cold bake owes words on 22 to 35 frames, 2 MiB a frame
+  (`MeshLandingWords`).
+- Mesh bytes by level (region words): vertices 611 MB; level 0 39.6 M
+  triangles, 633 MB; level 1 5.7 M, 90 MB; level 2 2.5 M, 39 MB; 1.37 GB used.
+- `ProbeCache`: 20 MB after the bake at the lobby; 38 MB (30,008 probes: 8 MB
+  table, 30 MB probe blocks) after a nine-stop hall walk, 10 s a stop.
+- Program: 2,842 instances and 3.08 M words emit in 181 to 209 ms on the frame
+  thread and build in 192 to 209 ms; the bake's restart (replan) takes 81 to
+  143 ms on the frame thread.
+- The world's frame carries 53 demand points: the seats, and every camera
+  filmed for a screen or session, each measured in its own image's pixels
+  (`SdfViewSnapshot.DemandHeight`). A window nobody sees still demands
+  everything about its camera; step 3's mapped demand weighs it by its glass.
+- One group in the debug world has a mesh that no draw names, not yet
+  identified; `world.residency` counts it resident, since it costs the region
+  nothing.
+
+1. Measure what the table leaves: `ProbeCache` after a valley flight, program
+   build and replan against more than one placement count, and time to the
+   occupied area after a document edit that renumbers materials (a code edit to
+   the bake closure is the cold row above). `world.residency` reads each.
+2. GI on the same demand points: the probe window follows every view, not
    `Views[0]` (`SdfMeshIrradiance.cs:208`); the irradiance scene and its pending
    gate are scoped to what the window reaches; `ProbeCache` (`:1365`) is
    byte-bounded.
-4. Mapped demand through portal faces, replacing the blanket baking share
+3. Mapped demand through portal faces, replacing the blanket baking share
    (`WorldViewGraphHost.ResetFootprints`).
-5. Eviction under one byte budget across residencies, with coarse levels owning
+4. Eviction under one byte budget across residencies, with coarse levels owning
    compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
-6. Authored areas (a volume with openings, on an existing volume vocabulary),
+5. Authored areas (a volume with openings, on an existing volume vocabulary),
    tried first on the gallery's floors with the stairwell, lift shaft and window
    bands as openings (the owner's suggestion): time until the occupied floor has
    landed, with and without the areas, and floor-first eviction under a lowered
    budget.
-7. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
+6. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
    the moons.
 
 ### Debug world content

@@ -9,17 +9,15 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>A worker retains its native host while consecutive scenarios share its boot composition.</summary>
+/// <summary>A worker process boots its scenarios one after another, each in a fresh native host.</summary>
 internal sealed class WorldTestBatch {
-    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, string BootShape, bool Reproduce = false, string? CacheDirectory = null);
+    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, bool Reproduce = false, string? CacheDirectory = null);
 
     private readonly Leg[] m_legs;
     private readonly Output m_output;
     private readonly Output m_error;
 
     private IServiceProvider m_services = null!;
-    private WorldAuthorityCheckpoint m_boot = null!;
-    private Dictionary<string, byte[]> m_bootFiles = [];
     private TextCommandSession m_control = null!;
     private readonly List<(string Name, WorldReplayProbe Probe)> m_probes = [];
     private readonly HashSet<WorldInstance> m_observed = [];
@@ -33,9 +31,6 @@ internal sealed class WorldTestBatch {
     private WorldTestHost m_host = null!;
 
     private int m_reportedBoots;
-    private bool m_reusable;
-
-    private string m_bootShape = string.Empty;
 
     private Timer? m_legDeadline;
     private string? m_reproductionFailure;
@@ -45,7 +40,7 @@ internal sealed class WorldTestBatch {
     private long m_legStarted;
     private long m_runStarted;
     private long m_bootTicks;
-    private long m_restoreTicks;
+    private long m_armTicks;
     private long m_authoredTicks;
     private long m_firstTickTicks;
 
@@ -108,26 +103,12 @@ internal sealed class WorldTestBatch {
     private T Get<T>() where T : notnull => m_services.GetRequiredService<T>();
     private void Initialize(IHost host) {
         m_services = host.Services;
-        m_bootShape = m_legs[m_index].BootShape;
-        var server = Get<WorldServer>();
-        var instances = Get<WorldInstanceHost>();
-
-        m_reusable = server.TryCaptureCheckpoint(instances.CaptureRow(row: instances.Boot!), out var checkpoint, out var reason);
-        if (m_reusable) {
-            m_boot = checkpoint!;
-            try { instances.CaptureScenarioBoot(); } catch (InvalidOperationException exception) { m_reusable = false; reason = exception.Message; }
-        }
-        if (!m_reusable) { Console.Error.WriteLine(value: $"[test.batch: boot cannot be reused ({reason}); this scenario owns its native host]"); }
-        var stateRoot = Get<WorldStateRoot>().FullPath;
-
-        m_bootFiles = (Directory.Exists(path: stateRoot) ? Directory.EnumerateFiles(path: stateRoot, searchOption: SearchOption.AllDirectories, searchPattern: "*")
-            .ToDictionary(path => Path.GetRelativePath(path: path, relativeTo: stateRoot), File.ReadAllBytes) : []);
         m_control = Get<TextCommandSource>().CreateSession(Principal.Console);
         Get<WorldTestRun>().Exported += FreezeLeg;
         Get<WorldTestRun>().FirstTick += () => m_firstTickTicks = (Stopwatch.GetTimestamp() - m_runStarted);
         Get<WorldTestRun>().Progress += tick => Console.WriteLine(value: $"[test.batch: tick {tick}]");
-        instances.Admitted += Observe;
-        StartLeg(freshHost: true);
+        Get<WorldInstanceHost>().Admitted += Observe;
+        StartLeg();
     }
     private void OpenLeg() {
         m_legStarted = Stopwatch.GetTimestamp();
@@ -156,13 +137,11 @@ internal sealed class WorldTestBatch {
             try { m_probes.Add(item: (instance.Name, Get<WorldReplayTape>().ObserveReplay(instance: instance))); } catch (InvalidOperationException exception) { m_reproductionFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
         }
     }
-    private void StartLeg(bool freshHost = false) {
+    private void StartLeg() {
         var started = Stopwatch.GetTimestamp();
 
-        m_bootTicks = (freshHost ? (started - m_legStarted) : 0);
+        m_bootTicks = (started - m_legStarted);
         var leg = m_legs[m_index];
-        var server = Get<WorldServer>();
-        var source = Get<WorldDefinitionSource>();
 
         m_reproductionFailure = null;
         m_observing = false;
@@ -174,23 +153,7 @@ internal sealed class WorldTestBatch {
         m_legDeadline = new Timer(_ => {
             if (Volatile.Read(location: ref m_index) == index) { lifetime.StopApplication(); }
         }, null, TimeSpan.FromSeconds(seconds: leg.ExitAfterSeconds), Timeout.InfiniteTimeSpan);
-        source.SourcePath = WorkingWorld;
-        if (m_reusable && !freshHost) {
-            if (!WorldDefinitionLoader.TryLoadFileForAdmission(WorkingWorld, out var admission, out _, out var reason,
-                catalog: server.Machines.ValidationCatalog)) {
-                throw new InvalidOperationException(message: reason);
-            }
-            var checkpoint = server.Persistence.ScenarioCheckpoint(admission: admission!, boot: m_boot);
-
-            Get<InputRouter>().ResetTimeline();
-            Get<Puck.World.Client.WorldClient>().ResetInputTimeline();
-            Get<WorldHistory>().Off();
-            Get<WorldInstanceHost>().RestoreScenario(checkpoint: checkpoint);
-            // Restoring a crossed seat's boot claim is not a live handoff. Its queued edge would admit input
-            // before tick one, whereas a fresh host first admits it during ordinary post-step synchronization.
-            Get<Puck.World.Client.WorldSeatAuthorityRouter>().DiscardPendingRouteChanges();
-            RestoreStateFiles();
-        }
+        Get<WorldDefinitionSource>().SourcePath = WorkingWorld;
         Get<WorldTestRun>().Reset(WorkingWorld, Path.Combine(path1: leg.Directory, path2: "out"));
         m_observing = true;
         foreach (var name in Get<WorldInstanceHost>().Names) {
@@ -198,7 +161,7 @@ internal sealed class WorldTestBatch {
         }
         Get<WorldTestRun>().ArmInstances();
         m_runStarted = Stopwatch.GetTimestamp();
-        m_restoreTicks = (m_runStarted - started);
+        m_armTicks = (m_runStarted - started);
     }
     private void FreezeLeg() {
         m_authoredTicks = (Stopwatch.GetTimestamp() - m_runStarted);
@@ -247,12 +210,12 @@ internal sealed class WorldTestBatch {
             File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
                 authorityTicks = run.AuthorityTicks,
                 bootMilliseconds = Milliseconds(ticks: m_bootTicks),
-                restoreMilliseconds = Milliseconds(ticks: m_restoreTicks),
+                armMilliseconds = Milliseconds(ticks: m_armTicks),
                 authoredMilliseconds = Milliseconds(ticks: m_authoredTicks),
                 firstTickMilliseconds = Milliseconds(ticks: m_firstTickTicks),
                 exportMilliseconds = Milliseconds(ticks: run.ExportTicks),
                 replayMilliseconds = Milliseconds(ticks: replayTicks),
-                otherMilliseconds = Milliseconds(ticks: (((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_restoreTicks) - m_authoredTicks) - replayTicks)),
+                otherMilliseconds = Milliseconds(ticks: (((((Stopwatch.GetTimestamp() - m_legStarted) - m_bootTicks) - m_armTicks) - m_authoredTicks) - replayTicks)),
             }));
             var boots = (m_host.Boots - m_reportedBoots);
 
@@ -267,18 +230,7 @@ internal sealed class WorldTestBatch {
         m_probes.Clear();
         m_output.Flush(); m_error.Flush();
         m_index++;
-        if ((m_index == m_legs.Length) || !m_reusable || (m_legs[m_index].BootShape != m_bootShape)) {
-            Get<IHostApplicationLifetime>().StopApplication();
-        } else {
-            try { OpenLeg(); StartLeg(); } catch (Exception exception) {
-                m_failed = true;
-                m_aborted = true;
-                try {
-                    Console.Error.WriteLine(value: $"[test.batch: {exception}]");
-                    m_error.Flush();
-                } finally { Get<IHostApplicationLifetime>().StopApplication(); }
-            }
-        }
+        Get<IHostApplicationLifetime>().StopApplication();
         return true;
     }
     private void ArchiveStateFiles(string directory) {
@@ -290,18 +242,6 @@ internal sealed class WorldTestBatch {
 
             Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
             File.Copy(file, target, overwrite: true);
-        }
-    }
-    private void RestoreStateFiles() {
-        var root = Get<WorldStateRoot>().FullPath;
-
-        Directory.CreateDirectory(path: root);
-        foreach (var file in Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*")) { File.Delete(path: file); }
-        foreach (var (relative, bytes) in m_bootFiles) {
-            var target = Path.Combine(path1: root, path2: relative);
-
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-            File.WriteAllBytes(bytes: bytes, path: target);
         }
     }
 

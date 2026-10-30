@@ -9,18 +9,23 @@ namespace Puck.SdfVm;
 public sealed class SdfDressedPickMap : ISdfPickMap {
     private readonly ISdfPickMap m_inner;
     private readonly object[] m_identities;
+    private readonly SdfMeshBakeGroup?[] m_owners;
     private readonly int m_hostDraws;
 
     /// <summary>Initializes a new instance of the <see cref="SdfDressedPickMap"/> class.</summary>
     /// <param name="inner">The host's map, indexed by the host's own draws.</param>
     /// <param name="hostDraws">The count of draws the host listed, which lead the dressed list.</param>
     /// <param name="draws">The dressed draw list, read once for its identities.</param>
-    public SdfDressedPickMap(ISdfPickMap inner, int hostDraws, IReadOnlyList<SdfMeshDraw> draws) {
+    /// <param name="chunkOwners">The group each chunk of a chunked baked mesh belongs to, read once: such a group's
+    /// draws are identified by their chunks. Null for none.</param>
+    public SdfDressedPickMap(ISdfPickMap inner, int hostDraws, IReadOnlyList<SdfMeshDraw> draws, IReadOnlyDictionary<object, SdfMeshBakeGroup>? chunkOwners = null) {
         m_inner = inner;
         m_hostDraws = hostDraws;
         m_identities = new object[draws.Count];
+        m_owners = new SdfMeshBakeGroup?[draws.Count];
         for (var index = 0; (index < m_identities.Length); index++) {
             m_identities[index] = draws[index].Identity;
+            m_owners[index] = chunkOwners?.GetValueOrDefault(key: m_identities[index]);
         }
     }
 
@@ -66,7 +71,7 @@ public sealed class SdfDressedPickMap : ISdfPickMap {
 
         if (source >= m_identities.Length) { return 0; }
 
-        var named = m_identities[source];
+        var named = (m_owners[source] ?? m_identities[source]);
 
         if (SdfSlotClip.CopiedFrom(identity: named) is { } copied) { named = copied; }
         if (named is SdfMeshInstance copy) {

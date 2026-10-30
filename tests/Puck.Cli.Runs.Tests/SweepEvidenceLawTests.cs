@@ -18,6 +18,17 @@ public sealed class SweepEvidenceLawTests {
     }
 
     [Fact]
+    public void AStillTakenAtAnotherExposureSaysSoAndOneTakenAtTheSameDoesNot() {
+        const string Answer = "[world.exposure: mode=auto ev100=9 minimum=-2 maximum=16 compensation=0 adaptation=0.75s local=0; view 0: ev100=7.25 multiplier=0.0123 meter=12.5 nits source=camera-trace air=1; view 1: ev100=3 multiplier=1 meter=none source=held air=1]";
+        var reading = SweepEvidence.ExposureReading(output: Answer);
+
+        Assert.Equal(expected: "ev100=7.25 meter=12.5 nits source=camera-trace", actual: reading);
+        Assert.Null(@object: SweepEvidence.ExposureReading(output: "[world.exposure: mode=auto; renderer not built yet]"));
+        Assert.Contains(expectedSubstring: "exposure differs", actualString: SweepEvidence.ExposureNote(before: "ev100=6.5 meter=9 nits source=probes", after: reading));
+        Assert.Contains(expectedSubstring: "difference is in the scene", actualString: SweepEvidence.ExposureNote(before: reading, after: reading));
+        Assert.Null(@object: SweepEvidence.ExposureNote(before: null, after: reading));
+    }
+    [Fact]
     public void EveryShippedSignalAndRecheckFailsWithoutEvidence() {
         var plan = Plan();
 

@@ -28,10 +28,6 @@ public sealed class WorldSeatAuthorityRouter {
     /// changed since the last delivery. A claim published while nothing subscribes owes no edge.</summary>
     public event Action<int>? RouteChanged;
 
-    /// <summary>Discards queued route edges after an isolated host restores its boot claims; the next ordinary
-    /// post-step synchronization admits input on the same tick as a fresh host.</summary>
-    public void DiscardPendingRouteChanges() => Interlocked.Exchange(location1: ref m_owed, value: 0);
-
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery the world's own
     // instance-addressed verbs use, so a routed answer reports which instance answered.
     private static string WithInstanceTag(string text, string instanceName) => CommandEcho.SpliceTag(
