@@ -172,7 +172,8 @@ holds.
 
 A pass first reads and validates everything it depends on and deletes nothing
 while it does. Both pointers must be the plain name of an existing version
-(`current` must exist). The pending intent's manifest must validate. Every
+(`current` must exist). Only a missing pointer file is absent: one that exists
+but is empty, blank, not a version name or unreadable skips the pass. The pending intent's manifest must validate. Every
 version's record is either valid or treated as absent and replaced by hashing
 its files. Every store's layout and channel manifests must be free of links and
 must validate. Any failure there skips the whole pass with its reason. `Prune`

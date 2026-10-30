@@ -481,6 +481,34 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.Contains(expectedSubstring: "names no version", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
     }
+    // Only a missing pointer is absent. A last-good that is present but empty, blank, not a version name, or unreadable
+    // might have protected any version, so it skips the whole pass.
+    [InlineData("")]
+    [InlineData("  \n")]
+    [InlineData("../1.0.0")]
+    [InlineData(null)]
+    [Theory]
+    public void APresentPointerThatNamesNoVersionSkipsTheWholePass(string? lastGood) {
+        _ = Install(version: "1.0.0");
+        _ = Install(version: "1.0.1");
+        var path = Path.Combine(path1: Root, path2: "last-good");
+        string? skipped;
+
+        File.WriteAllText(contents: (lastGood ?? "1.0.0"), path: path);
+        if (lastGood is not null) {
+            skipped = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
+        } else if (OperatingSystem.IsWindows()) {
+            using (new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.None)) {
+                skipped = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
+            }
+        } else {
+            File.SetUnixFileMode(mode: UnixFileMode.None, path: path);
+            skipped = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
+            File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite, path: path);
+        }
+        Assert.Contains(actualString: skipped, expectedSubstring: "nothing was deleted");
+        Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
+    }
     // A record that does not validate gives its version no rank, so the version is kept rather than ranked below older
     // recorded ones.
     [Fact]

@@ -300,9 +300,10 @@ public static class InstallPruner {
         if (stream is null) { return null; }
         if (stream.Length > MaximumPointerBytes) { throw new IOException(message: $"'{name}' exceeds {MaximumPointerBytes} bytes."); }
         using var reader = new StreamReader(stream: stream);
-        var text = reader.ReadToEnd().Trim();
 
-        return ((text.Length == 0) ? null : text);
+        // Only a missing file is absent: an empty or blank pointer is present and names no version, which the caller
+        // refuses like any other name that is not a version.
+        return reader.ReadToEnd().Trim();
     }
     private static byte[]? ReadBounded(ConfinedDirectory directory, string name) {
         using var stream = directory.OpenFile(name: name);
