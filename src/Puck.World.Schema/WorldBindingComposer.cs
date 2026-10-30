@@ -201,12 +201,12 @@ public static class WorldBindingComposer {
             version ??= layer.Version;
             if (layer.BindingBar is { } preference) {
                 bar = new BindingBarPreferences(
-                    HideUnbound: preference.HideUnbound ?? bar?.HideUnbound,
-                    Scale: preference.Scale ?? bar?.Scale,
-                    ContrastBoost: preference.ContrastBoost ?? bar?.ContrastBoost,
-                    UiScale: preference.UiScale ?? bar?.UiScale,
-                    Layout: preference.Layout ?? bar?.Layout,
-                    Model: preference.Model ?? bar?.Model
+                    HideUnbound: (preference.HideUnbound ?? bar?.HideUnbound),
+                    Scale: (preference.Scale ?? bar?.Scale),
+                    ContrastBoost: (preference.ContrastBoost ?? bar?.ContrastBoost),
+                    UiScale: (preference.UiScale ?? bar?.UiScale),
+                    Layout: (preference.Layout ?? bar?.Layout),
+                    Model: (preference.Model ?? bar?.Model)
                 );
             }
 

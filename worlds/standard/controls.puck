@@ -62,11 +62,11 @@ hud {
 
 icons {
   rows [
-    { name: "bar.cluster", label: ": :" }
-    { name: "bar.keys", label: "WASD" }
-    { name: "bar.pad", label: "PAD" }
-    { name: "bar.wings", label: "WING" }
-    { name: "bar.sides", label: "[=]" }
+    { name: "bar.cluster", label: "::" }
+    { name: "bar.keys", label: "KB" }
+    { name: "bar.pad", label: "PD" }
+    { name: "bar.wings", label: "WG" }
+    { name: "bar.sides", label: "||" }
     { name: "bar.single", label: "1" }
     { name: "bar.compact", label: "S" }
     { name: "bar.full", label: "L" }
@@ -163,6 +163,7 @@ icons {
     { name: "act.view", label: "DV" }
     { name: "act.wheel", label: "WH" }
     { name: "act.run", glyph { font: mono, glyph: "U+00BB" } }
+    { name: "act.dash", label: "DS" }
     { name: "act.autorun", label: "AR" }
     { name: "act.fly", glyph { font: mono, glyph: "U+21D1" } }
     { name: "act.autofly", label: "AF" }
@@ -292,6 +293,7 @@ state {
       rise = "act.rise"
       run = "act.run"
       runToggle = "act.run"
+      dash = "act.dash"
       fly = "act.fly"
       frame = "act.frame"
       descend = "act.descend"

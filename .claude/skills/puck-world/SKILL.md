@@ -30,7 +30,7 @@ camera: the first authored `views` layout is what a boot shows, and the Moth's
 is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
 `view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
 authors the body, its motion programs, its camera (`seatControl`,
-`seatRig "moth-camera"`) and its seat camera feel. A new rule or feature for
+`seatRig "moth-camera"`); the standard's `camera.puck` supplies shared feel and boom limits. A new rule or feature for
 the live world goes in `debug.puck` (or a scratch `.puck` world booted with
 `--world`). Every other world (the island
 `puck.world.json`, its districts, the games) and their canary, parity and

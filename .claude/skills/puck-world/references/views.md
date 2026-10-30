@@ -353,7 +353,7 @@ The standard right stick binds `player.look.steer`: horizontal input writes
 `Turn`. Authors may bind `player.look` for free orbit, explicit bindings may
 still write `Turn`, and a drive kit may interpret its left-stick roles
 according to their own motion program. In the debug world the left-stick
-press (and N) toggles the `run` channel, West and Left Shift hold it, and the
+press (and N) toggles the `run` channel, Left Shift holds it, West/J dash, and the
 left trigger's page turns the stick presses into autorun and autofly
 ([the Moth's controls](../../../../worlds/debug/avatars/moth.md#controls)).
 

@@ -133,7 +133,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
         var status = bindingBarControl.Status(slot: slot);
         var authoring = status.Authoring;
         var layout = status.Layout;
-        var layoutName = authoring.Layouts?.FirstOrDefault(pair => ReferenceEquals(pair.Value, layout)).Key ?? "none";
+        var layoutName = (authoring.Layouts?.FirstOrDefault(predicate: pair => ReferenceEquals(objA: pair.Value, objB: layout)).Key ?? "none");
         var overrideWord = ((status.Override is null)
             ? "auto"
             : (status.Override.Value
@@ -153,7 +153,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
             ? "on"
             : "off")} visible {((authoring.Visible is null)
             ? "always"
-            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} presence {status.Presence:0.##} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layoutName {layoutName} groups {status.Compiled.Frames.Length} placedSlots {status.Compiled.Banks.Values.Sum(bank => bank.Plates.Count)} layout buttonSize {layout.ResolvedButtonSize:0.###} banks {(layout.Banks?.Count ?? 0)} anchor {layout.ResolvedAnchor.Edge.ToString().ToLowerInvariant()} {layout.ResolvedAnchor.Inset:0.###} glyphOffsetRatio {layout.ResolvedGlyphOffsetRatio:0.###} glyphSizeRatio {layout.ResolvedGlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
+            : "predicate")} override {overrideWord} hidden {status.Hidden.ToString().ToLowerInvariant()} reason {status.Reason} presence {status.Presence:0.##} slots {authoring.SlotSet.Count} banks {authoring.Banks.Count} hideUnbound {status.EffectiveHideUnbound.ToString().ToLowerInvariant()} stacked {status.Stacked.ToString().ToLowerInvariant()} layoutName {layoutName} groups {status.Compiled.Frames.Length} placedSlots {status.Compiled.Banks.Values.Sum(selector: bank => bank.Plates.Count)} layout buttonSize {layout.ResolvedButtonSize:0.###} banks {(layout.Banks?.Count ?? 0)} anchor {layout.ResolvedAnchor.Edge.ToString().ToLowerInvariant()} {layout.ResolvedAnchor.Inset:0.###} glyphOffsetRatio {layout.ResolvedGlyphOffsetRatio:0.###} glyphSizeRatio {layout.ResolvedGlyphSizeRatio:0.###} scale {status.EffectiveScale:0.###}]"));
     }
     // world.screenshot <path.png> presented [<frames>] [region <x> <y> <width> <height>]: arms a presented capture of the
     // frames the display shows next, holding nothing, and reports every frame and its difference from the one before it

@@ -352,6 +352,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
 
         var document = m_seatBindings.ComposedDocument(slot: slot);
         var builder = new StringBuilder(value: $"[player.bindings: seat {PlayerRoster.DisplayNumber(slot: slot)}");
+
         builder.Append(value: ' ').Append(value: input.Text);
         var defaultGroup = ((document.Chords is { Count: > 0 } chords)
             ? (string)chords[0].Group

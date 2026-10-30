@@ -175,7 +175,7 @@ public static class WorldBodyEffects {
         form = new WorldBodyEffectForm(
             Designation: designation,
             Direction: direction,
-            UseMoveDirection: effect is WorldEffect.PlanarImpulse { UseMoveDirection: true },
+            UseMoveDirection: (effect is WorldEffect.PlanarImpulse { UseMoveDirection: true }),
             DurationTicks: durationTicks,
             Key: key,
             Operation: operation,

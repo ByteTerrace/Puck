@@ -496,7 +496,7 @@ orbit/look and never write `Turn`. Authors can pair `player.move` with
 The debug world's Moth (`worlds/debug/avatars/moth.puck`, with the bar's pages
 in `worlds/debug/controls.puck`) binds the left stick to `player.move.strafe`,
 the right stick to `player.look.steer`, mouse buttons 1 and 2 to `player.orbit`
-and `player.steer`, the `run` channel held on West and Left Shift and toggled
+and `player.steer`, West/J to the authored dash, the `run` channel held on Left Shift and toggled
 (`BindingEntryMode.Toggle`) on the left stick's press and N, and, on the left
 trigger's page, autorun and autofly as toggles of `forward` and `rise` and the
 held `player.look.free`, which suppresses body steering while camera look
@@ -1186,10 +1186,10 @@ Facts a script needs:
   package `worlds/debug/` at the repository root (`--world worlds/debug`): its
   entry `debug.puck`, with its basis `avatars/moth.puck`, the `quality.puck`
   presets that avatar imports, the `skies.puck` and `shapes.puck` modules it
-  imports, the `skin.puck` skin and the `controls.puck` cursor, key hints,
-  icons, five-page binding bar and three-ring play wheel it and the garden import
-  (with `pad.puck`, the debug world's own Go and Tour pages and Places ring, and
-  the `pad-kit.puck` library), and
+  imports, the standard package's skin, controls, camera feel and shared
+  binding-bar layouts (`worlds/standard/`). The debug world's `controls.puck`
+  refines its Go and Tour pages and adds Places beside the standard Act, View
+  and Bar rings, with `pad-kit.puck` holding its place definitions, and
   `garden.puck` and `night.puck`, the destinations its painting wing's portals
   open onto, and `paintings.puck`, the wing in the gallery hall
   ([the portal demo](../../worlds/debug/debug.md));

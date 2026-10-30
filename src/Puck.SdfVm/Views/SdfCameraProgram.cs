@@ -64,6 +64,7 @@ public readonly record struct SdfCameraDynamics(float Frequency, float Damping, 
 public abstract record SdfCameraOp {
     /// <summary>Reports an avatar-local first-person destination; the seat applies the transition.</summary>
     public sealed record FirstPerson(Vector3 EyePoint, SdfCameraScalar Active, float TransitionSeconds, float HideRadius) : SdfCameraOp;
+
     private SdfCameraOp() {
     }
 
@@ -310,7 +311,7 @@ public static class SdfCameraProgramEvaluator {
             switch (operations[index]) {
                 case SdfCameraOp.FirstPerson firstPersonOp:
                     firstPerson = new SdfCameraFirstPerson(firstPersonOp.EyePoint,
-                        firstPersonOp.Active.Resolve(scalars: scalars) >= 0.5f,
+                        (firstPersonOp.Active.Resolve(scalars: scalars) >= 0.5f),
                         firstPersonOp.TransitionSeconds, firstPersonOp.HideRadius);
                     break;
                 case SdfCameraOp.Anchor anchor:
@@ -508,7 +509,7 @@ public static class SdfCameraProgramEvaluator {
             Target: (haveTarget
             ? target
             : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
-        ) { TargetShift = targetShift, FirstPerson = firstPerson };
+        ) { FirstPerson = firstPerson, TargetShift = targetShift };
     }
     private static Vector3 Forward(Quaternion orientation) => Vector3.Transform(
         rotation: orientation,

@@ -1145,7 +1145,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         state = m_states[slot];
     }
     /// <inheritdoc/>
-    public object? ContextToken(int slot) => (((uint)slot) < SeatCount) ? m_seats[slot].ContextToken(slot: slot) : null;
+    public object? ContextToken(int slot) => ((((uint)slot) < SeatCount) ? m_seats[slot].ContextToken(slot: slot) : null);
     /// <inheritdoc/>
     public bool HoldsSource(int slot, string source) {
         return (

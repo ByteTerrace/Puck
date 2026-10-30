@@ -29,7 +29,7 @@ breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a
 bespoke command or simulation state. A page entry takes `mode: Toggle` the same way, and the
 debug world authors its auto-actions so: the Moth's resting page toggles `run` on the left stick's press beside the
-held `run` on West, and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
+held `run` on Left Shift (West/J now dash), and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
 stick's press (autorun) and `rise` on the right stick's press (autofly). The page's entry replaces the resting page's at
 that source, and the latch outlives the page, so the trigger lets go and she keeps going. Toggle contributions are owned by the compiled command destination,
 not by the button that flipped them; synthesized chord edges carry that stable

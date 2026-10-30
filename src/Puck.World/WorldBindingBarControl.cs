@@ -158,16 +158,16 @@ internal sealed class WorldBindingBarControl {
         var preferences = m_bindings.ComposedDocument(slot: slot).BindingBar;
         // Which layout is live is a state cell's answer, read through the state mirror: the bar's shape is data the
         // player can flip.
-        var layoutName = preferences?.Layout ?? CellText(
+        var layoutName = (preferences?.Layout ?? CellText(
             mirror: mirror,
             token: authoring.LayoutCell
-        );
+        ));
         var layout = authoring.LayoutNamed(name: layoutName);
         var stacked = !string.Equals(
-            a: preferences?.Model ?? CellText(
+            a: (preferences?.Model ?? CellText(
                 mirror: mirror,
                 token: authoring.ModelCell
-            ),
+            )),
             b: WorldBindingBarAuthoring.SingleModel,
             comparisonType: StringComparison.Ordinal
         );

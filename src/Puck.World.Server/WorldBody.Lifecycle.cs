@@ -182,9 +182,9 @@ public sealed partial class WorldBody {
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
         var planarVelocity = (m_planarVelocity + m_overlayVelocity).ToVector3();
-        var timerSuffix = string.Join(",", m_actionStateDefinitions.Select((definition, slot) => (definition, slot))
-            .Where(item => item.definition.Kind == ActionStateKind.Timer)
-            .Select(item => $"{item.definition.Name}:{((double)FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: StateTimer(item.slot))):0.###}"));
+        var timerSuffix = string.Join(separator: ",", values: m_actionStateDefinitions.Select(selector: (definition, slot) => (definition, slot))
+            .Where(predicate: item => (item.definition.Kind == ActionStateKind.Timer))
+            .Select(selector: item => $"{item.definition.Name}:{((double)FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: StateTimer(slot: item.slot))):0.###}"));
         var verticalVelocity = ((double)m_verticalVelocity);
         var scale = ((double)m_scale);
         var com = (IsRigid
@@ -714,6 +714,7 @@ public sealed partial class WorldBody {
     /// perturbed by this wake.</summary>
     /// <param name="field">The world contact field.</param>
     public void SetContactField(IContactField? field) => AdoptContactField(field: field, wake: true);
+
     // wake false hands over a field that provably differs from the old one only where this body cannot reach, so its
     // rest latch still describes the world it rests in.
     private void AdoptContactField(IContactField? field, bool wake) {

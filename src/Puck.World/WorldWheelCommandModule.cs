@@ -6,7 +6,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// The radial action menu's verb surface — the three bindable acts the wheel hold pages dispatch
+/// The radial action menu's verb surface — the bindable acts the wheel hold pages dispatch
 /// (<see cref="RingCommand"/> steps the active ring, the mouse-less twin of the mouse wheel;
 /// <see cref="CommitCommand"/> consumes an author-bound release-commit) plus the pipe-assertable
 /// <c>world.view.wheel</c> read (the <c>world.view.pointer</c> sibling: live radial presentation state nothing else
@@ -28,7 +28,6 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
     public const string RingCommand = Puck.World.Client.WorldWheelCommandNames.RingCommand;
     /// <summary>The author-bindable Axis2D radial selection act.</summary>
     public const string SelectCommand = Puck.World.Client.WorldWheelCommandNames.SelectCommand;
-
     /// <summary>The relative Axis2D ring-scroll act; vertical motion is measured in notches.</summary>
     public const string ScrollCommand = "player.wheel.scroll";
 

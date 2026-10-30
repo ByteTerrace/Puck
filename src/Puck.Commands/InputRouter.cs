@@ -451,12 +451,13 @@ public sealed partial class InputRouter : IDisposable {
         if (!workingBySlot.TryGetValue(key: slot, value: out var working)) {
             return;
         }
-        for (var activationIndex = m_relativeActivations.Count - 1; activationIndex >= 0; activationIndex--) {
+        for (var activationIndex = (m_relativeActivations.Count - 1); (activationIndex >= 0); activationIndex--) {
             var captured = m_relativeActivations[activationIndex];
+
             if (captured.Slot != slot) {
                 continue;
             }
-            for (var index = working.Count - 1; index >= 0; index--) {
+            for (var index = (working.Count - 1); (index >= 0); index--) {
                 if (working[index].Activation == captured.Activation) {
                     working.RemoveAt(index: index);
                 }
@@ -580,10 +581,11 @@ public sealed partial class InputRouter : IDisposable {
             : null
         );
         var contextChanged = !ReferenceEquals(objA: priorContext, objB: m_bindings.ContextToken(slot: slot));
+
         if (contextChanged) {
             DiscardRelativeActivations(slot: slot, workingBySlot: workingBySlot);
         }
-        var relativeSignal = signal.Transient && (signal.Value.Kind is CommandValueKind.Axis1D or CommandValueKind.Axis2D or CommandValueKind.Axis3D);
+        var relativeSignal = (signal.Transient && (signal.Value.Kind is CommandValueKind.Axis1D or CommandValueKind.Axis2D or CommandValueKind.Axis3D));
         var pageBindings = ResolveBindings(bindings: (focusExemptOnly
             ? null
             : resolvedPageBindings));
@@ -669,6 +671,7 @@ public sealed partial class InputRouter : IDisposable {
                 : alwaysActiveBindings[(bindingIndex - pageBindingCount)]
             );
             var binding = resolved.Binding;
+
             if (contextChanged && (relativeSignal || binding.Relative)) {
                 continue;
             }
@@ -2025,7 +2028,6 @@ public sealed partial class InputRouter : IDisposable {
             state.IsHeld
         );
     }
-
     /// <summary>Whether this seat's physical source is depressed, independently of a command's toggle or
     /// authoritative continuation. Reads the router's existing repeat/release state on the pump thread.</summary>
     public bool IsSourcePressed(int slot, string source) {

@@ -7,7 +7,7 @@ template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
       actions {
         dash {
           onPress {
-            gate: timerElapsed(state: dashCooldown)
+            gate: timerElapsed(state: "dashCooldown")
             latchSeconds: 0
             effects [
               planarImpulse(bodyDirection: [0, 0, -1], speed: speed, durationSeconds: duration, useMoveDirection: true)

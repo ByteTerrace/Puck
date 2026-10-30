@@ -1,4 +1,8 @@
 // Shared camera feel. A world or avatar may refine these rows by id.
+exports {
+  bindings [`camera-boom`]
+}
+
 seatDefaults {
   seatCameraFeel {
     invertPitch: false
@@ -15,6 +19,10 @@ dynamics [
 
 views {
   seatControl {
-    boom { minimum: 1.5, maximum: 12, step: 0.6 }
+    boom {
+      minimum: 1.5
+      maximum: 12
+      step: 0.6
+    }
   }
 }
