@@ -46,7 +46,7 @@ void sdfMeshIrradianceProbe(uint address, float3 normal, out float sky, out floa
 }
 
 // KEEP IN SYNC with SdfMeshIrradiance.Gather. A corner's weight is its cell's trilinear share times
-// max(0, dot(receiver normal, direction to relocated probe)) squared times depth-moment visibility.
+// a short distance fade in front of the receiver times angular surface visibility.
 // Continuous hemisphere weighting excludes probes behind a surface without a discrete front/back fallback.
 // Unwritten, invalid and invisible probes take no part; no answering probe means no measured indirect light.
 static const uint SdfMeshProbeNone = 0xffffffffu;
@@ -60,31 +60,107 @@ float3 sdfMeshProbeOffset(uint address) {
 
     return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
 }
-// Octahedral depth moments: four bilinear taps, reflected at identified edges, and a one-sided Chebyshev bound.
-// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and SdfOctahedral. The CPU reads the same packed FP16 moments.
+// First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
+// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
+float sdfMeshProbeCoverageVisibility(float blocked) {
+    float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
+    coverage = coverage * coverage * (3.0 - 2.0 * coverage);
+    return 1.0 - coverage;
+}
 float sdfMeshProbeDepthVisibility(uint address, float3 toward) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
     float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
     int2 base = (int2)floor(texel);
     float2 fraction = texel - (float2)base;
-    float mean = 0.0;
-    float squared = 0.0;
+    float3 points[4];
+    float3 normals[4];
+    float curvatures[4];
+    float4 weights = 0.0;
+    uint firstCode = 0xffffffffu;
+    float3 firstNormal = 0.0;
+    bool planar = true;
+    float planeLow = 3.402823466e+38;
+    float planeHigh = -3.402823466e+38;
+    float planeSum = 0.0;
+    float planeWeight = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        points[corner] = 0.0;
+        normals[corner] = 0.0;
         int2 high = int2(corner & 1u, corner >> 1);
         float2 axes = lerp(1.0 - fraction, fraction, (float2)high);
         float weight = axes.x * axes.y;
+        if (weight <= 0.0) { continue; }
         int2 tap = sdfOctBorderSource(base + high, (int)SDF_MESH_IRRADIANCE_DEPTH_SIZE);
         uint word = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y)];
-        mean += weight * sdfMeshIrradianceHalf(word, 0u);
-        squared += weight * sdfMeshIrradianceHalf(word, 1u);
+        float depth = sdfMeshIrradianceHalf(word, 0u);
+        if (depth < 0.0) {
+            if (distance > -depth) { return 0.0; }
+            continue;
+        }
+        int2 encoded = int2((int)(word << 8u) >> 24, (int)word >> 24);
+        points[corner] = depth * sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
+        uint index = (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y);
+        uint packedCurvature = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + SDF_MESH_IRRADIANCE_DEPTH_SIZE * SDF_MESH_IRRADIANCE_DEPTH_SIZE + (index >> 1u)];
+        float curvature = sdfMeshIrradianceHalf(packedCurvature, index & 1u);
+        if (!isfinite(curvature)) { continue; }
+        uint code = word >> 16u;
+        if (firstCode == 0xffffffffu) {
+            firstCode = code;
+            firstNormal = sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
+        }
+        normals[corner] = code == firstCode ? firstNormal : sdfOctDecode((float2)encoded / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
+        curvatures[corner] = curvature;
+        weights[corner] = weight;
+        planar = planar && curvature == 0.0 && code == firstCode;
+        float plane = dot(firstNormal, points[corner]);
+        planeLow = min(planeLow, plane);
+        planeHigh = max(planeHigh, plane);
+        planeSum += weight * plane;
+        planeWeight += weight;
     }
-    if (distance <= mean) { return 1.0; }
-    float variance = max(0.0, squared - mean * mean);
-    float delta = distance - mean;
-    float probability = variance / max(1.0e-8, variance + delta * delta);
-    float visibility = probability * probability * probability;
-    return (visibility < 0.2) ? (visibility * visibility * visibility / 0.04) : visibility;
+    if (planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
+        float gap = dot(firstNormal, toward) - planeSum / planeWeight;
+        return sdfMeshProbeCoverageVisibility(planeWeight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE));
+    }
+    float blocked = 0.0;
+    [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        if (weights[corner] <= 0.0) { continue; }
+        float quadratic = 0.0;
+        float3 coefficient = 0.0;
+        float constant = 0.0;
+        float total = 0.0;
+        [unroll] for (uint neighbour = 0u; neighbour < 4u; neighbour++) {
+            if (weights[neighbour] <= 0.0) { continue; }
+            float3 sum = normals[corner] + normals[neighbour];
+            if (dot(normals[corner], normals[neighbour]) <= 0.0 ||
+                abs(dot(sum, points[neighbour] - points[corner])) > SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) { continue; }
+            float curvature = curvatures[neighbour];
+            float3 position = points[neighbour];
+            float3 normal = normals[neighbour];
+            quadratic += weights[neighbour] * 0.5 * curvature;
+            coefficient += weights[neighbour] * (normal - curvature * position);
+            constant += weights[neighbour] * (-dot(normal, position) + 0.5 * curvature * dot(position, position));
+            total += weights[neighbour];
+        }
+        quadratic /= total;
+        coefficient /= total;
+        constant /= total;
+        float a = quadratic * dot(toward, toward);
+        float b = dot(coefficient, toward);
+        float c = constant;
+        float discriminant = b * b - 4.0 * a * c;
+        if (c <= 0.0 || discriminant <= 0.0) { continue; }
+        float divisor = sqrt(discriminant) - b;
+        if (divisor <= 1e-8) { continue; }
+        float along = 2.0 * c / divisor;
+        if (along <= 0.0 || along >= 1.0) { continue; }
+        float3 hit = toward * along;
+        float3 gradient = coefficient + 2.0 * quadratic * hit;
+        float gap = dot(normalize(gradient), toward - hit);
+        blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
+    }
+    return sdfMeshProbeCoverageVisibility(blocked);
 }
 struct SdfMeshProbes {
     uint address[8];
@@ -114,7 +190,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
     // Extend the boundary probes only as far as their visibility permits. The pushed receiver, never the clamped
-    // lookup, is tested against their depth moments, so leaving the window cannot invent open sky.
+    // lookup, is tested against their surface samples, so leaving the window cannot invent open sky.
     float3 unclamped = ((pushed / spacing) - 0.5);
     float3 lattice = clamp(unclamped, (float3)low, (float3)(low + dims - 1));
     float3 base = floor(lattice);
@@ -143,9 +219,8 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float distance = length(toward);
-        float facing = lerp(((distance > 0.0) ? max(0.0, dot((toward / distance), normal)) : 1.0), 1.0, outside);
-        float weight = (((axes.x * axes.y * axes.z) * (facing * facing)) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
+        float facing = lerp(smoothstep(0.0, 0.5 * spacing, dot(toward, normal)), 1.0, outside);
+        float weight = (((axes.x * axes.y * axes.z) * facing) * sdfMeshProbeDepthVisibility(address, (pushed - probePoint)));
 
         if (weight <= 0.0) {
             continue;
@@ -158,7 +233,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 }
 // The sky visibility and reflected radiance the gathered probes hold, seen along `direction` (the normal for the light a
 // surface receives, the mirror direction for the light it reflects). A point with no answering probe has no measured
-// incoming light. The boundary gather extrapolates only the light its probes' depth moments permit.
+// incoming light. The boundary gather extrapolates only the light its probes' surface samples permit.
 void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVisibility, out float3 radiance) {
     float sky = 0.0;
     float3 reflected = 0.0;
@@ -186,7 +261,7 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
     radiance = (reflected / total);
 }
 // The visibility of a light of the lights table at the surface: the share of the gathered probes whose centre sees it,
-// so a fixture lights nothing through the wall or slab between them; one where no probe takes part.
+// so a fixture lights nothing through the wall or slab between them; zero where no probe takes part.
 float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     uint word = (SDF_MESH_IRRADIANCE_LIGHTS_WORD + (lightIndex >> 5u));
     uint bit = (1u << (lightIndex & 31u));
@@ -206,7 +281,7 @@ float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
         total += probes.weight[corner];
     }
     if (total <= 0.0) {
-        return 1.0;
+        return 0.0;
     }
 
     return (visible / total);

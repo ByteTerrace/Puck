@@ -21,8 +21,8 @@ public static class HostAdmission {
 
         return CliLease.AcquireAsync(ancestor: IsAncestor, cancellationToken: cancellationToken, clock: clock, holder: step, lane: CliLease.LaneOf(checkout: repositoryRoot), name: "heavy", root: root, wait: HeavyTimeout).GetAwaiter().GetResult();
     }
-
-    private static bool IsAncestor(int pid, long ticks) {
+    /// <summary>Whether the named process, with the given UTC start ticks, is a live ancestor of this process.</summary>
+    public static bool IsAncestor(int pid, long ticks) {
         var child = Environment.ProcessId;
         var visited = new HashSet<int>();
 

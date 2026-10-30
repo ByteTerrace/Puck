@@ -280,7 +280,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         );
         m_brickPoolVoxelCapacity = Math.Max(
             val1: 0,
-            val2: Math.Min(options.BrickPoolVoxelCapacity, ((int)Math.Min(int.MaxValue, Math.Max(SdfBrickPoolLayout.VoxelsPerBrick, (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))))
+            val2: Math.Min(val1: options.BrickPoolVoxelCapacity, val2: ((int)Math.Min(val1: int.MaxValue, val2: Math.Max(val1: SdfBrickPoolLayout.VoxelsPerBrick, val2: (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (128 * sizeof(float)))))))
         );
         m_brickPoolEnabled = (m_brickPoolVoxelCapacity > 0);
 
@@ -363,7 +363,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             region: MeshRegionIndex
         ));
         m_meshBakePointRegion = scope.Own(created: CreateRegion(byteCount: MeshBakePointBytes, region: MeshBakePointRegionIndex));
-        m_meshIrradianceRegion = scope.Own(created: CreateRegion(byteCount: MeshIrradianceBytes, region: MeshIrradianceRegionIndex));
+        m_meshIrradianceRegion = scope.Own(created: CreateRegion(byteCount: (SdfMeshIrradianceProbe.ProbeWords * sizeof(uint)), region: MeshIrradianceRegionIndex));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
