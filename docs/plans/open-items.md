@@ -877,6 +877,16 @@ answer.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] The debug world sits at the rule-work ceiling: the granaries lane
+  raised `RuleCapacity.MaxWorkUnitsPerTick` from 4,000,000 to 4,250,000
+  (`src/Puck.State/Rule.cs`) because the plain debug world was about 10k units
+  from the chess search's minimum and the granary board broke validation by
+  23k; it also phases its rules one a tick over twelve because the pricing
+  counts rules gated on different values of one slot as the dearest, not the
+  sum. The card tables add more. Decide the cause before the next raise: is the
+  static price far above measured tick cost (measure a busy tick against the
+  price), should the search draw from its own budget, and does the slot-gating
+  rule price what one tick can actually run? (from: granaries lane)
 - [medium] A scratch test using `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed over two minutes of CPU during preparation without a
   generated world or a diagnostic; moving the console command and the closing
@@ -962,6 +972,13 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
+  `mutate` over `section:state` to write six feed rows; scope it to those rows if
+  the extension grant vocabulary allows. The Azure deployment files
+  (`src/Puck.Azure.Resources/bicepconfig.json`,
+  `avm/ptn/platform/public-ai-services/main.bicepparam`) carry the owner's
+  subscription ID; whether they stay is the owner's call. (from: the lead,
+  landing granaries)
 - Complete the independent review: federation interruption, recovery and
   revocation schedules; authorization and disclosure composition; deployed Azure
   identity, storage and key policy; aggregate hostile-input budgets; and
