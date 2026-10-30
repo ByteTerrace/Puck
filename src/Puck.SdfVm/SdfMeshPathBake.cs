@@ -328,10 +328,12 @@ public sealed partial class SdfMeshPathBake {
                 finished++;
                 if (group.Dynamic && (group.Slot < frame.DynamicTransforms.Count)) {
                     var transform = frame.DynamicTransforms[group.Slot];
+                    var scale = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
 
-                    if ((transform.Position != group.DrawnPosition) || (transform.Orientation != group.DrawnOrientation)) {
+                    if ((transform.Position != group.DrawnPosition) || (transform.Orientation != group.DrawnOrientation) || (scale != group.DrawnScale)) {
                         group.DrawnPosition = transform.Position;
                         group.DrawnOrientation = transform.Orientation;
+                        group.DrawnScale = scale;
                         moved = true;
                     }
                 }
@@ -353,8 +355,9 @@ public sealed partial class SdfMeshPathBake {
                         }
                         continue;
                     }
+                    // A dynamic group's mesh is in its slot's own units (DynamicTransform.Scale), which its draw scales.
                     var matrix = (group.Dynamic
-                        ? (Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
+                        ? ((Matrix4x4.CreateScale(scale: group.DrawnScale) * Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation)) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
                         : Matrix4x4.Identity);
 
                     for (var piece = 0; (piece < Math.Max(val1: 1, val2: mesh.Chunks.Count)); piece++) {
@@ -804,6 +807,7 @@ public sealed partial class SdfMeshPathBake {
                 group.Mesh = old.Mesh;
                 group.DrawnPosition = old.DrawnPosition;
                 group.DrawnOrientation = old.DrawnOrientation;
+                group.DrawnScale = old.DrawnScale;
             }
             if (Begin(group: group)) {
                 loading++;
@@ -1721,6 +1725,8 @@ public sealed partial class SdfMeshPathBake {
         public int PointsAnswered { get; set; }
 
         public Quaternion DrawnOrientation { get; set; } = Quaternion.Identity;
+
+        public float DrawnScale { get; set; } = 1f;
 
         // The final lattice while its slabs and corner gradients are sampled.
         public FinalLattice? Final { get; set; }

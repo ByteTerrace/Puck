@@ -77,6 +77,12 @@ float3 sdfMeshRow(uint record, uint row) {
 
     return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
 }
+// The uniform scale of a draw's matrix, its first row's length: a dynamic group's mesh is in its slot's own units
+// (DynamicTransform.Scale), and a vertex riding a member takes the draw's scale out of the member's frame as the rest of
+// the mesh takes it from the matrix (SdfMeshPathBake.Dress).
+float sdfMeshDrawScale(uint record) {
+    return length(sdfMeshRow(record, 0u));
+}
 // A direction in a draw's object space, under its matrix without the translation (v * M, the row-vector convention).
 float3 sdfMeshWorldDirection(uint record, float3 v) {
     return (((v.x * sdfMeshRow(record, 0u)) + (v.y * sdfMeshRow(record, 1u))) + (v.z * sdfMeshRow(record, 2u)));
@@ -117,7 +123,7 @@ float3 sdfMeshWorldPosition(uint record, uint k) {
     if (entry != 0u) {
         uint slot = sdfMeshMemberSlot(record, entry);
 
-        return sdfMeshCarryPoint(record, (rotatePointByQuaternion(sdfMeshMemberLocal(entry, object, true), sdfDynamicTransforms[((3u * slot) + 1u)]) + sdfDynamicTransforms[(3u * slot)].xyz));
+        return sdfMeshCarryPoint(record, (rotatePointByQuaternion((sdfMeshMemberLocal(entry, object, true) * sdfMeshDrawScale(record)), sdfDynamicTransforms[((3u * slot) + 1u)]) + sdfDynamicTransforms[(3u * slot)].xyz));
     }
 
     return sdfMeshCarryPoint(record, (sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u)));

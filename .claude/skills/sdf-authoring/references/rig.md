@@ -135,6 +135,11 @@ A `target` is `{ kind }` of `surface`, `body`, or `state`:
 | `body` | `index`, `offset` ≤ 16 |
 | `state` | `reference` = `state.<row>[.<key>]` holding a world-space point |
 
+`reach`, `standoff` and a replant's `distance` and `height` are creation
+lengths: at a look or `bodies.scale` scale other than one they scale with the
+body, as its shapes do, so a quarter-size Moth stands her boots a quarter-size
+sole height off the floor (`WorldCreationInstances.Effectors`).
+
 A `plant` is `{ driver, window, swingWeight }`, where the window is a
 `[from, to]` pair in [0, 2π) that wraps when `from` exceeds `to`. This is what
 keeps a foot still while the gait carries the body past it.
