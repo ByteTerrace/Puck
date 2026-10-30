@@ -447,16 +447,11 @@ Owner: debug-world tools lane (specialist) · medium · Next: the pick
 `panes`, and answers under `world.rate pause`), qualified in one windowed pass;
 then the diagnostics' windowed checks, then the three developer exhibits.
 
-- [medium] Naming what is under a pixel fails on the owner's windowed World:
-  `world.view.pick main 0.5 0.15` refuses "no rendered SDF view 'main'" and
-  `world.view.panes` lists 0 panes, so a walkthrough cannot ask what an object
-  is (`primary` resolves to the seat's render instance,
-  `src/Puck.World/WorldViewCommandModule.Picking.cs:48`; `main` names nothing).
-  Make pick address the presented world view by default and list it in
-  `panes`. Under `world.rate pause` the pick has stayed pending with no answer;
+- [medium] Under `world.rate pause` the pick has stayed pending with no answer;
   the hold now claims a paused World answers, bounded by the call's deadline
-  (`Picking.cs:73-100`), which only a windowed run shows. (from: owner
-  walkthrough)
+  (`Picking.cs`), which only a windowed run shows. The default view and the
+  `panes` listing are done (`world.view.pick <x> <y>`, `view instance:<name>`);
+  the paused run is owed. (from: owner walkthrough)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -780,6 +775,8 @@ failover witness.
 Owner: MCP lane (specialist) · medium · Next: the cached wait refusal (cache
 only a start's terminal outcome), then the per-swap state load, then the
 schema switch.
+
+- [low] A `puck_world_start` failed with "Access to the path .claude/leases/gpu.queue/000000000062 is denied": a Windows-held ticket file. The lease-rotation change counts an undeletable ticket as live on the new CLI; check the start path (the MCP adapter's lease delegate) handles the same error rather than failing the start. Also from the same lane: `world.view.pick` reports `placement=none` for static hall geometry and for screens (only the chess table resolves to a placement), and the pick answer does not name the prototype or palette material though `SdfPickResult.MaterialName` exists. (from: bars-and-pick lane)
 
 - [medium] `puck_exec` returns every line's full answer, so `world.affordances` and `world.grants` overflow an agent's token limit. Add an output filter to the tool (selected `lines` or `fields`, a byte cap with an explicit truncation mark) so the agents' own instrument stays usable on large answers. (from: c7-findings lane)
 
@@ -1193,8 +1190,6 @@ Owner: specialist lane (rendering, sdf-authoring, puck-world) · ordinary · Nex
 Owner: debug-world content lanes, each started by the owner's direction · one
 medium, the rest ordinary · Next: the black slats behind the chess table now (a
 material defect needs no taste call); new content and art on the owner's call.
-
-- [medium] Black slatted bars behind the chess table (level 3): five or six slats, each its own material id, lit normally in `indirect` and pure black in the lit view, so a black or missing albedo or a screen-type surface with no content; name the object from the document and fix its material (`body.pose 56.49 9.07 20.87 181`, eye (56.454, 12.92, 17.786) target (56.489, 10.07, 20.871); captures w03-* in `.claude/scratch/walkthrough/` (the lead's machine)). (from: owner walkthrough)
 
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and

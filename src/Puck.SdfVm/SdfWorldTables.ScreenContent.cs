@@ -217,14 +217,13 @@ public sealed partial class SdfWorldTables {
     /// already supplied packs nothing, and the region owes only the words a new mapping changes.</summary>
     /// <param name="screenIndex">The screen slot (0..<see cref="MaxScreenSurfaces"/>-1).</param>
     /// <param name="mapping">The screen's surface mapping, or <see langword="null"/> for none.</param>
-    /// <param name="face">The screen's face, which decides its treatment and its luminance; ignored without a mapping.</param>
+    /// <param name="face">The screen's face, which decides its treatment and its luminance. A screen drawing a glyph decal
+    /// (<see cref="SetScreenDecal"/>) publishes no mapping and keeps its face, so it shows at its display's luminance.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is out of range.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="mapping"/> is not drawable: its placement is not a
     /// surface, its warp declares no inverse, or its shape is invalid.</exception>
     public void SetScreenMapping(int screenIndex, SourceMapping? mapping, SdfScreenFace face) {
         RequireScreenIndex(screenIndex: screenIndex);
-
-        face = ((mapping is null) ? SdfScreenFace.Opening : face);
 
         if (
             ReferenceEquals(

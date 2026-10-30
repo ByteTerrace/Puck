@@ -115,7 +115,8 @@ view. `world.view.pick primary finding <id>` reads a retained causal record
 even while its diagnostic view is off or another is active; run `report` first
 to populate findings. `primary` resolves to the first seat's rendered instance
 (`world` before presentation); explicit instance names and the normalized
-`<view-or-instance> <x> <y>` pick form work too.
+`[<view-or-instance>] <x> <y>` pick form work too, and a pick with no view
+addresses `primary` (`world.view.panes` names the presented view).
 `world.debug-view goto <id>` requests an operator camera pose only. Reports
 share stable cause IDs, current measurements, precision budgets, source
 stamp/creation/node/operation and tick lifetimes. Changed reports enter
