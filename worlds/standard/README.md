@@ -25,12 +25,14 @@ distance and bounds, including in a headless World.
 `abilities.puck` is a library: `dashAbility(kit, speed, duration, cooldown)`
 authors a kit action over the generic timed planar impulse. The avatar declares
 the input channel and timer states and owns its tuning and rig response. The
-Moth's `avatars/moth-dash.puck` supplies its burst; West/J activates it on Move.
+Moth's [dash document](../debug/avatars/moth-dash.puck) supplies its burst; West/J activates it on Move.
 Run remains Shift while held, with N/left-stick press switching run on and off.
 
 The Bar ring selects the `standard` clusters, recovered `keys` and `pad`
-strips, `wings`, and `sidebars`. Wings use the same mirrored six-slot
-diamonds as the addon reference; its historical C# implementation already
+strips, `wings`, and `sidebars`. The strips retain the geometry authored at
+`8962c3d5a7`. Wings use the mirrored six-slot geometry at `e5841bfdad`:
+45/600 plates, a 60/600 central gap, and 24/45 badges offset by 0.4375 plates.
+That historical C# implementation already
 replaced secondary bars with multiplayer quadrants. The standard authors
 the requested fan-out: each secondary bank moves three pitches outward and
 0.75 pitches downward. Its primary anchor and modifier anchor retain the
