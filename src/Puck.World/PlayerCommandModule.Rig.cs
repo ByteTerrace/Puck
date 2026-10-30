@@ -40,15 +40,39 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[body.rig: body index must be an integer 0..{(m_population.Capacity - 1)}]");
         }
         var shapeName = ((instanceTarget.EffectiveCount == 2) ? args[1].ToString() : null);
+        // The input half is the routed authority's own read-back of the body, under the asking principal's Observe
+        // grant: a named instance answers for itself, a seat for the authority it is routed to, any other body for
+        // the boot world.
         if (instanceTarget.Instance is { } instance) {
-            return new CommandResult(Output: $"[body.rig: body:{index} instance:{instance.Name} {instance.Server.Input.DescribeBody(body: index)} creation-rig=none]");
+            var instanceInput = WorldInputReadBack.Ask(
+                caller: context.Principal,
+                link: instance.SubmissionLink,
+                query: new Puck.World.Protocol.WorldQuery.PlayerInput(Index: index)
+            );
+
+            return (instanceInput.Refused
+                ? WorldInputReadBack.Result(answer: instanceInput)
+                : new CommandResult(Output: $"[body.rig: body:{index} instance:{instance.Name} {instanceInput.Text} creation-rig=none]"));
         }
-        var input = m_server.Input.DescribeBody(body: index);
-        if ((index < PlayerRoster.MaxSlots) && (seatRouter.TryRoute(slot: index) is { } route) &&
-            !string.Equals(a: route.Endpoint.Authority, b: m_server.AuthorityIdentity, comparisonType: StringComparison.Ordinal)) {
-            route.Endpoint.Submissions.Query(query: new Puck.World.Protocol.WorldQuery.PlayerChannels(Index: route.EntityIndex),
-                completion: answer => input = answer.Text);
+        var answer = ((index < PlayerRoster.MaxSlots)
+            ? WorldInputReadBack.ForSeat(
+                bootLink: m_link,
+                caller: context.Principal,
+                query: static entity => new Puck.World.Protocol.WorldQuery.PlayerInput(Index: entity),
+                router: seatRouter,
+                slot: index
+            )
+            : WorldInputReadBack.Ask(
+                caller: context.Principal,
+                link: m_link,
+                query: new Puck.World.Protocol.WorldQuery.PlayerInput(Index: index)
+            ));
+
+        if (answer.Refused) {
+            return WorldInputReadBack.Result(answer: answer);
         }
+
+        var input = answer.Text;
         var pool = m_stamps;
         var bodyIndex = index;
         if ((index < PlayerRoster.MaxSlots) && (m_screens.Presenter is { } presenter) && presenter.TrySeatScene(index: out _, scene: out var scene, slot: index)) {

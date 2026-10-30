@@ -36,6 +36,26 @@ public sealed class CommandRegistryTests {
         Assert.True(condition: router.IsCommandHeld(command: "binding.probe", slot: 0));
     }
 
+    [Fact]
+    public void AnAnalogSampleAtRestAndAPostureStreamAreNotPressedControls() {
+        var registry = new CommandRegistry(modules: [new BindingOnlyModule(seen: [])]);
+        var router = new InputRouter(registry: registry, bindings: new FixedBindings(command: "binding.probe", mode: BindingEntryMode.Toggle), principalResolver: new ConsolePrincipal());
+        var tick = 1UL;
+
+        bool Pressed(string source) {
+            registry.ApplySnapshot(snapshot: router.SnapshotForTick(tick: tick++, windowEndTick: ulong.MaxValue));
+
+            return router.IsSourcePressed(slot: 0, source: source);
+        }
+
+        router.Capture(signal: InputSignal.Axis(source: "pad.stick", value: new System.Numerics.Vector2(x: 0.9f, y: 0f)));
+        Assert.True(condition: Pressed(source: "pad.stick"));
+        router.Capture(signal: InputSignal.Axis(source: "pad.stick", value: new System.Numerics.Vector2(x: 0.02f, y: 0f)));
+        Assert.False(condition: Pressed(source: "pad.stick"));
+        router.Capture(signal: (InputSignal.Axis(source: "pad.tilt", value: new System.Numerics.Vector2(x: 0f, y: 1f)) with { Posture = true }));
+        Assert.False(condition: Pressed(source: "pad.tilt"));
+    }
+
     private sealed class BindingOnlyModule(List<(CommandPhase Phase, CommandValue Value)> seen) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(name: "binding.probe", description: "Internal compiled destination.", valueKind: CommandValueKind.Digital,

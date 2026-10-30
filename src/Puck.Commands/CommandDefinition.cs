@@ -81,8 +81,8 @@ public sealed record CommandDefinition {
     public CommandBindability Bindability { get; init; }
     /// <summary>Gets the human-readable description shown in help output.</summary>
     public string Description { get; internal init; }
-    /// <summary>Optional current state read-back appended by full or prefixed help for the asking seat.</summary>
-    public Func<int, string>? HelpDetails { get; init; }
+    /// <summary>Optional current state read-back appended by full or prefixed help for the asking seat and principal.</summary>
+    public Func<int, Principal, string>? HelpDetails { get; init; }
     /// <summary>Gets whether this is a HELD verb: the handler reads the phase (active on Started/Active, released
     /// on Completed/Canceled), so a plain-bound entry — no <c>activateOn</c> — delivers both edges, exactly as a
     /// channel destination does. An author binds it once; only an explicit <c>activateOn</c> narrows to one edge.</summary>

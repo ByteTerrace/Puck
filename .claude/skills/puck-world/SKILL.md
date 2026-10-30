@@ -40,6 +40,17 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**The standard is authored.** `worlds/standard/standard.puck` composes the
+optional controls and skin. Shared cursor, icons, binding-bar designs, pages
+and wheel belong there; the debug world's Go/Tour pages and Places ring refine
+it in `worlds/debug/controls.puck`. The garden and night field import the
+standard directly. Add mechanisms to the engine and concrete design to the
+standard, with avatar tuning and rig animation in the avatar document. Authors
+override rows by id in the importing document's own body, or replace/omit the
+package through the existing composition path; do not copy a second standard
+into a world. [The package README](../../../worlds/standard/README.md) owns the
+import and override examples.
+
 **Replay one scope while the world lives on.** An authored `replays` row names its
 document rows, stable body ordinals, input principals, control row and timed
 input program. `WorldScopedReplayRuntime` captures its starting arena columns and
@@ -115,7 +126,8 @@ view. `world.view.pick primary finding <id>` reads a retained causal record
 even while its diagnostic view is off or another is active; run `report` first
 to populate findings. `primary` resolves to the first seat's rendered instance
 (`world` before presentation); explicit instance names and the normalized
-`<view-or-instance> <x> <y>` pick form work too.
+`[<view-or-instance>] <x> <y>` pick form work too, and a pick with no view
+addresses `primary` (`world.view.panes` names the presented view).
 `world.debug-view goto <id>` requests an operator camera pose only. Reports
 share stable cause IDs, current measurements, precision budgets, source
 stamp/creation/node/operation and tick lifetimes. Changed reports enter
@@ -221,7 +233,11 @@ with tick, command, status and output. Use `world.at` for absolute ticks or
 several commands at the same tick, and a multiline script for an ordered
 command/wait/read sequence.
 
-Keep reads lean: `world.view.camera` answers a compact line (`full` for every
+Keep reads lean: a large answer (`world.affordances`, `world.grants`) is narrowed
+by `puck_exec`'s own filters, which never change what the command does and apply to every
+line's answer: `lines` (one-based ranges such as `1-20,40`), `match` (lines containing a text,
+ignoring case), `fields` (keys of `key=value` answers, or property names anywhere in a JSON
+answer) and `maxBytes` (a cut ending in an explicit mark, with `truncated` set). `world.view.camera` answers a compact line (`full` for every
 field, a key list for chosen ones), `help <prefix>` answers one synopsis line per
 verb (`help --full <prefix>` for the whole text), and a sampling loop belongs in
 one script rather than one call per sample. `world.view.pick <view> <x> <y>`

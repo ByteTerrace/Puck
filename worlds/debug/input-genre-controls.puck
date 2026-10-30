@@ -92,6 +92,11 @@ state {
       value: 0
     }
     row {
+      name: "confirmPresses"
+      kind: Int
+      value: 0
+    }
+    row {
       name: "deltaTotal"
       kind: Fixed
       value: "0"
@@ -109,24 +114,41 @@ rule "relative-look" {
   mode: Level
   deltaTotal += channel(1, lookX)
 }
+rule "confirm-edges" {
+  forEach: $inputEvents:1
+  when inputEdge(1, confirm, Press, each)
+  mode: Level
+  confirmPresses += 1
+}
+// Each demonstration holds only in the epoch after the mode switch it covers: the press that began a kept hold
+// belongs to the previous epoch, so a hold that reads live with no press edge in the current epoch was kept by the
+// switch, and a hold that never crossed still has its edge.
 rule "shooter-demonstrated" {
   when (channel(1, moveX) == 1 and
     channel(1, moveY) == 0 and
     channel(1, aimX) == 0 and
     channel(1, aimY) == 1 and
     channel(1, fire) == 1 and
+    not inputEdge(1, fire, Press, 0) and
     firePresses == 1 and
     not inputMatch(1, `fire-buffer`))
   mode: Edge
   genreChecks["shooter"] = 1
 }
 rule "fps-demonstrated" {
-  when deltaTotal == 2 and firePresses == 2 and channel(1, fire) == 1 and not inputMatch(1, `fire-buffer`)
+  when (deltaTotal == 2 and
+    firePresses == 2 and
+    channel(1, fire) == 1 and
+    not inputEdge(1, fire, Press, 0) and
+    not inputMatch(1, `fire-buffer`))
   mode: Edge
   genreChecks["fps"] = 1
 }
 rule "menu-demonstrated" {
-  when channel(1, navigate) == 1 and channel(1, confirm) == 0
+  when (channel(1, navigate) == 1 and
+    not inputEdge(1, navigate, AxisSample, 0) and
+    confirmPresses == 1 and
+    channel(1, confirm) == 0)
   mode: Edge
   genreChecks["menu"] = 1
 }

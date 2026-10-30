@@ -4,6 +4,37 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldInputRuntime {
+    /// <summary>Writes the channel and input members of the affordance manifest for a body: every declared action
+    /// with its shape, consumer and, in the body's selected tuple, whether it is live and its value, then the body's
+    /// <see cref="DescribeBody"/> read-back as a string. The text is two members of a JSON object, without its braces.
+    /// An inactive body reads the default tuple.</summary>
+    /// <param name="body">The body index in this authority.</param>
+    public string DescribeAffordanceMembers(int body) {
+        var target = m_host.Body(index: body);
+        var mapping = Catalog.Mappings[(target?.InputMappingId ?? Catalog.DefaultMapping.Id)];
+        var text = new StringBuilder().Append(value: "\"channels\":");
+        var count = 0;
+
+        foreach (var channel in Catalog.Channels) {
+            Catalog.TryGetLogicalId(name: channel.Name, id: out var logical);
+            var active = mapping.IsLive(logicalId: logical);
+            var address = mapping.Address(logicalId: logical);
+
+            text.Append(value: ((count > 0) ? "," : "["))
+                .Append(value: "{\"name\":\"").Append(value: channel.Name)
+                .Append(value: "\",\"shape\":\"").Append(value: channel.Shape.ToString().ToLowerInvariant())
+                .Append(value: "\",\"consumer\":\"").Append(value: (channel.Role is { } role) ? role.ToString().ToLowerInvariant() : "composition")
+                .Append(value: "\",\"active\":").Append(value: (active ? "true" : "false"))
+                .Append(value: ",\"value\":").Append(value: System.Text.Json.JsonSerializer.Serialize(value:
+                    (!active ? "inactive(selected mode)" : ((address < 0) ? "event-only" :
+                    mapping.Channels.DescribeValue(intent: (target?.ChannelReadComposed ?? default), ordinal: address)))))
+                .Append(value: '}');
+            count++;
+        }
+
+        text.Append(value: ((count > 0) ? "]" : "[]"));
+        return text.Append(value: ",\"input\":").Append(value: System.Text.Json.JsonSerializer.Serialize(value: DescribeBody(body: body))).ToString();
+    }
     /// <summary>Names a body's current tuple and every declared action, including inactive actions and accepted
     /// source continuation. This is a read only; discovery never admits an input owner.</summary>
     /// <param name="body">The body index in this authority.</param>

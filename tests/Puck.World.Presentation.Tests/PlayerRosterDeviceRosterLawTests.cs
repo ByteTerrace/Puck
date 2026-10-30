@@ -34,6 +34,22 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         roster.Confirm(device: pad, actingPrincipal: Principal.Console);
         Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=p1*]", roster.DescribeDevices());
     }
+    [Fact]
+    public void AConnectedPadIsListedWithoutBeingRecordedInTheRoster() {
+        using var fixture = Fixtures.FreshServer(definition: SingleActiveSeatDocument());
+        var roster = BuildRoster(fixture: fixture);
+        var known = InputDeviceId.FromKey(key: "synthetic:28de:1304");
+        var unseen = InputDeviceId.FromKey(key: "synthetic:054c:0ce6");
+        roster.ObserveDeviceKind(device: known, kind: InputDeviceKind.Gamepad);
+        roster.ObserveDevice(device: known, kind: InputDeviceKind.Gamepad, name: "SteamControllerTriton");
+        (InputDeviceId Device, string Name)[] connected = [(unseen, "DualSense"), (known, "Renamed")];
+
+        Assert.Equal(
+            "[world.devices: gamepad1 'SteamControllerTriton'=unassigned | gamepad2 'DualSense'=unassigned]",
+            roster.DescribeDevices(connectedGamepads: connected)
+        );
+        Assert.Equal("[world.devices: gamepad1 'SteamControllerTriton'=unassigned]", roster.DescribeDevices());
+    }
     private static PlayerRoster BuildRoster(WorldFixture fixture) => new(
         definition: fixture.Server.Definition,
         link: new LoopbackTransport(server: fixture.Server),

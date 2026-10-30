@@ -9,6 +9,7 @@ namespace Puck.World.Client;
 public sealed class WorldSeatInput {
     private readonly WorldInputCatalog m_catalog;
     private readonly Dictionary<(string Source, int Channel), ushort> m_handles = [];
+    private readonly Dictionary<ushort, ulong> m_keptActivations = [];
     private readonly string[] m_sources;
     private readonly WorldInputSource[] m_contracts;
     private readonly Int128[] m_relative;
@@ -31,9 +32,9 @@ public sealed class WorldSeatInput {
             waiting |= source.AwaitingNeutral;
             held |= (source.RawValue != 0);
             toggled |= ((source.Source.Kind == WorldInputContributionKind.Toggle) && (source.RawValue != 0));
-        }
-        foreach (var decision in m_boundary.Decisions.Span) {
-            if (decision.Channel == logical) { retained |= ((decision.Reason == WorldInputContinuationReason.Kept) && (decision.CurrentRaw != 0)); }
+            // Retained is the hold the switch kept, still down; a release and a fresh press carries a new activation.
+            retained |= ((source.RawValue != 0) &&
+                m_keptActivations.TryGetValue(key: source.Source.Handle, value: out var kept) && (kept == source.Activation));
         }
         return new(Active: m_producer.Mapping.IsLive(logicalId: logical), AwaitingNeutral: waiting, Toggled: toggled, Retained: (retained && held));
     }
@@ -107,6 +108,13 @@ public sealed class WorldSeatInput {
         if (m_admitted && (publication.Revision == m_producer.Revision) && (publication.Epoch == m_producer.Epoch)) { return true; }
         m_producer.Reconcile(publication.Revision, publication.Epoch, m_catalog.Mappings[publication.Mapping], publication.Baseline, sources);
         m_boundary = publication.Boundary;
+        m_keptActivations.Clear();
+        foreach (var decision in m_boundary.Decisions.Span) {
+            if ((decision.Reason != WorldInputContinuationReason.Kept) || (decision.CurrentRaw == 0)) { continue; }
+            foreach (var source in sources) {
+                if ((source.Source.Channel == decision.Channel) && (source.RawValue != 0)) { m_keptActivations[source.Source.Handle] = source.Activation; }
+            }
+        }
         m_admitted = true;
         Array.Clear(array: m_relative);
         seat.InstallInputSources(Channels, sources, m_sources);

@@ -147,6 +147,8 @@ public static partial class WorldSubmissionCodec {
         WorldQuery.ReflowPreview => 20,
         WorldQuery.ReflowStatus => 21,
         WorldQuery.ReflowCancel => 22,
+        WorldQuery.PlayerInput => 23,
+        WorldQuery.PlayerAffordances => 24,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? QueryType(byte kind) => kind switch {
@@ -173,6 +175,8 @@ public static partial class WorldSubmissionCodec {
         20 => typeof(WorldQuery.ReflowPreview),
         21 => typeof(WorldQuery.ReflowStatus),
         22 => typeof(WorldQuery.ReflowCancel),
+        23 => typeof(WorldQuery.PlayerInput),
+        24 => typeof(WorldQuery.PlayerAffordances),
         _ => null,
     };
     private static WorldCommand ReadCommand(ref WireReader reader) {
