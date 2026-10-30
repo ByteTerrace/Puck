@@ -112,9 +112,13 @@ own `Cost`.
 `RuleWorkBudget.Contributor` turns that into a **contributor line**. The
 line's **multiplier** is the number of evaluations per tick: 1 for a rule
 evaluated once, the iterated row's capacity for a `forEach` rule, the zone
-table's entry count for a rule over zones, and, in Puck.World, the carrier or
-pair count for an interaction. Its check units are `Setup + Multiplier ×
-Check`, and its firing units are `Multiplier × Effects`.
+table's entry count for a rule over zones, the pool's capacity for a pool
+sweep, and, in Puck.World, the carrier or pair count for an interaction. Its
+**firings** are the multiplier, or the rule's `maxFirings` when that is
+smaller: the evaluator ends a sweep once that many bindings have fired
+([Bound how many bindings fire](rules.md#bound-how-many-bindings-fire)). Its
+check units are `Setup + Multiplier × Check`, and its firing units are
+`Firings × Effects`.
 
 A region interaction's carrier count is bounded by disc packing. Membership is
 by a body's centre, so at most `floor(((R + r)/r)^2)` carriers fit inside a
@@ -185,8 +189,9 @@ Children that pin different cells aren't exclusive and sum. Checks and setup
 always sum, because a closed gate still costs its check.
 
 The discount has to account for writes during the tick. `CountWriters` counts,
-per cell, how many evaluations per tick can write it; a write whose key isn't
-literal counts against every cell of its row, pinned cells included. For each
+per cell, how many firings per tick can write it (each rule's write set times
+its firings); a write whose key isn't literal counts against every cell of its
+row, pinned cells included. For each
 of those writers, the tally takes one more of the costliest values, because a
 cell that changes mid-tick can let a second exclusive rule fire later in the
 same tick.
@@ -203,9 +208,19 @@ the three costliest lines. The value was sized against a 30 Hz tick: it
 reserves roughly a fifth of a 33.3 ms tick for the rule sweep's worst case, at
 about 1.7 ns a unit.
 
+The search jobs run in the same tick, right after the rules, and draw on the
+same ceiling: a job's allowance is what the ceiling leaves after the sheet and
+the jobs' input stamps ([Search](search.md#work-is-priced-in-units)). One
+judge run is priced by the same sheet over the job's judge rules, so an
+over-priced rule costs the search twice, once in the sheet and once in every
+candidate.
+
 A `forEach` line's multiplier is its row's capacity, so the usual fix for a
-refused sheet is to author the capacity the row really needs.
-`world.budget.rules` lists every line, costliest first, with its multiplier,
+refused sheet is to author the capacity the row really needs. A rule that fires
+only a few of its bindings at a time, such as a batch window over an ordinal or
+a match against one held piece, states it with `maxFirings`, and its firings are
+priced at that number. `world.budget.rules` lists every line, costliest first,
+with its multiplier, its firings when `maxFirings` bounds them (`firings=`),
 setup, check, fire, and total, and the pinned ranges it's priced under.
 `world.budget.rules --why <rule>` prints one line's derivation: where the
 multiplier comes from and each effect's own cost.
@@ -324,6 +339,11 @@ ceiling and how they behave.
   pairs that never fire together in practice.
 - The work sheet is a static worst case. It says nothing about how long a tick
   takes on a particular machine.
+- In Puck.World every firing is its own grant-checked state transaction, and its
+  validation and commit revisit the document's rows and the input runtime's
+  owners whatever the firing wrote. The sheet prices a firing's effects, not
+  that per-firing overhead, so a tick of many firings costs more than its
+  price.
 - An analysis is only as complete as the facts' own `CollectReads`,
   `CollectWrites`, and `Cost`. An omitted access isn't detected.
 - The reference-cycle model is uncalibrated for memory, and many operations are

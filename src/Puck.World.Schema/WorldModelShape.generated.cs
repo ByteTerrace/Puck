@@ -5389,6 +5389,7 @@ public static partial class WorldModelShape {
                 M("locals", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.State.RuleLocal>), typeof(global::Puck.State.Rule), "Locals", Read | Write, static value => ((global::Puck.State.Rule)value).Locals),
                 M("zones", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.State.Rule), "Zones", Read | Write, static value => ((global::Puck.State.Rule)value).Zones),
                 M("poolForEach", typeof(global::Puck.State.RulePoolIteration), typeof(global::Puck.State.Rule), "PoolForEach", Read | Write, static value => ((global::Puck.State.Rule)value).PoolForEach),
+                M("maxFirings", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.State.Rule), "MaxFirings", Read | Write, static value => ((global::Puck.State.Rule)value).MaxFirings),
             ],
             []),
         T(typeof(global::Puck.World.WorldScheduleInstance), true, JsonTypeInfoKind.Object, null,
