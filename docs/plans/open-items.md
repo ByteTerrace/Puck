@@ -26,10 +26,9 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Lighting and GI](#lighting-and-gi): the probe-depth review's high finding
-   (depth visibility leaks at every silhouette) with the zero-weight gather
-   fallback in the same change, then the trace cost and the wrapped-diffuse sun
-   leak. In flight: probe-depth-fix.
+1. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
+   coverage, enclosure, floor and wrapped-diffuse sun findings, with quiet
+   timing and frame-cost qualification of the probe-depth fixes at integration.
 2. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
    the walkthrough's other high; `SdfMeshInstance.Matrix` already scales at
    draw, so the fix is in the dynamic bake path's identity and detail.
@@ -153,7 +152,19 @@ holds the fixed poses and the approaches already rejected.
 
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
 
-- Owner walkthrough, depth visibility (check each pose on the probe-depth-fix build before closing): (1) a jagged bright zig-zag in a room corner and a saw-tooth band along the ceiling, present in `indirect` (`body.pose 66.24 4.57 14.73 329`, camera eye (64.061, 5.331, 18.308) target (66.241, 5.57, 14.726)); (2) hard-edged diamond and star-shaped dark patches on the floor round the NOISE and ERODE plinths, black in `shadow` (sun occluded) and present in `indirect`: whole octahedral depth texels switching at once (`body.pose 58.17 4.57 30.87 180`, eye (58.16, 8.403, 29.767) target (58.168, 5.57, 30.868)). Captures w01-*, w02-* in `.claude/scratch/walkthrough/` (the lead's machine).
+- Owner walkthrough, depth visibility: both poses checked on probe-depth-fix's
+  settled Vulkan build. At (1) `body.pose 66.24 4.57 14.73 329`, eye
+  (64.061, 5.331, 18.308), target (66.241, 5.57, 14.726), the original large
+  corner zig-zag and ceiling saw-tooth are no longer visible, but ceiling
+  hotspots remain and the wall clips white in `indirect`; this is not a clean
+  exposure qualification. At (2) `body.pose 58.17 4.57 30.87 180`, eye
+  (58.16, 8.403, 29.767), target (58.168, 5.57, 30.868), hard diamond/star
+  patterns remain around the NOISE and ERODE plinths in `indirect`. Whole
+  octahedral texels switching was a hypothesis, not an established cause; the
+  current local reconstruction still needs this case isolated. Original
+  captures w01-*, w02-* are in the lead's walkthrough scratch; the new
+  `owner-corner-vulkan` and `owner-noise-erode-vulkan` captures are in the
+  probe-depth-fix hand-back. Keep the floor finding open.
 
 - [low] A quarter-size Moth (Wonderland) shows thin bright lines under her back
   band plates' lower edges that the full-size Moth at the same relative framing
@@ -178,12 +189,6 @@ holds the fixed poses and the approaches already rejected.
 - Decide (the lead's call): the coat layer's F0 semantic, chosen consistently
   with the material model; and whether baked static copies occupy SDF instances
   at all, the copies represented independently of the bake program's limits.
-- Decide (the lead's call): a missed depth ray stores a bounded distance (about
-  1.5 spacing diagonals) or a flag, never the reach; the sky comes from the
-  radiance rays; an all-zero gather is explicit, never full light. The
-  filtering rule against thin occluders, corners and FP16 precision wants its
-  own short consensus before it is final.
-
 - Probe depth visibility (from the probe-depth review):
   - [x] [high] Depth visibility leaks at every silhouette: a ray that misses stores
     `min(reach, DepthMaximum = 128 m)`, about forty times the farthest receiver
@@ -219,7 +224,10 @@ holds the fixed poses and the approaches already rejected.
   - [ ] Quiet integration confirmation: repeat the depth-visibility timing pair
     without the campaign's competing CPU work. The loaded pairs above establish
     work and CPU reductions, not quiet backend parity. Investigate if Vulkan
-    remains about three times Direct3D 12 under matched quiet conditions.
+    remains about three times Direct3D 12 under matched quiet conditions. The
+    full Direct3D tours miss the frame budget before and after (standing means
+    50.54 to 85.78 ms, walking 52.20 to 75.35 ms, mostly produce/simulate);
+    these nonadjacent loaded readings do not isolate probe gather cost.
   - [x] [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
     still show small dark marks at mid-height on the stairwell's east wall
     (`own-vulkan-stairwell-lit.png`, the black squares the owner reported), 2
@@ -227,11 +235,12 @@ holds the fixed poses and the approaches already rejected.
     right partition (`own-vulkan-boardroom-indirect.png`). The sphere reads clean.
     Closed by explicit misses and compatible local surface reconstruction, a
     distance-based hemisphere fade and shared radiance quadrature. The final
-    `fast-directx` and `fast-vulkan` fixed lit/indirect captures in the
+    `matched-directx` and `capture-vulkan` fixed lit/indirect pairs in the
     probe-depth-fix lane's scratch were individually inspected: the broad roof
     band, repeated floor poles, thin far-corner streak and stairwall squares are
-    gone; the sphere stays continuous. The separate dim-enclosure and grazing
-    corner findings below remain open.
+    gone; the sphere stays continuous. The final Vulkan stair tread has a sharp
+    dark bow-tie patch, recorded separately below. The separate dim-enclosure
+    and grazing corner findings remain open.
   - [x] [low] The sky share is measured over the 1,024 depth rays while bounce
     radiance comes from the 128 radiance rays, so a small window can count twice
     (`SdfMeshProbeDepth.cs:42-43`); FP16 variance cancellation at 3-5 m exceeds
@@ -274,18 +283,30 @@ holds the fixed poses and the approaches already rejected.
   floor's diagonal patches and black rectangle, which reproduce in `indirect`
   while that floor reads shadowed in the shadow view; and the wing's
   north-east corner remnants ([rendering plan](rendering.md#open-items)).
+- [medium] The controlled final Vulkan stairwell lit/indirect pair has a sharp
+  dark bow-tie patch on a middle tread, absent in its baseline. The original
+  east-wall squares are no longer distinct, but the enclosure is darker.
+  Isolate geometry/moving bake from probe interpolation before attributing the
+  tread patch. All requested captures report settled bakes and irradiance;
+  the Vulkan sweep nevertheless flags the cumulative moving-bake cap counter
+  increasing from 3 to 41. Its cause is unisolated. Evidence:
+  `capture-vulkan/report.json` and `tour/probe-stairwell-*.png` in the
+  probe-depth-fix hand-back.
 - [medium] Far-field irradiance coverage: bounded local depth support exposes
   unmeasured distant surfaces beyond the camera's probe window. The matched
   probe-depth-fix tour shows black far walls at `finding-teal-roof`,
   `gallery-entrance`, `devices`, `desktop`, `rate-range`, `camera-course`,
   `stage`, `jump`, `flight` and `noclip`, and a larger dark pane through the
   `garden` return portal. Several gallery/window views show the same far wall.
-  Their clamped boundary probes cannot certify a receiver beyond their measured
-  reach; the gather correctly supplies no measured sky/bounce there. Supply a
-  coarse far-field probe volume while retaining the local visibility test.
-  The earlier garden horizontal strip is part of this coverage finding; the
-  matched before/after sheets establish the expanded black area, rather than
-  attributing it to direct shadows or camera motion.
+  Live Vulkan readback confirms one authored south-wall receiver (69.5, 4, 12),
+  normal (0, 0, -1), answers with weight 0 although its boundary probes at
+  x=31 are bright and reference-clear=1. Their roughly 38.5 m separation is
+  beyond the 5.246 m local support. The near receiver (18.5, 4, 12) answers
+  with weight 0.525. The far wall also reads black in a fixed indirect view;
+  this isolates missing coverage for that receiver. Collision probing was
+  unavailable in that World's contact configuration. Supply coarse far-field
+  coverage while retaining local visibility. Not every changed tour pixel,
+  nor the garden return's scope/history, has been separately isolated.
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level 3
   ceiling and wall junction reproduces in beauty but not in `indirect`,
   `normals` or `shadow`; behind it at level 2 (chase view) a dotted bright line
