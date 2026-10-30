@@ -632,6 +632,10 @@ not a spiral:
   in a decision (pruning's three rounds were all hostile same-user
   interleavings, outside the install root's model) or have a design memo
   written and reviewed before any more code (the companion custody rework).
+- At each landing the lead checks that the top of Next has lanes on it. Review
+  rounds, fix lanes and landings fill a lead's attention without filling the
+  machine: once, only three review-bound lanes ran for hours while Next's top
+  packets sat idle.
 - After each landing, the lead runs `puck compile worlds/debug/debug.puck
   --validate` on the merged head before the next landing: two lanes that each
   fit a shared budget (the rule-work ceiling) can exceed it together, as the
