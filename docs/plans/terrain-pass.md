@@ -164,6 +164,9 @@ call per sector. Overriding a slot or writing a third set is ordinary `.puck`.
   altitude and warm on convex curvature; brush-scale breakup and no centimetre
   detail; a stronger tinted haze. It needs no world-wide `render.toon`, which
   stays a separate choice.
+  The valley uses it, with the
+  [Canyon workshop pack](../game/art/canyon-workshop-pack/README.md)'s valley
+  overview as the reference for its strata, ledges and floor.
 
 Each set ships a matching relief preset (alpine: ridged, warped, eroded;
 painterly: billow, broad warp, fewer octaves).

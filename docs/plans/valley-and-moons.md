@@ -192,7 +192,9 @@ window; a heightfield is added only if that reading fails.
   exposure meter fixed at its cause, and distance haze, each a generic engine
   capability. The standard package ships **two terrain material sets an author
   chooses, a natural alpine one and a stylized painterly one**; the valley uses
-  one, picked later. The design and its order of work are
+  the painterly one, after the owner's selected Canyon workshop direction (warm
+  terracotta and peach strata, green ledges, a grassy floor;
+  [references](../game/art/valley-and-gallery.md)). The design and its order of work are
   [the terrain pass](terrain-pass.md).
 
 Still open, for when the work reaches them: whether the moons dominate the day
