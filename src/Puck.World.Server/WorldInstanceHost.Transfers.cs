@@ -366,6 +366,7 @@ public sealed partial class WorldInstanceHost {
                 Companion: companion,
                 MemberId: reservationIndex,
                 Principal: MemberTravelPrincipal(
+                    companion: companion is not null,
                     server: source.Server,
                     transfer: in transfer,
                     slot: sourceSlot
@@ -589,8 +590,10 @@ public sealed partial class WorldInstanceHost {
         // its travelling principal — BEFORE any member leaves, so a member blocked by a drive gate (a revoked grant
         // today, a combat CC/death gate later) refuses the WHOLE party rather than letting the rest split off while
         // it strands at the source. One blocked member names itself and why.
-        foreach (var slot in members) {
+        for (var ordinal = 0; ordinal < members.Length; ordinal++) {
+            var slot = members[ordinal];
             var standingPrincipal = MemberTravelPrincipal(
+                companion: reservationMembers[ordinal].Companion is not null,
                 server: source.Server,
                 transfer: in transfer,
                 slot: slot
@@ -692,6 +695,7 @@ public sealed partial class WorldInstanceHost {
             var sourceSlot = members[index];
             var reservedSlot = reservedSlots[index];
             var memberPrincipal = MemberTravelPrincipal(
+                companion: reservationMembers[index].Companion is not null,
                 server: source.Server,
                 transfer: in transfer,
                 slot: sourceSlot
@@ -915,20 +919,16 @@ public sealed partial class WorldInstanceHost {
 
             // A departure already made durable is settled home before the cohort returns, so a restart redoes the
             // return instead of asking the destination again.
-            if (
-                (departed && !TrySettle(
-                arrived: false,
-                pending: rollback,
-                retired: retired
-            )) ||
-                !RestoreDetachedMembers(
+            var settled = (!departed || TrySettle(arrived: false, pending: rollback, retired: retired));
+            if (!settled) {
+                m_inDoubtTransfers.Add(item: rollback);
+            }
+            if (!settled || !RestoreOrRetain(
                 commits: [.. kept.Select(selector: ordinal => commitMembers[ordinal])],
                 members: [.. kept.Select(selector: ordinal => landed[ordinal])],
-                source: source,
-                transferId: transfer.TransferId
-            )
-            ) {
-                m_inDoubtTransfers.Add(item: rollback);
+                pending: rollback,
+                source: source
+            )) {
                 if (m_narration.HasNarrationSink) {
                     m_narration.Narrate(
                         channel: "world.transfer",
@@ -1437,9 +1437,10 @@ public sealed partial class WorldInstanceHost {
     }
     // A portal's frozen cohort travels under each body's own principal, including coalesced peers and census bodies.
     // An explicit seat-driven party also derives each other member's principal; other explicit actors retain their
-    // submitted authority. Reservation, standing and detach all use this decision.
-    private static Principal MemberTravelPrincipal(WorldServer server, in PendingTransfer transfer, int slot) =>
-        (((transfer.ResolvedDestinationRow is not null) || ((transfer.ActingPrincipal.Kind == PrincipalKind.Seat) && (transfer.ActingPrincipal.Index != slot)))
+    // submitted authority. An automatically following companion always travels under its own principal;
+    // following grants the player no Drive over it. Reservation, standing and detach all use this decision.
+    private static Principal MemberTravelPrincipal(WorldServer server, in PendingTransfer transfer, int slot, bool companion = false) =>
+        ((companion || (transfer.ResolvedDestinationRow is not null) || ((transfer.ActingPrincipal.Kind == PrincipalKind.Seat) && (transfer.ActingPrincipal.Index != slot)))
             ? TravelPrincipal(
                 server: server,
                 slot: slot

@@ -65,6 +65,12 @@ public sealed partial class WorldInstanceHost {
     // Recovery restores departure facts before the row resumes. A rollback saves the current owned identity, including
     // writes made while the outcome was in doubt; the departing projection must never overwrite those newer values.
     private static bool RestoreDetachedMember(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.ExecuteAuthorityOperation(operation: () => {
+        // A release can arrive after settlement left a restore-only obligation, including across a checkpoint.
+        // Home's durable release ends that obligation; no saved departure image may resurrect its title.
+        if ((commit.Companion is not null) &&
+            (source.Server.TransferEscrow.Custody.TitleOf(incarnation: member.Mobility.Incarnation) is { Installed: true })) {
+            return true;
+        }
         if (!RestoreDetachedBody(commit: commit, member: member, source: source, transferId: transferId)) {
             return false;
         }

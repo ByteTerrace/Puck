@@ -213,7 +213,7 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
     private IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? ConfirmCompanionHops(WorldTransferKey key, IEnumerable<WorldCustodyTicket> tickets, WorldHopPhase phase) {
         Dictionary<(WorldTransferKey, WorldEntityAddress), ulong>? confirmed = null;
 
-        foreach (var home in tickets.Where(predicate: ticket => (ticket.Hop == key)).GroupBy(keySelector: static ticket => ticket.Home, comparer: StringComparer.Ordinal)) {
+        foreach (var home in tickets.Where(predicate: ticket => ((ticket.Hop == key) && ticket.Incarnation.Titled && string.Equals(a: ticket.Home, b: ticket.Incarnation.Authority, comparisonType: StringComparison.Ordinal))).GroupBy(keySelector: static ticket => ticket.Home, comparer: StringComparer.Ordinal)) {
             if (CustodyPeers?.Invoke(arg: home.Key) is not { } door) {
                 continue;
             }

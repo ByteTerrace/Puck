@@ -25,7 +25,7 @@ public sealed partial class WorldInstanceHost {
             var transfer = pending.Transfer;
 
             // The destination may have left a companion out of the commit: the settlement names who landed, and every
-            // other member is restored here before the rest publish.
+            // other member is restored here after the landed members' routes are made durable.
             if (!pending.SettlementRecorded && (pending.CommitMembers.Any(predicate: static member => member.Companion is not null))) {
                 if (!pending.TargetAuthority!.Value.TryLanded(
                     landed: out var landedIds,
@@ -42,6 +42,18 @@ public sealed partial class WorldInstanceHost {
                         var retired = InstallRetired(commits: pending.CommitMembers, landed: landedIds, source: source);
                         var restored = unlanded.Where(predicate: ordinal => !retired.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
 
+                        // Publish only the members that landed before capturing the durable forwarding routes.
+                        // Keep the complete departure intact until settlement succeeds, so a failed append still
+                        // checkpoints an exact, retryable cohort rather than a shortened committed transfer.
+                        var landedOrdinals = Enumerable.Range(start: 0, count: pending.CommitMembers.Count)
+                            .Where(predicate: ordinal => landedIds.Contains(value: MemberIdAt(commits: pending.CommitMembers, ordinal: ordinal))).ToArray();
+                        PublishCommittedTransfer(
+                            in transfer,
+                            pending.TargetAuthority!.Value,
+                            pending.TargetName,
+                            [.. landedOrdinals.Select(selector: ordinal => pending.Landed[ordinal])],
+                            [.. landedOrdinals.Select(selector: ordinal => pending.CommitMembers[ordinal])]
+                        );
                         if (!TrySettle(
                             arrived: true,
                             landed: landedIds,
@@ -60,6 +72,7 @@ public sealed partial class WorldInstanceHost {
                             pending.Landed.RemoveAt(index: ordinal);
                             pending.CommitMembers.RemoveAt(index: ordinal);
                         }
+                        return true;
                     }
                 }
             }

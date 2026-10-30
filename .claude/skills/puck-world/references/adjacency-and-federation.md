@@ -351,9 +351,14 @@ member is restored. `WorldServer.ApplyCustodyRecord` is the one fold door (live,
 recovery and re-drive) and carries out a `Retire` on the body. Laws:
 `CompanionCustodyLawTests` (engine forms of the model's named traces, recovery
 cuts, and a tick-for-tick replay with its red leg) and
-`CompanionCustodyConformanceLawTests`, which folds the model's own explored home
-record sequences through the engine reducer at every cut and across a
-checkpoint split.
+`CompanionCustodyRefinementLawTests`, which follows real peer calls and appends
+with enabled model moves and compares derived custody at drains and restarts.
+Those rows are retained and use local player seats; they do not prove automatic
+reaping or remote-player forwarding. `CompanionCrossingLawTests.Adversarial.cs`
+covers the ordinary home lifetime, rollback retention, contradictory destination
+answers, cross-home confirmation contamination and a partial remote-player hop.
+Persisted reservations carry the authority-local `World` principal explicitly;
+it remains forbidden as an incoming wire actor (checkpoint 28, tape 12).
 
 ### Companions in a crossing
 
@@ -384,15 +389,20 @@ each member's generation. The source reads the landed ids
 per member, restores the rest, and the drain settles home's own hops from its
 own departure and settlement records (`OwedOwnHopSettlements`). A custodian's
 hop settles by the destination's word: after each drain the custodian sends
-home a notice for every companion its settled departures carried
+home a notice for every companion its settled allocation minted
 (`OwedHopNotices`, until a `HopAcked`), and home asks the hop's destination
 (`IWorldCustodyPeer.QueryCustody`, served only to the incarnation's minting
 authority, answered from the arrival the destination folded, its commit, lease
 or uncertainty, or a tombstone written first) and records `HopDone` from that
 answer alone. A notice for a hop home never recorded cancels it. A granted
 onward hop the crossing did not depart with is given up the same way when the
-crossing ends. An authority that still owes a notice or a settlement of its own
-hop is not reaped until the drain that makes it. The federation lane carries
+crossing ends. A home with a pending or away title, or any source with an
+in-doubt departure, stays reachable even with an empty population; owed notices
+and settlements also prevent reaping. A rollback retains only members it has
+not restored, in a restore-only row; a later durable home release ends that
+obligation before any image is restored. Once commit was confirmed, a contradictory
+Missing answer cannot authorize restoration. A partial settlement must persist
+the landed members' forwarding routes before the destination is acknowledged. The federation lane carries
 `HopQuery`/`HopQueryReply`, `HopRequest`/`HopAnswer`,
 `CustodyQuery`/`CustodyReply` and `HopSettled`/`HopSettledAck`, each answered
 for the connection's authenticated namespace. Laws:

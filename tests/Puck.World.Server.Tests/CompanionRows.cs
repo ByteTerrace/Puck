@@ -15,7 +15,14 @@ internal sealed class CompanionRows : IDisposable {
     private readonly Dictionary<string, byte[]> m_images = new(comparer: StringComparer.Ordinal);
     private readonly Func<string, IWorldCrossingLog, IWorldCrossingLog> m_logs;
 
-    public CompanionRows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null, bool cDeclaresRole = true, Func<int, string?>? cLandingRefusal = null, Func<string, IWorldCrossingLog, IWorldCrossingLog>? logs = null, bool retained = false) {
+    public CompanionRows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null, bool cDeclaresRole = true, Func<int, string?>? cLandingRefusal = null, Func<string, IWorldCrossingLog, IWorldCrossingLog>? logs = null, bool retained = false, bool admitHumans = false) {
+        WorldDefinition Document(int count, int slots, bool role = true) {
+            var definition = Fixtures.BuildCompanionDocument(companions: count, peerSlots: slots, declaresRole: role);
+            return admitHumans ? definition with {
+                Admission = [Fixtures.AnyAuthorityArrivals()],
+                PopulationRaw = definition.Population with { NetworkPlayers = slots },
+            } : definition;
+        }
         m_logs = (logs ?? ((_, log) => log));
         LandingRefusals["row-b"] = bLandingRefusal;
         LandingRefusals["row-c"] = cLandingRefusal;
@@ -29,9 +36,9 @@ internal sealed class CompanionRows : IDisposable {
             stateRoot: new WorldStateRoot(path: Directory.CreateTempSubdirectory(prefix: "puck-companion-host-").FullName)
         );
         m_owned.Add(item: Host);
-        Admit(row: HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: companions, peerSlots: peerSlots), landingRefusal: Refusal(name: "row-a"), name: "row-a"), fresh: true);
-        Admit(row: HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, declaresRole: bDeclaresRole, peerSlots: bPeerSlots), landingRefusal: Refusal(name: "row-b"), name: "row-b"), fresh: true);
-        Admit(row: HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, declaresRole: cDeclaresRole, peerSlots: 2), landingRefusal: Refusal(name: "row-c"), name: "row-c"), fresh: true);
+        Admit(row: HostRow.Build(definition: Document(count: companions, slots: peerSlots), landingRefusal: Refusal(name: "row-a"), name: "row-a"), fresh: true);
+        Admit(row: HostRow.Build(definition: Document(count: 0, slots: bPeerSlots, role: bDeclaresRole), landingRefusal: Refusal(name: "row-b"), name: "row-b"), fresh: true);
+        Admit(row: HostRow.Build(definition: Document(count: 0, slots: 2, role: cDeclaresRole), landingRefusal: Refusal(name: "row-c"), name: "row-c"), fresh: true);
         foreach (var slot in new[] { 0, 1 }) {
             Assert.True(condition: Home.Server.ApplySession(request: new SessionRequest.Join(
                 IdentityName: null,

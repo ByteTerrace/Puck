@@ -535,9 +535,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         if (HasForwardingFrom(source: instance.Server)) { return false; }
 
-        // An authority that still owes a custody step (a settlement notice, a settlement of its own hop) stays until it
-        // has made it: the drain that makes it reaps it.
-        if (instance.Server.ExecuteAuthorityOperation(operation: () => (instance.Server.TransferEscrow.Custody.OwedHopNotices().Count > 0) || (instance.Server.TransferEscrow.Custody.OwedOwnHopSettlements().Count > 0))) {
+        // Titles abroad and unresolved departures keep their authority alive even after its last body leaves.
+        // A settled crossing may still owe a source restoration, held by the host rather than the custody fold.
+        if (instance.Server.ExecuteAuthorityOperation(operation: () => instance.Server.TransferEscrow.Custody.HoldsCustody) ||
+            m_inDoubtTransfers.Any(predicate: pending => string.Equals(a: pending.Transfer.SourceInstance, b: name, comparisonType: StringComparison.Ordinal))) {
             _ = m_deferredReaps.Add(item: name);
 
             return false;
