@@ -90,6 +90,7 @@
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS            235u
+#define SDF_MESH_IRRADIANCE_LEVELS                 3u
 #define SDF_MESH_IRRADIANCE_LIGHTS_WORD            13u
 #define SDF_MESH_IRRADIANCE_LIGHT_WORDS            4u
 #define SDF_MESH_IRRADIANCE_DEPTH_WORD             19u
