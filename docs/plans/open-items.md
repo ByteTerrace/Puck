@@ -28,8 +28,9 @@ resolves their edits to this file at merge.
 
 1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
-   carrying a 30 Hz tick (8 to 14 ms) misses the blank; cut the tick's cost on
-   the frame thread.
+   carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
+   lobby and the rim, so take the next ranked costs (rule evaluation, snapshot
+   delivery, the scoped replay hash) and re-read the stops windowed.
 2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
@@ -183,6 +184,39 @@ packet), and re-read these stops on a quiet machine.
   0.4 ms (`world.gpu-timing timeline`). Vulkan under the same load reads avg
   17.5 ms at the lobby and 19.8 to 26.5 ms elsewhere, with produce 8 to 11 ms
   against Direct3D 12's 6 to 7. (from: frame-time)
+  The tick-cost lane cut the tick at its two largest causes: a rule firing's
+  state transaction now validates and commits only what it wrote and
+  resynchronizes only the input owners of a body whose selection registers it
+  touched (it re-ran every owner's selection three times a firing), and a
+  convex contact query ends GJK once a support plane proves separation (a body
+  at the overlook spent about 22 support evaluations a query beside the
+  terrain masses). Headless, paired base and final builds back to back (machine
+  35 to 65 % CPU from other lanes), thread-time traces of about 450 ticks each:
+  lobby p50 6.1 to 5.6 ms, p99 10.1 to 10.3 ms; valley rim p50 13.2 to 6.0 ms,
+  p99 77.5 to 8.1 ms, the seat body's contact 35.7 % of the tick to 6.8 %. The
+  windowed reading of the five stops is in the tick-cost hand-back. What the
+  trace ranks next, as shares of a lobby tick: rule evaluation itself (gates
+  10 %, binding latches and their dictionaries) 44 %, `WorldTick.EmitSnapshot`
+  17 % (session snapshot delivery, 12 %, and its disclosure filter), the scoped
+  replay hash (`WorldScopedReplayRuntime.Hash`) 10 %, and
+  `WorldBody.CaptureIntegrationResidue` 8 %, which zero-fills a buffer on every
+  body's advance. (from: tick-cost)
+- [low] A body resting at the overlook pays two ground snaps a tick (ten
+  sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
+  support whenever the body is grounded, and `ResolveProgramContacts`'s own
+  sweep at rest does not report it grounded, so its snap runs too. Counted at
+  191 resolves a tick for the whole population; a resting body with an exactly
+  zero velocity now skips the first search, which did not move the count there,
+  so her velocity at rest is not exactly zero. Find whether the support normal's
+  tilt leaves a residue the contact write-back keeps, and why the resting sweep
+  misses the ground the snap lands on. (from: tick-cost)
+- [low] `WorldPopulation.SyncBodyCells` resyncs every body's scale, kit and look
+  (and resolves each register by name, `WorldBodyStateReads.TryResolveSlot`, a
+  linear scan, per body) whenever one body's register moves, so a commit that
+  writes one body's `form` costs the population's capacity; the work sheet now
+  prices it so. Resync only the bodies whose lane cells the commit touched
+  (`StateArena.CollectOpenLaneOrdinals`), as the input runtime does.
+  (from: tick-cost)
 - [low] A reading taken while the compositor is not composing still looks like
   a slow frame. `GUID_CONSOLE_DISPLAY_STATE` read "off" for whole readings at
   60 FPS, so it cannot flag one; a present-side signal (the frame-latency wait
@@ -901,19 +935,6 @@ decision (the companion lands inert in the live debug world today; the lead's ca
 between the consensus split), then the uncertain crossing, opened by a two-silo
 failover witness.
 
-- [medium] A rule firing costs the world host far more than the work sheet
-  prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`
-  runs `WorldServer.ValidateStateTransaction` and the commit runs
-  `CommitStateTransaction`, and both clear and flag a per-row array, walk every
-  row, and re-run `WorldInputRuntime.TryValidate` (a `TrySelect` per input owner)
-  and `TrySynchronize` whatever the firing wrote. A thread-time sample of a
-  headless debug World put an idle tick's rule pass near 3.6 ms for about 5,600
-  evaluations and 94 firings, about 15 µs a firing with roughly three quarters
-  of it in the input runtime, while a chess judge candidate (the search's
-  arena host, no world transaction) ran near its price at the sheet's 1.7 ns a
-  unit. Make validation and commit proportional to the rows the firing touched
-  and revalidate input only when a row input selection reads changed, then price
-  what remains per firing. (from: rule-budget lane)
 - [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
 - [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)

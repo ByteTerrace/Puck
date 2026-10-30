@@ -120,6 +120,16 @@ smaller: the evaluator ends a sweep once that many bindings have fired
 check units are `Setup + Multiplier × Check`, and its firing units are
 `Firings × Effects`.
 
+A host whose commit of one firing spends more than the effects themselves
+prices that into the firing's effects: `Contributor` takes the commit's units.
+In Puck.World a firing's validation and commit otherwise scale with the rows
+it wrote, so the extra is only what a commit derives from a written register:
+a `setBodyState` of an input-selection register adds one routing owner's
+revalidation and resynchronization (two passes over the input families and the
+kit selection), one of a scale, kit or look register adds the population's
+capacity (every body's scale, kit and look resync), and a line that writes a
+drive-gate row adds every gate row's capacity and an owner resync per body.
+
 A region interaction's carrier count is bounded by disc packing. Membership is
 by a body's centre, so at most `floor(((R + r)/r)^2)` carriers fit inside a
 region of radius `R`, clamped to the population capacity. The footprint radius

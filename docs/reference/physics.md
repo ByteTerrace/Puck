@@ -361,6 +361,14 @@ budget do not compensate for that precision loss.
 The EPA bootstrap expands the GJK simplex along its edge/face normals into one
 tetrahedron, then expands its boundary faces. A support plane at zero depth
 ends a touching query; no search through support-point subsets is needed.
+A contact query stops GJK as soon as one support plane stands more than a
+sixteenth of a metre behind the origin: every point of the difference lies at
+or below its support, so no later simplex could come within tolerance, and the
+query answers separated with the same verdict the full descent reaches. A body
+standing beside a large curved collider (the valley's terrain masses at the
+overlook) otherwise spent about 22 support evaluations converging on a
+distance it never used. The nearest-point query (`FixedConvexContact.Nearest`)
+still runs the full descent, since it reads the converged closest point.
 Faces are oriented from a known interior point even when the origin lies on
 their boundary. `FixedConvexContact.TryPush` also reports support-map evaluations
 for deterministic work measurements: at most 65 GJK queries, two bootstrap
