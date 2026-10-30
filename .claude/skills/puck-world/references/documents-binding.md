@@ -496,8 +496,11 @@ inward, `activateOn: Started`). The hold pages also bind `mouse.wheel` to the
 Axis2D `player.wheel.scroll`: vertical notches accumulate fractionally within one
 gesture and step its ring immediately. The pointer projection drains its copy
 without taking any action, so a physical scroll and `player.signal mouse.wheel`
-have one routing path. A closed wheel discards an already routed ring scroll;
-zoom yields while a wheel is open. The generic router watches immutable active
+have one routing path. A closed wheel discards an already routed ring scroll.
+The hold page's `mouse.wheel` entry replaces the resting page's
+`player.camera.boom` on that source (inheritance replaces source by source), so
+zoom stops while the wheel is open because of that authored data; the boom verb
+has no wheel check of its own. The generic router watches immutable active
 page identities during its ordered fold: a page transition discards relative
 samples already collected in that page interval, including an open and close
 within one snapshot, and consumes a relative sample that caused the transition.
