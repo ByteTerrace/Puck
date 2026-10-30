@@ -17,9 +17,14 @@ using Puck.World.Machines;
 // a byte that is not UTF-8, while the command echoes beside them are UTF-8, so the run's output differs by machine.
 // The setter suppresses the byte-order mark. A test batch's boots share it.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+// An installed World registers as a holder of its version before it loads anything else, so pruning never removes it.
+if (!Puck.Confinement.InstallRegistration.TryRegisterProcess(refusal: out var installRefusal)) {
+    Console.Error.WriteLine(value: installRefusal);
+    return 2;
+}
 // Under `dotnet watch`, each edit the runtime applies says what it changed; the caches it invalidated derive again on
 // their next read (CodeRevision). An edit the runtime refuses never reaches here: dotnet watch rebuilds and reboots.
-CodeRevision.Applied += static types => Console.Error.WriteLine(value: $"[world.hot-reload] applied revision {CodeRevision.Current}: {((types is null) ? "the runtime named no types" : string.Join(separator: ", ", values: types.Take(count: 8).Select(selector: static type => type.FullName)))}{(((types?.Length ?? 0) > 8) ? $" and {types!.Length - 8} more" : "")}; derived presentation and camera rigs rebuild on the next frame");
+CodeRevision.Applied += static types => Console.Error.WriteLine(value: $"[world.hot-reload] applied revision {CodeRevision.Current}: {((types is null) ? "the runtime named no types" : string.Join(separator: ", ", values: types.Take(count: 8).Select(selector: static type => type.FullName)))}{(((types?.Length ?? 0) > 8) ? $" and {(types!.Length - 8)} more" : "")}; derived presentation and camera rigs rebuild on the next frame");
 if ((args.Length == 4) && (args[0] == "--devices") && (args[1] == "none") && (args[2] == "--test-batch")) {
     var batchHost = new WorldTestHost();
 
@@ -609,7 +614,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             Channel: updateChannel,
             CheckInterval: updateCheckInterval,
             InstalledVersion: updateInstalledVersion,
-            KeepVersions: (updateSection?.KeepVersions ?? 2),
+            KeepVersions: (updateSection?.KeepVersions ?? Puck.Launcher.Release.AddSelfUpdateDefaults.KeepVersions),
             TrustAnchor: releaseTrustAnchor
         ),
         releaseSource: releaseSource

@@ -32,7 +32,13 @@ do not end the client's connection or those World processes.
 The stub holds the same persistent `update.lock` lease as `UpdateService`
 while reading pointers, deciding rollback and recording the launch attempt. It
 releases the lease before starting the child so the application can update.
-Contention refuses the launch for retry. Before rolling back, it deletes only
+Contention refuses the launch for retry. Under the same lease it holds
+`versions/<version>` open (`StubInstall.HoldVersion`: a shared `flock` on Linux,
+a handle without `FILE_SHARE_DELETE` on Windows) until the child exits, so the
+launcher's pruner never removes the version the child runs from; the stub's exit
+releases it, a crash included, and the child registers itself as well. The lease
+and the hold go through `Puck.Confinement`, the stub's one project reference, so
+the stub and the pruner share one implementation. Before rolling back, it deletes only
 the pending `install-intent.json` whose manifest version matches the rejected
 version; cancellation precedes the pointer write so interrupted cleanup cannot
 resurrect that version. An unrelated newer pending intent is preserved. A

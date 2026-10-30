@@ -151,9 +151,97 @@ filesystems.
 Activation writes pending health before changing current, so successive updates
 cannot bless a version that has never started.
 The selected executable clears that marker after startup, under `update.lock`,
-only when both its version and actual executable directory match `current`.
-An old or concurrently replaced process leaves it intact. The stub refuses
-missing or corrupt state generations rather than guessing rollback compatibility.
+only when its registration (below) holds `versions/<current>`. An old or
+concurrently replaced process leaves it intact. The stub refuses missing or
+corrupt state generations rather than guessing rollback compatibility.
+
+### Pruning past versions
+
+After clearing, `InstallPruner` deletes past versions. It keeps `current`,
+`last-good`, the version a pending `install-intent.json` names, every version a
+live process holds, every version whose install order cannot be read, and the
+`UpdateOptions.KeepVersions` most recently installed others. It then deletes the
+content-addressed objects nothing kept references (a pending intent and a local
+release source's channel manifests count as references). Install order is the
+`sequence` the applier writes into `versions/<version>/install-record.json`,
+never version precedence; a payload file or directory of that name (or
+`state-generation`) is refused by manifest validation. A version without a
+valid record (one with a positive sequence and a non-empty inventory of
+well-formed pins) is kept and keeps the content pins of the regular files it
+holds.
+
+A pass first reads and validates everything it depends on and deletes nothing
+while it does. Both pointers must be the plain name of an existing version
+(`current` must exist). Only a missing pointer file is absent: one that exists
+but is empty, blank, not a version name or unreadable skips the pass. The pending intent's manifest must validate. Every
+version's record is either valid or treated as absent and replaced by hashing
+its files. Every store's layout and channel manifests must be free of links and
+must validate. Any failure there skips the whole pass with its reason. `Prune`
+never throws: whatever stops it is reported as the skip reason, so it cannot end
+the MCP adapter's or a World's start or health check.
+
+Every step acts through `Puck.Confinement`'s `ConfinedDirectory` handles opened
+from the install root: nothing is looked up or deleted by a path checked
+earlier, and no link is followed. These are the invariants a review checks:
+
+- **Never outside the root.** Every lookup is relative to an open directory
+  handle with no-follow semantics (`openat`/`O_NOFOLLOW` on Linux, `NtCreateFile`
+  with a `RootDirectory` and `FILE_OPEN_REPARSE_POINT` on Windows). A link
+  anywhere refuses that entry; renaming or replacing a directory the pass holds
+  either fails (Windows: held without `FILE_SHARE_DELETE`) or leaves the pass
+  acting on the held object (Linux).
+- **Never a live version.** A version is removable only through
+  `TryOpenChildForRemoval`, which fails while any process holds it: an
+  exclusive `flock` against holders' shared locks on Linux, a delete-access open
+  against holders' sharing mode on Windows. Holders are the stub (from before it
+  starts the child until the child exits) and every process itself:
+  `Puck.Confinement`'s `InstallRegistration.TryRegisterProcess` is the first
+  statement of every entry point an installed payload carries (`Puck.Cli`,
+  `Puck.Cli.Worlds`, `Puck.World`, `Puck.World.Silo` and `Puck.Actors`), and an
+  entry point that cannot register refuses to start with the reason.
+  Membership is decided by the process's own directory (`AppContext.BaseDirectory`)
+  whatever arguments it was given. A directory directly under one named
+  `versions` (or `trash`) belongs to the root above it, even before that root
+  writes `current`. The image confirmed is the entry assembly's file, or the
+  executable for a single-file app. A process under `versions/` that cannot
+  confirm its image or root refuses to start. The kernel releases a hold when its
+  process exits.
+- **Registration is serialized with removal.** Registration waits for
+  `update.lock` without a deadline; the pass holds `publication.lock` then
+  `update.lock` throughout. A registering process then confirms by identity that
+  `versions/<name>` is the directory its entry assembly was loaded from (the
+  mapped file's inode and current path on Linux; on Windows the mapped file's
+  open-time name, whose directory the runtime's open file pins), or fails its
+  launch with the reason. Whether a process runs from the install at all is the
+  identity of its image's parent directory, never a path spelling.
+- **Crash-safe.** A version leaves `versions/` whole by one move into `trash/`
+  (by handle on Windows, `renameat2` relative to held descriptors on Linux),
+  then is deleted there through the same handle. An interrupted pass leaves
+  every kept version whole, and the next pass empties what it left in `trash/`.
+  Removal, link scanning and hashing walk a tree without recursion.
+- **Fail closed.** The validation phase above skips the whole pass on anything
+  it cannot read or validate, before any deletion: a pointer that is not the
+  plain name of an existing version, a link among the versions or on a store's
+  layout or channels, an install record that cannot be read, or a manifest that
+  fails validation. A busy lease, a linked `trash/` or an unsupported platform
+  (anything but Windows and Linux x64) skips it too. A version whose rank cannot
+  be read is kept, and a running version never takes one of `KeepVersions`'
+  places.
+
+These defend against cooperating processes and crashes, not against the install
+root's own user ([decision](../../docs/decisions/runtime-and-delivery.md#releases)). A
+process with that user's write access can already replace the binaries the
+launcher runs. So interleavings that need a hostile process renaming entries
+inside the root during a pass are out of the model and get no defence beyond
+link refusal. Two such cases are known:
+- renaming a held version aside and moving another directory to its name
+  between the pass's check and its Linux `renameat2`;
+- renaming a `trash/` entry aside and moving a live version to its name between
+  the listing and the cleanup, which then deletes by that name.
+
+The stager replaces an earlier partial staging of the same version with the same
+removal (`InstallPruner.RemoveVersion`), so it too is refused while a process
+runs from it.
 Document-authored `update.cacheRoot` is a relative subdirectory of the host's
 updates directory; only trusted local update configuration may choose an
 absolute install root.

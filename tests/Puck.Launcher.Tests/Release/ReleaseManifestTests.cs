@@ -251,8 +251,6 @@ public sealed class ReleaseManifestTests {
             filter: error => (error.Path == "extensions.app")
         );
     }
-
-    [Theory]
     [InlineData("C:/outside.dll")]
     [InlineData("C:\\outside.dll")]
     [InlineData("\\\\server\\share\\outside.dll")]
@@ -266,14 +264,14 @@ public sealed class ReleaseManifestTests {
     [InlineData("NUL.dll")]
     [InlineData("aux/data")]
     [InlineData("a.dll\0")]
+    [Theory]
     public void Validate_RefusesNonPortablePayloadPaths(string path) {
         var document = ValidDocument();
+
         document = document with { Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = path }] }] };
 
-        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => error.Path == "payloads[0].files[0].path");
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => (error.Path == "payloads[0].files[0].path"));
     }
-
-    [Theory]
     [InlineData("2.0.0+../../outside")]
     [InlineData("../outside")]
     [InlineData("C:/outside")]
@@ -282,35 +280,43 @@ public sealed class ReleaseManifestTests {
     [InlineData("..")]
     [InlineData("2.0.0 ")]
     [InlineData(" 2.0.0")]
+    [Theory]
     public void Validate_RefusesVersionDirectoryEscape(string version) =>
-        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Version = version }), filter: error => error.Path == "version");
-
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Version = version }), filter: error => (error.Path == "version"));
     [Fact]
     public void Validate_RefusesNullEntriesAndCaseAliasedFiles() {
         var document = ValidDocument();
-        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with { Payloads = [null!] }), filter: error => error.Path == "payloads[0]");
-        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with { Payloads = [document.Payloads[0] with { Files = [null!] }] }), filter: error => error.Path == "payloads[0].files[0]");
+
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with { Payloads = [null!] }), filter: error => (error.Path == "payloads[0]"));
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with { Payloads = [document.Payloads[0] with { Files = [null!] }] }), filter: error => (error.Path == "payloads[0].files[0]"));
         var file = document.Payloads[0].Files[0];
+
         Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document with {
             Payloads = [document.Payloads[0] with { Files = [file, file with { Path = file.Path.ToUpperInvariant() }] }],
-        }), filter: error => error.Path == "payloads[0].files[1].path");
+        }), filter: error => (error.Path == "payloads[0].files[1].path"));
     }
-
-    [Theory]
     [InlineData("../other")]
     [InlineData("stable/beta")]
     [InlineData("stable..")]
     [InlineData(" stable")]
+    [Theory]
     public void Validate_RefusesNonPortableChannel(string channel) =>
-        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => error.Path == "channel");
-
-    [Fact]
-    public void Validate_RefusesReservedStateGenerationPayloadFile() {
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: ValidDocument() with { Channel = channel }), filter: error => (error.Path == "channel"));
+    // The applier writes both names into every version directory beside its payload: a payload file of either name would
+    // be overwritten after its hash was verified, and a payload directory of either name makes the write fail.
+    [InlineData("state-generation")]
+    [InlineData("install-record.json")]
+    [InlineData("Install-Record.JSON")]
+    [InlineData("install-record.json/data.bin")]
+    [InlineData("STATE-GENERATION/nested/data.bin")]
+    [Theory]
+    public void Validate_RefusesReservedPayloadFiles(string name) {
         var document = ValidDocument();
+
         document = document with {
-            Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = "state-generation" }] }],
+            Payloads = [document.Payloads[0] with { Files = [document.Payloads[0].Files[0] with { Path = name }] }],
         };
 
-        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => error.Path == "payloads[0].files[0].path");
+        Assert.Contains(collection: ReleaseCanonicalizer.Validate(document: document), filter: error => (error.Path == "payloads[0].files[0].path"));
     }
 }

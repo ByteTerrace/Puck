@@ -179,8 +179,8 @@ public sealed class FileUpdateApplierTests : IDisposable {
             condition: first.Applied,
             userMessage: first.RefusalReason
         );
-        HealthGateFile.ClearHealthy(cacheRoot: m_root.RootPath, version: "1.0.0",
-            runningDirectory: Path.Combine(path1: m_root.RootPath, path2: "versions", path3: "1.0.0"));
+        // 1.0.0 proves healthy, as its started process would by clearing the marker.
+        File.Delete(path: Path.Combine(path1: m_root.RootPath, path2: "state", path3: "health.json"));
 
         var second = applier.Apply(
             cacheRoot: m_root.RootPath,

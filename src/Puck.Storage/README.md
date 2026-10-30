@@ -56,15 +56,18 @@ to hosts that prepare retained content before it reaches a backend.
 ## Local filesystem boundary
 
 `DirectoryObjectStorageTarget` captures an absolute root at construction. Its
-backend opens every directory component without following links and keeps the
-directory handles alive for the operation. On Windows it rejects reparse points
-and denies write/delete sharing on those handles, preventing directory
-substitution while paths are in use. Linux x64 resolves child entries relative
-to directory descriptors with `openat` and `O_NOFOLLOW`. File handles must name
-regular files with one hard link. Unsupported platforms and Windows network
-roots refuse access. Native Windows opens and atomic replacements use extended
-local paths, so a valid nested blob key and its temporary file can exceed the
-legacy 260-character path limit without depending on process manifest settings.
+backend walks every directory component from the volume root through
+`Puck.Confinement`'s `ConfinedDirectory`, which opens each component relative to
+its parent's handle without following links and keeps the handles alive for the
+operation (see [its README](../Puck.Confinement/README.md)). On Windows the held
+directories deny delete sharing, so no ancestor can be renamed or replaced while
+an operation holds it; on Linux x64 every lookup is `openat` with `O_NOFOLLOW`
+relative to a held descriptor. File handles must name regular files with one
+hard link. Unsupported platforms and Windows network roots refuse access. Each
+lookup carries one component, so a valid nested blob key and its temporary file
+can exceed the legacy 260-character path limit without depending on process
+manifest settings, and an atomic replacement renames the temporary file's own
+handle.
 
 Conditional writes lock the containing directory across cooperating processes,
 check the existing content token, write and flush a new temporary file, and
@@ -85,11 +88,8 @@ operation history, which must survive independently of rewindable game saves.
 checks, and preallocation byte ceiling to an exact host-selected configuration
 file. It is for the trusted composition root, not an extension's arbitrary-path API.
 
-The native contracts are documented in Microsoft's
-[CreateFile reference](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea)
-and Linux's [openat](https://man7.org/linux/man-pages/man2/openat.2.html) and
-[rename](https://man7.org/linux/man-pages/man2/rename.2.html) references.
-`ConfinedStorageLawTests` exercises real directories, links, concurrent
+The native contracts and their sources are in the
+[Puck.Confinement README](../Puck.Confinement/README.md). `ConfinedStorageLawTests` exercises real directories, links, concurrent
 replacement, conditional writes, and namespace revocation in `Puck.World.Server.Tests`.
 
 ## Documentation

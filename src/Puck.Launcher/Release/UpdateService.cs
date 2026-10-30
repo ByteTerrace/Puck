@@ -148,14 +148,11 @@ public sealed class UpdateService(IReleaseSource source, IReleaseVerifier verifi
     public async Task<UpdateApplyOutcome> ApplyAsync(DateTimeOffset now, CancellationToken cancellationToken) {
         try {
             var root = Path.GetFullPath(path: m_options.CacheRoot);
-
-            Directory.CreateDirectory(path: root);
-            // Never unlink this file: a persistent inode makes process exit release the only writer lease.
-            using var lease = new FileStream(path: Path.Combine(path1: root, path2: "update.lock"),
-                mode: FileMode.OpenOrCreate, access: FileAccess.ReadWrite, share: FileShare.None);
+            using var lease = (InstallLeases.TryAcquire(fileName: InstallLeases.UpdateLockFileName, installRoot: root)
+                ?? throw new IOException(message: $"another process holds {InstallLeases.UpdateLockFileName}"));
 
             return await ApplyUnderLeaseAsync(cancellationToken: cancellationToken, now: now, root: root).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException)) {
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or JsonException or PlatformNotSupportedException)) {
             return new UpdateApplyOutcome(Applied: false, Detail: $"install is busy or unavailable; any pending intent is retained: {error.Message}");
         }
     }

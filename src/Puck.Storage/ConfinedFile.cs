@@ -1,3 +1,5 @@
+using Puck.Confinement;
+
 namespace Puck.Storage;
 
 /// <summary>Bounded, no-follow reads of a file explicitly selected by the trusted host, such as deployment configuration.</summary>

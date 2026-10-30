@@ -66,7 +66,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $null = New-Item -ItemType Directory -Force -Path $install
 foreach ($file in Get-ChildItem -LiteralPath $stubBuild -File) {
     $target = Join-Path $install $file.Name
-    if (-not (Test-Path -LiteralPath $target)) { Copy-Item -LiteralPath $file.FullName -Destination $target }
+    if ((Test-Path -LiteralPath $target) -and ((Get-FileHash -LiteralPath $target).Hash -eq (Get-FileHash -LiteralPath $file.FullName).Hash)) { continue }
+    # A stub another client is running keeps its files locked; the next start after it exits takes the new build.
+    try { Copy-Item -LiteralPath $file.FullName -Destination $target -Force } catch { Write-Note "kept the running stub's $($file.Name): $($_.Exception.Message)" }
 }
 '{"AppExecutableFileName":"Puck.Cli.exe","MaxAttempts":3}' | Set-Content -LiteralPath (Join-Path $install 'stub.json') -NoNewline
 $dll = Join-Path $build 'Puck.Cli.dll'
