@@ -354,8 +354,8 @@ public sealed class InstallPruneLawTests : IDisposable {
     // skips the pass.
     [Fact]
     public void MetadataThatCannotBeReadOrValidatedKeepsWhatItMightProtect() {
-        var older = Install(version: "0.9.0", healthy: true);
-        var lastGood = Install(version: "1.0.0", healthy: true);
+        var older = Install(healthy: true, version: "0.9.0");
+        var lastGood = Install(healthy: true, version: "1.0.0");
         var current = Install(version: "1.0.1");
         var orphan = Objects.Put(content: "nothing references this"u8);
         var sourceRoot = Path.Combine(path1: Root, path2: InstallPruner.LocalSourceDirectoryName);
@@ -374,7 +374,7 @@ public sealed class InstallPruneLawTests : IDisposable {
         } else {
             File.SetUnixFileMode(mode: UnixFileMode.None, path: olderRecord);
             unreadable = Prune(keepVersions: 0);
-            File.SetUnixFileMode(mode: (UnixFileMode.UserRead | UnixFileMode.UserWrite), path: olderRecord);
+            File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite, path: olderRecord);
         }
         Assert.Contains(expected: "0.9.0", collection: unreadable.KeptVersions);
         Assert.Equal(expected: ["0.9.0", "1.0.0", "1.0.1"], actual: VersionNames());
@@ -388,7 +388,7 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.True(condition: Objects.Contains(pin: current));
         Assert.False(condition: Objects.Contains(pin: orphan));
         Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(pin: stale, root: sourceRoot)), userMessage: "a store whose manifest fails validation was swept");
-        Assert.Contains(collection: readable.Refused, filter: static reason => reason.Contains(value: "fails validation", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: readable.Refused, filter: static reason => reason.Contains(comparisonType: StringComparison.Ordinal, value: "fails validation"));
         File.WriteAllText(path: Path.Combine(path1: Root, path2: "install-intent.json"), contents: """{"manifest":{"version":"1.0.1"}}""");
         Assert.Contains(expectedSubstring: "fails validation", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
     }
@@ -396,9 +396,9 @@ public sealed class InstallPruneLawTests : IDisposable {
     // keeps the newest others.
     [Fact]
     public void ARunningVersionDoesNotTakeAPlaceTheAllowanceKeeps() {
-        _ = Install(version: "1.0.0", healthy: true);
-        _ = Install(version: "1.0.1", healthy: true);
-        _ = Install(version: "1.0.2", healthy: true);
+        _ = Install(healthy: true, version: "1.0.0");
+        _ = Install(healthy: true, version: "1.0.1");
+        _ = Install(healthy: true, version: "1.0.2");
         _ = Install(version: "1.0.3");
         Assert.Equal(expected: "1.0.2", actual: File.ReadAllText(path: Path.Combine(path1: Root, path2: "last-good")));
         using (StubInstall.HoldVersion(installRoot: Root, version: "1.0.1")) {
@@ -415,7 +415,7 @@ public sealed class InstallPruneLawTests : IDisposable {
     [Fact]
     public void TreesOfAnyDepthArePrunedWithoutRecursion() {
         var depth = (OperatingSystem.IsWindows() ? 5000 : 900);
-        var unrecorded = Install(version: "1.0.0", healthy: true);
+        var unrecorded = Install(healthy: true, version: "1.0.0");
 
         _ = Install(version: "1.0.1");
         _ = Stage(version: "0.9.0");
@@ -454,10 +454,12 @@ public sealed class InstallPruneLawTests : IDisposable {
 
         Assert.True(condition: cleanup.DeleteChild(name: "d"));
     }
+
     // Hands the walk to the next directory, closing the one it leaves unless that is the root.
     private static ConfinedDirectory Owned(ConfinedDirectory current, ConfinedDirectory next, ConfinedDirectory root) {
         if (!ReferenceEquals(objA: current, objB: root)) { current.Dispose(); }
         return next;
     }
+
     public void Dispose() => m_directory.Dispose();
 }

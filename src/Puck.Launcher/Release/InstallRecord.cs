@@ -35,10 +35,10 @@ public sealed record InstallRecord(long Sequence, IReadOnlyList<string> Files) {
         try {
             // A record whose order or pins are not well formed names nothing reliable; its version is then ranked and
             // protected as one without a record (the content pins of the files it holds).
-            return ((JsonSerializer.Deserialize<InstallRecord>(options: DocumentJsonOptions.Shared, utf8Json: stream) is { Files: not null, Sequence: > 0 } record) &&
+            return (((JsonSerializer.Deserialize<InstallRecord>(options: DocumentJsonOptions.Shared, utf8Json: stream) is { Files: not null, Sequence: > 0 } record) &&
                 record.Files.All(predicate: static file => ContentPin.TryParse(pin: out _, text: file)))
                 ? record
-                : null;
+                : null);
         } catch (JsonException) {
             return null;
         }

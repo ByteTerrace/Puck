@@ -17,13 +17,11 @@ public static class InstallLayout {
     /// <summary>The version directories' parent, directly under the install root.</summary>
     public const string VersionsDirectoryName = "versions";
 }
-
 /// <summary>A launch that cannot confirm the version directory it runs from: the launcher removed or replaced it
 /// before this process registered, or its install cannot be read, so running on would read files that are not this
 /// version's.</summary>
 /// <param name="message">The reason, naming the version.</param>
 public sealed class InstallRegistrationException(string message) : IOException(message: message);
-
 /// <summary>
 /// A process's registration as a holder of the version directory it runs from. The launcher removes a version only
 /// while no live process holds it, and a held directory is a handle the operating system closes when the process exits,
@@ -38,6 +36,7 @@ public sealed class InstallRegistrationException(string message) : IOException(m
 /// </summary>
 public sealed class InstallRegistration : IDisposable {
     private static readonly Lock ProcessGate = new();
+
     private readonly ConfinedDirectory? m_held;
 
     private InstallRegistration(ConfinedDirectory? held, string? version, ConfinedIdentity? root) {
@@ -155,7 +154,6 @@ public sealed class InstallRegistration : IDisposable {
             return false;
         }
     }
-
     /// <summary>Releases the held version directory.</summary>
     public void Dispose() => m_held?.Dispose();
 

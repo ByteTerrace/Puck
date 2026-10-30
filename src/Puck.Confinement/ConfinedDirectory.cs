@@ -389,8 +389,8 @@ public sealed partial class ConfinedDirectory : IDisposable {
     private static SafeFileHandle? OpenForRemoval(SafeFileHandle parent, string name, out bool existed) {
         existed = false;
         if (OperatingSystem.IsWindows()) {
-            var handle = Windows.OpenAny(access: (Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes), isDirectory: out var isDirectory,
-                isLink: out var isLink, name: name, parent: parent, share: (Windows.ShareRead | Windows.ShareWrite));
+            var handle = Windows.OpenAny(access: Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes, isDirectory: out var isDirectory,
+                isLink: out var isLink, name: name, parent: parent, share: Windows.ShareRead | Windows.ShareWrite);
 
             if (handle is null) { return null; }
             existed = true;
