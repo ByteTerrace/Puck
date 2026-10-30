@@ -135,10 +135,12 @@ public sealed partial class WorldInstanceHost {
     /// <summary>Redoes, in order, every crossing record <paramref name="row"/>'s restored checkpoint does not reflect:
     /// the records at or past the checkpoint's crossing sequence, read back from the row's durable crossing log. An
     /// arrival lands its cohort again through the row's own escrow; a departure detaches its cohort again and puts the
-    /// transfer back in doubt; a settlement publishes the cohort's forwarding routes or returns it home. The ordinary
-    /// drain then reconciles whatever is still in doubt with its destination, so the traveler ends arrived or never
-    /// departed. Call after <see cref="Admit"/> and <see cref="RestoreRow"/>, before the row steps; a fresh row with
-    /// no checkpoint redoes its whole log.</summary>
+    /// transfer back in doubt; a settlement publishes the cohort's forwarding routes or returns it home; an allocation
+    /// raises the row's next transfer id past every id it allocated; a lease holds its key leased until its arrival
+    /// lands; a tombstone kills its key, and a live lease the checkpoint holds for it. Once every record is redone, a key
+    /// leased whose arrival never followed is dead. The ordinary drain then reconciles whatever is still in doubt with
+    /// its destination, so the traveler ends arrived or never departed. Call after <see cref="Admit"/> and
+    /// <see cref="RestoreRow"/>, before the row steps; a fresh row with no checkpoint redoes its whole log.</summary>
     /// <param name="row">The restored row.</param>
     /// <param name="entries">The row's crossing log, in any order; records the checkpoint reflects are skipped.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
@@ -179,6 +181,21 @@ public sealed partial class WorldInstanceHost {
                         settlement: settlement
                     );
                     break;
+                case WorldCrossingRecord.Lease lease:
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoLease(
+                        floor: lease.Floor,
+                        key: lease.Key
+                    ));
+                    break;
+                case WorldCrossingRecord.Tombstone tombstone:
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoTombstone(key: tombstone.Key));
+                    break;
+                case WorldCrossingRecord.Allocation allocation:
+                    row.NextTransferId = Math.Max(
+                        val1: row.NextTransferId,
+                        val2: allocation.Next
+                    );
+                    break;
                 default:
                     throw new ArgumentException(
                         message: $"crossing log for '{row.Name}' carries an undeclared record '{entry.Record.GetType().Name}'",
@@ -189,6 +206,9 @@ public sealed partial class WorldInstanceHost {
             next = checked((next + 1UL));
             row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.ResumeCrossingSequence(next: next));
         }
+
+        // Every key the log leased whose arrival never followed is dead from here.
+        row.Server.ExecuteAuthorityOperation(operation: row.Server.TransferEscrow.FinishRecovery);
     }
 
     private void RedoArrival(WorldInstance row, WorldCrossingArrival arrival) {

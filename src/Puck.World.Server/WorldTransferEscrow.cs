@@ -31,6 +31,21 @@ public readonly record struct WorldTransferReservationMember(Principal Principal
 }
 /// <summary>The destination's binding reservation request. The deadline is stated in the source authority's own
 /// simulation ticks; the destination converts the remaining interval through the exact 50400 engine-tick bridge.</summary>
+/// <param name="TransferId">The transfer key's id: allocated durably by its source before this request is sent, and
+/// never used by that source again.</param>
+/// <param name="SourceAuthority">The transfer key's authenticated source namespace.</param>
+/// <param name="SourceRateHz">The source's simulation rate, in ticks per second.</param>
+/// <param name="SourceTick">The source tick the request was made at.</param>
+/// <param name="DeadlineSourceTick">The source tick the lease expires at.</param>
+/// <param name="Border">The stable border identity used for destination admission accounting.</param>
+/// <param name="BorderCapacity">The border's authored capacity, or <see langword="null"/> for none.</param>
+/// <param name="PartyAllOrNothing">Whether the cohort binds as one transaction.</param>
+/// <param name="PeerAdmission">Whether the travelers land through the peer admission door.</param>
+/// <param name="Members">The prospective travelers, in cohort order.</param>
+/// <param name="SourceFloor">The source's settled floor: every id below it, from this source, is settled there (arrived
+/// or returned) or was never sent, so the source will never reserve, commit or ask under one again. It is at most
+/// <paramref name="TransferId"/>. The destination keeps no key row below a source's highest floor and answers such a key
+/// <see cref="WorldTransferStatus.Missing"/>; zero claims nothing.</param>
 public sealed record WorldTransferReservationRequest(
     ulong TransferId,
     string SourceAuthority,
@@ -41,7 +56,8 @@ public sealed record WorldTransferReservationRequest(
     int? BorderCapacity,
     bool PartyAllOrNothing,
     bool PeerAdmission,
-    IReadOnlyList<WorldTransferReservationMember> Members
+    IReadOnlyList<WorldTransferReservationMember> Members,
+    ulong SourceFloor = 0UL
 );
 /// <summary>A transfer's destination-wide identity. SourceAuthority is the authenticated source namespace; the
 /// numeric id is only required to be unique inside that namespace.</summary>
@@ -61,7 +77,9 @@ public readonly record struct WorldMobilityIdentity(WorldEntityAddress Incarnati
 }
 /// <summary>The destination's idempotent answer about one source-scoped transfer, and its verdict on a commit.</summary>
 public enum WorldTransferStatus : byte {
-    /// <summary>Nothing for the transfer is live here; a commit answered this way was refused and applied nothing.</summary>
+    /// <summary>Nothing for the transfer is live here, and nothing ever will be: the key is durably dead, so no later
+    /// reservation leases it and no later commit lands under it. A commit answered this way was refused and applied
+    /// nothing.</summary>
     Missing = 0,
 
     /// <summary>A reservation holds destination capacity and awaits its commit.</summary>
@@ -76,7 +94,11 @@ public enum WorldTransferStatus : byte {
     Uncertain = 3,
 }
 /// <summary>Bounded operational counts for transfer-state churn laws and diagnostics.</summary>
-public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases);
+/// <param name="ActiveTransactions">The live leases, retained commits and uncertain arrivals.</param>
+/// <param name="MobilityCredentials">The authenticated source aliases of admitted travelers.</param>
+/// <param name="MobilityLeases">The traveler incarnations a live lease holds.</param>
+/// <param name="TransferKeys">The key ledger's rows: settled keys above their source's floor, and one floor per source.</param>
+public readonly record struct WorldTransferTableCounts(int ActiveTransactions, int MobilityCredentials, int MobilityLeases, int TransferKeys);
 /// <summary>One named action register carried across an authority change. A destination accepts it only when its
 /// own seat kit declares the same name and kind; its own envelope remains authoritative.</summary>
 public readonly record struct WorldTransferActionRegister(string Name, ActionStateKind Kind, FixedQ4816 Value, ulong TimerTicks);
@@ -299,7 +321,9 @@ public sealed partial class WorldTransferEscrow {
             MobilityLeases: [.. m_mobilityLeases.Select(selector: static pair => (pair.Key, pair.Value.Transfer, pair.Value.ExpectedEpoch))],
             MobilityAdmissions: [.. m_mobilityAdmissions.Select(selector: static pair => (pair.Key.SourceAuthority, pair.Key.Incarnation, pair.Value.Epoch, pair.Value.Principal))],
             BorderAdmissions: [.. m_borderAdmissions.Select(selector: static pair => (pair.Key, pair.Value))],
-            CrossingSequence: m_crossingSequence
+            CrossingSequence: m_crossingSequence,
+            SpentKeys: [.. m_spent.Select(selector: static pair => (pair.Key, pair.Value.Committed, pair.Value.Durable))],
+            Floors: [.. m_floors.Select(selector: static pair => (pair.Key, pair.Value))]
         );
     }
     /// <summary>Restores every table this escrow owns from a previously captured checkpoint. Every table is cleared
@@ -318,7 +342,22 @@ public sealed partial class WorldTransferEscrow {
         m_mobilityAdmissions.Clear();
         m_borderAdmissions.Clear();
         m_detachedIdentities.Clear();
+        m_spent.Clear();
+        m_sourceRows.Clear();
+        m_floors.Clear();
+        m_recoveredLeases.Clear();
         m_crossingSequence = checkpoint.CrossingSequence;
+
+        foreach (var row in checkpoint.SpentKeys) {
+            SetSpent(
+                committed: row.Committed,
+                durable: row.Durable,
+                key: row.Key
+            );
+        }
+        foreach (var row in checkpoint.Floors) {
+            m_floors[row.SourceAuthority] = row.Floor;
+        }
 
         // Commit's own "definition moved after reservation" guard is a REFERENCE check against the live
         // m_server.Definition object a live Reserve captured verbatim. A restored lease whose destination content
@@ -536,6 +575,7 @@ public sealed partial class WorldTransferEscrow {
             (left.BorderCapacity != right.BorderCapacity) ||
             (left.PartyAllOrNothing != right.PartyAllOrNothing) ||
             (left.PeerAdmission != right.PeerAdmission) ||
+            (left.SourceFloor != right.SourceFloor) ||
             (left.Members.Count != right.Members.Count)
         ) {
             return false;
@@ -563,7 +603,16 @@ public sealed partial class WorldTransferEscrow {
 
         return true;
     }
+    // Drops a committed transaction's retry payload and keeps its outcome in the key ledger, so the key answers
+    // Committed for as long as its source can ask.
     private void RetireCommittedTransaction(WorldTransferKey key) {
+        if (!m_committed.Remove(item: key)) {
+            return;
+        }
+        Spend(
+            committed: true,
+            key: key
+        );
         if (m_committedIncarnations.Remove(
             key: key,
             value: out var incarnations
@@ -580,7 +629,6 @@ public sealed partial class WorldTransferEscrow {
                 }
             }
         }
-        _ = m_committed.Remove(item: key);
         _ = m_committedMembers.Remove(key: key);
         _ = m_committedPrincipals.Remove(key: key);
     }
@@ -621,11 +669,18 @@ public sealed partial class WorldTransferEscrow {
         return found;
     }
 
-    public void Abort(string sourceAuthority, ulong transferId) => ReleaseLease(key: new WorldTransferKey(
+    /// <summary>Releases a live reservation; its key is dead here from then on. A committed, uncertain or unknown key
+    /// is left as it is.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    public void Abort(string sourceAuthority, ulong transferId) => KillLease(key: new WorldTransferKey(
         SourceAuthority: sourceAuthority,
         TransferId: transferId
     ));
-    /// <summary>Retires disposable exact-retry payload after the source has observed and published commit.</summary>
+    /// <summary>Retires disposable exact-retry payload after the source has observed and published commit. The key keeps
+    /// answering <see cref="WorldTransferStatus.Committed"/>.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
     public void Acknowledge(string sourceAuthority, ulong transferId) => RetireCommittedTransaction(key: new WorldTransferKey(
         SourceAuthority: sourceAuthority,
         TransferId: transferId
@@ -645,8 +700,11 @@ public sealed partial class WorldTransferEscrow {
         ) &&
         m_borderAdmissions.Remove(key: bodyIndex));
     /// <summary>Lands a reserved cohort and makes its arrival durable before answering. An exact replay of a committed
-    /// transfer answers <see cref="WorldTransferStatus.Committed"/> again; a transfer whose arrival record is uncertain
-    /// answers <see cref="WorldTransferStatus.Uncertain"/> and lands nothing.</summary>
+    /// transfer answers <see cref="WorldTransferStatus.Committed"/> again, as does any commit under a key whose retry
+    /// payload is retired; a transfer whose arrival record is uncertain answers <see cref="WorldTransferStatus.Uncertain"/>
+    /// and lands nothing. A refusal kills the key's lease and answers <see cref="WorldTransferStatus.Missing"/> only once
+    /// the key's death is durable, so no later reservation or commit under it is admitted; a death that cannot be made
+    /// durable answers <see cref="WorldTransferStatus.Uncertain"/>.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
     /// <param name="members">The travelers in reservation order.</param>
@@ -658,12 +716,43 @@ public sealed partial class WorldTransferEscrow {
             SourceAuthority: sourceAuthority,
             TransferId: transferId
         );
+        var status = CommitUnder(
+            key: key,
+            members: members,
+            reason: out reason
+        );
+
+        // A relanding arrival is already durable, and a refused one leaves recovery or the re-drive to decide.
+        if (
+            (status != WorldTransferStatus.Missing) ||
+            m_relanding ||
+            m_committed.Contains(item: key)
+        ) {
+            return status;
+        }
+        KillLease(key: key);
+        return AnswerMissing(
+            key: key,
+            reason: ref reason
+        );
+    }
+    private WorldTransferStatus CommitUnder(WorldTransferKey key, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var transferId = key.TransferId;
 
         if (IsUncertain(
             key: key,
             reason: out reason
         )) {
             return WorldTransferStatus.Uncertain;
+        }
+        if (
+            m_spent.TryGetValue(
+                key: key,
+                value: out var spent
+            ) &&
+            spent.Committed
+        ) {
+            return WorldTransferStatus.Committed;
         }
         if (m_committed.Contains(item: key)) {
             if (
@@ -681,6 +770,10 @@ public sealed partial class WorldTransferEscrow {
             }
 
             reason = $"transfer {transferId} reuses a committed source-scoped id with a different commit";
+            return WorldTransferStatus.Missing;
+        }
+        if (IsBelowFloor(key: key)) {
+            reason = $"transfer {transferId} is below its source's settled floor";
             return WorldTransferStatus.Missing;
         }
 
@@ -884,6 +977,7 @@ public sealed partial class WorldTransferEscrow {
         }
 
         m_committed.Add(item: key);
+        _ = m_recoveredLeases.Remove(item: key);
         m_committedMembers[key] = [.. members];
         m_committedPrincipals[key] = lease.Slots.Select(selector: slot => (lease.Request.PeerAdmission
             ? m_server.Population.PeerPrincipal(index: slot)
@@ -1262,7 +1356,7 @@ public sealed partial class WorldTransferEscrow {
             tick: signedTick,
             out var key
         )) {
-            ReleaseLease(key: key);
+            KillLease(key: key);
         }
     }
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
@@ -1272,8 +1366,17 @@ public sealed partial class WorldTransferEscrow {
             TransferId: request.TransferId
         );
 
-        if (m_committed.Contains(item: key)) {
+        if (
+            m_committed.Contains(item: key) ||
+            (m_spent.TryGetValue(
+                key: key,
+                value: out var spent
+            ) && spent.Committed)
+        ) {
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} already committed");
+        }
+        if (m_spent.ContainsKey(key: key)) {
+            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} was already leased or answered here, and a key is leased at most once");
         }
         if (IsSuspended(
             reason: out var suspended,
@@ -1309,8 +1412,17 @@ public sealed partial class WorldTransferEscrow {
             );
         }
 
+        if (IsBelowFloor(key: key)) {
+            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} is below its source's settled floor");
+        }
+        if (request.SourceFloor > request.TransferId) {
+            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} claims a settled floor {request.SourceFloor} above its own id");
+        }
         if (request.Members.Count == 0) {
             return WorldTransferReservationReply.Refused(reason: "reservation carries no travelers");
+        }
+        if (LedgerRefusal(request: request) is { } ledgerRefusal) {
+            return WorldTransferReservationReply.Refused(reason: ledgerRefusal);
         }
         if (((m_leases.Count + m_committed.Count) + m_uncertain.Count) >= WorldTransferLimits.Transactions) {
             return WorldTransferReservationReply.Refused(reason: $"transfer history capacity is full ({WorldTransferLimits.Transactions}); acknowledge commits or retire travelers before reserving again");
@@ -1439,6 +1551,27 @@ public sealed partial class WorldTransferEscrow {
             slots[index] = slot;
         }
 
+        // Written ahead of the acceptance: a recovered destination finds the key leased, so it never leases it again.
+        // A lease that is not known durable is never installed, and its key is spent in this activation.
+        var durability = m_server.RecordCrossingHeld(
+            reason: out var leaseDetail,
+            record: new WorldCrossingRecord.Lease(
+                Floor: request.SourceFloor,
+                Key: key
+            )
+        );
+
+        if (durability != WorldCrossingDurability.Durable) {
+            Spend(
+                committed: false,
+                key: key
+            );
+            return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} lease could not be made durable — {leaseDetail}");
+        }
+        RaiseFloor(
+            floor: request.SourceFloor,
+            sourceAuthority: request.SourceAuthority
+        );
         return InstallLease(
             arrival: arrival,
             deadline: deadline,
@@ -1715,10 +1848,8 @@ public sealed partial class WorldTransferEscrow {
             return false;
         }
         if (!reply.BodyIndices.SequenceEqual(second: arrival.Slots)) {
-            Abort(
-                sourceAuthority: request.SourceAuthority,
-                transferId: request.TransferId
-            );
+            // Released, not killed: the recorded arrival decides the key, and a recovery that can land it later must.
+            ReleaseLease(key: arrival.Key);
             reason = $"transfer {request.TransferId} reserved body:[{string.Join(
                 separator: ",",
                 values: reply.BodyIndices
@@ -1765,7 +1896,7 @@ public sealed partial class WorldTransferEscrow {
             key: incarnation,
             value: out var mobilityLease
         )) {
-            ReleaseLease(key: mobilityLease.Transfer);
+            KillLease(key: mobilityLease.Transfer);
         }
         if (m_latestCommittedTransfer.TryGetValue(
             key: incarnation,
@@ -1780,19 +1911,31 @@ public sealed partial class WorldTransferEscrow {
             _ = m_mobilityAdmissions.Remove(key: key);
         }
     }
+    /// <summary>Answers what this destination holds for a source-scoped transfer. A key whose retry payload is retired
+    /// still answers <see cref="WorldTransferStatus.Committed"/>. A key holding nothing live answers
+    /// <see cref="WorldTransferStatus.Missing"/> only once its death is durable, tombstoning it first when no earlier
+    /// record shows it, so no later reservation or commit under it is admitted; a tombstone that cannot be made durable
+    /// answers <see cref="WorldTransferStatus.Uncertain"/>. The caller holds the authority gate.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    /// <returns>The transfer's status here.</returns>
     public WorldTransferStatus Status(string sourceAuthority, ulong transferId) {
         var key = new WorldTransferKey(
             SourceAuthority: sourceAuthority,
             TransferId: transferId
         );
+        var reason = string.Empty;
 
         return (m_uncertain.ContainsKey(key: key)
             ? WorldTransferStatus.Uncertain
-            : (m_committed.Contains(item: key)
+            : ((m_committed.Contains(item: key) || (m_spent.TryGetValue(key: key, value: out var spent) && spent.Committed))
                 ? WorldTransferStatus.Committed
                 : (m_leases.ContainsKey(key: key)
                     ? WorldTransferStatus.Reserved
-                    : WorldTransferStatus.Missing
+                    : AnswerMissing(
+                        key: key,
+                        reason: ref reason
+                    )
         )));
     }
     /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
@@ -1837,6 +1980,7 @@ public sealed partial class WorldTransferEscrow {
     public WorldTransferTableCounts Counts => new(
         ActiveTransactions: ((m_leases.Count + m_committed.Count) + m_uncertain.Count),
         MobilityCredentials: m_mobilityAdmissions.Count,
-        MobilityLeases: m_mobilityLeases.Count
+        MobilityLeases: m_mobilityLeases.Count,
+        TransferKeys: (m_spent.Count + m_floors.Count)
     );
 }

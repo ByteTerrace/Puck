@@ -673,6 +673,7 @@ public static partial class WorldFederationCodec {
         }
 
         writer.WriteBoolean(value: request.PartyAllOrNothing);
+        writer.WriteUInt64(value: request.SourceFloor);
         writer.WriteInt32(value: request.Members.Count);
 
         foreach (var member in request.Members) {
@@ -1269,6 +1270,7 @@ public static partial class WorldFederationCodec {
             : null
         );
         var party = reader.ReadBoolean();
+        var floor = reader.ReadUInt64();
         var count = reader.ReadCount(
             field: "reservation traveler count",
             maximum: WorldBodiesLimits.CapacityCeiling,
@@ -1303,6 +1305,7 @@ public static partial class WorldFederationCodec {
             PartyAllOrNothing: party,
             PeerAdmission: true,
             SourceAuthority: sourceAuthority,
+            SourceFloor: floor,
             SourceRateHz: sourceRate,
             SourceTick: sourceTick,
             TransferId: transferId

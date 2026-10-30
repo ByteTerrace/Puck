@@ -1088,13 +1088,47 @@ refuses an append from an activation its store has fenced off, so a superseded d
 commit. An exact replay of a committed token is answered as committed, including by a destination
 rebuilt from its checkpoint and log; the same token carrying a different commit is refused.
 
+**A transfer key names one handoff for all time.** The federation lane resends every
+transfer-keyed request (`MayResend`), so a reservation or commit the destination answered once can
+arrive again after the source acted on the answer. Four rules make that harmless for every traveler,
+whether a seat, a remote human or an autonomous body:
+
+- The source allocates a key durably before it reserves under it, and never uses it again. A
+  restart mints past every id its log allocated, and an operator cannot supply an id.
+- The destination leases a key at most once, durably: its lease record is written before the
+  reservation is accepted. A recovered destination holds a logged lease until the arrival that
+  follows it lands; one whose arrival never follows is dead.
+- `Missing` is final. Before a destination first answers `Missing` for a key, to a status query or a
+  commit, it makes the key's death durable, writing a tombstone unless its log already shows it. From
+  then on no reservation leases the key and no commit lands under it, and a tombstone redone past a
+  checkpoint kills the live lease that checkpoint holds. A death that cannot be made durable answers
+  `Uncertain`, which the source treats as a lost answer. An abort, an expired lease and a refused
+  commit kill the key the same way.
+- The destination keeps a key's outcome until its source can no longer ask. Acknowledging a commit,
+  or the traveler moving on, retires only the commit's retry payload; the key still answers
+  `Committed`.
+
+The key ledger stays bounded because each reservation carries the source's settled floor
+(`SourceFloor`): the lowest id it may still reserve, commit or ask under, which is the lowest of the
+transfer being reserved, its queued transfers and its in-doubt ones. The destination keeps no row
+below a source's highest floor and answers such a key `Missing`; a commit under a lease left below
+the floor is refused. The ledger holds settled keys above their floor and one floor per source, and
+is bounded with the leases and commits that become rows of it (`WorldTransferLimits.TransferKeys`);
+each source's own rows are bounded too (`TransferKeysPerSource`), so a source that asks after keys it
+never reserved, or never lets its floor rise, fills only its own share. A full ledger or share
+evicts nothing: it refuses reservations, and answers `Uncertain` for a key it cannot tombstone, until
+a rising floor frees it.
+
 Every crossing step a peer can see is written ahead to the authority's crossing log
 (`IWorldCrossingLog`) before the step happens:
 
 | Authority | Record | Written before |
 |---|---|---|
+| Source | allocation: every transfer id below the next | the first reservation under an id |
+| Destination | lease: the key and the source's settled floor | the reservation is accepted |
 | Source | departure: the complete in-doubt recovery record | the commit is sent |
 | Destination | arrival: the reservation, its body indices and the commit | the commit is answered |
+| Destination | tombstone: the key | the first `Missing` answer its log does not already show |
 | Source | settlement: arrived, with its forwarding routes | the arrival is acknowledged |
 | Source | settlement: stayed | the cohort is restored home |
 
@@ -1108,8 +1142,8 @@ cohort. If its settlement is not durable, the settlement stays pending until it 
 redoes whichever of these records did land.
 
 A destination that cannot make its arrival durable lands nothing. If the record was refused, it
-answers the commit as a refusal. If the record is uncertain, it cannot refuse, because the arrival
-may already be durable. It answers `Uncertain` (`WorldTransferStatus.Uncertain`) to the commit, to a
+answers the commit as a refusal once the key's tombstone is durable. If the record is uncertain, it
+cannot refuse, because the arrival may already be durable. It answers `Uncertain` (`WorldTransferStatus.Uncertain`) to the commit, to a
 retried commit and to the status query, and it refuses a reservation for any of the travelers.
 
 The source treats an uncertain answer like a lost one. It keeps the transfer in doubt and neither
@@ -1123,7 +1157,11 @@ authority restores its latest checkpoint and redoes, in order, every record past
 
 - an arrival lands again through the escrow;
 - a departure detaches its cohort again and puts the transfer back in doubt;
-- a settlement publishes the forwarding routes or restores the cohort.
+- a settlement publishes the forwarding routes or restores the cohort;
+- an allocation raises the next transfer id past every id it covers;
+- a lease holds its key leased until its arrival lands, and a lease whose arrival never follows
+  leaves its key dead once recovery finishes;
+- a tombstone kills its key, and any live lease the checkpoint holds for it.
 
 The ordinary drain then reconciles the transfer with its peer. Recovery refuses an arrival it cannot
 land again and leaves its sequence unapplied. Whichever step a crash or a lost answer interrupts, the

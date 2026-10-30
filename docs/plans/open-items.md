@@ -865,15 +865,6 @@ decision (the companion lands inert in the live debug world today; the lead's ca
 between the consensus split), then the uncertain crossing, opened by a two-silo
 failover witness.
 
-- [high] Ordinary travellers can be duplicated by a resent commit: a
-  destination that re-leases the same transfer key after a crash lets a resent
-  commit (`MayResend` is true for transfer-id-keyed kinds) land a body the
-  source already restored after a `Missing` status; and `Missing` is final only
-  if the destination tombstones the key it answered for. The companion custody
-  spec's lease-once and tombstone rule (`Leased(K)`/`Dead(K)`) fixes both; apply
-  it to every traveller, not only companions. Unconfirmed against a run; the
-  companion protocol's model check found it and a design review is checking
-  the code. (from: the companion-redesign lane)
 - [medium] A returning companion lands detached: `WorldInstanceHost.Transfers.cs:353-355` overwrites the traveller's `PreferredSlot` with its destination slot (4 in `night`), so `PreferredOrLowestFree` (`WorldTransferEscrow.cs:468-484`) lands it home at slot 4 instead of 42 with `PlacementId = null` and the default look and kit, and its addon (granted `GrantSubject.Body(42)`, slot-indexed in `WorldHandleTable.cs:104-123`) no longer drives it. The companion-driver decision (role contract, home re-adoption by mobility incarnation) is the fix; until then the defect stands. (from: companion-driver consensus, Antigravity's code read)
 
 - [medium] Build the [companion decision](../decisions/companions.md): role and preferred-driver (pinned addon hash) fields on the reservation member; a destination's role declaration (`accept` the visitor's own pinned driver, the same pin, a substituted driver, or nothing), with `worlds/standard/` declaring `accept`; refusal at reservation with a HUD notice to the player when a world declares nothing; a separated companion (left behind, or its player leaves) returns home; home re-adoption by mobility incarnation into its original placement, the away companion counted present so a reload does not replace it; driver grants keyed by placement or role group instead of `body:42`; the faerie's lasting state in registers; `night` declares the companion role with the faerie's pin. (from: companion-driver consensus)

@@ -35,13 +35,14 @@ public sealed class CrossingRecoveryLawTests {
             entries: arrival
         ));
 
+        // The lease record is redone; the arrival record's sequence stays unapplied.
         Assert.Contains(expectedSubstring: "crossing recovery refused", actualString: failure.Message);
-        Assert.Equal(expected: 0UL, actual: server.CrossingSequence);
+        Assert.Equal(expected: 1UL, actual: server.CrossingSequence);
 
         _ = server.Population.TryDetachSeatForTransfer(profile: out _, slot: 0);
         restarted.Host.RecoverCrossings(row: restarted.Destination.Instance, entries: arrival);
         restarted.Host.RecoverCrossings(row: restarted.Destination.Instance, entries: arrival);
-        Assert.Equal(expected: 1UL, actual: server.CrossingSequence);
+        Assert.Equal(expected: 2UL, actual: server.CrossingSequence);
         Assert.Equal(expected: 1, actual: restarted.CountTraveler());
     }
 
@@ -64,10 +65,8 @@ public sealed class CrossingRecoveryLawTests {
 
         world.SourceLog.CrashBefore = typeof(WorldCrossingRecord.Departure);
         _ = Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
-        Assert.Equal(
-            expected: 0,
-            actual: world.SourceLog.Count
-        );
+        // Only the transfer id's allocation is durable.
+        _ = Assert.IsType<WorldCrossingRecord.Allocation>(@object: Assert.Single(collection: world.SourceLog.Read()).Record);
 
         using var restarted = world.Restart(
             destinationDied: false,
