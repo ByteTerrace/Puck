@@ -39,14 +39,18 @@ record (section 5.2). The authenticated channel identifies the party speaking (i
 the host; remotely, the federation lane's authenticated namespace), and home's record says
 which custodian holds the title at which epoch. Nothing a sender asserts is evidence.
 
-**Keys, leases and tombstones are the escrow-once lane's rules.** That lane makes, for
-every traveller: transfer ids allocated durably before use (a crash after a reservation
-and before the departure never reuses the id); a key leased at most once at a destination
-(`Leased(K)`); and a tombstone (`Dead(K)`) written before a destination answers `Missing` to
-a commit or a status query or refuses a reservation for a key it leased before, so
-`Missing` is final and a later reservation or commit under `K` is refused. This protocol
-relies on those rules and does not restate them in the engine; the model carries them
-because its invariants depend on them.
+**Keys, leases and tombstones are the escrow-once lane's rules** (branch
+`worktree-agent-ab9e3866f29c631a2`, its crossing-log records `Allocation(Next)`,
+`Lease(Key, Floor)` and `Tombstone(Key)`, and the reservation's `SourceFloor`). For every
+traveller: transfer ids are allocated durably before use (`Allocation` advances `Next`
+ahead of the first send, so a crash after a reservation and before the departure never
+reuses the id); a key is leased at most once at a destination (`Lease`, with the source's
+settled floor); and a tombstone is written before a destination answers `Missing` to a
+commit or a status query or refuses a reservation for a key it leased before, so `Missing`
+is final and a later reservation or commit under the key is refused. This protocol relies
+on those records and does not restate them in the engine; the model carries them as
+`Minted`, `Leased` and `Dead` because its invariants depend on them, and a shed image's
+later attempts are new allocations (section 5.4).
 
 ## 2. Per-authority state
 
@@ -86,17 +90,16 @@ between any two of them; the explorer crashes there. The reducer is total over a
 
 | Record | Authority | Written when | Engine form |
 |---|---|---|---|
-| `Minted(K, to, memberIds)` | Source | Before the first message of a crossing | The escrow-once lane's durable allocation, carrying the intended members |
+| `Minted(K, to, memberIds[, image])` | Source | Before the first message of a crossing; a shed image's later attempt names the departure it carries | The escrow-once lane's `Allocation`, with the intended members |
 | `Hop(K, from, to, [(I, e, e+1)…])` | Home | It authorizes the hop of every companion it grants under one key; each entry is that title's own fact | New `WorldCrossingRecord.Hop` |
-| `Leased(K, from, members with slots)` | Destination | Before it answers `Reserved` | The escrow-once lane's durable lease |
+| `Leased(K, from, members with slots)` | Destination | Before it answers `Reserved` | The escrow-once lane's `Lease(Key, Floor)` |
 | `Departure(K, to, members with tickets, slots and images, shed)` | Source | Before it sends the commit; a shed departure before any reservation | Existing `Departure`; `WorldLandedMemberCheckpoint` gains `Companion`, `Ticket`, `Image`, `Shed` |
 | `Arrival(K, from, members with slots, generations and epochs, readopted ids)` | Destination | Before it answers the commit | Existing `Arrival`; `WorldArrivalOutcome` gains `Readopted` and each companion's `follows` member id |
-| `Dead(K)` | Destination | Before it answers `Missing` or refuses a leased key | The escrow-once lane's tombstone (`WorldCrossingRecord.Refused`) |
+| `Dead(K)` | Destination | Before it answers `Missing` or refuses a leased key | The escrow-once lane's `Tombstone(Key)` |
 | `Settlement(K, landedIds, retiredIds)` | Source | Before it acknowledges, restores or retires; every member not landed or retired is restored | Existing `Settlement`, keyed per member |
-| `HopDone(K, I, arrived)` | Home | One companion's hop settles | New `WorldCrossingRecord.HopDone` |
+| `HopDone(K, I, arrived)` | Home | One companion's hop settles, or its settlement notice arrives before its hop (which then cancels the hop on arrival) | New `WorldCrossingRecord.HopDone` |
 | `HopAcked(K, I)` | Custodian | Home acknowledged one settlement notice | New |
-| `Attempt(K', image K)` | Custodian | A shed image asks home again under a fresh key | The new in-doubt record names the departure it carries |
-| `Retire(I, cause)` | Custodian | Home answered `Stale` or `Released` for its embodied copy | New `WorldCrossingRecord.Retire` |
+| `Retire(I, cause)` | Custodian | A step of its own after home answered `Stale` or `Released` for an embodied copy (two refused companions retire in two steps; the answer itself is volatile and is given again on the next contact) | New `WorldCrossingRecord.Retire` |
 | `Recall(I, e'')` | Home | The player or an authored window recalls | New `WorldCrossingRecord.Recall` |
 | `Noticed(I, recalled \| released)` | Home | The player has been told | The HUD notice, recorded so the obligation survives a crash |
 | `Install(I)` | Home | A definition install removes the placement's role | The taped mutation; the reducer reads it |
@@ -113,8 +116,10 @@ applies each through the reducer and never re-decides.
 ### 3.1 Append outcomes
 
 An append answers `Durable`, `Refused` or `Uncertain`. After `Uncertain` the authority
-latches: it appends nothing until it recovers (checkpoint plus log redo), and about the
-uncertain record it answers `Uncertain`.
+latches: it appends nothing until it recovers (checkpoint plus log redo), it acts on
+nothing from the uncertain record on (a landed record is suspended, as the escrow suspends
+an uncertain arrival: it embodies nothing, grants nothing and verifies nothing until
+recovery reads the log), and about that record it answers `Uncertain`.
 
 | Record | Refused | Uncertain |
 |---|---|---|
@@ -130,9 +135,12 @@ uncertain record it answers `Uncertain`.
 
 ## 4. Messages
 
-All messages are idempotent by key and member, and may be lost, duplicated, delayed or
-reordered; every one is answered, and a party that needs an answer re-sends the same
-request.
+All messages are idempotent by key and member, and may be lost, duplicated or delayed;
+every one is answered, and a party that needs an answer re-sends the same request. A lane
+(one sender, one receiver, one sender lifetime) delivers in order, as the engine's
+request lanes do; a crash starts a new lifetime whose lane is independent of the old one,
+so a request still executing at the receiver from before the crash may be overtaken by
+anything the recovered sender says afterwards.
 
 | Message | From → To | Reply |
 |---|---|---|
@@ -141,7 +149,7 @@ request.
 | `HopQuery(K, [I…])` | Destination → home | `HopQueryReply(K, per companion: e+1 \| NotGranted)` |
 | `Commit(K, members with tickets)` | Source → destination | `Committed(K, landedIds)`, `Missing(K)` or `Uncertain(K)` |
 | `Status(K)` | Source → destination | `StatusReply(K, Committed:landedIds \| Reserved \| Missing \| Uncertain)` |
-| `CustodyQuery(K, I)` | Home → hop destination | `CustodyReply(K, I, Landed \| NotLanded \| Dead \| Reserved \| Unknown \| Uncertain \| Unauthorized)` |
+| `CustodyQuery(K, I)` | Home → hop destination | `CustodyReply(K, I, Landed \| NotLanded \| Dead \| Reserved \| Uncertain \| Unauthorized)` |
 | `HopSettled(K, I, arrived)` | Source → home | `HopSettledAck(K, I)` |
 
 `Reserve`, `Commit` and `Status` exist; `Reserved` gains per-member verdicts and slots,
@@ -157,7 +165,9 @@ its attempt and asks again.
 foreign authority may not ask about a key it did not mint). The destination serves it only
 to the authority that minted the incarnation (`I.Authority` equals the authenticated
 namespace) and answers from durable records: its arrival for `K` (landed, with or without
-`I`), its tombstone, its live lease, its latch, or `Unknown` when it never leased `K`. It
+`I`), its live lease, its latch, or `Dead`, writing the tombstone first for a key it leased
+and lost or never leased at all (home asks only once the source has given the key up, so
+the tombstone makes the answer final and a late reservation under `K` is refused). It
 never answers from retired transaction outcomes, so acknowledgement or supersession of the
 arrival does not change the answer.
 
@@ -184,11 +194,14 @@ Each row: precondition → record → message → what acknowledges it.
    cap (refused → the whole reservation is refused `Player`, nothing departs); a companion
    for a declared role, when no body or live lease at Y names its incarnation, when a slot
    is free, and when home confirms the hop: Y sends one `HopQuery(K, …)` for the cohort's
-   companions and holds the reservation until `HopQueryReply` says `Hop(K)` grants that
-   companion to Y at `e+1` (a signed,
-   home-issued ticket bound to `K`, `I`, `Y` and `e+1` is the offline equivalent the build
-   may choose). An unconfirmed companion is refused `Unverified`. Y records `Leased` and
-   answers `Reserved` with the accepted members and their slots.
+   companions and holds the reservation until `HopQueryReply` confirms a **currently
+   valid** grant: `Hop(K)` names that companion to Y at `e+1`, it is that title's pending
+   hop now (not settled, not superseded by a recall, not cancelled by a settlement that
+   arrived first), and home can call the record durable. A historical record is not a
+   grant, so an offline signature alone cannot replace this query; a signed ticket may
+   carry the grant, but the destination still confirms it is current. An unconfirmed
+   companion is refused `Unverified`. Y records `Leased` and answers `Reserved` with the
+   accepted members and their slots.
 4. **Depart.** Precondition: every accepted member's body still stands at X (an attempt
    whose body another attempt already moved is dropped). X records `Departure` with each
    companion's ticket `(home, I, K, e+1)` and image, and sends `Commit`.
@@ -206,8 +219,24 @@ Each row: precondition → record → message → what acknowledges it.
 7. **Notify home**, per companion the key was minted for: `HopSettled(K, I, I ∈ landedIds)`,
    kept as an obligation until `HopAcked(K, I)`. At home the same step is a local record:
    `HopDone(K, I, I ∈ landedIds)` from its own settlement.
-8. **Settle at home.** `HopSettled` records `HopDone(K, I, arrived)` once (a second notice
-   that disagrees is an invariant violation) and answers `HopSettledAck`.
+8. **Settle at home.** The hop's destination is the only oracle for a hop's settlement. A
+   source's `HopSettled` is a request: home asks the destination `CustodyQuery(K, I)` and
+   records `HopDone(K, I, arrived)` from that authenticated answer alone (`Landed` →
+   arrived; `Dead` or `NotLanded` → not arrived, and the destination has tombstoned the key
+   as it answered; `Reserved` or `Uncertain` → ask again), then answers the
+   source `HopSettledAck`. A destination that holds a verified lease therefore never sees
+   its grant cancelled under it: the cancellation can only come from its own tombstone.
+   A notice that arrives before its hop is recorded as `HopDone(K, I, false)` all the
+   same, since no destination can hold a lease on a hop home never granted; the delayed
+   `HopRequest` is then answered `Dead` for that companion and the reducer gives a hop
+   recorded after its settlement no custody effect, so a settlement acknowledged ahead of
+   its authorization can neither disappear nor leave the title pending.
+
+**The epoch is the grant's, never the sender's.** A destination accepts a companion's
+ticket only when its epoch is the one home's grant names (`e`), lands it at `e + 1`, and
+lands a commit member only when its ticket equals the verified reservation's; a sender
+naming any other epoch is refused `Unverified` or not landed. The engine's `Advance()`
+therefore runs on the verified reservation mobility, not on the commit's carried value.
 9. **Abandon.** A key minted but never departed, whose attempt a crash lost, is settled on
    record as `Settlement(K, [], [])` and notified `HopSettled(K, I, false)` for each
    companion it was minted for; its destination lease expires and the key dies there.
@@ -241,10 +270,15 @@ The return is its own operation, bound by home's record, never by `follows`.
 ### 5.3 Resolving a pending hop
 
 Home resolves `Pending(K)` for `I` by `CustodyQuery(K, I)` to the hop's destination:
-`Landed` → `HopDone(K, I, true)`; `NotLanded` or `Dead` → `HopDone(K, I, false)`; `Reserved`,
-`Unknown` or `Uncertain` → ask again later. Home asks on every return or hop request that
-meets the pending hop and on recovery; the source's `HopSettled` resolves it the same
-way, and the two must agree. A source that is gone for good leaves the hop pending and
+`Landed` → `HopDone(K, I, true)`; `NotLanded` or `Dead` → `HopDone(K, I, false)`; `Reserved`
+or `Uncertain` → ask again later. Home asks on recovery, whenever the source's
+`HopSettled` arrives, and on a return or hop request from a party to the pending hop (its
+source or its destination); a request from anyone else is answered `Stale` and resolves
+nothing, so no third party can make home tombstone a key the legitimate reservation has
+not reached yet. The source's notice never settles a hop by itself. Home's own hops are the exception: they settle only from
+home's own settlement record, never from the destination's answer, because home's
+departure may still be in doubt when the destination has already answered `Dead`, and the
+body it restores must find its slot held. A source that is gone for good leaves the hop pending and
 the title in durable custody until the owner recalls (5.5).
 
 ### 5.4 Stranded, grace, shed
@@ -255,10 +289,12 @@ custodian's own ticks, the deadline in the record so a restart keeps it) records
 `GraceElapsed(I)` when it passes; then the custodian **sheds**, whatever attempt is in
 flight: it records `Departure(K, H, [I], shed)`, drops the embodied attempt, frees the slot,
 and treats the record as a durable return obligation: `Reserve` until home answers,
-`Commit` on `Reserved`, and on `Missing` or `Dead` a new attempt under a fresh key recorded
-as `Attempt(K', image K)`. Only the latest attempt's answer counts. The custodian never
-drops custody on a timer; the record outlives reaping and stop (5.8). A shed image's only
-ends are home's `Committed` or home's `Stale`/`Released`.
+`Commit` on `Reserved`, and on `Missing` or `Dead` a new attempt under a fresh key, itself a
+durable allocation (`Minted(K', H, [I], image K)`) so no attempt key is ever reused and a
+crash keeps the mapping; shed departures have a key space of their own, numbered by the
+shed records. Only the latest attempt's answer counts. The custodian never drops custody on
+a timer; the record outlives reaping and stop (5.8). A shed image's only ends are home's
+`Committed` or home's `Stale`/`Released`.
 
 ### 5.5 Recall and release
 
@@ -323,15 +359,24 @@ write. Both are new lifetime mechanisms the build adds.
   driver. Runtime, authority and budget identity is (role, resolved driver pin).
 - **Who holds the title**: home's own records, read through one verification door for
   returns, hop requests and the commit re-check. A destination lands a companion only
-  after home confirms the hop (`HopQuery`), so an authenticated former custodian cannot
-  place a fabricated ticket anywhere.
+  after home confirms the hop is currently granted (`HopQuery`), so an authenticated
+  former custodian cannot place a fabricated ticket anywhere. The current custodian can
+  do what any custodian can: return the companion, or move it on under a granted hop. If
+  it keeps a body of its own while doing so, that body is a puppet at the epoch the title
+  left behind (the hop's old epoch while the hop is pending), refused on any contact with
+  home or another world and retired then; the title, the held slot and the epoch home
+  issued are the companion's. The model counts embodiments at the highest epoch home has
+  issued once a forger is in play, and requires every such puppet to retire or to be still
+  following its player at convergence.
 - **Every instance-targeted read** answers through one disclosure door.
 
 ## 7. The held slot
 
-While custody is `Pending` or `Away`, the held slot is reserved for the title: the census,
-`ReconcileInhabitCounts`, admission allocation and `PreferredOrLowestFree` read one
-predicate, `IsHeld(slot)`, derived from the custody records. A verified return's lease is
+While custody is `Pending` or `Away`, or while a departure in doubt names the companion,
+the held slot is reserved for the title: the census, `ReconcileInhabitCounts`, admission
+allocation and `PreferredOrLowestFree` read one predicate, `IsHeld(slot)`, derived from the
+custody records and the in-doubt departures. At every authority a slot a departure in
+doubt left is held for the body a rollback may restore to it. A verified return's lease is
 bound to that exact slot and never falls back. Home never refuses its own verified return
 for capacity.
 
@@ -371,10 +416,19 @@ at the title's epoch, following its player or at home, or released and embodied 
 and every write reached the embodied copy unless a recall discarded what left with it. A
 cycle without a new record is a livelock.
 
-Two bounds are scope, not forbidden interleavings: retries fire only after a loss (a
-retry with nothing lost is the duplicate the `Dup` fault produces) and are not held for an
-empty network; the grace window elapses under the deadline budget. Shedding is enabled
-whatever attempt is in flight.
+Every transition is also checked for the append boundary (at most one record per authority
+per step), and the shadow derivation covers each body's epoch, slot, image and recorded
+binding, not only presence. The explorer is depth-first over the fault budget with the
+visited set held as 128-bit digests of the canonical state text (two independent 64-bit
+folds), reports states, quiescent states converged, depth, wall time and peak managed
+memory per scope, and caps a scope at 1.5 million states. Scopes combine fault classes
+(two companions with admission failure, partial landing, crash and loss in one scope; log
+failures with crashes on the onward route; repeated deadlines so a shed image fails more
+than once; a custodian with one slot fewer than home so a cohort exhausts its companion
+capacity), bounded by count per class, never by forbidding interleavings: retries fire
+only after a loss (a retry with nothing lost is the duplicate the `Dup` fault produces), a
+status query may race the delayed commit it asks about, and shedding runs whatever
+attempt is in flight.
 
 | Finding (spec review) | Trace |
 |---|---|
@@ -389,6 +443,11 @@ whatever attempt is in flight.
 | Scheduler reductions | `AnUnansweredReturnStillShedsAfterTheGraceWindow`; retries no longer wait for an empty network |
 | Invariants assumed, not checked | the shadow fold, `TheCensusNeverTakesAHeldSlot…`, `AStrangerFillsTheCap…`, `WritesAbroadComeHome…` |
 | Ordinary-traveller lease-once and `Missing` finality | the escrow-once lane; the model carries both rules |
+| Round 3: verification accepts a cancelled authorization | `ACancelledAuthorizationDoesNotVerifyAForgedHop` |
+| Round 3: an acknowledged settlement overtakes its authorization | `ASettlementNoticeThatOvertakesItsAuthorizationIsRemembered` |
+| Round 3: shed retries reuse a key | `ShedAttemptsNeverReuseAKey` |
+| Round 3: append boundaries and suspension | `TwoReleasedCompanionsRetireInSeparateSteps`, `AnUncertainHopRecordIsNotServedBeforeRecovery`, and the append-boundary check on every explored transition |
+| Round 3: home's held slot allocatable before rollback finishes | `HomeHoldsTheSlotOfItsOwnDepartureInDoubt` |
 
 Writing and running the model changed the protocol before any reviewer could, in round two
 (`Pending` must be waited on; a dangling lease blocks returns until it expires; a stale

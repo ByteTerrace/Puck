@@ -10,33 +10,38 @@ namespace Puck.World.Protocol.Tests;
 public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
     // Each scope: the player's route, how many companions follow, whether B declares the role, the fault classes
     // enabled, and how many faults a trace may carry.
-    public static TheoryData<string, int, bool, Fault, int> Scopes => new() {
-        { "A", 1, true, Fault.Loss | Fault.Dup, 2 },
-        { "A", 1, true, Fault.Crash | Fault.Deadline, 2 },
-        { "A", 1, true, Fault.Log | Fault.Crash, 2 },
-        { "A", 1, true, Fault.Partition | Fault.Disconnect, 2 },
-        { "A", 1, true, Fault.Install | Fault.Recall | Fault.Disconnect, 2 },
-        { "A", 1, true, Fault.Deadline | Fault.Forge | Fault.Disconnect, 2 },
-        { "A", 1, true, Fault.Write | Fault.Census | Fault.Disconnect, 2 },
-        { "A", 1, true, Fault.All, 1 },
-        { "A", 2, true, Fault.Loss, 1 },
-        { "A", 2, true, Fault.Admission | Fault.Disconnect, 1 },
-        { "A", 2, true, Fault.Install | Fault.Recall | Fault.Disconnect, 1 },
-        { "AB", 1, true, Fault.Loss, 1 },
-        { "AB", 1, false, Fault.Disconnect, 1 },
-        { "AB", 1, true, Fault.Disconnect | Fault.Partition, 1 },
-        { "AB", 2, true, Fault.Admission, 1 },
-        { "AH", 1, true, Fault.None, 0 },
-        { "AB", 2, true, Fault.None, 0 },
-        { "ABH", 1, true, Fault.None, 0 },
+    // Each scope: the player's route, how many companions follow, whether B declares the role, the fault classes
+    // enabled, how many faults a trace may carry, and how many of one class (partitions and deadlines allow one more).
+    public static TheoryData<string, int, bool, Fault, int, int> Scopes => new() {
+        { "A", 1, true, Fault.Loss | Fault.Dup, 2, 2 },
+        { "A", 1, true, Fault.Crash | Fault.Deadline | Fault.Disconnect, 3, 2 },
+        { "A", 1, true, Fault.Log | Fault.Crash | Fault.Disconnect, 3, 2 },
+        { "A", 1, true, Fault.Partition | Fault.Disconnect, 2, 1 },
+        { "A", 1, true, Fault.Install | Fault.Recall | Fault.Disconnect, 3, 2 },
+        { "A", 1, true, Fault.Deadline | Fault.Forge | Fault.Disconnect, 2, 1 },
+        { "A", 1, true, Fault.Write | Fault.Census | Fault.Disconnect | Fault.Recall, 3, 1 },
+        { "A", 1, true, Fault.All, 1, 1 },
+        { "A", 2, true, Fault.Loss | Fault.Crash | Fault.Admission, 2, 1 },
+        { "A", 2, true, Fault.Admission | Fault.Disconnect, 2, 2 },
+        { "A", 2, true, Fault.Install | Fault.Recall | Fault.Disconnect, 2, 1 },
+        { "AB", 1, true, Fault.Loss | Fault.Crash, 1, 1 },
+        { "AB", 1, true, Fault.Log | Fault.Crash, 1, 1 },
+        { "AB", 1, true, Fault.Forge | Fault.Disconnect, 2, 1 },
+        { "AB", 1, false, Fault.Disconnect | Fault.Loss, 1, 1 },
+        { "AB", 1, true, Fault.Disconnect | Fault.Partition, 1, 1 },
+        { "AB", 2, true, Fault.Admission, 1, 1 },
+        { "A", 2, true, Fault.Crash | Fault.Log, 2, 1 },
+        { "AH", 1, true, Fault.Loss, 1, 1 },
+        { "AB", 2, true, Fault.None, 0, 1 },
+        { "ABH", 1, true, Fault.None, 0, 1 },
     };
 
     [Theory]
     [MemberData(nameof(Scopes))]
-    public void EveryReachableStateHoldsTheInvariantsAndConverges(string route, int companions, bool bAccepts, Fault allowed, int faults) {
-        var result = Explore(bAccepts: bAccepts, route: Route(route), companions: companions, faults: faults, allowed: allowed);
+    public void EveryReachableStateHoldsTheInvariantsAndConverges(string route, int companions, bool bAccepts, Fault allowed, int faults, int limit) {
+        var result = Explore(bAccepts: bAccepts, route: Route(route), companions: companions, faults: faults, allowed: allowed, limit: limit);
 
-        output.WriteLine(message: $"route={route} companions={companions} B={bAccepts} faults={allowed}x{faults}: {result}");
+        output.WriteLine(message: $"route={route} companions={companions} B={bAccepts} faults={allowed}x{faults} limit={limit}: {result}");
         Assert.True(condition: (result.States > 50), userMessage: $"the scope explored only {result.States} states");
         Assert.True(condition: result.Converged > 0);
     }
@@ -343,11 +348,150 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         s = Drive(s: s, "disconnect at A");
         s = Drive(s: s, "sweep A:2");
         s = Drive(s: s, "deliver A>H:Reserve");
-        s = Drive(s: s, "forge A>H:2");
-        s = Drive(s: s, "deliver A>H:Reserve");
+        s = Drive(s: s, "forge A>H:2 under Aforged2");
+        s = Drive(s: s, "deliver A>H:Reserve:Aforged2");
         Assert.Contains(collection: s.Network, filter: static m => (m.Kind == MsgKind.ReserveRefused) && (m.Arg == "Duplicate"));
         s = Converge(s: s);
         Assert.Single(collection: s.Nodes[1].Records.OfType<Dep>());
+    }
+
+    // ---- the round-3 review's counterexamples, each reproduced through the model's own successors ----------------
+
+    [Fact]
+    public void ACancelledAuthorizationDoesNotVerifyAForgedHop() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = Drive(s: s, "deliver A>H:HopRequest");
+        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Hop { Key: "A1" });
+        s = Drive(s: s, "crash A");
+        s = Drive(s: s, "abandon A:A1");
+        s = Drain(s: s);
+        Assert.Equal(expected: (CustodyKind.Away, Node.A, 1), actual: Title(s: s, Ids.C1));
+        s = Drive(s: s, "disconnect at A");
+        s = Converge(s: s);
+        Assert.Equal(expected: (CustodyKind.Home, Node.H, 2), actual: Title(s: s, Ids.C1));
+        // The former custodian presents its cancelled key and a ticket for the current epoch at B.
+        s = Drive(s: s, "forge A>B:2 under A1");
+        s = Drain(s: s);
+        Assert.False(condition: Fold(s: s, Node.B).Has(id: Ids.C1));
+        Assert.Contains(collection: s.Trace, filter: static t => t.Contains("B>A:ReserveRefused", StringComparison.Ordinal));
+        _ = Converge(s: s);
+    }
+
+    [Fact]
+    public void ASettlementNoticeThatOvertakesItsAuthorizationIsRemembered() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        Assert.Contains(collection: s.Network, filter: static m => m.Kind == MsgKind.HopRequest);
+        s = Drive(s: s, "crash A");
+        s = Drive(s: s, "abandon A:A1");
+        s = Drive(s: s, "deliver A>H:HopSettled");
+        s = Drive(s: s, "deliver H>A:HopSettledAck");
+        Assert.Contains(collection: s.Nodes[1].Records, filter: static r => r is HopAcked);
+        s = Drive(s: s, "deliver A>H:HopRequest");
+        Assert.NotEqual(expected: CustodyKind.Pending, actual: Title(s: s, Ids.C1).Kind);
+        s = Converge(s: s);
+        Assert.True(condition: Fold(s: s, Node.A).Follows(id: Ids.C1));
+    }
+
+    [Fact]
+    public void ShedAttemptsNeverReuseAKey() {
+        var s = Start(route: "AB");
+
+        s.Budget.Limit = 2;
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "partition H-A");
+        s = Drive(s: s, "disconnect at A");
+        s = Drive(s: s, "sweep A:2");
+        s = Drive(s: s, "strand A:2");
+        s = Drive(s: s, "elapse A:2");
+        s = Drive(s: s, "shed A:2");
+        s = Drive(s: s, "heal H-A");
+        // The sweep's own lease at home makes the shed's first reservation a duplicate until that lease is gone.
+        s = Drain(s: s);
+        s = Drive(s: s, "crash H");
+        s = Drive(s: s, "retry reserve A:As1");
+        s = DrainUntil(s: s, static m => (m.Kind == MsgKind.Reserved) && (m.From == Node.H) && (m.Lane == 1));
+        // The first attempt's lease expires; the second attempt's lease expires too; the third lands.
+        s = Drive(s: s, "expire H:");
+        s = DrainUntil(s: s, static m => (m.Kind == MsgKind.Reserved) && (m.From == Node.H) && (m.Key != "As1"));
+        s = Drive(s: s, "expire H:");
+        s = Drain(s: s);
+
+        var attempts = s.Nodes[1].Records.OfType<Minted>().Where(static m => m.Image is not null).Select(static m => m.Key).ToArray();
+
+        Assert.Equal(expected: attempts.Length, actual: attempts.Distinct().Count());
+        Assert.True(condition: attempts.Length >= 2);
+        s = Converge(s: s);
+        Assert.True(condition: Fold(s: s, Node.H).Has(id: Ids.C1));
+    }
+
+    [Fact]
+    public void HomeHoldsTheSlotOfItsOwnDepartureInDoubt() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = DrainUntil(s: s, static m => m.Kind == MsgKind.Commit);
+        Assert.Single(collection: Fold(s: s, Node.H).InDoubt);
+        // An answer about home's own hop reaches home while its departure is still in doubt.
+        CustodyModel.Deliver(s: s, msg: new Msg(From: Node.A, To: Node.H, Kind: MsgKind.CustodyReply, Key: "H1", Members: [], Arg: $"{Ids.C1},Dead", Dup: false));
+        CustodyModel.CheckInvariants(s: s);
+        s = Drive(s: s, "census");
+        Assert.NotEqual(expected: 1, actual: Fold(s: s, Node.H).Bodies.Values.Single(static b => b.Id >= Ids.BotBase).Slot);
+        s = Drive(s: s, "expire A:");
+        s = Converge(s: s);
+        Assert.Equal(expected: 1, actual: Fold(s: s, Node.H).Body(id: Ids.C1)!.Slot);
+    }
+
+    [Fact]
+    public void TwoReleasedCompanionsRetireInSeparateSteps() {
+        var s = Start(route: "AB", companions: 2);
+
+        s.Budget.Limit = 2;
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "install 2");
+        s = Drive(s: s, "install 3");
+        s = Drive(s: s, "cross A>B");
+        s = Drive(s: s, "deliver A>H:HopRequest");
+        s = Drive(s: s, "deliver H>A:HopAnswer");
+        // Home refused both; the custodian retires one copy per step, never two records in one append.
+        Assert.Equal(expected: 0, actual: s.Nodes[1].Records.Count(static r => r is Retire));
+        s = Drive(s: s, "retire A:2");
+        Assert.Equal(expected: 1, actual: s.Nodes[1].Records.Count(static r => r is Retire));
+        s = Drive(s: s, "retire A:3");
+        s = Converge(s: s);
+        Assert.Equal(expected: CustodyKind.Released, actual: Title(s: s, Ids.C1).Kind);
+        Assert.Equal(expected: Node.B, actual: s.PlayerAt);
+    }
+
+    [Fact]
+    public void AnUncertainHopRecordIsNotServedBeforeRecovery() {
+        var s = Start(route: "AB");
+
+        s = Drive(s: s, "cross H>A");
+        s = Drain(s: s);
+        s = Drive(s: s, "cross A>B");
+        s = Drive(s: s, "append UncertainLanded H");
+        s = Drive(s: s, "deliver A>H:HopRequest");
+        Assert.True(condition: s.Nodes[0].Latched);
+        Assert.Contains(collection: s.Nodes[0].Records, filter: static r => r is Hop { Key: "A1" });
+        Assert.Contains(collection: s.Network, filter: static m => (m.Kind == MsgKind.HopAnswer) && m.Arg.Contains("Unavailable", StringComparison.Ordinal));
+
+        var probe = s.Clone();
+
+        CustodyModel.Deliver(s: probe, msg: new Msg(From: Node.B, To: Node.H, Kind: MsgKind.HopQuery, Key: "A1", Members: [], Arg: Ids.C1.ToString(), Dup: false));
+        Assert.Contains(collection: probe.Network, filter: static m => (m.Kind == MsgKind.HopQueryReply) && m.Arg.EndsWith("=-1", StringComparison.Ordinal));
+        Assert.Equal(expected: CustodyKind.Away, actual: Title(s: s, Ids.C1).Kind);
+        s = Converge(s: s);
+        Assert.True(condition: Fold(s: s, Node.B).Follows(id: Ids.C1));
     }
 
     // ---- the explorer ---------------------------------------------------------------------------------------------
@@ -365,6 +509,7 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         foreach (var (name, next) in CustodyModel.Successors(s: s, faultBudget: int.MaxValue)) {
             if (name.StartsWith(prefix, StringComparison.Ordinal)) {
                 next.Trace.Add(item: name);
+                CustodyModel.CheckStep(before: s, after: next, name: name);
                 CustodyModel.CheckInvariants(s: next);
                 return next;
             }
@@ -377,7 +522,7 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
     private static ModelState Drain(ModelState s) => DrainUntil(s: s, static _ => false);
     private static ModelState DrainUntil(ModelState s, Func<Msg, bool> stop) {
         for (var guard = 0; guard < 300; guard++) {
-            var msg = s.Network.Where(m => s.LinkUp[(int)m.From, (int)m.To]).OrderBy(static m => m.Canon, StringComparer.Ordinal).FirstOrDefault();
+            var msg = CustodyModel.LaneHeads(s: s).OrderBy(static m => m.Canon, StringComparer.Ordinal).FirstOrDefault();
 
             if (msg is null) {
                 // Nothing in flight: the authorities' own bookkeeping steps run (home authorizes its hops, settles them
@@ -407,24 +552,40 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
         }
     }
 
-    private const int StateCap = 300_000;
+    private const int StateCap = 1_500_000;
 
-    private readonly record struct Exploration(int States, int Converged, int MaxDepth, long Milliseconds);
+    private readonly record struct Exploration(int States, int Converged, int MaxDepth, long Milliseconds, long PeakMegabytes);
 
-    private static Exploration Explore(bool bAccepts, Node[] route, int companions, int faults, Fault allowed) {
+    // Visited states are kept as 128-bit digests of their canonical text (two independent 64-bit folds), not the text.
+    private static (ulong, ulong) Digest(string canon) {
+        var a = 14695981039346656037UL;
+        var b = 0x9E3779B97F4A7C15UL;
+
+        foreach (var c in canon) {
+            a = ((a ^ c) * 1099511628211UL);
+            b = (System.Numerics.BitOperations.RotateLeft(b ^ c, 27) * 0xBF58476D1CE4E5B9UL) + 0x94D049BB133111EBUL;
+        }
+
+        return (a, b);
+    }
+
+    // Depth-first over the fault budget, so the frontier stays small while the visited set carries the breadth.
+    private static Exploration Explore(bool bAccepts, Node[] route, int companions, int faults, Fault allowed, int limit = 1) {
         var start = new ModelState(aAccepts: true, bAccepts: bAccepts, route: route, companions: companions);
 
         start.Budget.Allowed = allowed;
+        start.Budget.Limit = limit;
 
-        var visited = new HashSet<string>(comparer: StringComparer.Ordinal) { start.Canon() };
-        var queue = new Queue<(ModelState State, int Depth)>();
+        var visited = new HashSet<(ulong, ulong)> { Digest(canon: start.Canon()) };
+        var stack = new Stack<(ModelState State, int Depth)>();
         var converged = 0;
         var maxDepth = 0;
+        var peak = GC.GetTotalMemory(forceFullCollection: false);
         var watch = System.Diagnostics.Stopwatch.StartNew();
 
-        queue.Enqueue(item: (start, 0));
-        while (queue.Count > 0) {
-            var (state, depth) = queue.Dequeue();
+        stack.Push(item: (start, 0));
+        while (stack.Count > 0) {
+            var (state, depth) = stack.Pop();
 
             maxDepth = Math.Max(maxDepth, depth);
             try {
@@ -435,23 +596,25 @@ public sealed class CompanionCustodyModelLawTests(ITestOutputHelper output) {
                     _ = CustodyModel.Converge(s: state);
                     converged++;
                 }
-            } catch (ModelViolation violation) {
-                throw new Xunit.Sdk.XunitException($"{violation.Message}\nscope: route={string.Join("", route)} companions={companions} B={bAccepts} faults={allowed}x{faults}\ntrace: {string.Join(" -> ", state.Trace)}");
-            }
-            foreach (var (name, next) in CustodyModel.Successors(s: state, faultBudget: faults)) {
-                var canon = next.Canon();
-
-                if (!visited.Add(item: canon)) {
-                    continue;
+                foreach (var (name, next) in CustodyModel.Successors(s: state, faultBudget: faults)) {
+                    CustodyModel.CheckStep(before: state, after: next, name: name);
+                    if (!visited.Add(item: Digest(canon: next.Canon()))) {
+                        continue;
+                    }
+                    next.Trace.Add(item: name);
+                    stack.Push(item: (next, depth + 1));
                 }
-                next.Trace.Add(item: name);
-                queue.Enqueue(item: (next, depth + 1));
+            } catch (ModelViolation violation) {
+                throw new Xunit.Sdk.XunitException($"{violation.Message}\nscope: route={string.Join("", route)} companions={companions} B={bAccepts} faults={allowed}x{faults} limit={limit}\ntrace: {string.Join(" -> ", state.Trace)}");
+            }
+            if ((visited.Count & 0xFFFF) == 0) {
+                peak = Math.Max(peak, GC.GetTotalMemory(forceFullCollection: false));
             }
             if (visited.Count > StateCap) {
                 throw new Xunit.Sdk.XunitException($"the scope route={string.Join("", route)} companions={companions} faults={allowed}x{faults} exceeds {StateCap} states; tighten its bounds");
             }
         }
 
-        return new Exploration(States: visited.Count, Converged: converged, MaxDepth: maxDepth, Milliseconds: watch.ElapsedMilliseconds);
+        return new Exploration(States: visited.Count, Converged: converged, MaxDepth: maxDepth, Milliseconds: watch.ElapsedMilliseconds, PeakMegabytes: Math.Max(peak, GC.GetTotalMemory(forceFullCollection: false)) >> 20);
     }
 }
