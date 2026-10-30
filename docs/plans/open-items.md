@@ -1243,42 +1243,40 @@ the drawn relief. The measured state is in the
 ### Card tables in the board game room
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: the Klondike table, headless first,
-its look batched into the lead's window.
+ordinary, the owner's direction · Next: the lead's windowed look at the Klondike
+table (`worlds/debug/cardtable.md`), then step 2.
 
 The owner wants proper card tables in the gallery: physical cards on a table,
-played by sitting at it like the chess, Go, Reversi and Alchemy tables, which
-fill the board game room's four spots (`worlds/debug/shapes.md`). The cards
-need room of their own beside it on level 2; where is the lane's layout call,
-the look the owner's review.
+played by sitting at it like the chess, Go, Reversi and Alchemy tables. The
+Klondike table stands north of the Go table in the board game room
+(`worlds/debug/shapes.md`); the look is the owner's review.
 
-- Prior art, quarantined, to revive rather than rewrite (rule 7):
-  - Rules: `experimental/src/Puck.World/Assets/worlds/games/` holds Klondike
-    (draw one or three), Spider (one, two or four suits), FreeCell, the
-    `solitaire.puck` collection that switches between them and keeps each
-    deal, and poker with a hand-strength judge; deals use the seeded shuffle
-    stream and replay. They ran as state rows and rules with the console as
-    their only surface. The directory also holds backgammon, dominoes,
-    mancala, hidden ranks and word spy for later tables.
-  - Card faces: `experimental/worlds/genesis/cards.basis.puck`, all 52 faces as
-    SDF shapes. `card.hlsl` beside it was the side-by-side reference shader the
-    SDF look was built against, and `card.puck` holds the compare views and
-    hero cameras; the look is already SDF data and needs no shader.
-  - Laws: `experimental/tests/Puck.World.Games.Tests` (Solitaire deal and
-    rules, poker hand strength) as prior art for `test` blocks.
-- The mechanism exists: the tabletop (`src/Puck.World.Schema/README.md`,
-  discrete boards, cards and turns) and the chess table's pattern (rigid pieces,
-  a judge that reads the settled table, the context button to sit, the cursor
-  and pick button to play). A card table reuses both; no card engine.
-- The deck (faces, backs, card size) is a design any author imports, so it goes
-  to `worlds/standard/`; the tables and the room stay in `worlds/debug/`. One
-  baked mesh per face, shared by every table, so a second table adds no bake.
-1. Klondike: revive the module and the faces to the current language, a table
-   with the cards as bodies on the tabletop, deal from the seeded stream, play
-   by pick and context with the console still driving it, and `test` blocks for
-   a deal and a legal and an illegal move with `--reproduce`.
-2. Spider and FreeCell as the same table's game switch (`solitaire.puck`).
-3. Poker: seats, computer players and the hand judge; its own step.
+- Landed: the deck (`worlds/standard/cards.puck`, a library any author imports,
+  52 faces and a back as SDF creations), Klondike and the `solitaire.puck`
+  collection (`worlds/debug/klondike.puck`, `solitaire.puck`), the table
+  (`cardtable.puck`) and its `test` blocks (`cardtable-tests.puck`).
+- Prior art still quarantined for the next steps: `experimental/src/Puck.World/Assets/worlds/games/`
+  holds Spider (one, two or four suits), FreeCell and poker with a hand-strength
+  judge, and backgammon, dominoes, mancala, hidden ranks and word spy for later
+  tables; `experimental/tests/Puck.World.Games.Tests` holds laws (Solitaire deal
+  and rules, poker hand strength) as prior art for `test` blocks.
+- The cards are posed bodies, not rigid ones: a fan of cards a few millimetres
+  apart is not an arrangement a solver holds, so the rules' door judges each
+  request over the piles and the table follows; no settled table is read.
+  Letting a hand lift a card with `body.carry` and judging where it lands would
+  be a second input path beside the cursor.
+- The rules' work-budget cost is the table's price: Klondike's transfers and the
+  table's reads add about 500,000 work units to the debug world's sheet, whose
+  tick ceiling was 4,000,000 with 10,000 to spare over the chess search's need,
+  so the ceiling is now 4,600,000 (`RuleCapacity.MaxWorkUnitsPerTick`). Each
+  further game adds its own transfers to that sheet: Spider's two-deck piles
+  cost more than Klondike's, so step 2 owes either a cheaper transfer pricing
+  (the disclosure term grows with the square of the piles one zone table
+  reaches) or another raise the owner's frame floor allows.
+1. Spider and FreeCell as the same table's game switch (`solitaire.puck`): each
+   game lays its piles on the `kSlots` graph and answers the seat through the
+   same mailbox; Spider's 104 cards need 52 more bodies (`cardBodies`).
+2. Poker: seats, computer players and the hand judge; its own step.
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).

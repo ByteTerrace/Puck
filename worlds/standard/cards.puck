@@ -1,5 +1,15 @@
-schema: "puck.world.definition.v1"
-documentId: "cards-basis-v1"
+// The standard deck: 52 playing-card faces and a back as signed-distance creations, one prototype each
+// (`card-<suit>-<rank>`, suit c d h s, rank a 2 .. 10 j q k, and `card-back`). It is a library: import it
+//
+//   import "../standard/cards"
+//
+// and expand `cardDeckState()` inside the world's `state.world` block (the deck's theme table) and
+// `cardDeckPrototypes()` inside its `prototypes` block, so the prototypes belong to the importing document and its rows
+// name them freely. Give each card body the look of its prototype: the faces bake once per mesh store, so every table
+// that wears them shares one bake. The deck lies in the shape's XY plane, its index and face toward -Z of the author
+// frame and its back toward +Z, the card 1.76 wide and 2.48 tall (2.5 by 3.5 proportion) and 0.04 thick; a table scales
+// it to size with the look's `scale` and lays it flat by posing it with a pitch of 90 degrees. A world re-themes the
+// deck by authoring `state.cardTheme` rows in its own body.
 
 // Playing card dimensions (standard 2.5" x 3.5" proportion)
 let cardHalfWidth = 0.88
@@ -7,27 +17,25 @@ let cardHalfHeight = 1.24
 let cardHalfThickness = 0.02
 let heartAspect = 0.74074074
 
-state {
-  world {
-    // Deck theme - authors can override any slot in their world definition
-    table cardTheme {
-      face = "#272A34"
-      back = "#B31B2C"
-      backAccent = "#FFE06B"
-      border = "#FFD65C"
-      courtField = "#1E1D28"
-      suitRed = "#B51B26"
-      suitBlack = "#030304"
-    }
+// The deck's theme: any slot can be overridden in the importing world.
+template cardDeckState() {
+  table cardTheme {
+    face = "#272A34"
+    back = "#B31B2C"
+    backAccent = "#FFE06B"
+    border = "#FFD65C"
+    courtField = "#1E1D28"
+    suitRed = "#B51B26"
+    suitBlack = "#030304"
   }
 }
 
 let deckPalette = [
   { color: "state.cardTheme.face", metal: 0.04, roughness: 0.40, specular: 0.04 }
-  { color: "state.cardTheme.border", emissive: 0.15, metal: 0.98, roughness: 0.12, specular: 0.8 }
-  { color: "state.cardTheme.backAccent", emissive: 0.20, metal: 0.96, roughness: 0.10, specular: 0.8 }
+  { color: "state.cardTheme.border", metal: 0.98, roughness: 0.12, specular: 0.8 }
+  { color: "state.cardTheme.backAccent", metal: 0.96, roughness: 0.10, specular: 0.8 }
   { color: "state.cardTheme.courtField", metal: 0.10, roughness: 0.30, specular: 0.04 }
-  { color: "state.cardTheme.suitRed", emissive: 0.08, metal: 0.20, roughness: 0.16, specular: 0.30 }
+  { color: "state.cardTheme.suitRed", metal: 0.20, roughness: 0.16, specular: 0.30 }
   { color: "#F2CFA8", roughness: 0.5, metal: 0, specular: 0.04 }
   { color: "#F5F0E6", roughness: 0.22, metal: 0.08, specular: 0.04 }
   { color: "#9E66C7", roughness: 0.22, metal: 0.15, specular: 0.04 }
@@ -58,12 +66,31 @@ let heartLobeRadius = 0.35355339
 let heartArcSteps = 16
 let heartOutline = concat(
   [[0, -0.55], [0.5, -0.05]],
-  map(range(1, heartArcSteps - 1), k => [0.25 + heartLobeRadius * cosine(-0.78539816 + 3.14159265 * k / heartArcSteps), 0.2 + heartLobeRadius * sine(-0.78539816 + 3.14159265 * k / heartArcSteps)]),
+  map(
+    range(1, heartArcSteps - 1),
+    k => [
+      0.25 + heartLobeRadius * cosine(-0.78539816 + 3.14159265 * k / heartArcSteps)
+      0.2 + heartLobeRadius * sine(-0.78539816 + 3.14159265 * k / heartArcSteps)
+    ]
+  ),
   [[0, 0.45]],
-  map(range(1, heartArcSteps - 1), k => [-0.25 + heartLobeRadius * cosine(0.78539816 + 3.14159265 * k / heartArcSteps), 0.2 + heartLobeRadius * sine(0.78539816 + 3.14159265 * k / heartArcSteps)]),
+  map(
+    range(1, heartArcSteps - 1),
+    k => [
+      -0.25 + heartLobeRadius * cosine(0.78539816 + 3.14159265 * k / heartArcSteps)
+      0.2 + heartLobeRadius * sine(0.78539816 + 3.14159265 * k / heartArcSteps)
+    ]
+  ),
   [[-0.5, -0.05]]
 )
-let heartPoints = map(heartOutline, p => [(p[0] + heartBow["offset"] + clamp(p[1], heartBow["from"], heartBow["to"]) * (heartBow["linear"] + heartBow["quadratic"] * clamp(p[1], heartBow["from"], heartBow["to"]))) * heartAspect, p[1]])
+let heartPoints = map(
+  heartOutline,
+  p => [
+    (p[0] + heartBow["offset"] + clamp(p[1], heartBow["from"], heartBow["to"]) * (heartBow["linear"] +
+      heartBow["quadratic"] * clamp(p[1], heartBow["from"], heartBow["to"]))) * heartAspect
+    p[1]
+  ]
+)
 let suitHearts = {
   tolerance: 0.001
   contours [
@@ -650,11 +677,19 @@ template frameRing(name, outer, inner, z, depth, material) {
               segments [
                 { end [corner["qx"] * (xa - cx) / half, corner["qy"] * (outer["h"] - cy) / half] }
                 { end [corner["qx"] * (outer["ax"] - cx) / half, corner["qy"] * (outer["h"] - cy) / half] }
-                { end [corner["qx"] * (outer["w"] - cx) / half, corner["qy"] * (outer["ay"] - cy) / half], arcCenter [corner["qx"] * (outer["ax"] - cx) / half, corner["qy"] * (outer["ay"] - cy) / half], clockwise: corner["outerClockwise"] }
+                {
+                  end [corner["qx"] * (outer["w"] - cx) / half, corner["qy"] * (outer["ay"] - cy) / half]
+                  arcCenter [corner["qx"] * (outer["ax"] - cx) / half, corner["qy"] * (outer["ay"] - cy) / half]
+                  clockwise: corner["outerClockwise"]
+                }
                 { end [corner["qx"] * (outer["w"] - cx) / half, corner["qy"] * (ya - cy) / half] }
                 { end [corner["qx"] * (inner["w"] - cx) / half, corner["qy"] * (ya - cy) / half] }
                 { end [corner["qx"] * (inner["w"] - cx) / half, corner["qy"] * (inner["ay"] - cy) / half] }
-                { end [corner["qx"] * (inner["ax"] - cx) / half, corner["qy"] * (inner["h"] - cy) / half], arcCenter [corner["qx"] * (inner["ax"] - cx) / half, corner["qy"] * (inner["ay"] - cy) / half], clockwise: corner["innerClockwise"] }
+                {
+                  end [corner["qx"] * (inner["ax"] - cx) / half, corner["qy"] * (inner["h"] - cy) / half]
+                  arcCenter [corner["qx"] * (inner["ax"] - cx) / half, corner["qy"] * (inner["ay"] - cy) / half]
+                  clockwise: corner["innerClockwise"]
+                }
               ]
             }
           ]
@@ -665,9 +700,30 @@ template frameRing(name, outer, inner, z, depth, material) {
 }
 
 template cardFaceBorder() {
-  frameRing(name: "front-outer-gilded-band", outer: goldBandOuter, inner: goldBandInner, z: -0.024, depth: 0.0035, material: 1)
-  frameRing(name: "front-perimeter-hairline", outer: hairlineOuter, inner: hairlineInner, z: -0.0222, depth: 0.0016, material: 2)
-  frameRing(name: "front-inner-pinstripe", outer: pinstripeOuter, inner: pinstripeInner, z: -0.0228, depth: 0.002, material: 1)
+  frameRing(
+    name: "front-outer-gilded-band",
+    outer: goldBandOuter,
+    inner: goldBandInner,
+    z: -0.024,
+    depth: 0.0035,
+    material: 1
+  )
+  frameRing(
+    name: "front-perimeter-hairline",
+    outer: hairlineOuter,
+    inner: hairlineInner,
+    z: -0.0222,
+    depth: 0.0016,
+    material: 2
+  )
+  frameRing(
+    name: "front-inner-pinstripe",
+    outer: pinstripeOuter,
+    inner: pinstripeInner,
+    z: -0.0228,
+    depth: 0.002,
+    material: 1
+  )
 }
 
 // The reference frame's bead rail (card.hlsl): small flat beads between the hairline and the pinstripe. Each rail
@@ -698,7 +754,14 @@ template cardFaceOrnaments() {
 }
 
 template courtFaceBorder() {
-  frameRing(name: "court-outer-moulding", outer: courtMouldingOuter, inner: courtMouldingInner, z: -0.0252, depth: 0.0035, material: 1)
+  frameRing(
+    name: "court-outer-moulding",
+    outer: courtMouldingOuter,
+    inner: courtMouldingInner,
+    z: -0.0252,
+    depth: 0.0035,
+    material: 1
+  )
   frameRing(name: "court-inner-lip", outer: courtLipOuter, inner: courtLipInner, z: -0.0242, depth: 0.0025, material: 2)
 }
 
@@ -814,8 +877,7 @@ let clubLobes = map([
   cx: lobe["cx"] + clubBend["offset"] + lobe["cy"] * (clubBend["linear"] + clubBend["quadratic"] * lobe["cy"])
   cy: lobe["cy"]
   r: lobe["r"]
-}
-)
+})
 
 // The club's stem runs from a neck hidden inside the lobes down to a wide, flat foot. Its flanks flare concavely by sag
 // and follow the bow. Each flank's x is quadratic along its length (straight flank + bow + sag), so it is exactly a
@@ -827,26 +889,35 @@ let clubStemSpecs = [
 // Per stem: the bow at the neck, the middle, and the foot.
 let clubStemBows = map(clubStemSpecs, s => {
   top: clubBend["offset"] + s["top"] * (clubBend["linear"] + clubBend["quadratic"] * s["top"])
-  mid: clubBend["offset"] + (s["top"] + s["bottom"]) / 2 * (clubBend["linear"] + clubBend["quadratic"] * ((s["top"] + s["bottom"]) / 2))
+  mid: clubBend["offset"] + (s["top"] + s["bottom"]) / 2 * (clubBend["linear"] + clubBend["quadratic"] * ((s["top"] +
+    s["bottom"]) / 2))
   bottom: clubBend["offset"] + s["bottom"] * (clubBend["linear"] + clubBend["quadratic"] * s["bottom"])
-}
-)
+})
 let clubStems = map(clubStemSpecs, (s, i) => {
   start [(clubStemBows[i]["top"] - s["neck"]) / clubStemFrame, s["top"] / clubStemFrame]
   segments [
     { end [(clubStemBows[i]["top"] + s["neck"]) / clubStemFrame, s["top"] / clubStemFrame] }
     {
       end [(clubStemBows[i]["bottom"] + s["foot"]) / clubStemFrame, s["bottom"] / clubStemFrame]
-      control [(2 * (clubStemBows[i]["mid"] + (s["neck"] + s["foot"]) / 2 - s["sag"]) - (clubStemBows[i]["top"] + s["neck"] + clubStemBows[i]["bottom"] + s["foot"]) / 2) / clubStemFrame, (s["top"] + s["bottom"]) / 2 / clubStemFrame]
+      control [
+        (2 * (clubStemBows[i]["mid"] + (s["neck"] + s["foot"]) / 2 - s["sag"]) - (clubStemBows[i]["top"] +
+          s["neck"] +
+          clubStemBows[i]["bottom"] + s["foot"]) / 2) / clubStemFrame,
+        (s["top"] + s["bottom"]) / 2 / clubStemFrame
+      ]
     }
     { end [(clubStemBows[i]["bottom"] - s["foot"]) / clubStemFrame, s["bottom"] / clubStemFrame] }
     {
       end [(clubStemBows[i]["top"] - s["neck"]) / clubStemFrame, s["top"] / clubStemFrame]
-      control [(2 * (clubStemBows[i]["mid"] - (s["neck"] + s["foot"]) / 2 + s["sag"]) - (clubStemBows[i]["top"] - s["neck"] + clubStemBows[i]["bottom"] - s["foot"]) / 2) / clubStemFrame, (s["top"] + s["bottom"]) / 2 / clubStemFrame]
+      control [
+        (2 * (clubStemBows[i]["mid"] - (s["neck"] + s["foot"]) / 2 + s["sag"]) - (clubStemBows[i]["top"] -
+          s["neck"] +
+          clubStemBows[i]["bottom"] - s["foot"]) / 2) / clubStemFrame,
+        (s["top"] + s["bottom"]) / 2 / clubStemFrame
+      ]
     }
   ]
-}
-)
+})
 let clubStemContour = clubStems[0]
 
 // The spade is its own drawing, in suit units. Its crown is a slender flame: the point leans a little off centre and
@@ -937,32 +1008,148 @@ template clubMark(name, x, y, size, flipped, rimZ, coreZ, rimDepth, coreDepth, r
       }
     }
   }
-  pathRim(name: $"{name}-rim-stem", contour: clubStemContour, x: x, y: y, frame: size * clubStemFrame, flipped: flipped, z: rimZ, depth: rimDepth, material: rimMat)
-  pathCore(name: $"{name}-core-stem", contour: clubStemContour, x: x, y: y, frame: size * clubStemFrame, flipped: flipped, z: coreZ, depth: coreDepth, material: coreMat)
+  pathRim(
+    name: $"{name}-rim-stem",
+    contour: clubStemContour,
+    x: x,
+    y: y,
+    frame: size * clubStemFrame,
+    flipped: flipped,
+    z: rimZ,
+    depth: rimDepth,
+    material: rimMat
+  )
+  pathCore(
+    name: $"{name}-core-stem",
+    contour: clubStemContour,
+    x: x,
+    y: y,
+    frame: size * clubStemFrame,
+    flipped: flipped,
+    z: coreZ,
+    depth: coreDepth,
+    material: coreMat
+  )
 }
 
 template spadeMark(name, x, y, size, flipped, rimZ, coreZ, rimDepth, coreDepth, rimMat, coreMat) {
-  pathRim(name: $"{name}-rim-body", contour: spadeBodyContour, x: x, y: y, frame: size, flipped: flipped, z: rimZ, depth: rimDepth, material: rimMat)
-  pathRim(name: $"{name}-rim-stem", contour: spadeStemContour, x: x, y: y, frame: size, flipped: flipped, z: rimZ, depth: rimDepth, material: rimMat)
-  pathCore(name: $"{name}-core-body", contour: spadeBodyContour, x: x, y: y, frame: size, flipped: flipped, z: coreZ, depth: coreDepth, material: coreMat)
-  pathCore(name: $"{name}-core-stem", contour: spadeStemContour, x: x, y: y, frame: size, flipped: flipped, z: coreZ, depth: coreDepth, material: coreMat)
+  pathRim(
+    name: $"{name}-rim-body",
+    contour: spadeBodyContour,
+    x: x,
+    y: y,
+    frame: size,
+    flipped: flipped,
+    z: rimZ,
+    depth: rimDepth,
+    material: rimMat
+  )
+  pathRim(
+    name: $"{name}-rim-stem",
+    contour: spadeStemContour,
+    x: x,
+    y: y,
+    frame: size,
+    flipped: flipped,
+    z: rimZ,
+    depth: rimDepth,
+    material: rimMat
+  )
+  pathCore(
+    name: $"{name}-core-body",
+    contour: spadeBodyContour,
+    x: x,
+    y: y,
+    frame: size,
+    flipped: flipped,
+    z: coreZ,
+    depth: coreDepth,
+    material: coreMat
+  )
+  pathCore(
+    name: $"{name}-core-stem",
+    contour: spadeStemContour,
+    x: x,
+    y: y,
+    frame: size,
+    flipped: flipped,
+    z: coreZ,
+    depth: coreDepth,
+    material: coreMat
+  )
 }
 
 // Hearts and diamonds are one closed path each, with their aspect baked into the outline.
 template pathMark(name, suit, x, y, size, flipped, rimZ, coreZ, rimDepth, coreDepth, rimMat) {
-  pathRim(name: $"{name}-rim", contour: suit["path"]["contours"][0], x: x, y: y, frame: size, flipped: flipped, z: rimZ, depth: rimDepth, material: rimMat)
-  pathCore(name: $"{name}-core", contour: suit["path"]["contours"][0], x: x, y: y, frame: size, flipped: flipped, z: coreZ, depth: coreDepth, material: suit["mat"])
+  pathRim(
+    name: $"{name}-rim",
+    contour: suit["path"]["contours"][0],
+    x: x,
+    y: y,
+    frame: size,
+    flipped: flipped,
+    z: rimZ,
+    depth: rimDepth,
+    material: rimMat
+  )
+  pathCore(
+    name: $"{name}-core",
+    contour: suit["path"]["contours"][0],
+    x: x,
+    y: y,
+    frame: size,
+    flipped: flipped,
+    z: coreZ,
+    depth: coreDepth,
+    material: suit["mat"]
+  )
 }
 
 template suitMark(name, suit, x, y, size, flipped = 0, rimZ = -0.024, coreZ = -0.028, rimDepth = suitMarkDepth, coreDepth = suitMarkDepth, rimMat = 2) {
   for (club, i) in filter([suit], s => s["motif"] == 1) {
-    clubMark(name: name, x: x, y: y, size: size, flipped: flipped, rimZ: rimZ, coreZ: coreZ, rimDepth: rimDepth, coreDepth: coreDepth, rimMat: rimMat, coreMat: suit["mat"])
+    clubMark(
+      name: name,
+      x: x,
+      y: y,
+      size: size,
+      flipped: flipped,
+      rimZ: rimZ,
+      coreZ: coreZ,
+      rimDepth: rimDepth,
+      coreDepth: coreDepth,
+      rimMat: rimMat,
+      coreMat: suit["mat"]
+    )
   }
   for (spade, i) in filter([suit], s => s["motif"] == 2) {
-    spadeMark(name: name, x: x, y: y, size: size, flipped: flipped, rimZ: rimZ, coreZ: coreZ, rimDepth: rimDepth, coreDepth: coreDepth, rimMat: rimMat, coreMat: suit["mat"])
+    spadeMark(
+      name: name,
+      x: x,
+      y: y,
+      size: size,
+      flipped: flipped,
+      rimZ: rimZ,
+      coreZ: coreZ,
+      rimDepth: rimDepth,
+      coreDepth: coreDepth,
+      rimMat: rimMat,
+      coreMat: suit["mat"]
+    )
   }
   for (other, i) in filter([suit], s => s["motif"] == 0) {
-    pathMark(name: name, suit: suit, x: x, y: y, size: size, flipped: flipped, rimZ: rimZ, coreZ: coreZ, rimDepth: rimDepth, coreDepth: coreDepth, rimMat: rimMat)
+    pathMark(
+      name: name,
+      suit: suit,
+      x: x,
+      y: y,
+      size: size,
+      flipped: flipped,
+      rimZ: rimZ,
+      coreZ: coreZ,
+      rimDepth: rimDepth,
+      coreDepth: coreDepth,
+      rimMat: rimMat
+    )
   }
 }
 
@@ -2180,7 +2367,19 @@ template courtQueen(suit) {
     }
     rounding: 0.00496
   }
-  suitMark(name: "upper-sceptre-emblem", suit: suit, x: -0.40424, y: 0.49736400000000003, size: 0.154752, flipped: 0, rimZ: -0.0634, coreZ: -0.06836, rimDepth: 0.0124, coreDepth: 0.00992, rimMat: 1)
+  suitMark(
+    name: "upper-sceptre-emblem",
+    suit: suit,
+    x: -0.40424,
+    y: 0.49736400000000003,
+    size: 0.154752,
+    flipped: 0,
+    rimZ: -0.0634,
+    coreZ: -0.06836,
+    rimDepth: 0.0124,
+    coreDepth: 0.00992,
+    rimMat: 1
+  )
   shape Ellipsoid "lower-cranium" {
     position [0, -0.4712, -0.0448]
     rotation [-1, 0, 0, 0]
@@ -2591,7 +2790,19 @@ template courtQueen(suit) {
     }
     rounding: 0.00496
   }
-  suitMark(name: "lower-sceptre-emblem", suit: suit, x: 0.40424, y: -0.49736400000000003, size: 0.154752, flipped: 1, rimZ: -0.0634, coreZ: -0.06836, rimDepth: 0.0124, coreDepth: 0.00992, rimMat: 1)
+  suitMark(
+    name: "lower-sceptre-emblem",
+    suit: suit,
+    x: 0.40424,
+    y: -0.49736400000000003,
+    size: 0.154752,
+    flipped: 1,
+    rimZ: -0.0634,
+    coreZ: -0.06836,
+    rimDepth: 0.0124,
+    coreDepth: 0.00992,
+    rimMat: 1
+  )
   shape Prism "sash-inlay" {
     position [0, 0, -0.024]
     rotation [0, 1, 0, 0]
@@ -3846,12 +4057,19 @@ let decks = [
   { prefix: "card", back: "card-back", palette: deckPalette }
 ]
 
-prototypes {
+template cardDeckPrototypes() {
   for (deck, d) in decks {
     for (suit, s) in suits {
       makeAce(id: $"""{deck["prefix"]}-{suit["code"]}-a""", pal: deck["palette"], backMat: 11, suit: suit)
       for (rank, r) in pipRanks {
-        makePipCard(id: $"""{deck["prefix"]}-{suit["code"]}-{rank["code"]}""", pal: deck["palette"], backMat: 11, rankGlyph: rank["glyph"], suit: suit, pips: rank["pips"])
+        makePipCard(
+          id: $"""{deck["prefix"]}-{suit["code"]}-{rank["code"]}""",
+          pal: deck["palette"],
+          backMat: 11,
+          rankGlyph: rank["glyph"],
+          suit: suit,
+          pips: rank["pips"]
+        )
       }
       makeJack(id: $"""{deck["prefix"]}-{suit["code"]}-j""", pal: deck["palette"], backMat: 11, suit: suit)
       makeQueen(id: $"""{deck["prefix"]}-{suit["code"]}-q""", pal: deck["palette"], backMat: 11, suit: suit)
