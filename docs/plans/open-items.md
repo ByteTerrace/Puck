@@ -969,6 +969,25 @@ representative capture set with explicit settlement rules and world
 invocation, then the debug world's contract recorded on the RTX 4070 so
 `puck parity` runs again.
 
+- [medium · owner: rendering] Uniform region growth accepts an unbindable size
+  (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:688`, `Grow`, uniform-size
+  check): a 65,536-byte uniform ring can grow to 65,792 bytes, since the check
+  accepts any multiple of 256 below the storage-region maximum. Binding the
+  whole result exceeds Direct3D 12's 4,096 float4 constant-buffer elements
+  ([constants](https://learn.microsoft.com/en-us/windows/win32/direct3d12/constants),
+  [HLSL constant-buffer layout](https://microsoft.github.io/hlsl-specs/specs/hlsl.pdf))
+  and Vulkan's allowed descriptor range on a device reporting
+  `maxUniformBufferRange = 65536`
+  ([descriptor sets](https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html),
+  [device limits](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceLimits.html)).
+  The sources agree that alignment alone cannot establish a valid range;
+  Vulkan's limit is per device. `IGpuBindings.RequireConstantBufferSize` also
+  checks only alignment, and the GPU services expose no uniform-range limit.
+  Expose and enforce the actual view limit at uniform-region construction and
+  growth and at descriptor writes, before allocation or descriptor mutation.
+  This has no production `Grow` caller yet and is source-confirmed, not exercised
+  on hardware. It needs a shared capability change across both backends rather
+  than a guessed Vulkan limit in the region.
 - Cross-backend parity (`puck parity`, `experimental/tests/Puck.Parity`) is the
   only automated gate on the shared engine contract (the cross-backend render
   path, the SDF VM ISA). The debug world authors no `captures` rows and has no

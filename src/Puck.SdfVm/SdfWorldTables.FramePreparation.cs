@@ -9,6 +9,32 @@ public sealed partial class SdfWorldTables {
     // Whether the latest packed frame wrote its slots' update tiers (PackSlotRateCodes).
     private bool m_slotRateCodesPacked;
 
+    // Prepares both grown tables before publishing their capacity or retiring any buffer. A failed allocation leaves
+    // the previous tables usable, so the next frame can retry the same growth.
+    private void EnsureDynamicTransformCapacity(int count) {
+        if (count <= m_dynamicTransformCapacity) { return; }
+        if (count > (SdfProgram.MaxDynamicTransformSlot + 1)) { throw new InvalidOperationException($"The frame needs {count} transform slots, beyond the packed slot representation."); }
+        var bytes = checked((((long)count) * DynamicTransformByteLength));
+
+        // Neither retirement allocates after the region has grown.
+        m_retired.EnsureCapacity(capacity: checked((m_retired.Count + 2)));
+        var previous = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)bytes), usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
+
+        try {
+            Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: bytes));
+        } catch {
+            previous.Dispose();
+
+            throw;
+        }
+        Retire(replaced: m_previousDynamicTransforms);
+        m_previousDynamicTransforms = previous;
+        m_dynamicTransformCapacity = count;
+        m_dynamicHistoryWritten = false;
+        m_seedDynamicHistory = true;
+        m_dynamicTransformsPacked = false;
+        m_bindingRevision++;
+    }
     // Packs the rows the frame's moved set owes into the dynamic-transform region — 3 float4 per slot: position.xyz
     // (+ the tier views' code, PackSlotRateCodes), the orientation quaternion (xyzw), then the lanes — the table
     // SDF_OP_TRANSFORM_DYNAMIC indexes by slot; the region owes the words of each packed row that changed. The packed
@@ -16,21 +42,9 @@ public sealed partial class SdfWorldTables {
     // frame with no moved set declares its table static and packs nothing past the first frame that carries that
     // table. Every row is packed on this engine's first frame, for a frame from another producer or another static
     // table, and when the last consumed frame has left the producer's history; no unpacked row is compared. An empty
-    // list is only valid for a program with no dynamic slots (PrepareFrame throws otherwise); it still packs the one
-    // always-present slot as identity so the binding stays valid. Clamped to the slot capacity the construction
-    // options grew the table to. Returns whether the active row count or any packed row changed.
-    private void EnsureDynamicTransformCapacity(int count) {
-        if (count <= m_dynamicTransformCapacity) { return; }
-        if (count > (SdfProgram.MaxDynamicTransformSlot + 1)) { throw new InvalidOperationException($"The frame needs {count} transform slots, beyond the packed slot representation."); }
-        m_dynamicTransformCapacity = count;
-        Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: checked((((long)count) * DynamicTransformByteLength))));
-        Retire(replaced: m_previousDynamicTransforms);
-        m_previousDynamicTransforms = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
-        m_dynamicHistoryWritten = false;
-        m_seedDynamicHistory = true;
-        m_dynamicTransformsPacked = false;
-        m_bindingRevision++;
-    }
+    // list is only valid for a program with no dynamic slots (Pack throws otherwise); it still packs the one
+    // always-present slot as identity so the binding stays valid. Returns whether the active row count or any packed
+    // row changed.
     private bool PackDynamicTransforms(SdfFrame frame) {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;

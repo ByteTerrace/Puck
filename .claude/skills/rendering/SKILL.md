@@ -548,12 +548,17 @@ compares and fails naming the file that drifted, it writes nothing.
   A frame that supplies fewer transforms than
   `RequiredDynamicTransformCapacity` throws, because a slot rendering at
   identity is a bug. Fix the emission so the frame supplies the transforms it
-  needs; do not raise the capacity.
+  needs; increasing a reserve cannot supply missing transform rows.
 - A `GpuRegion` grows under whichever policy `GpuResidency.Select` gave it
   (`GpuRegion.Grow`): a staged region carries its destination on the GPU, and a
   ring or in-place region replaces its host-visible buffers and owes each the
-  whole region; the owner retires what it returns. A device with a large
-  host-visible device-local heap (resizable BAR, as on the lead machine under
+  whole region; the owner retires what it returns after the following upload's
+  fence, which also covers earlier readers and a staged carry. Create replacement
+  buffers, retirement bookkeeping and the CPU shadow before publishing growth;
+  a failed allocation preserves the old buffers, contents, capacity and bindings.
+  `SdfWorldTables.EnsureDynamicTransformCapacity` prepares motion history before
+  growing the region and publishes capacity only after both succeed. A device with
+  a large host-visible device-local heap (resizable BAR, as on the lead machine under
   both backends) gives a small per-frame table a ring, while the CPU fake
   device's default profile stages every region, so a region path written or
   tested for one policy alone passes the device-free suites and fails on the

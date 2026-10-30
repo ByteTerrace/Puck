@@ -31,7 +31,7 @@ namespace Puck.Abstractions.Gpu;
 /// caller, who disposes it once that recording's submission and every earlier reader have completed. A ring or in-place
 /// region grows too, by replacing its host-visible buffers and owing each the whole region, so an owner grows a region
 /// without knowing which policy <see cref="GpuResidency.Select"/> chose for it. The host copy lives in native memory, so a
-/// large region costs the managed heap nothing and growing it allocates no managed array.
+/// large region holds no managed copy of its contents, including when it grows.
 /// </para>
 /// <para>
 /// Such a region can keep a host copy of its leading bytes alone and take the rest from an owner that already holds those
@@ -704,6 +704,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // released so a failed creation leaves the region as it was, and owes the whole grown region in every buffer.
     private ReplacedBuffers GrowHostBuffers(long byteCount) {
         var created = new IGpuStorageBuffer[m_hostBuffers.Length];
+        var replaced = new IGpuBuffer[m_hostBuffers.Length];
+        var retirement = new ReplacedBuffers(buffers: replaced);
 
         try {
             for (var index = 0; (index < created.Length); index++) {
@@ -720,6 +722,10 @@ public sealed unsafe class GpuRegion : IDisposable {
                     )
                 );
             }
+
+            // Finish every allocation before moving ownership. If the CPU shadow cannot grow, the region still owns
+            // its old buffers and the replacements are released just as on a failed buffer creation.
+            GrowContents(byteCount: byteCount);
         } catch {
             foreach (var buffer in created) {
                 buffer?.Dispose();
@@ -728,8 +734,6 @@ public sealed unsafe class GpuRegion : IDisposable {
             throw;
         }
 
-        var replaced = new IGpuBuffer[m_hostBuffers.Length];
-
         for (var index = 0; (index < created.Length); index++) {
             replaced[index] = m_hostBuffers[index];
             _ = m_ownedBuffers.Remove(item: m_hostBuffers[index]);
@@ -737,7 +741,6 @@ public sealed unsafe class GpuRegion : IDisposable {
             m_ownedBuffers.Add(item: created[index]);
         }
 
-        GrowContents(byteCount: byteCount);
         ByteCount = byteCount;
 
         foreach (var owed in m_owed) {
@@ -748,7 +751,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             );
         }
 
-        return new ReplacedBuffers(buffers: replaced);
+        return retirement;
     }
     // Extends the host copy of a region that holds all of it to byteCount bytes, its new tail zero. A zeroed allocation
     // takes fresh pages the system zeroes as they are first touched, so only the bytes held are copied, where
@@ -778,8 +781,14 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         // The host copy grows with a region that holds all of it; a source keeps the new tail, and the host copy its
         // shadow.
-        if (m_source is null) {
-            GrowContents(byteCount: byteCount);
+        try {
+            if (m_source is null) {
+                GrowContents(byteCount: byteCount);
+            }
+        } catch {
+            replacement.Dispose();
+
+            throw;
         }
         _ = m_ownedBuffers.Remove(item: replaced);
         m_ownedBuffers.Add(item: replacement);
