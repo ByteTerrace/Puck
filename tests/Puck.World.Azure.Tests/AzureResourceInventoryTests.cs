@@ -144,8 +144,81 @@ public sealed class AzureResourceInventoryTests {
         Assert.Empty(collection: wire.Uris);
     }
 
-    private sealed class Wire(params string[] replies) : HttpMessageHandler {
-        private readonly Queue<string> m_replies = new(collection: replies);
+    [InlineData("..")]
+    [InlineData("puck?next=other")]
+    [InlineData("puck/providers")]
+    [Theory]
+    public void ABareGroupNameRejectsUriSyntaxAndTraversalBeforeServiceAccess(string group) {
+        using var wire = new Wire();
+
+        Assert.ThrowsAny<ArgumentException>(testCode: () => Source(
+            wire,
+            group: group
+        ));
+        Assert.Empty(collection: wire.Uris);
+    }
+    [Fact]
+    public async Task ABareGroupNameResolvesToTheOneSubscriptionHoldingItAndIsReadOnlyThere() {
+        using var wire = new Wire(
+            """{"value":[{"subscriptionId":"00000000-0000-0000-0000-000000000009","state":"Disabled"},{"subscriptionId":"00000000-0000-0000-0000-000000000002","state":"Enabled"},{"subscriptionId":"00000000-0000-0000-0000-000000000001","state":"Enabled"}]}""",
+            null,
+            """{"name":"puck"}""",
+            Page(["bytrcstp001"])
+        );
+        using var source = Source(
+            wire,
+            group: "puck"
+        );
+        var items = await source.ReadAsync(cancellationToken: Cancel);
+
+        Assert.Equal(
+            new[] { "bytrcstp001" },
+            items.Select(selector: item => item.Key)
+        );
+        Assert.Equal(
+            4,
+            wire.Uris.Count
+        );
+        Assert.Contains(
+            "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/puck/resources",
+            wire.Uris[3].AbsolutePath,
+            StringComparison.OrdinalIgnoreCase
+        );
+    }
+    [Fact]
+    public async Task ABareGroupHeldByNoSubscriptionOrByTwoRefusesTheRead() {
+        const string Two = """{"value":[{"subscriptionId":"00000000-0000-0000-0000-000000000002","state":"Enabled"},{"subscriptionId":"00000000-0000-0000-0000-000000000001","state":"Enabled"}]}""";
+        using var none = new Wire(Two, null, null);
+        using var noneSource = Source(
+            none,
+            group: "puck"
+        );
+
+        await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => noneSource.ReadAsync(cancellationToken: Cancel).AsTask());
+        using var both = new Wire(Two, """{"name":"puck"}""", """{"name":"puck"}""");
+        using var bothSource = Source(
+            both,
+            group: "puck"
+        );
+
+        await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => bothSource.ReadAsync(cancellationToken: Cancel).AsTask());
+        Assert.Equal(
+            3,
+            both.Uris.Count
+        );
+        foreach (var listing in new string?[] { null, """{"value":[{"subscriptionId":"not-a-guid"}]}""" }) {
+            using var broken = new Wire(listing);
+            using var brokenSource = Source(
+                broken,
+                group: "puck"
+            );
+
+            await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => brokenSource.ReadAsync(cancellationToken: Cancel).AsTask());
+        }
+    }
+
+    private sealed class Wire(params string?[] replies) : HttpMessageHandler {
+        private readonly Queue<string?> m_replies = new(collection: replies);
 
         public List<string> Methods { get; } = [];
         public List<Uri> Uris { get; } = [];
@@ -160,9 +233,12 @@ public sealed class AzureResourceInventoryTests {
         protected override void Dispose(bool disposing) { if (disposing) { m_client?.Dispose(); } base.Dispose(disposing: disposing); }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             Methods.Add(item: request.Method.Method); Uris.Add(item: request.RequestUri!);
-            return Task.FromResult(result: new HttpResponseMessage(statusCode: HttpStatusCode.OK) {
+            var reply = m_replies.Dequeue();
+
+            // A null reply is a 404.
+            return Task.FromResult(result: new HttpResponseMessage(statusCode: ((reply is null) ? HttpStatusCode.NotFound : HttpStatusCode.OK)) {
                 Content = new StringContent(
-                content: m_replies.Dequeue(),
+                content: (reply ?? "{}"),
                 encoding: Encoding.UTF8,
                 mediaType: "application/json"
             ),

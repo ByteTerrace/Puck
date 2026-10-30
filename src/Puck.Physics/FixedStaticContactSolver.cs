@@ -255,7 +255,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);
         }
         if ((volumes.IsEmpty) || ((colliders.IsEmpty) && (dynamicColliders.IsEmpty))) {
-            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
+            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
         }
         var radius = FixedQ4816.MaxValue;
 
@@ -268,8 +268,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var travel = ((Int128.Abs(value: movement.X.Value) + Int128.Abs(value: movement.Y.Value)) + Int128.Abs(value: movement.Z.Value));
         var parts = travel.CeilingDivide(divisor: ((Int128)slice));
 
-        if (parts <= 1) {
-            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
+        if ((parts <= 1) || !SweptBoundsMeetCollider(candidates: in candidates, colliderExtents: colliderExtents, colliders: colliders,
+            dynamicColliders: dynamicColliders, orientation: in orientation, position: in position, previousPosition: in previousPosition, volumes: volumes)) {
+            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
         }
         if (parts > long.MaxValue) {
             position = previousPosition;
@@ -291,7 +292,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 velocity = originalVelocity;
                 return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);
             }
-            result = ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: resolved, up: up, velocity: ref velocity, volumes: volumes);
+            result = ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: resolved, up: up, velocity: ref velocity, volumes: volumes);
             resolved = position;
             if (result.ObstructionNormal != FixedVector3.Zero) { obstruction = result.ObstructionNormal; }
             stepHeight = FixedQ4816.Max(x: stepHeight, y: result.RequiredStepHeight);
@@ -301,11 +302,55 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight, Unproved = (parts > count) };
     }
 
+    // Every intermediate pose of a straight move lies inside the box spanning its start and end bounds. A collider
+    // whose bounds miss that box, grown by the skin, pushes no slice, so slicing is spent only where a push can happen.
+    // A collider without bounds (a half-space) may meet any move.
+    private bool SweptBoundsMeetCollider(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedStaticCollider> dynamicColliders,
+        in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
+        ReadOnlySpan<FixedBodyColliderVolume> volumes, ReadOnlySpan<FixedVector3?> colliderExtents, in FixedColliderCandidates candidates) {
+        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
+        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+
+        foreach (ref readonly var volume in volumes) {
+            foreach (var at in (ReadOnlySpan<FixedVector3>)[previousPosition, position]) {
+                var (center, extent) = FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume);
+
+                low = Lowest(left: low, right: (center - extent));
+                high = FixedVector3.Max(left: high, right: (center + extent));
+            }
+        }
+        var halfSpan = ((high - low) / FixedQ4816.FromInteger(value: 2L));
+        var middle = (low + halfSpan);
+        var half = (halfSpan + new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon));
+        var bounded = (colliderExtents.Length == colliders.Length);
+
+        if (bounded && candidates.IsActive && candidates.Contains(center: middle, extent: half)) {
+            foreach (var index in candidates.Indices) {
+                if (Meets(collider: in colliders[index], extent: colliderExtents[index], center: in middle, half: in half)) { return true; }
+            }
+        } else {
+            for (var index = 0; (index < colliders.Length); index++) {
+                if (Meets(collider: in colliders[index], extent: (bounded ? colliderExtents[index] : colliders[index].WorldHalfExtent()), center: in middle, half: in half)) { return true; }
+            }
+        }
+        foreach (ref readonly var collider in dynamicColliders) {
+            if (Meets(collider: in collider, extent: collider.WorldHalfExtent(), center: in middle, half: in half)) { return true; }
+        }
+        return false;
+
+        static FixedVector3 Lowest(FixedVector3 left, FixedVector3 right) => new(X: FixedQ4816.Min(x: left.X, y: right.X),
+            Y: FixedQ4816.Min(x: left.Y, y: right.Y), Z: FixedQ4816.Min(x: left.Z, y: right.Z));
+    }
+    private bool Meets(in FixedStaticCollider collider, FixedVector3? extent, in FixedVector3 center, in FixedVector3 half) =>
+        ((extent is not { } bounds) || !Misses(bodyCenter: center, bodyExtent: half, colliderCenter: collider.Center, colliderExtent: bounds));
+
+    // previousPosition is the whole move's start, the pre-move foot every slice's edge test measures from, as
+    // FixedStepUp raises from that start; sliceStart begins this slice, whose displacement is the approach direction.
     private ContactResolution ResolveEndpoint(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedStaticCollider> dynamicColliders,
-        in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
+        in FixedVector3 previousPosition, in FixedVector3 sliceStart, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, ReadOnlySpan<FixedVector3?> colliderExtents,
         FixedColliderCandidates candidates) {
-        var movement = (position - previousPosition);
+        var movement = (position - sliceStart);
         var requiredStepHeight = FixedQ4816.Zero;
         var grounded = false;
         ContactSupportWitness? support = null;

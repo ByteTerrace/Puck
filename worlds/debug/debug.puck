@@ -22,8 +22,10 @@ import "studio"
 import "controls"
 import "devices"
 import "desktop"
-// The board game room's Alchemy, Go and Reversi tables, ahead of every other population so their tokens, stones and
-// discs take the population's top slots (shapes.puck's boardRoomBodies) and every body below keeps its index.
+// The board game room's granary board, Alchemy, Go and Reversi tables, ahead of every other population so their cursors,
+// tokens, stones and discs take the population's top slots (shapes.puck's boardRoomBodies) and every body below keeps
+// its index.
+import "granaries"
 import "alchemy"
 import "go"
 import "reversi"

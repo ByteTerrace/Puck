@@ -1,15 +1,14 @@
 {
   "schema": "puck.world.extensions.v1",
-  "world": "granaries",
+  "world": "debug",
   "scanEveryTicks": 30,
-  "lineage": "f4624d47-11ec-4057-af02-281597be27e6",
+  "lineage": "7d3c1e52-9a64-4f0b-b1c8-2e5a96d04a37",
   "providers": [
     {
       "name": "azure",
       "type": "azure.resource",
       "settings": {
-        "authentication": "azureCli",
-        "tenantId": "e09734be-ca09-41ec-b70d-98f5536fb774"
+        "authentication": "azureCli"
       }
     }
   ],
@@ -19,30 +18,13 @@
       "principal": "console",
       "operations": [],
       "requests": [
-        {
-          "capability": "observe",
-          "subject": "state:granaryNames"
-        },
-        {
-          "capability": "observe",
-          "subject": "state:granaryResources"
-        },
-        {
-          "capability": "observe",
-          "subject": "state:granaryRegions"
-        },
-        {
-          "capability": "observe",
-          "subject": "state:granaryKinds"
-        },
-        {
-          "capability": "observe",
-          "subject": "state:granarySkus"
-        },
-        {
-          "capability": "mutate",
-          "subject": "section:state"
-        }
+        { "capability": "observe", "subject": "state:granaryNames" },
+        { "capability": "observe", "subject": "state:granaryResources" },
+        { "capability": "observe", "subject": "state:granaryRegions" },
+        { "capability": "observe", "subject": "state:granaryKinds" },
+        { "capability": "observe", "subject": "state:granarySkus" },
+        { "capability": "observe", "subject": "state:granaryFeed" },
+        { "capability": "mutate", "subject": "section:state" }
       ]
     }
   ],
@@ -54,8 +36,9 @@
       "client": "console",
       "maximumItems": 16,
       "refreshTicks": 1800,
+      "status": "granaryFeed",
       "settings": {
-        "resourceGroup": "/subscriptions/fd49ea67-135b-449f-a62c-3e4b8d26d3d6/resourceGroups/byteterrace",
+        "resourceGroup": "byteterrace",
         "apiVersion": "2021-04-01",
         "resourceType": "Microsoft.Storage/storageAccounts",
         "namePrefix": "bytrcstp",

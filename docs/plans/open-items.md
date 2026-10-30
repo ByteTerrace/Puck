@@ -44,19 +44,25 @@ resolves their edits to this file at merge.
    break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
    `--reproduce`, including the unexplained Go CPU regression in the loaded
    boot-reuse comparison.
-6. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+   the owner's direction; Klondike first on the revived rules and SDF faces,
+   headless, its look in the lead's window.
+7. [Residency and streaming](#residency-and-streaming): the measurements, then
+   near-first ordering of bake, store loads and landing; the card tables are
+   its test case.
+8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-7. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
    it in `panes` and answers under pause, then the diagnostics' windowed checks
    and the developer exhibits.
-8. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
-   chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
-   then one paired windowed tour when no lane holds the GPU.
-9. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
-   isolate the temporal-off cadence blink first, then why history never
-   resolves the jitter.
-10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+    chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
+    then one paired windowed tour when no lane holds the GPU.
+11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+    isolate the temporal-off cadence blink first, then why history never
+    resolves the jitter.
+12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -608,13 +614,38 @@ movement-facing scheme returns.
   secondary wings spacing; their appearance remains unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
-- [medium · owner: lead review] Run the required adversarial cross-family
-  review-and-fix pass on controls' engine changes: relative input boundaries,
-  camera state, headless wheel commits, per-seat preferences, timed impulses
-  and the analytic sweep correction. The controls worktree's
-  `.claude/scratch/controls-review-brief.md` names the scope and hunt list.
-  File findings in this packet; review does not block landing, and every high
-  finding must be resolved or explicitly deferred before the owner's main push.
+- [high · owner: lead integration] Land the controls review's follow-up
+  branch. It fixes R1 (high): the sliced analytic sweep measured each slice's
+  edge rule from that slice's start, so a body lowered onto a nearly flat fillet
+  read it as a riser (`RoundedBoxContactLawTests.ANearlyFlatFilletBelowTheFootRemainsWalkable`
+  failed on the landed lane); R2 (medium): it sliced and spent the 64-slice
+  budget in clear space, so a small fast body stopped short and read `Unproved`;
+  R3 (medium): `player.camera.boom` refused input while a wheel was open, an
+  engine policy duplicating the standard's hold-page bindings. The high blocks
+  the owner's main push until this lands.
+- [low · owner: play-feel lane] A timed impulse integrates only inside
+  `IntegratePlanarAndVerticalVelocity` and `IntegrateScratchVelocity`
+  (`WorldBody.Step.cs`, `IntegrateOverlay`). On a body whose motion program has
+  neither op, `planarImpulse` neither moves it nor drains `m_overlayRemaining`, so
+  the burst waits and fires when the body next runs an integrating program.
+  No shipped program lacks one (`walk`; `rangeLoop` is a producer). Failing case,
+  unrun: a kit whose program has no integration takes a rule's `planarImpulse`,
+  then selects a walking kit. Drain or refuse the overlay there.
+- [low · owner: play-feel lane] `dashPose` (`worlds/debug/avatars/moth.puck`)
+  is one cell keyed `"0"`, so only body 0's dash drives the torso lean and pod
+  flare; a second seat's Moth dashes unlit. `airPose`, `airWings` and
+  `bootBoost` share the pattern; key all of them per body together.
+- [low · owner: play-feel lane] `player.binding-bar model <value>`
+  (`WorldBindingCommandModule.BindingBar.cs`) stores any text, and every value
+  but `single` stacks (the `ModelCell` contract): `player.binding-bar model
+  singel` echoes `model=singel` and `world.binding-bar` reads `stacked true` on
+  a headless debug World. Refuse an unknown model by name.
+- [low · owner: play-feel lane] A requested boom distance replaces the orbit
+  op's distance outright (`SdfCameraProgram.Evaluate`, `look.Distance ??
+  orbit.Distance.Resolve`), and `WorldSeatViewState.AuthoredDistance` reads the
+  first orbit op's literal. A scalar-bound orbit distance stops responding after
+  the first scroll; the Moth's is a literal 4.2. Unconfirmed in a world: none
+  binds one yet.
 
 - Make the debug world's dual-stick action play fluid. In: the seat camera
   presents its look at the fraction the body is drawn at, so camera and steered
@@ -840,6 +871,16 @@ answer.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] The debug world sits at the rule-work ceiling: the granaries lane
+  raised `RuleCapacity.MaxWorkUnitsPerTick` from 4,000,000 to 4,250,000
+  (`src/Puck.State/Rule.cs`) because the plain debug world was about 10k units
+  from the chess search's minimum and the granary board broke validation by
+  23k; it also phases its rules one a tick over twelve because the pricing
+  counts rules gated on different values of one slot as the dearest, not the
+  sum. The card tables add more. Decide the cause before the next raise: is the
+  static price far above measured tick cost (measure a busy tick against the
+  price), should the search draw from its own budget, and does the slot-gating
+  rule price what one tick can actually run? (from: granaries lane)
 - [medium] A scratch test using `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed over two minutes of CPU during preparation without a
   generated world or a diagnostic; moving the console command and the closing
@@ -872,8 +913,6 @@ hang, then the pre-`main` language findings.
 Owner: input lane · ordinary · Next: typing/chat exhibits and live hardware. The
 [input channel decision](../decisions/input-channels.md) owns the model and each
 step's completion criteria; C1 to C7 are in.
-
-- [medium] `ReplayInspectLawTests.EachOwnersEventsNameOnlyItsChangedChannels` (`tests/Puck.World.Server.Tests/ReplayInspectLawTests.cs:41`) fails on the integration head on a seat-2 `forward` channel event, most likely since c7-findings changed `replay.inspect` and `world.history` to print a segment's driven lanes by bank address (`segment p1 2s [@3=1] by console`). Decide whether the law or the read-back is right (the input decision's tape-names item in this packet) and make them agree. (from: companion-build lane, confirmed by the lead)
 
 - [low] `docs/decisions/input-channels.md:775-787` says a tape reports names from its captured definition and raw slots are optional diagnostic detail, while `documents-binding.md` and `replay.md` now say a segment's raw bank is never labelled (`replay.inspect` prints `segment p1 2s [@3=1] by console`). Reconcile the decision with what the tape can honestly name. (from: c7-findings lane)
 
@@ -925,6 +964,9 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
+  `mutate` over `section:state` to write six feed rows; scope it to those rows if
+  the extension grant vocabulary allows. (from: the lead, landing granaries)
 - Complete the independent review: federation interruption, recovery and
   revocation schedules; authorization and disclosure composition; deployed Azure
   identity, storage and key policy; aggregate hostile-input budgets; and
@@ -1235,6 +1277,84 @@ the drawn relief. The measured state is in the
   squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
   large radius.
 
+### Card tables in the board game room
+
+Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
+ordinary, the owner's direction · Next: the Klondike table, headless first,
+its look batched into the lead's window.
+
+The owner wants proper card tables in the gallery: physical cards on a table,
+played by sitting at it like the chess, Go, Reversi and Alchemy tables, which
+fill the board game room's four spots (`worlds/debug/shapes.md`). The cards
+need room of their own beside it on level 2; where is the lane's layout call,
+the look the owner's review.
+
+- Prior art, quarantined, to revive rather than rewrite (rule 7):
+  - Rules: `experimental/src/Puck.World/Assets/worlds/games/` holds Klondike
+    (draw one or three), Spider (one, two or four suits), FreeCell, the
+    `solitaire.puck` collection that switches between them and keeps each
+    deal, and poker with a hand-strength judge; deals use the seeded shuffle
+    stream and replay. They ran as state rows and rules with the console as
+    their only surface. The directory also holds backgammon, dominoes,
+    mancala, hidden ranks and word spy for later tables.
+  - Card faces: `experimental/worlds/genesis/cards.basis.puck`, all 52 faces as
+    SDF shapes. `card.hlsl` beside it was the side-by-side reference shader the
+    SDF look was built against, and `card.puck` holds the compare views and
+    hero cameras; the look is already SDF data and needs no shader.
+  - Laws: `experimental/tests/Puck.World.Games.Tests` (Solitaire deal and
+    rules, poker hand strength) as prior art for `test` blocks.
+- The mechanism exists: the tabletop (`src/Puck.World.Schema/README.md`,
+  discrete boards, cards and turns) and the chess table's pattern (rigid pieces,
+  a judge that reads the settled table, the context button to sit, the cursor
+  and pick button to play). A card table reuses both; no card engine.
+- The deck (faces, backs, card size) is a design any author imports, so it goes
+  to `worlds/standard/`; the tables and the room stay in `worlds/debug/`. One
+  baked mesh per face, shared by every table, so a second table adds no bake.
+1. Klondike: revive the module and the faces to the current language, a table
+   with the cards as bodies on the tabletop, deal from the seeded stream, play
+   by pick and context with the console still driving it, and `test` blocks for
+   a deal and a legal and an illegal move with `--reproduce`.
+2. Spider and FreeCell as the same table's game switch (`solitaire.puck`).
+3. Poker: seats, computer players and the hand judge; its own step.
+- Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
+  stress case for nearest-first bake order
+  ([streaming](#residency-and-streaming)).
+
+### Residency and streaming
+
+Owner: rendering lane (rendering, verification) · ordinary · Next: step 1, the
+measurements, then step 2, near-first ordering.
+
+The design is settled in [residency](../decisions/residency.md), from a
+three-family consensus: only presentation follows the observer; portals are
+edges, worlds and optional authored areas are nodes; one selector per
+presentation orders and bounds residency from every demand point; a door never
+waits for loading. The steps, each taken when its measured need appears:
+
+1. Measure: time until everything near the spawn has landed (cold and warm),
+   mesh bytes by level, `ProbeCache` bytes after a hall walk and a valley flight,
+   program build and replan time against placement count, store read rate
+   against the landing rate.
+2. Near-first: order lattices (`SdfMeshPathBake.TryTakeForFrame`), store loads
+   and owed meshes (`SdfWorldTables.MeshRegion`) by priority from demand points;
+   all three run in document order today. The card tables against a lobby spawn
+   are its test case.
+3. GI on the same demand points: the probe window follows every view, not
+   `Views[0]` (`SdfMeshIrradiance.cs:208`); the irradiance scene and its pending
+   gate are scoped to what the window reaches; `ProbeCache` (`:1365`) is
+   byte-bounded.
+4. Mapped demand through portal faces, replacing the blanket baking share
+   (`WorldViewGraphHost.ResetFootprints`).
+5. Eviction under one byte budget across residencies, with coarse levels owning
+   compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
+6. Authored areas (a volume with openings, on an existing volume vocabulary),
+   tried first on the gallery's floors with the stairwell, lift shaft and window
+   bands as openings (the owner's suggestion): time until the occupied floor has
+   landed, with and without the areas, and floor-first eviction under a lowered
+   budget.
+7. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
+   the moons.
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction · one
@@ -1283,8 +1403,8 @@ material defect needs no taste call); new content and art on the owner's call.
   glass may lose its tint).
 - The board game room: the owner reviews its look (the tables share the chess
   table's wood, the Go board a flat kaya face, the Reversi board green felt);
-  more games for the free table spot at (65, 30.6), and addon seats at the
-  tables.
+  addon seats at the tables; card tables have their own packet
+  ([card tables](#card-tables-in-the-board-game-room)).
 - An elements-and-combat yard toward MMO action combat
   ([combat decision](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input);
   the quarantined `arena.puck` district is the rules' prior art):
@@ -1333,6 +1453,13 @@ material defect needs no taste call); new content and art on the owner's call.
   optimisation cannot live in a deterministic guest), the learned policy frozen
   into an addon that is a pure function of its inputs; start with one committed
   test cartridge with a known win condition.
+
+- The granary board ([granaries.md](../../worlds/debug/granaries.md)): the owner's own
+  run against the live resource group is outstanding (the command is in that guide; the
+  fixture configuration stands in for it everywhere else). A piece's look carries its
+  account's kind only, since a deal's variants read one row; SKU and region are rows the
+  lectern reads. The pieces are dealt placements, not bodies, so a seated player inspects
+  and cannot yet pick one up; moving a piece (`deal.preserve`, `reflow`) is unused here.
 
 ### Agent tooling and skills
 

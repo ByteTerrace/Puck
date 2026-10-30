@@ -197,7 +197,7 @@ writes `phase`, so the sheet charges the costlier of their two firings once.
 
 ### The ceiling
 
-`RuleCapacity.MaxWorkUnitsPerTick` is 4,000,000. A world whose sheet is
+`RuleCapacity.MaxWorkUnitsPerTick` is 4,250,000. A world whose sheet is
 unmodeled, overflowed, or above the ceiling is refused, and the refusal names
 the three costliest lines. The value was sized against a 30 Hz tick: it
 reserves roughly a fifth of a 33.3 ms tick for the rule sweep's worst case, at
