@@ -627,6 +627,10 @@ not a spiral:
   in a decision (pruning's three rounds were all hostile same-user
   interleavings, outside the install root's model) or have a design memo
   written and reviewed before any more code (the companion custody rework).
+- After each landing, the lead runs `puck compile worlds/debug/debug.puck
+  --validate` on the merged head before the next landing: two lanes that each
+  fit a shared budget (the rule-work ceiling) can exceed it together, as the
+  card table and a corrected influence price did.
 - A Codex run that ends `Selected model is at capacity` is retried once on the
   other Codex model (Sol to Astra or back), not on the same one.
 - A read-only lane in a worktree commits what it writes or returns it as text:
