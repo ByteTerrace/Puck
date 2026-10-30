@@ -9,7 +9,7 @@ namespace Puck.World;
 /// <summary>The seat-owned camera read-back. Camera yaw and pitch participate in camera-relative simulation input,
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
-internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
+internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings, WorldWheelFeed? wheel = null) : ICommandModule {
     // The keys the default reading keeps: where the camera is and looks, how, and what the clearance did to the view.
     private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "mode", "fade", "clearance"];
 
@@ -48,7 +48,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             return new CommandResult(Output: Frame(fields: fields));
         }
 
-        var keys = ((shape == "compact") ? CompactKeys : shape.Split(separator: ',', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        var keys = ((shape == "compact") ? CompactKeys : shape.Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: ','));
         var chosen = new List<KeyValuePair<string, string>>(capacity: keys.Length);
 
         foreach (var key in keys) {
@@ -68,9 +68,9 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
 
         foreach (var (key, value) in fields) {
             // A value holding a space or a quote is quoted, so the line reads back as the pairs it was made from.
-            var quoted = ((value.Length == 0) || value.AsSpan().IndexOfAny(value0: ' ', value1: '"') >= 0);
+            var quoted = ((value.Length == 0) || (value.AsSpan().IndexOfAny(value0: ' ', value1: '"') >= 0));
 
-            _ = builder.Append(value: ' ').Append(value: key).Append(value: '=').Append(value: (quoted ? $"\"{value.Replace(oldValue: "\"", newValue: "\\\"")}\"" : value));
+            _ = builder.Append(value: ' ').Append(value: key).Append(value: '=').Append(value: (quoted ? $"\"{value.Replace(newValue: "\\\"", oldValue: "\"")}\"" : value));
         }
 
         return builder.Append(value: ']').ToString();
@@ -101,43 +101,49 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         void Add(string key, FormattableString value) => fields.Add(item: new(key: key, value: value.ToString(formatProvider: invariant)));
         static string Flag(bool value) => (value ? "true" : "false");
 
-        Add("tick", $"{continuum.Tick}");
-        Add("fov", $"{float.RadiansToDegrees(radians: (state?.FieldOfView ?? 0f)):0.##}");
-        Add("player", $"{PlayerRoster.DisplayNumber(slot: slot)}");
-        Add("authority", $"{route.Endpoint.Identity}");
-        Add("entity", $"{route.Entity.Authority}/{route.Entity.Index}#{route.Entity.Generation}");
-        Add("epoch", $"{route.Epoch}");
-        Add("resolved", $"{Flag(resolved)}");
+        Add(key: "tick", value: $"{continuum.Tick}");
+        Add(key: "fov", value: $"{float.RadiansToDegrees(radians: (state?.FieldOfView ?? 0f)):0.##}");
+        Add(key: "player", value: $"{PlayerRoster.DisplayNumber(slot: slot)}");
+        Add(key: "authority", value: $"{route.Endpoint.Identity}");
+        Add(key: "entity", value: $"{route.Entity.Authority}/{route.Entity.Index}#{route.Entity.Generation}");
+        Add(key: "epoch", value: $"{route.Epoch}");
+        Add(key: "resolved", value: $"{Flag(value: resolved)}");
         if (resolved) {
-            Add("anchor", $"({anchor.X:0.###},{anchor.Y:0.###},{anchor.Z:0.###})");
+            Add(key: "anchor", value: $"({anchor.X:0.###},{anchor.Y:0.###},{anchor.Z:0.###})");
         }
-        Add("yawReference", $"{control.YawReference.ToString().ToLowerInvariant()}");
-        Add("yawSensitivity", $"{seatLook.YawSensitivity:0.#####}");
-        Add("pitchSensitivity", $"{seatLook.PitchSensitivity:0.#####}");
-        Add("stickLookRate", $"{seatLook.StickLookRate:0.#####}");
-        Add("gyroScale", $"{gyro.Scale:0.#####}");
-        Add("gyroDeadZone", $"({gyro.DeadZone.X:0.#####},{gyro.DeadZone.Y:0.#####},{gyro.DeadZone.Z:0.#####})");
-        Add("gyroInvert", $"({Flag(gyro.InvertX)},{Flag(gyro.InvertY)},{Flag(gyro.InvertZ)})");
-        Add("gyroYaw", $"({gyro.Yaw.X:0.#####},{gyro.Yaw.Y:0.#####},{gyro.Yaw.Z:0.#####})");
-        Add("gyroPitch", $"({gyro.Pitch.X:0.#####},{gyro.Pitch.Y:0.#####},{gyro.Pitch.Z:0.#####})");
-        Add("invertYaw", $"{Flag(seatLook.InvertYaw)}");
-        Add("invertPitch", $"{Flag(seatLook.InvertPitch)}");
-        Add("minPitch", $"{float.RadiansToDegrees(radians: control.MinPitch):0.##}");
-        Add("maxPitch", $"{float.RadiansToDegrees(radians: control.MaxPitch):0.##}");
-        Add("yaw", $"{float.RadiansToDegrees(radians: (state?.Yaw ?? 0f)):0.##}");
-        Add("pitch", $"{float.RadiansToDegrees(radians: (state?.Pitch ?? 0f)):0.##}");
-        Add("freeLook", $"{Flag(seat?.FreeLooking ?? false)}");
-        Add("orbit", $"{Flag(seat?.Orbiting ?? false)}");
-        Add("steer", $"{Flag(seat?.PointerSteering ?? false)}");
-        Add("motionControls", $"{Flag(seat?.MotionControlsActive ?? false)}");
-        Add("angularVelocity", $"({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})");
+        Add(key: "yawReference", value: $"{control.YawReference.ToString().ToLowerInvariant()}");
+        Add(key: "yawSensitivity", value: $"{seatLook.YawSensitivity:0.#####}");
+        Add(key: "pitchSensitivity", value: $"{seatLook.PitchSensitivity:0.#####}");
+        Add(key: "stickLookRate", value: $"{seatLook.StickLookRate:0.#####}");
+        Add(key: "gyroScale", value: $"{gyro.Scale:0.#####}");
+        Add(key: "gyroDeadZone", value: $"({gyro.DeadZone.X:0.#####},{gyro.DeadZone.Y:0.#####},{gyro.DeadZone.Z:0.#####})");
+        Add(key: "gyroInvert", value: $"({Flag(value: gyro.InvertX)},{Flag(value: gyro.InvertY)},{Flag(value: gyro.InvertZ)})");
+        Add(key: "gyroYaw", value: $"({gyro.Yaw.X:0.#####},{gyro.Yaw.Y:0.#####},{gyro.Yaw.Z:0.#####})");
+        Add(key: "gyroPitch", value: $"({gyro.Pitch.X:0.#####},{gyro.Pitch.Y:0.#####},{gyro.Pitch.Z:0.#####})");
+        Add(key: "invertYaw", value: $"{Flag(value: seatLook.InvertYaw)}");
+        Add(key: "invertPitch", value: $"{Flag(value: seatLook.InvertPitch)}");
+        Add(key: "minPitch", value: $"{float.RadiansToDegrees(radians: control.MinPitch):0.##}");
+        Add(key: "maxPitch", value: $"{float.RadiansToDegrees(radians: control.MaxPitch):0.##}");
+        Add(key: "yaw", value: $"{float.RadiansToDegrees(radians: (state?.Yaw ?? 0f)):0.##}");
+        Add(key: "pitch", value: $"{float.RadiansToDegrees(radians: (state?.Pitch ?? 0f)):0.##}");
+        Add(key: "boomDistance", value: $"{(state?.BoomDistance(views: definition.Views) ?? 0f):0.###}");
+        if (control.Boom is { } boom) {
+            Add(key: "boomMinimum", value: $"{boom.Minimum:0.###}");
+            Add(key: "boomMaximum", value: $"{boom.Maximum:0.###}");
+            Add(key: "boomStep", value: $"{boom.Step:0.###}");
+        }
+        Add(key: "freeLook", value: $"{Flag(value: (seat?.FreeLooking ?? false))}");
+        Add(key: "orbit", value: $"{Flag(value: (seat?.Orbiting ?? false))}");
+        Add(key: "steer", value: $"{Flag(value: (seat?.PointerSteering ?? false))}");
+        Add(key: "motionControls", value: $"{Flag(value: (seat?.MotionControlsActive ?? false))}");
+        Add(key: "angularVelocity", value: $"({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})");
 
         if (state is not null) {
-            Add("mode", $"{choice.ToString().ToLowerInvariant()}");
-            Add("autoFirstPerson", $"{Flag(state.AutomaticFirstPerson(control, seatLook))}");
+            Add(key: "mode", value: $"{choice.ToString().ToLowerInvariant()}");
+            Add(key: "autoFirstPerson", value: $"{Flag(value: state.AutomaticFirstPerson(control: control, feel: seatLook))}");
 
             // The client's clearance reading is a fixed run of key=value tokens that hold no free text.
-            foreach (var token in state.DescribeClearance().Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries)) {
+            foreach (var token in state.DescribeClearance().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ')) {
                 var split = token.IndexOf(value: '=');
 
                 fields.Add(item: new(key: token[..split], value: token[(split + 1)..]));
@@ -145,13 +151,45 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         }
 
         if (seatBindings.IsCameraModeActive(slot: slot)) {
-            Add("cameraApplication", $"true");
+            Add(key: "cameraApplication", value: $"true");
         }
 
         return fields;
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.boom",
+            description: "Moves the seat's orbit distance from an Axis2D source's vertical input, within views.seatControl.boom. An open wheel owns scroll input first. The existing boom dynamics ease the eye.",
+            valueKind: CommandValueKind.Axis2D,
+            handler: (context, args) => {
+                if (context.Origin != CommandOrigin.Binding) {
+                    return CommandResult.Error(output: "[player.camera.boom: requires an Axis2D binding]");
+                }
+                if (wheel?.IsOpen(slot: context.Slot) == true) { return CommandResult.None; }
+                var seat = roster.Seat(slot: context.Slot);
+
+                if (seat is null) { return CommandResult.Error(output: "[player.camera.boom: no occupied seat]"); }
+                seat.View.MoveBoom(units: context.Value.AsAxis2D.Y, views: instances.ResolveRoutedDefinition(slot: context.Slot).Views);
+                return CommandResult.None;
+            },
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            name: "player.camera.reset",
+            description: "Resets this seat's live orbit angles and distance to its authored rig defaults.",
+            handler: (context, args) => {
+                if (context.Phase is CommandPhase.Completed or CommandPhase.Canceled) { return CommandResult.None; }
+                var seat = roster.Seat(slot: context.Slot);
+
+                if (seat is null) { return CommandResult.Error(output: "[player.camera.reset: no occupied seat]"); }
+                seat.View.Recenter();
+                return new CommandResult(Output: Describe(slot: context.Slot));
+            },
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "view.recenter",
@@ -179,15 +217,17 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                     return CommandResult.Error(output: "[player.camera.view: expected first|third|toggle|auto]");
                 }
                 var seat = roster.Seat(slot: context.Slot);
+
                 if (seat is null) {
                     return CommandResult.Error(output: "[player.camera.view: no occupied seat]");
                 }
                 var token = ((args.Count == 0) ? "toggle" : args[0].ToString().ToLowerInvariant());
+
                 switch (token) {
-                    case "first": seat.View.SetView(true); break;
-                    case "third": seat.View.SetView(false); break;
-                    case "toggle": seat.View.SetView(!seat.View.FirstPerson); break;
-                    case "auto": seat.View.SetView(null); break;
+                    case "first": seat.View.SetView(first: true); break;
+                    case "third": seat.View.SetView(first: false); break;
+                    case "toggle": seat.View.SetView(first: !seat.View.FirstPerson); break;
+                    case "auto": seat.View.SetView(first: null); break;
                     default: return CommandResult.Error(output: "[player.camera.view: expected first|third|toggle|auto]");
                 }
                 return new CommandResult(Output: Describe(slot: context.Slot));
@@ -203,17 +243,19 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                     return CommandResult.Error(output: "[player.camera.automatic: expected on|off|auto|toggle]");
                 }
                 var seat = roster.Seat(slot: context.Slot);
+
                 if (seat is null) {
                     return CommandResult.Error(output: "[player.camera.automatic: no occupied seat]");
                 }
                 var definition = instances.ResolveRoutedDefinition(slot: context.Slot);
                 var feel = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
                 var token = ((args.Count == 0) ? "toggle" : args[0].ToString().ToLowerInvariant());
+
                 switch (token) {
-                    case "on": seat.View.SetAutomaticFirstPerson(true); break;
-                    case "off": seat.View.SetAutomaticFirstPerson(false); break;
-                    case "auto": seat.View.SetAutomaticFirstPerson(null); break;
-                    case "toggle": seat.View.SetAutomaticFirstPerson(!seat.View.AutomaticFirstPerson(definition.Views.SeatControl, feel)); break;
+                    case "on": seat.View.SetAutomaticFirstPerson(enabled: true); break;
+                    case "off": seat.View.SetAutomaticFirstPerson(enabled: false); break;
+                    case "auto": seat.View.SetAutomaticFirstPerson(enabled: null); break;
+                    case "toggle": seat.View.SetAutomaticFirstPerson(enabled: !seat.View.AutomaticFirstPerson(control: definition.Views.SeatControl, feel: feel)); break;
                     default: return CommandResult.Error(output: "[player.camera.automatic: expected on|off|auto|toggle]");
                 }
                 return new CommandResult(Output: Describe(slot: context.Slot));

@@ -39,6 +39,37 @@ public sealed class WorldSeatViewState {
 
     private float m_pitch;
     private float m_yaw;
+    private float? m_distance;
+
+    /// <summary>Returns the requested boom distance, or the authored orbit distance before the first input.</summary>
+    public float BoomDistance(WorldViewDefaults views) {
+        lock (m_gate) {
+            return (RequestedDistance(views: views) ?? AuthoredDistance(views: views));
+        }
+    }
+
+    private float? RequestedDistance(WorldViewDefaults views) =>
+        (((m_distance is { } distance) && (views.SeatControl.Boom is { } boom))
+            ? Math.Clamp(distance, boom.Minimum, boom.Maximum) : null);
+    private static float AuthoredDistance(WorldViewDefaults views) {
+        foreach (var operation in views.SeatRig.Operations) {
+            if (operation is WorldCameraProgramOp.Orbit orbit) {
+                return orbit.Distance;
+            }
+        }
+        return 0f;
+    }
+
+    /// <summary>Moves the requested distance within the world's bounds; the existing boom follower eases the eye.</summary>
+    /// <param name="units">Positive input moves closer.</param>
+    /// <param name="views">The routed world's camera structure.</param>
+    public void MoveBoom(float units, WorldViewDefaults views) {
+        if (!float.IsFinite(f: units) || (views.SeatControl.Boom is not { } boom)) { return; }
+        lock (m_gate) {
+            m_distance = Math.Clamp(((m_distance ?? AuthoredDistance(views: views)) - (units * boom.Step)), boom.Minimum, boom.Maximum);
+        }
+    }
+
     // What the last fixed tick's view advance moved the live look by, and where it started, so a frame between ticks
     // can present the look where the body it frames is drawn (see PresentedLook).
     private float m_tickPitchStep;
@@ -71,6 +102,7 @@ public sealed class WorldSeatViewState {
     /// <summary>Gets the vertical field of view, in radians, of the seat camera the presenter last framed, or zero
     /// before any frame (a headless World frames none).</summary>
     public float FieldOfView { get { lock (m_gate) { return m_fieldOfView; } } }
+
     /// <summary>Records the vertical field of view, in radians, the presenter framed this seat with, for the camera
     /// read-back.</summary>
     /// <param name="radians">The field of view of the camera just built.</param>
@@ -409,6 +441,7 @@ public sealed class WorldSeatViewState {
         lock (m_gate) {
             m_yaw = 0f;
             m_pitch = 0f;
+            m_distance = null;
             m_boom.Reseed();
             CutTickStep();
         }
@@ -476,12 +509,15 @@ public sealed class WorldSeatViewState {
 
         var (yaw, pitch) = PresentedLook(interpolationAlpha: interpolationAlpha);
 
+        float? distance;
+
+        lock (m_gate) { distance = RequestedDistance(views: views); }
         rig.Look = WorldSeatCameraResolver.Look(
             bodyOrientation: bodyOrientation,
             livePitch: pitch,
             liveYaw: yaw,
             yawReference: views.SeatControl.YawReference
-        );
+        ) with { Distance = distance };
 
         return rig;
     }

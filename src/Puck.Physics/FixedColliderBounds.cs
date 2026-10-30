@@ -8,6 +8,13 @@ namespace Puck.Physics;
 public static class FixedColliderBounds {
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
+    /// <summary>The smallest support radius of a convex volume: its sphere/capsule radius or least box/ellipsoid half-extent.</summary>
+    /// <param name="volume">The body's convex volume.</param>
+    /// <returns>The least radius, before contact skin.</returns>
+    public static FixedQ4816 MinimumSupportRadius(in FixedBodyColliderVolume volume) =>
+        ((volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid)
+            ? FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z))
+            : volume.Radius);
     /// <summary>Returns the body's least projection along a unit direction, including its radius.</summary>
     /// <param name="position">The body position.</param>
     /// <param name="orientation">The body orientation.</param>

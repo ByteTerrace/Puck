@@ -44,19 +44,25 @@ resolves their edits to this file at merge.
    break (`WorldTestBatch.cs:89`), then quiet-machine measurement of
    `--reproduce`, including the unexplained Go CPU regression in the loaded
    boot-reuse comparison.
-6. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
+6. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+   the owner's direction; Klondike first on the revived rules and SDF faces,
+   headless, its look in the lead's window.
+7. [Residency and streaming](#residency-and-streaming): the measurements, then
+   near-first ordering of bake, store loads and landing; the card tables are
+   its test case.
+8. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
    comparisons on the corrected rounded-Box diagnostic, then the surviving red
    findings by cluster; the reds fail every sweep.
-7. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+9. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
    it in `panes` and answers under pause, then the diagnostics' windowed checks
    and the developer exhibits.
-8. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
-   chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
-   then one paired windowed tour when no lane holds the GPU.
-9. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
-   isolate the temporal-off cadence blink first, then why history never
-   resolves the jitter.
-10. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+10. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+    chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
+    then one paired windowed tour when no lane holds the GPU.
+11. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+    isolate the temporal-off cadence blink first, then why history never
+    resolves the jitter.
+12. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -90,6 +96,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   lever's values; first-person feel in the lift and stairwell; the glass
   exhibit on both backends; how indoor rooms read against daylight once the
   image meter drives exposure ([lighting](#lighting-and-gi)).
+- Residency's look and policy: what a late or over-budget group shows and
+  whether switches fade or cut; whether the debug world gets doors that close
+  and the gallery authors areas; the resident-byte target machine; a standard
+  door's opening time ([residency](../decisions/residency.md#the-owners-calls)).
 - Whether a cube projection is wanted for screens on shapes, beside the sphere
   the owner asked for ([curved screens](#screens-on-curved-and-general-sdf-surfaces)).
 - The ideas [awaiting review](#awaiting-the-owners-review).
@@ -287,7 +297,7 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   - [medium] The CLI computes `ScenarioBootShape` over the raw staged JSON with unresolved `basis`/`imports` while the server compares the composed definition, so a census row whose inhabiting placement comes from an import lands on a shared worker and the server aborts it ("requires its own worker") (`TestCommand.Batch.cs:10-19`, `WorldPersistence.Scenarios.cs:83-91`).
   - [low] `RestoreCheckpointCore` delivers the restored definition to attached sinks before `ResetClockSeeds` and `GrantTable.SyncState`, so a projection sink seeding trait clocks reads the previous scenario's seeds (presentation only) (`WorldPersistence.Scenarios.cs:138-142`, `WorldPersistence.Checkpoint.cs:1048`).
 
-- [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (`.claude/scratch/boot-reuse-report.md`, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
+- [medium] Boot reuse (one host boot per worker and file, every artifact byte-identical) gave no clear speedup on a loaded machine: ordinary CPU -4.1 %, reproduce +7.1 % across 18 files; faster for many-short-scenario files (alchemy, reversi, suit), slower for others (machine-debugger, noclip, go's reproduce +58 % wall, its first scenario already slower before any restore). Re-measure the pairs on a quiet machine; profile go's reproduce replica (boot-reuse-report.md, `go-first-comparison.json`, `go-replay-phase-comparison.json` in the lane's scratch); keep or simplify the reuse by what the quiet numbers show. (from: boot-reuse lane)
 
 - [x] Boot-once never reuses a boot in practice: closed by boot-reuse.
   Compatible scenarios now restore pristine session lanes into their own
@@ -595,20 +605,28 @@ Owner: play-feel lane, with the owner's feel sittings · ordinary · Next: the
 reversal brake, then a sitting; the rate-limited facing op only if a
 movement-facing scheme returns.
 
-- [medium · owner: controls] Finish the standard extraction's windowed comparison
-  before extending it with zoom, dash or layouts. The shared design now lives in
-  `worlds/standard/`, with Go/Tour, Places and gallery icons refining it in
-  `worlds/debug/controls.puck`. Headless composition and the 23 input scenarios
-  reproduce; stills remain owed because both bounded GPU attempts expired on a
-  live foreign lease. The saved original and paired capture scripts are in the
-  controls worktree's `.claude/scratch/controls-evidence/`; the hand-back is
-  `controls-handback.md` in that worktree's scratch directory. Batch the comparison
-  into the lead's GPU verification window, then resume the three owner items below.
-
-- Binding bar layouts again (the owner's request; with the controls work, which edits the same `controls.puck`). The engine has both switches (`WorldBindingBar.LayoutCell` names the live authored layout; `ModelCell` draws one bar when `single`, every page with the rest as wings otherwise); the debug world authors only `standard` and fixes `barModel.model` at `single`. Recover and author: (1) the linear strips `keys` and `pad` from `controls.puck` at commit `8962c3d5a7` (lines 304-384: `pad` one row, left stick and Back, right stick and press, the face diamond at the right end; `keys` a WASD cross and action keys in a row with camera and function keys above), which the play wheel switched through `state.bar.layout` (`player.state.cell.toggle ... bar layout keys pad`, about line 465); (2) the wings, the WoW addon's modulo layout (commit `e5841bfdad`, `experimental/Puck.Demo/BindingBar/BindingBarLayout.cs`: two mirrored six-slot diamonds, `BarCount` 1 to 5 pushing bars 1-4 outward and downward, at the addon's 600-line reference: button 45 px, centre gap 60 px, anchor 220 px, badge 24/45 at 0.4375) through `ModelCell`; (3) a classical bar with flanking sidebars, never authored, built on the schema's "strip with side columns" (three groups on three anchors); (4) a compact size, which was never a mode (August worlds set `buttonSize 0.075`, `scale 0.72` per world), as a player setting over the layout's scale. Switch layouts, wings and size from play-wheel sectors and a console verb, kept per seat.
-
-- Mouse-wheel camera zoom (the owner's request, folded into the next input or camera lane after input-c7): the wheel moves the seat camera's boom in and out between a world-defined minimum and maximum (authored beside `seatCameraFeel` and the `camera-boom` dynamics row, with sensible standard defaults), eased by the boom's own smoothing; a middle-button click resets the camera (boom distance and orientation to the seat rig's defaults). While the play wheel is open the mouse wheel cycles its rings and never zooms (the owner's ruling: keep that behaviour and make the two play nice): the open wheel takes the wheel input first, zoom resumes only after it closes, and a scroll that opened or closed the wheel mid-gesture neither zooms nor steps a ring twice. Input C7 now supplies the relative Axis2D source `mouse.wheel` (vertical `.y`) and the middle button `mouse.button3`; wire camera zoom and reset through those names and consolidate the existing ring-scroll path so each scroll has one destination.
-- A dash for the Moth (the owner's request): a short, nicely animated burst along the move direction (or facing when idle), bound to the gamepad's west face button (`gamepad.buttonWest`: X on Xbox, Square on PlayStation, Y on Switch Pro; the owner's ruling) on the Move page, whose current West action (the bar shows it as `»`) moves to another slot, with a keyboard equivalent, with a cooldown, a rig animation (lean, trail or thruster flare from the Moth's back thrusters) and deterministic simulation (fixed-point impulse, input from the command snapshot). Rule 7: build it on the existing locomotion and rig drivers, not beside them.
+- [medium · owner: lead verification] Finish the controls visual checks in the
+  lead's windowed batch. The owner's controls brief makes this a GPU-free lane:
+  the earlier extraction comparison is owed alongside the new zoom/reset,
+  dash lean and thruster flare, all bar layouts, wings and compact/full stills;
+  it is no longer a prerequisite to implementing those controls. Headless
+  readbacks pass, all 23 input scenarios reproduce with their original 84
+  verdicts/export ticks, and the three dash scenarios reproduce including thin
+  wall contact. Run the saved before/after extraction scripts and the unrun
+  camera, bars and dash scripts under the controls worktree's
+  `.claude/scratch/controls-evidence/`; inspect the same workload on Vulkan,
+  read standing/walking frame time and patrol the stage. The hand-back is
+  `.claude/scratch/controls-handback.md`. Judge the dash's feel and the authored
+  secondary wings spacing; their appearance remains unconfirmed. The durable
+  controls and commands live in the [standard package](../../worlds/standard/README.md)
+  and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
+- [medium · owner: lead review] Run the required adversarial cross-family
+  review-and-fix pass on controls' engine changes: relative input boundaries,
+  camera state, headless wheel commits, per-seat preferences, timed impulses
+  and the analytic sweep correction. The controls worktree's
+  `.claude/scratch/controls-review-brief.md` names the scope and hunt list.
+  File findings in this packet; review does not block landing, and every high
+  finding must be resolved or explicitly deferred before the owner's main push.
 
 - Make the debug world's dual-stick action play fluid. In: the seat camera
   presents its look at the fraction the body is drawn at, so camera and steered
@@ -1229,6 +1247,81 @@ the drawn relief. The measured state is in the
   squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
   large radius.
 
+### Card tables in the board game room
+
+Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
+ordinary, the owner's direction · Next: the Klondike table, headless first,
+its look batched into the lead's window.
+
+The owner wants proper card tables in the gallery: physical cards on a table,
+played by sitting at it like the chess, Go, Reversi and Alchemy tables, which
+fill the board game room's four spots (`worlds/debug/shapes.md`). The cards
+need room of their own beside it on level 2; where is the lane's layout call,
+the look the owner's review.
+
+- Prior art, quarantined, to revive rather than rewrite (rule 7):
+  - Rules: `experimental/src/Puck.World/Assets/worlds/games/` holds Klondike
+    (draw one or three), Spider (one, two or four suits), FreeCell, the
+    `solitaire.puck` collection that switches between them and keeps each
+    deal, and poker with a hand-strength judge; deals use the seeded shuffle
+    stream and replay. They ran as state rows and rules with the console as
+    their only surface. The directory also holds backgammon, dominoes,
+    mancala, hidden ranks and word spy for later tables.
+  - Card faces: `experimental/worlds/genesis/cards.basis.puck`, all 52 faces as
+    SDF shapes. `card.hlsl` beside it was the side-by-side reference shader the
+    SDF look was built against, and `card.puck` holds the compare views and
+    hero cameras; the look is already SDF data and needs no shader.
+  - Laws: `experimental/tests/Puck.World.Games.Tests` (Solitaire deal and
+    rules, poker hand strength) as prior art for `test` blocks.
+- The mechanism exists: the tabletop (`src/Puck.World.Schema/README.md`,
+  discrete boards, cards and turns) and the chess table's pattern (rigid pieces,
+  a judge that reads the settled table, the context button to sit, the cursor
+  and pick button to play). A card table reuses both; no card engine.
+- The deck (faces, backs, card size) is a design any author imports, so it goes
+  to `worlds/standard/`; the tables and the room stay in `worlds/debug/`. One
+  baked mesh per face, shared by every table, so a second table adds no bake.
+1. Klondike: revive the module and the faces to the current language, a table
+   with the cards as bodies on the tabletop, deal from the seeded stream, play
+   by pick and context with the console still driving it, and `test` blocks for
+   a deal and a legal and an illegal move with `--reproduce`.
+2. Spider and FreeCell as the same table's game switch (`solitaire.puck`).
+3. Poker: seats, computer players and the hand judge; its own step.
+- Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
+  stress case for nearest-first bake order
+  ([streaming](#residency-and-streaming)).
+
+### Residency and streaming
+
+Owner: rendering lane (rendering, verification) · ordinary · Next: step 1, the
+measurements, then step 2, near-first ordering.
+
+The design is settled in [residency](../decisions/residency.md), from a
+three-family consensus: only presentation follows the observer; portals are
+edges, worlds and optional authored areas are nodes; one selector per
+presentation orders and bounds residency from every demand point; a door never
+waits for loading. The steps, each taken when its measured need appears:
+
+1. Measure: time until everything near the spawn has landed (cold and warm),
+   mesh bytes by level, `ProbeCache` bytes after a hall walk and a valley flight,
+   program build and replan time against placement count, store read rate
+   against the landing rate.
+2. Near-first: order lattices (`SdfMeshPathBake.TryTakeForFrame`), store loads
+   and owed meshes (`SdfWorldTables.MeshRegion`) by priority from demand points;
+   all three run in document order today. The card tables against a lobby spawn
+   are its test case.
+3. GI on the same demand points: the probe window follows every view, not
+   `Views[0]` (`SdfMeshIrradiance.cs:208`); the irradiance scene and its pending
+   gate are scoped to what the window reaches; `ProbeCache` (`:1365`) is
+   byte-bounded.
+4. Mapped demand through portal faces, replacing the blanket baking share
+   (`WorldViewGraphHost.ResetFootprints`).
+5. Eviction under one byte budget across residencies, with coarse levels owning
+   compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
+6. Authored areas (a volume with openings, on an existing volume vocabulary),
+   when a world needs them.
+7. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
+   the moons.
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction · one
@@ -1277,8 +1370,8 @@ material defect needs no taste call); new content and art on the owner's call.
   glass may lose its tint).
 - The board game room: the owner reviews its look (the tables share the chess
   table's wood, the Go board a flat kaya face, the Reversi board green felt);
-  more games for the free table spot at (65, 30.6), and addon seats at the
-  tables.
+  addon seats at the tables; card tables have their own packet
+  ([card tables](#card-tables-in-the-board-game-room)).
 - An elements-and-combat yard toward MMO action combat
   ([combat decision](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input);
   the quarantined `arena.puck` district is the rules' prior art):

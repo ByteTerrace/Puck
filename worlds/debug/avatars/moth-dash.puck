@@ -1,0 +1,3 @@
+// Her back pods give a six-tick burst and permit another after 24 ticks at 30 Hz.
+import "../../standard/abilities"
+dashAbility(kit: "walker", speed: 15, duration: 0.2, cooldown: 0.8)
