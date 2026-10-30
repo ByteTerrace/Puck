@@ -1,4 +1,4 @@
-schema: "puck.world.definition.v1"
+// The standard package: a fragment that refines its importer's rows by id. It declares nothing of its own.
 import "skin"
 import "controls"
 import "camera"

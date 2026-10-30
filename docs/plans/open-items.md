@@ -414,10 +414,12 @@ Next: make the per-tick authority hash incremental (measured below).
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
-  each root tick advances four authorities. Reused Hall scenarios reach their
-  first completed tick in tens of milliseconds, and Alchemy's one-tick cases
-  spend 53–154 ms in authored work excluding export: the measured seconds are
-  not a fixed three-second authored startup delay. Have the scenario-fixture
+  each root tick advances four authorities. Hall scenarios (each boots fresh;
+  the warm worker saves only the process's one-time start-up) were measured
+  reaching their first completed tick in tens of milliseconds under the former
+  host reuse, and Alchemy's one-tick cases spent 53–154 ms in authored work
+  excluding export: the measured seconds are not a fixed three-second authored
+  startup delay. Re-measure under the fresh boot. Have the scenario-fixture
   lane remove the avoidable companion workload while preserving the scenarios'
   claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
   from: boot-reuse profiling; the machine contribution is not isolated.)

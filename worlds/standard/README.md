@@ -9,7 +9,9 @@ Import the package from a sibling world:
 import "../standard/standard"
 ```
 
-`standard.puck` composes `skin.puck`, `controls.puck` and `camera.puck`. The controls document
+`standard.puck` composes `skin.puck`, `controls.puck` and `camera.puck`. It names no schema, so it is a
+fragment that refines the importer's rows (the Moth basis's `bare` overlay among them) and not a world that boots on
+its own. The controls document
 authors the cursor, icon and badge tables, binding bar, shared pages and play
 wheel. `pad-kit.puck` is a library of source lists and shared ring definitions.
 The debug world's Go and Tour pages, Places ring and gallery icons live in
