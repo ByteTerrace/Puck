@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
-using Puck.Testing;
+using Puck.Commands;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Games.Tests;
@@ -152,7 +153,7 @@ public sealed class GranaryContentLawTests(ITestOutputHelper output) {
         var template = Placement(id: "granaryStores");
         var board = Fixtures.BuildDocument() with {
             Text = source.Text,
-            CreationsRaw = [.. source.Creations.Where(predicate: row => (row.Id.StartsWith(value: "granaryPiece", comparisonType: StringComparison.Ordinal) || (row.Id == "granaryTable")))],
+            CreationsRaw = [.. source.Creations.Where(predicate: row => (row.Id.ToString().StartsWith(value: "granaryPiece", comparisonType: StringComparison.Ordinal) || (row.Id == "granaryTable")))],
             PlacementRowsRaw = [table, template],
             StateRaw = new WorldStateSection(World: [.. source.State.Where(predicate: static row => (row.Name.Value is "granaryNames" or "granaryKinds"))]),
         };
@@ -185,17 +186,16 @@ public sealed class GranaryContentLawTests(ITestOutputHelper output) {
 
     private static long Measure(WorldDefinition definition, WorldMutation seed) {
         using var fixture = Fixtures.FreshServer(definition: definition);
-        var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
 
         fixture.Server.EnqueueMutation(mutation: seed);
         for (var tick = 0; (tick < 8); tick++) {
-            fixture.Step(stepTicks: width);
+            fixture.Step();
         }
 
         var samples = new long[120];
 
         for (var tick = 0; (tick < samples.Length); tick++) {
-            samples[tick] = AllocationWindow.Total(window: () => fixture.Step(stepTicks: width));
+            samples[tick] = AllocationWindow.Total(window: () => fixture.Step());
         }
 
         Array.Sort(array: samples);
