@@ -24599,6 +24599,20 @@
                       "null"
                     ],
                     "default": null
+                  },
+                  "layout": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "default": null
                   }
                 },
                 "additionalProperties": false,
@@ -27725,6 +27739,35 @@
               "additionalProperties": false,
               "default": null,
               "title": "WorldCameraAutoFirstPerson"
+            },
+            "boom": {
+              "description": "Optional authored distance limits and input step for the interactive orbit.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "minimum": {
+                  "description": "The closest requested orbit distance.",
+                  "type": "number"
+                },
+                "maximum": {
+                  "description": "The farthest requested orbit distance.",
+                  "type": "number"
+                },
+                "step": {
+                  "description": "Distance removed by one positive input unit.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "minimum",
+                "maximum",
+                "step"
+              ],
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldCameraBoom"
             }
           },
           "required": [
@@ -42619,6 +42662,11 @@
                           ],
                           "default": "Self",
                           "title": "ActionTarget"
+                        },
+                        "useMoveDirection": {
+                          "description": "Uses the normalized current movement command when nonzero, falling back to the authored body direction.",
+                          "type": "boolean",
+                          "default": false
                         }
                       },
                       "required": [

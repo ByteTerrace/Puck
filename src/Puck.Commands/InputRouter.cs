@@ -67,6 +67,9 @@ public sealed partial class InputRouter : IDisposable {
     private readonly List<CapturedInjection> m_dueInjections = [];
     private readonly List<CommandInjection> m_duePendingInjections = [];
     private readonly List<CapturedSignal> m_dueSignals = [];
+    // Relative activations belong to one page interval, even when an open and close both fit inside
+    // this snapshot. Keep capture identity in router scratch, outside the serialized command format.
+    private readonly List<(int Slot, ulong Activation)> m_relativeActivations = [];
     private readonly Stack<HeldCommandState> m_freeHeldStates = [];
     private readonly Dictionary<int, Dictionary<ushort, HeldCommandState>> m_heldBySlot = [];
     private readonly Dictionary<int, ulong> m_lastInputTickBySlot = [];
@@ -444,6 +447,24 @@ public sealed partial class InputRouter : IDisposable {
             SimulationOffset = m_simulationOffset,
         });
     }
+    private void DiscardRelativeActivations(int slot, Dictionary<int, List<CommandEntry>> workingBySlot) {
+        if (!workingBySlot.TryGetValue(key: slot, value: out var working)) {
+            return;
+        }
+        for (var activationIndex = (m_relativeActivations.Count - 1); (activationIndex >= 0); activationIndex--) {
+            var captured = m_relativeActivations[activationIndex];
+
+            if (captured.Slot != slot) {
+                continue;
+            }
+            for (var index = (working.Count - 1); (index >= 0); index--) {
+                if (working[index].Activation == captured.Activation) {
+                    working.RemoveAt(index: index);
+                }
+            }
+            m_relativeActivations.RemoveAt(index: activationIndex);
+        }
+    }
     private void ApplySignal(Dictionary<int, List<CommandEntry>> workingBySlot, InputSignal signal, ulong tick, bool focusExemptOnly) {
         // Resolve activity before repeat de-duplication: an OS repeat is not a second command edge, but it is still
         // fresh physical activity for idle/away accounting.
@@ -550,6 +571,7 @@ public sealed partial class InputRouter : IDisposable {
             source: signal.Source
         ))
         );
+        var priorContext = m_bindings.ContextToken(slot: slot);
         var resolvedPageBindings = (forwardsToResolver
             ? m_bindings.Resolve(
                 pressesWithheld: focusExemptOnly,
@@ -558,6 +580,12 @@ public sealed partial class InputRouter : IDisposable {
             )
             : null
         );
+        var contextChanged = !ReferenceEquals(objA: priorContext, objB: m_bindings.ContextToken(slot: slot));
+
+        if (contextChanged) {
+            DiscardRelativeActivations(slot: slot, workingBySlot: workingBySlot);
+        }
+        var relativeSignal = (signal.Transient && (signal.Value.Kind is CommandValueKind.Axis1D or CommandValueKind.Axis2D or CommandValueKind.Axis3D));
         var pageBindings = ResolveBindings(bindings: (focusExemptOnly
             ? null
             : resolvedPageBindings));
@@ -643,6 +671,10 @@ public sealed partial class InputRouter : IDisposable {
                 : alwaysActiveBindings[(bindingIndex - pageBindingCount)]
             );
             var binding = resolved.Binding;
+
+            if (contextChanged && (relativeSignal || binding.Relative)) {
+                continue;
+            }
             var commandId = resolved.CommandId;
             var dispatchSource = (resolved.ToggleSource ?? signal.Source);
 
@@ -850,6 +882,9 @@ public sealed partial class InputRouter : IDisposable {
             ) { Activation = m_activation, CaptureTick = m_captureTick, SimulationOffset = m_simulationOffset };
 
             working.Add(item: entry);
+            if ((relativeSignal || binding.Relative) && !m_relativeActivations.Contains(item: (slot, m_activation))) {
+                m_relativeActivations.Add(item: (slot, m_activation));
+            }
 
             // Channel destinations carry one contribution per physical control. Two keys sharing a destination
             // therefore remain independently owned: releasing one cannot erase the other's reassertion or later
@@ -1993,7 +2028,6 @@ public sealed partial class InputRouter : IDisposable {
             state.IsHeld
         );
     }
-
     /// <summary>Whether this seat's physical source is depressed, independently of a command's toggle or
     /// authoritative continuation. Reads the router's existing repeat/release state on the pump thread.</summary>
     public bool IsSourcePressed(int slot, string source) {
@@ -2222,6 +2256,7 @@ public sealed partial class InputRouter : IDisposable {
         // Working per-slot ordered state for this tick: carried state first, then every due signal is appended in order;
         // repeated commands stay repeated.
         SeedCarried();
+        m_relativeActivations.Clear();
         m_captureTick = 0;
         m_activation = 0;
         m_simulationOffset = null;

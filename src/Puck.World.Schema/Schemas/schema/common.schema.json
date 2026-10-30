@@ -6949,6 +6949,11 @@
           "$ref": "#/$defs/ActionTarget",
           "description": "The participant a kit\u0027s action addresses \u2014 see Target.",
           "default": "Self"
+        },
+        "useMoveDirection": {
+          "description": "Uses the normalized current movement command when nonzero, falling back to the authored body direction.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [

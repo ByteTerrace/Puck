@@ -361,6 +361,7 @@ public sealed partial class WorldRuleHost {
         _ = body.ApplyTargetedEffect(
             instruction: new CompiledBodyInstruction(
                 Direction: operation.Direction,
+                UseMoveDirection: operation.UseMoveDirection,
                 DurationTicks: operation.DurationTicks,
                 Operation: operation.Operation,
                 StateSlot: -1,

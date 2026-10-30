@@ -165,6 +165,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
         // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedStaticContactWork.Process);
         // The bodies each tick steps, and the parked rigid bodies a contact-field change wakes.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBodyWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);
@@ -932,12 +933,19 @@ public static class WorldBootComposition {
         ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => sp.GetRequiredService<WorldControlCommandModule>());
 
-        // The radial action menu's verb surface (player.wheel.ring/.select/.commit/.cancel + world.view.wheel) — see
-        // AddWorldPresentation below for WorldWheelFeed/WheelStore, the genuinely presentation-only pointer/viewport
-        // state this module reads. CORE-registered for the same command-vocabulary-parity reason as
-        // WorldUiCommandModule above: the engine-default document's wheel-hold pages commit RingCommand/CommitCommand
-        // on every group (play, editor), so a headless boot must carry the SAME verb NAMES; WorldWheelFeed is
-        // OPTIONAL (default null) and every handler refuses BY NAME at use when it is absent.
+        // Logical wheel input, ring selection and commits are core data. Pixel-space pointer selection
+        // and overlay publication are optional adapters, so the same bindings work in a headless host.
+        services.AddSingleton<WheelStore>();
+        services.AddSingleton(implementationFactory: static sp => new WorldWheelFeed(
+            clock: sp.GetRequiredService<IInputClock>(),
+            icons: sp.GetService<WorldIconTable>(),
+            pointer: sp.GetService<WorldPointer>(),
+            bindings: sp.GetRequiredService<WorldSeatBindings>(),
+            cursor: sp.GetService<WorldCursorFeed>(),
+            viewports: sp.GetService<WorldSeatViewports>(),
+            store: sp.GetRequiredService<WheelStore>(),
+            router: () => sp.GetRequiredService<InputRouter>()
+        ));
         services.AddSingleton<ICommandModule, WorldWheelCommandModule>();
         // The pad's desktop verbs (source.passthrough.pointer/.scroll/.button.*/.arrow.*), CORE-registered for the same
         // vocabulary-parity reason: the debug world's desktop page commits them. The passthrough door is
@@ -1551,28 +1559,7 @@ public static class WorldBootComposition {
             viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));
 
-        // The radial action menu — held binding pages presenting themselves: the store the overlay's wheel writer
-        // reads, the feed that keeps the radial's presentation state (hub anchor, active ring, hovered sector) and
-        // returns a sector activation through the seat's input-router lane, and the verb surface
-        // world.view.wheel). The feed is the process's ONE IWorldWheelConsumer — registered as a consumer BELOW so
-        // WorldPointerSink's construction-time registration sees it and stops drain-discarding the wheel
-        // accumulator. Its router is lazy because CommandRegistry aggregates WorldWheelCommandModule, which consumes
-        // the feed.
-        services.AddSingleton<WheelStore>();
-        services.AddSingleton(implementationFactory: static sp => new WorldWheelFeed(
-            clock: sp.GetRequiredService<IInputClock>(),
-            icons: sp.GetRequiredService<WorldIconTable>(),
-            pointer: sp.GetRequiredService<WorldPointer>(),
-            bindings: sp.GetRequiredService<WorldSeatBindings>(),
-            cursor: sp.GetRequiredService<WorldCursorFeed>(),
-            viewports: sp.GetRequiredService<WorldSeatViewports>(),
-            store: sp.GetRequiredService<WheelStore>(),
-            router: () => sp.GetRequiredService<InputRouter>()
-        ));
         services.AddSingleton<IWorldPointerConsumer>(implementationFactory: static sp => sp.GetRequiredService<WorldWheelFeed>());
-        // WorldWheelCommandModule (the verb surface reading this feed) is CORE-registered — see
-        // AddWorldAuthoritativeCore's tail — because the engine-default document commits its verb NAMES in every
-        // boot shape; it resolves this feed as an OPTIONAL dependency and refuses by name headless.
 
         // Both sinks above want every raw window input event, but IHostContext.HoldsCapability resolves exactly
         // ONE instance per capability type (see IWindowInputObserver's doc comment) — WorldWindowInputObservers

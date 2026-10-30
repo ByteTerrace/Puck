@@ -679,6 +679,8 @@ export type BindingBarPreferences = {
   scale?: number | null;
   contrastBoost?: number | null;
   uiScale?: number | null;
+  layout?: string | null;
+  model?: string | null;
 };
 
 export type BindingChordDefinition = {
@@ -3818,6 +3820,21 @@ export type WorldCameraAutoFirstPerson = {
   exitSeconds?: number;
 };
 
+export type WorldCameraBoom = {
+  /**
+   * The closest requested orbit distance.
+   */
+  minimum: number;
+  /**
+   * The farthest requested orbit distance.
+   */
+  maximum: number;
+  /**
+   * Distance removed by one positive input unit.
+   */
+  step: number;
+};
+
 export type WorldCameraCharacterFade = {
   /**
    * The boom distance at which the body starts dissolving.
@@ -5242,6 +5259,10 @@ export type WorldEffectPlanarImpulse = {
    * The participant a kit's action addresses — see Target.
    */
   target?: ActionTarget;
+  /**
+   * Uses the normalized current movement command when nonzero, falling back to the authored body direction.
+   */
+  useMoveDirection?: boolean;
 };
 
 /**
@@ -12166,6 +12187,10 @@ export type WorldSeatViewControl = {
    * The optional automatic pull-in policy; absent is off with standard hysteresis.
    */
   autoFirstPerson?: WorldCameraAutoFirstPerson | null;
+  /**
+   * Optional authored distance limits and input step for the interactive orbit.
+   */
+  boom?: WorldCameraBoom | null;
 };
 
 export type WorldSeatYawReference = "World" | "Body";

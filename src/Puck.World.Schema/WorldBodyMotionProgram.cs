@@ -248,6 +248,7 @@ public static class BodyActionSpecFactory {
 
         return new CompiledBodyInstruction(
             Direction: form.Direction,
+            UseMoveDirection: form.UseMoveDirection,
             DurationTicks: form.DurationTicks,
             Operation: form.Operation,
             StateName: form.Register,

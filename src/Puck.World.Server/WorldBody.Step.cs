@@ -42,7 +42,7 @@ public sealed partial class WorldBody {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         if (PopulationSleeping) { return false; }
 
-        // Captured before ExecuteProgram (or the overlay add below) can move m_position — the swept portal-crossing
+        // Captured before ExecuteProgram can move m_position — the swept portal-crossing
         // scan's segment start for this step. A hard teleport between scans overwrites this separately (CommitTeleport).
         m_previousPosition = m_position;
         var previousOrientationForSleep = m_orientation;
@@ -154,25 +154,6 @@ public sealed partial class WorldBody {
                     turnSpeed: turnSpeed
                 );
 
-                // The timed impulse overlay rides after the selected program, through its own accumulator.
-                if (m_overlayRemaining > 0) {
-                    var overlayTicks = Math.Min(
-                        val1: stepTicks,
-                        val2: m_overlayRemaining
-                    );
-
-                    m_position += m_overlayAccumulator.Integrate(
-                        elapsedTicks: overlayTicks,
-                        ratePerSecond: m_overlayVelocity
-                    );
-                    m_overlayRemaining -= overlayTicks;
-
-                    if (m_overlayRemaining == 0) {
-                        m_overlayVelocity = default;
-                        m_overlayAccumulator.Reset();
-                    }
-                }
-
                 refused = (m_sweepRefusal != ContactRefusal.None);
             }
         }
@@ -254,7 +235,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (m_orientation.Rotate(vector: instruction.Direction) * (instruction.Value * m_scale));
+                m_overlayVelocity = (ImpulseDirection(instruction: in instruction, intent: in m_channelReadComposed, orientation: m_orientation) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;
@@ -434,6 +415,24 @@ public sealed partial class WorldBody {
             role: ChannelRole.MoveUp
         ))) * scratch.MoveSpeed);
         scratch.TargetVelocity = scratch.Velocity;
+    }
+    // Resolve the accepted tick's movement resultant through the same surface projection as locomotion.
+    // Normalization gives a fixed overlay speed even at partial stick deflection.
+    private FixedVector3 ImpulseDirection(in CompiledBodyInstruction instruction, in PlayerIntent intent, FixedQuaternion orientation) {
+        if (instruction.UseMoveDirection) {
+            var scratch = new BodyMotionScratch { Intent = intent, Orientation = orientation, Up = m_up };
+            FixedVector3 direction;
+
+            if (!TryCommandedMoveDirection(direction: out direction, scratch: ref scratch)) {
+                var (forward, strafe) = PlanarIntent(intent: in intent);
+                var facing = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? m_frame.Rotate(vector: -FixedVector3.UnitZ) : orientation.Rotate(vector: -FixedVector3.UnitZ));
+                var right = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? m_frame.Rotate(vector: FixedVector3.UnitX) : orientation.Rotate(vector: FixedVector3.UnitX));
+
+                direction = ((facing * forward) + (right * strafe)).RejectFrom(unitAxis: m_up);
+            }
+            if (direction != FixedVector3.Zero) { return direction.WithLength(length: FixedQ4816.One); }
+        }
+        return orientation.Rotate(vector: instruction.Direction);
     }
     private void ComputePlanarTargetVelocity(ref BodyMotionScratch scratch) {
         var effectiveMoveSpeed = ApplySpeedHeld(
@@ -638,7 +637,7 @@ public sealed partial class WorldBody {
                 m_verticalVelocityAccumulator.Reset();
                 break;
             case BodyMotionOp.PlanarImpulse:
-                m_overlayVelocity = (scratch.Orientation.Rotate(vector: instruction.Direction) * (instruction.Value * m_scale));
+                m_overlayVelocity = (ImpulseDirection(instruction: in instruction, intent: in scratch.Intent, orientation: scratch.Orientation) * (instruction.Value * m_scale));
                 m_overlayRemaining = instruction.DurationTicks;
                 m_overlayAccumulator.Reset();
                 break;
@@ -843,12 +842,24 @@ public sealed partial class WorldBody {
         );
 
         scratch.NextPosition = (m_position + step);
+        IntegrateOverlay(scratch: ref scratch);
     }
     private void IntegrateScratchVelocity(ref BodyMotionScratch scratch) {
         scratch.NextPosition = (m_position + m_positionAccumulator.Integrate(
             elapsedTicks: scratch.StepTicks,
             ratePerSecond: scratch.Velocity
         ));
+        IntegrateOverlay(scratch: ref scratch);
+    }
+    // Keep the timed displacement inside the program's ordinary swept contact boundary. The overlay
+    // retains its own integration residue and never becomes persistent locomotion velocity.
+    private void IntegrateOverlay(ref BodyMotionScratch scratch) {
+        if (m_overlayRemaining == 0) { return; }
+        var ticks = Math.Min(val1: scratch.StepTicks, val2: m_overlayRemaining);
+
+        scratch.NextPosition += m_overlayAccumulator.Integrate(elapsedTicks: ticks, ratePerSecond: m_overlayVelocity);
+        m_overlayRemaining -= ticks;
+        if (m_overlayRemaining == 0) { m_overlayVelocity = default; m_overlayAccumulator.Reset(); }
     }
     private PlayerIntent NextIntent(ulong stepTicks, ulong tick, int body) {
         var movement = default(PlayerIntent);

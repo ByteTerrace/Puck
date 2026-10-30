@@ -1,0 +1,22 @@
+// Reusable timed movement burst, authored into the named kit. The importing avatar refines the kit
+// with locomotion, shape and other actions, and declares dash plus the two Timer body slots.
+template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
+  kits [
+    {
+      name: kit
+      actions {
+        dash {
+          onPress {
+            gate: timerElapsed(state: "dashCooldown")
+            latchSeconds: 0
+            effects [
+              planarImpulse(bodyDirection: [0, 0, -1], speed: speed, durationSeconds: duration, useMoveDirection: true)
+              startTimer(state: dashCooldown, seconds: cooldown)
+              startTimer(state: dashActive, seconds: duration)
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
