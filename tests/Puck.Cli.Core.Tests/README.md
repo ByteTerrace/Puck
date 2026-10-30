@@ -2,10 +2,12 @@
 
 These laws hold the plumbing every `puck` verb shares: process runs and their
 deadlines on a virtual clock, git runs, path display, the project build, scratch
-directories and a root's invocation. `CliProcessHandshakeTests` checks that
+directories and a root's invocation. `RunDirectorySweepLawTests` checks that a
+sweep removes a stale run directory of any depth and leaves a link out of its
+root untouched. `CliProcessHandshakeTests` checks that
 output can release a final stdin command without closing input early, and that
 early exit and timeout remain bounded. The suite references `Puck.Cli.Core`
-alone.
+and the shared run-directory policy's `Puck.Confinement` leaf.
 
 Shared fixtures (`ConsoleCapture`, `GitScratchCheckout`, the thread-pool floor and kin) live in [`tests/Shared/Cli`](../Shared/Cli/README.md) and are linked into each suite that uses them.
 

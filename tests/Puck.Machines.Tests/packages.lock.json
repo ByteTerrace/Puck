@@ -223,11 +223,15 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.machines.post": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       }
     }

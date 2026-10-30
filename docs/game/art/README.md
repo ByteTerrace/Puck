@@ -9,6 +9,9 @@ documents remain the implementation sources.
 
 | Document or package | Scope | Description |
 |---|---|---|
+| [Canyon discovery gallery](canyon-discovery-pack/README.md) | Major demo layout and interaction design | B-based portal court, sixteen-station shape workshop, Wonderland/link lab, six-game commons and studio/trail. |
+| [Canyon workshop environment pack](canyon-workshop-pack/README.md) | Selected valley and gallery direction | B-based environment views, interior scenes, construction details, and modeller handoff. |
+| [Valley and gallery visual references](valley-and-gallery.md) | Environment direction and real-life references | Source references, initial comparisons, and the selected B direction for a painterly, cartoony futuristic valley and gallery. |
 | [Armored chibi hero implementation brief](armored-chibi-hero-brief.md) | Character design and motion | Aesthetic brief defining silhouette, chunky chibi anime armor, materials, and movement dynamics for the hero avatar within Puck's signed-distance renderer. |
 | [Moth concept pack](moth-concept-pack/README.md) | Concept art and model sheets | The Moth's visual standard: the mech-suit turnaround, construction details, poses and expressions, flight, the off-suit Moth with her scale and fit inside the suit, the handheld at true scale, the flight-pack references and prompt provenance. |
 

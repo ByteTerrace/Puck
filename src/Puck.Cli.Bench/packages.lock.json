@@ -819,6 +819,7 @@
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )",
           "FSharp.Core": "[11.*, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Resharp": "[1.*, )",
           "System.CommandLine": "[2.*, )"
         }
@@ -831,6 +832,7 @@
           "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Source": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.World.Transpiler": "[1.0.0, )"
         }
       },
@@ -841,6 +843,7 @@
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
           "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.Launcher": "[1.0.0, )"
         }
       },
@@ -851,6 +854,7 @@
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",
           "Puck.Cli.Worlds": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.World.Console": "[1.0.0, )"
         }
       },
@@ -859,6 +863,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "Puck.Cli.Core": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.SdfVm.Model": "[1.0.0, )"
         }
       },
@@ -869,7 +874,8 @@
           "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
           "Puck.Cli.Core": "[1.0.0, )",
-          "Puck.Cli.Harness": "[1.0.0, )"
+          "Puck.Cli.Harness": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       },
       "puck.cli.worlds": {
@@ -883,6 +889,7 @@
           "Puck.Cli.Format": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",
           "Puck.Cli.Shaders": "[1.0.0, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )",

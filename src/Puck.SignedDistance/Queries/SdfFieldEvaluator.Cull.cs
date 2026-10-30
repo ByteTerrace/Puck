@@ -308,7 +308,9 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfOp.Onion:
                 case SdfOp.Dilate:
-                case SdfOp.CellDisplace: {
+                case SdfOp.CellDisplace:
+                case SdfOp.Displace:
+                case SdfOp.NoiseDisplace: {
                         if (depth == 0) {
                             return false;
                         }

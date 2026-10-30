@@ -1128,6 +1128,59 @@ internal static partial class Subjects {
             }
         }
 
+        // ValueNoise3 stays inside [-1, 1) over drawn points of the whole signed lattice, and at a whole lattice point,
+        // where every fade is zero, collapses onto twice its near corner's public Pcg3d fraction less one.
+        for (var draw = 0; (draw < 256); ++draw) {
+            var point = new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: unchecked((long)((int)generator.NextUInt32()))),
+                Y: FixedQ4816.FromRawBits(value: unchecked((long)((int)generator.NextUInt32()))),
+                Z: FixedQ4816.FromRawBits(value: unchecked((long)((int)generator.NextUInt32())))
+            );
+            var (seedX, seedY, seedZ) = (generator.NextUInt32(), generator.NextUInt32(), generator.NextUInt32());
+            var sample = Pcg3dLatticeNoise.ValueNoise3(q: point, seedX: seedX, seedY: seedY, seedZ: seedZ);
+
+            if ((sample < -FixedQ4816.One) || (sample >= FixedQ4816.One)) { return $"ValueNoise3({point}) left [-1, 1) at raw {sample.Value}"; }
+
+            var cell = new FixedVector3(
+                X: FixedQ4816.FromInteger(value: (point.X.Value >> FixedQ4816.FractionBitCount)),
+                Y: FixedQ4816.FromInteger(value: (point.Y.Value >> FixedQ4816.FractionBitCount)),
+                Z: FixedQ4816.FromInteger(value: (point.Z.Value >> FixedQ4816.FractionBitCount))
+            );
+            var corner = FixedQ4816.FromRawBits(value: ((long)(Pcg3dLatticeNoise.Pcg3d(
+                x: (unchecked((uint)(cell.X.Value >> FixedQ4816.FractionBitCount)) ^ seedX),
+                y: (unchecked((uint)(cell.Y.Value >> FixedQ4816.FractionBitCount)) ^ seedY),
+                z: (unchecked((uint)(cell.Z.Value >> FixedQ4816.FractionBitCount)) ^ seedZ)
+            ).X >> 16)));
+            var atCorner = Pcg3dLatticeNoise.ValueNoise3(q: cell, seedX: seedX, seedY: seedY, seedZ: seedZ);
+
+            if (atCorner != ((corner * FixedQ4816.FromInteger(value: 2)) - FixedQ4816.One)) {
+                return $"ValueNoise3 at lattice point {cell} is {atCorner.Value}, not twice the corner hash {corner.Value} less one";
+            }
+
+            // Fbm3 is its octaves' weighted sum: each a ValueNoise3 at the point scaled by lacunarity to the octave,
+            // seeded by the base seed plus the octave.
+            var octaves = ((int)(generator.NextUInt32() % 9U));
+            var gain = FixedQ4816.FromRawBits(value: (generator.NextUInt32() % 65537U));
+            var lacunarity = FixedQ4816.FromRawBits(value: (65536L + (generator.NextUInt32() % 196609U)));
+            var small = (point / FixedQ4816.FromInteger(value: 4096));
+            var expected = FixedQ4816.Zero;
+            var weight = FixedQ4816.One;
+            var at = small;
+
+            for (var octave = 0; (octave < octaves); ++octave) {
+                var octaveSeed = unchecked(seedX + ((uint)octave));
+
+                expected += (weight * Pcg3dLatticeNoise.ValueNoise3(q: at, seedX: octaveSeed,
+                    seedY: unchecked(octaveSeed * Pcg3dLatticeNoise.HashStreamA), seedZ: unchecked(octaveSeed * Pcg3dLatticeNoise.HashStreamB)));
+                at *= lacunarity;
+                weight *= gain;
+            }
+
+            var fbm = Pcg3dLatticeNoise.Fbm3(gain: gain, lacunarity: lacunarity, octaves: octaves, q: small, seed: seedX);
+
+            if (fbm != expected) { return $"Fbm3({small}, {seedX}, {octaves}, {gain.Value}, {lacunarity.Value}) is {fbm.Value}, not its octaves' sum {expected.Value}"; }
+        }
+
         return null;
     }
 

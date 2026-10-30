@@ -301,8 +301,12 @@ A solid placement requiring deterministic field contact refuses `Revolve` and
 domain folds that cannot expand; a `Path` prism profile (extruded, a fill or a
 stroke) is admitted, since the fixed-point evaluator reads its edge table as
 the kernel does. `flare`, `shear`, `bumps`, `erode`, panels,
-trims, cells, sweeps, and creation noise validate but are omitted from contact
-geometry (cells keep the base primitive). For an arched or otherwise convex
+trims, cells and sweeps validate but are omitted from contact geometry (cells
+keep the base primitive). Creation `noise` is not omitted: a relieved creation
+collides as the surface its bake draws, one field collider per stamped copy
+whose field is the creation's own fixed-point program (its contact shapes and
+the relief over their union), so a body stands on the drawn rock
+([shapes](references/shapes.md#contact-admission)). For an arched or otherwise convex
 outline that must collide, a clockwise `Convex` profile (at most 32 vertices)
 or a union of admitted primitives keeps the shape. See
 [shapes](references/shapes.md#contact-admission). Every view still renders a

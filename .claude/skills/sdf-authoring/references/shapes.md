@@ -247,8 +247,19 @@ are the authored ones. Strands closer than twice their radius fuse.
   does.
 - **Accepted but omitted:** creation contact emission skips sweeps entirely
   (including single-strand sweeps) and detail shapes; it omits flare, shear,
-  bumps, erode, panel, trims, cells, and creation noise. Base primitives remain
-  for the omitted facets. Author a separate admitted contact shape if needed.
+  bumps, erode, panel, trims and cells. Base primitives remain for the omitted
+  facets. Author a separate admitted contact shape if needed.
+- **Relief collides as drawn:** a creation with a `noise` facet compiles, under
+  the analytic provider, one field collider (`FixedStaticColliderKind.Field`)
+  per stamped copy instead of its primitives' colliders. Its field is the
+  copy's contact shapes in one scope with the relief over their union, the
+  program the field provider reads too (`NoiseDisplace` is a contact op), so
+  contact and the bake read one field. The narrowphase measures distance as
+  the field over its gradient's length and proves a body clear from the
+  shapes' unrelieved union grown by the amplitude (`FixedColliderField`,
+  `FixedFieldColliderContact`); `world.counters physics.contact` prices it as
+  `field-queries`, `field-bounds` and `field-samples`. Every boolean inside
+  the creation still collides as its contact shapes do (detail shapes drop).
 
 A low-level SDF operation's CPU support does not guarantee that a creation's
 contact compiler emits it. Conversely, a supported primitive or profile name

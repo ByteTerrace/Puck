@@ -35,8 +35,9 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// <see cref="FixedStaticContactSolver"/> depenetrates a body out of: <see cref="FixedStaticColliderKind.Sphere"/>,
 /// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, <see cref="FixedStaticColliderKind.OrientedBox"/>,
 /// <see cref="FixedStaticColliderKind.RoundedBox"/>, <see cref="FixedStaticColliderKind.ChamferedBox"/>,
-/// <see cref="FixedStaticColliderKind.Superellipsoid"/>, <see cref="FixedStaticColliderKind.Cylinder"/>, and
-/// <see cref="FixedStaticColliderKind.HalfSpace"/>. A
+/// <see cref="FixedStaticColliderKind.Superellipsoid"/>, <see cref="FixedStaticColliderKind.Cylinder"/>,
+/// <see cref="FixedStaticColliderKind.HalfSpace"/>, and <see cref="FixedStaticColliderKind.Field"/> (a projection by
+/// measured first-order steps, <see cref="FixedFieldColliderContact.Nearest"/>). A
 /// later slice reads a candidate's <see cref="FixedSurfaceAttachCandidate.Point"/> as the anchor and
 /// <see cref="FixedSurfaceAttachCandidate.Normal"/> as the surface-tangent-plane basis; nothing here decides grip,
 /// rope length, or reach — every distance and angle is caller-supplied, never a constant baked in.
@@ -260,6 +261,7 @@ public static class FixedSurfaceQuery {
 
     internal static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
         FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.Nearest(collider: in collider, probe: probe),
+        FixedStaticColliderKind.Field => FixedFieldColliderContact.Nearest(collider: in collider, probe: probe),
         FixedStaticColliderKind.RoundedBox => NearestOnRoundedBox(collider: in collider, probe: probe),
         FixedStaticColliderKind.Cylinder => NearestOnCylinder(collider: in collider, probe: probe),
         FixedStaticColliderKind.Sphere => NearestOnSphere(

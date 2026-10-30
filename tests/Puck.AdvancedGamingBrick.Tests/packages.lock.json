@@ -268,14 +268,19 @@
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Microsoft.Extensions.DependencyInjection": "[10.*, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.Machines.Post": "[1.0.0, )"
         }
+      },
+      "puck.confinement": {
+        "type": "Project"
       },
       "puck.machines.post": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       }
     }

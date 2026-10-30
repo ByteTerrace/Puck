@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Puck.Confinement;
 
 namespace Puck;
 
@@ -12,7 +13,10 @@ namespace Puck;
 // whose owner has finished, the newest KeptPerKind stay and the rest go. The first directory a process creates sweeps
 // every kind the same way and also removes any finished owner's directory older than StaleAge, which clears a killed
 // run's leftovers and old evidence of kinds that never run again. A directory whose owner still runs is never removed,
-// and a family directory named with a token alone names no owner, so it goes once older than StaleAge.
+// and a family directory named with a token alone names no owner, so it goes once older than StaleAge. A directory is
+// removed through Puck.Confinement (iterative, one open handle per level, never following a link), so a tree of any
+// depth cannot overflow the stack of the process that sweeps it; a directory holding a link, or one something still
+// holds, is left in place and named in a "run directory not removed:" line, and never stops the sweep.
 internal sealed partial class RunDirectory : IDisposable {
     /// <summary>The prefix every run directory's name starts with.</summary>
     public const string Family = "puck-";
@@ -133,7 +137,7 @@ internal sealed partial class RunDirectory : IDisposable {
     /// <param name="path">The kept directory's absolute path.</param>
     /// <returns>The line, without a terminator.</returns>
     public static string KeptLine(string path) => $"run directory kept: {path}";
-    /// <summary>Trims the kind of a directory just kept: sweeps that kind (<see cref="Sweep(string, TimeSpan)"/>). A
+    /// <summary>Trims the kind of a directory just kept: sweeps that kind (<see cref="Sweep(string, TimeSpan, string, TextWriter)"/>). A
     /// directory whose name is not a run directory's trims nothing.</summary>
     /// <param name="kept">The kept directory.</param>
     /// <returns>How many directories were removed.</returns>
@@ -143,18 +147,54 @@ internal sealed partial class RunDirectory : IDisposable {
         return (match.Success ? SweepKinds(age: StaleAge, kind: match.Groups["kind"].Value) : 0);
     }
     /// <summary>Deletes a directory once, letting the failure propagate: for an owner whose law is that nothing under
-    /// the directory is still open.</summary>
+    /// the directory is still open. The removal goes through <c>Puck.Confinement</c>: iterative, so a tree of any depth
+    /// is removed without overflowing the stack, and it never follows a link. A link in the tree, or the directory
+    /// itself being one, refuses the removal there and leaves what is not yet removed in place.</summary>
     /// <param name="path">The directory to remove recursively.</param>
+    /// <exception cref="IOException">The directory or an entry below it is a link or is held by another process, or
+    /// cannot be removed.</exception>
     public static void Delete(string path) {
-        if (Directory.Exists(path: path)) {
-            Directory.Delete(
-                path: path,
-                recursive: true
+        if (!Directory.Exists(path: path)) {
+            return;
+        }
+
+        var full = System.IO.Path.TrimEndingDirectorySeparator(path: System.IO.Path.GetFullPath(path: path));
+        var name = System.IO.Path.GetFileName(path: full);
+
+        if ((System.IO.Path.GetDirectoryName(path: full) is not { } parentPath) || (name.Length == 0)) {
+            throw new IOException(message: $"'{full}' is a volume root, which a run never owns.");
+        }
+
+        using var parent = ConfinedDirectory.OpenAnchor(
+            create: false,
+            path: parentPath
+        );
+
+        if (parent is null) {
+            return;
+        }
+
+        ConfinedDirectory? directory;
+
+        try {
+            directory = parent.TryOpenChildForRemoval(name: name);
+        } catch (DirectoryNotFoundException) {
+            return;
+        }
+
+        if (directory is null) {
+            throw new IOException(message: $"'{full}' is held by another process.");
+        }
+
+        using (directory) {
+            directory.DeleteTree(
+                name: name,
+                parent: parent
             );
         }
     }
     /// <summary>Deletes a directory best-effort, retrying for a short while as handles under it close and clearing
-    /// read-only attributes that refuse a delete.</summary>
+    /// read-only attributes through handles. Unsupported platforms leave the directory and return false.</summary>
     /// <param name="path">The directory to remove recursively.</param>
     /// <returns>Whether the directory is gone.</returns>
     public static bool TryDelete(string path) {
@@ -166,8 +206,10 @@ internal sealed partial class RunDirectory : IDisposable {
             } catch (IOException) {
                 // A handle under the directory has not closed yet.
             } catch (UnauthorizedAccessException) {
-                // A read-only file, or one still held open for deletion.
-                ClearReadOnly(path: path);
+                // A file whose permissions may change while its owner closes it.
+            } catch (PlatformNotSupportedException) {
+                // Optional cleanup must not turn a successful run into a failure on an unsupported host.
+                return false;
             }
 
             Thread.Sleep(millisecondsTimeout: DeleteRetryMilliseconds);
@@ -178,26 +220,30 @@ internal sealed partial class RunDirectory : IDisposable {
     /// <summary>Removes, best-effort, the run directories of every kind under the temporary root whose owners have
     /// finished, keeping the newest <see cref="KeptPerKind"/> of each kind that are younger than <see cref="StaleAge"/>.
     /// A directory whose owner still runs, or whose owner cannot be told, is never removed.</summary>
+    /// <param name="root">The directory whose children are swept; the temporary root when omitted.</param>
+    /// <param name="report">Where a directory the sweep could not remove is named; standard error when omitted.</param>
     /// <returns>How many directories were removed.</returns>
-    public static int Sweep() => SweepKinds(age: StaleAge, kind: null);
+    public static int Sweep(string? root = null, TextWriter? report = null) => SweepKinds(age: StaleAge, kind: null, report: report, root: root);
     /// <summary>Removes, best-effort, the run directories of <paramref name="prefix"/>'s kind whose owners have finished,
     /// keeping the newest <see cref="KeptPerKind"/> that are younger than <paramref name="age"/>. A directory whose owner
     /// still runs, or whose owner cannot be told, is never removed.</summary>
     /// <param name="prefix">The prefix naming the kind (<see cref="KindOf"/>).</param>
     /// <param name="age">How old a finished run's directory must be to go whatever its kind keeps.</param>
+    /// <param name="root">The directory whose children are swept; the temporary root when omitted.</param>
+    /// <param name="report">Where a directory the sweep could not remove is named; standard error when omitted.</param>
     /// <returns>How many directories were removed.</returns>
-    public static int Sweep(string prefix, TimeSpan age) => SweepKinds(age: age, kind: KindOf(prefix: prefix));
+    public static int Sweep(string prefix, TimeSpan age, string? root = null, TextWriter? report = null) => SweepKinds(age: age, kind: KindOf(prefix: prefix), report: report, root: root);
 
     // Sweeps one kind, or every kind when kind is null. A family directory named with a token alone, which names no
     // owner to ask, goes once it is older than the age.
-    private static int SweepKinds(string? kind, TimeSpan age) {
+    private static int SweepKinds(string? kind, TimeSpan age, string? root = null, TextWriter? report = null) {
         var threshold = (DateTime.UtcNow - age);
         var finished = new Dictionary<string, List<(string Path, DateTime Created)>>(comparer: StringComparer.Ordinal);
         var removed = 0;
 
         try {
             foreach (var directory in Directory.EnumerateDirectories(
-                path: System.IO.Path.GetTempPath(),
+                path: (root ?? System.IO.Path.GetTempPath()),
                 searchPattern: $"{(kind ?? Family)}*",
                 searchOption: SearchOption.TopDirectoryOnly
             )) {
@@ -218,11 +264,12 @@ internal sealed partial class RunDirectory : IDisposable {
                             list.Add(item: (directory, created));
                         }
                     } else if (OwnerlessName().IsMatch(input: name) && ((kind is null) || OwnerlessName().Match(input: name).Groups["kind"].Value.Equals(comparisonType: StringComparison.Ordinal, value: kind)) && (Directory.GetCreationTimeUtc(path: directory) < threshold)) {
-                        Delete(path: directory);
-                        removed++;
+                        if (TryRemove(path: directory, report: report)) {
+                            removed++;
+                        }
                     }
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    // A directory that vanished, cannot be read or is still held is left to a later sweep.
+                    // A directory that vanished or cannot be read is left to a later sweep.
                 }
             }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
@@ -241,17 +288,32 @@ internal sealed partial class RunDirectory : IDisposable {
                     continue;
                 }
 
-                try {
-                    Delete(path: list[index].Path);
+                if (TryRemove(path: list[index].Path, report: report)) {
                     removed++;
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    // Something still holds a file there; a later sweep tries again.
                 }
             }
         }
 
         return removed;
-    }    // Whether the run that created a directory at the given time has finished: no process holds its id, or the process
+    }
+    // Removes one swept directory. A directory that cannot be removed (a link in it, something still holding a file, a
+    // platform the confined removal does not support) is left in place and named, and never fails the sweep.
+    private static bool TryRemove(string path, TextWriter? report) {
+        try {
+            Delete(path: path);
+
+            return true;
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+            try {
+                (report ?? Console.Error).WriteLine(value: $"run directory not removed: {path}: {exception.Message}");
+            } catch (Exception writing) when ((writing is IOException or ObjectDisposedException)) {
+                // A report that cannot be written is no reason to fail the sweep.
+            }
+
+            return false;
+        }
+    }
+    // Whether the run that created a directory at the given time has finished: no process holds its id, or the process
     // holding it started after the directory was created, so the id was reused. A process that cannot be read may be
     // the owner, so it counts as running.
     private static bool OwnerFinished(string owner, DateTime created) {
@@ -272,26 +334,6 @@ internal sealed partial class RunDirectory : IDisposable {
         } catch (Exception exception) when ((exception is System.ComponentModel.Win32Exception or NotSupportedException or UnauthorizedAccessException)) {
             // Another user's process, or a platform that will not say: it may be the owner, so it is.
             return false;
-        }
-    }
-    private static void ClearReadOnly(string path) {
-        try {
-            foreach (var file in Directory.EnumerateFiles(
-                path: path,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*"
-            )) {
-                var attributes = File.GetAttributes(path: file);
-
-                if ((attributes & FileAttributes.ReadOnly) != 0) {
-                    File.SetAttributes(
-                        fileAttributes: attributes & ~FileAttributes.ReadOnly,
-                        path: file
-                    );
-                }
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // The next attempt reports what still refuses.
         }
     }
 }

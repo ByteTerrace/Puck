@@ -425,6 +425,11 @@ allowance for a bound: a collider outside its drawn solid is a finding.
 
 The rule is the same on every face: exact where the vocabulary can express the
 solid, inside it otherwise, never outside. Walls and ceilings get no exception.
+Relief is no exception either: a creation whose `noise` displaces its drawn
+surface collides as a field collider over the same fixed-point program the
+bake's field reads, with its distance measured by the field's gradient, so a
+body stands on the rock that is drawn rather than on the smooth masses under
+it.
 The chase camera clears against the drawn field, not the colliders, so an inset
 wall collider can't make the camera clip. A conservative approximation reports
 its computed bound. Within that bound it is a known approximation, not a red

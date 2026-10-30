@@ -438,13 +438,14 @@ public sealed class WorldSolidField : IContactField {
                 angle: FixedQ4816.FromDegrees(degrees: resolvedFrame.YawDegrees)
             );
 
-            // A creation whose parts carve each other is one candidate against the solid field, never a carve of it.
-            // The field scope is one deep, and a nonzero contact margin already spends it per shape (dilation before
-            // the authored blend), so a margined solid emits unscoped.
+            // A creation whose parts carve each other is one candidate against the solid field, never a carve of it, and
+            // a relieved creation's relief displaces only its own union: either emits inside one scope, which a nonzero
+            // contact margin's per-shape scopes nest within. A margined solid that neither carves nor is relieved emits
+            // unscoped.
+            var relieved = WorldColliderSet.Relieves(document: creation.EngineDocument);
             var scoped = (
-                (solid.Margin == 0f) &&
                 (creation.Document.Shapes is { Count: > 0 }) &&
-                CreationStampEmitter.ComposesInternally(document: creation.EngineDocument)
+                (relieved || ((solid.Margin == 0f) && CreationStampEmitter.ComposesInternally(document: creation.EngineDocument)))
             );
 
             // Each placed copy is one program instance carrying a conservative world-space bound: the creation's
@@ -478,18 +479,24 @@ public sealed class WorldSolidField : IContactField {
                         _ = builder.PushField(compose: SdfBlendOp.Union);
                     }
 
+                    var transform = new FixedCreationStampTransform(
+                        Origin: instance.Origin,
+                        Rotation: fixedRotation,
+                        Scale: FixedQ4816.FromDouble(value: placement.Scale),
+                        ReflectionNormal: instance.ReflectionNormal
+                    );
+
                     CreationStampEmitter.EmitFixed(
                         builder: builder,
                         document: creation.EngineDocument,
-                        transform: new FixedCreationStampTransform(
-                            Origin: instance.Origin,
-                            Rotation: fixedRotation,
-                            Scale: FixedQ4816.FromDouble(value: placement.Scale),
-                            ReflectionNormal: instance.ReflectionNormal
-                        ),
+                        transform: transform,
                         materialFor: _ => material,
                         contactMargin: solid.Margin
                     );
+
+                    if (scoped && relieved) {
+                        CreationStampEmitter.EmitNoise(builder: builder, noise: creation.EngineDocument.Noise!, transform: transform);
+                    }
 
                     if (scoped) {
                         _ = builder.PopField();

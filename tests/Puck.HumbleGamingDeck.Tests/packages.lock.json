@@ -216,6 +216,7 @@
         "dependencies": {
           "ByteTerrace.Puck.HumbleGamingDeck": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingDeck.Forge": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )",
           "Puck.Machines.Post": "[1.0.0, )"
         }
       },
@@ -231,11 +232,15 @@
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.machines.post": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       }
     }

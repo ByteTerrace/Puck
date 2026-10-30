@@ -401,7 +401,14 @@ public sealed class SdfRenderOpsLawTests {
             return (Box(p: point) + ((Amplitude / gainSum) * sum));
         });
         AssertBoundsEnclose(program: program);
-        AssertContactRefuses(program: program);
+
+        // Relief is a contact op: a solid collides with the surface the relief draws, so both readings answer alike.
+        var contact = new SdfFieldEvaluator(program: program);
+        var render = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
+
+        foreach (var point in Points()) {
+            Assert.Equal(expected: Read(field: render, point: point), actual: Read(field: contact, point: point));
+        }
     }
     [Fact]
     public void EveryRenderOpIsAdmittedByTheRenderReadingAlone() {

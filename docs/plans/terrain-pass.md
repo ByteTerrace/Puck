@@ -15,11 +15,11 @@ before code.
 | Smooth blends | `CreationDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
 | The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
 | Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldPlacementStamper.ReliefDetail` | Declares 1.56 m, but the scoped bound is a 770 m sphere about the ring's centre and refinement stops at eight cells a coarse axis, so sectors bake at 2.8 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)): the metre-scale grain. |
-| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relief and smooth blends are render-only. Colliders sit 2.7 to 5.6 m off the drawn relief, the colliders report's last 12 reds ([terrain packet](open-items.md#the-valleys-terrain)); a body creeps downslope at rest. |
+| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relief collides as drawn (a field collider per copy); smooth blends are still hard unions. |
 | Materials | `shade/shade-weathering.hlsli`, `shade/shade-layers.hlsli`, called from `passes/sdf-light-stage.hlsli` | No slope, altitude or curvature rule, though weathering's up-facing `deposit` and its curvature edges are such rules in fragment form. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
 | Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
-| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. At the summit the owner saw every view `meter=none source=held`: the meter never answered, so EV 11.5 plus 2.5 held and the rock blew out ([lighting packet](open-items.md#lighting-and-gi), which also chose an image meter). At a cut the EV snaps to whatever the cache answers ([sweep packet](open-items.md#sweep-and-visual-checks)). |
+| Exposure | `SdfViewExposures.Stage`, `SdfMeshIrradiance.TryMeter` | An incident probe meter with a camera-trace fallback cached by cell, plus the Moth basis's +2.5 EV compensation. It meters from the static meshes landed so far during a cold bake, and a cut snaps to the first reading taken at the camera itself. It still cannot see dynamic meshes or anchored lights ([lighting packet](open-items.md#lighting-and-gi), which chose an image meter). |
 | Residency | [residency decision](../decisions/residency.md), `SdfMeshDemand`, `SdfMeshChunks` | Near-first has landed; chunks are 8 m bins of one contour and do not stream. Terrain tiles (the decision's step 7) are unbuilt. |
 
 ## Design
@@ -63,9 +63,24 @@ One field for drawing and contact: a solid placement whose creation carries
 relief, or a smooth blend over the old cap, compiles a **field collider**, a new
 `FixedStaticColliderKind` whose surface is the creation's fixed-point program
 (its geometric octaves), not its primitives. `WorldColliderSet` keeps its grid
-and bounds cull; the narrowphase is `FixedFieldContactSolver`'s volume solve
-(distance plus measured gradient) scoped to that one program. Everything else
-stays analytic, with no world-wide switch to field contact.
+and bounds cull. Everything else stays analytic, with no world-wide switch to
+field contact.
+
+Landed for relief (`FixedStaticColliderKind.Field`, `FixedColliderField`,
+`WorldColliderSet.Relief.cs`): one collider per stamped copy over the copy's
+contact shapes and `NoiseDisplace` in one scope, read by the contact
+`SdfFieldEvaluator` (the op is a contact op, and the field provider emits the
+same relief), with the fixed-point fBm in `Pcg3dLatticeNoise.Fbm3`. The
+narrowphase is not `FixedFieldContactSolver`'s solve verbatim: that solve reads
+the field's value as the distance, which over a scope divided by its `L` holds
+a body up to `L` times its skin off the rock, and spends up to 1,033 samples a
+capsule. The field collider measures the distance as the value over the
+gradient's length (a four-tap tetrahedral difference), at the core point where
+the field reads least, and proves a body clear first from the shapes'
+unrelieved union grown by the amplitude, then from one relieved sample
+(`s·F` is 1-Lipschitz). A smooth blend over the cap reuses the collider by
+compiling its creation the same way; `TerrainRelief` replaces `NoiseDisplace`
+inside the same program.
 
 **The step bound:** the relieved field reads at most `L` times the true
 distance, `L` the op's step factor, so a body volume advances `f / L` per
@@ -75,8 +90,13 @@ step checks the sweep's 64-query budget (`DefaultSweepBoundsQueryBudget`)
 against the Moth's top speed on relief and fixes whichever falls short.
 
 Grounding and the slope test read the field's normal, so the walkable slope is
-the drawn slope. The downslope creep's cause is found in the same step: a body
-at rest must not move.
+the drawn slope. The downslope creep's cause was the walkable push itself: it
+displaced a body along the tilted normal and clamped its velocity along it, and
+both leave a downslope share of each tick's fall. Walkable ground now lifts
+along up by the penetration over `normal·up` and removes the approach through
+the velocity's up component (`FixedContactPushMath.ComputeOrdinary`), so a body
+at rest holds its place on any walkable slope and planar motion is the body's
+own; on level ground the two forms are one.
 
 ### Slope, altitude and curvature materials
 
@@ -108,10 +128,9 @@ eases as now, and **a cut snaps to the frame's own histogram**, so the EV after
 a teleport depends only on the destination's picture. A rendered frame always
 has an image, so `held` leaves the exposure path with the camera-trace cache.
 The probe meter stays for local adaptation and the air light
-(`SdfViewExposures.MeteredOf`, `AirLightOf`), so why it answered nothing at the
-summit is found in the same step: `TryMeter` refuses with no window, with no
-installed scene (`RefreshScene` runs only while no bake is pending), and when
-the camera trace sees more than `InsideShare` back faces. Display-referred constants the views pass divides by the
+(`SdfViewExposures.MeteredOf`, `AirLightOf`); it refuses with no window, before
+the first static mesh lands, and when the camera trace sees more than
+`InsideShare` back faces. Display-referred constants the views pass divides by the
 exposure (the unbound screen glass) move to the composite or read the previous
 frame's EV, settled by measurement. `world.exposure` reads the buffer back. The
 first check is the lighting packet's 18% grey card under a manual EV, which
@@ -165,6 +184,9 @@ call per sector. Overriding a slot or writing a third set is ordinary `.puck`.
   altitude and warm on convex curvature; brush-scale breakup and no centimetre
   detail; a stronger tinted haze. It needs no world-wide `render.toon`, which
   stays a separate choice.
+  The valley uses it, with the
+  [Canyon workshop pack](../game/art/canyon-workshop-pack/README.md)'s valley
+  overview as the reference for its strata, ledges and floor.
 
 Each set ships a matching relief preset (alpine: ridged, warped, eroded;
 painterly: billow, broad warp, fewer octaves).

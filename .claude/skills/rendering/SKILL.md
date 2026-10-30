@@ -338,7 +338,11 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   Gather weights are trilinear share × a half-spacing smooth distance fade in front of the receiver × depth
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.
-  A zero-weight gather supplies no measured indirect or traced static light.
+  The volume has three nested levels (8 m and 32 m cells past the tier's
+  window); a receiver reads the finest level holding it, and where none of that
+  level's probes measured it, the same probes answer past their reach, blocked
+  only by surfaces they measured, with no traced static light. Nothing a camera
+  sees reads an unmeasured surface as black.
   Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
   stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
@@ -538,11 +542,24 @@ compares and fails naming the file that drifted, it writes nothing.
 
 ## Capacity and emission
 
-- Program words and instances grow on upload. Dynamic-transform capacity does
-  not: a frame that supplies fewer transforms than
+- Program words and instances grow on upload, and the dynamic-transform region
+  grows to the frame's table, whose rows are the program's slots plus one root
+  per rigid copy (a body), so a `world.reload` or a new body grows it mid-run.
+  A frame that supplies fewer transforms than
   `RequiredDynamicTransformCapacity` throws, because a slot rendering at
   identity is a bug. Fix the emission so the frame supplies the transforms it
   needs; do not raise the capacity.
+- A `GpuRegion` grows under whichever policy `GpuResidency.Select` gave it
+  (`GpuRegion.Grow`): a staged region carries its destination on the GPU, and a
+  ring or in-place region replaces its host-visible buffers and owes each the
+  whole region; the owner retires what it returns. A device with a large
+  host-visible device-local heap (resizable BAR, as on the lead machine under
+  both backends) gives a small per-frame table a ring, while the CPU fake
+  device's default profile stages every region, so a region path written or
+  tested for one policy alone passes the device-free suites and fails on the
+  lead machine. Test a region path under every policy, as
+  `GpuResidencyLawTests.ARegionGrowsUnderEveryPolicyAndEverySlotReadsItExact`
+  does.
 - Large GPU buffers give their memory back. Both arenas (`DirectXHeapArena`,
   `VulkanMemoryArena`) free a resource's own heap (one past half a shared
   heap) as it empties and keep only a shared one spare; a kept large heap takes

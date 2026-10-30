@@ -14,7 +14,7 @@ namespace Puck.Confinement;
 // rename with a RootDirectory (ERROR_INVALID_PARAMETER), which is why the rename calls ntdll directly.
 public sealed partial class ConfinedDirectory {
     private static partial class Windows {
-        public const uint Delete = 0x10000, ListDirectory = 0x1, ReadAttributes = 0x80, Synchronize = 0x100000, Traverse = 0x20;
+        public const uint Delete = 0x10000, ListDirectory = 0x1, ReadAttributes = 0x80, WriteAttributes = 0x100, Synchronize = 0x100000, Traverse = 0x20;
         public const uint GenericRead = 0x80000000, GenericWrite = 0x40000000;
         public const uint ShareRead = 1, ShareWrite = 2, ShareDelete = 4;
         public const uint DirectoryAccess = ListDirectory | Traverse | ReadAttributes | Synchronize;
@@ -170,6 +170,22 @@ public sealed partial class ConfinedDirectory {
 
             if (SetFileInformationByHandle(handle: handle, information: &flags, informationClass: 21, size: 4)) { return; }
             var code = Marshal.GetLastPInvokeError();
+
+            // ReFS can return access denied for a read-only file even with IGNORE_READONLY_ATTRIBUTE.
+            // Change only the held object, never a path (which could now name a link or a replacement).
+            if ((code == 5) && ((Information(handle: handle).Attributes & ((uint)FileAttributes.ReadOnly)) != 0)) {
+                var info = Information(handle: handle);
+
+
+                if (((info.Attributes & AttributeDirectory) == 0) && (info.Links != 1)) {
+                    throw new IOException(message: "A read-only hard-linked file cannot have its attributes changed by confined removal.");
+                }
+                var attributes = ((FileAttributes)info.Attributes) & ~FileAttributes.ReadOnly;
+
+                File.SetAttributes(fileHandle: handle, fileAttributes: ((attributes == 0) ? FileAttributes.Normal : attributes));
+                if (SetFileInformationByHandle(handle: handle, information: &flags, informationClass: 21, size: 4)) { return; }
+                code = Marshal.GetLastPInvokeError();
+            }
             var classic = ((byte)1);
 
             if ((code != 87) || !SetFileInformationByHandle(handle: handle, information: &classic, informationClass: 4, size: 1)) {

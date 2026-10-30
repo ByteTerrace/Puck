@@ -277,6 +277,9 @@
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
           "Parlot": "[2.*, )"
         }
+      },
+      "puck.confinement": {
+        "type": "Project"
       }
     }
   }

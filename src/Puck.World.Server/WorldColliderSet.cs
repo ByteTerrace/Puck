@@ -139,7 +139,9 @@ public sealed partial class WorldColliderSet : IContactField {
     /// <summary>Gets the number of solid half-spaces in the set.</summary>
     public int PlaneCount { get; private init; }
     /// <summary>Gets the total collider count.</summary>
-    public int SolidCount => (((SphereCount + BoxCount) + CylinderCount) + PlaneCount);
+    public int SolidCount => ((((SphereCount + BoxCount) + CylinderCount) + PlaneCount) + FieldCount);
+    /// <summary>Gets the number of field colliders in the set: one per stamped copy of a relieved creation.</summary>
+    public int FieldCount { get; private init; }
     /// <summary>Gets the number of solid spheres in the set.</summary>
     public int SphereCount { get; private init; }
 
@@ -155,6 +157,7 @@ public sealed partial class WorldColliderSet : IContactField {
         var placementBoxes = 0L;
         var placementCylinders = 0L;
         var placementPlanes = 0L;
+        var placementFields = 0L;
         var unsupported = 0L;
 
         foreach (var screen in definition.Screens) {
@@ -182,6 +185,12 @@ public sealed partial class WorldColliderSet : IContactField {
                 )?.Count,
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement)
             );
+
+            // A relieved creation compiles one field collider per copy, whatever its shapes.
+            if (Relieves(document: creation.EngineDocument)) {
+                placementFields = AddSaturated(left: placementFields, right: copies);
+                continue;
+            }
 
             foreach (var shape in (creation.Document.Shapes ?? [])) {
                 // A shape carrying domain ops compiles one collider PER EXPANDED COPY, exactly as Build emits them —
@@ -248,7 +257,7 @@ public sealed partial class WorldColliderSet : IContactField {
             PlaneCount: planes,
             SphereCount: spheres,
             UnsupportedPlacementCount: unsupported
-        );
+        ) { PlacementFieldCount = placementFields };
     }
 
     private static long AddSaturated(long left, long right) =>
@@ -374,6 +383,7 @@ public sealed partial class WorldColliderSet : IContactField {
         var placementBoxes = 0;
         var placementCylinders = 0;
         var placementPlanes = 0;
+        var fields = 0;
 
         foreach (var screen in definition.Screens) {
             if (screen.Solid is not { } solid) {
@@ -469,6 +479,7 @@ public sealed partial class WorldColliderSet : IContactField {
             placementBoxes += compiled.Boxes;
             placementCylinders += compiled.Cylinders;
             placementPlanes += compiled.Planes;
+            fields += compiled.Fields;
         }
 
         return new WorldColliderSet(
@@ -487,6 +498,7 @@ public sealed partial class WorldColliderSet : IContactField {
             PlacementSphereCount = placementSpheres,
             PlaneCount = placementPlanes,
             SphereCount = placementSpheres,
+            FieldCount = fields,
             m_placements = placementsCompiled,
         };
     }
@@ -496,7 +508,7 @@ public sealed partial class WorldColliderSet : IContactField {
     // the same frame (Shows, keyed by creation and holding this entry too), so a response change compiles nothing.
     private sealed record PlacementColliders(WorldPrototype Creation, CompiledPlacementFrame Frame, ulong WorldSeed, bool DefaultGrip,
         FixedStaticCollider[] Colliders, WorldDiagnosticCollider[] Diagnostics, bool Holdable, bool HoldableIsOverride, int Spheres,
-        int Boxes, int Cylinders, int Planes, IReadOnlyDictionary<WorldPrototype, PlacementColliders>? Shows = null);
+        int Boxes, int Cylinders, int Planes, IReadOnlyDictionary<WorldPrototype, PlacementColliders>? Shows = null, int Fields = 0);
 
     // Compiles a responding row's colliders for its authored creation and every response entry's, beside the one it
     // shows, and returns the shown entry holding them all.
@@ -626,6 +638,8 @@ public sealed partial class WorldColliderSet : IContactField {
         var boxes = 0;
         var cylinders = 0;
         var planes = 0;
+        var fields = 0;
+        var relieved = Relieves(document: creation.EngineDocument);
         // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
         // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
         // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
@@ -645,14 +659,27 @@ public sealed partial class WorldColliderSet : IContactField {
                 worldSeed: worldSeed
             ),
             mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-            visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
-                document: creation.EngineDocument,
-                transform: new FixedCreationStampTransform(
+            visitor: instance => {
+                var transform = new FixedCreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: rotation,
                     Scale: FixedQ4816.FromDouble(value: placement.Scale),
                     ReflectionNormal: instance.ReflectionNormal
-                ),
+                );
+
+                if (relieved) {
+                    var relief = ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform);
+
+                    colliders.Add(item: relief);
+                    diagnostics.Add(item: new WorldDiagnosticCollider(relief, placement.Id.ToString(), creation.Id.ToString(), "relief",
+                        "Field/relief", solid.Margin));
+                    fields++;
+                    return;
+                }
+
+                CreationStampEmitter.VisitFixedPrimitiveCopies(
+                document: creation.EngineDocument,
+                transform: transform,
                 visitor: copy => {
                     FixedStaticCollider placementCollider;
 
@@ -694,7 +721,8 @@ public sealed partial class WorldColliderSet : IContactField {
                         ConservativeInset = ((placementCollider.Kind == FixedStaticColliderKind.Cylinder) ? (double)CylinderInset(copy: copy).Length : 0),
                     });
                 }
-            )
+            );
+            }
         );
 
         // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
@@ -711,7 +739,8 @@ public sealed partial class WorldColliderSet : IContactField {
             Spheres: spheres,
             Boxes: boxes,
             Cylinders: cylinders,
-            Planes: planes
+            Planes: planes,
+            Fields: fields
         );
     }
 

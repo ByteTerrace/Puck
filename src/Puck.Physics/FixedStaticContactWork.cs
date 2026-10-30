@@ -18,7 +18,7 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public const string SourceName = "physics.contact";
 
     private readonly WorkCounterSet m_counts = new(
-        kinds: [Resolves, Queries, ConvexQueries, Supports, Pushes],
+        kinds: [Resolves, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples],
         name: SourceName
     );
 
@@ -34,6 +34,12 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public static WorkKind Supports { get; } = new(name: "physics.contact.supports", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the exact queries that returned a push.</summary>
     public static WorkKind Pushes { get; } = new(name: "physics.contact.pushes", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the queries against a field collider, a push or a surface projection each.</summary>
+    public static WorkKind FieldQueries { get; } = new(name: "physics.contact.field-queries", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the envelope evaluations the field queries spend proving a body clear.</summary>
+    public static WorkKind FieldBounds { get; } = new(name: "physics.contact.field-bounds", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the field evaluations the field queries spend.</summary>
+    public static WorkKind FieldSamples { get; } = new(name: "physics.contact.field-samples", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger every analytic solve counts into. Declared after the kinds, which its counter set reads as
     /// it is created.</summary>
     public static FixedStaticContactWork Process { get; } = new();
@@ -59,6 +65,14 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public void CountConvex(int supports) {
         m_counts.Count(kind: ConvexQueries);
         m_counts.Add(amount: supports, kind: Supports);
+    }
+    /// <summary>Counts one query against a field collider and the evaluations it spent.</summary>
+    /// <param name="bounds">The envelope evaluations.</param>
+    /// <param name="samples">The field evaluations.</param>
+    public void CountField(int bounds, int samples) {
+        m_counts.Count(kind: FieldQueries);
+        m_counts.Add(amount: bounds, kind: FieldBounds);
+        m_counts.Add(amount: samples, kind: FieldSamples);
     }
     /// <summary>Reads the current total of one of this ledger's kinds.</summary>
     /// <param name="kind">One of this ledger's kinds.</param>
