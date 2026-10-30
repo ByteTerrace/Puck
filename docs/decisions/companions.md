@@ -86,6 +86,50 @@ slot the escrow lands it at. While the companion is away its placement counts
 it as present, so a reload at home does not spawn a replacement. Grants that
 drive a companion name its placement or role group, never a body slot.
 
+## A stranded companion waits in custody; only home recalls it
+
+A companion is stranded when it must go home and cannot: home is not running,
+its server is unreachable, or the link is down. The owner asked for consensus
+weighing the abstract; Claude, Codex and Antigravity each drafted an answer
+independently, and all three reached the same rule.
+
+An owned traveller has a *title* (that it exists and whose it is, held by its
+home), an *image* (its durable identity state and registers) and *custody*
+(which authority embodies it now, at which epoch). A crossing moves custody,
+never title. Across a partition nobody can tell lost from slow, so elapsed time
+is never evidence of loss. The invariant the engine never breaks: at most one
+committed embodiment of an incarnation at any point, no silent re-issue of its
+title, and no destruction of its committed state without a record from an
+authority entitled to make it.
+
+- **The custodian sheds the body, never the custody.** A stranded companion
+  stays embodied for an authored grace window, then detaches into a durable
+  return record (an in-doubt departure toward home) and frees its slot, so the
+  world holding it can reap or stop. The record is retried until home settles
+  it; the custodian never drops it on a timer.
+- **Home never refuses its own returning companion for capacity.** Its away
+  entitlement holds the slot, and home may accept custody before it has room to
+  embody it.
+- **Only home ends or recalls a title.** Recall restores the companion from its
+  last committed image under a new epoch and tells the player what was lost.
+  It is safe only because home authorizes every custody hop: no onward crossing
+  or return commits without home's record, so a stale copy that later
+  reappears is refused and retired at its custodian, never duplicated or
+  merged. Home never recalls on silence while the owner is also unreachable,
+  since they may be together in a partitioned world.
+- **By default it waits.** The engine's default is to wait in durable custody;
+  a recall happens by the player's request or an author's declared recall
+  window. Refilling with a new identity happens only for a traveller its author
+  declares a disposable role (a summon, a hireling, an escort), and it is
+  named to the player as a different individual.
+- **Every transition is a record** made by the deciding authority (departure,
+  detach, settlement, recall, release), every window counts that authority's
+  own ticks, and replay re-drives taped outcomes rather than re-deciding them.
+
+The rule is the engine's for any owned traveller (items, mounts, vehicles,
+summons), not the companion's alone. The redesign that builds it carries the
+records, the fence and the laws.
+
 ## State that persists is declared
 
 What a companion must remember across crossings (its name, mood, affinity,
