@@ -1202,6 +1202,11 @@ Next: the lead's window over the sweep tour's `valley` stops, then contact on
 the drawn relief. The measured state is in the
 [plan](valley-and-moons.md#phase-1-the-valley-as-built).
 
+- Valley review findings (Codex review of the valley merge `be0f38692`):
+  - [medium] The superellipsoid's product-first rounding misclassifies small superellipsoids and disagrees with the HLSL: exponent 2, all radii 1/1024 m, p = (1/256, 0, 0) gives −1/1024 m on the CPU and +3/1024 m on the GPU, so contact and the drawn surface disagree at small sizes (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836`). One formula, exact at both ends of the radius range, on both sides.
+  - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal` clamps its factor to at least 2, so a small creation declaring 1.5625 m spacing still subdivides its existing ~15 mm lattice (`src/Puck.World.Client/WorldPlacementStamper.cs:770`).
+  - [medium] `physics.contact` adds three or four shared `CompareExchange` updates to every surviving convex query whether or not a counters reader exists (`src/Puck.Physics/FixedStaticContactWork.cs:51`): count per thread or per tick and publish on read.
+
 - Contact rides the unrelieved masses: creation noise is render-only, so a body
   on a wall floats over or sinks into the drawn relief by up to its amplitude
   (4 m on the sectors). The fixed-point render reading already evaluates
