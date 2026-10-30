@@ -524,7 +524,8 @@ colliders report's only red findings left are the valley's relief
   normals that never read an interior sample. Not yet run: `puck test
   worlds/debug --jobs 1 --reproduce` (sharp-box colliders change contact at box
   edges) and a lit, settled windowed look at the stairs (the boot's cold bake
-  ran past the GPU batch; the D3D12 and Vulkan boots ran clean).
+  ran past the GPU batch; windowed Direct3D 12 and Vulkan boots of this head
+  ran with no fault or refusal in stderr).
 - The 178 witnesses the colliders report counts as `mesh correspondence
   uncertified` all lie on the valley sectors' terrain masses (`main`,
   `shoulder-left`, `shoulder-right` of every `valley-*` sector, y between about
