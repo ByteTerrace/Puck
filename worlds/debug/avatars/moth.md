@@ -53,7 +53,7 @@ rule).
 | Left Shift (hold) | | Run: 10 m/s where she walks at 5, and 10 where she flies at 5 |
 | N | Left stick press | Switch running on or off |
 | J | West | Dash along movement, or facing while idle: a 0.2 s burst with a 0.8 s cooldown, torso lean and back-thruster flare |
-| Mouse wheel | | Zoom the camera boom between the standard's authored limits; an open play wheel takes scrolling first |
+| Mouse wheel | | Zoom the camera boom between the standard's authored limits; while the play wheel is open its hold pages bind scrolling to the ring instead |
 | Middle mouse button | | Reset camera angles and boom distance to the authored rig |
 | Z held, then N | Left trigger held, then left stick press | Autorun: switch walking forward on or off; it keeps going with the trigger released, and the stick still steers and strafes |
 | F | North | Switch flight mode on or off |

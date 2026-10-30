@@ -168,9 +168,6 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// argument.</summary>
     public WorldWheelStatus Status => StatusFor(slot: (m_cursor?.Status.Slot ?? 0));
 
-    /// <summary>Whether the seat's authored hold pages currently present a radial.</summary>
-    public bool IsOpen(int slot) => (m_bindings.WheelView(slot: slot) is not null);
-
     private static void ApplyRingScroll(SeatState state, BindingWheelView wheel) {
         state.RingScroll += state.BankedNotches;
         state.BankedNotches = 0f;

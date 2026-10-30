@@ -267,9 +267,13 @@ other.
 The analytic solver's `ResolveSweep` splits translation into slices no longer
 than half the body's least support radius, resolving each through its existing
 contact kernel. Fast movement therefore meets a thin wall on its approach side.
-The fixed-point rate accumulator preserves the exact unobstructed displacement.
-It shares the field solver's work budget: exhaustion keeps only the solved
-prefix and reports `Unproved`; an unrepresentable slice refuses the whole move.
+A move no collider's bounds reach (within the contact skin of the box spanning
+its start and end bounds) resolves its endpoint alone. Every slice measures the
+lateral edge rule from the whole move's starting foot, the foot a step-up
+raises from. The fixed-point rate accumulator preserves the exact unobstructed
+displacement. It shares the field solver's work budget: exhaustion keeps only
+the solved prefix and reports `Unproved`; an unrepresentable slice refuses the
+whole move.
 
 `FixedFieldContactSolver.ResolveSweep` proves a moving body's travel before it
 solves contact at the endpoint, so a body never passes through geometry,

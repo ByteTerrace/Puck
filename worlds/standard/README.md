@@ -18,8 +18,10 @@ The garden and night field import the standard directly.
 
 `camera.puck` authors the shared input feel, the `camera-boom` response and the
 zoom bounds/step in `views.seatControl.boom`. Mouse wheel changes the requested
-orbit distance; middle click resets distance and angles. An open play wheel
-owns scrolling until it closes. `world.view.camera 1 full` reports the requested
+orbit distance; middle click resets distance and angles. The play wheel's hold
+pages bind `mouse.wheel` to `player.wheel.scroll`, replacing the inherited zoom
+source by source, so scrolling steps the open wheel's ring and leaves the boom
+alone until the wheel closes. `world.view.camera 1 full` reports the requested
 distance and bounds, including in a headless World.
 
 `abilities.puck` is a library: `dashAbility(kit, speed, duration, cooldown)`
