@@ -184,7 +184,8 @@ case, `stage` when omitted:
 | `wonderland` | (13.3, 0.05, 30.5), in the gallery lobby 3 m before the big painting ([`wonderland.md`](wonderland.md)) | -X; walk ahead to come out a quarter her size |
 | `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
 | `boardroom` | (53, 9.05, 26), inside the board game room's doorway on the gallery's level 2 | +X, into the room |
-| `chess`, `go`, `reversi`, `alchemy` | (56.5, 9.05, 21), (56.5, 9.05, 29), (65, 9.05, 21) and (65, 9.05, 29), at White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy table in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md)), close enough to sit | +Z, across the board |
+| `cards` | (60.8, 9.05, 37.4), at the +Z edge of the card table in the board game room ([`cardtable.md`](cardtable.md)), close enough to sit | -Z, across the board |
+| `chess`, `go`, `reversi`, `alchemy`, `granaries` | (56.5, 9.05, 21), (56.5, 9.05, 29), (65, 9.05, 21), (65, 9.05, 29) and (65, 9.05, 13), at White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md)), close enough to sit | +Z, across the board |
 | `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
 | `portals` | (53.5, 0.05, 26), the painting wing's doorway | +X, into the wing |
 | `portal-garden`, `portal-night` | (57, 0.05, 36.3) and (64, 0.05, 36.3), before the garden and night paintings | +Z; walk ahead to cross |

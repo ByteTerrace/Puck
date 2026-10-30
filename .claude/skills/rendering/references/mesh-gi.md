@@ -68,6 +68,17 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   spacing or test the clamped position: either can carry a receiver through a
   thin wall. An unwritten or invalid probe contributes nothing. No answering
   probe means no measured indirect light, and a depth miss has finite reach.
+- Past the boundary the facing term eases to one over the first cell outside
+  (`outside` in `sdfMeshProbesAt` and `Gather`). Every boundary probe lies on the
+  window's side of such a receiver, so the hemisphere weight would light only
+  the normals turned toward the window: a body or surface out there reads half
+  dark, split at the plane that faces the window. A body posed ahead of the
+  window's refill stands outside the published window until the moved cells are
+  measured (`world.probe` answers `unsettled` meanwhile): on a fresh boot whose
+  first trace ran at the spawn, a pose across the hall reads the spawn's window
+  for the refill's duration. Reproduce a boundary finding by posing past the
+  published window and taking a presented capture before the refill lands; a
+  settled capture or a pose before the first trace hides it.
 - Read `world.probe <x> <y> <z> [<nx> <ny> <nz>]` for each corner's origin,
   offset, back-face share, validity, sweeps, cubes and weight terms.
   Each valid corner also reports an exact mesh-segment `reference-clear` check,

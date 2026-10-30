@@ -112,6 +112,9 @@ public sealed class WorldRegionOccupancyOperand : WorldFactOperand {
 }
 /// <summary>The influence a placement's channel carries (<see cref="WorldRuleFacts.InfluencePrefix"/>).</summary>
 public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
+    // One volume's fixed-point frame composition, quaternion rotation and extent checks, priced as a small fixed multiple of a scan step.
+    private const long BoundVolumeCompileWork = 32L;
+
     // Child operands are semantic names. Caching a runtime CellKey here would retain one arena's address when the
     // compiled rule later serves a replacement arena.
     private readonly Dictionary<string, PlacementInfluenceOperand> m_resolved = new(comparer: StringComparer.Ordinal);
@@ -146,13 +149,24 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
         reference: KeyFrom
     );
     /// <summary>Returns the placement scan the read is bounded by: every spatial volume the document declares, which
-    /// is what an influence count walks.</summary>
+    /// is what an influence count walks. A document with volumes that read a state-bound value adds the compile a read
+    /// can owe after a write moved one: each volume copied twice (the index and its occupation targets) and each bound
+    /// volume's geometry compiled again.</summary>
     /// <param name="context">The compile context.</param>
     /// <returns>The work units.</returns>
-    public override RuleWork Cost(IRuleCostContext context) => Math.Max(
-        val1: 1L,
-        val2: ((WorldFactsCompileContext)context).Definition.Placements.Sum(selector: static placement => ((long)(placement.Spatial?.Count ?? 0)))
-    );
+    public override RuleWork Cost(IRuleCostContext context) {
+        var placements = ((WorldFactsCompileContext)context).Definition.Placements;
+        var volumes = Math.Max(
+            val1: 1L,
+            val2: placements.Sum(selector: static placement => ((long)(placement.Spatial?.Count ?? 0)))
+        );
+        var bound = WorldSpatialQueryCompilation.BoundVolumeCount(placements: placements);
+
+        return ((bound == 0L)
+            ? volumes
+            : (volumes + (2L * volumes) + (BoundVolumeCompileWork * bound))
+        );
+    }
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
         ArgumentNullException.ThrowIfNull(argument: facet);

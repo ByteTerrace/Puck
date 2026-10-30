@@ -29,7 +29,7 @@ breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a
 bespoke command or simulation state. A page entry takes `mode: Toggle` the same way, and the
 debug world authors its auto-actions so: the Moth's resting page toggles `run` on the left stick's press beside the
-held `run` on West, and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
+held `run` on Left Shift (West/J now dash), and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
 stick's press (autorun) and `rise` on the right stick's press (autofly). The page's entry replaces the resting page's at
 that source, and the latch outlives the page, so the trigger lets go and she keeps going. Toggle contributions are owned by the compiled command destination,
 not by the button that flipped them; synthesized chord edges carry that stable
@@ -284,9 +284,16 @@ every placed bank. The resolved placement compiles into
 
 A player's own `BindingProfileDocument.BindingBar` (stored in the identity
 document's `bindingOverlays` section; `Puck.Commands.BindingBarPreferences`:
-`hideUnbound`/`scale`/`contrastBoost`/`uiScale`, all nullable, LOOK only —
-never a binding) overrides the world's `hideUnbound` and the layout's scale and
-adjusts the resolved theme, resolved in `WorldBindingBarControl.Status`.
+`hideUnbound`/`scale`/`contrastBoost`/`uiScale`/`layout`/`model`, all nullable, LOOK only —
+never a binding) overrides the world policy and adjusts the resolved theme.
+Binding-layer composition merges these fields individually, so a session scale
+change retains an identity layout or contrast preference. `player.binding-bar
+layout|model|scale <value> [seat]` writes the session layer; `auto` clears that
+field, and `identity.bindings.save` persists it with other rebindings. Layout
+and model preferences override `layoutCell` and `modelCell` for that seat only.
+The [standard package](../../../../worlds/standard/README.md) authors the
+concrete layouts, compact multiplier and console commands used by its Bar ring.
+`world.binding-bar` reports the resolved layout name, stacked model and scale.
 
 `bindingBar.text` (default `true`) is the bar's ATLAS-TEXT switch: `false` drops
 every text run the bar writes — every badge whose authored icon row carries a
@@ -420,7 +427,7 @@ for wheel A and RT for wheel B). Releasing one opener defers commit while
 another hold page still presents the same radial.
 
 Rings are ordinary `BindingPageDefinition`s worn as concentric shells
-(`BindingProfile.Compile` bounds: 1–3 rings per wheel, 2–8 sectors per ring,
+(`BindingProfile.Compile` bounds: 1–4 rings per wheel, 2–8 sectors per ring,
 ring page ids sharing the document-wide page-id namespace). A SECTOR row
 narrows the page-entry shape to a command destination plus label/icon and an
 optional constant `value`/`activateOn`; `source`, `activator`, `channel`,
@@ -453,7 +460,7 @@ different sector must reach while grace holds the prior sector; raise it to
 reject stronger spring rebound, or lower it to admit lighter direction changes.
 
 `ringSelection` is `Explicit` (the default: `player.wheel.ring` bindings and
-pointer-wheel notches step the active ring) or `Excursion` (neutral-relative
+authored `player.wheel.scroll` Axis2D bindings step the active ring) or `Excursion` (neutral-relative
 selector magnitude chooses it). Excursion requires an `excursion` object:
 `deadZone` is the inclusive magnitude that selects no ring; `thresholds`
 contains exactly N-1 ascending boundaries for N rings; `hysteresis` supplies
@@ -485,11 +492,22 @@ Axis selection, ring navigation, commit, and cancel sources are ordinary entries
 on each hold page. `worlds/standard/controls.puck`'s `play-primary` is the live
 example: two hold pages (Tab, LB) that inherit the resting page and step the ring
 with `player.wheel.ring` (Up and Down, a constant Axis1D value of +1 outward and -1
-inward, `activateOn: Started`), and rings whose labels and icons read
-`state.wheelLabels`/`state.wheelIcons`. The garden's wheel has two rings (Act,
-View); `worlds/debug/controls.puck` declares the wheel again with a third (Places, which
-names `debug.go`), since a later layer's wheel replaces the earlier one whole. A
-fourth ring is refused at validation.
+inward, `activateOn: Started`). The hold pages also bind `mouse.wheel` to the
+Axis2D `player.wheel.scroll`: vertical notches accumulate fractionally within one
+gesture and step its ring immediately. The pointer projection drains its copy
+without taking any action, so a physical scroll and `player.signal mouse.wheel`
+have one routing path. A closed wheel discards an already routed ring scroll.
+The hold page's `mouse.wheel` entry replaces the resting page's
+`player.camera.boom` on that source (inheritance replaces source by source), so
+zoom stops while the wheel is open because of that authored data; the boom verb
+has no wheel check of its own. The generic router watches immutable active
+page identities during its ordered fold: a page transition discards relative
+samples already collected in that page interval, including an open and close
+within one snapshot, and consumes a relative sample that caused the transition.
+Later samples resume on the new page. Rings read their labels and icons through
+`state.wheelLabels`/`state.wheelIcons`. The standard has Act, View and Bar;
+`worlds/debug/controls.puck` adds Places through its refinement. Up to four
+rings fit the overlay reservation, whose writer and schema share one bound.
 
 **Trigger-held pages** (the live example is `controls.puck`'s `pad-pages` row): declare
 the trigger modifiers (`id: "lt"`, `sources ["gamepad.leftTrigger", "keyboard.z"]`,
@@ -508,8 +526,11 @@ already does for any command a leaner shape lacks. The bar's Debug and Tour page
 (`world.quality next`, `world.rates toggle`), `world.screenshot`, `world.history on` and `world.debug-view` directly. An
 imported module's state rows are private, so a binding in another module that reads one
 (`worlds/debug/controls.puck`'s wheel names `wheelLabels`) needs the owner's `exports { bindings [...] }`.
-`WorldWheelFeed` owns presentation;
+`WorldWheelFeed` owns logical gesture state and optional presentation;
 its drawn labels, icons and hub label come from `WorldWheelRings`
 (`Puck.World.Client`), which reads the label and icon rows through the seat's
 routed mirror and rebuilds only when one of those cells changes. `world.view.wheel` reports the live wheel, hover, effective selector dead
-zone, and neutral-grace duration.
+zone, and neutral-grace duration. Headless hosts resolve the same directional
+selection, fractional ring scroll and sector commits without inventing a pixel
+viewport; the hub remains unanchored. Their logical feed advances after each
+headless fixed step, and read-back never seeds or changes the gesture.

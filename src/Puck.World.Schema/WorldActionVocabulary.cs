@@ -63,6 +63,7 @@ public static class WorldEffect {
     /// <param name="Speed">The overlay's speed, in world units per second at the body's authored size, times the
     /// body's live scale.</param>
     /// <param name="DurationSeconds">How long the overlay rides.</param>
+    /// <param name="UseMoveDirection">Uses the normalized current movement command when nonzero, falling back to the authored body direction.</param>
     /// <param name="Key">The body a world rule names — see <see cref="SetVerticalVelocity.Key"/>.</param>
     /// <param name="Target">The participant a kit's action addresses — see <see cref="SetVerticalVelocity.Target"/>.</param>
     public sealed record PlanarImpulse(
@@ -70,7 +71,8 @@ public static class WorldEffect {
         decimal Speed,
         decimal DurationSeconds,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
-        ActionTarget Target = ActionTarget.Self
+        ActionTarget Target = ActionTarget.Self,
+        bool UseMoveDirection = false
     ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;
@@ -179,9 +181,13 @@ public static class WorldEffect {
     /// For a rule that moves a body a short step every tick (a lift car); a long jump should teleport.</param>
     /// <param name="RollDegrees">The roll a teleport stands the body at, about its forward axis: 180 lays it upside
     /// down, as a rule turning a two-faced piece over does. A glide keeps the body's attitude and ignores it.</param>
+    /// <param name="PitchDegrees">The pitch a teleport stands the body at, about its right axis: a creation authored
+    /// standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide
+    /// keeps the body's attitude and ignores it.</param>
     public sealed record PoseCell(string Key, string Topology, ExpressionProgram Expression, DocumentVector3 Offset,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f) : ActionEffect;
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
         StateChannelRef Key,

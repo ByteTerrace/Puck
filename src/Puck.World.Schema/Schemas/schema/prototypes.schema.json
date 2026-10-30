@@ -2824,11 +2824,11 @@
                     },
                     "reach": {
                       "default": null,
-                      "description": "KindSurface: how far along Direction the probe searches, world units. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing."
+                      "description": "KindSurface: how far along Direction the probe searches, in creation units: world units at the body\u0027s scale of one, and multiplied by its scale, as its shapes are. Beyond MaxReach, or at zero or less, is refused. A probe that finds nothing eases the correction out rather than reaching at nothing."
                     },
                     "standoff": {
                       "default": null,
-                      "description": "KindSurface: how far off the hit surface, along its normal, the tip is placed (null = 0 \u2014 the tip lands on the surface). The thickness of a boot\u0027s sole or the gap a claw keeps."
+                      "description": "KindSurface: how far off the hit surface, along its normal, the tip is placed, in creation units as Reach is (null = 0 \u2014 the tip lands on the surface). The thickness of a boot\u0027s sole or the gap a claw keeps."
                     },
                     "index": {
                       "type": [
@@ -2905,7 +2905,7 @@
                       "properties": {
                         "distance": {
                           "type": "number",
-                          "description": "The drift that starts a step, world units, in (0, MaxDistance]."
+                          "description": "The drift that starts a step, in creation units (world units at the body\u0027s scale of one, multiplied by its scale), in (0, MaxDistance]."
                         },
                         "seconds": {
                           "type": "number",
@@ -2913,7 +2913,7 @@
                         },
                         "height": {
                           "type": "number",
-                          "description": "The arc\u0027s peak lift, world units, in [0, MaxHeight]."
+                          "description": "The arc\u0027s peak lift, in creation units as Distance is, in [0, MaxHeight]."
                         }
                       },
                       "required": [

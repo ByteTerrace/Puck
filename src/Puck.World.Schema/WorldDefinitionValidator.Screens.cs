@@ -905,6 +905,14 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.YawReference)) {
             errors.Add(item: $"{path}.yawReference is unknown.");
         }
+        if (control.Boom is { } boom) {
+            RequirePositive(value: boom.Minimum, name: $"{path}.boom.minimum", errors: errors);
+            RequirePositive(value: boom.Maximum, name: $"{path}.boom.maximum", errors: errors);
+            RequirePositive(value: boom.Step, name: $"{path}.boom.step", errors: errors);
+            if (boom.Maximum < boom.Minimum) {
+                errors.Add(item: $"{path}.boom.maximum must be at least minimum.");
+            }
+        }
         if (!Enum.IsDefined(value: control.ClearanceMode) || (control.ClearanceMode == WorldCameraClearanceChoice.Auto)) {
             errors.Add(item: $"{path}.clearanceMode must be Fade or Cutaway.");
         }

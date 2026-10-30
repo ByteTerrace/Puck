@@ -1,25 +1,37 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Security.Cryptography;
+using Puck.Abstractions.Documents;
+using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Test;
 
 public static partial class TestCommand {
     // A boot owns a cohort, not just its root document. Compare the composition of every staged companion
-    // and the bytes of every asset; each authority restores its own scenario rows and programs.
+    // and the bytes of every asset; each authority restores its complete pristine checkpoint.
     private static string BatchShape(TestWorld world) => ((Path.GetFileName(path: world.Path) + "\n") + string.Join(separator: "\n",
         values: Directory.EnumerateFiles(path: Path.GetDirectoryName(path: world.Path)!, searchPattern: "*", searchOption: SearchOption.AllDirectories).Order(comparer: StringComparer.Ordinal).Select(selector: path => {
             var bytes = File.ReadAllBytes(path: path);
             var shape = (((path == world.Path) || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".world.json"))
-                ? Puck.World.Server.WorldPersistence.ScenarioBootShape(json: bytes)
+                ? ComposedBootShape(bytes: bytes, path: path)
                 : Convert.ToHexStringLower(inArray: SHA256.HashData(source: bytes)));
             var name = Path.GetRelativePath(relativeTo: Path.GetDirectoryName(path: world.Path)!, path: path).Replace(newChar: '/', oldChar: '\\');
 
             return $"{name.Length}:{name}:{shape}";
         })));
+    private static string ComposedBootShape(string path, byte[] bytes) {
+        // An imported file may only override part of a row; it need not parse as a standalone definition.
+        // Compose its JSON through the boot resolver without retaining these one-use roots in the cache.
+        if (!PuckDocumentComposer.TryComposeWorldDocument(rootResolvedPath: path, rootBytes: bytes,
+            composed: out var composed, chainBytes: out _, reason: out var reason,
+            catalog: CliWorldVocabulary.EnsureInstalled(), retainRoot: false)) {
+            throw new InvalidOperationException(message: reason);
+        }
+        return Puck.World.Server.WorldPersistence.ScenarioBootShape(json: ((composed is null) ? bytes : CanonicalJsonDocument.Serialize(node: composed)));
+    }
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
-    // A worker retains its native host across compatible compositions, replacing scenario state and programs.
+    // A worker retains its native host across identical compositions, replacing only the scenario schedule.
     private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory) {
         var legs = new List<object>();
 

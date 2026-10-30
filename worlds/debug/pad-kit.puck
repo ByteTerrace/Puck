@@ -17,4 +17,4 @@ let placesRing = {
 }
 
 
-let debugRings = [actRing, viewRing, placesRing]
+let debugRings = [actRing, viewRing, placesRing, barRing]

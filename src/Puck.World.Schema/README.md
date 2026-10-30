@@ -2533,7 +2533,7 @@ sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
 Rule execution admits at most 256 top-level effects per rule/interaction and
-4,000,000 statically derived heuristic work units per tick. There is no separate
+4,250,000 statically derived heuristic work units per tick. There is no separate
 ordinary-rule count ceiling. A line has three parts: setup, paid once per sweep;
 check, paid once per evaluation whether or not the gate holds; and firing, paid
 once per evaluation whose effects run. The cost includes gate/expression

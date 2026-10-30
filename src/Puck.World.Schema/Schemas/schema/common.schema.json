@@ -6949,6 +6949,11 @@
           "$ref": "#/$defs/ActionTarget",
           "description": "The participant a kit\u0027s action addresses \u2014 see Target.",
           "default": "Self"
+        },
+        "useMoveDirection": {
+          "description": "Uses the normalized current movement command when nonzero, falling back to the authored body direction.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -8502,6 +8507,11 @@
         },
         "rollDegrees": {
           "description": "The roll a teleport stands the body at, about its forward axis: 180 lays it upside down, as a rule turning a two-faced piece over does. A glide keeps the body\u0027s attitude and ignores it.",
+          "type": "number",
+          "default": 0
+        },
+        "pitchDegrees": {
+          "description": "The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body\u0027s attitude and ignores it.",
           "type": "number",
           "default": 0
         }

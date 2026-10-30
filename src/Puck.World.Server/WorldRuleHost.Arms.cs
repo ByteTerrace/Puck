@@ -361,6 +361,7 @@ public sealed partial class WorldRuleHost {
         _ = body.ApplyTargetedEffect(
             instruction: new CompiledBodyInstruction(
                 Direction: operation.Direction,
+                UseMoveDirection: operation.UseMoveDirection,
                 DurationTicks: operation.DurationTicks,
                 Operation: operation.Operation,
                 StateSlot: -1,
@@ -523,7 +524,7 @@ public sealed partial class WorldRuleHost {
             if (effect.Glide) {
                 body.Glide(position: position);
             } else {
-                body.Pose(position: position, yawRadians: body.FixedYaw, pitchRadians: FixedQ4816.Zero, rollRadians: effect.Roll);
+                body.Pose(position: position, yawRadians: body.FixedYaw, pitchRadians: effect.Pitch, rollRadians: effect.Roll);
             }
         }
         return true;

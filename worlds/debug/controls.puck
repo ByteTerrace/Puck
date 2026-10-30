@@ -235,6 +235,59 @@ bindingOverlays [
             }
           }
         }
+        keys {
+          banks {
+            go {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+            tour {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+          }
+        }
+        pad {
+          banks {
+            go { pieces [{ table: "left", at [-5, 0] }, { table: "right", at [-1, 0] }, { table: "face", at [4, 0] }] }
+            tour {
+              pieces [{ table: "left", at [-5, 0] }, { table: "right", at [-1, 0] }, { table: "face", at [4, 0] }]
+            }
+          }
+        }
+        wings {
+          // Five banks bottom at -4 pitches, keeping the primary at the standard 220/600 lift.
+          banks {
+            move { anchor { edge: Bottom, inset: 0.3888889 } }
+            view { anchor { edge: Bottom, inset: 0.3888889 } }
+            debug { anchor { edge: Bottom, inset: 0.3888889 } }
+            go {
+              pieces [{ table: "left", at [-9, -2.25] }, { table: "right", at [9, -2.25] }]
+              anchor { edge: Bottom, inset: 0.3888889 }
+            }
+            tour {
+              pieces [{ table: "left", at [-12, -3] }, { table: "right", at [12, -3] }]
+              anchor { edge: Bottom, inset: 0.3888889 }
+            }
+          }
+        }
+        sidebars {
+          banks {
+            go { pieces [{ table: "column", at [1.2, 0] }], anchor { edge: Left, inset: 1.5 } }
+            tour { pieces [{ table: "column", at [-1.2, 0] }], anchor { edge: Right, inset: 1.5 } }
+          }
+        }
+
       }
     }
   }

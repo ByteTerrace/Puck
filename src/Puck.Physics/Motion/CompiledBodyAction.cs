@@ -29,7 +29,7 @@ public static class CompiledPredicateCapacity {
 /// since a site's source and cursor are its own — and is <see langword="null"/> for every other operation. Nothing
 /// is bound at kit-compile time here: the generate site is a world-global <c>state</c> row, not part of this kit's
 /// per-body slot table.</remarks>
-public readonly record struct CompiledBodyInstruction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, int StateSlot, ActionTarget Target = ActionTarget.Self, string? StateName = null);
+public readonly record struct CompiledBodyInstruction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, int StateSlot, ActionTarget Target = ActionTarget.Self, string? StateName = null, bool UseMoveDirection = false);
 /// <summary>A slot envelope compiled into the slot's fixed counter or engine-tick domain.</summary>
 /// <param name="Minimum">The inclusive range minimum, or zero for a set.</param>
 /// <param name="Maximum">The inclusive range maximum, or zero for a set.</param>

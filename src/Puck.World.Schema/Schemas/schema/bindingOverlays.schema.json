@@ -424,6 +424,20 @@
                   "null"
                 ],
                 "default": null
+              },
+              "layout": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               }
             },
             "additionalProperties": false,

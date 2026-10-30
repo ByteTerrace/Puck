@@ -59,7 +59,7 @@ state {
     row {
       name: "companionBodies"
       kind: "Int"
-      cells: map(range(0, galleryPopulation + 2 + boardRoomBodies), i => { key: $"{i}", value: 1 })
+      cells: map(range(0, galleryPopulation + 2 + boardRoomBodies + cardBodies), i => { key: $"{i}", value: 1 })
     }
     table companionCue {
       guide = -1
