@@ -76,6 +76,10 @@ public sealed class SdfResolveDeviceLawTests {
                 sharpness: 1f, width: RenderWidth, stationaryPhase: phase);
 
             Check(color: stationary, value: 0.5f, width: RenderWidth, x: ((phase == 0u) ? 2u : 13u), y: 8);
+            var disoccluded = Run(extension: extension, height: RenderHeight, services: services,
+                sharpness: 1f, width: RenderWidth, stationaryPhase: phase, displacedCamera: true);
+
+            Check(color: disoccluded, value: (phase / 7f), width: RenderWidth, x: ((phase == 0u) ? 2u : 13u), y: 8);
         }
 
         foreach (var poison in new[] { Half.NaN, Half.PositiveInfinity, Half.NegativeInfinity }) {
@@ -100,7 +104,7 @@ public sealed class SdfResolveDeviceLawTests {
         }
         Assert.Equal(expected: ((Half)1f), actual: color[(offset + 3)]);
     }
-    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false, bool narrowChromaHistory = false, uint? stationaryPhase = null) {
+    private static Half[] Run(GpuDeviceServices services, string extension, float sharpness, uint width, uint height, Half? poisonedHistory = null, bool poisonCurrent = false, bool narrowChromaHistory = false, uint? stationaryPhase = null, bool displacedCamera = false) {
         var seededHistory = (narrowChromaHistory || stationaryPhase.HasValue);
         var temporal = (poisonedHistory.HasValue || poisonCurrent || seededHistory);
         var parameters = SdfWorldInterfaces.ResolveParameters;
@@ -124,6 +128,7 @@ public sealed class SdfResolveDeviceLawTests {
             Float(member: SdfWorldPackage.AspectRatio, value: 1f);
             Float(member: SdfWorldPackage.FarDistance, value: 40f);
             Float(lane: 3, member: SdfWorldPackage.PreviousView, value: 1f);
+            Float(member: SdfWorldPackage.PreviousView, value: (displacedCamera ? 0.1f : 0f));
             Float(lane: 4, member: SdfWorldPackage.PreviousView, value: 1f);
             Float(lane: 7, member: SdfWorldPackage.PreviousView, value: 0.5f);
             Float(lane: 9, member: SdfWorldPackage.PreviousView, value: 1f);

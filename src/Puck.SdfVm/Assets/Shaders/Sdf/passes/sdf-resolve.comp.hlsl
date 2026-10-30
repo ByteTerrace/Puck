@@ -466,9 +466,9 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
                 SdfVisibility visibility = sdfLoadVisibility(record);
                 if (sdfVisibilityHit(visibility)) {
                     float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
-                    float3 point = (view.position.xyz + (direction * visibility.t));
+                    float3 surfacePoint = (view.position.xyz + (direction * visibility.t));
                     float3 previousPoint;
-                    footprintStill = (footprintStill && sdfPreviousPoint(record, visibility, point, previousPoint) && all(previousPoint == point));
+                    footprintStill = (footprintStill && sdfPreviousPoint(record, visibility, surfacePoint, previousPoint) && all(previousPoint == surfacePoint));
                 }
             }
         }
