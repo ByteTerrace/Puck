@@ -24,12 +24,13 @@ let heartAspect = 0.74074074
 // The court figures are modelled in a deep relief, from -0.2032 (the nose) to +0.0916 (the back of the cranium) about the
 // card's mid-plane, which stands 0.18 off the face and 0.07 through the back of a 0.04 card: cards lie a few millimetres
 // apart in a fan and a stack, so a figure that deep pokes through the card laid over it. Every court shape's depth and
-// depth position map linearly into the span from the front the figure may stand (courtFront, a hair over the face) to
-// the card's back surface (courtBack), keeping the figure inside the card.
+// depth position map linearly into a bas-relief standing on the court field: from courtFront, the most the figure may
+// stand off the face (about 2 mm at a table's scale, less than the thickness of the card laid over it), back to
+// courtBack, just in front of the field.
 let courtModelFront = -0.2032
 let courtModelBack = 0.0916
-let courtFront = -0.032
-let courtBack = 0.02
+let courtFront = -0.05
+let courtBack = -0.0245
 let courtFlat = (courtBack - courtFront) / (courtModelBack - courtModelFront)
 let courtLift = courtFront - courtModelFront * courtFlat
 
@@ -40,7 +41,7 @@ let lightTheme = {
   back: "#B31B2C"
   backAccent: "#FFE06B"
   border: "#E0A82E"
-  courtField: "#E3D5B0"
+  courtField: "#44506E"
   suitRed: "#C8101E"
   suitBlack: "#14141A"
 }
@@ -59,16 +60,16 @@ let cardVariants = map([{ name: "light", theme: lightTheme }, { name: "dark", th
   name: variant["name"]
   palette [
     { color: variant["theme"]["face"], metal: 0.04, roughness: 0.40, specular: 0.04 }
-    { color: variant["theme"]["border"], metal: 0.98, roughness: 0.12, specular: 0.8 }
-    { color: variant["theme"]["backAccent"], metal: 0.96, roughness: 0.10, specular: 0.8 }
-    { color: variant["theme"]["courtField"], metal: 0.10, roughness: 0.30, specular: 0.04 }
-    { color: variant["theme"]["suitRed"], metal: 0.20, roughness: 0.16, specular: 0.30 }
+    { color: variant["theme"]["border"], metal: 0.8, roughness: 0.38, specular: 0.3 }
+    { color: variant["theme"]["backAccent"], metal: 0.8, roughness: 0.38, specular: 0.3 }
+    { color: variant["theme"]["courtField"], metal: 0.10, roughness: 0.55, specular: 0.04 }
+    { color: variant["theme"]["suitRed"], metal: 0, roughness: 0.6, specular: 0.04 }
     { color: "#F2CFA8", roughness: 0.5, metal: 0, specular: 0.04 }
     { color: "#F5F0E6", roughness: 0.22, metal: 0.08, specular: 0.04 }
     { color: "#9E66C7", roughness: 0.22, metal: 0.15, specular: 0.04 }
     { color: "#7A421F", roughness: 0.45, metal: 0.05, specular: 0.04 }
     { color: "#2ED6ED", roughness: 0.04, metal: 0.5, specular: 0.04, emissive: 1.5 }
-    { color: variant["theme"]["suitBlack"], metal: 0.05, roughness: 0.3, specular: 0.06 }
+    { color: variant["theme"]["suitBlack"], metal: 0, roughness: 0.6, specular: 0.04 }
     { color: variant["theme"]["back"], metal: 0.05, roughness: 0.28, specular: 0.12 }
   ]
 })

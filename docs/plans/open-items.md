@@ -1445,16 +1445,27 @@ Klondike table stands north of the Go table in the board game room
 - The rules' work-budget cost is the table's price: Klondike with its table is
   about 200,000 units of the sheet. With the batched Go reads and the one-piece
   chess moves priced by their `maxFirings`, the debug world's sheet is about
-  2,550,000 of the 4,250,000 ceiling and the chess search needs about 600,000 of
-  the remaining 1,700,000, which leaves Spider and FreeCell about 1,100,000.
+  2,550,000 of the 4,250,000 ceiling; FreeCell and the game switch add about
+  215,000 (2,765,000 read from `world.budget` on a headless World), the chess
+  search needs about 600,000 of the remaining 1,485,000, which leaves Spider about
+  885,000.
   A transfer between named piles costs a few thousand where one between piles a
   live zone table picks costs about 140,000 (the disclosure term grows with the
   square of the piles the table reaches), so every deal step, gather step and
   move is a rule of its own pinned on its literal piles, and the table reads one
   pile a tick (`kSync.scan`), which the sheet prices as the dearest pile.
-1. Spider and FreeCell as the same table's game switch (`solitaire.puck`): each
-   game lays its piles on the `kSlots` graph and answers the seat through the
-   same mailbox; Spider's 104 cards need 52 more bodies (`cardBodies`).
+1. Spider as the same table's game switch (`solitaire.puck`; FreeCell landed
+   as `freecell.puck`, `solitaire.game 2`, `freecell-tests.puck`): it lays its
+   piles on the `kSlots` graph after FreeCell's (`fSlotCount`) and answers the
+   seat through its own mailbox. Its shape: 104 cards need 52 more bodies
+   (`cardBodies` 54 to 106, the bodies still the population's top slots) and a
+   60-cell-wide grid for ten columns (the 2 cm cell fits them at 12 cm and the
+   felt grows to 1.32 m); a body wears one face for good, so it is the
+   four-suit game (card `k` wears `card-<suit of k % 52>`, and the one- and
+   two-suit games would need a look a body can swap); the rules are ten
+   columns of any-rank-on-the-next-rank moves of a same-suit run (90 move
+   rules), ten stock deals of one card a column, and a run K to A of one suit
+   leaving to a completed pile.
 2. Poker: seats, computer players and the hand judge; its own step.
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order

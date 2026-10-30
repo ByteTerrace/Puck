@@ -1,12 +1,17 @@
 // The patience collection: the games that play on the card table (cardtable.puck), one at a time. `solitaire.table`
-// names the game in play (1 Klondike; 0 pauses them all) and each game's rules are gated on it, so a game kept
-// mid-deal keeps its piles while another is on the table.
+// names the game in play (1 Klondike, 2 FreeCell; 0 pauses them all) and each game's rules are gated on it, so a game
+// kept mid-deal keeps its piles while another is on the table.
 import "klondike"
+import "freecell"
 
-export action solitaireKlondike
+export action solitaireKlondike, solitaireFreecell
 export read solitaire, solitaireKlondike, solitaireKlondikeCards, solitaireKlondikeFace, solitaireKlondikeRank, solitaireKlondikeSuit, solitaireKlondikeLength
 export read solitaireKlondikePile0, solitaireKlondikePile1, solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6
 export read solitaireKlondikePile7, solitaireKlondikePile8, solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13
+export read solitaireFreecell, solitaireFreecellCards, solitaireFreecellRank, solitaireFreecellSuit, solitaireFreecellLength, solitaireFreecellDeck
+export read solitaireFreecellPile0, solitaireFreecellPile1, solitaireFreecellPile2, solitaireFreecellPile3, solitaireFreecellPile4, solitaireFreecellPile5
+export read solitaireFreecellPile6, solitaireFreecellPile7, solitaireFreecellPile8, solitaireFreecellPile9, solitaireFreecellPile10, solitaireFreecellPile11
+export read solitaireFreecellPile12, solitaireFreecellPile13, solitaireFreecellPile14, solitaireFreecellPile15
 
 state {
   world {
