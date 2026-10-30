@@ -100,6 +100,39 @@ public sealed class BindingBarDeclaredModifiersLawTests {
         Assert.Equal(expected: 0, actual: kept);
     }
     [Fact]
+    public void AChordHintDrawsOnlyWhenTheLiveLayoutPlacesEveryMemberOrItIsADeclaredModifier() {
+        var view = Resting();
+        string[] slotSet = ["mouse.button1", "mouse.button2", "gamepad.leftShoulder"];
+        var layout = CompiledBindingBarLayout.Build(banks: [(
+            Id: "move",
+            Edge: BindingBarEdge.Bottom,
+            Inset: 0f,
+            Plates: new Dictionary<string, BindingPlatePlacement>(comparer: StringComparer.Ordinal) {
+                ["gamepad.leftShoulder"] = new BindingPlatePlacement(Badge: Vector2.Zero, Position: Vector2.Zero),
+            }
+        )]);
+        var placed = new List<string>();
+
+        BindingBarSeatComposer.PlacedSlots(destination: placed, layout: layout, slotSet: slotSet);
+
+        Assert.Equal(expected: ["gamepad.leftShoulder"], actual: placed);
+
+        int Hints(IReadOnlyList<string> slots) => BindingBarSeatComposer.ComposeHints(
+            declaredOnly: true,
+            destination: new OverlayBindingHint[BindingBarWriter.MaxHintLines],
+            members: new OverlayResolvedGlyph[(BindingBarWriter.MaxHintLines * BindingBarWriter.MaxHintMembers)],
+            modifiers: true,
+            resolveAction: static _ => OverlayResolvedGlyph.None,
+            resolveBadge: static _ => Badge,
+            slotSet: slots,
+            text: true,
+            view: view
+        );
+
+        Assert.Equal(expected: 1, actual: Hints(slots: slotSet));
+        Assert.Equal(expected: 0, actual: Hints(slots: placed));
+    }
+    [Fact]
     public void AnUnboundControlThatOpensAPageWearsThatPagesIcon() {
         var view = Resting();
         var plates = new Dictionary<string, BindingPlatePlacement>(comparer: StringComparer.Ordinal) {

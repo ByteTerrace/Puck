@@ -26,42 +26,50 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-1. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
+1. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the owner-visible
+   sub-cell features (stair holes and flipped faces, blind slats, shell seams)
+   fixed at the root in the bake. In flight: bake-seams (principal).
+2. [Lighting and GI](#lighting-and-gi): nothing renders black (sky fill on
+   shaded faces, probes or sky outside the window) and the meter meters during
+   a bake. In flight: lighting-robust.
+3. [The valley's terrain](#the-valleys-terrain): contact on the drawn relief
+   (in flight: relief-contact), then the terrain pass (docs/plans/terrain-pass.md).
+4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
    carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
    lobby and the rim, so take the next ranked costs (rule evaluation, snapshot
    delivery, the scoped replay hash) and re-read the stops windowed.
-2. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
+5. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
-3. [Bake detail](#bake-detail): measure static curvature refinement and local
+6. [Bake detail](#bake-detail): measure static curvature refinement and local
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
-4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+7. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a reboot for an edit outside `PuckHotReload`, and the windowed C# loop timed
    on a quiet machine.
-5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+8. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    schema switch, then the pick answer.
-6. [Test runner and replay](#test-runner-and-replay): make the per-tick
+9. [Test runner and replay](#test-runner-and-replay): make the per-tick
    authority hash incremental, as the quiet measurement supports.
-7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
-   the owner's direction; Klondike first on the revived rules and SDF faces,
-   headless, its look in the lead's window.
-8. [Residency and streaming](#residency-and-streaming): near-first has landed;
-   next, GI on the same demand points and the measurements still open.
-9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
-   inverted sheets along the divider; the colliders report's remaining reds are
-   the valley relief's ([the valley's terrain](#the-valleys-terrain)).
-10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
+10. [Card tables in the board game room](#card-tables-in-the-board-game-room):
+    the owner's direction; Klondike first on the revived rules and SDF faces,
+    headless, its look in the lead's window.
+11. [Residency and streaming](#residency-and-streaming): near-first has landed;
+    next, GI on the same demand points and the measurements still open.
+12. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
+    inverted sheets along the divider; the colliders report's remaining reds are
+    the valley relief's ([the valley's terrain](#the-valleys-terrain)).
+13. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
     it in `panes` and answers under pause, then the diagnostics' windowed checks
     and the developer exhibits.
-11. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
+14. [Sweep and visual checks](#sweep-and-visual-checks): fix the prelude (the
     chess toast, the refused `world.wait 300`), reproduce the companion overlaps,
     then one paired windowed tour when no lane holds the GPU.
-12. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
+15. [Temporal shimmer and cadence flicker](#temporal-shimmer-and-cadence-flicker):
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
-13. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
+16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
     the thread itself, a design consensus the owner has yet to queue.
 
 ## Owner decisions
@@ -231,6 +239,7 @@ coverage, enclosure, corner and exposure findings; quiet GI qualification at int
 The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 holds the fixed poses and the approaches already rejected.
 
+- [high] Far surfaces render pure black on every gallery floor (the owner's walkthrough, `.claude/scratch/lead-window/owner-level2-black.png`, level 2 at (47.6, 9.1, 23.3) looking east, bakes all landed at 639 s): picks into the black land on drawn geometry (`hall-shell.palette[0]`, `hall-shaft.palette[2]`), and `world.cull off` changes nothing, so the surfaces draw but receive no light: they lie outside the measured probe window and the "no indirect light until measured" rule gives them zero, with no direct light indoors. Fix at the cause: a surface outside the window gets the nearest measured probes or a sky/ambient term, never black; and the window follows every view (the residency decision's step 3). Confirm on every floor, both backends. (from: the owner's walkthrough)
 - [high] Auto exposure is not metering: on the owner's walkthrough (valley summit, `.claude/scratch/lead-window/owner-valley-summit.png`) `world.exposure` reads `mode=auto ev100=11.5 compensation=2.5` but every view `meter=none source=held`, so the image holds a fixed EV with +2.5 compensation and white terrain blows out. Cause found on the same World: the meter answers nothing until the whole cold bake has landed (`SdfMeshIrradiance.TryMeter` needs an installed scene, and `RefreshScene` runs only while no bake is pending); once all 2,078 groups landed at 639 s, every view metered (lobby view 0 ev100 7.81 from probes). A cold bake, an edit or a residency change therefore leaves the image unmetered for minutes. Fix at the cause: meter from what has landed (or from the camera trace) while the bake runs, never wait for the whole world; then confirm the summit, the lobby and the card table on both backends. (from: the owner's walkthrough)
 - [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white sun key, hard black shadows with no sky fill, no rim and no aerial haze. A lighting-direction pass (sky colour and fill, sun colour and height, shadow softness, haze) with the owner, after exposure meters; the [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the image meter. (from: the owner's walkthrough)
 - [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:150`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
@@ -487,6 +496,7 @@ sheets along the divider, then the 178 witnesses with no mesh correspondence.
 The rendered colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
+- [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). In flight: the bake-seams lane (principal), a root fix to zero defects, superseding the case patches (2dbc758c1 and the unlanded hall-stairs branch). (from: the owner's walkthrough)
 - The hall stairs' mesh carries inverted and doubled faces where flight A's
   boxes meet the divider (x 12.1) and flight B's meet the east wall (x 12.3 and
   14.1): `puck mesh audit --cpu --group "(hall-stairs)"` reports 1,557 flipped
@@ -516,6 +526,7 @@ The rendered colliders report's only red findings left are the valley's relief
 
 ### Edit to running, hot reload and boot
 
+- [high] `world.reload` crashes a windowed World: on the owner's third live reload (tuning the wings layout in `worlds/standard/controls.puck` and `worlds/debug/controls.puck`) the next frame threw `InvalidOperationException: Only a staged region that owns its destination grows.` at `GpuRegion.Grow` from `SdfWorldTables.EnsureDynamicTransformCapacity` (`SdfWorldTables.FramePreparation.cs:26`, via `PackDynamicTransforms`), with the bake reporting 2,765 instances and 1,357 dynamic after the reload; the host stopped. Log: `.claude/scratch/lead-window/owner-reload-crash.stderr.log`. The dynamic transform table must grow (or be rebuilt) after a reload raises its count; a reload never stops the host. (from: the owner's walkthrough)
 - [high · owner: lead integration] The combined debug document at integration
   45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
   PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for
@@ -733,8 +744,9 @@ movement-facing scheme returns.
   `.claude/scratch/controls-evidence/`; inspect the same workload on Vulkan,
   read standing/walking frame time and patrol the stage. The hand-back is
   .claude/scratch/controls-handback.md (lead checkout, ignored). Judge the dash's
-  feel and the authored secondary wings spacing; their appearance remains
-  unconfirmed. The durable
+  feel and the authored secondary wings spacing. The owner confirmed the
+  sidebars layout correct in play (`.claude/scratch/lead-window/owner-bar-sidebars.png`);
+  wings, compact/full and the dash's appearance remain unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
 - [high · owner: lead integration] Land the controls review's follow-up

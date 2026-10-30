@@ -174,6 +174,29 @@ public static class BindingBarSeatComposer {
 
         return count;
     }
+    /// <summary>Collects the controls of a slot set that a compiled layout gives a plate in any of its banks, in slot-set
+    /// order: a layout can place only some of the controls the bar may show, and a chord hint's member is placed only
+    /// when the live layout places it.</summary>
+    /// <param name="slotSet">The bar's slot set.</param>
+    /// <param name="layout">The live layout, compiled.</param>
+    /// <param name="destination">The list the placed controls are appended to; cleared first.</param>
+    public static void PlacedSlots(IReadOnlyList<string> slotSet, CompiledBindingBarLayout layout, List<string> destination) {
+        ArgumentNullException.ThrowIfNull(argument: slotSet);
+        ArgumentNullException.ThrowIfNull(argument: layout);
+        ArgumentNullException.ThrowIfNull(argument: destination);
+
+        destination.Clear();
+
+        for (var index = 0; (index < slotSet.Count); index++) {
+            foreach (var bank in layout.Banks.Values) {
+                if (bank.Plates.ContainsKey(key: slotSet[index])) {
+                    destination.Add(item: slotSet[index]);
+
+                    break;
+                }
+            }
+        }
+    }
     /// <summary>Composes the bar's command-chord hints from a page view. A chord row of the active group becomes a hint
     /// only when the bar places every member — a control in <paramref name="slotSet"/>, or any member while the bar
     /// draws its modifier row — and every member's badge resolves: the hint is the members' badges and the action's
