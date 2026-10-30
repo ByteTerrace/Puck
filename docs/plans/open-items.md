@@ -488,6 +488,7 @@ sheets along the divider, then the 178 witnesses with no mesh correspondence.
 The rendered colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
+- [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). In flight: the bake-seams lane (principal), a root fix to zero defects, superseding the case patches (2dbc758c1 and the unlanded hall-stairs branch). (from: the owner's walkthrough)
 - The hall stairs' mesh carries inverted and doubled faces where flight A's
   boxes meet the divider (x 12.1) and flight B's meet the east wall (x 12.3 and
   14.1): `puck mesh audit --cpu --group "(hall-stairs)"` reports 1,557 flipped
