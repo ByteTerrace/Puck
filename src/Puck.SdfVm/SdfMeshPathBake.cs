@@ -806,7 +806,7 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
-            group.TakeDemandSphere();
+            group.TakeDemandBox();
             if (previous.TryGetValue(key: group.Selector, value: out var old) && Keeps(group: group, old: old)) {
                 Replace(group: old, index: index);
                 continue;
@@ -934,7 +934,7 @@ public sealed partial class SdfMeshPathBake {
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
     // store refuses its entry; true when it loads.
     private bool Begin(Group group) {
-        group.TakeDemandSphere();
+        group.TakeDemandBox();
         // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
         var center = ((group.Low + group.High) * 0.5f);
         var half = (MathF.Max(x: (group.High.X - group.Low.X), y: MathF.Max(x: (group.High.Y - group.Low.Y), y: (group.High.Z - group.Low.Z))) * 0.5f);
@@ -1813,23 +1813,25 @@ public sealed partial class SdfMeshPathBake {
         public Vector3[]? StillPositions { get; private set; }
         public float StillSince { get; set; }
 
-        // The sphere a demand point measures the group by: its planned box's, taken before the bake narrows the box, in
-        // world space or, for a dynamic group, its slot's frame and units. A negative radius is not yet taken.
+        // The box a demand point measures the group by: its planned box, taken before the bake narrows it, as a center and
+        // half extents in world space or, for a dynamic group, its slot's frame and units.
         public Vector3 DemandCenter { get; private set; }
-        public float DemandRadius { get; private set; } = -1f;
+        public Vector3 DemandHalf { get; private set; }
+        public bool HasDemandBox { get; private set; }
         // When the frame thread first saw the group done, and its mesh's words in the mesh region (Stopwatch timestamps;
         // zero not yet).
         public long LandedAt { get; set; }
         public long ResidentAt { get; set; }
-        // The display pixels its demand sphere projects at the demand point that sees it largest, as of the latest frame
+        // The display pixels its demand box projects at the demand point that sees it largest, as of the latest frame
         // that measured it (SdfMeshDemand.Priority); zero with no demand point.
         public float Priority { get; set; }
 
-        // Takes the demand sphere from the planned box, once.
-        public void TakeDemandSphere() {
-            if (DemandRadius >= 0f) { return; }
+        // Takes the demand box from the planned box, once.
+        public void TakeDemandBox() {
+            if (HasDemandBox) { return; }
             DemandCenter = ((Low + High) * 0.5f);
-            DemandRadius = (0.5f * Vector3.Distance(value1: Low, value2: High));
+            DemandHalf = Vector3.Abs(value: ((High - Low) * 0.5f));
+            HasDemandBox = true;
         }
 
         // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place.

@@ -11,7 +11,7 @@ public sealed partial class SdfMeshPathBake {
     /// before dressing it. A bake no residency observes for has none, and keeps its plan's order.</summary>
     public SdfMeshDemand Demand { get; init; } = new();
 
-    // The latest dressed frame's dynamic transforms, which carry a dynamic group's demand sphere into world space.
+    // The latest dressed frame's dynamic transforms, which carry a dynamic group's demand box into world space.
     private IReadOnlyList<DynamicTransform> m_demandTransforms = [];
     // When the latest bake that baked or loaded a group started (a Stopwatch timestamp; zero before one).
     private long m_bakeStarted;
@@ -33,16 +33,16 @@ public sealed partial class SdfMeshPathBake {
     // The loaders that run at once: one a processor, as the thread pool ran one task a load on.
     private static int LoadWorkers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
 
-    // Measures every group still owing a mesh by its demand sphere at the demand points, under the gate; with none, the
+    // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
     // priorities stand as they were and the plan's order decides.
     private void Prioritize() {
         if (Demand.Count == 0) { return; }
         foreach (var group in m_groups) {
-            if (group.Done || (group.DemandRadius < 0f)) { continue; }
+            if (group.Done || !group.HasDemandBox) { continue; }
 
-            var (center, radius) = WorldSphere(group: group);
+            var (center, half) = WorldBox(group: group);
 
-            group.Priority = Demand.Priority(center: center, radius: radius);
+            group.Priority = Demand.Priority(center: center, half: half);
         }
     }
     // Starts loaders, under the gate, until LoadWorkers run or every queued load has one.
@@ -80,15 +80,25 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // A group's demand sphere in world space: a dynamic group's carried out of its slot's frame by the slot's transform.
-    private (Vector3 Center, float Radius) WorldSphere(Group group) {
-        if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandRadius); }
+    // A group's demand box in world space: a dynamic group's carried out of its slot's frame by the slot's transform, as
+    // the world-axis box about the turned one.
+    private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
+        if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandHalf); }
 
         var transform = m_demandTransforms[group.Slot];
         var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
         var orientation = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
+        var turn = Matrix4x4.CreateFromQuaternion(quaternion: orientation);
+        var half = (group.DemandHalf * MathF.Abs(x: units));
 
-        return ((transform.Position + Vector3.Transform(rotation: orientation, value: (group.DemandCenter * units))), (group.DemandRadius * units));
+        return (
+            (transform.Position + Vector3.Transform(rotation: orientation, value: (group.DemandCenter * units))),
+            new Vector3(
+                x: (((MathF.Abs(x: turn.M11) * half.X) + (MathF.Abs(x: turn.M21) * half.Y)) + (MathF.Abs(x: turn.M31) * half.Z)),
+                y: (((MathF.Abs(x: turn.M12) * half.X) + (MathF.Abs(x: turn.M22) * half.Y)) + (MathF.Abs(x: turn.M32) * half.Z)),
+                z: (((MathF.Abs(x: turn.M13) * half.X) + (MathF.Abs(x: turn.M23) * half.Y)) + (MathF.Abs(x: turn.M33) * half.Z))
+            )
+        );
     }
 
     /// <summary>Stamps, on the frame's thread after the frame's mesh region is staged, each group the bake has finished and
@@ -135,7 +145,7 @@ public sealed partial class SdfMeshPathBake {
     /// words in the mesh region) counted from its start, those within <paramref name="radius"/> of a demand point apart,
     /// its store loads, the time its plan and restart took, and the resident meshes' region bytes by level of
     /// detail.</summary>
-    /// <param name="radius">The distance, in metres, from a demand point to a group's demand sphere within which the group
+    /// <param name="radius">The distance, in metres, from a demand point to a group's demand box within which the group
     /// counts as near.</param>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeResidency(float radius) {
@@ -149,8 +159,8 @@ public sealed partial class SdfMeshPathBake {
             Span<long> levelTriangles = stackalloc long[3];
 
             foreach (var group in m_groups) {
-                var (center, sphere) = WorldSphere(group: group);
-                var isNear = ((group.DemandRadius >= 0f) && (Demand.Distance(center: center, radius: sphere) <= radius));
+                var (center, half) = WorldBox(group: group);
+                var isNear = (group.HasDemandBox && (Demand.Distance(center: center, half: half) <= radius));
 
                 near += (isNear ? 1 : 0);
                 if (group.LandedAt != 0) {

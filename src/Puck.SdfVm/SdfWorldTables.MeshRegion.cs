@@ -348,7 +348,7 @@ public sealed partial class SdfWorldTables {
             if (!m_meshesOwed.Contains(item: draw.Mesh)) { continue; }
             m_owedOrder.Add(item: ((demand is null)
                 ? 0f
-                : (SdfMeshDemand.SphereOf(center: out var center, draw: in draw, radius: out var radius) ? demand.Priority(center: center, radius: radius) : float.PositiveInfinity), index));
+                : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity), index));
         }
         CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparison: ByPriority);
 
