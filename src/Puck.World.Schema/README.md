@@ -2551,7 +2551,12 @@ firing, total, and the cell its firing effects price exclusively under—costlie
 first, so the total is traceable to the rows that make it up. All candidate
 checks sum even when firing effects are mutually exclusive. A `forEach` line's
 multiplier is its row's capacity: a row left at the default room prices at 128
-cells, a registry-sized row authors the capacity it needs. Interaction `range`
+cells, a registry-sized row authors the capacity it needs. A rule's
+`maxFirings` ends its sweep once that many bindings have fired, and its firings,
+and the writes they count against exclusive cells, are priced at that number
+(`firings=` on its `world.budget.rules` line); the debug world's batched Go
+reads and its one-piece chess moves author it at what their gates already
+admit. Interaction `range`
 is an exact JSON decimal lowered directly to fixed point, with no binary32 round
 trip. A distance interaction's setup gathers both carrier sets (a scan of each
 tag row and a sort of its carriers) and tests every left against every right;
@@ -3183,8 +3188,9 @@ sign; it lands the most-visited root move in `best` with the mean score. A tree
 step is a unit of the job's allowance like any other, and the whole tree, path,
 frames, and seed ride the checkpoint and hash.
 
-Search spends work, not nodes. One judge run costs the sum of the
-frame-evaluable rules' work-sheet lines. What `RuleCapacity.
+Search spends work, not nodes. One judge run costs the frame-evaluable judge
+rules' work sheet, tallied like the tick's, so a judge rule's `maxFirings`
+lowers every candidate's price too. What `RuleCapacity.
 MaxWorkUnitsPerTick` leaves after the sheet, less every job's worst-case fold of
 its input dependency rows (the stamp that tells it its inputs moved), is every
 job's allowance. Position-key prices use only that job's plan and judge rows;

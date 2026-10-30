@@ -66,7 +66,7 @@ public static partial class WorldDecompiler {
     }
 
     private static readonly HashSet<string> RuleKnownKeys = new(comparer: StringComparer.Ordinal) {
-        "name", "gate", "locals", "mode", "forEach", "poolForEach", "zones", "decision", "effects",
+        "name", "gate", "locals", "mode", "forEach", "poolForEach", "maxFirings", "zones", "decision", "effects",
     };
 
     // Respelled under the rule's own locals (see ExpressionSpelling.WithLocals): a plain row read one of them
@@ -188,6 +188,12 @@ public static partial class WorldDecompiler {
         }
         if ((rule["poolForEach"] is { }) && !((rule["poolForEach"] is JsonObject iteration) && CarriesOnly(iteration, "pool", "binding"))) {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}poolForEach{FieldSeparator(value: rule["poolForEach"])}{FormatValue(rule["poolForEach"], indentLevel)}");
+        }
+        if (rule["maxFirings"] is { } maxFirings) {
+            sb.AppendLine(
+                CultureInfo.InvariantCulture,
+                $"{inner}maxFirings: {FormatModelField(holder: typeof(WorldRule), indentLevel: indentLevel, key: "maxFirings", node: maxFirings)}"
+            );
         }
         if (rule["zones"] is { } zones) {
             sb.AppendLine(

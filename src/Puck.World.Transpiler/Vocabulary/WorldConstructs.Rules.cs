@@ -56,7 +56,7 @@ public static partial class WorldConstructs {
     private static IReadOnlyList<WorldConstruct> Rules() => [
         new(
             DocumentMember: "rules[]",
-            Grammar: "rule \"name\" { [local …]* [when Gate] [mode: …] [forEach: …] [decision { … }] <effect>* }",
+            Grammar: "rule \"name\" { [local …]* [when Gate] [mode: …] [forEach: …] [maxFirings: N] [decision { … }] <effect>* }",
             Keyword: "rule",
             Members: [
                 QuotedName(key: "name", summary: "The rule's name, which a group claims it by and a trace reports."),
@@ -74,6 +74,13 @@ public static partial class WorldConstructs {
                     Name: "forEach",
                     Position: WorldMemberPosition.Property,
                     Summary: "What the rule iterates, one evaluation per binding of `$each`: a keyed row's live keys, `$zones` for its zone table's entries, or `$bodies` for every live body in ascending index order."
+                ),
+                new(
+                    DocumentKeys: ["maxFirings"],
+                    Kind: WorldMemberKind.Number,
+                    Name: "maxFirings",
+                    Position: WorldMemberPosition.Property,
+                    Summary: "The most bindings of one iterating sweep that may fire in a tick; the sweep stops there, the rest wait for a later tick, and the work sheet prices the rule's firings at this number instead of the iterated row's capacity."
                 ),
                 new(
                     DocumentKeys: ["effects"],

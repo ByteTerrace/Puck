@@ -1067,6 +1067,8 @@ rule "chess-ai-request" {
     physics(quiescent, "chess-demo") == 1)
   mode: Level
   forEach: pieceCode
+  // The answer names one token, so one binding at most matches it.
+  maxFirings: 1
   ai.from = pieceCell[$each]
   ai.to = aiBest.to
   ai.mover = pieceCode[$each]
@@ -1085,6 +1087,8 @@ rule "chess-input-move" {
     physics(quiescent, "chess-demo") == 1)
   mode: Level
   forEach: pieceCode
+  // A firing clears the request, which closes the gate for every later binding.
+  maxFirings: 1
   ai.from = chessInput.from
   ai.to = chessInput.to
   ai.mover = pieceCode[$each]
@@ -1247,6 +1251,8 @@ rule "chess-play-lift" {
     ) > 0 and aiSide != turn and ai.pending == 0 and settleHold == chessSettleTicks
   mode: Level
   forEach: pieceCode
+  // A firing holds a piece, which closes the gate for every later binding.
+  maxFirings: 1
   play.held = pieceOrdinal[$each]
   play.from = play.cursor
   play.lifted = 1
@@ -1261,6 +1267,8 @@ rule "chess-play-put" {
   when play.held >= 0 and (press or drop) and open and pieceOrdinal[$each] == play.held
   mode: Level
   forEach: pieceCode
+  // The held piece is one ordinal, and a firing lets go of it.
+  maxFirings: 1
   pieceCell[$each] = play.from
   ai.from = play.from
   ai.to = play.cursor

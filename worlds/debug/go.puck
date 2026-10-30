@@ -683,6 +683,8 @@ rule "go-read-stones" {
   when reading and goCell[$each] != nextCell
   mode: Level
   forEach: goCode
+  // One settle tick reads one batch of distinct ordinals, so this is what the gate already admits.
+  maxFirings: goReadBatch
   goCell[$each] = nextCell
 }
 
@@ -1013,6 +1015,8 @@ rule "go-sync" {
     goOrdinal[$each] < (goReturnCursor + goReturnBatch))
   mode: Level
   forEach: goCode
+  // The window holds at most a batch of distinct ordinals, so this is what the gate already admits.
+  maxFirings: goReturnBatch
   poseCell(key: `placement:$each`, topology: goTrays, expression: goHomeCell[$each], offset: [0, 0.05, 0])
   goReturn[$each] = 0
 }

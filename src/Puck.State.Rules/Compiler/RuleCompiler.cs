@@ -137,7 +137,7 @@ public static partial class RuleCompiler {
                 PoolBindingSlot: poolBindingSlot,
                 PoolForEach: poolForEach,
                 Zones: context.Zones
-            ) { Iteration = context.Iteration };
+            ) { Iteration = context.Iteration, MaxFirings = (rule.MaxFirings ?? 0) };
 
             return ((extend is null)
                 ? compiled
@@ -170,6 +170,15 @@ public static partial class RuleCompiler {
         ArgumentNullException.ThrowIfNull(argument: rule);
 
         context.ClearScope();
+
+        if (rule.MaxFirings is { } maxFirings) {
+            if ((rule.ForEach is null) && (rule.PoolForEach is null)) {
+                throw new RuleException(detail: "'maxFirings' bounds an iterating rule's sweep, and this rule declares neither 'forEach' nor 'poolForEach'", refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
+            }
+            if (maxFirings < 1) {
+                throw new RuleException(detail: $"'maxFirings' is {maxFirings}; a sweep must be allowed at least one firing", refusal: RuleRefusal.EffectKindInadmissible, ruleName: rule.Name);
+            }
+        }
 
         var zones = CompileZones(
             context: context,

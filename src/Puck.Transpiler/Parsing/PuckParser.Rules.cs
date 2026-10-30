@@ -279,7 +279,7 @@ public static partial class PuckParser {
     // A rule's own wire fields. `mode = Edge` reads exactly like a cell assignment to the effect dispatcher, so
     // these names are routed to the property path first; a state row genuinely called one of them is backquoted.
     private static readonly HashSet<string> RuleBodyPropertyNames = new(comparer: StringComparer.Ordinal) {
-        "name", "gate", "mode", "forEach", "poolForEach", "zones", "locals", "effects", "decision",
+        "name", "gate", "mode", "forEach", "poolForEach", "maxFirings", "zones", "locals", "effects", "decision",
     };
 
     // Whether the next token is one of `names` used as a property (followed by ':', '=', '{' or '[').
