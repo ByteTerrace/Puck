@@ -283,7 +283,7 @@ klondikeGather(step: 10, pile: solitaireKlondikePile12)
 klondikeGather(step: 11, pile: solitaireKlondikePile13)
 
 rule "solitaireKlondike-gather-advance" {
-  when solitaire.table == 1 and solitaireKlondike.stage == 1 and count($zones[solitaireKlondike["gatherStep"]]) == 0
+  when solitaire.table == 1 and solitaireKlondike.stage == 1 and count($zones[solitaireKlondike.gatherStep]) == 0
   zones [
     solitaireKlondikePile1
     solitaireKlondikePile2
@@ -396,7 +396,7 @@ rule "solitaireKlondike-source" {
     solitaireKlondike["busy"] == 0 and
     solitaireKlondike["status"] == 1 and
     solitaireKlondike["action"] == 2 and
-    $zones[solitaireKlondike["from"]][solitaireKlondike["card"]] == 1)
+    $zones[solitaireKlondike.from][solitaireKlondike["card"]] == 1)
   zones [
     ""
     ""
@@ -408,8 +408,8 @@ rule "solitaireKlondike-source" {
     solitaireKlondikePile7
     solitaireKlondikePile8
   ]
-  solitaireKlondike["sourceOk"] = match(solitaireKlondikeRun, $zones[solitaireKlondike["from"]])[solitaireKlondike["card"]]
-  solitaireKlondike["runLength"] = match(solitaireKlondikeLength, $zones[solitaireKlondike["from"]], prefix)[solitaireKlondike["card"]]
+  solitaireKlondike["sourceOk"] = match(solitaireKlondikeRun, $zones[solitaireKlondike.from])[solitaireKlondike["card"]]
+  solitaireKlondike["runLength"] = match(solitaireKlondikeLength, $zones[solitaireKlondike.from], prefix)[solitaireKlondike["card"]]
 }
 
 rule "solitaireKlondike-source-1" {
@@ -419,7 +419,7 @@ rule "solitaireKlondike-source-1" {
     solitaireKlondike["busy"] == 0 and
     solitaireKlondike["status"] == 1 and
     solitaireKlondike["action"] == 2 and
-    $zones[solitaireKlondike["from"]][solitaireKlondike["card"]] == 1)
+    $zones[solitaireKlondike.from][solitaireKlondike["card"]] == 1)
   zones [
     ""
     solitaireKlondikePile1
@@ -436,8 +436,8 @@ rule "solitaireKlondike-source-1" {
     solitaireKlondikePile12
     solitaireKlondikePile13
   ]
-  solitaireKlondike["sourceOk"] = match(solitaireKlondikeSingle, $zones[solitaireKlondike["from"]])[solitaireKlondike["card"]]
-  solitaireKlondike["runLength"] = match(solitaireKlondikeLength, $zones[solitaireKlondike["from"]], prefix)[solitaireKlondike["card"]]
+  solitaireKlondike["sourceOk"] = match(solitaireKlondikeSingle, $zones[solitaireKlondike.from])[solitaireKlondike["card"]]
+  solitaireKlondike["runLength"] = match(solitaireKlondikeLength, $zones[solitaireKlondike.from], prefix)[solitaireKlondike["card"]]
 }
 
 rule "solitaireKlondike-target" {
@@ -460,8 +460,8 @@ rule "solitaireKlondike-target" {
     solitaireKlondikePile8
   ]
   solitaireKlondike["targetOk"] = (
-    count($zones[solitaireKlondike["to"]]) == 0 ? (solitaireKlondikeRank[solitaireKlondike["card"]] == 13) :
-    match(solitaireKlondikeLanding, $zones[solitaireKlondike["to"]])
+    count($zones[solitaireKlondike.to]) == 0 ? (solitaireKlondikeRank[solitaireKlondike["card"]] == 13) :
+    match(solitaireKlondikeLanding, $zones[solitaireKlondike.to])
   )
 }
 
@@ -492,7 +492,7 @@ rule "solitaireKlondike-target-10" {
   solitaireKlondike["targetOk"] = (
     (solitaireKlondike["runLength"] == 1) *
     (solitaireKlondikeSuit[solitaireKlondike["card"]] == solitaireKlondike["to"] - 10) *
-    (solitaireKlondikeRank[solitaireKlondike["card"]] == count($zones[solitaireKlondike["to"]]) + 1)
+    (solitaireKlondikeRank[solitaireKlondike["card"]] == count($zones[solitaireKlondike.to]) + 1)
   )
 }
 

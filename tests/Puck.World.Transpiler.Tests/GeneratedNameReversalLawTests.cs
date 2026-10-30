@@ -27,6 +27,7 @@ public sealed class GeneratedNameReversalLawTests {
     private const string Expansion = "src/Puck.World.Transpiler/Lowering/WorldDocumentEmitter.cs";
     private const string Extensions = "src/Puck.World.Server/WorldConfiguredExtensions.Hosting.cs";
     private const string Identity = "src/Puck.World.Schema/WorldIdentityRows.cs";
+    private const string InstanceHost = "src/Puck.World.Server/WorldInstanceHost.cs";
     private const string Links = "src/Puck.World.Transpiler/Lowering/WorldCompositionLinks.cs";
     private const string ModuleInstances = "src/Puck.Transpiler/Lowering/DocumentScope.ModuleInstances.cs";
     private const string ModuleNamespace = "src/Puck.World.Schema/WorldModuleNamespace.cs";
@@ -47,6 +48,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Calls: 2, File: Catalog, Mints: "a pool's live, generation and field rows"),
         new(Calls: 7, File: Identity, Mints: "an owned identity's rate, chat, controller and sequence rows"),
         new(Calls: 1, File: Sessions, Mints: "a freshly started instance's name"),
+        new(Calls: 1, File: InstanceHost, Mints: "the authority identity a later lifetime of a started instance takes, its name joined to the lifetime's ordinal"),
         new(Calls: 1, File: Extensions, Mints: "an extension runtime's directory"),
         new(Calls: 1, File: Captures, Mints: "a capture's frame file"),
         new(Calls: 13, File: Views, Mints: "a residency environment producer, an infinity view's instance name under the viewer's own sky and under a deeper view's, a session screen's view name, a session seen through it one level deeper and the head a routed world's sessions are named under, a camera of a world shown through a screen under its level, a camera seat's view name, a screen source's instance name from its producer and settings digest, a later view's world producer, and the synthesized root graph's own versions and passes, which exist only at run time"),
@@ -377,6 +379,7 @@ public sealed class GeneratedNameReversalLawTests {
         new(Label: "pool rows", Site: Catalog, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("$pool", "pieces", "live")), name: GeneratedName.Join("$pool", "pieces", "live"))),
         new(Label: "identity rows", Site: Identity, Check: static () => RefusedDocument(document: HandDocument(row: WorldIdentityRows.MoveSpeed.Value), name: WorldIdentityRows.MoveSpeed.Value)),
         new(Label: "fresh instance name", Site: Sessions, Check: static () => FileBacked(site: Sessions)),
+        new(Label: "later lifetime's authority identity", Site: InstanceHost, Check: static () => FileBacked(site: InstanceHost)),
         new(Label: "extension directory", Site: Extensions, Check: static () => FileBacked(site: Extensions)),
         new(Label: "capture frame file", Site: Captures, Check: static () => FileBacked(site: Captures)),
         new(Label: "view name a hand document spells", Site: Views, Check: static () => RefusedDocument(document: HandDocument(row: GeneratedName.Join("session", "0")), name: GeneratedName.Join("session", "0"))),

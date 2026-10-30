@@ -483,7 +483,8 @@ rule "granary-phase" {
 // removes leaves the row; its cell and coverage cells are cleaned on the tick after, once the influence no longer reads.
 
 rule "granary-locate" {
-  local at = (1 +
+  local at = (
+    1 +
     (influence(bit0, granaryStores)[$each] ?? 0) +
     2 * (influence(bit1, granaryStores)[$each] ?? 0) +
     4 * (influence(bit2, granaryStores)[$each] ?? 0) +
@@ -530,14 +531,20 @@ rule "granary-power-coverage-cleanup" {
 }
 
 rule "granary-water-coverage" {
-  when granaryPhase == 5 and influence(water, granaryStores)[$each] >= 0 and granaryWaterCoverage[$each] != influence(water, granaryStores)[$each]
+  when granaryPhase == 5 and influence(water, granaryStores)[$each] >= 0 and granaryWaterCoverage[$each] != influence(
+      water,
+      granaryStores
+    )[$each]
   mode: Level
   forEach: granaryNames
   setState(state: granaryWaterCoverage, key: $each, fromState: influence(water, granaryStores), fromKey: $each)
 }
 
 rule "granary-power-coverage" {
-  when granaryPhase == 6 and influence(power, granaryStores)[$each] >= 0 and granaryPowerCoverage[$each] != influence(power, granaryStores)[$each]
+  when granaryPhase == 6 and influence(power, granaryStores)[$each] >= 0 and granaryPowerCoverage[$each] != influence(
+      power,
+      granaryStores
+    )[$each]
   mode: Level
   forEach: granaryNames
   setState(state: granaryPowerCoverage, key: $each, fromState: influence(power, granaryStores), fromKey: $each)
@@ -604,28 +611,28 @@ rule "granary-feed-live" {
 
 // What the lectern shows for the piece under the cursor, and nothing for an empty cell.
 rule "granary-inspect-name" {
-  when granaryPhase == 8 and granaryCellOf[$each] == granarySeat.cursor + 1
+  when granaryPhase == 8 and granaryCellOf[$each] == (granarySeat.cursor + 1)
   mode: Level
   forEach: granaryNames
   setState(state: granarySel, key: name, fromState: granaryNames, fromKey: $each)
 }
 
 rule "granary-inspect-region" {
-  when granaryPhase == 9 and granaryCellOf[$each] == granarySeat.cursor + 1
+  when granaryPhase == 9 and granaryCellOf[$each] == (granarySeat.cursor + 1)
   mode: Level
   forEach: granaryNames
   setState(state: granarySel, key: region, fromState: granaryRegions, fromKey: $each)
 }
 
 rule "granary-inspect-kind" {
-  when granaryPhase == 10 and granaryCellOf[$each] == granarySeat.cursor + 1
+  when granaryPhase == 10 and granaryCellOf[$each] == (granarySeat.cursor + 1)
   mode: Level
   forEach: granaryNames
   setState(state: granarySel, key: kind, fromState: granaryKinds, fromKey: $each)
 }
 
 rule "granary-inspect-sku" {
-  when granaryPhase == 11 and granaryCellOf[$each] == granarySeat.cursor + 1
+  when granaryPhase == 11 and granaryCellOf[$each] == (granarySeat.cursor + 1)
   mode: Level
   forEach: granaryNames
   setState(state: granarySel, key: sku, fromState: granarySkus, fromKey: $each)
@@ -781,14 +788,52 @@ state {
   world {
     // The feed's rows: one cell per storage account, keyed by its name. The observation owns them (the configuration
     // names each), and the deal reads granaryNames and granaryKinds.
-    row { name: "granaryNames", kind: "Text", capacity: 16, cells [], visibility {} }
-    row { name: "granaryResources", kind: "Text", capacity: 16, cells [], visibility {} }
-    row { name: "granaryRegions", kind: "Text", capacity: 16, cells [], visibility {} }
-    row { name: "granaryKinds", kind: "Text", capacity: 16, cells [], visibility {} }
-    row { name: "granarySkus", kind: "Text", capacity: 16, cells [], visibility {} }
+    row {
+      name: "granaryNames"
+      kind: "Text"
+      capacity: 16
+      cells []
+      visibility {}
+    }
+    row {
+      name: "granaryResources"
+      kind: "Text"
+      capacity: 16
+      cells []
+      visibility {}
+    }
+    row {
+      name: "granaryRegions"
+      kind: "Text"
+      capacity: 16
+      cells []
+      visibility {}
+    }
+    row {
+      name: "granaryKinds"
+      kind: "Text"
+      capacity: 16
+      cells []
+      visibility {}
+    }
+    row {
+      name: "granarySkus"
+      kind: "Text"
+      capacity: 16
+      cells []
+      visibility {}
+    }
 
     // The feed's state, kept by the host: 0 pending (no feed, or no read yet), 1 live, 2 offline.
-    row { name: "granaryFeed", kind: "Int", capacity: 1, min: 0, max: 2, cells [{ key: "status", value: 0 }], visibility {} }
+    row {
+      name: "granaryFeed"
+      kind: "Int"
+      capacity: 1
+      min: 0
+      max: 2
+      cells [{ key: "status", value: 0 }]
+      visibility {}
+    }
 
     // The play board: 1 where a piece stands, over the same grid the pieces are dealt on; and each account's cell.
     row {
@@ -800,11 +845,35 @@ state {
       domain: cellsOf(topology: granaryGrid)
       cells: map(range(0, granaryCells), i => { key: $"{i}", value: 0 })
     }
-    row { name: "granaryCellOf", kind: "Int", capacity: 16, min: 1, max: 16, cells [], visibility {} }
+    row {
+      name: "granaryCellOf"
+      kind: "Int"
+      capacity: 16
+      min: 1
+      max: 16
+      cells []
+      visibility {}
+    }
 
     // How many providers cover each account's piece.
-    row { name: "granaryWaterCoverage", kind: "Int", capacity: 16, min: 0, max: 99, cells [], visibility {} }
-    row { name: "granaryPowerCoverage", kind: "Int", capacity: 16, min: 0, max: 99, cells [], visibility {} }
+    row {
+      name: "granaryWaterCoverage"
+      kind: "Int"
+      capacity: 16
+      min: 0
+      max: 99
+      cells []
+      visibility {}
+    }
+    row {
+      name: "granaryPowerCoverage"
+      kind: "Int"
+      capacity: 16
+      min: 0
+      max: 99
+      cells []
+      visibility {}
+    }
 
     row {
       name: "granaryIrrigationVolumes"
@@ -820,8 +889,18 @@ state {
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
       visibility {}
     }
-    row { name: "granaryIrrigationSelected", kind: "Text", value: granaryReachVolume[0], visibility {} }
-    row { name: "granaryIrrigationPatch", kind: "Text", value: granaryReachPatch[0], visibility {} }
+    row {
+      name: "granaryIrrigationSelected"
+      kind: "Text"
+      value: granaryReachVolume[0]
+      visibility {}
+    }
+    row {
+      name: "granaryIrrigationPatch"
+      kind: "Text"
+      value: granaryReachPatch[0]
+      visibility {}
+    }
     row {
       name: "granaryPowerVolumes"
       kind: "Text"
@@ -836,8 +915,18 @@ state {
       cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
       visibility {}
     }
-    row { name: "granaryPowerSelected", kind: "Text", value: granaryReachVolume[0], visibility {} }
-    row { name: "granaryPowerPatch", kind: "Text", value: granaryReachPatch[0], visibility {} }
+    row {
+      name: "granaryPowerSelected"
+      kind: "Text"
+      value: granaryReachVolume[0]
+      visibility {}
+    }
+    row {
+      name: "granaryPowerPatch"
+      kind: "Text"
+      value: granaryReachPatch[0]
+      visibility {}
+    }
     slot granaryPhase = 0 bounds(0..11)
     slot granaryIrrigationRequest = 0 bounds(0..2)
     slot granaryIrrigationStage = 0 bounds(0..2)

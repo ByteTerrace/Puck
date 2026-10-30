@@ -28,9 +28,8 @@ rule "board-demonstrated" {
   genreChecks["board"] = 1
 }
 rule "board-leak" {
-  when (genreChecks["action"] == 1 and
-    board(engaged, board, 1) == 1 and
-    (channel(1, forward) == 1 or channel(1, run) == 1))
+  when genreChecks["action"] == 1 and board(engaged, board, 1) == 1 and (channel(1, forward) == 1 or
+      channel(1, run) == 1)
   mode: Edge
   genreChecks["leak"] = 1
 }
