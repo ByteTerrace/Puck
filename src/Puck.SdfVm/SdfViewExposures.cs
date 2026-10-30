@@ -7,7 +7,8 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfPhotometry.ExposureOf"/>), which its pass block carries and its composite applies, and the share of the
 /// sky the air about its camera sees open, which scales the sky's in-scatter into its atmosphere. A manual exposure is
 /// its <c>EV100</c>; an automatic one meters about the view's camera (<see cref="SdfMeshIrradiance.TryMeter"/>) and
-/// eases toward that reading over presentation time, each view on its own, snapping to it at a camera cut. A view that
+/// eases toward that reading over presentation time, each view on its own, snapping to the first reading after a camera
+/// cut, which meters at the camera itself rather than reusing a sample taken elsewhere in its cell. A view that
 /// publishes its luminance partially exposed (<see cref="SdfViewSnapshot.Unexposed"/>) still takes its exposure, which
 /// divides its display-referred terms, while its composite applies the window share of it
 /// (<see cref="SdfPhotometry.WindowAdaptation"/>). Presentation only: no value here reaches simulation state.
@@ -15,6 +16,7 @@ namespace Puck.SdfVm;
 public sealed class SdfViewExposures {
     private float[] m_ev100 = [];
     private long[] m_cuts = [];
+    private bool[] m_cutOwed = [];
     private float[] m_multipliers = [];
     private float[] m_metered = [];
     private float[] m_airLight = [];
@@ -63,6 +65,7 @@ public sealed class SdfViewExposures {
 
             Array.Resize(array: ref m_ev100, newSize: grown);
             Array.Resize(array: ref m_cuts, newSize: grown);
+            Array.Resize(array: ref m_cutOwed, newSize: grown);
             Array.Resize(array: ref m_multipliers, newSize: grown);
             Array.Resize(array: ref m_metered, newSize: grown);
             Array.Resize(array: ref m_airLight, newSize: grown);
@@ -79,7 +82,11 @@ public sealed class SdfViewExposures {
         SkyPeakLuminance = irradiance.SkyPeakLuminance;
         for (var index = 0; (index < count); index++) {
             var view = frame.Views[index];
-            var cut = (view.CutRevision != m_cuts[index]);
+
+            // A cut stays owed until the meter reads: the first reading after it is the camera's own and snaps.
+            m_cutOwed[index] |= (view.CutRevision != m_cuts[index]);
+
+            var cut = m_cutOwed[index];
             var ev100 = exposure.Ev100;
 
             m_cuts[index] = view.CutRevision;
@@ -90,8 +97,9 @@ public sealed class SdfViewExposures {
                 m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : ev100));
                 continue;
             }
-            m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, luminance: out var luminance,
+            m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, fresh: cut, luminance: out var luminance,
                 position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
+            if (m_reads[index]) { m_cutOwed[index] = false; }
             m_sources[index] = source switch {
                 SdfExposureMeterSource.Probes => "probes",
                 SdfExposureMeterSource.CameraTrace => "camera-trace",

@@ -338,7 +338,11 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   Gather weights are trilinear share × a half-spacing smooth distance fade in front of the receiver × depth
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.
-  A zero-weight gather supplies no measured indirect or traced static light.
+  The volume has three nested levels (8 m and 32 m cells past the tier's
+  window); a receiver reads the finest level holding it, and where none of that
+  level's probes measured it, the same probes answer past their reach, blocked
+  only by surfaces they measured, with no traced static light. Nothing a camera
+  sees reads an unmeasured surface as black.
   Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
   stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
