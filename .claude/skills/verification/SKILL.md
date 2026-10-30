@@ -76,8 +76,10 @@ transplant only the arena into another document's checkpoint: undo plans bind
 row ordinals, and fields, group progress, latches, decisions and search derive
 from the whole document. Changing an ordinary row before an undo-owned row can
 invalidate that checkpoint even when the group declaration did not change.
-The CLI composes before comparing shapes; a reused raw JSON document also loads
-through the file-composition boundary. Drive grants and presentation clock seeds
+The CLI composes JSON before comparing shapes: an imported partial row need not
+parse as a standalone definition. These one-use roots are not retained in the
+composition cache. A reused raw JSON document also loads through the
+file-composition boundary. Drive grants and presentation clock seeds
 are rebound before restore delivers to attached sinks. Restoration rebuilds
 geometry and population when the preceding run edited their configuration.
 Checkpoint restoration discards replay-only departure rollback bodies: a committed
