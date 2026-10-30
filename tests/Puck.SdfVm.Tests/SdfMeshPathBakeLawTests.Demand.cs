@@ -78,7 +78,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
         // A draw's box is its host box's: a unit triangle's, moved and doubled by its matrix.
         var triangle = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
-        var draw = new SdfMeshDraw(Identity: "triangle", Material: 0, Mesh: triangle, ObjectToWorld: (Matrix4x4.CreateScale(scale: 2f) * Matrix4x4.CreateTranslation(x: 4f, y: 0f, z: 0f)));
+        var draw = new SdfMeshDraw(Identity: "triangle", Material: 0, Mesh: triangle, ObjectToWorld: (Matrix4x4.CreateScale(scale: 2f) * Matrix4x4.CreateTranslation(position: new Vector3(x: 4f, y: 0f, z: 0f))));
 
         Assert.True(condition: SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half));
         Assert.Equal(expected: new Vector3(x: 5f, y: 1f, z: 0f), actual: center);

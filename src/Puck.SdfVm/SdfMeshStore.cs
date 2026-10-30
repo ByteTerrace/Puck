@@ -208,9 +208,9 @@ public sealed class SdfMeshStore {
         var decoded = TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why);
 
         _ = Interlocked.Increment(location: ref m_reads);
-        _ = Interlocked.Add(location: ref m_readBytes, value: bytes.Length);
-        _ = Interlocked.Add(location: ref m_readTicks, value: (read - started));
-        _ = Interlocked.Add(location: ref m_decodeTicks, value: (System.Diagnostics.Stopwatch.GetTimestamp() - read));
+        _ = Interlocked.Add(location1: ref m_readBytes, value: bytes.Length);
+        _ = Interlocked.Add(location1: ref m_readTicks, value: (read - started));
+        _ = Interlocked.Add(location1: ref m_decodeTicks, value: (System.Diagnostics.Stopwatch.GetTimestamp() - read));
         if (!decoded) {
             refusal = $"{Path.GetFileName(path: path)} {why}";
             damaged = true;
