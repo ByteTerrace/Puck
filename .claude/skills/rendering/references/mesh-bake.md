@@ -622,7 +622,7 @@ laws exercise that boundary.
   (the host lever, else the frame's tier) drives `SdfMeshIrradiance`, staged
   before the upload into the staged World table `sdfMeshIrradiance` and
   described by the pass-block values `meshIrradianceVolume` and
-  `meshIrradianceLow`. The probe layout, key, toroidal slot, normal bias and
+  `meshIrradianceLevels`. The probe layout, key, toroidal slot, normal bias and
   probe weights are a sync pair between `SdfMeshIrradiance` (its CPU feedback
   read included) and `shade/sdf-mesh-irradiance.hlsli`, which only the views
   kernel compiles. The trace reads static mesh draws through

@@ -48,11 +48,16 @@ public static partial class SdfWorldPackage {
     /// <summary>The irradiance volume, a World-group table of uints: per probe slot its cell key and its sky
     /// visibility and radiance ambient cubes as halves (<c>SdfMeshIrradiance</c> in <c>Puck.SdfVm</c>).</summary>
     public const string MeshIrradiance = "sdfMeshIrradiance";
-    /// <summary>The pass-block value describing the irradiance volume views read: x whether views read it, y the probe
-    /// spacing in metres as bits, z the probes along each axis packed ten bits each, x lowest (<c>uint4</c>).</summary>
+    /// <summary>The pass-block value describing the irradiance volume views read: x whether views read it, then the probe
+    /// spacing in metres, as bits, of each of its <see cref="MeshIrradianceLevelCount"/> levels, finest first, zero for
+    /// a level not yet published (<c>uint4</c>).</summary>
     public const string MeshIrradianceVolume = "meshIrradianceVolume";
-    /// <summary>The pass-block value holding the irradiance volume's first cell (<c>int4</c>, w unused).</summary>
-    public const string MeshIrradianceLow = "meshIrradianceLow";
+    /// <summary>The pass-block array holding each irradiance level's window, finest first: its first cell in xyz and its
+    /// probes along each axis in w, packed ten bits each, x lowest (<c>int4</c> a level).</summary>
+    public const string MeshIrradianceLevels = "meshIrradianceLevels";
+    /// <summary>The irradiance volume's levels: nested windows about the camera, each coarser than the one inside it, so a
+    /// surface past the finest window takes a coarser level's measured light rather than none.</summary>
+    public const int MeshIrradianceLevelCount = 3;
     /// <summary>The second shadow slot's cascade depth, sampled by the surface pass.</summary>
     public const string MeshShadowSecond = "meshShadowSecond";
     /// <summary>The shadow cascades the frame renders: the key light's near and far cascades, then the second shadow
