@@ -106,8 +106,8 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public bool Clamped { get; internal set; }
 
     /// <summary>Plans the groups of a program: one per dynamic slot and per run of static instances baked together (one
-    /// rigid copy), unions of several static shapes first, so their long lattices and contours lead each frame's round,
-    /// and the group of the segments no instance owns last. Each is sealed: its geometry, materials and poses fixed.</summary>
+    /// rigid copy), unions of several static shapes first, so among groups the demand points rank alike their long
+    /// lattices and contours lead each frame's round, and the group of the segments no instance owns last. Each is sealed: its geometry, materials and poses fixed.</summary>
     /// <typeparam name="T">The group type the caller keeps.</typeparam>
     /// <param name="program">The program.</param>
     /// <param name="transforms">The frame's dynamic transforms.</param>
@@ -336,8 +336,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     // Puts a whole plan's groups, listed at their first instances, in the order the bake takes them, and adds the world
     // group.
     private static List<T> Ordered<T>(List<T> groups, SdfProgram program, IReadOnlyList<DynamicTransform> transforms, float reach, Func<int, bool, T> create) where T : SdfMeshBakeGroup {
-        // A union of several static shapes bakes the largest lattice and contours longest, so its lattices go first in
-        // each frame's round, and its contour overlaps the other groups' sampling rather than running after them.
+        // A union of several static shapes bakes the largest lattice and contours longest, so among groups of equal
+        // priority its lattices go first in each frame's round, and its contour overlaps the other groups' sampling rather
+        // than running after them.
         var unions = groups.Where(predicate: static group => (group.Members.Count > 1)).ToArray();
 
         if (unions.Length > 0) {

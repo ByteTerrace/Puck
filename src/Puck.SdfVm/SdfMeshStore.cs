@@ -168,10 +168,26 @@ public sealed class SdfMeshStore {
         return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes.AsSpan(start: 8)), materials: out materials, mesh: out mesh, refusal: out _));
     }
 
+    // The entries this store read, their file bytes, and the time its readers spent reading and decoding them, summed over
+    // the threads that read.
+    private long m_reads;
+    private long m_readBytes;
+    private long m_readTicks;
+    private long m_decodeTicks;
+
+    /// <summary>Describes the entries this store has read: their count, their file bytes, and the seconds its readers
+    /// spent reading files and decoding them, each summed over the threads that read concurrently.</summary>
+    /// <returns>One line of <c>key=value</c> pairs.</returns>
+    public string DescribeReads() => string.Create(
+        provider: System.Globalization.CultureInfo.InvariantCulture,
+        handler: $"store-reads={Interlocked.Read(location: ref m_reads)} store-read-bytes={Interlocked.Read(location: ref m_readBytes)}B store-read-thread-seconds={(((double)Interlocked.Read(location: ref m_readTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s store-decode-thread-seconds={(((double)Interlocked.Read(location: ref m_decodeTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s"
+    );
+
     // Reads an entry, answering whether a held entry's bytes were refused (damaged) rather than unreadable.
     private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged) {
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         byte[] bytes;
 
         mesh = null;
@@ -189,7 +205,14 @@ public sealed class SdfMeshStore {
             return false;
         }
 
-        if (!TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why)) {
+        var read = System.Diagnostics.Stopwatch.GetTimestamp();
+        var decoded = TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why);
+
+        _ = Interlocked.Increment(location: ref m_reads);
+        _ = Interlocked.Add(location1: ref m_readBytes, value: bytes.Length);
+        _ = Interlocked.Add(location1: ref m_readTicks, value: (read - started));
+        _ = Interlocked.Add(location1: ref m_decodeTicks, value: (System.Diagnostics.Stopwatch.GetTimestamp() - read));
+        if (!decoded) {
             refusal = $"{Path.GetFileName(path: path)} {why}";
             damaged = true;
 
