@@ -285,6 +285,13 @@ Owner: test runner and replay specialist · medium and low ·
 Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then isolate
 replica cost and repeat the paired CPU measurements on a quiet machine.
 
+- [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
+  process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
+  recursive `Directory.Delete`, which overflows the stack past about 3,500
+  levels (a launcher-pruning depth law's red run left one at 5,000). Delete with
+  the iterative, link-refusing removal in `src/Puck.Confinement`, and have the
+  sweep refuse a directory it cannot remove rather than crash. (from: the
+  prune-redesign lane)
 - [medium] Re-measure complete-boot reuse on a quiet machine and profile Go's
   reproduction replica. The boot-reuse-2 correction requires identical composed
   documents apart from schedules, including every state row and rule. Its paired
