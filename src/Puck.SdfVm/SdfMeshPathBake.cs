@@ -1218,7 +1218,6 @@ public sealed partial class SdfMeshPathBake {
             if (factor >= 2) {
                 points = Homogeneous(points: final.Sampled.Refine(factor: factor, regions: final.Regions));
             }
-            Console.Error.WriteLine(value: $"[bs2] group {group.Selector} dims={lattice.Dims} cell={lattice.Cell} asked={factor} regions={final.Regions.Length} took={final.Sampled.Refinement} measured={final.Sampled.MeasuredCells} refined={final.Sampled.RefinedCells} fine={points?.Length ?? 0}");
             if ((points is null) || (points.Length == 0)) {
                 points = ChooseCrossingPoints(final: final);
             } else {

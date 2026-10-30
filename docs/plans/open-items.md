@@ -492,12 +492,42 @@ Next: make the per-tick authority hash incremental (measured below).
 
 ### Collision versus drawn mesh
 
-Owner: next geometry and bake lane · ordinary · Next: the valley sectors'
-buried colliders, then the grooves at the hall stairs' creases. The rendered
+Owner: next geometry and bake lane · ordinary · Next: the regressions sharp
+boxes left (the item below), then the valley sectors' buried colliders. The rendered
 colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
 
-- [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). In flight: the bake-seams lane (principal), a root fix to zero defects, superseding the case patches (2dbc758c1 and the unlanded hall-stairs branch). (from: the owner's walkthrough)
+- [high] Sub-cell features draw badly across the gallery (the owner's walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). (from: the owner's walkthrough)
+  Delivered (bake-seams): boxes are sharp unless authored `rounding`; a union's
+  refinement budget serves its thin members' own boxes, smallest first; a
+  transition ring's crossings are searched; the field correction keeps a vertex
+  off a seam's gradient; the cassettes bake as rows of their own. `puck mesh
+  audit --cpu`, tip to delivered: `hall-stairs` 12,251 (1,557 flipped, 84 open
+  edges) to 217 (10 flipped, 0 open); `hall-shell` 9,264 (24 open) to 236 (0
+  open), every `hall-cassettes-*` row 0; `hall-floor-1-dark` 21,124 to 55;
+  `hall-roof` 44 to 0; `wonderland-stairs` 50 to 7; store-wide 473,056 to
+  424,147. `hall-blind-3-north` audits clean, so the blinds' speckle is shading
+  (paint or GI), not the bake.
+  Left, worse than the tip by the audit (the next lane's work): `goTable` 4,213
+  to 15,026 (its flush face prisms' seams: 2,929 flipped), `hall-floor-2` and
+  `-3` 20 to 6,295 (a 3 mm sliver and a shading band a cell wide where the
+  strip at z 30.4 meets the slab, the strip's side against the slab's 2 cm
+  ceiling finish), `wonderland-room` 1,163 to 7,232 and `hall-floor-0` 0 to
+  1,606 (flat floors the budget now refines: their tops read turned 180 degrees
+  against the audit's gradient at y 0.05 and 0.001, unexplained), the lift
+  doors 27 to 2,137, and `device-humble-gaming-deck-television` 0 to 5,010 open
+  edges with sharp boxes. Store-wide open edges rose from 52,181 to 63,591 with
+  sharp boxes alone (63,947 before this lane's refinement work). Every one is a
+  touching-box seam or a thin layer inside a union, whose interior field
+  measures to the seam: the contour's interpolated normals (`TryNormal`) and
+  the ring's crossing gradients still read it. Contour patches that rewrite gap
+  samples (`GapFill`) or drop seam-pointing corners (`SeamGradient`) were
+  measured store-wide and opened more holes than they closed, so they are gone;
+  the fix is a field that is a distance across a seam, or crossings and
+  normals that never read an interior sample. Not yet run: `puck test
+  worlds/debug --jobs 1 --reproduce` (sharp-box colliders change contact at box
+  edges) and a lit, settled windowed look at the stairs (the boot's cold bake
+  ran past the GPU batch; the D3D12 and Vulkan boots ran clean).
 - The 178 witnesses the colliders report counts as `mesh correspondence
   uncertified` all lie on the valley sectors' terrain masses (`main`,
   `shoulder-left`, `shoulder-right` of every `valley-*` sector, y between about
@@ -509,33 +539,6 @@ colliders report's only red findings left are the valley's relief
   Either contact takes the same cut (a body cannot reach under the floor), or
   the report counts witnesses a detail intersection removes from the drawn
   field as buried rather than unknown.
-- [high · bake-seams lane, handed back mid-work] With a sharp Box (the
-  decision [a box is sharp unless its document rounds it](../decisions/engine-design.md#a-box-is-sharp-unless-its-document-rounds-it))
-  `puck mesh audit --cpu --group "(hall-stairs)"` falls from score 7,891 (953
-  flipped, 306 folds, 27 open edges) to 397.9 (13 flipped, 2 folds, 0 open
-  edges, 68k triangles from 101k), and `(wonderland-stairs)` from 50.3 (3
-  flipped, 4 folds) to 7.2 (1 flipped, 0 folds). The residue is not zero: on
-  the hall stairs a 38 mm band across tread B5's underside against the
-  divider (12.300, 7.627, 35.702) faces +x against a -x gradient, a 62 mm band
-  along the landing's north edge at z 39.697, and the east wall's face at
-  (14.098, 4.277, 34.898) sits 12.6 mm off; on the Wonderland stairs four
-  slivers at the corner where a concave crease meets the side face (1.152,
-  0.570, 29.641). All lie on seams between touching boxes, where the union's
-  interior gradient points at the shared face: the remaining work is in the
-  contour (a vertex or crossing that reads an interior sample's gradient near
-  a seam), and whether `GapFill`/`SeamGradient` still earn their place over
-  sharp boxes is to be measured. `(hall-shell)` reads score 9,237 before and
-  14,969 after (51 flipped, 216 open edges, vertices up to 36 mm off the
-  surface at the cassettes and the top bands at y 12.3 and 3.29: 0.13 m boxes
-  in a 125 mm contour cell, a thin feature the lattice should refine for), and
-  `(hall-roof)` 39.3 and `(hall-floor-3)` 15.4 before are seam-groove facets
-  (46 and 41 degrees) that sharp boxes remove; `(hall-blind-3-north)` audits
-  clean (score 0, face normals under 14 degrees) so its speckle is not the
-  bake's. Not yet run on the sharp-box build: the shell's images
-  (`.claude/scratch/bake-seams-shell-images` in the lane's worktree hold the
-  tip's), the test suites, the store-wide audit, `puck test worlds/debug
-  --jobs 1 --reproduce` (contact follows the shape change) and the windowed
-  looks.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.

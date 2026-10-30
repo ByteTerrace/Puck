@@ -254,9 +254,6 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 public sealed class SdfSampledLattice {
     // A refinement that would measure more fine samples than this is not taken: the lattice contours at its own spacing.
     private const int MaxFineSamples = 4_000_000;
-    // The field value, in field units, within which a sample lies on the surface: one step of the fixed-point evaluator
-    // (2^-16), above the float interpreter's rounding at world coordinates (Solid).
-    private const float OnSurface = (1f / 65536f);
     // The share of a step across a line, at the line's own slope, the field may change by toward either neighbour before
     // a pair on the line lies beside a solid rather than either side of a sheet (SheetsBetween): a sheet tilted 45
     // degrees from the line changes the field by 0.71 of a step across it and stays a sheet; a line over a plate's top
@@ -305,8 +302,7 @@ public sealed class SdfSampledLattice {
     /// <param name="samplesX">The samples along X, at least two.</param>
     /// <param name="samplesY">The samples along Y, at least two.</param>
     /// <param name="samplesZ">The samples along Z, at least two.</param>
-    /// <param name="values">One field value per sample, X fastest: negative inside. The lattice keeps the array, and
-    /// rewrites a value within one fixed-point step of zero as inside, since a solid holds its surface.</param>
+    /// <param name="values">One field value per sample, X fastest: negative inside. The lattice keeps the array.</param>
     /// <param name="materials">One material per sample. The lattice keeps the array.</param>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
@@ -329,9 +325,6 @@ public sealed class SdfSampledLattice {
             throw new ArgumentException(message: $"A lattice of {count} samples holds one value and material per sample.");
         }
 
-        for (var index = 0; (index < values.Length); index++) {
-            values[index] = Solid(value: values[index]);
-        }
         m_origin = origin;
         m_cell = cell;
         m_samplesX = samplesX;
@@ -1006,7 +999,7 @@ public sealed class SdfSampledLattice {
         }
 
         for (var index = 0; (index < values.Length); index++) {
-            m_fineValues[(first + index)] = Solid(value: values[index]);
+            m_fineValues[(first + index)] = values[index];
             m_fineMaterials[(first + index)] = materials[index];
         }
     }
@@ -1092,7 +1085,7 @@ public sealed class SdfSampledLattice {
             if (!float.IsFinite(value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
             var root = m_crossingRoots[m_pendingCrossings[(first + index)]];
 
-            if (MathF.Abs(x: value) <= OnSurface) {
+            if (value == 0f) {
                 root.Done = true;
                 continue;
             }
@@ -1488,12 +1481,6 @@ public sealed class SdfSampledLattice {
     }
     // Whether the sample a fine key names reads the value of a sheet closed at the fine spacing (CloseSheets).
     private bool Closed(int key) => m_closed.ContainsKey(key: key);
-    // A sample's value with the surface counted as solid: a sample on the surface reads inside, a hair under it. A solid
-    // holds its boundary, and so does a union of solids that touch: the face two of them share (a tread on its riser, a
-    // slab's finish on its ceiling) lies inside the union, though each reads zero there. Counted outside, such a sample
-    // opens a sheet of faces along the seam inside the solid, and a sample on a face's plane past the face's edge (a
-    // strip's side under the slab it hangs from) puts the crossing of the face across it on that sample.
-    private static float Solid(float value) => (((value > -OnSurface) && (value <= OnSurface)) ? -OnSurface : value);
     // The thickness, in steps, of the run of one sample `value` between `before` and `after` of the other sign along a
     // line, as the line's values interpolate its two crossings.
     private static float RunThickness(float before, float value, float after) {
