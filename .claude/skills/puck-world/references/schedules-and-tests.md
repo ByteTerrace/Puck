@@ -271,8 +271,9 @@ the values the gate saw, status 0/1/2 = never-evaluated/pass/fail). A verdict ro
 a Fixed or Bool row sits in a row of that kind carrying `witness: "<verdict
 row>"`, which the same doors refuse and which freezes with its verdict.
 `world.verdicts` reads the verdict rows; `puck test <path>` boots each such world through the real
-executable and prints one line per verdict. Each worker boots once, restores its
-boot checkpoint before every compatible scenario, and replaces state, rules and
+executable and prints one line per verdict. A worker process stays alive across its
+scenarios and boots each one in a fresh native host (the process's first boot pays the
+one-time start-up that later boots skip), so a scenario never inherits state, rules or
 schedule. `--reproduce` restores each authority's start and replays the captured
 input through the tape's ordinary doors, checking every tick's authoritative
 hash, final machine cores and final canonical export. It never boots a second
@@ -281,9 +282,9 @@ host or re-submits the schedule. Its manifest describes the authored run;
 `WorldReplayProbe` owns the per-tick hashes and their comparison; the test manifest
 contains only exports and command outcomes. A second hash list in `WorldTestRun`
 duplicates the probe's most expensive work during reproduction; a check that needs
-per-tick hashes outside `--reproduce` (the fresh-boot versus reused-worker law) takes
+per-tick hashes outside `--reproduce` (the fresh-process versus worker law) takes
 them from a probe in each process, not from the manifest. Each batch leg also writes `timing.json`
-beside its transcripts: boot, restore/arming, authored execution (including export),
+beside its transcripts: boot, arming, authored execution (including export),
 first completed tick, export, reproduction and other overhead in milliseconds, plus the authority-tick
 observations across running instances. These are diagnostic readings, kept outside
 the deterministic manifest. Pass `--cache-dir` under lane scratch to isolate device
@@ -293,16 +294,12 @@ imports, including authored-value origins, through the existing content-checked
 composition cache; each reader gets a fresh tree. Staging consumes roots without
 retaining their composed images or scalar-origin snapshots, while shared imports
 retain their origins. Generated test compiles share persisted entries but release
-their in-memory documents after staging each source. Each worker builds one
-native host through the normal composition root for one boot configuration.
-Provider reuse by rewriting singleton lifetimes changes dependency validation,
-caller ownership and child-scope identity, so every graph uses the native container.
-Input producers, their submission guards, session allocators, resolver generations,
-host transfers and schedules reset with the authority cohort. A changed scenario
-uses the normal document admission and canonical checkpoint parsing paths. Do not
-seed it by shallow-cloning the live boot definition: that shortcut changed the
-debug world's store hashes while leaving poses and verdicts unchanged. A changed scenario
-followed by a pristine one must match a fresh-process run. The default runs at most
+their in-memory documents after staging each source. Each scenario builds its
+native host through the normal composition root. Provider reuse by rewriting
+singleton lifetimes changes dependency validation, caller ownership and
+child-scope identity, so every graph uses the native container. A scenario
+boots through the normal document admission path and must match a fresh-process
+run of the same staged world. The default runs at most
 two worker processes concurrently; `--jobs 1` serializes workers. Transcripts stream
 to disk and verdicts are read one world at a time.
 A `schedule` declaring `instances`

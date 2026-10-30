@@ -15,6 +15,37 @@ public sealed class WorldDiagnosticReportTests {
         Assert.False(WorldDiagnosticGeometry.SharedInteriorFace(left, right, new Vector3(1, 1, 0), 0.001));
         Assert.False(WorldDiagnosticGeometry.SharedInteriorFace(left, left, Vector3.UnitX, 0.001));
     }
+    // Two stair treads against a wall, each a filleted box as the hall's stairs compile: the edge the three share
+    // encloses a fillet groove no bake cell draws, while the tread's corner at the wall opens onto the stairwell.
+    [Fact]
+    public void AGrooveThreeBoxesEncloseIsClosedWhereTheTreadMeetingTheWallIsOpen() {
+        static FixedStaticCollider Box(Vector3 min, Vector3 max, float radius) => FixedStaticCollider.RoundedBox(
+            FixedVector3.FromVector3(value: ((min + max) * 0.5f)), FixedQuaternion.Identity,
+            FixedVector3.FromVector3(value: (((max - min) * 0.5f) - new Vector3(value: radius))), FixedQ4816.FromDouble(value: radius));
+        var lower = Box(new Vector3(10.3f, 9.05f, 34.9f), new Vector3(12.1f, 9.55f, 35.3f), 0.008f);
+        var upper = Box(new Vector3(10.3f, 9.05f, 35.3f), new Vector3(12.1f, 9.8f, 35.7f), 0.008f);
+        var wall = Box(new Vector3(12.1f, 9.05f, 34.5f), new Vector3(12.3f, 13.55f, 37.7f), 0.004f);
+        FixedStaticCollider[] stairs = [lower, upper, wall];
+        const double Resolution = 0.0363;
+        var groove = new Vector3(12.1f - 0.008f + (0.008f / MathF.Sqrt(2)), 9.3f, 35.3f - 0.008f + (0.008f / MathF.Sqrt(2)));
+        var corner = new Vector3(12.1f - 0.008f + (0.008f / MathF.Sqrt(2)), 9.55f - 0.008f + (0.008f / MathF.Sqrt(2)), 35.1f);
+
+        Assert.InRange(WorldDiagnosticGeometry.SignedDistance(collider: lower, point: groove), -0.0001, 0.0001);
+        Assert.False(condition: WorldDiagnosticGeometry.OpensOnto(stairs, groove, Vector3.UnitX, Resolution));
+        Assert.True(condition: WorldDiagnosticGeometry.OpensOnto(stairs, corner, Vector3.UnitY, Resolution));
+        Assert.True(condition: WorldDiagnosticGeometry.OpensOnto(stairs, new Vector3(11.2f, 9.55f, 35.1f), Vector3.UnitY, Resolution));
+        // A slab 5 cm over the tread closes the gap between them for a 3.6 cm cell; a bound's distance closes it only
+        // where a ball's centre lies inside the bound, so the same slab as a superellipsoid leaves the tread measured.
+        var tread = new Vector3(11.2f, 9.55f, 35.1f);
+        var slab = FixedStaticCollider.Box(FixedVector3.FromVector3(value: new Vector3(11.2f, 10.1f, 35.1f)), FixedQuaternion.Identity,
+            FixedVector3.FromVector3(value: new Vector3(2, 0.5f, 2)));
+        var bound = FixedStaticCollider.Superellipsoid(slab.Center, FixedQuaternion.Identity, slab.Extent, FixedQ4816.FromInteger(value: 8));
+
+        Assert.False(condition: WorldDiagnosticGeometry.OpensOnto([lower, upper, wall, slab], tread, Vector3.UnitY, Resolution));
+        Assert.True(condition: WorldDiagnosticGeometry.OpensOnto([lower, upper, wall, bound], tread, Vector3.UnitY, Resolution));
+        Assert.False(condition: WorldDiagnosticGeometry.OpensOnto([lower, upper, bound with { Center = FixedVector3.FromVector3(value: new Vector3(11.2f, 10.05f, 35.1f)) }],
+            tread, Vector3.UnitY, Resolution));
+    }
     private static WorldDiagnosticFinding Finding(double separation, ulong tick = 1) => new("", "colliders", "red",
         "analytic/box/node", "collider-outside-authored-solid", "boundary agrees", separation, new(0.01, 0, 0.001),
         new Vector3(x: ((float)separation), y: 0, z: 0), Vector3.UnitX,

@@ -607,7 +607,8 @@ check the flag: the owner may be holding the pad.
   its `world.at` script ends at; `world.wait until <tick>`, then `world.patrol` gives
   a summary and a line per flagged point (`OFF BODY`, `OCCLUDED` by an exhibit, `NO
   ANSWER`, `STALL`), `world.patrol all` every point. A pick names `body=<index>` for a
-  body and `placement=<id>` for a placement. `world.patrol stop` clears every armed
+  body and `placement=<id>` for a placement (a pick answer also names `prototype=` and the
+  `materialName=` palette entry). `world.patrol stop` clears every armed
   `world.at` line, not only the patrol's.
 - **Capture motion on exact ticks.** `puck motion` does it for the Moth in one
   command (scenario file `worlds/debug/motion.scenarios.json`, contact sheets,

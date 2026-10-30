@@ -10,11 +10,13 @@ namespace Puck.World.Transpiler;
 /// (<see cref="WorldCompilation.DocumentNames"/>), and the lowering admits exactly the worlds read here, so the two
 /// never disagree.</summary>
 /// <param name="EmitsDocument">Whether the source emits a document. A module library does not: it names no schema and
-/// no basis, declares no world, and every statement at its top level is a <c>let</c>, a <c>template</c> or
-/// <c>module</c>, an <c>import</c>, or a <c>test</c>, none of which reaches the document it is written in; the
-/// sources importing it carry what it defines. A library may import only other libraries: a document it imported would
-/// compose into nothing, and the import walk refuses it (<see cref="Puck.Transpiler.Modules.ModuleResolver"/>). Every
-/// other source emits a document: each world it declares, or else the one document its top level lowers to.</param>
+/// no basis, declares no world, hands over at least one <c>let</c>, <c>template</c> or <c>test</c>, and every
+/// statement at its top level is one of those or an <c>import</c>, none of which reaches the document it is written
+/// in; the sources importing it carry what it defines. A library may import only other libraries: a document it
+/// imported would compose into nothing, and the import walk refuses it
+/// (<see cref="Puck.Transpiler.Modules.ModuleResolver"/>). A source of imports alone hands over nothing of its own,
+/// so it is a fragment composing the documents it imports. Every other source emits a document: each world it
+/// declares, or else the one document its top level lowers to.</param>
 /// <param name="Worlds">The names of the worlds the source declares at its top level, in declaration order.</param>
 public sealed record WorldSourceDeclaration(bool EmitsDocument, IReadOnlyList<string> Worlds) {
     /// <summary>Reads what a parsed source declares.</summary>
@@ -25,6 +27,8 @@ public sealed record WorldSourceDeclaration(bool EmitsDocument, IReadOnlyList<st
 
         var emits = ((document.Schema is not null) || (document.Basis is not null));
         var worlds = new List<string>();
+        var imports = false;
+        var hands = false;
 
         foreach (var statement in document.Statements) {
             switch (statement) {
@@ -37,13 +41,23 @@ public sealed record WorldSourceDeclaration(bool EmitsDocument, IReadOnlyList<st
 
                         break;
                     }
-                case ImportNode or LetNode or TemplateNode or TestDeclarationNode or ErrorStatementNode:
+                case ImportNode:
+                    imports = true;
+                    break;
+                case LetNode or TemplateNode or TestDeclarationNode:
+                    hands = true;
+                    break;
+                case ErrorStatementNode:
                     break;
                 default:
                     emits = true;
                     break;
             }
         }
+
+        // A source whose every statement is an import hands nothing of its own to an importer, so what it provides is
+        // the documents it composes: a fragment, not a library.
+        emits |= (imports && !hands);
 
         return new WorldSourceDeclaration(
             EmitsDocument: emits,

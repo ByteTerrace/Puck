@@ -52,7 +52,7 @@ public sealed class WorldReplayProbe : IDisposable {
         Dispose();
         m_tape.SuspendCapture();
         try {
-            m_server.Persistence.RestoreScenario(checkpoint: m_start);
+            m_server.Persistence.RestoreReplayStart(checkpoint: m_start);
             var startDifference = WorldStateHashComposition.DifferingComponents(left: m_startComponents,
                 right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1)));
 

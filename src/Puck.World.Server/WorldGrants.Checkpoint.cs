@@ -59,10 +59,10 @@ public sealed partial class WorldGrants {
         );
     }
     /// <summary>Replaces grants and sessions from a checkpoint. Live restoration retains the greatest retired
-    /// epoch for every ordinal, so a principal minted after the save cannot be reissued. An isolated scenario reset
+    /// epoch for every ordinal, so a principal minted after the save cannot be reissued. A replay-start restore
     /// also replaces the epoch allocator after discarding its observers and timeline.</summary>
     /// <param name="checkpoint">The grants and sessions to restore.</param>
-    /// <param name="resetSessionEpochs">Whether the caller discarded the entire isolated scenario timeline.</param>
+    /// <param name="resetSessionEpochs">Whether the caller restores a replay start, discarding the entire timeline.</param>
     public void Restore(WorldGrantsCheckpoint checkpoint, bool resetSessionEpochs = false) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
@@ -168,7 +168,7 @@ public sealed partial class WorldGrants {
             m_driveGates[row.BodyIndex] = row.Reason;
         }
 
-        // Only an isolated scenario discards every observer and its timeline. A live load retains retired
+        // Only a replay-start restore discards every observer and its timeline. A live load retains retired
         // epochs so mirrors holding a principal from after the save cannot observe a newly minted session.
         if (resetSessionEpochs) {
             m_sessionEpochs.Clear();
