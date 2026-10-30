@@ -33,8 +33,8 @@ worlds delta over, carries the shared values as state rows: a `transforms`
 text row (`identity`, `origin`, `unit`) and a `colors` text row, which
 documents reference as `state.<row>.<key>` instead of restating literals, so
 each standard value has one home. A world that authors no `theme` draws the
-engine's neutral one; the debug world's look is its own skin, `skin.puck`,
-which a world imports beside its basis.
+engine's neutral one; the live worlds import the authored standard skin from
+`worlds/standard/skin.puck` beside their basis.
 
 **Every world stands over a safety net.** The basis places one solid `Plane`
 (`groundPlane`) far below the playable space to catch anything that falls; it

@@ -319,9 +319,10 @@ Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 **Shared content is authored, never an engine default.** The live debug world
 and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
-`skin.puck` (the debug world's skin; a world that imports none draws the
-engine's neutral theme) and `controls.puck` (cursor, key hints, icons,
-binding bar, play wheel) as documents, as the Moth imports `quality.puck`;
+`worlds/standard/standard.puck` (the authored skin, cursor, key hints, icons,
+binding bar and play wheel) as a document, as the Moth imports `quality.puck`;
+the debug world's `controls.puck` refines the standard with Go/Tour and Places.
+A world that imports no theme draws the engine's neutral theme.
 `skies.puck`, `shapes.puck` and `studio.puck` beside them are module libraries
 whose templates the importing file expands. The quarantined
 `standard.puck` library and the island built on it are prior art. Absent means

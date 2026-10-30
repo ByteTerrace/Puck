@@ -92,6 +92,33 @@ public sealed class McpAdversarialTests {
 
         Assert.False(condition: selected.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent").TryGetProperty(propertyName: "world", value: out _));
     }
+    // An output filter narrows each answer's text and never what the command did: selected lines, lines containing a text,
+    // the fields of a key=value answer, and a byte cap that ends in an explicit mark and sets truncated.
+    [InlineData("""{"command":"tick=7 hash=ab yaw=3","fields":["tick","yaw"]}""", "tick=7 yaw=3", false)]
+    [InlineData("""{"command":"one\ntwo\nthree","lines":"2-3"}""", "two\nthree", false)]
+    [InlineData("""{"command":"one\ntwo\nthree","match":"TW"}""", "two", false)]
+    [InlineData("""{"command":"{\"a\":{\"keep\":1,\"drop\":2},\"b\":[{\"keep\":3,\"x\":4}]}","fields":["keep"]}""", "", true)]
+    [InlineData("""{"command":"0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789","maxBytes":256}""", "truncated at 256 of", false)]
+    [InlineData("""{"command":"[world.x: {\"commands\":[{\"name\":\"a.jump\",\"k\":1},{\"name\":\"b.walk\",\"k\":2}]}]","match":"jump","fields":["name"]}""", """[world.x: {"commands":[{"name":"a.jump"}]}]""", false)]
+    [Theory]
+    public async Task AnExecOutputFilterNarrowsEachAnswer(string arguments, string expected, bool json) {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
+        await using var adapter = new InProcessAdapter(() => new ScriptedSession(entered: null));
+
+        adapter.Send(line: InProcessAdapter.Request(id: 1, parameters: ("""{"name":"puck_exec","arguments":""" + arguments + "}")));
+        using var reply = await adapter.ReplyAsync();
+        var structured = reply.RootElement.GetProperty(propertyName: "result").GetProperty(propertyName: "structuredContent");
+        var answer = (structured.TryGetProperty(propertyName: "commands", value: out var commands) ? commands[0] : structured);
+
+        if (json) {
+            Assert.Equal(expected: """{"a":{"keep":1},"b":[{"keep":3}]}""", actual: answer.GetProperty(propertyName: "data").GetRawText());
+        } else {
+            var text = answer.GetProperty(propertyName: "output").GetString()!;
+
+            Assert.Contains(expectedSubstring: expected, actualString: text);
+            Assert.Equal(expected: expected.StartsWith(value: "truncated"), actual: answer.TryGetProperty(propertyName: "truncated", value: out var truncated) && truncated.GetBoolean());
+        }
+    }
     // Law: stdin ends the adapter cleanly only at a well-formed EOF. Every input fault fails the adapter with its cause
     // rather than reading as EOF, whatever the read sizes; a UTF-8 scalar may span reads.
     [InlineData("scalar-spans-reads")]
