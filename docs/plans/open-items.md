@@ -1035,17 +1035,9 @@ Owner: suites lane · ordinary · Next: measure the two unmeasured suites' class
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · ordinary · Next: the launcher's version pruning (the MCP
-development install grows 340 MB a CLI rebuild).
+Owner: delivery lane · ordinary · Next: measure deriving the eleven addon guest
+`.wasm` modules from source against edit-to-running.
 
-- The launcher cleans up past versions (the owner's ruling): after an install is
-  proven, keep `current`, `last-good` and the most recent N other versions
-  (N from the user's settings), delete the rest, and drop `objects` no kept
-  version references. Today nothing prunes: `UpdateOptions.KeepVersions`
-  (default 2, also `host.update.keepVersions`) is only validated and echoed by
-  `update.status`. The MCP development install (`.claude/mcp-install`) reached
-  8 versions and 3.8 GB before a manual prune; there `last-good` also stayed two
-  days behind a `current` that served a whole session, unexplained.
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
   is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
@@ -1053,8 +1045,6 @@ development install grows 340 MB a CLI rebuild).
   CI job that loads an addon, so measure that cost against edit-to-running
   first. A hand-written fixture module (the transpiler sample's 8-byte
   `Samples/addons/rules.wasm`) is source.
-- Give the counters workloads `.puck` sources: `tests/Puck.Counters/debug.world.json`
-  and `avatar.world.json` are committed JSON derived from `debug.puck`.
 - Finish the shared shader cache ([freshness](../reference/shaders.md#freshness)):
   no GitHub run has yet shown the restored Windows build, the silo image build
   and a repeated `shader-bytecode` job compiling nothing (`0 compiled`); a local

@@ -2096,7 +2096,7 @@ puck counters [--world <file>] [--script <file>] [--output <file>]
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `tests/Puck.Counters/debug.world.json` once per backend
+The run boots `tests/Puck.Counters/debug.puck` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each
@@ -2116,7 +2116,7 @@ build included, after thirty.
 `--world` and `--script` select another authored `.puck` or JSON workload and its console
 script. Both paths are recorded in the report.
 The [seated-avatar workload](../../tests/Puck.Counters/README.md),
-`avatar.world.json` with `avatar.script.txt`, is the debug world as played.
+`avatar.puck` with `avatar.script.txt`, is the debug world as played.
 The quarantined `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `experimental/tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
