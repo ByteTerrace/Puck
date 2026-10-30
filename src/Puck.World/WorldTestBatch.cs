@@ -27,6 +27,8 @@ internal sealed class WorldTestBatch {
     private bool m_observing;
     private int m_index;
     private bool m_failed;
+    // Set when the worker itself could not report or open a leg, as opposed to a leg whose own verdict failed.
+    private bool m_aborted;
 
     private WorldTestHost m_host = null!;
 
@@ -87,7 +89,7 @@ internal sealed class WorldTestBatch {
             ], null);
                 batch.m_legDeadline?.Dispose();
                 batch.m_control?.Dispose();
-                if ((exit != 0) || batch.m_failed || (batch.m_index == startingIndex)) { break; }
+                if ((exit != 0) || batch.m_aborted || (batch.m_index == startingIndex)) { break; }
             }
 
             return (((exit == 0) && !batch.m_failed && (batch.m_index == legs.Length)) ? 0 : 1);
@@ -210,6 +212,7 @@ internal sealed class WorldTestBatch {
     private bool CompleteLegSafely() {
         try { return CompleteLeg(); } catch (Exception exception) {
             m_failed = true;
+            m_aborted = true;
             try { Console.Error.WriteLine(value: $"[test.batch: {exception}]"); } catch (Exception) { } finally { Get<IHostApplicationLifetime>().StopApplication(); }
             return true;
         }
@@ -269,6 +272,7 @@ internal sealed class WorldTestBatch {
         } else {
             try { OpenLeg(); StartLeg(); } catch (Exception exception) {
                 m_failed = true;
+                m_aborted = true;
                 try {
                     Console.Error.WriteLine(value: $"[test.batch: {exception}]");
                     m_error.Flush();
