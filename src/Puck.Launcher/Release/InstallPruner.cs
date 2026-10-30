@@ -83,7 +83,7 @@ public static class InstallPruner {
                 }
                 skipped = $"another process holds {((publication is null) ? InstallLeases.PublicationLockFileName : InstallLeases.UpdateLockFileName)}";
             }
-        } catch (Exception error) when (error is not OutOfMemoryException) {
+        } catch (Exception error) when ((error is not OutOfMemoryException)) {
             // A maintenance pass never ends its caller's start or health check; a failure part way leaves the tree as
             // an interrupted pass would, which the next pass completes.
             skipped = $"the pass stopped: {error.GetType().Name}: {error.Message}";
@@ -117,7 +117,6 @@ public static class InstallPruner {
     }
 
     private enum Removal { Removed, Gone, Running, Refused }
-
     // One version as the validation phase read it: its install order when a valid record names one, and the objects it
     // references (its record's pins, or the content pins of the files it holds).
     private sealed record Version(string Name, long? Sequence, IReadOnlySet<string> Objects);

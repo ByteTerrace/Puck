@@ -303,9 +303,11 @@ public sealed partial class ConfinedDirectory : IDisposable {
             _ = Linux.Unlink(directory: true, name: name, parent: parent.Handle);
         }
     }
+
     // The base address of this process's executable image on Windows (GetModuleHandle of null), for a single-file app
     // whose executable is its image; zero elsewhere.
     internal static nint ProcessImageAddress() => (OperatingSystem.IsWindows() ? Windows.GetModuleHandle(name: 0) : 0);
+
     /// <summary>Reports whether the regular file <paramref name="name"/> in this directory is the file that backs a
     /// memory mapping of this process. On Linux any mapping with the file's inode and current path matches, both as the
     /// kernel reports them. On Windows the mapping that contains <paramref name="address"/> matches when the name its
