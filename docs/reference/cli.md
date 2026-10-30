@@ -3003,10 +3003,12 @@ world, the debug world (`worlds/debug/debug.puck`) unless a
 `.puck` source or `.world.json` document is named, builds its server without a
 device, and prints one row per number—server construction time, idle-tick time
 and quiet-tick allocation (median over a sampled window, after a warmup), and
-the contact work behind each sampled tick as deterministic counts (certified
-sweeps and the bounds queries they charge, interval walks with their
+the contact work behind each sampled tick as deterministic counts (the analytic
+solver's resolves, exact queries, convex queries and their support evaluations,
+certified sweeps and the bounds queries they charge, interval walks with their
 instructions and full rotation expansions, and point evaluations with their
-instructions, read from `physics.sweep`, `sdf.bounds` and `sdf.point`). It
+instructions, read from `physics.contact`, `physics.sweep`, `sdf.bounds` and
+`sdf.point`). It
 also boots a separate server with the world's addons and console edit echoes,
 activates seat zero, and measures standing plus three 60-tick gallery walks
 from `body.pose 30 - 22 90 - -` with the intent corresponding to

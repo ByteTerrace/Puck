@@ -597,6 +597,13 @@ public static class WorldPlacementStamper {
 
             return (float.IsFinite(f: detail) ? detail : 0f);
         }
+        // A scoped creation's noise relief declares its own spacing (CreationNoiseDocument.DetailSpacing): the shapes'
+        // bounds size its lattice by the creation's extent, which steps over relief a few cells long.
+        private static float ReliefDetail(float detail, CreationNoiseDocument? noise, float scale) {
+            var relief = ((noise is null) ? 0f : (noise.DetailSpacing() * scale));
+
+            return ((relief <= 0f) ? detail : ((detail <= 0f) ? relief : MathF.Min(x: detail, y: relief)));
+        }
         // The creation's glass shapes, one static instance of their own after the opaque shapes and text: their own
         // group, so they never bake with an opaque shape, carve or are carved by one, and draw in the glass pass. They
         // take a field scope of their own only when one of them composes by something other than a union, so a hollow
@@ -760,7 +767,7 @@ public static class WorldPlacementStamper {
                 _ = builder.BeginInstance(
                     boundCenter: instance.Origin,
                     boundRadius: (reach + PlacementBoundMargin),
-                    detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale)
+                    detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale)
                 );
                 if (scoped) {
                     _ = builder.PushField(compose: SdfBlendOp.Union);

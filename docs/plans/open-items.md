@@ -1193,6 +1193,35 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 - `.puck` edits in game are the sooner win: they are data, replayable and deterministic, and need no compiler.
 - Development only: editing C# runs arbitrary code, so it needs the SDK on the machine and an explicit grant to the owner's seat; published builds do not hot reload.
 
+### The valley's terrain
+
+Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
+Next: the lead's window over the sweep tour's `valley` stops, then contact on
+the drawn relief. The measured state is in the
+[plan](valley-and-moons.md#phase-1-the-valley-as-built).
+
+- Contact rides the unrelieved masses: creation noise is render-only, so a body
+  on a wall floats over or sinks into the drawn relief by up to its amplitude
+  (4 m on the sectors). The fixed-point render reading already evaluates
+  `NoiseDisplace` deterministically; analytic contact needs a collider whose
+  surface is the relieved field, with a step bound for the sweep.
+- A standing body creeps downslope on a curved superellipsoid: 2 cm a second on
+  a 22 degree slope and 7 cm a second on a 58 degree one (`body.where` over 30
+  ticks at rest, north sector).
+- A scoped static creation's instance bound is a sphere about the creation's
+  origin (`WorldPlacementStamper`'s scoped branch), 770 m in radius for a sector
+  centred on the ring's centre, so the bake's eight-cells-a-coarse-axis cap, not
+  the relief's declared 1.56 m, sets its 2.8 m cell. A bound about the shapes
+  would let the declared detail through; measure the triangles it costs first
+  (about 3.5 times a sector's 266,000).
+- Creation limits sized for props bound terrain: noise amplitude at most 4 m
+  (`CreationNoiseDocument.MaxAmplitude`) and smooth blends at most 0.5 m
+  (`CreationDocument.MaxSmooth`), so a 300 to 430 m wall reads as a few smooth
+  masses with metre-scale rock.
+- The CPU evaluator's capsule reads its segment parameter through a Q16 inverse
+  squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
+  large radius.
+
 ### Debug world content
 
 Owner: debug-world content lanes, each started by the owner's direction · one
