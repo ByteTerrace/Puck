@@ -197,14 +197,29 @@ earlier, and no link is followed. These are the invariants a review checks:
   open-time name, whose directory the runtime's open file pins), or fails its
   launch with the reason. Whether a process runs from the install at all is the
   identity of its image's parent directory, never a path spelling.
-- **Removal is atomic from a reader's view.** A version leaves `versions/` whole
-  by one move into `trash/` (by handle on Windows; `renameat2` checked against
-  the held handle's identity on Linux), then is deleted there through the same
-  handle. The next pass empties what an interrupted one left in `trash/`.
-- **Fail closed.** A busy lease, a linked `trash/`, a malformed intent or an
-  unsupported platform (anything but Windows and Linux x64) skips the pass; a
-  store whose channel manifest does not parse keeps all its objects; a kept
-  version whose files cannot be read stops the sweep for that pass.
+- **Crash-safe.** A version leaves `versions/` whole by one move into `trash/`
+  (by handle on Windows, `renameat2` relative to held descriptors on Linux),
+  then is deleted there through the same handle. An interrupted pass leaves
+  every kept version whole, and the next pass empties what it left in `trash/`.
+  Removal, link scanning and hashing walk a tree without recursion.
+- **Fail closed.** A busy lease, a linked `trash/`, an intent whose manifest
+  fails validation or an unsupported platform (anything but Windows and Linux
+  x64) skips the pass. A store whose channel manifest does not parse or
+  validate keeps all its objects. A version whose install record cannot be read
+  is kept, and a record naming an invalid pin counts as no record. A kept
+  version whose files cannot be read stops the sweep for that pass. A running
+  version never takes one of `KeepVersions`' places.
+
+These defend against cooperating processes and crashes, not against the install
+root's own user ([decision](../../docs/decisions/runtime-and-delivery.md#releases)). A
+process with that user's write access can already replace the binaries the
+launcher runs. So interleavings that need a hostile process renaming entries
+inside the root during a pass are out of the model and get no defence beyond
+link refusal. Two such cases are known:
+- renaming a held version aside and moving another directory to its name
+  between the pass's check and its Linux `renameat2`;
+- renaming a `trash/` entry aside and moving a live version to its name between
+  the listing and the cleanup, which then deletes by that name.
 
 The stager replaces an earlier partial staging of the same version with the same
 removal (`InstallPruner.RemoveVersion`), so it too is refused while a process

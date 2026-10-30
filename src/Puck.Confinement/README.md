@@ -70,9 +70,11 @@ name a mapped file was opened by, not its current name.
 On Linux x64, every lookup is `openat`, `fstatat`, `renameat2` or `unlinkat`
 relative to a held descriptor with `O_NOFOLLOW` or `AT_SYMLINK_NOFOLLOW`, listing
 reads the descriptor's `/proc/self/fd` link, and holding a directory is an
-`flock` on its descriptor. A move is made by name and then checked against the
-held descriptor's identity, and undone when another directory had taken the
-name. A mapping is matched by its inode and current path in `/proc/self/maps`,
+`flock` on its descriptor. A move and the final removal of an emptied directory
+are made by name relative to the held parent's descriptor, which names the held
+directory unless another process of the same user renames entries meanwhile; the
+launcher's threat model leaves that out
+([decision](../../docs/decisions/runtime-and-delivery.md#releases)). A mapping is matched by its inode and current path in `/proc/self/maps`,
 because the device number printed there differs from `stat`'s on btrfs
 subvolumes. Sources: the
 [openat(2)](https://man7.org/linux/man-pages/man2/openat.2.html),

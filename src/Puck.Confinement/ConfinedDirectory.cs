@@ -261,16 +261,15 @@ public sealed partial class ConfinedDirectory : IDisposable {
         return RemoveEntry(name: name, parent: Handle);
     }
     /// <summary>Moves this directory, held for removal, to <paramref name="destination"/>/<paramref name="newName"/>. On
-    /// Windows the held object itself moves; on Linux the move is made by name relative to
-    /// <paramref name="parent"/>'s handle and then checked against this handle's identity, and undone when another
-    /// object had taken the name.</summary>
+    /// Windows the held object itself moves; on Linux the move is made by name relative to <paramref name="parent"/>'s
+    /// handle, which names this directory unless another process of the same user renames entries meanwhile.</summary>
     /// <param name="parent">The directory this one is in.</param>
     /// <param name="name">This directory's current name in <paramref name="parent"/>.</param>
     /// <param name="destination">The directory to move into, on the same volume.</param>
     /// <param name="newName">A name that does not exist in <paramref name="destination"/>.</param>
     /// <exception cref="InvalidOperationException">This directory was not opened by
     /// <see cref="TryOpenChildForRemoval"/>.</exception>
-    /// <exception cref="IOException">The move fails, or the name no longer named this directory.</exception>
+    /// <exception cref="IOException">The move fails.</exception>
     public void MoveTo(ConfinedDirectory parent, string name, ConfinedDirectory destination, string newName) {
         ArgumentNullException.ThrowIfNull(argument: parent);
         ArgumentNullException.ThrowIfNull(argument: destination);
@@ -281,10 +280,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
             Windows.Rename(destination: destination.Handle, handle: Handle, name: newName, replace: false);
         } else {
             Linux.Rename(destinationName: newName, destinationParent: destination.Handle, sourceName: name, sourceParent: parent.Handle);
-            if ((Linux.StatAt(name: newName, parent: destination.Handle) is not { } moved) || (Linux.Identity(stat: moved) != Identity)) {
-                Linux.Rename(destinationName: name, destinationParent: parent.Handle, sourceName: newName, sourceParent: destination.Handle);
-                throw new IOException(message: $"'{name}' was replaced while it was being moved; it was put back and kept.");
-            }
         }
         m_path = System.IO.Path.Combine(path1: destination.m_path, path2: newName);
     }
@@ -305,9 +300,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
         if (OperatingSystem.IsWindows()) {
             Windows.Remove(handle: Handle);
         } else {
-            if ((Linux.StatAt(name: name, parent: parent.Handle) is not { } named) || (Linux.Identity(stat: named) != Identity)) {
-                throw new IOException(message: $"'{name}' no longer names the directory being removed; it was left in place.");
-            }
             _ = Linux.Unlink(directory: true, name: name, parent: parent.Handle);
         }
     }
