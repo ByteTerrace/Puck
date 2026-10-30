@@ -632,6 +632,10 @@ not a spiral:
   in a decision (pruning's three rounds were all hostile same-user
   interleavings, outside the install root's model) or have a design memo
   written and reviewed before any more code (the companion custody rework).
+- A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
+  at the top of Next and gets a lane at once, aimed at the root cause, not a
+  packet line: the hall stairs' holes sat as "dark patches" in the sweep packet
+  for weeks while engine work ran, and the owner found them unfixed.
 - At each landing the lead checks that the top of Next has lanes on it. Review
   rounds, fix lanes and landings fill a lead's attention without filling the
   machine: once, only three review-bound lanes ran for hours while Next's top
