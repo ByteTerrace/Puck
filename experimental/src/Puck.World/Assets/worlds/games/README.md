@@ -1,8 +1,11 @@
 # Solitaire collection
 
-Nexus imports [solitaire.puck](solitaire.puck), which composes the
-three patience games bundled with Windows XP. They run as state rows, patterns,
-and rules; the console is their playing surface.
+The three patience games bundled with Windows XP. Klondike, and the collection
+that selects between the games (`solitaire.puck`), now live in `worlds/debug`
+(`klondike.puck`, `solitaire.puck`) behind the card table
+([`cardtable.md`](../../../../../worlds/debug/cardtable.md)); Spider and FreeCell remain here
+as prior art: state rows, patterns and rules with the console as their playing
+surface.
 
 Every game in this directory is authored as `.puck` source, and the directory
 holds sources only. The game's build compiles each one into its own output
@@ -13,7 +16,7 @@ names a game by its document name (`games/poker`), never a file.
 
 | Table | Module | Options |
 |---|---|---|
-| 1 | [Klondike](klondike.puck) | Draw one (`option=1`) or three (`option=3`); unlimited stock passes |
+| 1 | Klondike (revived as `worlds/debug/klondike.puck`) | Draw one (`option=1`) or three (`option=3`); unlimited stock passes |
 | 2 | [Spider](spider.puck) | One, two, or four suits (`option=1`, `2`, or `4`) |
 | 3 | [FreeCell](freecell.puck) | Four free cells and eight columns (`option=1`) |
 

@@ -10,7 +10,8 @@ namespace Puck.World;
 /// <param name="offset">The displacement from its centre.</param>
 /// <param name="glide">Whether the body moves there as continuous motion rather than a teleport.</param>
 /// <param name="roll">The roll, in radians, a teleport stands the body at.</param>
-public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default) : WorldFactEffect(describe: $"poseCell {topology}") {
+/// <param name="pitch">The pitch, in radians, a teleport stands the body at.</param>
+public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default) : WorldFactEffect(describe: $"poseCell {topology}") {
     /// <summary>Gets the addressed body.</summary>
     public WorldBodyRef Body { get; } = body;
     /// <summary>Gets the topology name.</summary>
@@ -24,6 +25,8 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     public bool Glide { get; } = glide;
     /// <summary>Gets the roll, in radians, a teleport stands the body at; a glide keeps the body's attitude.</summary>
     public FixedQ4816 Roll { get; } = roll;
+    /// <summary>Gets the pitch, in radians, a teleport stands the body at; a glide keeps the body's attitude.</summary>
+    public FixedQ4816 Pitch { get; } = pitch;
 
     /// <inheritdoc/>
     public override bool SubmitsMutation => false;

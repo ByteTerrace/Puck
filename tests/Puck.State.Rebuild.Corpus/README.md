@@ -44,7 +44,7 @@ the document gate. `ExemptSourceStillFailsForItsReason` fails when a source
 round-trips again or fails for another reason than its row names, so the ledger
 only shrinks. Two sources are exempt today, both because they expand to a
 document whose decompiled form is longer than the parser's source limit:
-`moth-courtyard.puck` and `worlds/genesis/cards.basis.puck`.
+`moth-courtyard.puck` and `worlds/standard/cards.puck`.
 
 The plan this serves is [the state system rebuild](../../docs/plans/state-rebuild.md).
 

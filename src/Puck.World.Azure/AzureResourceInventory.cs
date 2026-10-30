@@ -15,10 +15,7 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
     private readonly int m_maximumItems;
     private readonly HttpPipeline m_pipeline;
     private readonly AzureResourceInventorySettings m_settings;
-    private readonly Uri m_endpoint;
-
-    private string? m_group;
-    private Uri? m_uri;
+    private readonly Uri m_uri;
 
     /// <inheritdoc/>
     public string Kind => "inventory";
@@ -37,37 +34,29 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
             ?? throw new JsonException(message: "Inventory settings are required."));
         var segments = m_settings.ResourceGroup.Split('/');
 
-        // A bare name leaves the subscription to the signed-in credential (ResolveGroupAsync); an absolute ID pins it.
-        var bare = !m_settings.ResourceGroup.StartsWith(value: '/');
-
         if (
-            bare
-            ? !IsGroupName(name: m_settings.ResourceGroup)
-            : (
-                (segments.Length != 5) ||
-                (segments[0].Length != 0) ||
-                !segments[1].Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "subscriptions"
-            ) ||
-                !Guid.TryParseExact(
-                segments[2],
-                "D",
-                out _
-            ) ||
-                !segments[3].Equals(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: "resourceGroups"
-            ) ||
-                !IsGroupName(name: segments[4])
-            )
+            (segments.Length != 5) ||
+            (segments[0].Length != 0) ||
+            !segments[1].Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "subscriptions"
+        ) ||
+            !Guid.TryParseExact(
+            segments[2],
+            "D",
+            out _
+        ) ||
+            !segments[3].Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: "resourceGroups"
+        ) ||
+            (segments[4].Length is < 1 or > 90) ||
+            segments[4].EndsWith(value: '.') ||
+            segments[4].Any(predicate: c => !(char.IsLetterOrDigit(c: c) || (c is '_' or '-' or '.' or '(' or ')')))
         ) {
-            throw new ArgumentException(message: "Inventory requires a resource-group name, or an absolute subscription/resource-group ID, without URI syntax or traversal segments.");
+            throw new ArgumentException(message: "Inventory requires the absolute resource-group ID /subscriptions/<id>/resourceGroups/<name>, without URI syntax or traversal segments; the subscription is authored, never discovered.");
         }
-        var scope = new ResourceIdentifier(resourceId: (bare
-            ? $"/subscriptions/{Guid.Empty:D}/resourceGroups/{m_settings.ResourceGroup}"
-            : m_settings.ResourceGroup
-        ));
+        var scope = new ResourceIdentifier(resourceId: m_settings.ResourceGroup);
 
         if (
             (scope.ResourceType.ToString() != "Microsoft.Resources/resourceGroups") ||
@@ -101,11 +90,16 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
         ) {
             throw new ArgumentException(message: "Inventory requires an HTTPS ARM origin.");
         }
-        m_endpoint = endpoint;
-        if (!bare) {
-            m_group = m_settings.ResourceGroup;
-            m_uri = QueryUri(group: m_group);
-        }
+        var path = string.Join(
+            separator: '/',
+            values: m_settings.ResourceGroup.Split('/').Select(selector: Uri.EscapeDataString)
+        );
+
+        m_uri = new Uri(
+            baseUri: endpoint,
+            relativeUri: ((((path + "/resources?api-version=") + Uri.EscapeDataString(stringToEscape: m_settings.ApiVersion)) +
+            "&%24filter=") + Uri.EscapeDataString(stringToEscape: (("resourceType eq '" + m_settings.ResourceType) + "'")))
+        );
         if (transport is null) {
             m_httpClient = new(handler: new SocketsHttpHandler { AllowAutoRedirect = false });
             transport = new HttpClientTransport(client: m_httpClient);
@@ -132,9 +126,7 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
         var result = new List<WorldExtensionObservationItem>();
         var identities = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var pages = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var group = (m_group ??= await ResolveGroupAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
-        var first = (m_uri ??= QueryUri(group: group));
-        var uri = first;
+        var uri = m_uri;
         var inspected = 0;
 
         for (var page = 0; (page < m_settings.MaximumPages); page++) {
@@ -181,7 +173,7 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
                 var id = resource.GetProperty(propertyName: "id").GetString()!;
 
                 if (!id.StartsWith(
-                    (group.TrimEnd(trimChar: '/') + "/providers/"),
+                    (m_settings.ResourceGroup.TrimEnd(trimChar: '/') + "/providers/"),
                     StringComparison.OrdinalIgnoreCase
                 )) {
                     throw new InvalidOperationException(message: "Inventory returned a resource outside its approved group.");
@@ -249,15 +241,15 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
                 uriKind: UriKind.Absolute,
                 uriString: link
             ) ||
-                (uri.Scheme != first.Scheme) ||
+                (uri.Scheme != m_uri.Scheme) ||
                 !uri.Authority.Equals(
-                first.Authority,
+                m_uri.Authority,
                 StringComparison.OrdinalIgnoreCase
             ) ||
                 (uri.UserInfo.Length != 0) ||
                 (uri.Fragment.Length != 0) ||
                 !uri.AbsolutePath.Equals(
-                first.AbsolutePath,
+                m_uri.AbsolutePath,
                 StringComparison.OrdinalIgnoreCase
             )
             ) {
@@ -267,98 +259,6 @@ public sealed class AzureResourceInventory : IWorldExtensionObservationSource {
         throw new InvalidOperationException(message: "Inventory pagination exceeds page budget.");
     }
 
-    private static bool IsGroupName(string name) =>
-        (name.Length is >= 1 and <= 90) &&
-        !name.EndsWith(value: '.') &&
-        name.All(predicate: c => (char.IsLetterOrDigit(c: c) || (c is '_' or '-' or '.' or '(' or ')')));
-    private Uri QueryUri(string group) => new(
-        baseUri: m_endpoint,
-        relativeUri: ((((string.Join(
-            separator: '/',
-            values: group.Split('/').Select(selector: Uri.EscapeDataString)
-        ) + "/resources?api-version=") + Uri.EscapeDataString(stringToEscape: m_settings.ApiVersion)) +
-        "&%24filter=") + Uri.EscapeDataString(stringToEscape: (("resourceType eq '" + m_settings.ResourceType) + "'")))
-    );
-    /// <summary>Finds the one subscription the credential sees that holds the named resource group, so a deployment
-    /// document names what to read and not whose: it refuses when no visible subscription holds the group, or
-    /// several do.</summary>
-    private async ValueTask<string> ResolveGroupAsync(CancellationToken cancellationToken) {
-        var name = m_settings.ResourceGroup;
-        var subscriptions = new List<string>();
-
-        using (var list = await GetAsync(
-            cancellationToken: cancellationToken,
-            uri: new Uri(
-                baseUri: m_endpoint,
-                relativeUri: "subscriptions?api-version=2022-12-01"
-            )
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            if (list is null) { throw new InvalidOperationException(message: "Inventory could not list the credential's subscriptions."); }
-            foreach (var subscription in list.RootElement.GetProperty(propertyName: "value").EnumerateArray()) {
-                if (
-                    subscription.TryGetProperty(
-                    propertyName: "state",
-                    value: out var state
-                ) &&
-                    (state.GetString() is { } text) &&
-                    !text.Equals(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: "Enabled"
-                )
-                ) { continue; }
-                var id = subscription.GetProperty(propertyName: "subscriptionId").GetString();
-
-                if (!Guid.TryParseExact(
-                    id,
-                    "D",
-                    out _
-                )) { throw new InvalidOperationException(message: "Inventory listed a malformed subscription."); }
-                subscriptions.Add(item: id!);
-            }
-        }
-        var holders = new List<string>();
-
-        foreach (var subscription in subscriptions) {
-            using var probe = await GetAsync(
-                cancellationToken: cancellationToken,
-                uri: new Uri(
-                    baseUri: m_endpoint,
-                    relativeUri: ($"subscriptions/{subscription}/resourcegroups/{Uri.EscapeDataString(stringToEscape: name)}?api-version=2021-04-01")
-                )
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            if (probe is not null) { holders.Add(item: subscription); }
-        }
-        return ((holders.Count == 1)
-            ? $"/subscriptions/{holders[0]}/resourceGroups/{name}"
-            : throw new InvalidOperationException(message: $"Inventory found resource group '{name}' in {holders.Count} visible subscription(s); exactly one is required.")
-        );
-    }
-    /// <summary>Reads one bounded JSON document, or <see langword="null"/> for a 404.</summary>
-    private async ValueTask<JsonDocument?> GetAsync(Uri uri, CancellationToken cancellationToken) {
-        using var message = m_pipeline.CreateMessage();
-
-        message.BufferResponse = true;
-        message.Request.Method = RequestMethod.Get;
-        message.Request.Uri.Reset(value: uri);
-        message.Request.Headers.SetValue(
-            name: "Accept",
-            value: "application/json"
-        );
-        await m_pipeline.SendAsync(
-            cancellationToken: cancellationToken,
-            message: message
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        if (message.Response.Status == 404) { return null; }
-        if (message.Response.Status != 200) { throw new InvalidOperationException(message: ("Inventory HTTP " + message.Response.Status)); }
-        var stream = (message.Response.ContentStream ?? throw new JsonException(message: "Inventory response has no body."));
-
-        if (stream.Length > m_settings.MaximumResponseBytes) { throw new InvalidOperationException(message: "Inventory response exceeds byte budget."); }
-        return await JsonDocument.ParseAsync(
-            utf8Json: stream,
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
-    }
     private sealed class InventoryResource(ArmClient client, ResourceIdentifier scope) : ArmResource(
         client,
         scope

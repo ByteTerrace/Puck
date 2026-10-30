@@ -5309,6 +5309,10 @@ export type WorldEffectPoseCell = {
    * The roll a teleport stands the body at, about its forward axis: 180 lays it upside down, as a rule turning a two-faced piece over does. A glide keeps the body's attitude and ignores it.
    */
   rollDegrees?: number;
+  /**
+   * The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body's attitude and ignores it.
+   */
+  pitchDegrees?: number;
 };
 
 /**
