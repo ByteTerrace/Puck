@@ -894,9 +894,9 @@ cell size, corner extent, baked corner count, band, and hash. The field provider
 moving body's step clear before its contact solve, by a certified sweep over the exact program's
 bounds together with those of any field lattice's solid columns (`FixedFieldContactSolver.ResolveSweep`,
 counted as the `physics.sweep` work source). The analytic provider emits isotropically
-scaled spheres, circular cylinders and rounded Boxes with their surfaces. Box
-fillets derive from `SdfSolidGeometry.BoxCornerRadius`, the renderer's own
-source, retaining the authored flat-face extents at every yaw. Chamfered Boxes
+scaled spheres, circular cylinders and Boxes with their surfaces. A Box's
+fillet is its authored `rounding` (none makes it sharp), the radius the renderer
+draws, retaining the authored flat-face extents at every yaw. Chamfered Boxes
 use the exact lifted-profile support map at every bevel depth, and
 Superellipsoids use their Lp surface, including the chair seat and back.
 Circular rims without an exact contact use contained cylinder cores and

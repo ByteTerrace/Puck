@@ -500,15 +500,33 @@ colliders report's only red findings left are the valley's relief
   Either contact takes the same cut (a body cannot reach under the floor), or
   the report counts witnesses a detail intersection removes from the drawn
   field as buried rather than unknown.
-- The hall stairs still draw a groove facet under the contour's cell where a
-  tread's filleted edge meets the divider or the east wall, its corner normals
-  the wall's (the fillet's notch at the seam's mouth): `puck mesh audit --cpu
-  --group "(hall-stairs)"` reads 953 flipped triangles (290 cm2) and 27 open
-  edges, all within a few centimetres of those creases and the boxes' corners,
-  after the crevice and seam-gradient fix took it from 1,557 flipped (616 cm2),
-  865 folds and 84 open edges. A groove narrower than the cell could close as a
-  crevice does (`SdfSampledLattice.GapFill`) if its crossings were placed on the
-  filled surface rather than in the groove.
+- [high · bake-seams lane, handed back mid-work] With a sharp Box (the
+  decision [a box is sharp unless its document rounds it](../decisions/engine-design.md#a-box-is-sharp-unless-its-document-rounds-it))
+  `puck mesh audit --cpu --group "(hall-stairs)"` falls from score 7,891 (953
+  flipped, 306 folds, 27 open edges) to 397.9 (13 flipped, 2 folds, 0 open
+  edges, 68k triangles from 101k), and `(wonderland-stairs)` from 50.3 (3
+  flipped, 4 folds) to 7.2 (1 flipped, 0 folds). The residue is not zero: on
+  the hall stairs a 38 mm band across tread B5's underside against the
+  divider (12.300, 7.627, 35.702) faces +x against a -x gradient, a 62 mm band
+  along the landing's north edge at z 39.697, and the east wall's face at
+  (14.098, 4.277, 34.898) sits 12.6 mm off; on the Wonderland stairs four
+  slivers at the corner where a concave crease meets the side face (1.152,
+  0.570, 29.641). All lie on seams between touching boxes, where the union's
+  interior gradient points at the shared face: the remaining work is in the
+  contour (a vertex or crossing that reads an interior sample's gradient near
+  a seam), and whether `GapFill`/`SeamGradient` still earn their place over
+  sharp boxes is to be measured. `(hall-shell)` reads score 9,237 before and
+  14,969 after (51 flipped, 216 open edges, vertices up to 36 mm off the
+  surface at the cassettes and the top bands at y 12.3 and 3.29: 0.13 m boxes
+  in a 125 mm contour cell, a thin feature the lattice should refine for), and
+  `(hall-roof)` 39.3 and `(hall-floor-3)` 15.4 before are seam-groove facets
+  (46 and 41 degrees) that sharp boxes remove; `(hall-blind-3-north)` audits
+  clean (score 0, face normals under 14 degrees) so its speckle is not the
+  bake's. Not yet run on the sharp-box build: the shell's images
+  (`.claude/scratch/bake-seams-shell-images` in the lane's worktree hold the
+  tip's), the test suites, the store-wide audit, `puck test worlds/debug
+  --jobs 1 --reproduce` (contact follows the shape change) and the windowed
+  looks.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.

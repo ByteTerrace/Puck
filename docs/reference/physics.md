@@ -188,9 +188,9 @@ radius), including the complete separating axes when box cores intersect.
 
 Box placements use `FixedStaticCollider.RoundedBox`: an oriented inner box
 offset by a sphere. `Extent` carries the inner half-extents and `Radius` the
-offset. `SdfSolidGeometry.BoxCornerRadius` supplies the same built-in fillet
-the renderer emits (0.04 of the smallest effective scale); the outer flat
-faces stay at the authored extents. Sphere contact uses the inner box with
+offset, the shape's authored `rounding` (zero, a sharp box, where the document
+authors none), the same fillet the renderer draws; the outer flat faces stay at
+the authored extents. Sphere contact uses the inner box with
 the combined radii. Capsule and box contact measure their closest convex
 features, including edge pairs, rather than a body bound. Intersecting cores
 use separating axes with the offset added to their depth. The solver's
@@ -199,7 +199,8 @@ The chase camera already queries the rendered SDF directly.
 
 A chamfered Box compiles to one `FixedStaticCollider.ChamferedBox`, including
 deep bevels. Its inner dimensions and chamfer match the drawing builder's
-erosion: subtract the fillet r from every half-extent and replace b with
+erosion (a chamfer and a rounding never share a shape, so its fillet r is
+zero): subtract r from every half-extent and replace b with
 max(0, b − r(2 − √2)). Its support map follows the actual lifted XY profile,
 including the cap/profile corner and the final scalar offset. At a fixed Z,
 the cross-section is a rounded rectangle clipped by the profile bevel;

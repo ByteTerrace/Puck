@@ -200,10 +200,9 @@ public sealed class ChamferLawTests {
     [InlineData(1f, 1f, 1f)]
     [InlineData(1f, .5f, .25f)]
     [Theory]
-    public void ADocumentBoxChamferKeepsThePlainBoxZeroSetAndFillet(float x, float y, float z) {
-        // The plain Box's zero set is its packed half-extents (the decoder insets them by the round and offsets the
-        // field back out) under a BoxRound*min(scale) fillet; read both off its own packed instruction rather than
-        // restating the constant here.
+    public void ADocumentBoxChamferKeepsThePlainBoxZeroSetAndStaysSharp(float x, float y, float z) {
+        // The plain Box's zero set is its packed half-extents with no rounding (a Box rounds only where its document
+        // says so); read both off its own packed instruction.
         var scale = new Vector3(
             x: x,
             y: y,
@@ -229,7 +228,7 @@ public sealed class ChamferLawTests {
             z: plain.Data0.Z
         ) * plainScale);
 
-        Assert.True(condition: (fillet > 0f));
+        Assert.Equal(0f, fillet);
 
         var chamferedBuilder = new SdfProgramBuilder();
         var chamferedMaterial = chamferedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -310,7 +309,7 @@ public sealed class ChamferLawTests {
             );
         }
 
-        // And the chamfer is still there: the corner the plain (filleted) Box keeps is cut away.
+        // And the chamfer is still there: the corner the plain Box keeps is cut away.
         var corner = Position(
             x: (extents.X - .02),
             y: (extents.Y - .02),
@@ -331,84 +330,6 @@ public sealed class ChamferLawTests {
             (chamferedCorner > plainCorner),
             userMessage: $"the chamfer did not cut the corner: plain {((double)plainCorner)}, chamfered {((double)chamferedCorner)}"
         );
-    }
-    [Fact]
-    public void ADocumentBoxChamferVanishingIntoTheFilletIsThePlainBox() {
-        // A chamfer under fillet*(2 - sqrt2) sits inside the corner the fillet already removes, so the opening
-        // absorbs it: the emitted shape IS the plain filleted Box, and chamfer -> 0 is continuous at the door.
-        var scale = new Vector3(
-            x: 1f,
-            y: .5f,
-            z: .25f
-        );
-        var plainBuilder = new SdfProgramBuilder();
-        var plainMaterial = plainBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = SdfSolidGeometry.AppendScaledPrimitive(
-            plainBuilder,
-            SdfSolidPrimitive.Box,
-            scale,
-            plainMaterial
-        );
-
-        var chamferedBuilder = new SdfProgramBuilder();
-        var chamferedMaterial = chamferedBuilder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = SdfSolidGeometry.AppendScaledPrimitive(
-            chamferedBuilder,
-            SdfSolidPrimitive.Box,
-            scale,
-            chamferedMaterial,
-            chamfer: 1e-4f
-        );
-
-        var chamferedProgram = chamferedBuilder.Build();
-
-        Assert.Equal(
-            0f,
-            chamferedProgram.Instructions.Single(predicate: instruction => (instruction.Op == SdfOp.ShapeBlend)).Data0.Z
-        );
-
-        var plainEvaluator = new SdfFieldEvaluator(program: plainBuilder.Build());
-        var chamferedEvaluator = new SdfFieldEvaluator(program: chamferedProgram);
-
-        foreach (var point in new[] { Position(
-            x: 0,
-            y: 0,
-            z: 0
-        ), Position(
-            x: 1.2,
-            y: .6,
-            z: .3
-        ), Position(
-            x: .9,
-            y: .45,
-            z: 0
-        ), Position(
-            x: 2,
-            y: 0,
-            z: 0
-        ), Position(
-            x: 1.03,
-            y: .51,
-            z: .26
-        ), }) {
-            Assert.True(condition: plainEvaluator.TryDistance(
-                distance: out var plainDistance,
-                material: out _,
-                position: point
-            ));
-            Assert.True(condition: chamferedEvaluator.TryDistance(
-                distance: out var chamferedDistance,
-                material: out _,
-                position: point
-            ));
-            Assert.InRange(
-                actual: ((double)chamferedDistance),
-                high: (((double)plainDistance) + .0005),
-                low: (((double)plainDistance) - .0005)
-            );
-        }
     }
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]

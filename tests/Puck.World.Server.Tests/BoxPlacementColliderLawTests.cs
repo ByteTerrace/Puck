@@ -27,12 +27,17 @@ public sealed class BoxPlacementColliderLawTests {
         };
     }
 
-    [InlineData(0.5f)]
-    [InlineData(1f)]
-    [InlineData(2f)]
+    // A Box collides as the solid it draws: sharp without a rounding (its corner is the corner), and under an authored
+    // rounding of 0.08 its corner lies on the fillet, 0.08 (1 - 1/sqrt 3) in from the sharp corner, at every scale.
+    [InlineData(0.5f, 0f, 2d, 2d)]
+    [InlineData(1f, 0f, 2d, 2d)]
+    [InlineData(2f, 0f, 2d, 2d)]
+    [InlineData(0.5f, 0.08f, 1.966, 1.967)]
+    [InlineData(1f, 0.08f, 1.966, 1.967)]
+    [InlineData(2f, 0.08f, 1.966, 1.967)]
     [Theory]
-    public void AScaledBoxSurfaceAgreesWithTheDrawnFilletAndKeepsTheFace(float scale) {
-        var definition = Document(scale: scale);
+    public void AScaledBoxSurfaceAgreesWithTheDrawnCornerAndKeepsTheFace(float scale, float rounding, double cornerLow, double cornerHigh) {
+        var definition = Document(scale: scale, rounding: ((rounding > 0f) ? rounding : null));
         var colliders = WorldColliderSet.Build(definition: definition);
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
@@ -42,7 +47,7 @@ public sealed class BoxPlacementColliderLawTests {
             maxDistance: Q(value: 2), assistHalfAngle: Q(value: 0.01), candidate: out var corner));
         Assert.True(condition: field!.Probe(position: corner.Point, distance: out var distance, gradient: out _, material: out _));
         Assert.InRange(actual: ((double)distance), high: 0.0002, low: -0.0002);
-        Assert.InRange(((double)(corner.Point.X / s)), 1.966, 1.967);
+        Assert.InRange(((double)(corner.Point.X / s)), cornerLow, cornerHigh);
         Assert.True(condition: colliders.TryNearestSurfaceAlongDirection(origin: (V(x: 0, y: 2.2, z: 0) * s), direction: -FixedVector3.UnitY,
             maxDistance: Q(value: 2), assistHalfAngle: Q(value: 0.01), candidate: out var face));
         Assert.Equal((Q(value: 2) * s), face.Point.Y);

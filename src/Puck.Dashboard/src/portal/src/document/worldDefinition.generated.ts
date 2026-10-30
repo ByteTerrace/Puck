@@ -8877,7 +8877,7 @@ export type WorldPrototype = {
        */
       lift?: "Revolve" | "Extrude" | null;
       /**
-       * Only for Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet. Refused by name past MaxRounding.
+       * Only for Box, Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units, finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field offsets back out, so the shape keeps its authored extent and its edges fillet; a Box without it is sharp, so boxes that touch meet as one solid, and a solid placement collides as the same rounded or sharp box. Refused by name past MaxRounding.
        */
       rounding?: number | null;
       /**

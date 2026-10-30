@@ -27,22 +27,21 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   half a fine cell below the surface. Solids that touch (a stair's treads, a
   board on its table) meet at the surface, and refining that seam chamfered the
   concave crease above it by a cell.
-- **Touching solids are one solid to the contour.** Every Box carries a built-in
-  fillet (`SdfSolidGeometry.BoxCornerRadius`), so where the face two touching
-  boxes share meets a third solid (a flight's treads against its divider) the
-  fillets leave a crevice a few millimetres wide inside the union. A sample
-  outside between two inside samples, thinner than the contour's cell along
-  that line, reads inside as its shallower neighbour (`SdfSampledLattice.GapFill`:
-  `CloseCoarseGaps` in `Refine` below the fine cell and in `PrepareCrossings`
-  below the coarse one, `CloseFineGaps` at the fine spacing); drawn, a crevice
-  was a sliver of folded faces inside the solid. Inside a union the field is the
-  distance to the nearest face of the solid a sample lies in, which beside a
-  seam is the shared face, so its gradient points into the neighbour: the
-  interpolated normal (`TryNormal`) leaves out a corner whose step along its
-  gradient does not rise (`SeamGradient`), or the faces beside the seam shade
-  turned 180 degrees (the hall stairs' dark patches). The crevice's open mouth,
-  a groove under the cell where a tread's rounded edge meets the wall, still
-  contours as a facet whose corner normals are the wall's.
+- **Touching solids are one solid to the contour.** A Box is sharp unless its
+  document rounds it ([decision](../../../../docs/decisions/engine-design.md#a-box-is-sharp-unless-its-document-rounds-it)),
+  so boxes that touch meet with no groove at the seam and no crevice where the
+  seam meets a third face. A sub-cell gap the field does hold (two shapes
+  authored a hair apart) closes as a sheet does: a sample outside between two
+  inside samples, thinner than the contour's cell along that line, reads inside
+  as its shallower neighbour (`SdfSampledLattice.GapFill`: `CloseCoarseGaps` in
+  `Refine` below the fine cell and in `PrepareCrossings` below the coarse one,
+  `CloseFineGaps` at the fine spacing). Inside a union the field is the distance
+  to the nearest face of the solid a sample lies in, which beside a seam is the
+  shared face, so its gradient points into the neighbour: the interpolated
+  normal (`TryNormal`) leaves out a corner whose step along its gradient does
+  not rise (`SeamGradient`), or the faces beside the seam shade turned 180
+  degrees. Whether these two closures still earn their place over sharp boxes
+  is measured by the store-wide audit, not assumed.
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
   in 20 s. A refinement past its fine-sample budget (`MaxFineSamples`) splits
   each cell into fewer fine cells, down to two, and contours whole only past
@@ -98,7 +97,7 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   interpolated gradients. Such a vertex on a fillet under the cell carries the
   fillet's normal, so `SdfContour.SplitAtCreases` gives the corners of its quads
   that face more than 25 degrees from that normal a copy with their face's
-  normal (a plinth's 6 mm BoxRound fillet at 21 mm cells otherwise shades a
+  normal (a plinth's authored 6 mm fillet at 21 mm cells otherwise shades a
   band a cell wide along every edge). The material cut samples and searches by
   place, not by copy (`SdfMeshMaterialCut`), so the pieces either side of a
   split edge meet at one boundary point.
