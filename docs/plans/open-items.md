@@ -524,6 +524,28 @@ The rendered colliders report's only red findings left are the valley's relief
 
 ### Edit to running, hot reload and boot
 
+- [medium · fixed · owner: rendering] Region growth allocation failure
+  (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:705`, `GrowHostBuffers` and
+  `GrowDestination`): if new GPU buffers fit but allocating the larger CPU
+  shadow fails, host growth must retain its old buffers and staged growth must
+  release its unused replacement. Both paths finish fallible allocations before
+  publishing ownership and clean up replacements on failure; the ring also
+  prepares its returned retirement owner before allocating any GPU buffer.
+- [medium · fixed · owner: rendering] Transform growth failure
+  (`src/Puck.SdfVm/SdfWorldTables.FramePreparation.cs:14`,
+  `EnsureDynamicTransformCapacity`): failing a buffer allocation must not
+  publish a capacity the region has never reached, or a retry skips growth and
+  throws while writing the extra rows. Motion history is prepared before region
+  growth, retirement capacity is reserved first, and the new capacity and
+  binding revision publish only after both buffers succeed.
+- [low · fixed · owner: rendering] Transform-capacity documentation
+  (`src/Puck.SdfVm/SdfWorldTablesOptions.cs:13`, `DynamicTransformCapacity`, and
+  `SdfWorldTables.ProgramUpload.cs`, `UploadProgram`) describes growing tables;
+  it must not tell an author that an extra frame row is dropped or an uploaded
+  program exceeding the initial reserve is rejected. The packing comment and
+  rendering skill distinguish missing emitted rows from GPU storage capacity.
+  `GpuRegion`'s summary promises no managed copy of the contents; ring growth
+  does allocate small arrays of buffer references.
 - [medium] Upload plumbing keys the stored meshes: the bake's code identity
   (`SdfMeshBakeClosure`) holds `SdfWorldTables.WriteMeshBakePoints`, so changing
   `GpuRegion.Grow`'s return type changed that method's IL and missed every
@@ -860,6 +882,25 @@ representative capture set with explicit settlement rules and world
 invocation, then the debug world's contract recorded on the RTX 4070 so
 `puck parity` runs again.
 
+- [medium · owner: rendering] Uniform region growth accepts an unbindable size
+  (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:688`, `Grow`, uniform-size
+  check): a 65,536-byte uniform ring can grow to 65,792 bytes, since the check
+  accepts any multiple of 256 below the storage-region maximum. Binding the
+  whole result exceeds Direct3D 12's 4,096 float4 constant-buffer elements
+  ([constants](https://learn.microsoft.com/en-us/windows/win32/direct3d12/constants),
+  [HLSL constant-buffer layout](https://microsoft.github.io/hlsl-specs/specs/hlsl.pdf))
+  and Vulkan's allowed descriptor range on a device reporting
+  `maxUniformBufferRange = 65536`
+  ([descriptor sets](https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html),
+  [device limits](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceLimits.html)).
+  The sources agree that alignment alone cannot establish a valid range;
+  Vulkan's limit is per device. `IGpuBindings.RequireConstantBufferSize` also
+  checks only alignment, and the GPU services expose no uniform-range limit.
+  Expose and enforce the actual view limit at uniform-region construction and
+  growth and at descriptor writes, before allocation or descriptor mutation.
+  This has no production `Grow` caller yet and is source-confirmed, not exercised
+  on hardware. It needs a shared capability change across both backends rather
+  than a guessed Vulkan limit in the region.
 - Cross-backend parity (`puck parity`, `experimental/tests/Puck.Parity`) is the
   only automated gate on the shared engine contract (the cross-backend render
   path, the SDF VM ISA). The debug world authors no `captures` rows and has no

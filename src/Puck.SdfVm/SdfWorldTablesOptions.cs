@@ -10,8 +10,8 @@ namespace Puck.SdfVm;
 /// <param name="DynamicTransformCapacity">The number of dynamic entity-transform slots to allocate (at least one slot
 /// is always bound so the binding stays valid for a static scene). The tables raise this floor to the program's
 /// <see cref="SdfProgram.RequiredDynamicTransformCapacity"/>. Each slot costs 48 bytes of the dynamic-transform
-/// region, and a frame uploads only the words that changed. Excess transforms in a frame beyond the capacity are
-/// dropped.</param>
+/// region, and a frame uploads only the words that changed. A later program or frame requiring more slots grows
+/// the region and its motion-history buffer.</param>
 /// <param name="ProgramWordCapacity">The packed words the tables are provisioned for, which
 /// <see cref="SdfWorldTables.ProgramWordCapacity"/> reports while no program exceeds it. It allocates nothing: the
 /// program region holds the live program and <see cref="SdfWorldTables.UploadProgram"/> grows it by half again when a

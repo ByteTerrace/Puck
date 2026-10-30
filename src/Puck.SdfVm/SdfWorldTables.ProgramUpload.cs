@@ -12,8 +12,7 @@ public sealed partial class SdfWorldTables {
     /// <param name="delta">The words <paramref name="program"/> differs in from the program it was built after, or
     /// <see langword="null"/>: when that program is the one the tables hold, only those words are copied, and otherwise
     /// the program's words are compared with what the tables hold.</param>
-    /// <exception cref="ArgumentException">The program contains an opcode not declared by <see cref="SdfOp"/>, or its
-    /// dynamic-transform requirements exceed the host's reserved transform slots.</exception>
+    /// <exception cref="ArgumentException">The program contains an opcode not declared by <see cref="SdfOp"/>.</exception>
     public void UploadProgram(SdfProgram program, SdfProgramDelta? delta = null) {
         ArgumentNullException.ThrowIfNull(program);
         program.ValidateIsa();
