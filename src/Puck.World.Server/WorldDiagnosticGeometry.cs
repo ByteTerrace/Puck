@@ -36,6 +36,55 @@ public static class WorldDiagnosticGeometry {
         }
         return false;
     }
+    /// <summary>Whether a boundary witness opens onto free space that a contour sampled at <paramref name="resolution"/>
+    /// draws: some ball of that radius, clear of every collider, touches the boundary within that radius of the
+    /// witness. A witness without one lies in a seam or crevice the solids enclose, such as the groove left along an
+    /// edge where three filleted boxes meet; a contour at that resolution closes over it, so a drawn mesh has no
+    /// surface there to compare. A collider whose signed distance is a bound (a superellipsoid's or a chamfered box's)
+    /// blocks a ball only when the ball's centre lies inside it, where the bound's sign is exact; a ball that merely
+    /// reaches it counts as free, so a bound can leave a witness measured but never hides one.</summary>
+    /// <param name="colliders">Every effective collider, the witness's own included.</param>
+    /// <param name="point">The boundary witness.</param>
+    /// <param name="normal">The outward direction at the witness, tried beside the lattice directions.</param>
+    /// <param name="resolution">The drawn surface's precision at the witness: its bake cell's half diagonal.</param>
+    /// <returns>True when a free ball of the resolution's radius reaches the witness.</returns>
+    public static bool OpensOnto(IEnumerable<FixedStaticCollider> colliders, Vector3 point, Vector3 normal, double resolution) {
+        var radius = (float)resolution;
+        var near = colliders.Where(predicate: c => ((c.Kind == FixedStaticColliderKind.HalfSpace) ||
+            ((Vector3.Distance(value1: c.Center.ToVector3(), value2: point) - Reach(collider: c)) <= (3 * radius)))).ToArray();
+        var directions = new List<Vector3>(capacity: 27);
+
+        if (normal.LengthSquared() > 0) { directions.Add(item: Vector3.Normalize(value: normal)); }
+        for (var x = -1; (x <= 1); x++) {
+            for (var y = -1; (y <= 1); y++) {
+                for (var z = -1; (z <= 1); z++) {
+                    if ((x != 0) || (y != 0) || (z != 0)) { directions.Add(item: Vector3.Normalize(value: new Vector3(x: x, y: y, z: z))); }
+                }
+            }
+        }
+        foreach (var direction in directions) {
+            foreach (var scale in Scales) {
+                var center = (point + (direction * (radius * scale)));
+
+                if (near.All(predicate: c => (SignedDistance(collider: c, point: center) >= (Exact(collider: c) ? (radius * (1 - 1e-3)) : 0)))) { return true; }
+            }
+        }
+        return false;
+    }
+    // A free ball's centre one, one and a half and two radii out: the last reaches a right-angled concave corner's
+    // inscribed ball from a witness on its fillet.
+    private static readonly float[] Scales = [1f, 1.5f, 2f];
+
+    // Kinds whose SignedDistance is the exact Euclidean distance outside; a lower bound would close a void that is open.
+    private static bool Exact(FixedStaticCollider collider) => collider.Kind is FixedStaticColliderKind.AxisAlignedBox or
+        FixedStaticColliderKind.OrientedBox or FixedStaticColliderKind.RoundedBox or FixedStaticColliderKind.Sphere or
+        FixedStaticColliderKind.Cylinder or FixedStaticColliderKind.HalfSpace;
+    // A radius about the centre containing the collider.
+    private static float Reach(FixedStaticCollider collider) => collider.Kind switch {
+        FixedStaticColliderKind.Sphere => collider.Extent.ToVector3().X,
+        FixedStaticColliderKind.Cylinder => new Vector2(x: collider.Extent.ToVector3().X, y: collider.Extent.ToVector3().Y).Length(),
+        _ => (collider.Extent.ToVector3().Length() + (float)collider.Radius),
+    };
     /// <summary>Names a signed boundary contradiction only outside the check's explained uncertainty.</summary>
     /// <param name="separation">Positive in authored air, negative inside the authored solid.</param>
     /// <param name="budget">The check's precision components.</param>

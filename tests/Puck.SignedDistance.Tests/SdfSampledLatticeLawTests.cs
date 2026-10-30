@@ -280,6 +280,32 @@ public sealed class SdfSampledLatticeLawTests {
         Assert.Empty(collection: lattice.Refine(factor: Factor));
     }
 
+    // Two boxes whose faces touch (a stair's treads, a board on its table) are one solid: the union's field falls to the
+    // surface at the seam between them and rises no further, so no cell refines there. Pulled two fine cells apart, the
+    // gap between them is one the fine lattice draws, and its cells refine.
+    [InlineData(0f, false)]
+    [InlineData((2f * Cell) / Factor, true)]
+    [Theory]
+    public void TouchingSolidsRefineNoCellWhereAGapTheFineCellsDrawDoes(float gap, bool refines) {
+        static float Slab(Vector3 point, float low, float high) {
+            var q = (Vector3.Abs(value: (point - new Vector3(x: (0.5f * (low + high)), y: 0.007f, z: -0.003f))) - new Vector3(x: (0.5f * (high - low)), y: 0.05f, z: 0.05f));
+
+            return (Vector3.Max(value1: q, value2: Vector3.Zero).Length() + MathF.Min(MathF.Max(q.X, MathF.Max(q.Y, q.Z)), 0f));
+        }
+        var count = ((Samples * Samples) * Samples);
+        var values = new float[count];
+
+        for (var index = 0; (index < count); index++) {
+            var point = (Origin + (new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples))) * Cell));
+
+            values[index] = MathF.Min(Slab(point: point, low: -0.0929f, high: 0.0071f), Slab(point: point, low: (0.0071f + gap), high: (0.1071f + gap)));
+        }
+
+        var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
+
+        Assert.Equal(expected: refines, actual: (lattice.Refine(factor: Factor).Length > 0));
+    }
+
     // A tilted disc thinner than the fine cell, which the fine samples alone catch in places and step over in others,
     // contours as one closed two-manifold, and no vertex strays from the disc by more than a fine cell. A field that
     // reads at a fifth of the distance (a scoped or flared shape's bound) contours the same, since the lattice measures

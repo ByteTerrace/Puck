@@ -48,9 +48,9 @@ resolves their edits to this file at merge.
    headless, its look in the lead's window.
 8. [Residency and streaming](#residency-and-streaming): near-first has landed;
    next, GI on the same demand points and the measurements still open.
-9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): re-run the mesh
-   comparisons on the corrected rounded-Box diagnostic, then the surviving red
-   findings by cluster; the reds fail every sweep.
+9. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the hall stairs'
+   inverted sheets along the divider; the colliders report's remaining reds are
+   the valley relief's ([the valley's terrain](#the-valleys-terrain)).
 10. [Debug tools](#debug-tools): a pick that addresses the presented view, lists
     it in `panes` and answers under pause, then the diagnostics' windowed checks
     and the developer exhibits.
@@ -444,25 +444,24 @@ Next: make the per-tick authority hash incremental (measured below).
 
 ### Collision versus drawn mesh
 
-Owner: next geometry and bake lane · red sweep signal · Next: re-run the
-rendered mesh comparisons on the corrected rounded-Box diagnostic, then the
-surviving red findings by cluster, starting with the hall stairs.
+Owner: next geometry and bake lane · ordinary · Next: the hall stairs' inverted
+sheets along the divider, then the 178 witnesses with no mesh correspondence.
+The rendered colliders report's only red findings left are the valley's relief
+([the valley's terrain](#the-valleys-terrain)).
 
-- The windowed collider and mesh disagreements: of the original 637 of 9,202 red
-  checks, buried shared stair faces were not exterior boundaries, and the
-  comparison now excludes certified opposing planar face interiors while still
-  measuring edges and corners. The last Vulkan sweep measured 243 red of 8,514
-  exterior checks and two field-versus-mesh failures, kept as 87 red findings
-  (24 hall-stairs, 17 Go table, eight camera-course). One stair witness lies
-  0.202341 m from the mesh against a 0.036705 m budget; the two Wonderland field
-  witnesses measure 0.005692 and 0.005615 m against 0.005305 and 0.005308 m.
-  No tolerance was widened. Headless measures the authored field with no mesh
-  comparison.
-- Re-run the rendered mesh comparisons on the corrected rounded-Box diagnostic
-  before attributing the earlier mesh witnesses to the bake: on the old sharp-Box
-  base the hall stairs (`flight-a-2-6`) had a nearest-surface gap and the
-  Wonderland stairs (`cases-8`) a mesh and field discrepancy just beyond their
-  bake precision.
+- The hall stairs' mesh carries inverted and doubled faces where flight A's
+  boxes meet the divider (x 12.1) and flight B's meet the east wall (x 12.3 and
+  14.1): `puck mesh audit --cpu --group "(hall-stairs)"` reports 1,557 flipped
+  triangles, 865 folds and 84 open edges, its worst clusters faces at 0.0 mm
+  off the field turned 180 degrees from its gradient (12.100, 5.828, 36.179).
+  The sweep's `finding-flight-a-level-1` stop ("dark patches where flight A
+  meets the wall") is likely this. A face two touching boxes share reads zero
+  in the union's field on both sides; find what samples or refines it, as the
+  touching seam under the Wonderland stairs did.
+- 178 collider witnesses find no retained triangle within the search radius
+  (`mesh correspondence uncertified` in the report's coverage); name their
+  placements and say whether each is a missing draw, a draw outside the static
+  trace scene or a search that should reach it.
 - A solid screen still collides as its world-axis bounds
   (`WorldColliderSet.ScreenBox`), exact only for an axis-aligned slab; it needs
   a rotation from its `Right` and `Up` frame.
@@ -1408,7 +1407,10 @@ the drawn relief. The measured state is in the
   on a wall floats over or sinks into the drawn relief by up to its amplitude
   (4 m on the sectors). The fixed-point render reading already evaluates
   `NoiseDisplace` deterministically; analytic contact needs a collider whose
-  surface is the relieved field, with a step bound for the sweep.
+  surface is the relieved field, with a step bound for the sweep. This is the
+  windowed colliders report's last red: 12 findings over 22 witnesses, the
+  sectors' superellipsoid colliders 2.7 to 5.6 m from the drawn relief against
+  2.4 to 2.7 m bake budgets, which fail every sweep's `colliders` signal.
 - A standing body creeps downslope on a curved superellipsoid: 2 cm a second on
   a 22 degree slope and 7 cm a second on a 58 degree one (`body.where` over 30
   ticks at rest, north sector).

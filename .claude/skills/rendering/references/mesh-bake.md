@@ -22,6 +22,11 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   fine from interpolated coarse values and merge each piece into one vertex,
   which keeps the mesh crack-free. Never refine a cell without that ring: a
   whole cell next to measured fine samples cracks (`SdfSampledLatticeLawTests`).
+  The ring's crossings carry interpolated coarse gradients, so a crease inside
+  it is cut: a gap between two inside samples refines only where the falls meet
+  half a fine cell below the surface. Solids that touch (a stair's treads, a
+  board on its table) meet at the surface, and refining that seam chamfered the
+  concave crease above it by a cell.
   Refining every cell instead (5 mm across the Moth) bakes about 8 M triangles
   in 20 s. A refinement past its fine-sample budget (`MaxFineSamples`) splits
   each cell into fewer fine cells, down to two, and contours whole only past
