@@ -181,7 +181,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     up: in up,
                     velocity: ref velocity
                 );
-                if (FixedVector3.Dot(left: push.Normal, right: up) >= GroundedThreshold) {
+                var alignment = FixedVector3.Dot(left: push.Normal, right: up);
+                if ((alignment > FixedQ4816.Zero) && (alignment >= GroundedThreshold)) {
                     support = new ContactSupportWitness(Collider: collider, ColliderIndex: index, Orientation: orientation,
                         Position: position, Push: push, Source: source, Volume: volume) {
                         BodyPoint = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)),

@@ -1,4 +1,7 @@
+using System.Numerics;
 using Puck.Maths;
+using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 
 namespace Puck.Physics.Tests;
 
@@ -6,14 +9,68 @@ namespace Puck.Physics.Tests;
 /// relieved creation's scoped field reads a fraction of its own) must still hold every body volume exactly the skin
 /// outside the sphere, along its radial normal, in any frame.</summary>
 public sealed class FieldColliderContactLawTests {
+    [Fact]
+    public void APositiveFieldScaleDoesNotEraseAMeasurableContact() {
+        var collider = FixedStaticCollider.FieldSurface(center: FixedVector3.Zero, rotation: FixedQuaternion.Identity,
+            halfExtent: V(x: 10d, y: 10d, z: 10d), field: new FixedColliderField(
+                field: new ScaledSphereField(radius: Radius, gain: Q(value: 1d / 1024d)),
+                boundScale: FixedQ4816.One, gradientStep: Q(value: 1d / 32d)));
+        var sphere = Capsule() with { Kind = FixedBodyColliderKind.Sphere, Center = FixedVector3.Zero, Radius = Q(value: 0.5d) };
+
+        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.25d, z: 0d),
+            push: out var push, skin: Skin, volume: sphere));
+        Near(expected: 0.3d, actual: push.Penetration);
+    }
+
+    [Fact]
+    public void AWalkableLimitThatRoundsToZeroDoesNotLiftAlongAVerticalFace() {
+        var threshold = FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: 89.9999f));
+        Assert.Equal(expected: FixedQ4816.Zero, actual: threshold);
+        var velocity = -FixedVector3.UnitX;
+        var trial = FixedContactPushMath.ComputeOrdinary(normal: FixedVector3.UnitX, penetration: Skin,
+            velocity: in velocity, up: FixedVector3.UnitY, groundedThreshold: threshold);
+
+        Assert.False(condition: trial.Grounded);
+        Assert.Equal(expected: FixedVector3.UnitX * Skin, actual: trial.PositionDelta);
+        Assert.Equal(expected: FixedVector3.UnitX, actual: trial.VelocityDelta);
+
+        var solver = new FixedStaticContactSolver(ContactSkin: Skin, GroundedThreshold: threshold, MaxIterations: 1);
+        var position = V(x: 0.1d, y: 0d, z: 0d);
+        var resolution = solver.Resolve(colliders: [FixedStaticCollider.HalfSpace(point: FixedVector3.Zero, normal: FixedVector3.UnitX)],
+            dynamicColliders: [], position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity,
+            volumes: [Capsule() with { Kind = FixedBodyColliderKind.Sphere, Center = FixedVector3.Zero }], up: FixedVector3.UnitY);
+        Assert.False(condition: resolution.Grounded);
+        Assert.Null(@object: resolution.Support);
+    }
+
+    [Fact]
+    public void AFloorNormalAtTheFootDoesNotHideContactAtTheHead() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+        _ = builder.Plane(material: material, normal: Vector3.UnitY, offset: 0f);
+        _ = builder.ResetPoint().Plane(material: material, normal: -Vector3.UnitY, offset: 2f);
+        var field = new SdfFieldEvaluator(program: builder.Build());
+        var collider = FixedStaticCollider.FieldSurface(center: FixedVector3.Zero, rotation: FixedQuaternion.Identity,
+            halfExtent: FixedVector3.Zero, field: new FixedColliderField(field: field,
+                boundScale: FixedQ4816.One, gradientStep: Q(value: 1d / 32d), bounded: false));
+
+        // The foot sphere clears y=0 by 0.2 m, while the head sphere crosses y=2 by 0.25 m.
+        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 0.2d, z: 0d),
+            push: out var push, skin: Skin, volume: Capsule()));
+        Near(expected: -1d, actual: push.Normal.Y);
+        Near(expected: 0.3d, actual: push.Penetration);
+    }
+
     // F(p) = gain·(|p| − radius): its zero set is the sphere, and value over gradient length is the exact distance.
     private sealed class ScaledSphereField(FixedQ4816 radius, FixedQ4816 gain) : IFieldEvaluator {
+        public int Samples { get; private set; }
         public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
 
         public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
             material = 0;
             distance = FixedQ4816.Zero;
             if (!position.TryDelta(delta: out var point, origin: FixedPosition.Zero)) { return false; }
+            Samples++;
             distance = (gain * (point.Length - radius));
             return true;
         }
@@ -74,13 +131,10 @@ public sealed class FieldColliderContactLawTests {
     [Fact]
     public void ABodyTheBoundScaleProvesClearTakesOneSampleAndNoPush() {
         var collider = Sphere(center: FixedVector3.Zero, rotation: FixedQuaternion.Identity);
-        var samples = FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.FieldSamples);
-        var queries = FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.FieldQueries);
+        var field = Assert.IsType<ScaledSphereField>(@object: collider.Field!.Field);
 
         Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), push: out _, skin: Skin, volume: Capsule()));
-        // Other tests may count into the process ledger at the same time, so the window bounds this query from below.
-        Assert.True(condition: (FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.FieldQueries) > queries));
-        Assert.True(condition: (FixedStaticContactWork.Process.Read(kind: FixedStaticContactWork.FieldSamples) > samples));
+        Assert.Equal(expected: 1, actual: field.Samples);
     }
 
     [Fact]
@@ -95,6 +149,7 @@ public sealed class FieldColliderContactLawTests {
 
         Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), push: out _, skin: Skin, volume: Capsule()));
         Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), push: out _, skin: Skin, volume: box));
+        Assert.Equal(expected: 0, actual: Assert.IsType<ScaledSphereField>(@object: plain.Field!.Field).Samples);
         Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 9.9d, z: 0d), push: out var push, skin: Skin, volume: Capsule()));
         Near(actual: push.Penetration, expected: 0.15d);
         Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.2d, z: 0d), push: out var boxPush, skin: Skin, volume: box));
@@ -153,16 +208,12 @@ public sealed class FieldColliderContactLawTests {
     }
 
     [Fact]
-    public void AFieldWithoutDirectionOrAnswerPushesNothing() {
+    public void ASymmetricFieldPointHasNoMeasuredNormal() {
         var collider = Sphere(center: FixedVector3.Zero, rotation: FixedQuaternion.Identity);
-        var sphere = new FixedBodyColliderVolume(Center: FixedVector3.Zero, Endpoint: FixedVector3.Zero, HalfExtents: FixedVector3.Zero,
-            Kind: FixedBodyColliderKind.Sphere, Radius: Q(value: 0.5d), Rotation: FixedQuaternion.Identity);
 
-        // At the sphere's centre every tap reads alike: no measured normal, no push, and no projection step.
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Skin, volume: sphere));
+        // At the sphere's centre every tap reads alike. This proves no normal, not clearance of an embedded body.
         Assert.False(condition: FixedFieldColliderContact.TryMeasure(collider: in collider, distance: out _, normal: out var none, point: FixedVector3.Zero));
         Assert.Equal(expected: FixedVector3.Zero, actual: none);
-        Assert.Equal(expected: (FixedVector3.Zero, FixedVector3.UnitY), actual: FixedFieldColliderContact.Nearest(collider: in collider, probe: FixedVector3.Zero));
     }
 
     // A field that answers only on one plane of y, reading zero there.

@@ -721,7 +721,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   its fillet radius, never the distant apex of a tilted ramp; an edge witness
   at or below the pre-move foot remains walkable support;
   resting and falling still meet the rounded surface. Every
-  boolean carve collides as the uncarved shape. Build a doorway,
+  boolean carve in an unrelieved analytic creation collides as the uncarved
+  shape; relieved field colliders retain the authored blends. Build a doorway,
   window or stairwell as a union of boxes around the opening, never a
   subtraction, and keep 2.4 m of headroom over every tread and landing (her
   height plus the 0.3 m step-up raise). `worlds/debug/hall.puck` is the

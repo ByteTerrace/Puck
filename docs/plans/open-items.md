@@ -30,13 +30,14 @@ The [refactoring campaign](#refactoring-campaign) comes first: the owner has
 lifted every test requirement so the next session can seriously improve the
 code (AGENTS.md). The packets below follow it.
 
-1. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the owner-visible
-   sub-cell features (stair holes and flipped faces, blind slats, shell seams)
-   fixed at the root in the bake. In flight: bake-seams (principal).
-2. [Lighting and GI](#lighting-and-gi): no dark interval before a cold area's
+1. [The valley's terrain](#the-valleys-terrain): the relief-contact review's
+   open highs (clearance certificates, fixed-point scope scaling, composed
+   bounds), then the terrain pass (docs/plans/terrain-pass.md).
+2. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups
+   sharp boxes left worse (the board game room's table, gallery floors 0, 2 and
+   3, the Wonderland room, the lift doors, the deck television).
+3. [Lighting and GI](#lighting-and-gi): no dark interval before a cold area's
    first irradiance level publishes.
-3. [The valley's terrain](#the-valleys-terrain): contact on the drawn relief
-   (in flight: relief-contact), then the terrain pass (docs/plans/terrain-pass.md).
 4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
    carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
@@ -1604,10 +1605,62 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 
 ### The valley's terrain
 
-Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
-Next: the [terrain pass](terrain-pass.md#order-of-work), whose steps take
+Owner: geometry and bake lane (sdf-authoring, rendering, physics) · high ·
+Next: resolve the relief-contact findings below, then the [terrain pass](terrain-pass.md#order-of-work), whose steps take
 the sub-points below (contact in step 5, the caps and bound in step 4). The
 measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built).
+
+- Relief-contact review (owner: geometry and bake lane):
+  - **R4 [high]** `src/Puck.Physics/FixedColliderField.cs:119`, `TryMeasure` and
+    `TryPush`: `F / |gradient|` is a first-order estimate, not a distance bound.
+    For a +Y plane with noise frequency 2, amplitude 0.4, three octaves,
+    gain 0.5, lacunarity 2, seed 7, a radius-0.35 sphere at
+    (-0.600006103515625, 0.1100006103515625, 0), skin 0.05, receives no push:
+    the measured distance is 0.4152069091796875, but its bottom reads
+    -0.0157470703125 (inside). The tap offset is 1/128 m. Also, the core's
+    16-sample cap and three refinements cannot certify thin features between
+    samples; box and ellipsoid contact samples only the centre. Use volume
+    bounds or certified subdivision and a converged surface solve. Merely
+    deleting the endpoint shortcut does not settle this finding.
+  - **R5 [high]** `src/Puck.World.Server/WorldColliderSet.Relief.cs:99` trusts
+    the program's global scale after scope quantization. Noise frequency 8,
+    amplitude 4, eight octaves, gain 1, lacunarity 4 (all admitted) produces
+    scope scale 0.0000017619569, compiled to zero at
+    `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:439`; `PopScope`
+    then skips scaling, while the global scale is 1. On a +Y plane, seed 7,
+    F(0) is 0.2293701171875 and F(1/1024, 0, 0) is -0.4313507080078125.
+    A radius-0.1 sphere at the origin with skin 0.05 is rejected by the
+    single-sample check despite containing that negative witness. Preserve
+    conservative scale/error bounds through fixed-point compilation; flooring
+    just the global scale does not suffice.
+  - **R6 [high]** `src/Puck.World.Server/WorldColliderSet.Relief.cs:50`
+    bounds the relieved field from primitive colliders plus noise amplitude,
+    omitting composition growth. Two coincident radius-1 spheres joined with
+    SmoothUnion radius 0.5 have an unrelieved zero set at radius 1.125. Noise
+    amplitude 0.01 leaves the outward surface beyond 1.115, but the compiled
+    collider's padded extent is only 1.04125. A radius-0.01 body at y=1.1,
+    skin 0.001, is inside the solid and outside the broadphase bound. Derive
+    bounds from the composed field, including blend growth, gauge scaling
+    and any inset used only by the analytic witness colliders. This case is
+    established from the formulas; the server fixture is not run.
+  - **R7 [medium]** `src/Puck.World.Server/WorldColliderSet.Relief.cs:116`
+    opens a field scope even when contact emission drops every shape. A
+    solid placement of a noisy creation containing only `detail` shapes
+    (or only sweeps) throws at `PopField` because no shape was emitted;
+    `WorldSolidField` has the same empty-scope path. Skip copies without
+    contact operands and reconcile the census in both providers. The review
+    tree restores only the Physics test closure: the required server build
+    with `--no-restore` fails NETSDK1004 for its missing assets file, so the
+    server fix and its execution remain with integration.
+  - **R8 [medium]** `src/Puck.Physics/FixedColliderField.cs:227`, `TryMeasure`
+    and `Nearest`: a zero gradient is treated as no collision, and a failed
+    projection returns its original probe as a surface. At a radius-10 sphere
+    field's centre, an embedded body receives no push and `TryNearest` accepts
+    an anchor at distance zero even with reach 0.1. The symmetric
+    field law must not require these false-clear results. Distinguish unproved contact from clear,
+    recover embedding without inventing a normal, and propagate projection
+    failure to attachment and diagnostic callers. Removing the absolute
+    small-gradient cutoff fixes measurable gradients only.
 
 - Valley review findings (Codex review of the valley merge `be0f38692`):
   - [medium] The superellipsoid's product-first rounding misclassifies small superellipsoids and disagrees with the HLSL: exponent 2, all radii 1/1024 m, p = (1/256, 0, 0) gives −1/1024 m on the CPU and +3/1024 m on the GPU, so contact and the drawn surface disagree at small sizes (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836`). One formula, exact at both ends of the radius range, on both sides.
@@ -1619,15 +1672,21 @@ measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built)
   `meter=none source=held` (EV 11.5 plus 2.5); the Direct3D 12 capture of the
   same pose read normally. The image meter (terrain pass step 1) owns it;
   check whether Vulkan only shows it before its bakes settle.
-- Field-collider cost: a Moth standing on relief spends about 70 field queries
+- Field-collider cost before the endpoint-shortcut correction: a Moth standing
+  on relief spends about 70 field queries
   and 420 relieved samples a tick, each six octaves of value noise (about
-  3.4 µs on a loaded machine). If the quiet rim p99 misses its bar, cut the
+  3.4 µs on a loaded machine). With the whole-core search a typical capsule
+  against a plane takes 12 relieved samples instead of 6; the worst core query
+  remains bounded by 27 field reads. Remeasure the quiet rim with many bodies
+  near relief; the earlier timings do not qualify the corrected search. If the
+  quiet rim p99 misses its bar, cut the
   octaves contact reads to the geometric ones (the terrain pass's step 3 cut),
   or take the noise's gradient in closed form with its value.
 - The field provider (`FixedFieldContactSolver`) reads a field's value as the
   distance, so over a relieved scope divided by its `L` it holds a body up to
   `L` times its skin off the rock; the analytic field collider measures the
-  distance as value over gradient length, and the provider should too.
+  distance as value over gradient length, which is also insufficient (R4);
+  both providers need the same certified surface solve.
 - A scoped static creation's instance bound is a sphere about the creation's
   origin (`WorldPlacementStamper`'s scoped branch), 770 m in radius for a sector
   centred on the ring's centre, so the bake's eight-cells-a-coarse-axis cap, not

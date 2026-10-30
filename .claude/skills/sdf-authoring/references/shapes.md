@@ -254,12 +254,18 @@ are the authored ones. Strands closer than twice their radius fuse.
   per stamped copy instead of its primitives' colliders. Its field is the
   copy's contact shapes in one scope with the relief over their union, the
   program the field provider reads too (`NoiseDisplace` is a contact op), so
-  contact and the bake read one field. The narrowphase measures distance as
+  contact and the bake read one field. The narrowphase estimates distance as
   the field over its gradient's length and proves a body clear from the
   shapes' unrelieved union grown by the amplitude (`FixedColliderField`,
   `FixedFieldColliderContact`); `world.counters physics.contact` prices it as
   `field-queries`, `field-bounds` and `field-samples`. Every boolean inside
   the creation still collides as its contact shapes do (detail shapes drop).
+  This estimate is not a conservative clearance certificate: curved relief,
+  quantized scope clamps, degenerate gradients and composed bounds have open
+  findings in the [terrain packet](../../../../docs/plans/open-items.md#the-valleys-terrain).
+  A capsule's endpoint normal does not certify the rest of a nonconvex core;
+  the contact search samples the whole core. Exact zero gradients still cannot
+  supply a measured contact normal; small nonzero gradients remain usable.
 
 A low-level SDF operation's CPU support does not guarantee that a creation's
 contact compiler emits it. Conversely, a supported primitive or profile name
