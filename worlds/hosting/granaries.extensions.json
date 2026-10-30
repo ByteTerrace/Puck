@@ -1,0 +1,65 @@
+{
+  "schema": "puck.world.extensions.v1",
+  "world": "debug",
+  "scanEveryTicks": 30,
+  "lineage": "7d3c1e52-9a64-4f0b-b1c8-2e5a96d04a37",
+  "providers": [
+    {
+      "name": "azure",
+      "type": "azure.resource",
+      "settings": {
+        "authentication": "azureCli"
+      }
+    }
+  ],
+  "operations": [],
+  "clients": [
+    {
+      "principal": "console",
+      "operations": [],
+      "requests": [
+        { "capability": "observe", "subject": "state:granaryNames" },
+        { "capability": "observe", "subject": "state:granaryResources" },
+        { "capability": "observe", "subject": "state:granaryRegions" },
+        { "capability": "observe", "subject": "state:granaryKinds" },
+        { "capability": "observe", "subject": "state:granarySkus" },
+        { "capability": "observe", "subject": "state:granaryFeed" },
+        { "capability": "mutate", "subject": "section:state" }
+      ]
+    }
+  ],
+  "connections": [],
+  "observations": [
+    {
+      "name": "partition-accounts",
+      "provider": "azure",
+      "client": "console",
+      "maximumItems": 16,
+      "refreshTicks": 1800,
+      "status": "granaryFeed",
+      "settings": {
+        "resourceGroup": "byteterrace",
+        "apiVersion": "2021-04-01",
+        "resourceType": "Microsoft.Storage/storageAccounts",
+        "namePrefix": "bytrcstp",
+        "excludeNames": [
+          "bytrcstp000"
+        ],
+        "fields": {
+          "name": "/name",
+          "id": "/id",
+          "region": "/location",
+          "kind": "/kind",
+          "sku": "/sku/name"
+        }
+      },
+      "fields": {
+        "name": "granaryNames",
+        "id": "granaryResources",
+        "region": "granaryRegions",
+        "kind": "granaryKinds",
+        "sku": "granarySkus"
+      }
+    }
+  ]
+}

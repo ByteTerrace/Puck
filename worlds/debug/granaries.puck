@@ -1,0 +1,833 @@
+import "inputs"
+import "shapes"
+
+// The granary board: the deployment's storage accounts as pieces on a tabletop board, at the board game room's
+// south-east table on level 2 (hall.puck). The debug world imports this file whole (before alchemy, so its cursor takes
+// the population's top slot; shapes.puck's granaryBodies). granaries.md beside this file says how to read the board,
+// run it against the synthetic feed and point it at a live subscription.
+//
+// An observation (hosting/granaries.extensions.json; `--extensions-config-file`) reads the platform's storage accounts
+// into the keyed text rows granaryNames, granaryResources, granaryRegions, granaryKinds and granarySkus, one cell per
+// account keyed by its name, and keeps `granaryFeed.status` (0 pending, 1 live, 2 offline) so the board can tell an empty
+// resource group from a feed that is not there. The board knows nothing of Azure: with no configuration the rows stay
+// empty and the board says so.
+//
+// The pieces are a deal. `granaryStores` is a placement carrying a `deal` facet over the granaryNames row: one child
+// piece per account, parented to the table at the cell its dealt slot names, its prototype chosen by the account's kind
+// (the variants map reads granaryKinds). The 16 board tiles each carry an influence volume on their own channel, so a
+// rule finds the cell a piece stands on by asking which tile covers it (`granaryCellOf`), and the occupancy row
+// `granaryBoard` (the board facet's own row, over the grid `granaryGrid`) follows. Water and power are two providers at
+// the board's rims whose coverage grows in three stages; the coverage rows hold, per account, how many providers cover
+// its piece.
+//
+// A seated player moves the cursor over the grid (pointer, keys, pad: the shared board page of chess.puck) and the
+// lectern's screen reads the piece under it: name, region, kind and SKU.
+
+let granaryTable = [65, 8.55, 14.6]
+let granarySize = 4
+let granaryCells = (granarySize * granarySize)
+let granaryCellSize = 0.15
+// The board's playing surface over the table's origin; the tabletop's own top is at 1.3.
+let granarySurface = 1.355
+let granaryCorner = (0 - ((granarySize * granaryCellSize) / 2))
+let granaryFirst = (granaryCorner + (granaryCellSize / 2))
+
+// The coverage stages: the half extent, in metres, a provider reaches at each stage along both board axes. Stage 0
+// covers the provider's own corner cell, stage 1 the 2 by 2 block, stage 2 the 3 by 3 block.
+let granaryReach = [0.1, 0.22, 0.38]
+let granaryReachVolume = map(granaryReach, h => $"[{h}, 0.01, {h}]")
+let granaryReachPatch = map(granaryReach, h => $"[{h}, 0.004, {h}]")
+
+let granaryInk = "#E6D1A3"
+let granaryPaper = "#231A14"
+let granaryCursorColor = "#3FA9F5"
+
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "granaryCursor"
+    scale: 1
+    source: creation(prototypeId: granaryCursor)
+  }
+]
+
+placements {
+  placement "granaryTable" {
+    prototype: "granaryTable"
+    board {
+      occupancy: "granaryBoard"
+      topology: "granaryGrid"
+      // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera looks
+      // down on the board from the seat's side and the pointer picks cells 2 cm over the board's face.
+      engage {
+        channel: "interact"
+        radius: 2.5
+        pitch: 62
+        margin: 0.12
+        surface: 0.02
+      }
+    }
+    position: granaryTable
+    solid
+  }
+
+  // The cell cursor a seated player moves.
+  placement "granaryCursor" {
+    prototype: "granaryCursor"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "boardCursor"
+      look: "granaryCursor"
+      source: "Idle"
+    }
+    parent: "granaryTable"
+    position [0, 1.33, 0]
+  }
+
+  // The pieces: one child per account, dealt over the 4 by 4 lattice of cell centres, cell = 4 * row + column (rows run
+  // +Z, columns +X, as in `granaryGrid`). The template renders nothing; the occupation volume is what the tiles' channels
+  // and the providers' coverage find.
+  placement "granaryStores" {
+    prototype: "granaryPiece"
+    parent: "granaryTable"
+    position [granaryFirst, granarySurface, granaryFirst]
+    spatial [
+      {
+        name: "piece-occupation"
+        role: "Occupation"
+        shape {
+          kind: "Box"
+          center [0, 0.04, 0]
+          halfExtents [0.06, 0.04, 0.06]
+        }
+      }
+    ]
+    distribution {
+      fill {
+        name: "none"
+        offset: 0
+        step: 0
+      }
+      region: lattice(
+        countA: granarySize,
+        countB: granarySize,
+        stepA: [0, 0, granaryCellSize],
+        stepB: [granaryCellSize, 0, 0]
+      )
+    }
+    "deal" {
+      row: "granaryNames"
+      variants {
+        row: "granaryKinds"
+        map {
+          StorageV2: "granaryPieceV2"
+          BlobStorage: "granaryPieceBlob"
+          BlockBlobStorage: "granaryPieceBlock"
+          FileStorage: "granaryPieceFile"
+        }
+      }
+    }
+  }
+
+  // The tiles: 16 felt squares, each a coverage volume on its own channel, so a piece standing on a tile is found by the
+  // channel `cell<ordinal>`.
+  for r in range(0, granarySize) {
+    for c in range(0, granarySize) {
+      placement $"granaryTile-{r * granarySize + c}" {
+        prototype: "granaryTile"
+        parent: "granaryTable"
+        position [
+          (granaryCorner + (granaryCellSize * (c + 0.5))),
+          (granarySurface - 0.0075),
+          (granaryCorner + (granaryCellSize * (r + 0.5)))
+        ]
+        spatial: map(range(0, 5), b => {
+          name: $"cover{b}"
+          role: "Influence"
+          channel: (b == 4) ? "tile" : ((((r * granarySize + c) >> b) & 1) == 1) ? $"bit{b}" : "off"
+          shape {
+            kind: "Box"
+            center [0, 0.0475, 0]
+            halfExtents [0.07, 0.01, 0.07]
+          }
+        })
+      }
+    }
+  }
+
+  // The providers sit outside the board's rims; each volume is centred on its corner cell and sized by its stage.
+  placement "granaryIrrigation" {
+    prototype: "granaryIrrigation"
+    parent: "granaryTable"
+    position [-0.55, granarySurface, granaryFirst]
+    spatial [
+      {
+        name: "irrigation-coverage"
+        role: "Influence"
+        channel: "water"
+        shape {
+          kind: "Box"
+          center [(0.55 + granaryFirst), 0.0475, 0]
+          halfExtents: "state.granaryIrrigationSelected"
+        }
+      }
+    ]
+  }
+
+  placement "granaryPower" {
+    prototype: "granaryPower"
+    parent: "granaryTable"
+    position [0.55, granarySurface, (0 - granaryFirst)]
+    spatial [
+      {
+        name: "power-coverage"
+        role: "Influence"
+        channel: "power"
+        shape {
+          kind: "Box"
+          center [((0 - granaryFirst) - 0.55), 0.0475, 0]
+          halfExtents: "state.granaryPowerSelected"
+        }
+      }
+    ]
+  }
+}
+
+// At the table's -Z edge, 1.6 m from the board's centre and facing it, inside the engage radius: the context button sits
+// her down.
+spawnPoints [
+  { id: "granaries", position [granaryTable[0], galleryFloor[2], (granaryTable[2] - 1.6)], yawDegrees: 180 }
+]
+
+// The board page and the readout. The lectern screen sits on the table's +Z edge, tilted back toward the seat.
+screens [
+  {
+    index: 17
+    origin [granaryTable[0], (granaryTable[1] + 1.592), (granaryTable[2] + 0.58)]
+    right [-1, 0, 0]
+    up [0, 0.866025, 0.5]
+    halfWidth: 0.35
+    halfHeight: 0.19
+    halfDepth: 0.004
+    round: 0
+    luminance: 180nit
+    source: text(
+      columns: 34,
+      rows: 8,
+      foreground: granaryInk,
+      background: granaryPaper,
+      lines: [
+        "GRANARY BOARD"
+        "{state.granaryNote.feed}"
+        "ACCOUNTS {state.granaryTally.accounts}  WATER {state.granaryTally.watered}  POWER {state.granaryTally.powered}"
+        "CELL     {state.granarySeat.cursor}"
+        "NAME     {state.granarySel.name}"
+        "REGION   {state.granarySel.region}"
+        "KIND     {state.granarySel.kind}"
+        "SKU      {state.granarySel.sku}"
+      ]
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+]
+
+prototypes {
+  prototype "granaryTable" {
+    document {
+      name: "granaryTable"
+      palette [
+        { color: "#8A6A45" }
+        { color: "#141816", roughness: 0.7 }
+        { color: "#3E2B1D", roughness: 0.75, specular: 0.08 }
+        { color: "#D6A13E", metal: 0.85, roughness: 0.3, specular: 0.4 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "top" {
+        material: 0
+        position [0, 1.25, 0]
+        scale [1.75, 0.05, 0.85]
+      }
+      for x in [-1.1, 1.1] {
+        shape Cylinder $"leg-{x}" {
+          material: 0
+          position [x, 0.855, 0]
+          scale [0.08, 0.355, 0.08]
+        }
+        shape Cylinder $"foot-{x}" {
+          material: 0
+          position [x, 0.52, 0]
+          scale [0.35, 0.02, 0.35]
+        }
+      }
+      // The board: a dark base the tiles' seams show, inside a dark rim flush with the tiles' faces.
+      shape Box "base" {
+        material: 1
+        position [0, 1.32, 0]
+        scale [0.31, 0.02, 0.31]
+      }
+      shape Box "rim-north" {
+        material: 1
+        position [0, 1.3275, 0.345]
+        scale [0.385, 0.0275, 0.035]
+      }
+      shape Box "rim-south" {
+        material: 1
+        position [0, 1.3275, -0.345]
+        scale [0.385, 0.0275, 0.035]
+      }
+      shape Box "rim-east" {
+        material: 1
+        position [0.345, 1.3275, 0]
+        scale [0.035, 0.0275, 0.31]
+      }
+      shape Box "rim-west" {
+        material: 1
+        position [-0.345, 1.3275, 0]
+        scale [0.035, 0.0275, 0.31]
+      }
+      // The lectern behind the board on the +Z edge, holding the screen.
+      shape Box "lectern-foot" {
+        material: 3
+        position [0, 1.312, 0.64]
+        scale [0.16, 0.012, 0.12]
+      }
+      shape Cylinder "lectern-stem" {
+        material: 0
+        position [0, 1.44, 0.64]
+        scale [0.04, 0.14, 0.04]
+      }
+      shape Box "lectern-board" {
+        material: 2
+        position [0, 1.58, 0.6]
+        rotation [-0.258819, 0, 0, 0.965926]
+        scale [0.38, 0.22, 0.018]
+      }
+      shape Box "lectern-lip" {
+        material: 3
+        position [0, 1.47, 0.5]
+        rotation [-0.258819, 0, 0, 0.965926]
+        scale [0.38, 0.015, 0.03]
+      }
+    }
+  }
+
+  prototype "granaryTile" {
+    document {
+      name: "granaryTile"
+      palette [{ color: "#6E7A52", roughness: 0.85, specular: 0.04 }]
+      schema: "puck.creation.v1"
+      shape Box "tile" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.07, 0.0075, 0.07]
+      }
+    }
+  }
+
+  prototype "granaryCursor" {
+    document {
+      name: "granaryCursor"
+      palette [{ color: granaryCursorColor, roughness: 0.4, specular: 0.3 }]
+      schema: "puck.creation.v1"
+      shape Box "near" {
+        material: 0
+        position [0, 0.0025, -0.0715]
+        scale [0.0775, 0.0025, 0.004]
+      }
+      shape Box "far" {
+        material: 0
+        position [0, 0.0025, 0.0715]
+        scale [0.0775, 0.0025, 0.004]
+      }
+      shape Box "left" {
+        material: 0
+        position [-0.0715, 0.0025, 0]
+        scale [0.004, 0.0025, 0.0675]
+      }
+      shape Box "right" {
+        material: 0
+        position [0.0715, 0.0025, 0]
+        scale [0.004, 0.0025, 0.0675]
+      }
+    }
+  }
+
+  // Every piece is a small timber store: a stone foot, a body, a gabled roof and a door. The kind sets the body and roof
+  // colours; the plain piece, dealt for a kind with no entry above, is grey.
+  granaryStore("granaryPiece", "#8C8C8C", "#5A5A5A")
+  granaryStore("granaryPieceV2", "#AE7144", "#496F68")
+  granaryStore("granaryPieceBlob", "#C9A56A", "#7A4A2A")
+  granaryStore("granaryPieceBlock", "#6F8FA8", "#263D43")
+  granaryStore("granaryPieceFile", "#A8566B", "#4A2A35")
+
+  prototype "granaryIrrigation" {
+    document {
+      name: "granaryIrrigation"
+      palette [
+        { color: "#2E9FD0", roughness: 0.3, specular: 0.3 }
+        { color: "#174E6A" }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "water-marker" {
+        position [0, 0.05, 0]
+        scale [0.02, 0.05, 0.02]
+        material: 0
+      }
+      shape Cylinder "water-cap" {
+        position [0, 0.108, 0]
+        scale [0.035, 0.008, 0.035]
+        material: 1
+      }
+      shape Box "water-coverage-patch" {
+        position [(0.55 + granaryFirst), 0.0125, 0]
+        scale: "state.granaryIrrigationPatch"
+        material: 0
+      }
+    }
+  }
+
+  prototype "granaryPower" {
+    document {
+      name: "granaryPower"
+      palette [
+        { color: "#E0B84C", roughness: 0.3, specular: 0.3 }
+        { color: "#76551B" }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "power-marker" {
+        position [0, 0.06, 0]
+        scale [0.02, 0.06, 0.02]
+        material: 0
+      }
+      shape Box "power-cap" {
+        position [0, 0.126, 0]
+        scale [0.035, 0.006, 0.035]
+        material: 1
+      }
+      shape Box "power-coverage-patch" {
+        position [((0 - granaryFirst) - 0.55), 0.0125, 0]
+        scale: "state.granaryPowerPatch"
+        material: 0
+      }
+    }
+  }
+}
+
+// Every piece is a small timber store: a stone foot, a body, a gabled roof and a door. The kind sets the body and roof
+// colours; the plain piece, dealt for a kind with no entry in granaryKindPieces, is grey.
+template granaryStore(name, body, roof) {
+  prototype name {
+    document {
+      name: name
+      palette [
+        { color: body, roughness: 0.7, specular: 0.08 }
+        { color: roof, roughness: 0.6, specular: 0.1 }
+        { color: "#513F33", roughness: 0.8 }
+        { color: "#B4A283", roughness: 0.9 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "stone-foot" {
+        material: 3
+        position [0, 0.006, 0]
+        scale [0.058, 0.006, 0.056]
+      }
+      shape Box "timber-store" {
+        material: 0
+        position [0, 0.034, 0]
+        scale [0.048, 0.022, 0.044]
+      }
+      shape Box "roof-west" {
+        material: 1
+        position [-0.027, 0.066, 0]
+        rotation [0, 0, 0.2419219, 0.9702957]
+        scale [0.034, 0.004, 0.054]
+      }
+      shape Box "roof-east" {
+        material: 1
+        position [0.027, 0.066, 0]
+        rotation [0, 0, -0.2419219, 0.9702957]
+        scale [0.034, 0.004, 0.054]
+      }
+      shape Box "door" {
+        material: 2
+        position [0, 0.028, 0.0445]
+        scale [0.016, 0.02, 0.002]
+      }
+    }
+  }
+}
+
+// ---- Finding each piece's cell ----------------------------------------------------------------------------------------
+// The tiles' channels `bit0`..`bit3` and `tile` code the cell a piece stands on: an account's cell is the sum of the bits that cover its piece. A piece the deal removes leaves the row; its cell and
+// coverage cells are cleaned on the tick after, once the influence no longer reads.
+
+rule "granary-locate" {
+  local at = (1 +
+    (influence(bit0, granaryStores)[$each] ?? 0) +
+    2 * (influence(bit1, granaryStores)[$each] ?? 0) +
+    4 * (influence(bit2, granaryStores)[$each] ?? 0) +
+    8 * (influence(bit3, granaryStores)[$each] ?? 0)
+  )
+  when influence(tile, granaryStores)[$each] >= 1 and granaryCellOf[$each] != at
+  mode: Level
+  forEach: granaryNames
+  granaryCellOf[$each] = at
+}
+
+template granaryBoardCell(cell, ordinal) {
+  rule $"granary-board-{cell}" {
+    local held = count(granaryCellOf, atLeast: ordinal, atMost: ordinal)
+    when not granaryBoard[cell] == held
+    mode: Level
+    granaryBoard[cell] = held
+  }
+}
+
+for c in range(0, granaryCells) {
+  granaryBoardCell(c, (c + 1))
+}
+
+rule "granary-cell-cleanup" {
+  when not influence(water, granaryStores)[$each] == influence(water, granaryStores)[$each]
+  mode: Level
+  forEach: granaryCellOf
+  remove granaryCellOf[$each]
+}
+
+rule "granary-water-coverage-cleanup" {
+  when not influence(water, granaryStores)[$each] == influence(water, granaryStores)[$each]
+  mode: Level
+  forEach: granaryWaterCoverage
+  remove granaryWaterCoverage[$each]
+}
+
+rule "granary-power-coverage-cleanup" {
+  when not influence(power, granaryStores)[$each] == influence(power, granaryStores)[$each]
+  mode: Level
+  forEach: granaryPowerCoverage
+  remove granaryPowerCoverage[$each]
+}
+
+rule "granary-water-coverage" {
+  when influence(water, granaryStores)[$each] >= 0 and not granaryWaterCoverage[$each] == influence(water, granaryStores)[$each]
+  mode: Level
+  forEach: granaryNames
+  setState(state: granaryWaterCoverage, key: $each, fromState: influence(water, granaryStores), fromKey: $each)
+}
+
+rule "granary-power-coverage" {
+  when influence(power, granaryStores)[$each] >= 0 and not granaryPowerCoverage[$each] == influence(power, granaryStores)[$each]
+  mode: Level
+  forEach: granaryNames
+  setState(state: granaryPowerCoverage, key: $each, fromState: influence(power, granaryStores), fromKey: $each)
+}
+
+// ---- Growing the providers --------------------------------------------------------------------------------------------
+// A request names a stage; the rule commits the stage and the vectors the provider's volume and patch bind to together.
+
+rule "granary-irrigation-stage" {
+  when granaryIrrigationRequest != granaryIrrigationStage
+  mode: Level
+  transaction {
+    setState(state: granaryIrrigationStage, expression: granaryIrrigationRequest)
+    setState(state: granaryIrrigationSelected, fromState: granaryIrrigationVolumes, fromKey: (granaryIrrigationRequest))
+    setState(state: granaryIrrigationPatch, fromState: granaryIrrigationPatches, fromKey: (granaryIrrigationRequest))
+  }
+}
+
+rule "granary-power-stage" {
+  when granaryPowerRequest != granaryPowerStage
+  mode: Level
+  transaction {
+    setState(state: granaryPowerStage, expression: granaryPowerRequest)
+    setState(state: granaryPowerSelected, fromState: granaryPowerVolumes, fromKey: (granaryPowerRequest))
+    setState(state: granaryPowerPatch, fromState: granaryPowerPatches, fromKey: (granaryPowerRequest))
+  }
+}
+
+// ---- The readout ------------------------------------------------------------------------------------------------------
+
+rule "granary-tally" {
+  mode: Level
+  granaryTally.accounts = count(granaryCellOf, atLeast: 1, atMost: 16)
+  granaryTally.watered = count(granaryWaterCoverage, atLeast: 1, atMost: 99)
+  granaryTally.powered = count(granaryPowerCoverage, atLeast: 1, atMost: 99)
+}
+
+// The feed line: no configuration at all, an unavailable or unauthorised provider, a live feed with nothing in the
+// group, and a live feed.
+rule "granary-feed-pending" {
+  when granaryFeed.status == 0
+  mode: Level
+  setState(state: granaryNote, key: feed, text: "FEED  NONE  AZURE NOT CONNECTED")
+}
+
+rule "granary-feed-offline" {
+  when granaryFeed.status == 2
+  mode: Level
+  setState(state: granaryNote, key: feed, text: "FEED  OFFLINE  UNAVAILABLE OR UNAUTHORISED")
+}
+
+rule "granary-feed-empty" {
+  when granaryFeed.status == 1 and granaryTally.accounts == 0
+  mode: Level
+  setState(state: granaryNote, key: feed, text: "FEED  LIVE  NO STORAGE ACCOUNTS")
+}
+
+rule "granary-feed-live" {
+  when granaryFeed.status == 1 and granaryTally.accounts > 0
+  mode: Level
+  setState(state: granaryNote, key: feed, text: "FEED  LIVE")
+}
+
+// What the lectern shows for the piece under the cursor, and nothing for an empty cell.
+rule "granary-inspect-piece" {
+  when granaryCellOf[$each] == granarySeat.cursor + 1
+  mode: Level
+  forEach: granaryNames
+  setState(state: granarySel, key: name, fromState: granaryNames, fromKey: $each)
+  setState(state: granarySel, key: region, fromState: granaryRegions, fromKey: $each)
+  setState(state: granarySel, key: kind, fromState: granaryKinds, fromKey: $each)
+  setState(state: granarySel, key: sku, fromState: granarySkus, fromKey: $each)
+}
+
+rule "granary-inspect-empty" {
+  when granaryBoard[granarySeat.cursor] == 0
+  mode: Level
+  setState(state: granarySel, key: name, text: "")
+  setState(state: granarySel, key: region, text: "")
+  setState(state: granarySel, key: kind, text: "")
+  setState(state: granarySel, key: sku, text: "")
+}
+
+// ---- Seated play at the table -----------------------------------------------------------------------------------------
+// Seat 1 sits down with the context button (the board's engage block) and moves the cursor with the shared tabletop page
+// (chess.puck): the pointer, the movement keys, the d-pad or the stick, one cell a press.
+
+rule "granary-seat-presses" {
+  mode: Level
+  if board(engaged, granaryBoard, 1) == 1 and channel(1, forward) >= 0.5 {
+    granarySeat.aheadEdge = granarySeat.aheadDown == 0
+    granarySeat.aheadDown = 1
+  } else {
+    granarySeat.aheadEdge = 0
+    granarySeat.aheadDown = 0
+  }
+  if board(engaged, granaryBoard, 1) == 1 and channel(1, forward) <= -0.5 {
+    granarySeat.behindEdge = granarySeat.behindDown == 0
+    granarySeat.behindDown = 1
+  } else {
+    granarySeat.behindEdge = 0
+    granarySeat.behindDown = 0
+  }
+  if board(engaged, granaryBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
+    granarySeat.rightEdge = granarySeat.rightDown == 0
+    granarySeat.rightDown = 1
+  } else {
+    granarySeat.rightEdge = 0
+    granarySeat.rightDown = 0
+  }
+  if board(engaged, granaryBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
+    granarySeat.leftEdge = granarySeat.leftDown == 0
+    granarySeat.leftDown = 1
+  } else {
+    granarySeat.leftEdge = 0
+    granarySeat.leftDown = 0
+  }
+}
+
+rule "granary-seat-point" {
+  local pointed = board(pointer, granaryBoard, 1)
+  when board(engaged, granaryBoard, 1) == 1
+  mode: Level
+  if pointed >= 0 and pointed != granarySeat.pointer {
+    granarySeat.cursor = pointed
+  }
+  granarySeat.pointer = pointed
+}
+
+// A step moves the cursor one cell in the seat's own frame, as the other tables do.
+rule "granary-seat-step" {
+  local seatSide = board(side, granaryBoard, 1)
+  local cursorColumn = (
+    granarySeat.cursor % granarySize +
+    (granarySeat.aheadEdge - granarySeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
+    (granarySeat.rightEdge - granarySeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
+  )
+  local cursorRow = (
+    granarySeat.cursor / granarySize +
+    (granarySeat.aheadEdge - granarySeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
+    (granarySeat.rightEdge - granarySeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
+  )
+  when (granarySeat.aheadEdge - granarySeat.behindEdge) or (granarySeat.rightEdge - granarySeat.leftEdge)
+  mode: Level
+  granarySeat.cursor = clamp(cursorRow, 0, granarySize - 1) * granarySize + clamp(cursorColumn, 0, granarySize - 1)
+}
+
+// The cursor stands on its cell while the seat sits at the table, and rests inside the board otherwise.
+rule "granary-seat-cursor-shown" {
+  when board(engaged, granaryBoard, 1) == 1
+  mode: Level
+  poseCell(
+    key: `placement:granaryCursor`,
+    topology: granaryGrid,
+    expression: granarySeat.cursor,
+    offset: [0, 0.004, 0]
+  )
+}
+
+rule "granary-seat-cursor-parked" {
+  when board(engaged, granaryBoard, 1) == 0
+  mode: Level
+  poseCell(
+    key: `placement:granaryCursor`,
+    topology: granaryGrid,
+    expression: granarySeat.cursor,
+    offset: [0, -0.035, 0]
+  )
+}
+
+commands [
+  {
+    name: "granary.water"
+    help: "Sets the granary board's irrigation provider to a coverage stage: 0 the corner cell, 1 the 2 by 2 block, 2 the 3 by 3 block."
+    parameters [
+      { name: "stage", kind: Choice, values ["0", "1", "2"], default: "0" }
+    ]
+    lines [
+      "world.state.cell.set granaryIrrigationRequest $value {stage}"
+    ]
+  }
+  {
+    name: "granary.power"
+    help: "Sets the granary board's power provider to a coverage stage: 0 the corner cell, 1 the 2 by 2 block, 2 the 3 by 3 block."
+    parameters [
+      { name: "stage", kind: Choice, values ["0", "1", "2"], default: "0" }
+    ]
+    lines [
+      "world.state.cell.set granaryPowerRequest $value {stage}"
+    ]
+  }
+]
+
+state {
+  lattices [
+    grid(
+      band: 0.12,
+      cellSize: granaryCellSize,
+      depth: granarySize,
+      width: granarySize,
+      origin: [granaryCorner, granarySurface, granaryCorner],
+      name: "granaryGrid",
+      wrap: None
+    )
+  ]
+
+  world {
+    // The feed's rows: one cell per storage account, keyed by its name. The observation owns them (the configuration
+    // names each), and the deal reads granaryNames and granaryKinds.
+    row { name: "granaryNames", kind: "Text", capacity: 16, cells [], visibility {} }
+    row { name: "granaryResources", kind: "Text", capacity: 16, cells [], visibility {} }
+    row { name: "granaryRegions", kind: "Text", capacity: 16, cells [], visibility {} }
+    row { name: "granaryKinds", kind: "Text", capacity: 16, cells [], visibility {} }
+    row { name: "granarySkus", kind: "Text", capacity: 16, cells [], visibility {} }
+
+    // The feed's state, kept by the host: 0 pending (no feed, or no read yet), 1 live, 2 offline.
+    row { name: "granaryFeed", kind: "Int", capacity: 1, min: 0, max: 2, cells [{ key: "status", value: 0 }], visibility {} }
+
+    // The play board: 1 where a piece stands, over the same grid the pieces are dealt on; and each account's cell.
+    row {
+      name: "granaryBoard"
+      kind: "Int"
+      capacity: granaryCells
+      min: 0
+      max: 1
+      domain: cellsOf(topology: granaryGrid)
+      cells: map(range(0, granaryCells), i => { key: $"{i}", value: 0 })
+    }
+    row { name: "granaryCellOf", kind: "Int", capacity: 16, min: 1, max: 16, cells [], visibility {} }
+
+    // How many providers cover each account's piece.
+    row { name: "granaryWaterCoverage", kind: "Int", capacity: 16, min: 0, max: 99, cells [], visibility {} }
+    row { name: "granaryPowerCoverage", kind: "Int", capacity: 16, min: 0, max: 99, cells [], visibility {} }
+
+    row {
+      name: "granaryIrrigationVolumes"
+      kind: "Text"
+      capacity: 3
+      cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachVolume[i] })
+      visibility {}
+    }
+    row {
+      name: "granaryIrrigationPatches"
+      kind: "Text"
+      capacity: 3
+      cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
+      visibility {}
+    }
+    row { name: "granaryIrrigationSelected", kind: "Text", value: granaryReachVolume[0], visibility {} }
+    row { name: "granaryIrrigationPatch", kind: "Text", value: granaryReachPatch[0], visibility {} }
+    row {
+      name: "granaryPowerVolumes"
+      kind: "Text"
+      capacity: 3
+      cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachVolume[i] })
+      visibility {}
+    }
+    row {
+      name: "granaryPowerPatches"
+      kind: "Text"
+      capacity: 3
+      cells: map(range(0, 3), i => { key: $"{i}", value: granaryReachPatch[i] })
+      visibility {}
+    }
+    row { name: "granaryPowerSelected", kind: "Text", value: granaryReachVolume[0], visibility {} }
+    row { name: "granaryPowerPatch", kind: "Text", value: granaryReachPatch[0], visibility {} }
+    slot granaryIrrigationRequest = 0 bounds(0..2)
+    slot granaryIrrigationStage = 0 bounds(0..2)
+    slot granaryPowerRequest = 0 bounds(0..2)
+    slot granaryPowerStage = 0 bounds(0..2)
+
+    // What the lectern shows: the feed line, the tallies, the cell under the cursor and the piece on it.
+    table granaryNote {
+      feed = ""
+    }
+    table granaryTally {
+      accounts = 0
+      watered = 0
+      powered = 0
+    }
+    table granarySel {
+      name = ""
+      region = ""
+      kind = ""
+      sku = ""
+    }
+
+    // Seat 1 at the table: the cursor's cell, the last pointed cell, this tick's presses (the *Edge keys) and last
+    // tick's buttons (*Down).
+    table granarySeat {
+      cursor = 0
+      pointer = -1
+      aheadEdge = 0
+      behindEdge = 0
+      rightEdge = 0
+      leftEdge = 0
+      aheadDown = 0
+      behindDown = 0
+      rightDown = 0
+      leftDown = 0
+    }
+  }
+}
