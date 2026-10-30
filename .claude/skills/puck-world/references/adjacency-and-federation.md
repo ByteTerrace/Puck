@@ -329,6 +329,27 @@ refusal, since the store reconciles its own commit point. Laws:
 `CrossingUncertaintyLawTests` (each crash point, with red legs replaying the
 refusal) and `WorldSiloCrossingRecoveryLawTests`.
 
+### Companion custody records
+
+An owned traveller's title, custody and epoch (the
+[custody protocol](../../../../docs/plans/companion-redesign.md)) are a fold of
+its authorities' custody records: `Hop`, `HopDone`, `HopAcked`, `Recall`,
+`Noticed`, `Release`, `Retire`, `Stranded` and `GraceElapsed` in
+`WorldCrossingRecord`, plus an `Arrival` whose `Readopted` list brings a title
+home. `WorldServer.RecordCustody` appends one record per call through the same
+crossing log and folds it into `WorldTransferEscrow.Custody`
+(`WorldCompanionCustody`) only once it is durable; an uncertain one latches
+the authority (`WorldServer.IsUncertainAbout(key)`) and folds only on recovery.
+The one reducer, `WorldCompanionCustody.Apply`, is what the escrow checkpoint
+restores (it carries the folded history), what `RecoverCrossings` redoes, and
+what a tape's `WorldReplayEntry.Custody` re-drives; the history folds into the
+authoritative hash (`WorldStateHashComponent.Custody`). Home holds titles only
+for incarnations it minted (`TitleOf` answers `null` otherwise); a release
+installed while a hop is pending keeps the title pending until that hop's
+`HopDone`. `Settlement` names its landed and retired member ids; every other
+member is restored. Laws: `CompanionCustodyLawTests` (engine forms of the
+model's named traces, and a tick-for-tick replay with its red leg).
+
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and
 `WorldSeatAuthorityRouter` publishes the complete claim with CAS. Rendering,

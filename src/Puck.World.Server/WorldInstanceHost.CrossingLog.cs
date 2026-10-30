@@ -108,8 +108,11 @@ public sealed partial class WorldInstanceHost {
         if (!source.Server.TryRecordCrossing(
             reason: out var reason,
             record: new WorldCrossingRecord.Settlement(
-                Arrived: arrived,
                 Forwarded: forwarded,
+                Landed: (arrived
+                    ? [.. Enumerable.Range(start: 0, count: pending.MemberCount)]
+                    : []),
+                Retired: [],
                 TransferId: pending.Transfer.TransferId
             )
         )) {
@@ -197,6 +200,11 @@ public sealed partial class WorldInstanceHost {
                         val1: row.NextTransferId,
                         val2: allocation.Next
                     );
+                    break;
+                case WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
+                    WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or
+                    WorldCrossingRecord.Stranded or WorldCrossingRecord.GraceElapsed:
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.Apply(record: entry.Record));
                     break;
                 default:
                     throw new ArgumentException(

@@ -897,12 +897,15 @@ set and component chrome out of the core sets; then the overlay text's advance.
 ### Transfers, federation and server
 
 Owner: specialist, transfers and server · medium · Next: build the companion
-decision along the [custody protocol](companion-redesign.md) (the companion lands
-inert in the live debug world today; two builds of the decision failed review on
-trust, away bookkeeping and the custody key, so the protocol is specified per
-authority and checked by the `CompanionCustodyModel` law in
-`tests/Puck.World.Protocol.Tests`, which the build follows as its oracle), then
-the uncertain crossing, opened by a two-silo failover witness.
+decision along the [custody protocol](companion-redesign.md) from step 2 of its
+build plan (member ids and tickets, then hop authorization and verification);
+step 1, the custody records and their reducer (`WorldCompanionCustody`, folded
+by checkpoint restore, crossing-log recovery and the tape's `Custody` entry, and
+by the authoritative hash), stands with its laws in `CompanionCustodyLawTests`.
+The companion still lands inert in the live debug world. The protocol is
+checked by the `CompanionCustodyModel` law in `tests/Puck.World.Protocol.Tests`,
+which the build follows as its oracle. Then the uncertain crossing, opened by a
+two-silo failover witness.
 
 - [medium] A rule firing costs the world host far more than the work sheet
   prices it. Each firing is its own transaction: `WorldRuleHost.PrepareStateCommit`

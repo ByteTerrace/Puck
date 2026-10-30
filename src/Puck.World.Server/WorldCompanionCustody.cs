@@ -1,0 +1,414 @@
+using Puck.Maths;
+using Puck.World.Protocol;
+
+namespace Puck.World.Server;
+
+/// <summary>The custody of one owned traveller's title, as its home's records say.</summary>
+public enum WorldCustodyKind : byte {
+    /// <summary>Embodied at home, authorized to depart but not yet departed, or detached by home's own departure in
+    /// doubt.</summary>
+    Home = 0,
+
+    /// <summary>A hop home authorized is not yet settled.</summary>
+    Pending = 1,
+
+    /// <summary>A custodian holds the title at an epoch.</summary>
+    Away = 2,
+
+    /// <summary>A definition install removed the placement's role: the title has ended.</summary>
+    Released = 3,
+}
+/// <summary>What a custody notice tells the player.</summary>
+public enum WorldCustodyNotice : byte {
+    /// <summary>Home recalled the companion from its last committed image.</summary>
+    Recalled = 0,
+
+    /// <summary>The author's install released the companion's title.</summary>
+    Released = 1,
+}
+/// <summary>Why a custodian retired an embodied copy.</summary>
+public enum WorldCustodyRetireCause : byte {
+    /// <summary>Home answered that the copy is not the title's current custody.</summary>
+    Stale = 0,
+
+    /// <summary>Home answered that the title was released.</summary>
+    Released = 1,
+}
+/// <summary>A custody ticket: the statement "home recorded hop <paramref name="Hop"/> moving
+/// <paramref name="Incarnation"/> to its destination at <paramref name="Epoch"/>". It is evidence of nothing on its own:
+/// a destination confirms the hop with home before it leases the companion, and home checks a return against its own
+/// records.</summary>
+/// <param name="Home">The title authority: the authority that minted the incarnation.</param>
+/// <param name="Incarnation">The companion's mobility incarnation.</param>
+/// <param name="Hop">The key of the crossing that moves custody.</param>
+/// <param name="Epoch">The custody epoch the hop lands the companion at.</param>
+public readonly record struct WorldCustodyTicket(string Home, WorldEntityAddress Incarnation, WorldTransferKey Hop, ulong Epoch);
+/// <summary>What a crossing member carries as a companion: the role it holds, the member it follows, its title
+/// authority, its preferred driver, and its custody ticket.</summary>
+/// <param name="Role">The companion role name the destination must declare.</param>
+/// <param name="FollowsMember">The request-local member id of the player member it follows in the same request, or
+/// <see langword="null"/> when it follows none (a return).</param>
+/// <param name="Home">The title authority.</param>
+/// <param name="Driver">The preferred driver's content pin (<c>sha256/…</c>), or <see langword="null"/> for none.</param>
+/// <param name="Ticket">The custody ticket home granted for this hop, or <see langword="null"/> before home has
+/// granted one.</param>
+public sealed record WorldTransferCompanion(string Role, int? FollowsMember, string Home, string? Driver, WorldCustodyTicket? Ticket);
+/// <summary>A companion's recorded binding at the authority it landed in: the member it follows, and the slot and
+/// generation that member landed at. The binding is live while that slot holds that generation; a generation of
+/// <c>-1</c> is home's placement binding, which follows whoever holds the home seat.</summary>
+/// <param name="FollowsMember">The followed member's request-local id.</param>
+/// <param name="Slot">The body index the followed member landed at.</param>
+/// <param name="Generation">The occupant generation the followed member took there, or <c>-1</c> for the placement
+/// binding.</param>
+public readonly record struct WorldCompanionBinding(int FollowsMember, int Slot, int Generation);
+/// <summary>One companion's entry in a hop home authorized.</summary>
+/// <param name="Incarnation">The companion's incarnation.</param>
+/// <param name="Epoch">The custody epoch the companion leaves at.</param>
+/// <param name="Next">The custody epoch it lands at: one above <paramref name="Epoch"/>.</param>
+public readonly record struct WorldCustodyHopMember(WorldEntityAddress Incarnation, ulong Epoch, ulong Next);
+/// <summary>One companion's authorized hop, as home's records index it.</summary>
+/// <param name="Key">The hop's transfer key.</param>
+/// <param name="Incarnation">The companion.</param>
+/// <param name="From">The custodian the hop leaves.</param>
+/// <param name="To">The destination the hop lands at.</param>
+/// <param name="Epoch">The epoch it leaves at.</param>
+/// <param name="Next">The epoch it lands at.</param>
+public readonly record struct WorldCustodyHop(WorldTransferKey Key, WorldEntityAddress Incarnation, string From, string To, ulong Epoch, ulong Next);
+/// <summary>One title as its home's records say: its custody, the custodian and epoch, its pending hop, every epoch it
+/// issued, and whether it was recalled or released.</summary>
+/// <param name="Incarnation">The incarnation; its index is the held slot.</param>
+/// <param name="Kind">The custody.</param>
+/// <param name="Custodian">The authority holding the title (home's own identity for <see cref="WorldCustodyKind.Home"/>).</param>
+/// <param name="Epoch">The custody epoch.</param>
+/// <param name="PendingKey">The pending hop's key while <see cref="WorldCustodyKind.Pending"/>.</param>
+/// <param name="MaxIssued">The highest epoch home ever issued for the title.</param>
+/// <param name="Recalls">The epoch of every recall home recorded, in order; each owes its own notice.</param>
+/// <param name="Installed">Whether an install released the title (a pending one ends when its hop resolves).</param>
+public sealed record WorldCustodyTitle(WorldEntityAddress Incarnation, WorldCustodyKind Kind, string Custodian, ulong Epoch, WorldTransferKey? PendingKey, ulong MaxIssued, IReadOnlyList<ulong> Recalls, bool Installed) {
+    /// <summary>Gets the slot the title holds at home: its incarnation's index.</summary>
+    public int HeldSlot => Incarnation.Index;
+}
+/// <summary>The custody reducer of one authority: every durable custody fact is a function of the authority's custody
+/// records, folded by <see cref="Apply"/> in the order they became durable. Checkpoint restore, crossing-log recovery
+/// and a replay's re-drive all fold through it, so a restarted or replayed authority derives exactly the custody the
+/// live one did. Records that are not durable (refused, or uncertain until recovery reads the log) are never folded.
+/// Only home holds titles: an incarnation this authority minted is always in one of the four
+/// <see cref="WorldCustodyKind"/> states (no record means <see cref="WorldCustodyKind.Home"/> at epoch zero), and one it
+/// did not mint has no title here.</summary>
+public sealed class WorldCompanionCustody {
+    private sealed class Title(WorldEntityAddress incarnation, string home) {
+        public WorldEntityAddress Incarnation { get; } = incarnation;
+        public WorldCustodyKind Kind { get; set; } = WorldCustodyKind.Home;
+        public string Custodian { get; set; } = home;
+        public ulong Epoch { get; set; }
+        public WorldTransferKey? PendingKey { get; set; }
+        public ulong MaxIssued { get; set; }
+        public List<ulong> Recalls { get; } = [];
+        public bool Installed { get; set; }
+    }
+
+    private readonly Func<string> m_authority;
+    private readonly List<WorldCrossingRecord> m_history = [];
+    private readonly Dictionary<WorldEntityAddress, Title> m_titles = new();
+    private readonly Dictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), WorldCustodyHop> m_hops = new();
+    private readonly HashSet<(WorldTransferKey Key, WorldEntityAddress Incarnation)> m_hopsDone = new();
+    private readonly HashSet<(WorldTransferKey Key, WorldEntityAddress Incarnation)> m_superseded = new();
+    private readonly HashSet<(WorldTransferKey Key, WorldEntityAddress Incarnation)> m_acked = new();
+    private readonly HashSet<(WorldEntityAddress Incarnation, WorldCustodyNotice What, ulong Epoch)> m_noticed = new();
+    private readonly Dictionary<(WorldEntityAddress Incarnation, int Visit), ulong> m_stranded = new();
+    private readonly HashSet<(WorldEntityAddress Incarnation, int Visit)> m_graceElapsed = new();
+    private readonly HashSet<WorldEntityAddress> m_retired = new();
+
+    /// <summary>Initializes a new instance of the <see cref="WorldCompanionCustody"/> class for one authority.</summary>
+    /// <param name="authority">Reads the authority's identity: the namespace whose incarnations it holds titles
+    /// for.</param>
+    public WorldCompanionCustody(Func<string> authority) {
+        ArgumentNullException.ThrowIfNull(argument: authority);
+        m_authority = authority;
+    }
+
+    /// <summary>Gets every custody record this authority folded, in fold order: what a checkpoint captures.</summary>
+    public IReadOnlyList<WorldCrossingRecord> History => m_history;
+    /// <summary>Gets every incarnation a custodian retired here on home's word.</summary>
+    public IReadOnlyCollection<WorldEntityAddress> Retired => m_retired;
+
+    /// <summary>Returns whether <paramref name="record"/> is one this reducer folds: a custody kind, or an arrival
+    /// that re-adopted a companion at home.</summary>
+    /// <param name="record">The record.</param>
+    /// <returns><see langword="true"/> when <see cref="Apply"/> derives custody from it.</returns>
+    public static bool Folds(WorldCrossingRecord record) => record switch {
+        WorldCrossingRecord.Hop or WorldCrossingRecord.HopDone or WorldCrossingRecord.HopAcked or WorldCrossingRecord.Recall or
+        WorldCrossingRecord.Noticed or WorldCrossingRecord.Release or WorldCrossingRecord.Retire or WorldCrossingRecord.Stranded or
+        WorldCrossingRecord.GraceElapsed => true,
+        WorldCrossingRecord.Arrival arrival => (arrival.Value.Readopted.Count > 0),
+        _ => false,
+    };
+
+    /// <summary>Folds one durable record. A record this reducer does not fold (<see cref="Folds"/>) changes nothing.
+    /// The fold is total: any prefix of an authority's records folds to a custody state.</summary>
+    /// <param name="record">The durable record.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="record"/> is <see langword="null"/>.</exception>
+    public void Apply(WorldCrossingRecord record) {
+        ArgumentNullException.ThrowIfNull(argument: record);
+
+        if (!Folds(record: record)) {
+            return;
+        }
+        m_history.Add(item: record);
+        switch (record) {
+            case WorldCrossingRecord.Hop hop:
+                foreach (var member in hop.Members) {
+                    var key = (hop.Key, member.Incarnation);
+
+                    m_hops[key] = new WorldCustodyHop(
+                        Epoch: member.Epoch,
+                        From: hop.From,
+                        Incarnation: member.Incarnation,
+                        Key: hop.Key,
+                        Next: member.Next,
+                        To: hop.To
+                    );
+                    // A hop whose settlement reached home before the hop itself was recorded is cancelled on arrival.
+                    if (TitleFor(incarnation: member.Incarnation) is { } title && !m_hopsDone.Contains(item: key)) {
+                        title.Kind = WorldCustodyKind.Pending;
+                        title.PendingKey = hop.Key;
+                        title.MaxIssued = Math.Max(val1: title.MaxIssued, val2: member.Next);
+                    }
+                }
+                break;
+            case WorldCrossingRecord.HopDone done: {
+                var key = (done.Key, done.Incarnation);
+
+                _ = m_hopsDone.Add(item: key);
+                if (TitleFor(incarnation: done.Incarnation) is not { } title) {
+                    break;
+                }
+                // A release installed while this hop was pending ends the title once the hop resolves.
+                if (title.Installed) {
+                    if ((title.Kind == WorldCustodyKind.Pending) && (title.PendingKey == done.Key)) {
+                        title.Kind = WorldCustodyKind.Released;
+                        title.PendingKey = null;
+                    }
+                    break;
+                }
+                if (!m_hops.TryGetValue(key: key, value: out var settled) || m_superseded.Contains(item: key)) {
+                    break;
+                }
+                if (done.Arrived) {
+                    title.Kind = WorldCustodyKind.Away;
+                    title.Custodian = settled.To;
+                    title.Epoch = settled.Next;
+                } else {
+                    title.Kind = (IsHome(authority: settled.From) ? WorldCustodyKind.Home : WorldCustodyKind.Away);
+                    title.Custodian = settled.From;
+                    title.Epoch = settled.Epoch;
+                }
+                title.PendingKey = null;
+                break;
+            }
+            case WorldCrossingRecord.HopAcked acked:
+                _ = m_acked.Add(item: (acked.Key, acked.Incarnation));
+                break;
+            case WorldCrossingRecord.Recall recall:
+                if (TitleFor(incarnation: recall.Incarnation) is { } recalled) {
+                    foreach (var pending in m_hops.Keys) {
+                        if ((pending.Incarnation == recall.Incarnation) && !m_hopsDone.Contains(item: pending)) {
+                            _ = m_superseded.Add(item: pending);
+                        }
+                    }
+                    recalled.Kind = WorldCustodyKind.Home;
+                    recalled.Custodian = m_authority();
+                    recalled.Epoch = recall.Epoch;
+                    recalled.MaxIssued = Math.Max(val1: recalled.MaxIssued, val2: recall.Epoch);
+                    recalled.PendingKey = null;
+                    recalled.Recalls.Add(item: recall.Epoch);
+                }
+                break;
+            case WorldCrossingRecord.Noticed noticed:
+                _ = m_noticed.Add(item: (noticed.Incarnation, noticed.What, noticed.Epoch));
+                break;
+            case WorldCrossingRecord.Release release:
+                if (TitleFor(incarnation: release.Incarnation) is { } released) {
+                    released.Installed = true;
+                    // A pending hop's destination may hold home's confirmation for its commit: the title stays pending
+                    // until that hop resolves.
+                    if (released.Kind != WorldCustodyKind.Pending) {
+                        released.Kind = WorldCustodyKind.Released;
+                        released.PendingKey = null;
+                    }
+                }
+                break;
+            case WorldCrossingRecord.Retire retire:
+                _ = m_retired.Add(item: retire.Incarnation);
+                break;
+            case WorldCrossingRecord.Stranded stranded:
+                m_stranded[(stranded.Incarnation, stranded.Visit)] = stranded.DeadlineTick;
+                break;
+            case WorldCrossingRecord.GraceElapsed grace:
+                _ = m_graceElapsed.Add(item: (grace.Incarnation, grace.Visit));
+                break;
+            case WorldCrossingRecord.Arrival arrival:
+                foreach (var incarnation in arrival.Value.Readopted) {
+                    if (TitleFor(incarnation: incarnation) is not { } home) {
+                        continue;
+                    }
+                    var landed = arrival.Value.Request.Members.FirstOrDefault(predicate: member => (member.Mobility?.Incarnation == incarnation));
+
+                    if (landed.Mobility is not { } mobility) {
+                        continue;
+                    }
+                    home.Kind = WorldCustodyKind.Home;
+                    home.Custodian = m_authority();
+                    home.Epoch = checked((mobility.Epoch + 1UL));
+                    home.MaxIssued = Math.Max(val1: home.MaxIssued, val2: home.Epoch);
+                    home.PendingKey = null;
+                }
+                break;
+        }
+    }
+    /// <summary>Replaces this reducer's state with the fold of <paramref name="history"/>: a checkpoint's restore.</summary>
+    /// <param name="history">The custody records a checkpoint captured (<see cref="History"/>), in fold order.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="history"/> is <see langword="null"/>.</exception>
+    public void Restore(IReadOnlyList<WorldCrossingRecord> history) {
+        ArgumentNullException.ThrowIfNull(argument: history);
+
+        m_history.Clear();
+        m_titles.Clear();
+        m_hops.Clear();
+        m_hopsDone.Clear();
+        m_superseded.Clear();
+        m_acked.Clear();
+        m_noticed.Clear();
+        m_stranded.Clear();
+        m_graceElapsed.Clear();
+        m_retired.Clear();
+        foreach (var record in history) {
+            Apply(record: record);
+        }
+    }
+
+    /// <summary>Returns the title this authority holds for <paramref name="incarnation"/>, or <see langword="null"/>
+    /// when it did not mint the incarnation (<c>NotMyTitle</c>). An incarnation it minted with no custody record is at
+    /// home at epoch zero.</summary>
+    /// <param name="incarnation">The incarnation.</param>
+    /// <returns>The title, or <see langword="null"/>.</returns>
+    public WorldCustodyTitle? TitleOf(WorldEntityAddress incarnation) {
+        if (!IsHome(authority: incarnation.Authority)) {
+            return null;
+        }
+        if (!m_titles.TryGetValue(key: incarnation, value: out var title)) {
+            return new WorldCustodyTitle(
+                Custodian: m_authority(),
+                Epoch: 0UL,
+                Incarnation: incarnation,
+                Installed: false,
+                Kind: WorldCustodyKind.Home,
+                MaxIssued: 0UL,
+                PendingKey: null,
+                Recalls: []
+            );
+        }
+        return new WorldCustodyTitle(
+            Custodian: title.Custodian,
+            Epoch: title.Epoch,
+            Incarnation: title.Incarnation,
+            Installed: title.Installed,
+            Kind: title.Kind,
+            MaxIssued: title.MaxIssued,
+            PendingKey: title.PendingKey,
+            Recalls: [.. title.Recalls]
+        );
+    }
+    /// <summary>Returns the hop home recorded for <paramref name="incarnation"/> under <paramref name="key"/>, or
+    /// <see langword="null"/> when it recorded none.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <returns>The hop, or <see langword="null"/>.</returns>
+    public WorldCustodyHop? HopOf(WorldTransferKey key, WorldEntityAddress incarnation) => (m_hops.TryGetValue(key: (key, incarnation), value: out var hop) ? hop : null);
+    /// <summary>Returns whether home recorded the settlement of <paramref name="incarnation"/>'s hop under
+    /// <paramref name="key"/> (or a settlement notice that reached it before the hop).</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <returns><see langword="true"/> once the hop is settled here.</returns>
+    public bool IsHopDone(WorldTransferKey key, WorldEntityAddress incarnation) => m_hopsDone.Contains(item: (key, incarnation));
+    /// <summary>Returns whether home's grant of <paramref name="incarnation"/>'s hop under <paramref name="key"/> to
+    /// <paramref name="destination"/> is current: it is that title's pending hop now, not settled, superseded or
+    /// released. A historical record is not a grant.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="destination">The authority asking.</param>
+    /// <param name="next">The epoch the grant lands the companion at, when it is current.</param>
+    /// <returns><see langword="true"/> when the grant is current.</returns>
+    public bool IsGrantCurrent(WorldTransferKey key, WorldEntityAddress incarnation, string destination, out ulong next) {
+        next = 0UL;
+        if (
+            !m_hops.TryGetValue(key: (key, incarnation), value: out var hop) ||
+            !string.Equals(a: hop.To, b: destination, comparisonType: StringComparison.Ordinal) ||
+            m_hopsDone.Contains(item: (key, incarnation)) ||
+            !m_titles.TryGetValue(key: incarnation, value: out var title) ||
+            (title.Kind != WorldCustodyKind.Pending) ||
+            (title.PendingKey != key) ||
+            title.Installed
+        ) {
+            return false;
+        }
+        next = hop.Next;
+        return true;
+    }
+    /// <summary>Returns whether home acknowledged this custodian's settlement notice for one companion's hop.</summary>
+    /// <param name="key">The hop's key.</param>
+    /// <param name="incarnation">The companion.</param>
+    /// <returns><see langword="true"/> once the acknowledgement is recorded.</returns>
+    public bool IsAcked(WorldTransferKey key, WorldEntityAddress incarnation) => m_acked.Contains(item: (key, incarnation));
+    /// <summary>Returns whether the companion was recorded stranded during the player's <paramref name="visit"/>th
+    /// visit here, and the grace window's deadline tick.</summary>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="visit">The visit.</param>
+    /// <param name="deadlineTick">The authority tick the grace window ends at.</param>
+    /// <returns><see langword="true"/> when the stranding is recorded.</returns>
+    public bool IsStranded(WorldEntityAddress incarnation, int visit, out ulong deadlineTick) => m_stranded.TryGetValue(key: (incarnation, visit), value: out deadlineTick);
+    /// <summary>Returns whether the grace window of the companion's stranding during <paramref name="visit"/> has
+    /// elapsed on record.</summary>
+    /// <param name="incarnation">The companion.</param>
+    /// <param name="visit">The visit.</param>
+    /// <returns><see langword="true"/> once the elapse is recorded.</returns>
+    public bool IsGraceElapsed(WorldEntityAddress incarnation, int visit) => m_graceElapsed.Contains(item: (incarnation, visit));
+    /// <summary>Returns the notices home owes and has not recorded: one per recall, and one per release.</summary>
+    /// <returns>Each owed notice: the incarnation, what it tells, and the recall's epoch (zero for a release).</returns>
+    public IReadOnlyList<(WorldEntityAddress Incarnation, WorldCustodyNotice What, ulong Epoch)> OwedNotices() {
+        var owed = new List<(WorldEntityAddress, WorldCustodyNotice, ulong)>();
+
+        foreach (var title in m_titles.Values.OrderBy(keySelector: static title => title.Incarnation.Index).ThenBy(keySelector: static title => title.Incarnation.Generation)) {
+            foreach (var epoch in title.Recalls) {
+                if (!m_noticed.Contains(item: (title.Incarnation, WorldCustodyNotice.Recalled, epoch))) {
+                    owed.Add(item: (title.Incarnation, WorldCustodyNotice.Recalled, epoch));
+                }
+            }
+            if (title.Installed && !m_noticed.Contains(item: (title.Incarnation, WorldCustodyNotice.Released, 0UL))) {
+                owed.Add(item: (title.Incarnation, WorldCustodyNotice.Released, 0UL));
+            }
+        }
+        return owed;
+    }
+    /// <summary>Folds this authority's custody into a state hash: the count of folded records, then each one in
+    /// order.</summary>
+    /// <param name="hash">The running hash.</param>
+    public void AppendStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)m_history.Count));
+        foreach (var record in m_history) {
+            hash.Add(values: WorldAuthorityCheckpointCodec.EncodeCrossingRecord(record: record));
+        }
+    }
+
+    private bool IsHome(string authority) => string.Equals(a: authority, b: m_authority(), comparisonType: StringComparison.Ordinal);
+    private Title? TitleFor(WorldEntityAddress incarnation) {
+        if (!IsHome(authority: incarnation.Authority)) {
+            return null;
+        }
+        if (!m_titles.TryGetValue(key: incarnation, value: out var title)) {
+            title = new Title(home: m_authority(), incarnation: incarnation);
+            m_titles[incarnation] = title;
+        }
+        return title;
+    }
+}

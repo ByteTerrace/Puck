@@ -196,6 +196,12 @@ public abstract record WorldReplayEntry {
     /// what a MATCH proves.</para></summary>
     /// <param name="Adjacency">The authored <c>adjacencies</c> row name that refreshed.</param>
     internal sealed record LinkDelivery(string Adjacency) : WorldReplayEntry;
+    /// <summary>One custody record the authority made durable (<see cref="WorldServer.CustodyTap"/>), encoded with the
+    /// crossing log's own record leaf (<see cref="Server.WorldAuthorityCheckpointCodec.EncodeCrossingRecord"/>), at its
+    /// position among the tick's authority entries. A re-drive folds it through the shadow's custody reducer
+    /// (<see cref="WorldCompanionCustody.Apply"/>) and never decides it again.</summary>
+    /// <param name="Encoded">The encoded record.</param>
+    public sealed record Custody(byte[] Encoded) : WorldReplayEntry;
 }
 /// <summary>One recorded tick's server-facing input — the exact <see cref="IServerLink"/> traffic the live session
 /// applied that tick, captured at the loopback: the synchronous <see cref="Authority"/> stream (commands, grants, and
@@ -570,6 +576,17 @@ public sealed partial class WorldReplaySnapshot {
                 case WorldReplayEntry.Transfer:
                     // Narration and pairing only: each body left at its own Departure entry.
                     break;
+                case WorldReplayEntry.Custody custody:
+                    if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingRecord(
+                        bytes: custody.Encoded,
+                        reason: out var custodyRefusal,
+                        record: out var custodyRecord
+                    )) {
+                        throw new InvalidDataException(message: custodyRefusal);
+                    }
+                    server.ExecuteAuthorityOperation(operation: () => server.TransferEscrow.Custody.Apply(record: custodyRecord!));
+
+                    break;
                 case WorldReplayEntry.Departure departure:
                     if (server.ExecuteAuthorityOperation(operation: () => server.RedriveDeparture(
                         restored: departure.Restored,
@@ -919,6 +936,24 @@ public sealed partial class WorldReplaySnapshot {
                 return ReadArrivalEntry(reader: ref reader);
             case 21:
                 return ReadDepartureEntry(reader: ref reader);
+            case 25: {
+                    var encoded = reader.ReadBlock(
+                        field: "custody record",
+                        maxBytes: WireLimits.MaxDocumentBytes
+                    );
+
+                    if (
+                        !reader.Failed &&
+                        (!WorldAuthorityCheckpointCodec.TryDecodeCrossingRecord(bytes: encoded, reason: out var custodyReason, record: out var custodyRecord) || !WorldCompanionCustody.Folds(record: custodyRecord!))
+                    ) {
+                        reader.Fail(
+                            detail: ((custodyRecord is null) ? custodyReason : "custody entry carries a record the custody reducer does not fold"),
+                            refusal: WireRefusal.PayloadMalformed
+                        );
+                    }
+
+                    return new WorldReplayEntry.Custody(Encoded: encoded);
+                }
             case 22:
                 return ReadSeatIdentityEntry(reader: ref reader);
             case 23:
@@ -1078,9 +1113,25 @@ public sealed partial class WorldReplaySnapshot {
             readItem: static (ref WireReader r) => WorldIdentityProjectionWire.ReadOptional(reader: ref r),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
+        var readopted = reader.ReadArray(
+            field: "arrival readopted companions",
+            readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
+        var bindings = reader.ReadArray(
+            field: "arrival companion bindings",
+            readItem: static (ref WireReader r) => r.ReadOptional(readValue: static (ref WireReader b) => new WorldCompanionBinding(
+                FollowsMember: b.ReadInt32(),
+                Slot: b.ReadInt32(),
+                Generation: b.ReadInt32()
+            )),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
         var outcome = new WorldArrivalOutcome(
             Adopted: adopted,
+            Bindings: bindings,
             Generations: generations,
+            Readopted: readopted,
             RolledBack: rolledBack
         );
         var refused = new WorldReplayEntry.Arrival(
@@ -1614,6 +1665,26 @@ public sealed partial class WorldReplaySnapshot {
                         writer: w
                     )
                 );
+                writer.WriteArray(
+                    items: arrival.Outcome.Readopted,
+                    writeItem: WorldWireLeaves.WriteEntityAddress
+                );
+                writer.WriteArray(
+                    items: arrival.Outcome.Bindings,
+                    writeItem: static (w, binding) => w.WriteOptional(
+                        value: binding,
+                        writeValue: static (b, value) => {
+                            b.WriteInt32(value: value.FollowsMember);
+                            b.WriteInt32(value: value.Slot);
+                            b.WriteInt32(value: value.Generation);
+                        }
+                    )
+                );
+
+                break;
+            case WorldReplayEntry.Custody custody:
+                writer.WriteByte(value: 25);
+                writer.WriteBlock(value: custody.Encoded);
 
                 break;
             case WorldReplayEntry.Departure departure:

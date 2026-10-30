@@ -1,3 +1,4 @@
+using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>One destination arrival exactly as it landed: the reservation the source's cohort bound, the body indices
@@ -7,7 +8,11 @@ namespace Puck.World.Server;
 /// <param name="Request">The reservation request the lease was bound by.</param>
 /// <param name="Slots">The destination body indices the reservation assigned, in member order.</param>
 /// <param name="Members">The committed travelers, in member order.</param>
-public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members) {
+/// <param name="Readopted">The companions this arrival re-adopted at their home: each lands in its held slot and its
+/// title comes home one epoch above the custody it left.</param>
+public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null) {
+    /// <summary>Gets the companions this arrival re-adopted at their home; empty for one that re-adopts none.</summary>
+    public IReadOnlyList<WorldEntityAddress> Readopted { get; init; } = (Readopted ?? []);
     /// <summary>Gets the handoff token this arrival committed under.</summary>
     public WorldTransferKey Key => new(
         SourceAuthority: Request.SourceAuthority,
@@ -27,8 +32,17 @@ public sealed record WorldCrossingArrival(WorldTransferReservationRequest Reques
 /// <param name="Adopted">For a commit that stood, one entry per traveler in member order: the projection a traveler
 /// coming home was bound to after its adoption, or <see langword="null"/> for one that did not come home. Empty for a
 /// commit that rolled back, which adopts nothing.</param>
-public sealed record WorldArrivalOutcome(IReadOnlyList<int> Generations, bool RolledBack, IReadOnlyList<WorldIdentityProjection?> Adopted);
-/// <summary>One crossing step an authority makes durable before the step becomes visible to its peer. A source records
+/// <param name="Readopted">The companions the commit re-adopted at their home; empty for one that rolled back.</param>
+/// <param name="Bindings">For a commit that stood, one entry per traveler in member order: a companion's recorded
+/// binding to the player member it follows, or <see langword="null"/> for a traveler that follows none.</param>
+public sealed record WorldArrivalOutcome(IReadOnlyList<int> Generations, bool RolledBack, IReadOnlyList<WorldIdentityProjection?> Adopted, IReadOnlyList<WorldEntityAddress>? Readopted = null, IReadOnlyList<WorldCompanionBinding?>? Bindings = null) {
+    /// <summary>Gets the companions the commit re-adopted at their home.</summary>
+    public IReadOnlyList<WorldEntityAddress> Readopted { get; init; } = (Readopted ?? []);
+    /// <summary>Gets each traveler's recorded binding, in member order; empty when none follows anyone.</summary>
+    public IReadOnlyList<WorldCompanionBinding?> Bindings { get; init; } = (Bindings ?? []);
+}
+/// <summary>One crossing step an authority makes durable before the step becomes visible to its peer. Every authority
+/// operation appends at most one record, so recovery finds the state between any two of them. A source records
 /// its <see cref="Allocation"/> before it reserves under a transfer key, its <see cref="Departure"/> before it sends the
 /// commit and its <see cref="Settlement"/> before it acknowledges; a destination records its <see cref="Lease"/> before
 /// it accepts a reservation, its <see cref="Arrival"/> before it answers the commit, and a <see cref="Tombstone"/>
@@ -61,11 +75,61 @@ public abstract record WorldCrossingRecord {
     /// settlement: recovery detaches the cohort again and asks the destination for the outcome.</summary>
     /// <param name="Transfer">The source's complete recovery record for the transfer.</param>
     public sealed record Departure(WorldInDoubtTransferCheckpoint Transfer) : WorldCrossingRecord;
-    /// <summary>A source settled a departed transfer: published the destination's commit, or restored every member.</summary>
+    /// <summary>A source settled a departed transfer, per member: the landed members arrived, the retired ones were
+    /// destroyed on home's definitive word, and every other member is restored to the slot it left.</summary>
     /// <param name="TransferId">The source-scoped transfer id the departure was recorded under.</param>
-    /// <param name="Arrived">Whether the cohort arrived; <see langword="false"/> means every member was restored.</param>
+    /// <param name="Landed">The request-local ids of the members the destination landed.</param>
+    /// <param name="Retired">The request-local ids of the unlanded members the source retired rather than restored.</param>
     /// <param name="Forwarded">The forwarding routes the settlement left for the cohort's admitted travelers.</param>
-    public sealed record Settlement(ulong TransferId, bool Arrived, IReadOnlyList<WorldForwardedBodyCheckpoint> Forwarded) : WorldCrossingRecord;
+    public sealed record Settlement(ulong TransferId, IReadOnlyList<int> Landed, IReadOnlyList<int> Retired, IReadOnlyList<WorldForwardedBodyCheckpoint> Forwarded) : WorldCrossingRecord {
+        /// <summary>Gets whether any member arrived.</summary>
+        public bool Arrived => (Landed.Count > 0);
+    }
+    /// <summary>Home authorized the hop of every listed companion under one key; each entry is its own title's
+    /// fact. From here the title is pending until the hop settles.</summary>
+    /// <param name="Key">The crossing's transfer key.</param>
+    /// <param name="From">The custodian the hop leaves.</param>
+    /// <param name="To">The destination it lands at.</param>
+    /// <param name="Members">Each granted companion with the epoch it leaves at and the epoch it lands at.</param>
+    public sealed record Hop(WorldTransferKey Key, string From, string To, IReadOnlyList<WorldCustodyHopMember> Members) : WorldCrossingRecord;
+    /// <summary>Home settled one companion's hop from the destination's authenticated word (or its own settlement for a
+    /// hop of its own). A settlement that reaches home before its hop cancels that hop when it is recorded.</summary>
+    /// <param name="Key">The hop's key.</param>
+    /// <param name="Incarnation">The companion.</param>
+    /// <param name="Arrived">Whether the destination landed it.</param>
+    public sealed record HopDone(WorldTransferKey Key, WorldEntityAddress Incarnation, bool Arrived) : WorldCrossingRecord;
+    /// <summary>Home acknowledged this custodian's settlement notice for one companion's hop.</summary>
+    /// <param name="Key">The hop's key.</param>
+    /// <param name="Incarnation">The companion.</param>
+    public sealed record HopAcked(WorldTransferKey Key, WorldEntityAddress Incarnation) : WorldCrossingRecord;
+    /// <summary>Home recalled a companion that was away: its last committed image is embodied in the held slot at
+    /// <paramref name="Epoch"/>, above every epoch home issued, and every pending hop of it is superseded.</summary>
+    /// <param name="Incarnation">The companion.</param>
+    /// <param name="Epoch">The recall's epoch.</param>
+    public sealed record Recall(WorldEntityAddress Incarnation, ulong Epoch) : WorldCrossingRecord;
+    /// <summary>Home told the player of a recall or a release, discharging that notice.</summary>
+    /// <param name="Incarnation">The companion.</param>
+    /// <param name="What">What the notice told.</param>
+    /// <param name="Epoch">The recall's epoch, or zero for a release.</param>
+    public sealed record Noticed(WorldEntityAddress Incarnation, WorldCustodyNotice What, ulong Epoch) : WorldCrossingRecord;
+    /// <summary>A definition install removed the placement's role: the title is released (once its pending hop, if
+    /// any, resolves).</summary>
+    /// <param name="Incarnation">The companion.</param>
+    public sealed record Release(WorldEntityAddress Incarnation) : WorldCrossingRecord;
+    /// <summary>A custodian destroyed its embodied copy on home's definitive answer.</summary>
+    /// <param name="Incarnation">The companion.</param>
+    /// <param name="Cause">What home answered.</param>
+    public sealed record Retire(WorldEntityAddress Incarnation, WorldCustodyRetireCause Cause) : WorldCrossingRecord;
+    /// <summary>A custodian found a companion separated with no way home during the player's
+    /// <paramref name="Visit"/>th visit here: its grace window runs to <paramref name="DeadlineTick"/>.</summary>
+    /// <param name="Incarnation">The companion.</param>
+    /// <param name="Visit">The visit the stranding belongs to.</param>
+    /// <param name="DeadlineTick">The custodian tick the grace window ends at.</param>
+    public sealed record Stranded(WorldEntityAddress Incarnation, int Visit, ulong DeadlineTick) : WorldCrossingRecord;
+    /// <summary>A stranded companion's grace window passed.</summary>
+    /// <param name="Incarnation">The companion.</param>
+    /// <param name="Visit">The visit the stranding belongs to.</param>
+    public sealed record GraceElapsed(WorldEntityAddress Incarnation, int Visit) : WorldCrossingRecord;
 }
 /// <summary>One record in an authority's crossing log, in the order the authority made it durable.</summary>
 /// <param name="Sequence">The authority's crossing sequence: dense from zero, never reused, and captured by every

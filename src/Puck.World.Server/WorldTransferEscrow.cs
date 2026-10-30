@@ -262,7 +262,12 @@ public sealed partial class WorldTransferEscrow {
     public WorldTransferEscrow(WorldServer server, Func<int, string?>? landingRefusal = null) {
         m_server = server;
         m_landingRefusal = landingRefusal;
+        Custody = new WorldCompanionCustody(authority: () => m_server.AuthorityIdentity);
     }
+
+    /// <summary>Gets this authority's custody reducer: the titles it holds as home and the custody facts it holds as a
+    /// custodian, folded from its durable custody records.</summary>
+    public WorldCompanionCustody Custody { get; }
 
     /// <summary>Gets the first crossing sequence this authority has not yet made durable.</summary>
     public ulong CrossingSequence => m_crossingSequence;
@@ -324,7 +329,8 @@ public sealed partial class WorldTransferEscrow {
             BorderAdmissions: [.. m_borderAdmissions.Select(selector: static pair => (pair.Key, pair.Value))],
             CrossingSequence: m_crossingSequence,
             SpentKeys: [.. m_spent.Select(selector: static pair => (pair.Key, pair.Value.Committed, pair.Value.Durable))],
-            Floors: [.. m_floors.Select(selector: static pair => (pair.Key, pair.Value))]
+            Floors: [.. m_floors.Select(selector: static pair => (pair.Key, pair.Value))],
+            Custody: [.. Custody.History]
         );
     }
     /// <summary>Restores every table this escrow owns from a previously captured checkpoint. Every table is cleared
@@ -360,6 +366,7 @@ public sealed partial class WorldTransferEscrow {
         foreach (var row in checkpoint.Floors) {
             m_floors[row.SourceAuthority] = row.Floor;
         }
+        Custody.Restore(history: checkpoint.Custody);
 
         // Commit's own "definition moved after reservation" guard is a REFERENCE check against the live
         // m_server.Definition object a live Reserve captured verbatim. A restored lease whose destination content
@@ -984,6 +991,8 @@ public sealed partial class WorldTransferEscrow {
         }
 
         m_committed.Add(item: key);
+        // The arrival's custody effect (a re-adoption at home) folds wherever it lands: live, in recovery and in a re-drive.
+        Custody.Apply(record: new WorldCrossingRecord.Arrival(Value: arrival));
         // A relanded arrival is the key's last durable record: it supersedes the death its lease record left.
         _ = m_spent.Remove(key: key);
         m_committedMembers[key] = [.. members];

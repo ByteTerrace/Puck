@@ -307,6 +307,13 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteUInt64(value: row.Floor);
             }
         );
+        writer.WriteArray(
+            items: section.Custody,
+            writeItem: static (w, record) => WriteCrossingRecord(
+                record: record,
+                writer: w
+            )
+        );
 
         return writer.ToArray();
     }
@@ -400,6 +407,21 @@ public static partial class WorldAuthorityCheckpointCodec {
             },
             maximum: MaxCollectionCount
         );
+        var custody = reader.ReadArray(
+            field: "escrow custody history",
+            readItem: static (ref WireReader r) => {
+                var record = ReadCrossingRecord(reader: ref r);
+
+                if (!r.Failed && ((record is null) || !WorldCompanionCustody.Folds(record: record))) {
+                    r.Fail(
+                        detail: "escrow custody history carries a record the custody reducer does not fold",
+                        refusal: WireRefusal.PayloadMalformed
+                    );
+                }
+                return record!;
+            },
+            maximum: MaxCollectionCount
+        );
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -412,6 +434,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             BorderAdmissions: borderAdmissions,
             Committed: committed,
             CrossingSequence: crossingSequence,
+            Custody: custody,
             Floors: floors,
             LatestCommittedTransfer: latest,
             Leases: leases,
