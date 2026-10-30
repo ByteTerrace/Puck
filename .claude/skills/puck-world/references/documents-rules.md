@@ -28,7 +28,9 @@ body with `key` and refuses a `target`, and both lower through
 `WorldBodyEffects`. `startTimer` writes a kit's own timer slot and is refused BY
 NAME by `WorldFactsCompiler`. `pose` is the
 rule-side `body.pose`: `{"$type":"pose","key":"<body>","spawnPoint":"<id>"}` or
-`position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two),
+`position` + `yawDegrees`/`pitchDegrees`/`rollDegrees` (exactly one of the two; `poseCell`
+takes `rollDegrees` and `pitchDegrees` beside its cell, and a body keeps a pitch only under a program
+running `ResolveDriveFrame`, as the card table's `cardSlab` kit does),
 applied through `WorldBody.Pose` as the world's own act — no `WorldMutation`, no
 journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `dead == 1 && $tick >= respawnIn` rule move a body its own gate row has frozen.

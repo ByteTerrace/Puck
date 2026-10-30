@@ -44416,6 +44416,11 @@
                           "description": "The roll a teleport stands the body at, about its forward axis: 180 lays it upside down, as a rule turning a two-faced piece over does. A glide keeps the body\u0027s attitude and ignores it.",
                           "type": "number",
                           "default": 0
+                        },
+                        "pitchDegrees": {
+                          "description": "The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body\u0027s attitude and ignores it.",
+                          "type": "number",
+                          "default": 0
                         }
                       },
                       "required": [

@@ -22,13 +22,14 @@ let galleryStorey = 4.5
 let galleryPopulation = 43
 // The board game room's bodies (boardroom.puck): the granary board's cursor (granaries.puck), Alchemy's cursor and 31
 // element tokens (alchemy.puck), Go's cursor and 361 stones (go.puck), then Reversi's cursor and 64 discs
-// (reversi.puck). debug.puck imports them ahead of every other population, so they take the population's top slots and
-// every body below them keeps its index. The granary board imports first and takes the highest slot, which leaves the
-// others at the indices they held before it.
+// (reversi.puck), and above them the card table's cursor, 52 cards and held marker (cardtable.puck). debug.puck imports
+// the card table first and the others after it, so the cards take the population's very top slots, the granary board
+// the highest below them, and every other body keeps the index it held before the cards came.
 let granaryBodies = 1
 let alchemyBodies = 32
 let goBodies = 362
 let reversiBodies = 65
+let cardBodies = 54
 let boardRoomBodies = (granaryBodies + alchemyBodies + goBodies + reversiBodies)
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 let galleryMapDirections = "stairs and lift north-west: press CALL, or gallery.lift <level>"

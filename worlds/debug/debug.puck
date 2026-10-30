@@ -22,9 +22,10 @@ import "studio"
 import "controls"
 import "devices"
 import "desktop"
-// The board game room's granary board, Alchemy, Go and Reversi tables, ahead of every other population so their cursors,
-// tokens, stones and discs take the population's top slots (shapes.puck's boardRoomBodies) and every body below keeps
-// its index.
+// The board game room's card, granary board, Alchemy, Go and Reversi tables, ahead of every other population so their
+// cards, cursors, tokens, stones and discs take the population's top slots (shapes.puck's cardBodies and
+// boardRoomBodies) and every body below keeps its index.
+import "cardtable"
 import "granaries"
 import "alchemy"
 import "go"
@@ -167,7 +168,7 @@ commands: galleryCommands
 // walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
 // (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2 + boardRoomBodies)
+  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies)
 }
 
 placements {

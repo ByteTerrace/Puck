@@ -13,7 +13,7 @@ public sealed class PoseCellGlideLawTests {
     private const string Column = "column";
     private const float LayerHeight = 0.25f;
 
-    private static WorldDefinition Document(bool glide, float rollDegrees) => (Fixtures.BuildDocument() with {
+    private static WorldDefinition Document(bool glide, float rollDegrees, float pitchDegrees = 0f) => (Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(
             World: [
                 new WorldStateRow(
@@ -28,7 +28,7 @@ public sealed class PoseCellGlideLawTests {
             new WorldRule(
                 Name: CellName.Parse(candidate: "ride"),
                 Effects: [
-                    new WorldEffect.PoseCell(Key: "body:0", Topology: Column, Expression: ExpressionProgram.Parse(text: "stop"), Offset: Vector3.Zero, Glide: glide, RollDegrees: rollDegrees),
+                    new WorldEffect.PoseCell(Key: "body:0", Topology: Column, Expression: ExpressionProgram.Parse(text: "stop"), Offset: Vector3.Zero, Glide: glide, RollDegrees: rollDegrees, PitchDegrees: pitchDegrees),
                 ]
             ),
         ],
@@ -60,5 +60,20 @@ public sealed class PoseCellGlideLawTests {
         var up = body.FixedOrientation.Rotate(vector: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero));
 
         Assert.Equal(expected: ((!glide && (rollDegrees == 180f)) ? -1f : 1f), actual: (float)up.Y, tolerance: 1e-3f);
+    }
+
+    [Fact]
+    public void ATeleportStandsTheBodyAtItsAuthoredPitchSoAnEdgeOnCreationLiesFlat() {
+        using var fixture = Fixtures.FreshServer(definition: Document(glide: false, rollDegrees: 0f, pitchDegrees: -90f));
+        var body = fixture.JoinSeat();
+
+        body.Pose(x: 0f, y: 0f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
+        fixture.Step();
+
+        // A pitch of -90 degrees turns the body's own backward axis (+Z, the face of a creation authored looking along its
+        // forward) toward the world's up.
+        var backward = body.FixedOrientation.Rotate(vector: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One));
+
+        Assert.Equal(expected: 1f, actual: (float)backward.Y, tolerance: 1e-3f);
     }
 }
