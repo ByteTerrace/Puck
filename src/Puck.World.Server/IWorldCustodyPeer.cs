@@ -47,6 +47,15 @@ public enum WorldCustodyAnswer : byte {
     /// <summary>The asker is not the authority that minted the companion's incarnation.</summary>
     Unauthorized = 5,
 }
+/// <summary>Which decision a destination's hop confirmation question belongs to. An answer counts only for the question
+/// of its own phase, so a reservation's answer can never stand for the commit's.</summary>
+public enum WorldHopPhase : byte {
+    /// <summary>The destination is deciding the reservation.</summary>
+    Reservation = 0,
+
+    /// <summary>The destination is deciding the commit.</summary>
+    Commit = 1,
+}
 /// <summary>One companion a custodian asks home to move onward under a key.</summary>
 /// <param name="Incarnation">The companion.</param>
 /// <param name="Epoch">The custody epoch the custodian holds it at.</param>
@@ -67,9 +76,10 @@ public interface IWorldCustodyPeer {
     /// <param name="key">The hop's key.</param>
     /// <param name="incarnations">The companions.</param>
     /// <param name="destination">The authenticated asking destination.</param>
+    /// <param name="phase">The decision the question belongs to.</param>
     /// <returns>One entry per companion: the landing epoch of a current grant, or <see langword="null"/>; or
     /// <see langword="null"/> when home could not be reached.</returns>
-    IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination);
+    IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase);
     /// <summary>Asks home to authorize the onward hop of each companion the authenticated custodian
     /// <paramref name="source"/> holds, toward <paramref name="destination"/>, under <paramref name="key"/>. Home decides
     /// each on its own title and records one hop naming the ones it grants.</summary>

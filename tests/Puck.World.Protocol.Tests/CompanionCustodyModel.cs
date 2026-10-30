@@ -936,20 +936,19 @@ public static class CustodyModel {
         var refusals = new List<string>();
         var taken = new HashSet<int>();
         var player = msg.Members.FirstOrDefault(static m => m.IsPlayer);
+        var playerRefused = false;
 
+        // The player is decided under the destination's own door and cap; a refused player refuses the whole reservation
+        // once the cohort's companions have been asked about, since the destination verifies the hop before it decides.
         if (player is not null) {
-            if ((view.Humans + 1) > HumanCap) {
-                Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
-                return;
-            }
             var slot = ((to.Id == Node.H) ? 0 : FreeSlot(s: s, view: view, node: to, taken: taken));
 
-            if ((slot < 0) || ((to.Id == Node.H) && view.Bodies.Values.Any(static b => b.Slot == 0))) {
-                Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
-                return;
+            if (((view.Humans + 1) > HumanCap) || (slot < 0) || ((to.Id == Node.H) && view.Bodies.Values.Any(static b => b.Slot == 0))) {
+                playerRefused = true;
+            } else {
+                _ = taken.Add(item: slot);
+                accepted.Add(item: player with { Slot = slot });
             }
-            _ = taken.Add(item: slot);
-            accepted.Add(item: player with { Slot = slot });
         }
         foreach (var member in msg.Members.Where(static m => !m.IsPlayer)) {
             string? refusal = null;
@@ -993,6 +992,10 @@ public static class CustodyModel {
             }
         }
         _ = to.Held.Remove(key: msg.Key);
+        if (playerRefused) {
+            Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: "Player");
+            return;
+        }
         if (accepted.Count == 0) {
             Send(s: s, from: msg.To, to: msg.From, kind: MsgKind.ReserveRefused, key: msg.Key, members: [], arg: ((refusals.Count > 0) ? refusals[0].Split(':')[1] : "Empty"));
             return;
@@ -1304,7 +1307,7 @@ public static class CustodyModel {
         // A custodian lands a companion only under home's grant as it stands at the commit: the reservation's answer is
         // spent, so the commit is held until home answers again.
         if (to.Id != Node.H) {
-            var unverified = lease.Members.Where(m => !m.IsPlayer && !lease.RefusedAtCommit.Contains(value: m.Id) && !to.Verified.ContainsKey(key: Verification(key: msg.Key, id: m.Id, phase: 'C'))).Select(static m => m.Id).ToArray();
+            var unverified = lease.Members.Where(m => !m.IsPlayer && !to.Verified.ContainsKey(key: Verification(key: msg.Key, id: m.Id, phase: 'C'))).Select(static m => m.Id).ToArray();
 
             if (unverified.Length > 0) {
                 if (!InFlight(s: s, from: to.Id, key: msg.Key, kind: MsgKind.HopQuery, arg: "C|")) {

@@ -877,7 +877,8 @@ public sealed class WorldPeerHost : IDisposable {
             body: body.Span,
             failure: out var failure,
             incarnations: out var incarnations,
-            key: out var key
+            key: out var key,
+            phase: out var phase
         )) {
             await WriteFederationRefusal(
                 ct: ct,
@@ -892,7 +893,8 @@ public sealed class WorldPeerHost : IDisposable {
         var answers = ExecuteAuthenticated(credential: credential, operation: () => m_server.ConfirmHops(
             destination: sourceAuthority,
             incarnations: incarnations,
-            key: key
+            key: key,
+            phase: phase
         ))!;
 
         await WorldFederationCodec.WriteResponseAsync(

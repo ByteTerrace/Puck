@@ -6,6 +6,7 @@ namespace Puck.World;
 
 public sealed partial class WorldInstanceHost {
     private static WorldInDoubtTransferCheckpoint CaptureInDoubt(InDoubtTransfer pending) => new(
+        RestoreOnly: pending.RestoreOnly,
         RollbackOnly: pending.RollbackOnly,
         CommitConfirmed: pending.CommitConfirmed,
         Continuation: CaptureTransferContinuation(
@@ -199,7 +200,7 @@ public sealed partial class WorldInstanceHost {
                     ));
                     break;
                 case WorldCrossingRecord.Tombstone tombstone:
-                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoTombstone(key: tombstone.Key));
+                    row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.RedoTombstone(burned: tombstone.Burned, key: tombstone.Key));
                     break;
                 case WorldCrossingRecord.Allocation allocation:
                     row.NextTransferId = Math.Max(
@@ -309,6 +310,27 @@ public sealed partial class WorldInstanceHost {
         );
         row.DrainedTransfers.DrainThrough(transferId: record.TransferId);
     }
+    // Restores the members a settlement did not land; whichever cannot be restored now (its slot is taken) stays a
+    // restore-only obligation of the source, retried at every drain and carried by its checkpoint.
+    private void RestoreOrRetain(InDoubtTransfer pending, WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
+        if (RestoreDetachedMembers(
+            commits: commits,
+            members: members,
+            source: source,
+            transferId: pending.Transfer.TransferId
+        )) {
+            return;
+        }
+        var retained = pending with {
+            CommitMembers = commits,
+            Landed = members,
+            RestoreOnly = true,
+            RollbackOnly = true,
+        };
+
+        retained.SettlementRecorded = true;
+        m_inDoubtTransfers.Add(item: retained);
+    }
     private void RedoSettlement(WorldInstance row, WorldCrossingRecord.Settlement settlement) {
         var index = m_inDoubtTransfers.FindIndex(match: pending => (string.Equals(
             a: pending.Transfer.SourceInstance,
@@ -327,15 +349,15 @@ public sealed partial class WorldInstanceHost {
                     return !settlement.Landed.Contains(value: id) && !settlement.Retired.Contains(value: id);
                 }).ToArray();
 
+                m_inDoubtTransfers.RemoveAt(index: index);
                 if (unlanded.Length > 0) {
-                    _ = RestoreDetachedMembers(
+                    RestoreOrRetain(
                         commits: [.. unlanded.Select(selector: ordinal => remaining.CommitMembers[ordinal])],
                         members: [.. unlanded.Select(selector: ordinal => remaining.Landed[ordinal])],
-                        source: row,
-                        transferId: settlement.TransferId
+                        pending: remaining,
+                        source: row
                     );
                 }
-                m_inDoubtTransfers.RemoveAt(index: index);
             }
             foreach (var (incarnation, body) in PrepareForwardedBodies(
                 row,

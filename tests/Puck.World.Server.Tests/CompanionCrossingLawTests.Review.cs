@@ -1,4 +1,5 @@
 using Xunit;
+using Rows = Puck.World.Server.Tests.CompanionRows;
 
 namespace Puck.World.Server.Tests;
 

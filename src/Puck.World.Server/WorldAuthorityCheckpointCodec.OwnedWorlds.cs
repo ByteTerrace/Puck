@@ -164,6 +164,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: row.MemberCount);
         writer.WriteBoolean(value: row.RollbackOnly);
         writer.WriteBoolean(value: row.CommitConfirmed);
+        writer.WriteBoolean(value: row.RestoreOnly);
         writer.WriteOptionalClass(
             value: row.Continuation,
             writeValue: WriteTransferContinuation
@@ -204,6 +205,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var memberCount = reader.ReadInt32();
         var rollbackOnly = reader.ReadBoolean();
         var commitConfirmed = reader.ReadBoolean();
+        var restoreOnly = reader.ReadBoolean();
         var continuation = reader.ReadOptionalClass(
             readValue: ReadTransferContinuation
         );
@@ -232,6 +234,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Continuation: continuation,
             Landed: landed,
             MemberCount: memberCount,
+            RestoreOnly: restoreOnly,
             RollbackOnly: rollbackOnly,
             SourceDeadlineTick: sourceDeadlineTick,
             SourceInstance: sourceInstance,

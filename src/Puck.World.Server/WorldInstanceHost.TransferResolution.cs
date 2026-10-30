@@ -30,6 +30,18 @@ public sealed partial class WorldInstanceHost {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
 
+            // A settled crossing whose unlanded members could not be restored owes their restoration alone.
+            if (pending.RestoreOnly) {
+                if (
+                    m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var restoring) &&
+                    RestoreDetachedMembers(commits: pending.CommitMembers, members: pending.Landed, source: restoring, transferId: pending.Transfer.TransferId)
+                ) {
+                    m_inDoubtTransfers.RemoveAt(index: index);
+                } else {
+                    index++;
+                }
+                continue;
+            }
             if (!TryBindRecoveryDestination(pending: ref pending)) {
                 index++;
                 continue;

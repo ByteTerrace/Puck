@@ -10,7 +10,7 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
     public Func<string, IWorldCustodyPeer?>? CustodyPeers { get; set; }
 
     /// <inheritdoc/>
-    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination) {
+    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
         ArgumentNullException.ThrowIfNull(argument: incarnations);
         ArgumentNullException.ThrowIfNull(argument: destination);
 
@@ -210,7 +210,7 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
     // Asks each companion's title authority, off this authority's gate, whether its hop under `key` to this destination
     // is currently granted: one question per home, for this call alone, so an answer never outlives the decision it was
     // asked for.
-    private IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? ConfirmCompanionHops(WorldTransferKey key, IEnumerable<WorldCustodyTicket> tickets) {
+    private IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? ConfirmCompanionHops(WorldTransferKey key, IEnumerable<WorldCustodyTicket> tickets, WorldHopPhase phase) {
         Dictionary<(WorldTransferKey, WorldEntityAddress), ulong>? confirmed = null;
 
         foreach (var home in tickets.Where(predicate: ticket => (ticket.Hop == key)).GroupBy(keySelector: static ticket => ticket.Home, comparer: StringComparer.Ordinal)) {
@@ -222,7 +222,8 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
             var answers = door.ConfirmHops(
                 destination: AuthorityIdentity,
                 incarnations: incarnations,
-                key: key
+                key: key,
+                phase: phase
             );
 
             if ((answers is null) || (answers.Count != incarnations.Length)) {
@@ -251,17 +252,24 @@ public sealed partial class WorldServer : IWorldCustodyPeer {
         _ => false,
     });
     /// <summary>Folds one durable custody record and carries out what it states about the bodies here: a retired
-    /// companion's copy is destroyed. Live recording, crossing-log recovery and a replay's re-drive all fold through
-    /// this door, so each derives the same custody and the same embodiment. The caller holds the authority gate.</summary>
+    /// companion's copy is destroyed, and a released title's companion embodied at home despawns. Live recording,
+    /// crossing-log recovery and a replay's re-drive all fold through this door, so each derives the same custody and the
+    /// same embodiment. The caller holds the authority gate.</summary>
     /// <param name="record">The durable record.</param>
     /// <exception cref="ArgumentNullException"><paramref name="record"/> is <see langword="null"/>.</exception>
     public void ApplyCustodyRecord(WorldCrossingRecord record) {
         ArgumentNullException.ThrowIfNull(argument: record);
 
         m_transferEscrow.Custody.Apply(record: record);
-        if (record is WorldCrossingRecord.Retire retire) {
+        var despawned = record switch {
+            WorldCrossingRecord.Retire retire => retire.Incarnation,
+            WorldCrossingRecord.Release release => release.Incarnation,
+            _ => (WorldEntityAddress?)null,
+        };
+
+        if (despawned is { } incarnation) {
             for (var slot = 0; (slot < Population.Capacity); slot++) {
-                if (Population.IsActive(index: slot) && (Population.ResolveIncarnation(authority: AuthorityIdentity, index: slot) == retire.Incarnation)) {
+                if (Population.IsActive(index: slot) && (Population.ResolveIncarnation(authority: AuthorityIdentity, index: slot) == incarnation)) {
                     GrantTable.RollbackTransferredEntity(slot: slot);
                     break;
                 }

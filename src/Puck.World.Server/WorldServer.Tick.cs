@@ -71,6 +71,7 @@ public sealed partial class WorldServer {
         return m_tick.CommitTransfer(
             confirmed: ConfirmCompanionHops(
                 key: key,
+                phase: WorldHopPhase.Commit,
                 tickets: (members ?? []).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>()
             ),
             members: members!,
@@ -142,6 +143,7 @@ public sealed partial class WorldServer {
                     SourceAuthority: request.SourceAuthority,
                     TransferId: request.TransferId
                 ),
+                phase: WorldHopPhase.Reservation,
                 tickets: (request.Members ?? []).Select(selector: static member => member.Companion?.Ticket).OfType<WorldCustodyTicket>()
             ),
             request: request

@@ -465,8 +465,7 @@ public sealed partial class WorldInstanceHost {
 
         if (companions.Count > 0) {
             var keep = Enumerable.Repeat(element: true, count: members.Length).ToArray();
-
-            AuthorizeCompanions(
+            var transient = AuthorizeCompanions(
                 destination: (targetAuthority.Local?.Server.AuthorityIdentity ?? targetAuthority.Remote!.PeerAuthority),
                 keep: keep,
                 key: new WorldTransferKey(
@@ -476,6 +475,15 @@ public sealed partial class WorldInstanceHost {
                 reservationMembers: reservationMembers,
                 source: source
             );
+
+            // A title authority that could not decide yet is asked again at the next drain; the companion is left behind
+            // only once the attempts run out.
+            if (transient && (transfer.Attempt < TransferRetryCeiling)) {
+                if (spawned) { ReapIfEmpty(name: targetName); }
+                source.DrainedTransfers.Undrain(transferId: transfer.TransferId);
+                m_pendingTransfers.Enqueue(item: (transfer with { Attempt = (transfer.Attempt + 1) }));
+                return;
+            }
             members = [.. members.Where(predicate: (_, ordinal) => keep[ordinal])];
             reservationMembers = [.. reservationMembers.Where(predicate: (_, ordinal) => keep[ordinal])];
             reservationRequest = reservationRequest with { Members = reservationMembers };
@@ -2448,7 +2456,8 @@ public sealed partial class WorldInstanceHost {
         string? RecoveryAuthority = null,
         string? RecoveryEndpoint = null,
         WorldDefinition? RecoveryDefinition = null,
-        bool CommitConfirmed = false
+        bool CommitConfirmed = false,
+        bool RestoreOnly = false
     ) {
         public bool PublicationFailureReported { get; set; }
         // The settlement this source wrote ahead of acknowledging or restoring the cohort.

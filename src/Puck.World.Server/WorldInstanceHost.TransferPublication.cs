@@ -50,11 +50,11 @@ public sealed partial class WorldInstanceHost {
                         )) {
                             return false;
                         }
-                        _ = RestoreDetachedMembers(
+                        RestoreOrRetain(
                             commits: [.. restored.Select(selector: ordinal => pending.CommitMembers[ordinal])],
                             members: [.. restored.Select(selector: ordinal => pending.Landed[ordinal])],
-                            source: source,
-                            transferId: transfer.TransferId
+                            pending: pending,
+                            source: source
                         );
                         foreach (var ordinal in unlanded.Reverse()) {
                             pending.Landed.RemoveAt(index: ordinal);

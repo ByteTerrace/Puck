@@ -87,11 +87,13 @@ public sealed partial class WorldInstanceHost {
     });
     // Asks each companion's title authority to grant its hop under this crossing's key: this authority's own title is
     // granted by one record here; another authority's is asked through the host's custody door. A granted companion
-    // carries the ticket home recorded; any other is left out of the cohort and stays where it is.
-    private void AuthorizeCompanions(WorldInstance source, WorldTransferKey key, string destination, WorldTransferReservationMember[] reservationMembers, bool[] keep) {
+    // carries the ticket home recorded; any other is left out of the cohort and stays where it is. Returns whether an
+    // answer was transient (Pending or Unavailable), which keeps the attempt for the next drain to ask again.
+    private bool AuthorizeCompanions(WorldInstance source, WorldTransferKey key, string destination, WorldTransferReservationMember[] reservationMembers, bool[] keep) {
         var server = source.Server;
         var authority = server.AuthorityIdentity;
         var ordinals = Enumerable.Range(start: 0, count: reservationMembers.Length).Where(predicate: ordinal => reservationMembers[ordinal].Companion is not null);
+        var transient = false;
 
         foreach (var home in ordinals.GroupBy(keySelector: ordinal => reservationMembers[ordinal].Companion!.Home, comparer: StringComparer.Ordinal)) {
             var group = home.ToArray();
@@ -126,6 +128,7 @@ public sealed partial class WorldInstanceHost {
                 if ((answer.Verdict == WorldHopVerdict.Granted) && !string.Equals(a: home.Key, b: authority, comparisonType: StringComparison.Ordinal)) {
                     m_foreignGrants.Add(item: (source, key, incarnations[index], home.Key));
                 }
+                transient |= (answer.Verdict is WorldHopVerdict.Pending or WorldHopVerdict.Unavailable);
                 if ((answer.Verdict == WorldHopVerdict.Granted) && (answer.Incarnation == incarnations[index]) && (answer.Next == expected)) {
                     reservationMembers[ordinal] = member with {
                         Companion = member.Companion! with {
@@ -148,6 +151,7 @@ public sealed partial class WorldInstanceHost {
                 }
             }
         }
+        return transient;
     }
     /// <summary>Queues a visiting companion's return to the authority that holds its title: a crossing of its own, under
     /// a key this custodian allocates durably, carrying the ticket the companion landed with and following no one. Home
@@ -250,10 +254,23 @@ public sealed partial class WorldInstanceHost {
             }
         }
     }
-    // Settles every hop this authority granted for itself whose departure it settled or never made: one record per
-    // companion, each its own operation. A departure in doubt waits for its settlement.
+    // Abandons every key this authority granted its own hop under whose attempt ended without departing (a settlement
+    // landing nothing, one record each), then settles every own hop whose key is settled: one record per companion, each
+    // its own operation. A key still queued, and a departure in doubt, wait.
     private void SettleOwnHops() {
         foreach (var row in m_instances.Values.ToArray()) {
+            foreach (var transferId in row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.UnsettledOwnKeys())) {
+                if (
+                    m_pendingTransfers.Any(predicate: pending => string.Equals(a: pending.SourceInstance, b: row.Name, comparisonType: StringComparison.Ordinal) && (pending.TransferId == transferId)) ||
+                    m_inDoubtTransfers.Any(predicate: pending => string.Equals(a: pending.Transfer.SourceInstance, b: row.Name, comparisonType: StringComparison.Ordinal) && (pending.Transfer.TransferId == transferId))
+                ) {
+                    continue;
+                }
+                if (!row.Server.TryRecordCrossing(reason: out _, record: new WorldCrossingRecord.Settlement(Forwarded: [], Landed: [], Retired: [], TransferId: transferId))) {
+                    break;
+                }
+            }
+
             var owed = row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.OwedOwnHopSettlements());
 
             foreach (var (key, incarnation, arrived) in owed) {

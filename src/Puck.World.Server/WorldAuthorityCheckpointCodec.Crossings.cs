@@ -328,6 +328,10 @@ public static partial class WorldAuthorityCheckpointCodec {
                     key: tombstone.Key,
                     writer: writer
                 );
+                writer.WriteArray(
+                    items: tombstone.Burned,
+                    writeItem: static (w, slot) => w.WriteInt32(value: slot)
+                );
                 break;
             case WorldCrossingRecord.Allocation allocation:
                 writer.WriteByte(value: CrossingAllocationTag);
@@ -468,8 +472,18 @@ public static partial class WorldAuthorityCheckpointCodec {
                     Key: key
                 );
             }
-            case CrossingTombstoneTag:
-                return new WorldCrossingRecord.Tombstone(Key: ReadTransferKey(reader: ref reader));
+            case CrossingTombstoneTag: {
+                var key = ReadTransferKey(reader: ref reader);
+
+                return new WorldCrossingRecord.Tombstone(
+                    Burned: reader.ReadArray(
+                        field: "tombstone burned slots",
+                        readItem: static (ref WireReader r) => r.ReadInt32(),
+                        maximum: WorldBodiesLimits.CapacityCeiling
+                    ),
+                    Key: key
+                );
+            }
             case CrossingAllocationTag:
                 return new WorldCrossingRecord.Allocation(Next: reader.ReadUInt64());
             case CrossingHopTag: {

@@ -72,9 +72,16 @@ public abstract record WorldCrossingRecord {
     /// (<see cref="WorldTransferReservationRequest.SourceFloor"/>).</param>
     public sealed record Lease(WorldTransferKey Key, ulong Floor) : WorldCrossingRecord;
     /// <summary>A destination is about to answer <see cref="WorldTransferStatus.Missing"/> for a key: from here no
-    /// reservation leases it and no commit lands under it, and a live lease a recovered checkpoint holds for it dies.</summary>
+    /// reservation leases it and no commit lands under it, and a live lease a recovered checkpoint holds for it dies.
+    /// A commit that landed members and rolled them back names their slots, whose generations outlive the rollback, so
+    /// recovery advances them as the landings did.</summary>
     /// <param name="Key">The dead key.</param>
-    public sealed record Tombstone(WorldTransferKey Key) : WorldCrossingRecord;
+    /// <param name="Burned">The body indices the refused commit landed at before it rolled them back; empty for a key
+    /// that landed nothing.</param>
+    public sealed record Tombstone(WorldTransferKey Key, IReadOnlyList<int>? Burned = null) : WorldCrossingRecord {
+        /// <summary>Gets the body indices the refused commit landed at before it rolled them back.</summary>
+        public IReadOnlyList<int> Burned { get; init; } = (Burned ?? []);
+    }
     /// <summary>A source allocated every transfer id below <paramref name="Next"/>: recovery never mints one of them
     /// again.</summary>
     /// <param name="Next">The first id the source has not allocated.</param>

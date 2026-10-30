@@ -93,6 +93,9 @@ public sealed record WorldLandedMemberCheckpoint(
 /// its next observation; required for a remote endpoint and null for a local destination.</param>
 /// <param name="CommitConfirmed">A destination commit is known. Only source-side publication remains; status,
 /// commit, and rollback must never run again, including after another checkpoint restore.</param>
+/// <param name="RestoreOnly">The crossing is settled and the remaining members are the ones its settlement did not land
+/// whose restoration failed (their slot was taken meanwhile): only their restoration remains, and the destination is
+/// never asked again.</param>
 public sealed record WorldInDoubtTransferCheckpoint(
     string SourceInstance,
     ulong TransferId,
@@ -107,7 +110,8 @@ public sealed record WorldInDoubtTransferCheckpoint(
     bool RollbackOnly = false,
     WorldTransferContinuationCheckpoint? Continuation = null,
     byte[]? TargetDefinitionJson = null,
-    bool CommitConfirmed = false
+    bool CommitConfirmed = false,
+    bool RestoreOnly = false
 );
 /// <summary>Preserves the source-side completion of an unresolved crossing. Arrival motion and action continuity
 /// are already in the exact commit payload; these fields instead own rollback clamping and outcome narration.</summary>

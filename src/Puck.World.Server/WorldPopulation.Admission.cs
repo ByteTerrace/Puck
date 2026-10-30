@@ -63,6 +63,19 @@ public sealed partial class WorldPopulation {
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
     }
+    /// <summary>Advances an inactive body index's occupant generation without seating anyone, as a landing that was rolled
+    /// back did: recovery redoes a refused commit's burned generations through it so the slot's next occupant is a new
+    /// generation here too.</summary>
+    /// <param name="index">The body index.</param>
+    /// <exception cref="InvalidOperationException">The index is active.</exception>
+    public void BurnGeneration(int index) {
+        var entry = m_entries[index];
+
+        if (entry.Active) {
+            throw new InvalidOperationException(message: $"body:{index} is active; its generation advances with its occupant");
+        }
+        entry.Generation = checked((entry.Generation + 1));
+    }
     // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.

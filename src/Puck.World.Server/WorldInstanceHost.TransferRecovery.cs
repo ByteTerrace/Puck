@@ -252,7 +252,7 @@ public sealed partial class WorldInstanceHost {
 
             restored.Add(item: new(
                 RollbackOnly: pending.RollbackOnly, CommitMembers: [.. pending.CommitMembers], Landed: landed,
-                CommitConfirmed: pending.CommitConfirmed,
+                CommitConfirmed: pending.CommitConfirmed, RestoreOnly: pending.RestoreOnly,
                 MemberCount: pending.MemberCount, SourceAuthority: row.Server.AuthorityIdentity,
                 SourceDeadlineTick: pending.SourceDeadlineTick, Spawned: pending.Spawned,
                 TargetAuthority: ((target is null)

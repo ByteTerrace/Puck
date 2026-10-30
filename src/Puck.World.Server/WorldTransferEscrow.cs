@@ -315,6 +315,9 @@ public sealed partial class WorldTransferEscrow {
     private ulong m_crossingSequence;
     // Set while a recorded arrival lands again: its record is already durable, so it is not written twice.
     private bool m_relanding;
+    // The body indices the commit being decided landed at and rolled back: the generations those landings took outlive
+    // the rollback, and the key's tombstone names them so recovery advances them too.
+    private readonly List<int> m_rolledBack = [];
     // Set while a re-drive lands a taped arrival: the outcome its landings must reproduce, and whether the landing
     // reached the recorded rollback.
     private WorldArrivalOutcome? m_relandOutcome;
@@ -819,6 +822,7 @@ public sealed partial class WorldTransferEscrow {
         var leased = m_leases.ContainsKey(key: key);
 
         m_commitConfirmations = confirmed;
+        m_rolledBack.Clear();
         WorldTransferStatus status;
 
         try {
@@ -848,6 +852,7 @@ public sealed partial class WorldTransferEscrow {
             );
         }
         return AnswerMissing(
+            burned: [.. m_rolledBack],
             key: key,
             reason: ref reason
         );
@@ -1020,6 +1025,7 @@ public sealed partial class WorldTransferEscrow {
                 ordinals: landedOrdinals
             );
 
+            m_rolledBack.AddRange(collection: landedSoFar.Slots.Take(count: generations.Count));
             RollBackArrival(
                 arrival: landedSoFar,
                 landed: generations.Count

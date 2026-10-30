@@ -166,7 +166,7 @@ public sealed class WorldCompanionCustody {
     /// <see cref="Folds"/>, where a settlement counts only when it settles a departure that carried a companion.</summary>
     /// <param name="record">The record.</param>
     /// <returns><see langword="true"/> when <see cref="Apply"/> folds it.</returns>
-    public bool Concerns(WorldCrossingRecord record) => (Folds(record: record) && ((record is not WorldCrossingRecord.Settlement settlement) || m_ownDepartures.ContainsKey(key: settlement.TransferId)));
+    public bool Concerns(WorldCrossingRecord record) => (Folds(record: record) && ((record is not WorldCrossingRecord.Settlement settlement) || m_ownDepartures.ContainsKey(key: settlement.TransferId) || IsOwnHopKey(transferId: settlement.TransferId)));
 
     /// <summary>Folds one durable record. A record this reducer does not fold (<see cref="Folds"/>) changes nothing.
     /// The fold is total: any prefix of an authority's records folds to a custody state.</summary>
@@ -436,10 +436,9 @@ public sealed class WorldCompanionCustody {
     /// <param name="visit">The visit.</param>
     /// <returns><see langword="true"/> once the elapse is recorded.</returns>
     public bool IsGraceElapsed(WorldEntityAddress incarnation, int visit) => m_graceElapsed.Contains(item: (incarnation, visit));
-    /// <summary>Returns the settlements home owes its own hops, each a record of its own: a hop whose departure this
-    /// authority settled arrived when the settlement landed the companion's member and did not otherwise; a hop with no
-    /// departure on record was abandoned and did not arrive. A departure still in doubt owes nothing yet. The caller
-    /// asks only when no crossing of this authority is between its hop record and its departure record.</summary>
+    /// <summary>Returns the settlements home owes its own hops, each a record of its own: once the key's crossing is
+    /// settled, a hop arrived when the settlement landed the companion's member and did not otherwise (a settlement with
+    /// no departure is an abandoned key, which landed nothing). A key still in flight or in doubt owes nothing yet.</summary>
     /// <returns>Each owed settlement: the hop's key, the companion, and whether it arrived.</returns>
     public IReadOnlyList<(WorldTransferKey Key, WorldEntityAddress Incarnation, bool Arrived)> OwedOwnHopSettlements() {
         var owed = new List<(WorldTransferKey, WorldEntityAddress, bool)>();
@@ -449,21 +448,37 @@ public sealed class WorldCompanionCustody {
             if (
                 !string.Equals(a: hop.From, b: home, comparisonType: StringComparison.Ordinal) ||
                 !string.Equals(a: key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) ||
-                m_hopsDone.Contains(item: (key, incarnation))
+                m_hopsDone.Contains(item: (key, incarnation)) ||
+                !m_ownSettlements.TryGetValue(key: key.TransferId, value: out var landed)
             ) {
                 continue;
             }
-            if (!m_ownDepartures.TryGetValue(key: key.TransferId, value: out var departed) || !departed.Carried.Any(predicate: carried => (carried.Incarnation == incarnation))) {
-                owed.Add(item: (key, incarnation, false));
-                continue;
-            }
-            if (m_ownSettlements.TryGetValue(key: key.TransferId, value: out var landed)) {
-                var memberId = departed.Carried.First(predicate: carried => (carried.Incarnation == incarnation)).MemberId;
+            // A companion the departure never carried (left out at the reservation, or an abandoned key) did not arrive.
+            var memberId = (m_ownDepartures.TryGetValue(key: key.TransferId, value: out var departed)
+                ? departed.Carried.Where(predicate: carried => (carried.Incarnation == incarnation)).Select(selector: static carried => (int?)carried.MemberId).FirstOrDefault()
+                : null);
 
-                owed.Add(item: (key, incarnation, landed.Contains(value: memberId)));
-            }
+            owed.Add(item: (key, incarnation, ((memberId is { } member) && landed.Contains(value: member))));
         }
         return owed;
+    }
+    /// <summary>Returns the transfer ids of this authority's own keys that it granted a hop under and that neither
+    /// departed nor settled: each is abandoned on record (a settlement landing nothing) once no attempt under it is in
+    /// flight, so its hop settles as not arrived.</summary>
+    /// <returns>The transfer ids, lowest first.</returns>
+    public IReadOnlyList<ulong> UnsettledOwnKeys() {
+        var home = m_authority();
+
+        return [.. m_hops.Keys
+            .Where(predicate: pair => string.Equals(a: pair.Key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal) && !m_hopsDone.Contains(item: pair) && !m_ownDepartures.ContainsKey(key: pair.Key.TransferId) && !m_ownSettlements.ContainsKey(key: pair.Key.TransferId))
+            .Select(selector: static pair => pair.Key.TransferId)
+            .Distinct()
+            .Order()];
+    }
+    private bool IsOwnHopKey(ulong transferId) {
+        var home = m_authority();
+
+        return m_hops.Keys.Any(predicate: pair => (pair.Key.TransferId == transferId) && string.Equals(a: pair.Key.SourceAuthority, b: home, comparisonType: StringComparison.Ordinal));
     }
     /// <summary>Returns whether the arrival under <paramref name="key"/> landed <paramref name="incarnation"/> here, or
     /// <see langword="null"/> when no arrival carrying companions landed under the key.</summary>

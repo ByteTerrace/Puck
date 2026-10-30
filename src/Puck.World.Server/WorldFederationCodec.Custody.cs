@@ -4,18 +4,21 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldFederationCodec {
-    /// <summary>Encodes a destination's hop confirmation question: the hop's key and the companions it asks about.</summary>
+    /// <summary>Encodes a destination's hop confirmation question: the hop's key, the decision it belongs to and the
+    /// companions it asks about.</summary>
     /// <param name="key">The hop's key.</param>
     /// <param name="incarnations">The companions.</param>
+    /// <param name="phase">The decision the question belongs to.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="incarnations"/> is <see langword="null"/>.</exception>
-    public static byte[] EncodeHopQuery(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations) {
+    public static byte[] EncodeHopQuery(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, WorldHopPhase phase) {
         ArgumentNullException.ThrowIfNull(argument: incarnations);
 
         var writer = new WireWriter();
 
         writer.WriteString(value: key.SourceAuthority);
         writer.WriteUInt64(value: key.TransferId);
+        writer.WriteByte(value: (byte)phase);
         writer.WriteArray(
             items: incarnations,
             writeItem: WorldWireLeaves.WriteEntityAddress
@@ -26,15 +29,22 @@ public static partial class WorldFederationCodec {
     /// <param name="body">The leaf bytes.</param>
     /// <param name="key">The hop's key.</param>
     /// <param name="incarnations">The companions.</param>
+    /// <param name="phase">The decision the question belongs to.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeHopQuery(ReadOnlySpan<byte> body, out WorldTransferKey key, out WorldEntityAddress[] incarnations, out WireFailure failure) {
+    public static bool TryDecodeHopQuery(ReadOnlySpan<byte> body, out WorldTransferKey key, out WorldEntityAddress[] incarnations, out WorldHopPhase phase, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
         key = new WorldTransferKey(
             SourceAuthority: reader.ReadRequiredString(field: "hop key source authority"),
             TransferId: reader.ReadUInt64()
         );
+        phase = (WorldHopPhase)reader.ReadByte();
+        if (!Enum.IsDefined(value: phase)) {
+            incarnations = [];
+            failure = new WireFailure(Detail: $"hop query phase {(byte)phase} is undefined", Refusal: WireRefusal.PayloadMalformed);
+            return false;
+        }
         incarnations = reader.ReadArray(
             field: "hop query companions",
             readItem: static (ref WireReader r) => WorldWireLeaves.ReadEntityAddress(reader: ref r),

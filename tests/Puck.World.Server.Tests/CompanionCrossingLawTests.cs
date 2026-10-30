@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.World.Protocol;
 using Xunit;
+using Rows = Puck.World.Server.Tests.CompanionRows;
 
 namespace Puck.World.Server.Tests;
 
@@ -10,104 +11,6 @@ namespace Puck.World.Server.Tests;
 /// under a grant home confirms to it for that very decision. Each law is the engine form of a named trace of the custody
 /// model (<c>CompanionCustodyModelLawTests</c>). Row a is home; its companions follow its seat 0.</summary>
 public sealed partial class CompanionCrossingLawTests {
-    // Three authorities in one host, each with a durable crossing log: home (row-a) holding the companions, and two
-    // custodians. Seat 0 of home is the player; seat 1 keeps home running when the player leaves.
-    private sealed class Rows : IDisposable {
-        private readonly List<IDisposable> m_owned = [];
-
-        public Rows(int companions = 1, int peerSlots = 2, bool bDeclaresRole = true, int bPeerSlots = 2, Func<int, string?>? bLandingRefusal = null, bool cDeclaresRole = true, Func<int, string?>? cLandingRefusal = null) {
-            Host = new WorldInstanceHost(
-                applicationStopping: CancellationToken.None,
-                admitsSpawn: true,
-                machineHostFactory: Fixtures.MachineHostFactory,
-                machineId: Guid.NewGuid(),
-                resolver: new WorldSessionResolver(),
-                seats: WorldEmbodiedSeats.None,
-                stateRoot: new WorldStateRoot(path: Directory.CreateTempSubdirectory(prefix: "puck-companion-host-").FullName)
-            );
-            Home = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: companions, peerSlots: peerSlots), name: "row-a");
-            B = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, declaresRole: bDeclaresRole, peerSlots: bPeerSlots), landingRefusal: bLandingRefusal, name: "row-b");
-            C = HostRow.Build(definition: Fixtures.BuildCompanionDocument(companions: 0, declaresRole: cDeclaresRole, peerSlots: 2), landingRefusal: cLandingRefusal, name: "row-c");
-            foreach (var row in new[] { Home, B, C }) {
-                var store = new MemoryCrossingStore();
-
-                Logs[row.Instance.Name] = store;
-                row.Server.InstallCrossingLog(log: store.Activate());
-                Host.Admit(row: row.Instance);
-                m_owned.Add(item: row);
-            }
-            m_owned.Add(item: Host);
-            foreach (var slot in new[] { 0, 1 }) {
-                Assert.True(condition: Home.Server.ApplySession(request: new SessionRequest.Join(
-                    IdentityName: null,
-                    Principal: Principal.Seat(slot: slot),
-                    Slot: slot,
-                    WireProtocolKey: WorldProtocol.WireProtocolKey
-                )).Accepted);
-            }
-            Step(ticks: 3);
-            Player = Incarnation(row: Home, slot: 0)!.Value;
-            // In member order: the cohort lists companions by the body they leave.
-            Companions = [.. Enumerable.Range(start: 0, count: companions).Select(selector: index => PlacementSlot(row: Home, placementId: $"companion-{index}")).Order().Select(selector: slot => Incarnation(row: Home, slot: slot)!.Value)];
-        }
-
-        public WorldInstanceHost Host { get; }
-        public HostRow Home { get; }
-        public HostRow B { get; }
-        public HostRow C { get; }
-        public Dictionary<string, MemoryCrossingStore> Logs { get; } = new(comparer: StringComparer.Ordinal);
-        public WorldEntityAddress Player { get; }
-        public WorldEntityAddress[] Companions { get; }
-
-        public void Dispose() {
-            foreach (var owned in Enumerable.Reverse(source: m_owned)) {
-                owned.Dispose();
-            }
-        }
-        public void Step(int ticks) {
-            for (var tick = 0; (tick < ticks); tick++) {
-                Host.DrainPendingTransfers();
-                Host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-            }
-        }
-        // Moves the player from `from` to `to` and settles everything the crossing owes.
-        public void Cross(HostRow from, HostRow to) {
-            _ = Host.EnqueueTransfer(
-                actingPrincipal: Principal.Console,
-                destination: WorldInstanceHost.TransferDestination.Existing(name: to.Instance.Name),
-                scope: WorldInstanceHost.TransferScope.Body,
-                sourceInstance: from.Instance.Name,
-                sourceSlot: SlotOf(row: from, incarnation: Player)
-            );
-            Step(ticks: 3);
-        }
-        public static WorldEntityAddress? Incarnation(HostRow row, int slot) => row.Server.ExecuteAuthorityOperation(operation: () => row.Server.Population.ResolveIncarnation(
-            authority: row.Server.AuthorityIdentity,
-            index: slot
-        ));
-        public static int PlacementSlot(HostRow row, string placementId) {
-            for (var slot = 0; (slot < row.Server.Population.Capacity); slot++) {
-                if (row.Server.Population.IsActive(index: slot) && string.Equals(a: row.Server.Population.InhabitantPlacementId(index: slot), b: placementId, comparisonType: StringComparison.Ordinal)) {
-                    return slot;
-                }
-            }
-            throw new InvalidOperationException(message: $"no body of placement '{placementId}' stands in '{row.Instance.Name}'");
-        }
-        public static int SlotOf(HostRow row, WorldEntityAddress incarnation) {
-            for (var slot = 0; (slot < row.Server.Population.Capacity); slot++) {
-                if (row.Server.Population.IsActive(index: slot) && (Incarnation(row: row, slot: slot) == incarnation)) {
-                    return slot;
-                }
-            }
-            return -1;
-        }
-        public static ulong EpochAt(HostRow row, WorldEntityAddress incarnation) => row.Server.ExecuteAuthorityOperation(operation: () => row.Server.Population.ReadMobility(
-            authority: row.Server.AuthorityIdentity,
-            index: SlotOf(row: row, incarnation: incarnation)
-        ).Epoch);
-        public WorldCustodyTitle Title(WorldEntityAddress companion) => Home.Server.ExecuteAuthorityOperation(operation: () => Home.Server.TransferEscrow.Custody.TitleOf(incarnation: companion))!;
-        public IReadOnlyList<WorldCrossingRecord> Records(HostRow row) => [.. Logs[row.Instance.Name].Read().Select(selector: static entry => entry.Record)];
-    }
 
     // Model traces H2_H10_AdmissionAndBindingArePerMemberById and Epochs: the companion crosses with its player as a
     // member of its own, named by id; home records the hop before anything is sent, the destination lands the companion
@@ -491,9 +394,9 @@ public sealed partial class CompanionCrossingLawTests {
         );
     }
     private sealed record CountingHome(Action Counted, IWorldCustodyPeer Inner) : IWorldCustodyPeer {
-        public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination) {
+        public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
             Counted();
-            return Inner.ConfirmHops(destination: destination, incarnations: incarnations, key: key);
+            return Inner.ConfirmHops(destination: destination, incarnations: incarnations, key: key, phase: phase);
         }
         public IReadOnlyList<WorldHopAnswer> RequestHop(WorldTransferKey key, string source, string destination, IReadOnlyList<WorldHopRequestMember> members) => Inner.RequestHop(destination: destination, key: key, members: members, source: source);
         public WorldCustodyAnswer QueryCustody(WorldTransferKey key, WorldEntityAddress incarnation, string asker) => Inner.QueryCustody(asker: asker, incarnation: incarnation, key: key);

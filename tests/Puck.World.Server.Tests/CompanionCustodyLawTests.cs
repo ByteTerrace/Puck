@@ -223,11 +223,11 @@ public sealed class CompanionCustodyLawTests {
         var destination = world.Destination.Server.AuthorityIdentity;
 
         Durable(record: new WorldCrossingRecord.Hop(From: world.Destination.Server.AuthorityIdentity, Key: key, Members: [new WorldCustodyHopMember(Epoch: 0UL, Incarnation: companion, Next: 1UL)], To: destination), server: home);
-        Assert.Equal(actual: home.ConfirmHops(destination: destination, incarnations: [companion], key: key), expected: [1UL]);
+        Assert.Equal(actual: home.ConfirmHops(destination: destination, incarnations: [companion], key: key, phase: WorldHopPhase.Reservation), expected: [1UL]);
         world.SourceLog.LoseAnswerOn = typeof(WorldCrossingRecord.Release);
         world.SourceLog.LostAnswerLands = true;
         Assert.Equal(actual: home.RecordCustody(reason: out _, record: new WorldCrossingRecord.Release(Incarnation: companion)), expected: WorldCrossingDurability.Uncertain);
-        Assert.Equal(actual: home.ConfirmHops(destination: destination, incarnations: [companion], key: key), expected: [(ulong?)null]);
+        Assert.Equal(actual: home.ConfirmHops(destination: destination, incarnations: [companion], key: key, phase: WorldHopPhase.Commit), expected: [(ulong?)null]);
     }
     // A retire is the custodian's own record that its copy is destroyed: recovery from a checkpoint that still holds the
     // copy redoes the retire and leaves no body, as the live retire did.

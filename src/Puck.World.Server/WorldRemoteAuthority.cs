@@ -1020,13 +1020,16 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             result: out result
         );
     }
-    private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer) {
+    // Correlation names what a step is about beyond its source-scoped id, so two steps of one kind about different
+    // questions (a hop query about another authority's key, other companions or the other phase) never share an answer.
+    private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer, string correlation = "") {
         answer = default;
 
         if (m_submissionAuthority is { } upstream) {
             return upstream.TryResolveTransferStep(
                 answer: out answer,
                 body: body,
+                correlation: correlation,
                 kind: kind,
                 sourceAuthority: sourceAuthority,
                 transferId: transferId
@@ -1059,6 +1062,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         }
 
         var key = new TransferStepKey(
+            Correlation: correlation,
             Kind: kind,
             SourceAuthority: sourceAuthority,
             TransferId: transferId
@@ -1391,17 +1395,19 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// <param name="key">The hop's key.</param>
     /// <param name="incarnations">The companions.</param>
     /// <param name="destination">The asking destination: this lane's authenticated namespace.</param>
-    /// <returns>One answer per companion, or <see langword="null"/> when the peer gave no usable answer.</returns>
-    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination) {
+    /// <param name="phase">The decision the question belongs to; it correlates the answer to this question alone.</param>
+    public IReadOnlyList<ulong?>? ConfirmHops(WorldTransferKey key, IReadOnlyList<WorldEntityAddress> incarnations, string destination, WorldHopPhase phase) {
         _ = TryResolveTransferStep(
             sourceAuthority: destination,
             transferId: key.TransferId,
             kind: WorldFederationRequest.HopQuery,
             body: () => WorldFederationCodec.EncodeHopQuery(
                 incarnations: incarnations,
-                key: key
+                key: key,
+                phase: phase
             ),
-            answer: out var answer
+            answer: out var answer,
+            correlation: $"{key.SourceAuthority}|{(byte)phase}|{string.Join(',', incarnations)}"
         );
 
         return (((answer.Kind == WorldFederationResponse.HopQueryReply) && WorldFederationCodec.TryDecodeHopQueryReply(
@@ -1484,7 +1490,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             : [.. members.Select(selector: static member => new WorldHopAnswer(Incarnation: member.Incarnation, Next: 0UL, Verdict: WorldHopVerdict.Unavailable))]);
     }
 
-    private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind);
+    private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind, string Correlation = "");
     // One route republish generation: the endpoint to dial and its description, formatted once here so no attempt,
     // narration, or comparison formats it again, and held as one reference so a swap is atomic.
     private sealed class PublishedRoute(EndPoint endpoint) {
