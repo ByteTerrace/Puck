@@ -322,7 +322,9 @@ public sealed partial class WorldInstanceHost {
         )) {
             return;
         }
+        // Settled already, the row asks no destination: it owes only the restoration, neither a commit nor a rollback.
         var retained = pending with {
+            CommitConfirmed = false,
             CommitMembers = commits,
             Landed = members,
             RestoreOnly = true,

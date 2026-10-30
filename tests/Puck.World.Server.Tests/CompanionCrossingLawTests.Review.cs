@@ -1,3 +1,4 @@
+using Puck.World.Protocol;
 using Xunit;
 using Rows = Puck.World.Server.Tests.CompanionRows;
 
@@ -128,6 +129,38 @@ public sealed partial class CompanionCrossingLawTests {
         foreach (var slot in tombstone.Burned) {
             Assert.True(condition: (rows.B.Server.Population.Generation(index: slot) > before[slot]), userMessage: $"body:{slot} is back at generation {before[slot]} after the restart");
         }
+    }
+    // A partial landing's unlanded companion whose source slot another body took meanwhile cannot be restored when the
+    // settlement is recorded: the obligation to restore it is kept as a restore-only row, which a checkpoint carries and
+    // the drain retries until the slot is free, and the companion comes back to it.
+    [Fact]
+    public void AnUnrestorableCompanionIsKeptAsARestoreOnlyObligation() {
+        using var rows = new Rows(companions: 2, bLandingRefusal: static ordinal => ((ordinal == 2) ? "refuse the second companion" : null));
+        var fault = new HoldLanded(destination: rows.B.Server);
+        var left = rows.Companions[1];
+
+        rows.Host.SetPeerCallFault(fault: fault, instanceName: "row-b");
+        rows.Cross(from: rows.Home, to: rows.B);
+        Assert.Equal(actual: Rows.SlotOf(row: rows.Home, incarnation: left), expected: -1);
+        // Another body takes the companion's slot while the crossing is in doubt.
+        var refusal = string.Empty;
+
+        Assert.True(condition: rows.Home.Server.ExecuteAuthorityOperation(operation: () => rows.Home.Server.Population.TryAdmitTransferredEntityAt(admitted: out _, occupant: default, refusal: out refusal, slot: left.Index, source: IntentSource.Idle)), userMessage: refusal);
+        fault.Release = true;
+        rows.Step(ticks: 3);
+
+        Assert.Equal(actual: rows.Records(row: rows.Home).OfType<WorldCrossingRecord.Settlement>().Single().Landed, expected: [0, 1]);
+        Assert.Equal(actual: Rows.SlotOf(row: rows.Home, incarnation: left), expected: -1);
+        Assert.Contains(collection: rows.Host.CaptureRow(row: rows.Home.Instance).InDoubtTransfers, filter: static row => row.RestoreOnly);
+        // The obligation outlives a restart from a checkpoint taken while it stands.
+        rows.Checkpoint(name: "row-a");
+        rows.Restart(name: "row-a");
+        Assert.Contains(collection: rows.Host.CaptureRow(row: rows.Home.Instance).InDoubtTransfers, filter: static row => row.RestoreOnly);
+        // Once the slot is free the drain restores the companion to it.
+        Assert.True(condition: rows.Home.Server.ExecuteAuthorityOperation(operation: () => rows.Home.Server.Population.TryDetachSeatForTransfer(profile: out _, slot: left.Index)));
+        rows.Step(ticks: 3);
+        Assert.Equal(actual: Rows.SlotOf(row: rows.Home, incarnation: left), expected: left.Index);
+        Assert.DoesNotContain(collection: rows.Host.CaptureRow(row: rows.Home.Instance).InDoubtTransfers, filter: static row => row.RestoreOnly);
     }
     // Forwards every call to the destination, holding the landed verdict back until released.
     private sealed class HoldLanded(WorldServer destination) : IWorldPeerCall {
