@@ -24,7 +24,7 @@ public sealed record InstallRecord(long Sequence, IReadOnlyList<string> Files) {
 
     /// <summary>Reads a version directory's record through its handle.</summary>
     /// <param name="version">The held version directory.</param>
-    /// <returns>The record, or <see langword="null"/> when it is absent, does not parse, or names a sequence or pin that is not well formed.</returns>
+    /// <returns>The record, or <see langword="null"/> when it is absent, does not parse, or names no files, a sequence or a pin that is not well formed.</returns>
     /// <exception cref="IOException">The record is a link, oversized or cannot be read.</exception>
     public static InstallRecord? TryRead(ConfinedDirectory version) {
         ArgumentNullException.ThrowIfNull(argument: version);
@@ -33,9 +33,9 @@ public sealed record InstallRecord(long Sequence, IReadOnlyList<string> Files) {
         if (stream is null) { return null; }
         if (stream.Length > MaximumBytes) { throw new IOException(message: $"'{FileName}' exceeds {MaximumBytes} bytes."); }
         try {
-            // A record whose order or pins are not well formed names nothing reliable; its version is then ranked and
-            // protected as one without a record (the content pins of the files it holds).
-            return (((JsonSerializer.Deserialize<InstallRecord>(options: DocumentJsonOptions.Shared, utf8Json: stream) is { Files: not null, Sequence: > 0 } record) &&
+            // A record whose order, inventory or pins are not well formed names nothing reliable; its version then counts as
+            // one without a record: kept, with the content pins of the files it holds.
+            return (((JsonSerializer.Deserialize<InstallRecord>(options: DocumentJsonOptions.Shared, utf8Json: stream) is { Files: { Count: > 0 }, Sequence: > 0 } record) &&
                 record.Files.All(predicate: static file => ContentPin.TryParse(pin: out _, text: file)))
                 ? record
                 : null);

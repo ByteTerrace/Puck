@@ -43,8 +43,8 @@ public sealed class UpdateRecoveryHardeningTests : IDisposable {
 
         Assert.True(condition: cleared.Cleared);
         Assert.False(condition: File.Exists(path: Marker));
-        // The pass that follows keeps both: current, and the version the old process holds.
-        Assert.Equal(expected: ["1.0.0"], actual: cleared.Pruned!.RunningVersions);
+        // The pass that follows keeps both: current, and the old version, which no install record ranks.
+        Assert.Equal(expected: ["1.0.1", "1.0.0"], actual: cleared.Pruned!.KeptVersions);
     }
     [InlineData(false)]
     [InlineData(true)]

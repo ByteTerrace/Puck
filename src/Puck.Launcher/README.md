@@ -159,14 +159,25 @@ corrupt state generations rather than guessing rollback compatibility.
 
 After clearing, `InstallPruner` deletes past versions. It keeps `current`,
 `last-good`, the version a pending `install-intent.json` names, every version a
-live process holds, and the `UpdateOptions.KeepVersions` most recently installed
-others, then deletes the content-addressed objects nothing kept references (a
-pending intent and a local release source's channel manifests count as
-references). Install order is the `sequence` the applier writes into
-`versions/<version>/install-record.json`, never version precedence; a payload
-file of that name (or `state-generation`) is refused by manifest validation. A
-kept version without a record keeps the content pins of the regular files it holds, so
-it never blocks the sweep.
+live process holds, every version whose install order cannot be read, and the
+`UpdateOptions.KeepVersions` most recently installed others. It then deletes the
+content-addressed objects nothing kept references (a pending intent and a local
+release source's channel manifests count as references). Install order is the
+`sequence` the applier writes into `versions/<version>/install-record.json`,
+never version precedence; a payload file or directory of that name (or
+`state-generation`) is refused by manifest validation. A version without a
+valid record (one with a positive sequence and a non-empty inventory of
+well-formed pins) is kept and keeps the content pins of the regular files it
+holds.
+
+A pass first reads and validates everything it depends on and deletes nothing
+while it does. Both pointers must be the plain name of an existing version
+(`current` must exist). The pending intent's manifest must validate. Every
+version's record is either valid or treated as absent and replaced by hashing
+its files. Every store's layout and channel manifests must be free of links and
+must validate. Any failure there skips the whole pass with its reason. `Prune`
+never throws: whatever stops it is reported as the skip reason, so it cannot end
+the MCP adapter's or a World's start or health check.
 
 Every step acts through `Puck.Confinement`'s `ConfinedDirectory` handles opened
 from the install root: nothing is looked up or deleted by a path checked
@@ -186,9 +197,14 @@ earlier, and no link is followed. These are the invariants a review checks:
   `Puck.Confinement`'s `InstallRegistration.TryRegisterProcess` is the first
   statement of every entry point an installed payload carries (`Puck.Cli`,
   `Puck.Cli.Worlds`, `Puck.World`, `Puck.World.Silo` and `Puck.Actors`), and an
-  entry point that cannot register refuses to start with the reason. A process
-  registers when its image directory's grandparent holds `current`, whatever
-  arguments it was given. The kernel releases a hold when its process exits.
+  entry point that cannot register refuses to start with the reason.
+  Membership is decided by the process's own directory (`AppContext.BaseDirectory`)
+  whatever arguments it was given. A directory directly under one named
+  `versions` (or `trash`) belongs to the root above it, even before that root
+  writes `current`. The image confirmed is the entry assembly's file, or the
+  executable for a single-file app. A process under `versions/` that cannot
+  confirm its image or root refuses to start. The kernel releases a hold when its
+  process exits.
 - **Registration is serialized with removal.** Registration waits for
   `update.lock` without a deadline; the pass holds `publication.lock` then
   `update.lock` throughout. A registering process then confirms by identity that
@@ -202,13 +218,14 @@ earlier, and no link is followed. These are the invariants a review checks:
   then is deleted there through the same handle. An interrupted pass leaves
   every kept version whole, and the next pass empties what it left in `trash/`.
   Removal, link scanning and hashing walk a tree without recursion.
-- **Fail closed.** A busy lease, a linked `trash/`, an intent whose manifest
-  fails validation or an unsupported platform (anything but Windows and Linux
-  x64) skips the pass. A store whose channel manifest does not parse or
-  validate keeps all its objects. A version whose install record cannot be read
-  is kept, and a record naming an invalid pin counts as no record. A kept
-  version whose files cannot be read stops the sweep for that pass. A running
-  version never takes one of `KeepVersions`' places.
+- **Fail closed.** The validation phase above skips the whole pass on anything
+  it cannot read or validate, before any deletion: a pointer that is not the
+  plain name of an existing version, a link among the versions or on a store's
+  layout or channels, an install record that cannot be read, or a manifest that
+  fails validation. A busy lease, a linked `trash/` or an unsupported platform
+  (anything but Windows and Linux x64) skips it too. A version whose rank cannot
+  be read is kept, and a running version never takes one of `KeepVersions`'
+  places.
 
 These defend against cooperating processes and crashes, not against the install
 root's own user ([decision](../../docs/decisions/runtime-and-delivery.md#releases)). A

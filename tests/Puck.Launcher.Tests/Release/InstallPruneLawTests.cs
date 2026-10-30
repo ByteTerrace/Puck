@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Confinement;
@@ -209,15 +210,21 @@ public sealed class InstallPruneLawTests : IDisposable {
         Directory.CreateDirectory(path: Trash);
         DirectoryLinks.Create(link: Path.Combine(path1: Trash, path2: "escape"), target: Outside);
 
+        // A link among the versions fails the validation phase, so nothing at all is deleted.
+        Assert.Contains(expectedSubstring: "is a link", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        Assert.Equal(expected: ["1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.9"], actual: VersionNames());
+        Assert.True(condition: Directory.Exists(path: Path.Combine(path1: Trash, path2: "escape")));
+        DirectoryLinks.Remove(link: Version(version: "1.0.9"));
+
         var pass = Prune(keepVersions: 0);
 
         AssertOutsideIntact();
         Assert.Equal(expected: ["1.0.2", "1.0.0"], actual: pass.DeletedVersions);
-        Assert.Equal(expected: ["1.0.1", "1.0.3", "1.0.9"], actual: VersionNames());
-        Assert.Equal(expected: 4, actual: pass.Refused.Count);
+        Assert.Equal(expected: ["1.0.1", "1.0.3"], actual: VersionNames());
+        Assert.Equal(expected: 3, actual: pass.Refused.Count);
         Assert.True(condition: Directory.Exists(path: Fanout(name: "ee")));
         // A linked trash/ refuses the whole pass.
-        foreach (var link in new[] { Version(version: "1.0.9"), Fanout(name: "ee"), Path.Combine(path1: Trash, path2: "escape") }) {
+        foreach (var link in new[] { Fanout(name: "ee"), Path.Combine(path1: Trash, path2: "escape") }) {
             DirectoryLinks.Remove(link: link);
         }
         Directory.Delete(path: Trash);
@@ -348,10 +355,10 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.Equal(expected: 0, actual: again.DeletedObjects);
         Assert.Equal(expected: pruned, actual: Tree());
     }
-    // Metadata that cannot be read or does not validate keeps what it might protect: a version whose install record
-    // cannot be read is kept, a record with an invalid pin falls back to the content pins of the version's files, a
-    // channel manifest that fails validation keeps its store's objects, and an intent whose manifest fails validation
-    // skips the pass.
+    // Metadata that cannot be read or does not validate keeps what it might protect: an install record that cannot be
+    // read, a channel manifest that fails validation, and an intent whose manifest fails validation each skip the whole
+    // pass, and a record with an invalid pin counts as no record, so its version is kept with the content pins of its
+    // files.
     [Fact]
     public void MetadataThatCannotBeReadOrValidatedKeepsWhatItMightProtect() {
         var older = Install(healthy: true, version: "0.9.0");
@@ -365,21 +372,23 @@ public sealed class InstallPruneLawTests : IDisposable {
         File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName), contents: """{"sequence":2,"files":["invalid"]}""");
         Directory.CreateDirectory(path: Path.Combine(path1: sourceRoot, path2: "development"));
         File.WriteAllText(path: Path.Combine(path1: sourceRoot, path2: "development", path3: "manifest.json"), contents: "{}");
-        InstallPruneResult unreadable;
+        string? unreadable;
 
         if (OperatingSystem.IsWindows()) {
             using (new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: olderRecord, share: FileShare.None)) {
-                unreadable = Prune(keepVersions: 0);
+                unreadable = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
             }
         } else {
             File.SetUnixFileMode(mode: UnixFileMode.None, path: olderRecord);
-            unreadable = Prune(keepVersions: 0);
+            unreadable = InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped;
             File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite, path: olderRecord);
         }
-        Assert.Contains(expected: "0.9.0", collection: unreadable.KeptVersions);
+        Assert.Contains(expectedSubstring: "nothing was deleted", actualString: unreadable);
+        Assert.Contains(expectedSubstring: "fails validation", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
         Assert.Equal(expected: ["0.9.0", "1.0.0", "1.0.1"], actual: VersionNames());
-        Assert.True(condition: Objects.Contains(pin: older), userMessage: "the version with an unreadable record lost its object");
-        Assert.True(condition: Objects.Contains(pin: orphan), userMessage: "the sweep ran without knowing every kept version's objects");
+        Assert.True(condition: Objects.Contains(pin: older) && Objects.Contains(pin: orphan), userMessage: "a skipped pass deleted an object");
+        Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(pin: stale, root: sourceRoot)));
+        File.Delete(path: Path.Combine(path1: sourceRoot, path2: "development", path3: "manifest.json"));
 
         var readable = Prune(keepVersions: 0);
 
@@ -387,8 +396,6 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.True(condition: Objects.Contains(pin: lastGood), userMessage: "a record with an invalid pin lost its version's object");
         Assert.True(condition: Objects.Contains(pin: current));
         Assert.False(condition: Objects.Contains(pin: orphan));
-        Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(pin: stale, root: sourceRoot)), userMessage: "a store whose manifest fails validation was swept");
-        Assert.Contains(collection: readable.Refused, filter: static reason => reason.Contains(comparisonType: StringComparison.Ordinal, value: "fails validation"));
         File.WriteAllText(path: Path.Combine(path1: Root, path2: "install-intent.json"), contents: """{"manifest":{"version":"1.0.1"}}""");
         Assert.Contains(expectedSubstring: "fails validation", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
     }
@@ -409,16 +416,18 @@ public sealed class InstallPruneLawTests : IDisposable {
         }
         Assert.Equal(expected: ["1.0.0"], actual: Prune(keepVersions: 1).DeletedVersions);
     }
-    // A tree of any depth is scanned, hashed and removed without recursion: on a thread whose stack holds a few hundred
-    // frames, versions and a trash/ leftover far deeper than that are still pruned. Linux keeps one descriptor open per
-    // level, so its tree stays under the default limit of 1024.
+    // A tree of any depth is scanned, hashed and removed without recursion: on a thread whose stack holds few frames,
+    // versions and a trash/ leftover 900 levels deep are still pruned. The depth stays under Linux's default limit of
+    // 1024 descriptors (one is open per level) and within what the run directory's own recursive cleanup can remove if
+    // the law fails part way.
     [Fact]
     public void TreesOfAnyDepthArePrunedWithoutRecursion() {
-        var depth = (OperatingSystem.IsWindows() ? 5000 : 900);
+        const int Depth = 900;
+
+        _ = Install(version: "0.9.0");
         var unrecorded = Install(healthy: true, version: "1.0.0");
 
         _ = Install(version: "1.0.1");
-        _ = Stage(version: "0.9.0");
         File.Delete(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName));
         Directory.CreateDirectory(path: Path.Combine(path1: Trash, path2: "leftover"));
         using (var root = ConfinedDirectory.OpenAnchor(create: false, path: Root)!) {
@@ -426,14 +435,14 @@ public sealed class InstallPruneLawTests : IDisposable {
                 var current = root;
 
                 foreach (var segment in start.Split(separator: '/')) { current = Owned(current: current, next: current.Child(name: segment)!, root: root); }
-                for (var level = 0; (level < depth); level++) { current = Owned(current: current, next: current.Child(create: true, name: "d")!, root: root); }
+                for (var level = 0; (level < Depth); level++) { current = Owned(current: current, next: current.Child(create: true, name: "d")!, root: root); }
                 using (var leaf = current.OpenFile(create: true, name: "leaf.dat")!) { leaf.Write(buffer: "deep"u8); }
                 current.Dispose();
             }
         }
         InstallPruneResult? pass = null;
         Exception? error = null;
-        var pruning = new Thread(maxStackSize: (128 * 1024), start: () => {
+        var pruning = new Thread(maxStackSize: (64 * 1024), start: () => {
             try {
                 pass = InstallPruner.Prune(installRoot: Root, keepVersions: 0);
             } catch (Exception thrown) {
@@ -455,6 +464,86 @@ public sealed class InstallPruneLawTests : IDisposable {
         Assert.True(condition: cleanup.DeleteChild(name: "d"));
     }
 
+    // A pointer that is not the plain name of an existing version skips the whole pass before anything, a trash/
+    // leftover included, is deleted.
+    [Fact]
+    public void APointerThatIsNotAVersionNameSkipsTheWholePass() {
+        _ = Install(version: "1.0.0");
+        _ = Install(version: "1.0.1");
+        Directory.CreateDirectory(path: Path.Combine(path1: Trash, path2: "leftover"));
+        File.WriteAllText(path: Path.Combine(path1: Root, path2: "current"), contents: "../1.0.1");
+
+        Assert.Contains(expectedSubstring: "is not a version directory", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
+        Assert.True(condition: Directory.Exists(path: Path.Combine(path1: Trash, path2: "leftover")), userMessage: "a skipped pass deleted a trash/ entry");
+        File.WriteAllText(path: Path.Combine(path1: Root, path2: "current"), contents: "1.0.9");
+        Assert.Contains(expectedSubstring: "is not a version directory", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        File.Delete(path: Path.Combine(path1: Root, path2: "current"));
+        Assert.Contains(expectedSubstring: "names no version", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        Assert.Equal(expected: ["1.0.0", "1.0.1"], actual: VersionNames());
+    }
+    // A record that does not validate gives its version no rank, so the version is kept rather than ranked below older
+    // recorded ones.
+    [Fact]
+    public void ACorruptRecordKeepsItsVersion() {
+        _ = Install(version: "1.0.0");
+        var corrupted = Install(version: "1.0.1");
+
+        _ = Install(version: "1.0.2");
+        File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.1"), path2: InstallRecord.FileName), contents: "{ not json");
+
+        var pass = Prune(keepVersions: 1);
+
+        Assert.Empty(collection: pass.DeletedVersions);
+        Assert.Equal(expected: ["1.0.0", "1.0.1", "1.0.2"], actual: VersionNames());
+        Assert.True(condition: Objects.Contains(pin: corrupted));
+    }
+    // A record that names no files is no inventory: its version keeps the content pins of the files it holds.
+    [Fact]
+    public void AnEmptyInventoryCountsAsNoRecord() {
+        var current = Install(version: "1.0.0");
+        var orphan = Objects.Put(content: "nothing references this"u8);
+
+        File.WriteAllText(path: Path.Combine(path1: Version(version: "1.0.0"), path2: InstallRecord.FileName), contents: """{"sequence":1,"files":[]}""");
+
+        var pass = Prune(keepVersions: 0);
+
+        Assert.True(condition: Objects.Contains(pin: current), userMessage: "an empty inventory let the sweep take the version's object");
+        Assert.False(condition: Objects.Contains(pin: orphan));
+        Assert.Equal(expected: 1, actual: pass.DeletedObjects);
+    }
+    // A channel directory that is a link fails the validation phase instead of being skipped, so the objects a manifest
+    // behind it names are never swept.
+    [Fact]
+    public void ALinkedChannelDirectorySkipsTheWholePass() {
+        _ = Install(version: "1.0.0");
+        var sourceRoot = Path.Combine(path1: Root, path2: InstallPruner.LocalSourceDirectoryName);
+        var build = m_directory.PathOf(name: "build");
+
+        Directory.CreateDirectory(path: build);
+        File.WriteAllText(path: Path.Combine(path1: build, path2: "app.dll"), contents: "published");
+        _ = new DirectoryReleaseSource(root: Outside).Publish(input: build, manifest: ManifestFor(version: "1.0.1"), rid: "win-x64");
+        var published = new ContentAddressedStore(root: sourceRoot).Put(content: "published"u8);
+
+        DirectoryLinks.Create(link: Path.Combine(path1: sourceRoot, path2: "stable"), target: Path.Combine(path1: Outside, path2: "stable"));
+        Assert.Contains(expectedSubstring: "is a link", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+        Assert.True(condition: File.Exists(path: ContentAddressedStore.ObjectPath(pin: published, root: sourceRoot)));
+        DirectoryLinks.Remove(link: Path.Combine(path1: sourceRoot, path2: "stable"));
+    }
+    // A channel manifest whose file has no path fails validation, and the pass reports it instead of throwing into its
+    // caller's start or health check.
+    [Fact]
+    public void AManifestFileWithoutAPathSkipsThePassWithoutThrowing() {
+        _ = Install(version: "1.0.0");
+        var manifest = JsonNode.Parse(json: JsonSerializer.Serialize(options: DocumentJsonOptions.Shared, value: ManifestFor(version: "1.0.1")))!;
+        var channel = Path.Combine(path1: Root, path2: InstallPruner.LocalSourceDirectoryName, path3: "stable");
+
+        _ = manifest["payloads"]![0]!["files"]![0]!.AsObject().Remove(propertyName: "path");
+        Directory.CreateDirectory(path: channel);
+        File.WriteAllText(path: Path.Combine(path1: channel, path2: "manifest.json"), contents: manifest.ToJsonString());
+
+        Assert.Contains(expectedSubstring: "nothing was deleted", actualString: InstallPruner.Prune(installRoot: Root, keepVersions: 0).Skipped);
+    }
     // Hands the walk to the next directory, closing the one it leaves unless that is the root.
     private static ConfinedDirectory Owned(ConfinedDirectory current, ConfinedDirectory next, ConfinedDirectory root) {
         if (!ReferenceEquals(objA: current, objB: root)) { current.Dispose(); }

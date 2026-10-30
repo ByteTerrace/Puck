@@ -136,8 +136,9 @@ public static class ReleaseCanonicalizer {
         }
 
         // The applier writes these two files into every version directory beside its payload, so neither may be a payload
-        // file or the directory a payload file sits in.
-        var first = file.Path.Split(separator: '/')[0];
+        // file or the directory a payload file sits in. A path a deserialized document omits is null, which
+        // IsPortablePath refuses.
+        var first = (file.Path ?? "").Split(separator: '/')[0];
 
         if (!IsPortablePath(value: file.Path, allowDirectories: true) ||
             first.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "state-generation") ||
@@ -148,7 +149,7 @@ public static class ReleaseCanonicalizer {
             ));
         } else if (
             (seenPaths is not null) &&
-            !seenPaths.Add(item: file.Path)
+            !seenPaths.Add(item: file.Path!)
         ) {
             errors.Add(item: new(
                 Message: $"path '{file.Path}' is declared more than once.",
