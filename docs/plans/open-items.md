@@ -191,11 +191,19 @@ holds the fixed poses and the approaches already rejected.
     back to `sdfMeshLightVisibility` 1.0, fully lit by every traced static light:
     a point light in the next room shines through a flat wall
     (`sdf-mesh-irradiance.hlsli:142,202-204`, `SdfMeshIrradiance.cs:1250`).
-  - [ ] [medium] Depth visibility raised the GI trace time: Direct3D 12 from 3.9 s to
-    5.2-7.6 s and Vulkan from 4.6 s to 16.8 s (both on a loaded machine), with a
-    38.67 MiB probe table per residency. Re-measure on a quiet machine; if
-    Vulkan stays about three times Direct3D 12, find why
-    (the probe-depth hand-back in the lead checkout's scratch).
+  - [x] [medium] Depth visibility raised the GI trace time and reserved a 38.67 MiB
+    probe table at every tier. Bounded depth work removes 85.94 % of its rays.
+    Adjacent loaded-machine pairs: Direct3D 12 High 11.487 to 7.437 s, Medium
+    1.698 to 1.032 s, whole-protocol process CPU 102.65625 to 75.9375 s;
+    Vulkan High 15.527 to 13.247 s, Medium 1.932 to 1.123 s, CPU 97.625 to
+    75.421875 s. Radiance work matches. One table/volume now fits its tier:
+    11.02 MiB Medium, 33.05 MiB High. Actual retained uploads are reported
+    separately; whole-process private memory does not uniformly decrease.
+    Raw pairs and allocation diagnostics are in the probe-depth-fix hand-back.
+  - [ ] Quiet integration confirmation: repeat the depth-visibility timing pair
+    without the campaign's competing CPU work. The loaded pairs above establish
+    work and CPU reductions, not quiet backend parity. Investigate if Vulkan
+    remains about three times Direct3D 12 under matched quiet conditions.
   - [x] [medium] The probe-depth lane's Vulkan captures (in the lead checkout's scratch)
     still show small dark marks at mid-height on the stairwell's east wall
     (`own-vulkan-stairwell-lit.png`, the black squares the owner reported), 2

@@ -22,6 +22,14 @@ key after build admission and after compilation, and discards a build if either
 check changed; a capture run must still confirm its implementation through live
 counters before accepting measurements.
 
+Retain each prepared `WorldArtifact` lease until its last comparison leg exits.
+Stopping a preparation World releases that lease, and other lanes' normal cache
+retention can evict the build while a GPU batch queues. Keep builds outside the
+GPU hold, and give capture tours a separate bounded leg when frame-budget
+sampling and timing would consume their deadline. Preflight console recipes
+after integration: memory compaction is `host.memory collect`; renderer-only
+probe help is absent in a headless World.
+
 Steps 1 to 3 make a lane ready for a batch. Steps 4 and 5 need a windowed World,
 so the integration lane's sweep reads them
 ([orchestration](../orchestration/SKILL.md#land-in-batches)).
