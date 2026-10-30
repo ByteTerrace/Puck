@@ -74,17 +74,6 @@ public sealed partial class WorldServer {
         return observation;
     }
 
-    // Reattaches a boot checkpoint's observer to its restored principal without minting a session or grant.
-    internal WorldSessionObservation RestoreSessionObservation(Principal session, WorldDisclosureTier tier, string sourceAuthority, IClientSink sink) {
-        if (!IsLiveSession(principal: session)) { throw new InvalidOperationException(message: "The restored observation has no live session."); }
-        var (observation, reason) = AttachSessionObservation(session: session, sink: sink, sourceAuthority: sourceAuthority, tier: tier);
-        return (observation ?? throw new InvalidOperationException(message: reason));
-    }
-    internal void ClearSessionObservers() {
-        foreach (var principal in m_sessionSinks.Keys.ToArray()) { DetachSessionSink(session: principal); }
-        m_observerEndedSessions.Clear();
-    }
-
     private (WorldSessionObservation? Observation, string Reason) AttachSessionObservation(
         Principal session, WorldDisclosureTier tier, string sourceAuthority, IClientSink sink) {
         var admitted = new WorldSessionObservation(

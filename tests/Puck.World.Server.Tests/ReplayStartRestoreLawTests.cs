@@ -5,10 +5,10 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>A scenario's terminal tape and input mask never cross the next scenario's boot boundary.</summary>
-public sealed class ScenarioResetLawTests {
+/// <summary>A replay probe restores its starting checkpoint and replays the recorded input into the same authority.</summary>
+public sealed class ReplayStartRestoreLawTests {
     [Fact]
-    public void ScenarioDeliveryReadsTheRestoredClockSeeds() {
+    public void RestoreDeliversTheRestoredClockSeeds() {
         var row = new WorldStateRow(CellName.Parse(candidate: "phase"), CellKind.Fixed,
             Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(rawBits: 16384))]);
         var definition = Fixtures.BuildDocument().WithWorldState(rows: [row]) with {
@@ -30,7 +30,7 @@ public sealed class ScenarioResetLawTests {
 
         sink.Seeds.Clear();
 
-        server.Persistence.RestoreScenario(checkpoint: boot!);
+        server.Persistence.RestoreReplayStart(checkpoint: boot!);
 
         Assert.Equal(expected: [expected], actual: sink.Seeds);
     }
@@ -151,64 +151,5 @@ public sealed class ScenarioResetLawTests {
         // discard that previous re-drive before the same source-scoped transfer id can be used again.
         Assert.Equal(-1, earlier.Verify());
         Assert.Equal(-1, later.Verify());
-    }
-    [Fact]
-    public void ADriveStillRunningAtExportIsCancelledBeforeTheNextScenario() {
-        using var directory = new TemporaryDirectory(prefix: "puck-scenario-drive-");
-        using var run = new WorldHistoryHarness(on: false);
-        var server = run.Fixture.Server;
-        var source = directory.PathOf(name: "boot.json");
-
-        File.WriteAllBytes(source, WorldDefinitionSerialization.Serialize(definition: server.Definition));
-        using var host = new WorldInstanceHost(
-            applicationStopping: CancellationToken.None,
-            admitsSpawn: true,
-            machineHostFactory: Fixtures.MachineHostFactory,
-            machineId: Guid.NewGuid(),
-            resolver: new WorldSessionResolver(),
-            seats: WorldEmbodiedSeats.None,
-            stateRoot: new WorldStateRoot(path: directory.RootPath));
-        var instance = new WorldInstance("boot", () => source, server, null, run.Transport,
-            new WorldFederationIdentity(new InertAuthenticator(), server.AuthorityIdentity), new WorldFileOrigin(source)) { Tape = run.Tape };
-
-        host.AdmitBoot(row: instance);
-        host.CaptureScenarioBoot();
-        Assert.True(condition: server.TryCaptureCheckpoint(host.CaptureRow(row: instance), out var boot, out var reason), userMessage: reason);
-
-        Assert.True(condition: host.TryStart(instance: out var visitor, name: "visitor", path: source, reason: out reason), userMessage: reason);
-        var firstAuthority = visitor!.Server.AuthorityIdentity;
-
-        Assert.True(condition: host.TryStop(name: "visitor", reason: out reason), userMessage: reason);
-        Assert.True(condition: host.TryStart(instance: out visitor, name: "visitor", path: source, reason: out reason), userMessage: reason);
-        Assert.NotEqual(firstAuthority, visitor!.Server.AuthorityIdentity);
-
-        Assert.True(condition: run.Tape.TryBeginRecording(name: "long", refusal: out reason), userMessage: reason);
-        run.Steps(count: 20);
-        _ = run.Tape.StopRecording();
-        // replay.drive is the console's live-play verb. Export after two of its twenty recorded ticks.
-        var inspector = new WorldReplayInspector(server.Profiles, [], Fixtures.MachineHostFactory, static (_, _) => new NullAddonHost());
-        var commands = new CommandRegistry([new WorldReplayCommandModule(run.Tape, inspector, host)]);
-        var play = commands.Submit(line: "replay.drive long");
-
-        Assert.False(condition: play.IsError, userMessage: play.Output);
-        for (var tick = 0; (tick < 2); tick++) {
-            run.Tape.InjectDriveTick();
-            run.StepWithoutInput();
-        }
-        Assert.Equal(WorldReplayMode.Replaying, run.Tape.Mode);
-        Assert.True(condition: run.Transport.InputMasked);
-
-        host.RestoreScenario(checkpoint: boot!);
-        Assert.Equal(WorldReplayMode.Idle, run.Tape.Mode);
-        Assert.False(condition: run.Transport.InputMasked);
-        Assert.True(condition: host.TryStart(instance: out visitor, name: "visitor", path: source, reason: out reason), userMessage: reason);
-        Assert.Equal(firstAuthority, visitor!.Server.AuthorityIdentity);
-        Assert.True(condition: host.TryStop(name: "visitor", reason: out reason), userMessage: reason);
-        run.StepWithoutInput();
-        var afterDrive = run.Hash();
-
-        host.RestoreScenario(checkpoint: boot!);
-        run.StepWithoutInput();
-        Assert.Equal(afterDrive, run.Hash());
     }
 }

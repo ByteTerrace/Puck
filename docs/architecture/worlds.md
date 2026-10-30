@@ -619,8 +619,7 @@ and retires its epoch, so a submission still naming it is refused as `world.sess
 reused ordinal carries a later epoch. A rebuild ends every session. A checkpoint holds the live
 sessions and each ordinal's last epoch. Restoring replaces that timeline's allocator exactly,
 so replaying the same admission mints the same principal; epochs from the discarded future do not
-leak into it. An isolated scenario worker also detaches future observations and reattaches its boot
-observers to their restored principals. Admission, embodiment and ending ride the replay tape as server events, and a tape armed while
+leak into it. Admission, embodiment and ending ride the replay tape as server events, and a tape armed while
 a session lives opens with that session as it stands, so a session's authorized mutation replays with
 the same outcome.
 

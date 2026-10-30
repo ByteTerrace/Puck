@@ -86,36 +86,27 @@ its first sampled tick and instance. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
-`puck test` retains one native host per worker only while consecutive scenarios
-have identical composed documents apart from their schedules, including every
-staged companion and asset. State rows (fields and ordinary rows alike), rules,
-groups and generated expectations all participate. A different document boots a
-fresh host; a compatible one restores its complete pristine checkpoint. Never
-transplant only the arena into another document's checkpoint: undo plans bind
-row ordinals, and fields, group progress, latches, decisions and search derive
-from the whole document. Changing an ordinary row before an undo-owned row can
-invalidate that checkpoint even when the group declaration did not change.
-The CLI composes JSON before comparing shapes: a placement in one import can
-read its census from a state row in another, which neither raw fragment sees.
-An imported partial row need not parse as a standalone definition. These
-one-use roots are not retained in the composition cache. A reused raw JSON
-document also loads through the
-file-composition boundary. Drive grants and presentation clock seeds
-are rebound before restore delivers to attached sinks. Restoration rebuilds
-geometry and population when the preceding run edited their configuration.
-Checkpoint restoration discards replay-only departure rollback bodies: a committed
-departure otherwise keeps its source-scoped transfer id and falsely refuses the next
-scenario's replay as a duplicate. The scenario reset
-cancels queued seat-route edges after restoring boot claims; otherwise a prior crossing
-admits the next scenario's input before tick one and changes its first two hashes.
-It also cancels live tape drives as well as recordings. Session epochs reset only in this
-isolated path; a live load preserves retired epochs. Never rewrite
-singleton lifetimes to reuse a provider: that changes captive-dependency validation,
-caller-owned instance disposal and child-scope singleton identity. Arbitrary factories
-and extensions require the native container. `WorldTestHostLawTests` preserves the
-three native-container witnesses. `TestCommandLawTests.DifferentScenariosStartPristineAndIdenticalScenariosReuseOneHost`
-checks fresh boots for changed scenarios, reuse for identical scenarios and replay, and
-also compares a reused worker's export and manifest with a fresh-process boot.
+`puck test` keeps a worker process alive across its scenarios and boots every
+scenario in a fresh native host with its own state directory: no scenario
+inherits an arena, rule latch, session allocator or input producer from the one
+before it, and no document comparison decides what to share. The process's first
+boot pays the one-time start-up that later boots skip, which is what the warm
+worker saves. Never rewrite singleton lifetimes to reuse a provider: that
+changes captive-dependency validation, caller-owned instance disposal and
+child-scope singleton identity. Arbitrary factories and extensions require the
+native container. `WorldTestHostLawTests` preserves the three native-container
+witnesses. `TestCommandLawTests.EveryScenarioStartsPristineInItsOwnHost` checks
+one host boot per scenario, replay, and a worker's export and manifest against a
+fresh-process boot.
+
+`--reproduce` restores each probe's starting checkpoint into the same authority
+(`WorldPersistence.RestoreReplayStart`). Drive grants and presentation clock
+seeds are rebound before the restore delivers to attached sinks, and the restore
+rebuilds geometry and population when the run edited their configuration.
+Checkpoint restoration discards replay-only departure rollback bodies: a
+committed departure otherwise keeps its source-scoped transfer id and falsely
+refuses the replay as a duplicate. Session epochs reset only in this replay-start
+path; a live load preserves retired epochs.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
 Workers share the per-user device caches. Use `puck test --cache-dir <scratch-root>`
@@ -124,7 +115,7 @@ An ordinary scheduled boot has no replay probe or `reproduction.json`; a fresh-p
 hash comparison runs `puck test --reproduce` in a separate worker so its proof actually
 compares the recorded ticks.
 
-Each leg's `timing.json` separates boot, restore, authored time, export and replay;
+Each leg's `timing.json` separates boot, arming, authored time, export and replay;
 export is included in authored time. `firstTickMilliseconds` measures the authored
 phase through its first completed tick, including host-service startup on a fresh
 boot. Read it beside the tick count before calling a short scenario's cost fixed.

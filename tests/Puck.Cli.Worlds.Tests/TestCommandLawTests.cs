@@ -66,15 +66,9 @@ public sealed class TestCommandLawTests {
         var (exit, output) = RunTest(directory.PathOf(name: "worlds"), "--reproduce");
         Assert.True(condition: (exit == 0), userMessage: output);
         Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=2 world-runs=2");
-        var first = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":7}]}]},"rules":[],"schedule":{"tick":1}}""");
-        var rescheduled = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":7}]}]},"rules":[],"schedule":{"tick":2}}""");
-        var changed = System.Text.Encoding.UTF8.GetBytes(s: """{"state":{"world":[{"name":"value","cells":[{"key":"0","value":11}]}]},"rules":[],"schedule":{"tick":1}}""");
-
-        Assert.Equal(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: rescheduled));
-        Assert.NotEqual(Puck.World.Server.WorldPersistence.ScenarioBootShape(json: first), Puck.World.Server.WorldPersistence.ScenarioBootShape(json: changed));
     }
     [Fact]
-    public void DifferentScenariosStartPristineAndIdenticalScenariosReuseOneHost() {
+    public void EveryScenarioStartsPristineInItsOwnHost() {
         using var directory = new TemporaryDirectory(prefix: "puck-test-isolation-");
 
         directory.WriteText(name: "isolation.puck", text: """
@@ -121,7 +115,7 @@ public sealed class TestCommandLawTests {
 
         var (exit, output) = RunTest(directory.PathOf(name: "isolation.puck"), "--reproduce", "--keep", kept);
         Assert.Equal(actual: exit, expected: 0);
-        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=3 world-runs=4");
+        Assert.Contains(actualString: output, comparisonType: StringComparison.Ordinal, expectedSubstring: "processes=1 host-boots=4 world-runs=4");
         for (var index = 0; (index < 4); index++) {
             Assert.Contains("\"divergence\":-1", File.ReadAllText(path: Path.Combine(path1: kept, path2: $"worlds/{index:D6}/run1/reproduction.json")), StringComparison.Ordinal);
         }
@@ -129,7 +123,7 @@ public sealed class TestCommandLawTests {
             actual: File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000002/run1/out/state-export.json")));
         Assert.NotEqual(File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000000/run1/out/state-export.json")),
             File.ReadAllBytes(path: Path.Combine(path1: kept, path2: "worlds/000001/run1/out/state-export.json")));
-        // Also compare a reused worker to a truly fresh process, using the same staged world and ordinary boot.
+        // Also compare a worker's boot to a truly fresh process, using the same staged world and ordinary boot.
         var generated = Path.Combine(path1: kept, path2: "generated/isolation~pristine/same.world.json");
         var freshDirectory = directory.PathOf(name: "fresh");
         using var error = new StringWriter();
@@ -183,14 +177,12 @@ public sealed class TestCommandLawTests {
                     World = worldPath,
                     Directory = leg0,
                     ExitAfterSeconds = 120,
-                    BootShape = "same",
                     Reproduce = false,
                 },
                 new {
                     World = worldPath,
                     Directory = leg1,
                     ExitAfterSeconds = 120,
-                    BootShape = "same",
                     Reproduce = false,
                 },
             })
@@ -232,8 +224,8 @@ public sealed class TestCommandLawTests {
         var batchPath = directory.WriteText(
             name: "batch.json",
             text: System.Text.Json.JsonSerializer.Serialize(value: new[] {
-                new { World = worldPath, Directory = failing, ExitAfterSeconds = 120, BootShape = "first", Reproduce = false, },
-                new { World = worldPath, Directory = following, ExitAfterSeconds = 120, BootShape = "second", Reproduce = false, },
+                new { World = worldPath, Directory = failing, ExitAfterSeconds = 120, Reproduce = false, },
+                new { World = worldPath, Directory = following, ExitAfterSeconds = 120, Reproduce = false, },
             })
         );
         var process = CliProcess.RunCaptured(

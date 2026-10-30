@@ -287,11 +287,10 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         placements: fixture.Server.Definition.Placements
     )!.ShownPrototypeId;
 
-    /// <summary>A reused scenario host shares one boot: the preceding scenario's run swapped the responsive collider,
-    /// and restoring the boot brings back the shape its seed shows before the first tick. A scenario whose seed
-    /// differs is refused: it boots its own host.</summary>
+    /// <summary>A run swapped the responsive collider; restoring the starting checkpoint brings back the shape its seed
+    /// shows before the first tick.</summary>
     [Fact]
-    public void AScenarioRestoreBringsBackItsSeedsResponsiveColliderBeforeTheFirstTick() {
+    public void ARestoreBringsBackTheSeedsResponsiveColliderBeforeTheFirstTick() {
         var basis = CrossingDocument();
         var placement = basis.Placements[0];
 
@@ -328,12 +327,10 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
             fixture.Step();
             Assert.NotEqual(collider, Assert.Single(collection: server.Population.DiagnosticColliders).Collider);
 
-            server.Persistence.RestoreScenario(checkpoint: server.Persistence.ScenarioCheckpoint(admission: Scenario(value: seed), boot: boot!));
+            server.Persistence.RestoreReplayStart(checkpoint: boot!);
             Assert.Equal(shown, PrototypeOf(fixture: fixture));
             Assert.Equal(collider, Assert.Single(collection: server.Population.DiagnosticColliders).Collider);
             Assert.Equal(1UL, server.NextInputTick);
-
-            Assert.Throws<InvalidOperationException>(testCode: () => server.Persistence.ScenarioCheckpoint(admission: Scenario(value: run), boot: boot!));
         }
     }
     /// <summary>The row climbs 1/tick from a rule with no gate; the swap lands the moment it reaches 3, not

@@ -67,7 +67,7 @@ public sealed class SessionPrincipalLawTests {
         var future = AdmitSession(fixture: fixture);
 
         Assert.NotEqual(actual: future, expected: first);
-        fixture.Server.Persistence.RestoreScenario(checkpoint: checkpoint!);
+        fixture.Server.Persistence.RestoreReplayStart(checkpoint: checkpoint!);
         Assert.Equal(first, AdmitSession(fixture: fixture));
     }
     [Fact]

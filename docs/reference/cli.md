@@ -1873,7 +1873,7 @@ that a passing run deletes and a failing run keeps and names (see
 Each collected world owns a numbered directory under `<dir>/worlds`, starting
 at `000000/run1`. Its `out` exports, manifest and transcripts describe that
 scenario. Each report names the source and artifact directory. The worker uses
-an isolated state root and restores the boot checkpoint between scenarios.
+an isolated state root that each scenario starts empty.
 `--reproduce` writes `reproduction.json` beside the transcript, one verdict per
 authority; it creates no second run directory. `process-id` identifies the worker.
 Ordinary scheduled boots attach no reproduction probe and write no reproduction
@@ -1914,24 +1914,18 @@ The work summary reports source compiles, compositions and shared images, worker
 processes, container host boots, world runs, and exported authority ticks (excluding
 the extra shutdown ticks). Executable build reuse is reported separately.
 
-Each worker boots through the normal World composition root and restores
-the complete boot checkpoint before each compatible scenario, replacing its
-document-state seeds, rules and schedule. The new arena carries session lanes
-from the pristine checkpoint, never from the preceding scenario. Composition
-differences in the root or any staged companion, or changed asset bytes, start a
-fresh native host. Body-register and field-lattice declarations and cells that
-choose the boot inhabitant census belong to that composition.
-An uncapturable boot runs each scenario in its own native host;
-reproduction still requires a capturable starting checkpoint.
-Native dependency validation, singleton identity in child scopes and caller ownership
-of supplied singleton instances are preserved. Container reuse by rewriting lifetimes
-cannot preserve arbitrary factories and extensions, so the native container remains
-intact. Authority clocks, session allocators, guest memory, client input producers,
-schedules and the boot authority cohort reset between scenarios. `--jobs` bounds
-concurrent workers. For 96 compatible scenarios, `--reproduce --jobs 2` uses two
-workers, two native container boots and 96 authored scenario runs. The default of
-at most two concurrent workers leaves memory headroom on a 32 GB development machine;
-use `--jobs 1` alongside other heavy work.
+A worker process stays alive across its scenarios (the first boot in a process
+pays the one-time start-up; later boots are cheaper) and boots each scenario
+through the normal World composition root into a fresh native host with its own
+state directory. No authority, clock, session allocator, guest memory, client
+input producer or schedule carries from one scenario to the next. Reproduction
+requires a capturable starting checkpoint. Native dependency validation,
+singleton identity in child scopes and caller ownership of supplied singleton
+instances are preserved, because every scenario builds the native container.
+`--jobs` bounds concurrent workers. For 96 scenarios, `--reproduce --jobs 2`
+uses two workers, 96 native container boots and 96 authored scenario runs. The
+default of at most two concurrent workers leaves memory headroom on a 32 GB
+development machine; use `--jobs 1` alongside other heavy work.
 
 Ordinary authoring runs every isolated test world once. `--reproduce` adds the
 determinism qualification pass: the worker captures each authority's starting

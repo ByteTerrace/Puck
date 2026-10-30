@@ -94,19 +94,6 @@ public sealed class WorldSessionResolver {
 
     private readonly record struct Generation(ulong GenerationId, string InstanceName);
 
-    /// <summary>Captures an in-process restore point for an isolated host's resolution timeline.</summary>
-    public Action CaptureRestorePoint() {
-        var next = m_nextGenerationId;
-        var entries = m_active.ToArray();
-
-        return () => {
-            m_active.Clear();
-            m_byInstanceName.Clear();
-            m_nextGenerationId = next;
-            foreach (var pair in entries) { InstallGeneration(pair.Key, pair.Value); }
-        };
-    }
-
     /// <summary>One resolved scoped session — the identity docs/architecture/worlds.md's <c>ResolvedWorldSession</c> names,
     /// narrowed to what a same-process caller needs today (no remote authority/session id/epoch yet).</summary>
     /// <param name="DestinationName">The resolved <see cref="WorldDestination.Name"/>.</param>
