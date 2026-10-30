@@ -38,10 +38,11 @@ toward her.
 | Device | Move the cursor | Lift, play or draw | Put the run back | Stand up |
 |---|---|---|---|---|
 | Mouse | Point at a card | Click | Right-click, or click the pile it came from | E |
-| Keyboard | A D or the arrows across; W up the fan and to the top row, S down | Space or Enter | Escape or Backspace | E |
+| Keyboard | A D or the arrows across; W to the top row, S back to a column's last card | Space or Enter | Escape or Backspace | E |
 | Pad | Left stick or d-pad | South (A) | East (B) | RB |
 
-A blue outline marks the card under the cursor. A pick on the stock draws
+Only the pointer reaches a card inside a column's fan; the keys and the pad stand
+on a column's last card. A blue outline marks the card under the cursor. A pick on the stock draws
 (`draw` cards, one or three by `option`), or turns the waste over once the stock
 is empty. A pick on a face-up card lifts it and every card after it in its fan,
 and an orange outline marks it; a pick on another pile plays the run there. The

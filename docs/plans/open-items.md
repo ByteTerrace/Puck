@@ -883,7 +883,7 @@ hang, then the pre-`main` language findings.
   from the chess search's minimum and the granary board broke validation by
   23k; it also phases its rules one a tick over twelve because the pricing
   counts rules gated on different values of one slot as the dearest, not the
-  sum. The card tables add more. Decide the cause before the next raise: is the
+  sum. The Klondike table fits by 15,000 units, about what a test world adds (see the card tables). Decide the cause before the next raise: is the
   static price far above measured tick cost (measure a busy tick against the
   price), should the search draw from its own budget, and does the slot-gating
   rule price what one tick can actually run? (from: granaries lane)
@@ -1314,14 +1314,18 @@ Klondike table stands north of the Go table in the board game room
   request over the piles and the table follows; no settled table is read.
   Letting a hand lift a card with `body.carry` and judging where it lands would
   be a second input path beside the cursor.
-- The rules' work-budget cost is the table's price: Klondike's transfers and the
-  table's reads add about 500,000 work units to the debug world's sheet, whose
-  tick ceiling was 4,000,000 with 10,000 to spare over the chess search's need,
-  so the ceiling is now 4,600,000 (`RuleCapacity.MaxWorkUnitsPerTick`). Each
-  further game adds its own transfers to that sheet: Spider's two-deck piles
-  cost more than Klondike's, so step 2 owes either a cheaper transfer pricing
-  (the disclosure term grows with the square of the piles one zone table
-  reaches) or another raise the owner's frame floor allows.
+- The rules' work-budget cost is the table's price, and Klondike with its table (200,000 units of the sheet)
+  leaves the debug world 15,000 units over the chess search's need under the
+  4,250,000 ceiling (3,159,000 of the sheet, the search needing 1,075,835 of
+  the rest). What kept it there: a transfer between named piles costs a few
+  thousand where one between piles a live zone table picks costs about 140,000
+  (the disclosure term grows with the square of the piles the table reaches),
+  so every deal step, gather step and move is a rule of its own pinned on its
+  literal piles, and the table reads one pile a tick (`kSync.scan`), which the
+  sheet prices as the dearest pile. Spider's and FreeCell's piles and a second
+  deck add to that sheet with nothing left to spare, so step 2 needs the open
+  question under Language and authoring answered first (the static price against
+  measured tick cost, a search budget of its own), not another raise.
 1. Spider and FreeCell as the same table's game switch (`solitaire.puck`): each
    game lays its piles on the `kSlots` graph and answers the seat through the
    same mailbox; Spider's 104 cards need 52 more bodies (`cardBodies`).

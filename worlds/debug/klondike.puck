@@ -126,7 +126,7 @@ state {
 
     pile solitaireKlondikePile13 of solitaireKlondikeCards capacity(13)
 
-    table solitaireKlondike capacity(27) {
+    table solitaireKlondike capacity(28) {
       request = 0
       applied = 0
       action = 0
@@ -154,6 +154,7 @@ state {
       changed = 0
       attributeStep = 0
       drawLeft = 0
+      moveReady = 0
     }
 
     row {
@@ -252,8 +253,37 @@ rule "solitaireKlondike-new-deal" {
   solitaireKlondike.busy = 1
 }
 
-rule "solitaireKlondike-gather" {
-  when solitaire.table == 1 and solitaireKlondike["stage"] == 1 and count($zones[solitaireKlondike["gatherStep"]]) > 0
+// A transfer between two named piles is priced by those two piles alone, where one between piles a zone table picks
+// live is priced by every pile the table holds. So every transfer below is a rule of its own, gated on the literal
+// piles it moves between, and the work budget prices the alternatives as the dearest one.
+
+// A deal gathers the cards a card a tick, pile by pile from the waste (1) to the last foundation (13): `gatherStep`
+// counts those twelve piles and moves on when the pile it names is empty.
+template klondikeGather(step, pile) {
+  rule $"solitaireKlondike-gather-{step}" {
+    when (solitaire.table == 1 and
+      solitaireKlondike.stage == 1 and
+      solitaireKlondike.gatherStep == step and
+      count(pile) > 0)
+    transform transfer(from: pile, to: solitaireKlondikePile0, selector: First)
+  }
+}
+
+klondikeGather(step: 0, pile: solitaireKlondikePile1)
+klondikeGather(step: 1, pile: solitaireKlondikePile2)
+klondikeGather(step: 2, pile: solitaireKlondikePile3)
+klondikeGather(step: 3, pile: solitaireKlondikePile4)
+klondikeGather(step: 4, pile: solitaireKlondikePile5)
+klondikeGather(step: 5, pile: solitaireKlondikePile6)
+klondikeGather(step: 6, pile: solitaireKlondikePile7)
+klondikeGather(step: 7, pile: solitaireKlondikePile8)
+klondikeGather(step: 8, pile: solitaireKlondikePile10)
+klondikeGather(step: 9, pile: solitaireKlondikePile11)
+klondikeGather(step: 10, pile: solitaireKlondikePile12)
+klondikeGather(step: 11, pile: solitaireKlondikePile13)
+
+rule "solitaireKlondike-gather-advance" {
+  when solitaire.table == 1 and solitaireKlondike.stage == 1 and count($zones[solitaireKlondike["gatherStep"]]) == 0
   zones [
     solitaireKlondikePile1
     solitaireKlondikePile2
@@ -268,12 +298,12 @@ rule "solitaireKlondike-gather" {
     solitaireKlondikePile12
     solitaireKlondikePile13
   ]
-  transform transfer(
-    from: $zones[solitaireKlondike["gatherStep"]],
-    to: solitaireKlondikePile0,
-    selector: Slice,
-    key: zone($zones[solitaireKlondike["gatherStep"]], first)
-  )
+  solitaireKlondike.gatherStep = minimum(11, solitaireKlondike.gatherStep + 1)
+}
+
+rule "solitaireKlondike-gather-reset" {
+  when solitaire.table == 1 and solitaireKlondike.stage == 0
+  solitaireKlondike.gatherStep = 0
 }
 
 rule "solitaireKlondike-attributes-start" {
@@ -296,21 +326,42 @@ rule "solitaireKlondike-shuffle" {
   }
 }
 
-rule "solitaireKlondike-deal" {
-  when solitaire.table == 1 and solitaireKlondike.stage == 3 and solitaireKlondike.dealStep <= 27
-  zones [
-    ""
-    ""
-    solitaireKlondikePile2
-    solitaireKlondikePile3
-    solitaireKlondikePile4
-    solitaireKlondikePile5
-    solitaireKlondikePile6
-    solitaireKlondikePile7
-    solitaireKlondikePile8
-  ]
-  draw solitaireKlondikePile0 to $zones[(solitaireKlondike["dealStep"] < 7) ? (2 + solitaireKlondike["dealStep"]) : ((solitaireKlondike["dealStep"] < 13) ? (solitaireKlondike["dealStep"] - 4) : ((solitaireKlondike["dealStep"] < 18) ? (solitaireKlondike["dealStep"] - 9) : ((solitaireKlondike["dealStep"] < 22) ? (solitaireKlondike["dealStep"] - 13) : ((solitaireKlondike["dealStep"] < 25) ? (solitaireKlondike["dealStep"] - 16) : ((solitaireKlondike["dealStep"] < 27) ? (solitaireKlondike["dealStep"] - 18) : 8)))))]
+// The deal: the tableau's 28 cards, a card a tick, across the columns that still want one (column c takes c + 1).
+template klondikeDeal(step, pile) {
+  rule $"solitaireKlondike-deal-{step}" {
+    when solitaire.table == 1 and solitaireKlondike.stage == 3 and solitaireKlondike.dealStep == step
+    transform transfer(from: solitaireKlondikePile0, to: pile, selector: First)
+  }
 }
+
+klondikeDeal(step: 0, pile: solitaireKlondikePile2)
+klondikeDeal(step: 1, pile: solitaireKlondikePile3)
+klondikeDeal(step: 2, pile: solitaireKlondikePile4)
+klondikeDeal(step: 3, pile: solitaireKlondikePile5)
+klondikeDeal(step: 4, pile: solitaireKlondikePile6)
+klondikeDeal(step: 5, pile: solitaireKlondikePile7)
+klondikeDeal(step: 6, pile: solitaireKlondikePile8)
+klondikeDeal(step: 7, pile: solitaireKlondikePile3)
+klondikeDeal(step: 8, pile: solitaireKlondikePile4)
+klondikeDeal(step: 9, pile: solitaireKlondikePile5)
+klondikeDeal(step: 10, pile: solitaireKlondikePile6)
+klondikeDeal(step: 11, pile: solitaireKlondikePile7)
+klondikeDeal(step: 12, pile: solitaireKlondikePile8)
+klondikeDeal(step: 13, pile: solitaireKlondikePile4)
+klondikeDeal(step: 14, pile: solitaireKlondikePile5)
+klondikeDeal(step: 15, pile: solitaireKlondikePile6)
+klondikeDeal(step: 16, pile: solitaireKlondikePile7)
+klondikeDeal(step: 17, pile: solitaireKlondikePile8)
+klondikeDeal(step: 18, pile: solitaireKlondikePile5)
+klondikeDeal(step: 19, pile: solitaireKlondikePile6)
+klondikeDeal(step: 20, pile: solitaireKlondikePile7)
+klondikeDeal(step: 21, pile: solitaireKlondikePile8)
+klondikeDeal(step: 22, pile: solitaireKlondikePile6)
+klondikeDeal(step: 23, pile: solitaireKlondikePile7)
+klondikeDeal(step: 24, pile: solitaireKlondikePile8)
+klondikeDeal(step: 25, pile: solitaireKlondikePile7)
+klondikeDeal(step: 26, pile: solitaireKlondikePile8)
+klondikeDeal(step: 27, pile: solitaireKlondikePile8)
 
 rule "solitaireKlondike-deal-finish" {
   when solitaire.table == 1 and solitaireKlondike.stage == 3 and solitaireKlondike.dealStep == 27
@@ -445,51 +496,78 @@ rule "solitaireKlondike-target-10" {
   )
 }
 
-rule "solitaireKlondike-move" {
-  when (solitaire.table == 1 and
+// A move is a rule per pair of piles it can run between: a tableau column (2 to 8) to another or to a foundation
+// (10 to 13), the waste (1) to either, and a foundation back to a column. The score rises 10 for a card to a foundation,
+// falls 15 for one taken from it and rises 5 for one taken from the waste.
+// A move is ready when the door is idle on a move request whose run and landing the rules above accepted. The move
+// rules below gate on this one cell and on their two piles, which is all the work budget has to price them by.
+rule "solitaireKlondike-move-ready" {
+  mode: Level
+  solitaireKlondike.moveReady = (
+    solitaire.table == 1 and
     solitaireKlondike.request != solitaireKlondike.applied and
     solitaireKlondike.stage == 0 and
     solitaireKlondike.busy == 0 and
     solitaireKlondike.status == 1 and
     solitaireKlondike.action == 2 and
     solitaireKlondike.sourceOk == 1 and
-    solitaireKlondike.targetOk == 1 and
-    solitaireKlondike.from != solitaireKlondike.to)
-  zones [
-    ""
-    solitaireKlondikePile1
-    solitaireKlondikePile2
-    solitaireKlondikePile3
-    solitaireKlondikePile4
-    solitaireKlondikePile5
-    solitaireKlondikePile6
-    solitaireKlondikePile7
-    solitaireKlondikePile8
-    ""
-    solitaireKlondikePile10
-    solitaireKlondikePile11
-    solitaireKlondikePile12
-    solitaireKlondikePile13
-  ]
-  transaction {
-    transform transfer(
-      from: $zones[solitaireKlondike["from"]],
-      to: $zones[solitaireKlondike["to"]],
-      selector: Slice,
-      key: solitaireKlondike["card"]
+    solitaireKlondike.targetOk == 1
+  )
+}
+
+template klondikeMove(from, to, pileFrom, pileTo, score) {
+  rule $"solitaireKlondike-move-{from}-{to}" {
+    when solitaireKlondike.moveReady == 1 and solitaireKlondike.from == from and solitaireKlondike.to == to
+    transaction {
+      transform transfer(from: pileFrom, to: pileTo, selector: Slice, key: solitaireKlondike.card)
+      solitaireKlondike.moves = solitaireKlondike.moves + 1
+      solitaireKlondike.busy = 1
+      solitaireKlondike.score = maximum(0, solitaireKlondike.score + score)
+      solitaireKlondike.result = 1
+      solitaireKlondike.applied = solitaireKlondike.request
+    }
+  }
+}
+
+
+for from in [2, 3, 4, 5, 6, 7, 8] {
+  for to in filter([2, 3, 4, 5, 6, 7, 8], other => other != from) {
+    klondikeMove(
+      from: from,
+      to: to,
+      pileFrom: $"solitaireKlondikePile{from}",
+      pileTo: $"solitaireKlondikePile{to}",
+      score: 0
     )
-    solitaireKlondike.moves = solitaireKlondike.moves + 1
-    solitaireKlondike.busy = 1
-    solitaireKlondike.score = maximum(
-      0,
-      solitaireKlondike.score +
-        (
-          (solitaireKlondike.to >= 10) ? 10 :
-          ((solitaireKlondike.from >= 10) ? -15 : ((solitaireKlondike.from == 1) ? 5 : 0))
-        )
+  }
+  for to in [10, 11, 12, 13] {
+    klondikeMove(
+      from: from,
+      to: to,
+      pileFrom: $"solitaireKlondikePile{from}",
+      pileTo: $"solitaireKlondikePile{to}",
+      score: 10
     )
-    solitaireKlondike.result = 1
-    solitaireKlondike.applied = solitaireKlondike.request
+  }
+}
+
+for to in [2, 3, 4, 5, 6, 7, 8] {
+  klondikeMove(from: 1, to: to, pileFrom: "solitaireKlondikePile1", pileTo: $"solitaireKlondikePile{to}", score: 5)
+}
+
+for to in [10, 11, 12, 13] {
+  klondikeMove(from: 1, to: to, pileFrom: "solitaireKlondikePile1", pileTo: $"solitaireKlondikePile{to}", score: 10)
+}
+
+for from in [10, 11, 12, 13] {
+  for to in [2, 3, 4, 5, 6, 7, 8] {
+    klondikeMove(
+      from: from,
+      to: to,
+      pileFrom: $"solitaireKlondikePile{from}",
+      pileTo: $"solitaireKlondikePile{to}",
+      score: -15
+    )
   }
 }
 
@@ -540,15 +618,13 @@ rule "solitaireKlondike-recycle-start" {
   solitaireKlondike.passes = solitaireKlondike.passes + 1
 }
 
+// The waste turns over a card a tick, face down.
 rule "solitaireKlondike-recycle-card" {
   when solitaire.table == 1 and solitaireKlondike.stage == 2 and count(solitaireKlondikePile1) > 0
-  draw solitaireKlondikePile1 to solitaireKlondikePile0
-}
-
-rule "solitaireKlondike-recycle-face-down" {
-  when solitaire.table == 1 and solitaireKlondike.stage == 2 and solitaireKlondikeFace[$each] == 1
-  forEach: solitaireKlondikePile0
-  solitaireKlondikeFace[$each] = 0
+  transaction {
+    solitaireKlondikeFace[zone(solitaireKlondikePile1, first)] = 0
+    draw solitaireKlondikePile1 to solitaireKlondikePile0
+  }
 }
 
 rule "solitaireKlondike-recycle-finish" {
@@ -584,29 +660,27 @@ rule "solitaireKlondike-maintenance-start" {
   solitaireKlondike.busy = 0
 }
 
-rule "solitaireKlondike-reveal" {
-  when solitaire.table == 1 and solitaireKlondike["status"] == 1 and solitaireKlondike["stage"] == 0 and count(
-      $zones[$each]
-    ) > 0 and (solitaireKlondikeFace[zone($zones[$each], last)] ?? 1) == 0
-  forEach: $zones
-  zones [
-    solitaireKlondikePile2
-    solitaireKlondikePile3
-    solitaireKlondikePile4
-    solitaireKlondikePile5
-    solitaireKlondikePile6
-    solitaireKlondikePile7
-    solitaireKlondikePile8
-    solitaireKlondikePile1
-  ]
-  solitaireKlondikeFace[zone($zones[$each], last)] = 1
-  solitaireKlondike.busy = 1
+// The waste and the tableau turn their last card face up.
+template klondikeReveal(z, pile) {
+  rule $"solitaireKlondike-reveal-{z}" {
+    when (solitaire.table == 1 and
+      solitaireKlondike.status == 1 and
+      solitaireKlondike.stage == 0 and
+      count(pile) > 0 and
+      (solitaireKlondikeFace[zone(pile, last)] ?? 1) == 0)
+    solitaireKlondikeFace[zone(pile, last)] = 1
+    solitaireKlondike.busy = 1
+  }
 }
 
-rule "solitaireKlondike-gather-advance" {
-  when solitaire.table == 1 and (solitaireKlondike.stage == 0 or solitaireKlondike.stage == 1)
-  solitaireKlondike.gatherStep = solitaireKlondike.stage == 0 ? 0 : minimum(11, solitaireKlondike.gatherStep + 1)
-}
+klondikeReveal(z: 1, pile: solitaireKlondikePile1)
+klondikeReveal(z: 2, pile: solitaireKlondikePile2)
+klondikeReveal(z: 3, pile: solitaireKlondikePile3)
+klondikeReveal(z: 4, pile: solitaireKlondikePile4)
+klondikeReveal(z: 5, pile: solitaireKlondikePile5)
+klondikeReveal(z: 6, pile: solitaireKlondikePile6)
+klondikeReveal(z: 7, pile: solitaireKlondikePile7)
+klondikeReveal(z: 8, pile: solitaireKlondikePile8)
 
 rule "solitaireKlondike-attribute-advance" {
   when solitaire.table == 1 and (solitaireKlondike.stage == 0 or solitaireKlondike.stage == 5)

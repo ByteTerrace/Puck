@@ -375,7 +375,6 @@ state {
       depth = 0
       want = 99
       card = -1
-      aboveUp = 0
       heldZone = -1
       heldBefore = -1
       heldDepth = 0
@@ -400,11 +399,11 @@ state {
 // ---- The cards follow the piles ------------------------------------------------------------------------------------
 
 // Any change in the game (a deal in progress, a move, a draw, a reveal) keeps the table reading for a full pass over the
-// thirteen piles and three ticks more.
+// twelve piles and three ticks more.
 rule "klondike-table-arm" {
   when solitaire.table == 1 and (solitaireKlondike.busy == 1 or solitaireKlondike.stage)
   mode: Level
-  kSync.left = 16
+  kSync.left = 15
 }
 
 rule "klondike-table-run" {
@@ -413,49 +412,37 @@ rule "klondike-table-run" {
   kSync.left -= 1
 }
 
-// The reading visits one pile a tick: its rules are alternatives on `kSync.scan`, so the work budget prices the thirteen
+// The reading visits one pile a tick: its rules are alternatives on `kSync.scan`, so the work budget prices the twelve
 // as the dearest one, not their sum.
 rule "klondike-table-scan" {
   when kSync.left > 0
   mode: Level
-  kSync.scan = (kSync.scan + 1) % 13
+  kSync.scan = (kSync.scan + 1) % 12
 }
 
 // Each pile's cards read their depth: how many cards of the pile stand before them. The `solitaireKlondikeLength` pattern
 // matched from a card to the pile's end counts the cards from it on, so a card's depth is the pile's count less that.
 template klondikeTableRead(turn, z, pile) {
   rule $"klondike-table-read-{z}" {
-    local from = match(solitaireKlondikeLength, pile, prefix)[$each]
     when solitaire.table == 1 and kSync.left > 0 and kSync.scan == turn
     mode: Level
     forEach: pile
-    kSlotOf[$each] = kBase[z] + count(pile) - from
+    kSlotOf[$each] = kBase[z] + count(pile) - match(solitaireKlondikeLength, pile, prefix)[$each]
   }
 }
 
-// The stock is face down and every back is alike, so its cards need no true order: each takes a layer from its number,
-// and the stack stands as thick as the pile (24 layers at most).
-rule "klondike-table-read-0" {
-  when solitaire.table == 1 and kSync.left > 0 and kSync.scan == 0
-  mode: Level
-  forEach: solitaireKlondikePile0
-  kSlotOf[$each] = (
-    solitaireKlondikeCards[$each] % (count(solitaireKlondikePile0) < 24 ? count(solitaireKlondikePile0) : 24)
-  )
-}
-
-klondikeTableRead(turn: 1, z: 1, pile: solitaireKlondikePile1)
-klondikeTableRead(turn: 2, z: 2, pile: solitaireKlondikePile2)
-klondikeTableRead(turn: 3, z: 3, pile: solitaireKlondikePile3)
-klondikeTableRead(turn: 4, z: 4, pile: solitaireKlondikePile4)
-klondikeTableRead(turn: 5, z: 5, pile: solitaireKlondikePile5)
-klondikeTableRead(turn: 6, z: 6, pile: solitaireKlondikePile6)
-klondikeTableRead(turn: 7, z: 7, pile: solitaireKlondikePile7)
-klondikeTableRead(turn: 8, z: 8, pile: solitaireKlondikePile8)
-klondikeTableRead(turn: 9, z: 10, pile: solitaireKlondikePile10)
-klondikeTableRead(turn: 10, z: 11, pile: solitaireKlondikePile11)
-klondikeTableRead(turn: 11, z: 12, pile: solitaireKlondikePile12)
-klondikeTableRead(turn: 12, z: 13, pile: solitaireKlondikePile13)
+klondikeTableRead(turn: 0, z: 1, pile: solitaireKlondikePile1)
+klondikeTableRead(turn: 1, z: 2, pile: solitaireKlondikePile2)
+klondikeTableRead(turn: 2, z: 3, pile: solitaireKlondikePile3)
+klondikeTableRead(turn: 3, z: 4, pile: solitaireKlondikePile4)
+klondikeTableRead(turn: 4, z: 5, pile: solitaireKlondikePile5)
+klondikeTableRead(turn: 5, z: 6, pile: solitaireKlondikePile6)
+klondikeTableRead(turn: 6, z: 7, pile: solitaireKlondikePile7)
+klondikeTableRead(turn: 7, z: 8, pile: solitaireKlondikePile8)
+klondikeTableRead(turn: 8, z: 10, pile: solitaireKlondikePile10)
+klondikeTableRead(turn: 9, z: 11, pile: solitaireKlondikePile11)
+klondikeTableRead(turn: 10, z: 12, pile: solitaireKlondikePile12)
+klondikeTableRead(turn: 11, z: 13, pile: solitaireKlondikePile13)
 
 // Then each card lies at its slot, face up or face down. `kCardNo` is keyed by the cards' placement names.
 rule "klondike-table-up" {
@@ -466,7 +453,7 @@ rule "klondike-table-up" {
   poseCell(
     key: `placement:$each`,
     topology: kSlots,
-    expression: kSlotOf[card],
+    expression: (solitaireKlondikePile0[card] == 1) ? (card % 24) : kSlotOf[card],
     offset: [0, 0, 0],
     pitchDegrees: cardFaceUp
   )
@@ -480,7 +467,7 @@ rule "klondike-table-down" {
   poseCell(
     key: `placement:$each`,
     topology: kSlots,
-    expression: kSlotOf[card],
+    expression: (solitaireKlondikePile0[card] == 1) ? (card % 24) : kSlotOf[card],
     offset: [0, 0, 0],
     pitchDegrees: cardFaceDown
   )
@@ -568,24 +555,20 @@ rule "klondike-seat-point" {
   kSeat.pointer = pointed
 }
 
-// A step moves the cursor one pile across, or between the top row and the tableau, and along a column's fan. Seated at
-// the +Z edge, forward is away from the seat (up the fan and then to the top row) and right is +X.
+// A step moves the cursor one pile across, or between the top row and the tableau, onto a pile's last card. Seated at
+// the +Z edge, forward is away from the seat (to the top row) and right is +X.
 rule "klondike-seat-step" {
   local across = kSeat.rightEdge - kSeat.leftEdge
   local away = kSeat.aheadEdge - kSeat.behindEdge
-  local was = kSeat.band
   local moved = clamp(kSeat.col + across, 0, 6)
-  local bandNow = (
-    (away == 0) ? kSeat.band :
-    ((kSeat.band == 1) ? ((away > 0 and (kSeat.depth == 0 or kSeat.aboveUp == 0)) ? 0 : 1) : ((away < 0) ? 1 : 0))
-  )
+  local bandNow = ((away == 0) ? kSeat.band : ((kSeat.band == 1) ? ((away > 0) ? 0 : 1) : ((away < 0) ? 1 : 0)))
   local colNow = (bandNow == 0 and moved == 2) ? (across > 0 ? 3 : 1) : moved
   when across or away
   mode: Level
   kSeat.col = colNow
   kSeat.band = bandNow
   kSeat.zone = (bandNow == 0) ? kTopZone[colNow] : 2 + colNow
-  kSeat.want = (bandNow == 1 and was == 1 and across == 0 and away != 0) ? kSeat.depth - away : 99
+  kSeat.want = 99
 }
 
 // The cursor's depth stays inside its pile.
@@ -615,7 +598,6 @@ rule "klondike-seat-depth" {
 rule "klondike-seat-card-clear" {
   mode: Level
   kSeat.card = -1
-  kSeat.aboveUp = 0
 }
 
 rule "klondike-seat-card" {
@@ -623,9 +605,6 @@ rule "klondike-seat-card" {
   forEach: kSlotOf
   if kSlotOf[$each] == (kSlotBase[kSeat.zone] + kSeat.depth) {
     kSeat.card = solitaireKlondikeCards[$each]
-  }
-  if kSlotOf[$each] == (kSlotBase[kSeat.zone] + kSeat.depth - 1) {
-    kSeat.aboveUp = solitaireKlondikeFace[$each]
   }
 }
 
