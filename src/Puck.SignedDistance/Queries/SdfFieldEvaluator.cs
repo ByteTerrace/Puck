@@ -16,9 +16,11 @@ namespace Puck.SignedDistance.Queries;
 // run; only the ANSWER differs).
 //
 // THE EXCLUDED-OPS RULE (asserted once at construction, never per query): read for contact, this evaluator is
-// WARP-FREE — it rejects any program containing a warp, fold or relief whose value is not physical clearance (every op
-// in RenderWarpOps) and the one op needing a per-frame dynamic-transform buffer this evaluator's signature has no seam
-// for (TransformDynamic — see the constructor's remarks). It also rejects a NON-UNIFORM Scale: the renderer's min-axis
+// WARP-FREE — it rejects any program containing a warp, fold or per-shape relief whose value is not physical clearance
+// (every op in RenderWarpOps). Creation relief (NoiseDisplace) is read: a solid collides with the relief it draws, and
+// its scope's 1/L keeps the reading a lower bound on the distance to that surface, as CellDisplace's does. It also
+// rejects the one op needing a per-frame dynamic-transform buffer this evaluator's signature has no seam for
+// (TransformDynamic — see the constructor's remarks). It also rejects a NON-UNIFORM Scale: the renderer's min-axis
 // correction is deliberately a safe sphere-tracing lower bound, not Euclidean surface distance, while this evaluator's
 // query and contact consumers require physical clearance. Scalable primitives must bake anisotropy into a native shape
 // spelling (CreationGeometry does this for boxes, spheres/ellipsoids, axially symmetric cylinders/cones, and planes).

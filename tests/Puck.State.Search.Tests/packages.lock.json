@@ -306,6 +306,9 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
+      "puck.confinement": {
+        "type": "Project"
+      },
       "puck.world.authoring": {
         "type": "Project",
         "dependencies": {

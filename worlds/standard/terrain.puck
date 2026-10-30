@@ -9,9 +9,8 @@
 // centre, turned by the placement's yawDegrees. With the author frame's half turn, a placement yaw of (compass + 180)
 // points the sector at compass bearing `compass` (0 is world +Z, 90 is world +X): terrainYaw(compass) says so once.
 //
-// Contact rides the masses alone. The debug world's analytic provider collides each superellipsoid with its exact Lp
-// surface, and creation noise is render-only relief (CreationNoiseDocument), so keep its amplitude to the error a body
-// may sink into or float over the drawn slope. Walkable decks on the terrain are separate creations without noise.
+// Contact follows the drawn rock: a relieved creation collides as one field collider over its masses and their relief,
+// the same fixed-point field the bake draws, so a body stands on the relief, not on the smooth masses under it.
 
 // The placement yaw that points a sector authored along author +Z at a compass bearing.
 let terrainYaw = 180
@@ -26,7 +25,7 @@ let terrainYaw = 180
 // at most a few percent, which the authored foot absorbs.
 template terrainMass(label, foot, peak, radial, across, offset = 0, sink = 0.3, exponent = 2, material = 0) {
   // A union only: a creation's smooth blends are bounded at CreationDocument.MaxSmooth (half a metre), far under a
-  // wall's scale, and the analytic provider collides any blend as the hard union.
+  // wall's scale.
   shape Superellipsoid $"{label}" {
     exponent: exponent
     material: material

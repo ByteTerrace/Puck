@@ -43,6 +43,9 @@
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
+      },
+      "puck.confinement": {
+        "type": "Project"
       }
     }
   }

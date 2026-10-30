@@ -414,15 +414,14 @@ holds the fixed poses and the approaches already rejected.
 Owner: test runner and replay specialist · medium and low ·
 Next: make the per-tick authority hash incremental (measured below).
 
+- [medium] Strict `TemporaryDirectory` teardown still removes its root with
+  recursive `Directory.Delete` (`tests/Shared/TemporaryDirectory.cs:75`), bypassing
+  `RunDirectory.Delete`. A passing law that leaves a 5,000-deep tree can still
+  overflow its host's stack; strict cleanup also deletes links that the shared
+  confined remover refuses. Route strict teardown through the shared remover
+  while preserving its writer-release checks, and migrate link-owning fixtures
+  and unsupported-host teardown behavior together. (from: the sweep-crash review)
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
-- [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
-  process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
-  recursive `Directory.Delete`, which overflows the stack past about 3,500
-  levels (a launcher-pruning depth law's red run left one at 5,000). Delete with
-  the pruning lane's iterative, link-refusing confined removal (not yet landed
-  here), and have the sweep refuse a directory it cannot remove rather than
-  crash. (from: the
-  prune-redesign lane)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
   per-tick hashing and recording, not host reuse. Recording slows the authored
   phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
@@ -1506,17 +1505,20 @@ measured state is in the [plan](valley-and-moons.md#phase-1-the-valley-as-built)
   - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal` clamps its factor to at least 2, so a small creation declaring 1.5625 m spacing still subdivides its existing ~15 mm lattice (`src/Puck.World.Client/WorldPlacementStamper.cs:770`).
   - [medium] `physics.contact` adds three or four shared `CompareExchange` updates to every surviving convex query whether or not a counters reader exists (`src/Puck.Physics/FixedStaticContactWork.cs:51`): count per thread or per tick and publish on read.
 
-- Contact rides the unrelieved masses: creation noise is render-only, so a body
-  on a wall floats over or sinks into the drawn relief by up to its amplitude
-  (4 m on the sectors). The fixed-point render reading already evaluates
-  `NoiseDisplace` deterministically; analytic contact needs a collider whose
-  surface is the relieved field, with a step bound for the sweep. This is the
-  windowed colliders report's last red: 12 findings over 22 witnesses, the
-  sectors' superellipsoid colliders 2.7 to 5.6 m from the drawn relief against
-  2.4 to 2.7 m bake budgets, which fail every sweep's `colliders` signal.
-- A standing body creeps downslope on a curved superellipsoid: 2 cm a second on
-  a 22 degree slope and 7 cm a second on a 58 degree one (`body.where` over 30
-  ticks at rest, north sector).
+- At `valley-slope` on Vulkan (a fresh World, bakes still pending at the
+  capture) the frame is blown out to white around the Moth with every view at
+  `meter=none source=held` (EV 11.5 plus 2.5); the Direct3D 12 capture of the
+  same pose read normally. The image meter (terrain pass step 1) owns it;
+  check whether Vulkan only shows it before its bakes settle.
+- Field-collider cost: a Moth standing on relief spends about 70 field queries
+  and 420 relieved samples a tick, each six octaves of value noise (about
+  3.4 µs on a loaded machine). If the quiet rim p99 misses its bar, cut the
+  octaves contact reads to the geometric ones (the terrain pass's step 3 cut),
+  or take the noise's gradient in closed form with its value.
+- The field provider (`FixedFieldContactSolver`) reads a field's value as the
+  distance, so over a relieved scope divided by its `L` it holds a body up to
+  `L` times its skin off the rock; the analytic field collider measures the
+  distance as value over gradient length, and the provider should too.
 - A scoped static creation's instance bound is a sphere about the creation's
   origin (`WorldPlacementStamper`'s scoped branch), 770 m in radius for a sector
   centred on the ring's centre, so the bake's eight-cells-a-coarse-axis cap, not

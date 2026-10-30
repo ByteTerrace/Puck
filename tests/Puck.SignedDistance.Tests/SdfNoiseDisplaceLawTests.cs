@@ -245,7 +245,7 @@ public sealed class SdfNoiseDisplaceLawTests {
         Assert.True(condition: (program.StepScale < 1.0f));
     }
     [Fact]
-    public void TheWarpFreeEvaluatorRefusesTheOpByName() {
+    public void TheContactEvaluatorReadsTheReliefAsTheRenderReadingDoes() {
         var program = BuildNoiseSphere(
             amplitude: 1.0f,
             frequency: 1.0f,
@@ -253,11 +253,20 @@ public sealed class SdfNoiseDisplaceLawTests {
             lacunarity: 2.0f,
             octaves: 2
         );
-        var exception = Assert.Throws<ArgumentException>(testCode: () => new SdfFieldEvaluator(program: program));
+        var contact = new SdfFieldEvaluator(program: program);
+        var render = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
 
-        Assert.Contains(
-            actualString: exception.Message,
-            expectedSubstring: "NoiseDisplace"
-        );
+        Assert.True(condition: contact.Capabilities.WarpFree);
+        for (var step = -8; (step <= 8); step++) {
+            var point = Puck.Maths.FixedPosition.FromLocal(local: new Puck.Maths.FixedVector3(
+                X: Puck.Maths.FixedQ4816.FromDouble(value: (step * 0.21)),
+                Y: Puck.Maths.FixedQ4816.FromDouble(value: (0.5 - (step * 0.07))),
+                Z: Puck.Maths.FixedQ4816.FromDouble(value: 0.3)
+            ));
+
+            Assert.True(condition: contact.TryDistance(distance: out var read, material: out _, position: point));
+            Assert.True(condition: render.TryDistance(distance: out var drawn, material: out _, position: point));
+            Assert.Equal(expected: drawn, actual: read);
+        }
     }
 }

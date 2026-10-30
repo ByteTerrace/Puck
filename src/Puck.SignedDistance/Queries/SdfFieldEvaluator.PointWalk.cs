@@ -248,12 +248,12 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfOp.Onion:
                 case SdfOp.CellDisplace:
+                case SdfOp.NoiseDisplace:
                 case SdfOp.Dilate: {
                         resultDistance = EditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
                         break;
                     }
-                case SdfOp.Displace:
-                case SdfOp.NoiseDisplace: {
+                case SdfOp.Displace: {
                         resultDistance = RenderEditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
                         break;
                     }
@@ -443,6 +443,10 @@ public sealed partial class SdfFieldEvaluator {
             ((SdfCellMode)instruction.Blend),
             instruction.Data0Z
         ) - Half))),
+        // The fBm relief (sdfValueNoise3, field/sdf-noise.hlsli): amplitude times the host-baked 1/Σ gainᵏ times the sum.
+        SdfOp.NoiseDisplace => (resultDistance + ((instruction.Data0Y * instruction.Data1X) * Pcg3dLatticeNoise.Fbm3(
+            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend),
+            q: (localPosition * instruction.Data0X), seed: instruction.Shape))),
         _ => (resultDistance - instruction.Data0X),
     };
     // A scope's pop: its candidate, scaled by the scope's baked 1/L, joins the field the scope saved. Data1.y is that

@@ -492,6 +492,7 @@
           "Microsoft.Data.Sqlite": "[10.*, )",
           "Microsoft.Testing.Extensions.CodeCoverage": "[18.*, )",
           "Microsoft.Testing.Extensions.HangDump": "[2.*, )",
+          "Puck.Confinement": "[1.0.0, )",
           "xunit.v3": "[4.*, )"
         }
       },

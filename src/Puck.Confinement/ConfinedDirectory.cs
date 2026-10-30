@@ -116,7 +116,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
     public ConfinedDirectory? TryOpenChildForRemoval(string name) {
         RequireName(name: name);
         if (OperatingSystem.IsWindows()) {
-            var handle = Windows.Open(access: Windows.DirectoryAccess | Windows.Delete, busyIsNull: true, create: false, directory: true,
+            var handle = Windows.Open(access: Windows.DirectoryAccess | Windows.Delete | Windows.WriteAttributes, busyIsNull: true, create: false, directory: true,
                 name: name, newFile: false, parent: Handle, share: Windows.ShareRead | Windows.ShareWrite);
 
             if (handle is null) {
@@ -127,8 +127,10 @@ public sealed partial class ConfinedDirectory : IDisposable {
         var child = (Linux.Open(create: false, directory: true, name: name, newFile: false, parent: Handle, write: false)
             ?? throw new DirectoryNotFoundException(message: $"'{name}' does not exist."));
 
-        if (!Linux.TryLock(handle: child, operation: Linux.LockExclusive)) { child.Dispose(); return null; }
-        return Wrap(handle: child, name: name, removable: true);
+        try {
+            if (!Linux.TryLock(handle: child, operation: Linux.LockExclusive)) { child.Dispose(); return null; }
+            return Wrap(handle: child, name: name, removable: true);
+        } catch { child.Dispose(); throw; }
     }
     /// <summary>Registers this handle as a holder of the directory: on Linux a shared lock, which keeps every removal's
     /// exclusive lock out until this handle closes; on Windows the held handle already denies removal.</summary>
@@ -394,7 +396,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
     private static SafeFileHandle? OpenForRemoval(SafeFileHandle parent, string name, out bool existed) {
         existed = false;
         if (OperatingSystem.IsWindows()) {
-            var handle = Windows.OpenAny(access: Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes, isDirectory: out var isDirectory,
+            var handle = Windows.OpenAny(access: Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes | Windows.WriteAttributes, isDirectory: out var isDirectory,
                 isLink: out var isLink, name: name, parent: parent, share: Windows.ShareRead | Windows.ShareWrite);
 
             if (handle is null) { return null; }
@@ -406,11 +408,14 @@ public sealed partial class ConfinedDirectory : IDisposable {
                 return null;
             }
         }
-        var directory = Linux.OpenDirectoryOrNull(error: out var error, name: name, parent: parent);
+        var directory = Linux.OpenForRemoval(directory: true, error: out var error, name: name, parent: parent, writeOnly: false);
 
         if (directory is not null) {
-            existed = true;
-            return directory;
+            try {
+                RequireRemovalLock(handle: directory, name: name);
+                existed = true;
+                return directory;
+            } catch { directory.Dispose(); throw; }
         }
         if (error == Linux.NoEntry) { return null; }
         if (error is not (Linux.NotDirectory or Linux.Loop)) { throw Linux.Error(code: error, message: $"Cannot open confined entry '{name}'"); }
@@ -418,8 +423,39 @@ public sealed partial class ConfinedDirectory : IDisposable {
         if (Linux.Kind(stat: stat) == ConfinedEntryKind.Link) {
             throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place.");
         }
+        if (Linux.Kind(stat: stat) == ConfinedEntryKind.File) {
+            // A file's cooperating holder locks the file, not its parent directory. Keep its descriptor and
+            // exclusive lock through unlink; hard links are safe to unlink without changing their attributes. A file
+            // this user can open neither to read nor to write cannot be locked; it is unlinked as before the lock.
+            var file = Linux.OpenForRemoval(directory: false, error: out error, name: name, parent: parent, writeOnly: false);
+
+            if ((file is null) && (error == Linux.AccessDenied)) {
+                file = Linux.OpenForRemoval(directory: false, error: out error, name: name, parent: parent, writeOnly: true);
+                if ((file is null) && (error == Linux.AccessDenied)) {
+                    existed = Linux.Unlink(directory: false, name: name, parent: parent);
+                    return null;
+                }
+            }
+            if (file is null) {
+                if (error == Linux.NoEntry) { return null; }
+                throw Linux.Error(code: error, message: $"Cannot open confined entry '{name}'");
+            }
+            using var opened = file;
+
+            if (Linux.Kind(stat: Linux.StatOf(handle: file)) != ConfinedEntryKind.File) {
+                throw new IOException(message: $"'{name}' is no longer a regular file; confined removal refuses it.");
+            }
+            RequireRemovalLock(handle: file, name: name);
+            existed = Linux.Unlink(directory: false, name: name, parent: parent);
+            return null;
+        }
         existed = Linux.Unlink(directory: false, name: name, parent: parent);
         return null;
+    }
+    private static void RequireRemovalLock(SafeFileHandle handle, string name) {
+        if (!Linux.TryLock(handle: handle, operation: Linux.LockExclusive)) {
+            throw Linux.Error(code: Linux.WouldBlock, message: $"'{name}' is held by another process.");
+        }
     }
     // Removes a directory emptied through its handle, and closes that handle either way.
     private static void RemoveEmptied(SafeFileHandle directory, SafeFileHandle parent, string name) {

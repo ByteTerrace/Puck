@@ -69,10 +69,26 @@ Measured on Windows 11 (NTFS): a held directory handle that requests only
 directory even when that file shares delete; `K32GetMappedFileNameW` reports the
 name a mapped file was opened by, not its current name.
 
+Removal handles also request `FILE_WRITE_ATTRIBUTES`. On ReFS, a read-only file
+can still return access denied with `FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE`;
+the remover clears that attribute through the same held handle and retries.
+It refuses to change a hard-linked file's attributes, which would affect names
+outside the held tree. The
+[Windows disposition contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_file_disposition_information_ex)
+defines the ignore flag; independent implementations in
+[Go](https://go.dev/src/internal/syscall/windows/at_windows.go) and
+[libuv](https://github.com/libuv/libuv/blob/v1.x/src/win/fs.c) also clear attributes
+through handles when their disposition flags are unsupported. Unlike those
+fallback conditions, the ReFS case returns access denied with the flag accepted.
+
 On Linux x64, every lookup is `openat`, `fstatat`, `renameat2` or `unlinkat`
 relative to a held descriptor with `O_NOFOLLOW` or `AT_SYMLINK_NOFOLLOW`, listing
 reads the descriptor's `/proc/self/fd` link, and holding a directory is an
-`flock` on its descriptor. A move and the final removal of an emptied directory
+`flock` on its descriptor. Removal takes an exclusive lock on every descendant
+directory and regular file as well, refusing a cooperating holder below the
+top-level directory before removing that entry. A regular file this user can
+open neither to read nor to write cannot be locked, and is unlinked without a
+lock. A move and the final removal of an emptied directory
 are made by name relative to the held parent's descriptor, which names the held
 directory unless another process of the same user renames entries meanwhile; the
 launcher's threat model leaves that out
@@ -91,6 +107,10 @@ other code running as the same OS identity.
 
 ## Verification
 
+`RunDirectorySweepLawTests` in `Puck.Cli.Core.Tests` sweeps a 5,000-deep stale
+run directory on a 256 KB stack and refuses a directory holding a link out of
+the root, which the repository's run-directory policy removes through
+`DeleteTree`.
 `InstallPruneLawTests` in the [launcher tests](../../tests/Puck.Launcher.Tests/README.md)
 and `ConfinedStorageLawTests` in `Puck.World.Server.Tests` exercise real
 directories, links, concurrent replacement and held removals on both platforms.

@@ -205,6 +205,9 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "Concentus": "[2.*, )"
         }
+      },
+      "puck.confinement": {
+        "type": "Project"
       }
     }
   }
