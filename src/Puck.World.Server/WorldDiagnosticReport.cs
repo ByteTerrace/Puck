@@ -86,7 +86,12 @@ public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnly
 /// <param name="Red">Certified contract violations.</param>
 /// <param name="Clean">Evaluated witnesses within their own precision budgets.</param>
 /// <param name="Unknown">Witnesses without certified correspondence or required state.</param>
-public sealed record WorldDiagnosticSampleCounts(int Red, int Clean, int Unknown);
+public sealed record WorldDiagnosticSampleCounts(int Red, int Clean, int Unknown) {
+    /// <summary>Gets the witnesses certified outside the comparison: each lies in a seam or crevice its solids enclose,
+    /// narrower than the drawn surface's precision there, which the drawn mesh closes over
+    /// (<see cref="WorldDiagnosticGeometry.OpensOnto"/>). Neither clean nor red.</summary>
+    public int Enclosed { get; init; }
+}
 /// <summary>An immutable diagnostic snapshot, including incomplete coverage.</summary>
 /// <param name="Snapshot">Snapshot identity.</param>
 /// <param name="View">Requested view.</param>

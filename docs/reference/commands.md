@@ -912,7 +912,11 @@ half diagonal)`. This radius
 bounds coverage, not acceptable error; the budget includes only the returned
 triangle's own contour cell half diagonal. Collider/mesh separation is unsigned
 Euclidean distance. A distant ray hit or a missing local nearest point is
-unknown, never red or clean. The authored-field comparison is independent.
+unknown, never red or clean. A witness no ball of the returned triangle's half
+diagonal can reach from free space (`WorldDiagnosticGeometry.OpensOnto`) lies in
+a seam or crevice its solids enclose, such as the fillet groove along an edge
+where three boxes meet; the contour closes over it, so it is counted `enclosed`,
+neither red nor clean. The authored-field comparison is independent.
 Opaque solids participate in that contract; transmissive geometry does not
 become a missing opaque surface. Attached poses and providers without a
 retained witness are reported as unknown. Contacts use the actual analytic
