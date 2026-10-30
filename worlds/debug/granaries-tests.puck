@@ -16,7 +16,7 @@ test "accounts dealt onto the board are found on their cells and covered" {
     granaryNames[bytrcstp003] = "bytrcstp003"
   }
   when {
-    ticks 12
+    ticks 30
   }
   expect {
     granaryBoard[0] == 1
@@ -39,7 +39,7 @@ test "the lectern reads the piece under the cursor" {
     granarySeat.cursor = 1
   }
   when {
-    ticks 12
+    ticks 30
   }
   expect {
     granarySel.name == "bytrcstp002"
@@ -59,12 +59,12 @@ test "a provider's stage grows and shrinks the pieces it covers" {
     granaryNames[bytrcstp006] = "bytrcstp006"
   }
   when {
-    ticks 12
+    ticks 30
     seat1: world.state.cell.set granaryIrrigationRequest $value 1
     seat1: world.state.cell.set granaryPowerRequest $value 2
-    ticks 12
+    ticks 30
     seat1: world.state.cell.set granaryIrrigationRequest $value 0
-    ticks 12
+    ticks 30
   }
   expect {
     granaryIrrigationStage == 0
@@ -80,9 +80,9 @@ test "an account that leaves the feed leaves the board and its coverage" {
     granaryNames[bytrcstp002] = "bytrcstp002"
   }
   when {
-    ticks 12
+    ticks 30
     seat1: world.state.cell.remove granaryNames bytrcstp001
-    ticks 12
+    ticks 30
   }
   expect {
     granaryBoard[0] == 0

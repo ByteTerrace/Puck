@@ -469,6 +469,15 @@ template granaryStore(name, body, roof) {
 }
 
 // ---- Finding each piece's cell ----------------------------------------------------------------------------------------
+// The board's rules run one phase a tick, in a cycle of nine (`granaryPhase`), so the tick's rule work is priced as the
+// dearest phase rather than the sum of them all: the stale cells are cleaned, each piece is found, the occupancy follows,
+// the two coverage rows are read, the tallies are counted and the lectern reads the piece under the cursor. A change
+// settles within one cycle, 0.3 s.
+rule "granary-phase" {
+  mode: Level
+  granaryPhase = (granaryPhase + 1) % 9
+}
+
 // The tiles' channels `tile` and `bit0`..`bit3` code the cell a piece stands on: an account's cell is the sum of the bits
 // that cover its piece, and `granaryCellOf` holds it plus one, so an absent cell never reads as cell 0. A piece the deal
 // removes leaves the row; its cell and coverage cells are cleaned on the tick after, once the influence no longer reads.
@@ -480,7 +489,7 @@ rule "granary-locate" {
     4 * (influence(bit2, granaryStores)[$each] ?? 0) +
     8 * (influence(bit3, granaryStores)[$each] ?? 0)
   )
-  when influence(tile, granaryStores)[$each] >= 1 and granaryCellOf[$each] != at
+  when granaryPhase == 3 and influence(tile, granaryStores)[$each] >= 1 and granaryCellOf[$each] != at
   mode: Level
   forEach: granaryNames
   granaryCellOf[$each] = at
@@ -489,7 +498,7 @@ rule "granary-locate" {
 template granaryBoardCell(cell, ordinal) {
   rule $"granary-board-{cell}" {
     local held = count(granaryCellOf, atLeast: ordinal, atMost: ordinal)
-    when not granaryBoard[cell] == held
+    when granaryPhase == 4 and granaryBoard[cell] != held
     mode: Level
     granaryBoard[cell] = held
   }
@@ -500,35 +509,35 @@ for c in range(0, granaryCells) {
 }
 
 rule "granary-cell-cleanup" {
-  when not influence(water, granaryStores)[$each] == influence(water, granaryStores)[$each]
+  when granaryPhase == 0 and isAbsent(influence(water, granaryStores)[$each])
   mode: Level
   forEach: granaryCellOf
   remove granaryCellOf[$each]
 }
 
 rule "granary-water-coverage-cleanup" {
-  when not influence(water, granaryStores)[$each] == influence(water, granaryStores)[$each]
+  when granaryPhase == 1 and isAbsent(influence(water, granaryStores)[$each])
   mode: Level
   forEach: granaryWaterCoverage
   remove granaryWaterCoverage[$each]
 }
 
 rule "granary-power-coverage-cleanup" {
-  when not influence(power, granaryStores)[$each] == influence(power, granaryStores)[$each]
+  when granaryPhase == 2 and isAbsent(influence(power, granaryStores)[$each])
   mode: Level
   forEach: granaryPowerCoverage
   remove granaryPowerCoverage[$each]
 }
 
 rule "granary-water-coverage" {
-  when influence(water, granaryStores)[$each] >= 0 and not granaryWaterCoverage[$each] == influence(water, granaryStores)[$each]
+  when granaryPhase == 5 and influence(water, granaryStores)[$each] >= 0 and granaryWaterCoverage[$each] != influence(water, granaryStores)[$each]
   mode: Level
   forEach: granaryNames
   setState(state: granaryWaterCoverage, key: $each, fromState: influence(water, granaryStores), fromKey: $each)
 }
 
 rule "granary-power-coverage" {
-  when influence(power, granaryStores)[$each] >= 0 and not granaryPowerCoverage[$each] == influence(power, granaryStores)[$each]
+  when granaryPhase == 6 and influence(power, granaryStores)[$each] >= 0 and granaryPowerCoverage[$each] != influence(power, granaryStores)[$each]
   mode: Level
   forEach: granaryNames
   setState(state: granaryPowerCoverage, key: $each, fromState: influence(power, granaryStores), fromKey: $each)
@@ -560,6 +569,7 @@ rule "granary-power-stage" {
 // ---- The readout ------------------------------------------------------------------------------------------------------
 
 rule "granary-tally" {
+  when granaryPhase == 7
   mode: Level
   granaryTally.accounts = count(granaryCellOf, atLeast: 1, atMost: 16)
   granaryTally.watered = count(granaryWaterCoverage, atLeast: 1, atMost: 99)
@@ -594,7 +604,7 @@ rule "granary-feed-live" {
 
 // What the lectern shows for the piece under the cursor, and nothing for an empty cell.
 rule "granary-inspect-piece" {
-  when granaryCellOf[$each] == granarySeat.cursor + 1
+  when granaryPhase == 8 and granaryCellOf[$each] == granarySeat.cursor + 1
   mode: Level
   forEach: granaryNames
   setState(state: granarySel, key: name, fromState: granaryNames, fromKey: $each)
@@ -604,7 +614,7 @@ rule "granary-inspect-piece" {
 }
 
 rule "granary-inspect-empty" {
-  when granaryBoard[granarySeat.cursor] == 0
+  when granaryPhase == 8 and granaryBoard[granarySeat.cursor] == 0
   mode: Level
   setState(state: granarySel, key: name, text: "")
   setState(state: granarySel, key: region, text: "")
@@ -795,6 +805,7 @@ state {
     }
     row { name: "granaryPowerSelected", kind: "Text", value: granaryReachVolume[0], visibility {} }
     row { name: "granaryPowerPatch", kind: "Text", value: granaryReachPatch[0], visibility {} }
+    slot granaryPhase = 0 bounds(0..8)
     slot granaryIrrigationRequest = 0 bounds(0..2)
     slot granaryIrrigationStage = 0 bounds(0..2)
     slot granaryPowerRequest = 0 bounds(0..2)
