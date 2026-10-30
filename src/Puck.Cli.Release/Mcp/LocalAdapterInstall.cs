@@ -1,13 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
+using Puck.Confinement;
 using Puck.Launcher;
 using Puck.Launcher.Release;
 
 namespace Puck.Cli.Mcp;
 
 internal static class LocalAdapterInstall {
-    // This process's registration as a holder of the version it runs from, kept until it exits.
-    private static InstallRegistration? Registration;
-
     public static async Task<string> ActivateAsync(string build, string install, CancellationToken token) {
         // Publication writes release content into the install root; the pruner holds the same lease while it deletes.
         using (await InstallLeases.AcquireAsync(cancellationToken: token, fileName: InstallLeases.PublicationLockFileName, installRoot: install).ConfigureAwait(continueOnCapturedContext: false)) {
@@ -46,13 +44,10 @@ internal static class LocalAdapterInstall {
             return version;
         }
     }
-    // Registers before the process does anything else with its install, and fails the launch when its version directory
-    // was removed or replaced since it was loaded.
-    public static void Register(string install, CancellationToken token) =>
-        Registration ??= InstallRegistration.RegisterEntryAssembly(cancellationToken: token, installRoot: install);
+    // Proves health with the registration the CLI's entry point took before it loaded anything else.
     public static void Healthy(string install) {
         var version = new DirectoryInfo(path: AppContext.BaseDirectory).Name;
-        var cleared = HealthGateFile.ClearHealthy(cacheRoot: install, registration: (Registration ?? throw new InvalidOperationException(message: "Register before proving health.")), version: version);
+        var cleared = HealthGateFile.ClearHealthy(cacheRoot: install, registration: InstallRegistration.RegisterProcess(cancellationToken: CancellationToken.None), version: version);
 
         if (cleared.Pruned is { } pruned) {
             Console.Error.WriteLine(value: ((pruned.Skipped is { } skipped)

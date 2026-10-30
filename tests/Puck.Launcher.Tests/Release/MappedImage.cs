@@ -1,5 +1,5 @@
 using System.IO.MemoryMappedFiles;
-using Puck.Launcher.Release;
+using Puck.Confinement;
 
 namespace Puck.Launcher.Tests.Release;
 

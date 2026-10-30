@@ -52,9 +52,9 @@ public static class InstallPruner {
     /// adapter's development channel publishes here).</summary>
     public const string LocalSourceDirectoryName = "development-source";
     /// <summary>Where a version waits for deletion after leaving <c>versions/</c>, directly under the install root.</summary>
-    public const string TrashDirectoryName = "trash";
+    public const string TrashDirectoryName = InstallLayout.TrashDirectoryName;
     /// <summary>The version directories' parent, directly under the install root.</summary>
-    public const string VersionsDirectoryName = "versions";
+    public const string VersionsDirectoryName = InstallLayout.VersionsDirectoryName;
 
     private static StringComparer NameComparer => StringComparer.OrdinalIgnoreCase;
 

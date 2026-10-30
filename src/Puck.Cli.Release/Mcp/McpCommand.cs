@@ -67,7 +67,6 @@ public static class McpCommand {
                     _ = await LocalAdapterInstall.ActivateAsync(build: buildSource, install: installRoot, token: stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                     return 0;
                 }
-                LocalAdapterInstall.Register(install: installRoot, token: stop.Token);
                 if (!worker) {
                     // The stub counts each launch of a pending version; a front that started proves it as a worker
                     // does, or a client's probe-and-reconnect reaches the attempt ceiling and rolls a good build back.

@@ -182,9 +182,13 @@ earlier, and no link is followed. These are the invariants a review checks:
   `TryOpenChildForRemoval`, which fails while any process holds it: an
   exclusive `flock` against holders' shared locks on Linux, a delete-access open
   against holders' sharing mode on Windows. Holders are the stub (from before it
-  starts the child until the child exits) and every process itself
-  (`InstallRegistration`, which `AddSelfUpdate`'s hosted service and the operator
-  adapter run at start). The kernel releases a hold when its process exits.
+  starts the child until the child exits) and every process itself:
+  `Puck.Confinement`'s `InstallRegistration.TryRegisterProcess` is the first
+  statement of every entry point an installed payload carries (`Puck.Cli`,
+  `Puck.Cli.Worlds`, `Puck.World`, `Puck.World.Silo` and `Puck.Actors`), and an
+  entry point that cannot register refuses to start with the reason. A process
+  registers when its image directory's grandparent holds `current`, whatever
+  arguments it was given. The kernel releases a hold when its process exits.
 - **Registration is serialized with removal.** Registration waits for
   `update.lock` without a deadline; the pass holds `publication.lock` then
   `update.lock` throughout. A registering process then confirms by identity that

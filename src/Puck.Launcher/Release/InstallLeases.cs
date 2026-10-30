@@ -15,7 +15,7 @@ public static class InstallLeases {
     /// <summary>The publication lease's file name, directly under the install root.</summary>
     public const string PublicationLockFileName = "publication.lock";
     /// <summary>The update lease's file name, directly under the install root. The stub spells the same name.</summary>
-    public const string UpdateLockFileName = "update.lock";
+    public const string UpdateLockFileName = InstallLayout.UpdateLockFileName;
 
     /// <summary>Takes a lease on an install root without waiting, creating the root when it is missing.</summary>
     /// <param name="installRoot">The install root.</param>

@@ -6,28 +6,24 @@ using System.Text.Json;
 namespace Puck.Launcher.Release;
 
 /// <summary>
-/// Registers this process as a holder of the version it runs from (<see cref="InstallRegistration"/>), then clears the
-/// stub's health attempt counter (<c>Puck.Launcher.Stub.StubHealth</c>'s file, an independent reader: the two sides
-/// share the file's shape by convention) once this process reports healthy, and prunes past versions. Registered by
-/// <see cref="LauncherServiceRegistration.AddSelfUpdate"/> as a hosted service that registers on start, failing the
-/// start with the reason when its version directory was removed or replaced, and clears on
+/// Clears the stub's health attempt counter (<c>Puck.Launcher.Stub.StubHealth</c>'s file, an independent reader: the
+/// two sides share the file's shape by convention) once this process reports healthy, and prunes past versions.
+/// Registered by <see cref="LauncherServiceRegistration.AddSelfUpdate"/> as a hosted service that clears on
 /// <see cref="IHostApplicationLifetime.ApplicationStarted"/>, the one "hosting completed startup" signal both
-/// <c>HeadlessTickHostedService</c> and <c>LauncherWindowHostedService</c> already depend on.
+/// <c>HeadlessTickHostedService</c> and <c>LauncherWindowHostedService</c> already depend on. It proves health with this
+/// process's registration (<see cref="InstallRegistration.Process"/>), which the entry point took before it loaded
+/// anything else and which lives as long as the process.
 /// </summary>
 /// <param name="applicationLifetime">The host lifetime whose <see cref="IHostApplicationLifetime.ApplicationStarted"/> marks healthy.</param>
 /// <param name="options">Names the install root, the version this process reports itself as, and how many past versions to keep.</param>
-internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime applicationLifetime, UpdateOptions options) : IHostedService, IDisposable {
+internal sealed class SelfUpdateHealthGateHostedService(IHostApplicationLifetime applicationLifetime, UpdateOptions options) : IHostedService {
     private readonly IHostApplicationLifetime m_applicationLifetime = applicationLifetime;
     private readonly UpdateOptions m_options = options;
 
-    // Held until the container disposes this service at host shutdown; process exit releases it in any case.
-    private InstallRegistration? m_registration;
-
-    /// <inheritdoc/>
-    public void Dispose() => m_registration?.Dispose();
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken) {
-        var registration = (m_registration ??= InstallRegistration.RegisterEntryAssembly(cancellationToken: cancellationToken, installRoot: m_options.CacheRoot));
+        // A host whose entry point registered already gets that registration back.
+        var registration = InstallRegistration.RegisterProcess(cancellationToken: cancellationToken);
 
         m_applicationLifetime.ApplicationStarted.Register(callback: () => HealthGateFile.ClearHealthy(
             cacheRoot: m_options.CacheRoot,
@@ -58,7 +54,8 @@ public static class HealthGateFile {
         contents: JsonSerializer.Serialize(value: new HealthRecord(Attempts: 0, Version: version)));
     /// <summary>Deletes the health marker only for the process still selected by current, under the install lease, then
     /// runs one <see cref="InstallPruner.Prune"/> pass. The process is the selected one when its registration holds
-    /// <c>versions/&lt;version&gt;</c> (identity, not path spelling, decided that) and current names that version. A
+    /// <c>versions/&lt;version&gt;</c> of this very install root (identity, not path spelling, decided both) and current
+    /// names that version. A
     /// busy install leaves the marker intact; an older process cannot bless a newer selected install and never prunes.</summary>
     /// <param name="cacheRoot">The install root (the same directory the stub reads <c>state/health.json</c> under).</param>
     /// <param name="version">The version to clear.</param>
@@ -75,9 +72,9 @@ public static class HealthGateFile {
         try {
             using var root = ConfinedDirectory.OpenAnchor(create: false, path: cacheRoot);
             using var lease = root?.TryAcquireLock(name: InstallLeases.UpdateLockFileName);
-            var currentPath = Path.Combine(path1: cacheRoot, path2: "current");
+            var currentPath = Path.Combine(path1: cacheRoot, path2: InstallLayout.CurrentFileName);
 
-            if ((lease is null) || !File.Exists(path: currentPath) || !string.Equals(a: File.ReadAllText(path: currentPath).Trim(), b: version, comparisonType: StringComparison.Ordinal)) {
+            if ((lease is null) || (registration.Root != root!.Identity) || !File.Exists(path: currentPath) || !string.Equals(a: File.ReadAllText(path: currentPath).Trim(), b: version, comparisonType: StringComparison.Ordinal)) {
                 return new HealthClearResult(Cleared: false, Pruned: null);
             }
             File.Delete(path: Path.Combine(path1: cacheRoot, path2: "state", path3: "health.json"));

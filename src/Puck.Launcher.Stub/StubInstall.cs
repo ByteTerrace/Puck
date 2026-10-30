@@ -65,7 +65,7 @@ public static class StubInstall {
     }
 
     /// <summary>The current-version pointer file name, directly under the install root.</summary>
-    public const string CurrentFileName = "current";
+    public const string CurrentFileName = InstallLayout.CurrentFileName;
     /// <summary>The subdirectory the health attempt counter lives under.</summary>
     public const string HealthDirectoryName = "state";
     /// <summary>The health attempt counter file name, under <see cref="HealthDirectoryName"/>.</summary>
@@ -73,13 +73,13 @@ public static class StubInstall {
     /// <summary>The last-known-good version pointer file name, directly under the install root.</summary>
     public const string LastGoodFileName = "last-good";
     /// <summary>The update lease's file name, directly under the install root.</summary>
-    public const string UpdateLockFileName = "update.lock";
+    public const string UpdateLockFileName = InstallLayout.UpdateLockFileName;
     /// <summary>The per-version durable-state-generation file name, under <c>versions/&lt;version&gt;/</c>.</summary>
     public const string StateGenerationFileName = "state-generation";
     /// <summary>The stub's own configuration file name, beside the stub executable (the install root itself).</summary>
     public const string StubConfigFileName = "stub.json";
     /// <summary>The subdirectory staged versions live under.</summary>
-    public const string VersionsDirectoryName = "versions";
+    public const string VersionsDirectoryName = InstallLayout.VersionsDirectoryName;
 
     /// <summary>Reads a version's <c>state-generation</c> file.</summary>
     /// <param name="installRoot">The install root.</param>

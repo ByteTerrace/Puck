@@ -30,6 +30,18 @@ for an install root. From a held directory:
 - `Identity` is the file system's identity of the held directory, for comparing
   two handles whatever paths reached them.
 
+## Install registration
+
+`InstallRegistration` and `InstallLayout` hold the install root's process
+registration here, because every entry point an installed payload carries, the
+stub and the launcher must share it and this is the one BCL-only project all of
+them reach. `TryRegisterProcess` is the first statement of each such entry point:
+a process whose image directory's grandparent holds `current` waits for
+`update.lock`, confirms by identity that `versions/<name>` is the directory it
+was loaded from, and holds it for the life of the process; one that cannot
+refuses to start. The launcher's pruner never removes a held version (see the
+[launcher README](../Puck.Launcher/README.md#pruning-past-versions)).
+
 ## Platforms
 
 Windows and Linux x64 are supported; every other platform refuses with
