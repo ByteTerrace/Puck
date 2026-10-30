@@ -37,12 +37,24 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
     }
-    private static void WriteReservationMember(WireWriter writer, WorldTransferReservationMember member) {
-        // An autonomous source's own principal is durable authority state, never an actor admitted from a peer.
-        writer.WriteBoolean(value: member.Principal == Puck.Commands.Principal.World);
-        if (member.Principal != Puck.Commands.Principal.World) {
-            WritePrincipal(writer: writer, principal: member.Principal);
+    // An autonomous traveller's own World principal is durable authority state, never an actor admitted from a peer, so
+    // the checkpoint spells it by a flag the wire's live principal leaf never carries.
+    private static void WriteDurablePrincipal(WireWriter writer, Puck.Commands.Principal principal) {
+        writer.WriteBoolean(value: (principal == Puck.Commands.Principal.World));
+        if (principal != Puck.Commands.Principal.World) {
+            WritePrincipal(
+                principal: principal,
+                writer: writer
+            );
         }
+    }
+    private static Puck.Commands.Principal ReadDurablePrincipal(ref WireReader reader) =>
+        (reader.ReadBoolean() ? Puck.Commands.Principal.World : WorldWireCodec.ReadPrincipal(reader: ref reader));
+    private static void WriteReservationMember(WireWriter writer, WorldTransferReservationMember member) {
+        WriteDurablePrincipal(
+            principal: member.Principal,
+            writer: writer
+        );
         writer.WriteInt32(value: member.PreferredSlot);
         WorldIdentityProjectionWire.WriteOptional(
             projection: member.Identity,
@@ -66,7 +78,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
     private static WorldTransferReservationMember ReadReservationMember(ref WireReader reader) {
-        var principal = (reader.ReadBoolean() ? Puck.Commands.Principal.World : WorldWireCodec.ReadPrincipal(reader: ref reader));
+        var principal = ReadDurablePrincipal(reader: ref reader);
         var preferredSlot = reader.ReadInt32();
         var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var source = WorldWireCodec.ReadIntentSource(reader: ref reader);
@@ -210,7 +222,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteArray(
             items: committed.Principals,
-            writeItem: WritePrincipal
+            writeItem: WriteDurablePrincipal
         );
         writer.WriteArray(
             items: committed.Incarnations,
@@ -232,7 +244,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var principals = reader.ReadArray(
             field: "committed principals",
-            readItem: static (ref WireReader r) => WorldWireCodec.ReadPrincipal(reader: ref r),
+            readItem: static (ref WireReader r) => ReadDurablePrincipal(reader: ref r),
             maximum: MaxCollectionCount
         );
         var incarnations = reader.ReadArray(
@@ -301,7 +313,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     writer: w
                 );
                 w.WriteUInt64(value: row.Epoch);
-                WritePrincipal(
+                WriteDurablePrincipal(
                     principal: row.Principal,
                     writer: w
                 );
@@ -389,7 +401,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
                 var incarnation = WorldWireLeaves.ReadEntityAddress(reader: ref r);
                 var epoch = r.ReadUInt64();
-                var principal = WorldWireCodec.ReadPrincipal(reader: ref r);
+                var principal = ReadDurablePrincipal(reader: ref r);
 
                 return (sourceAuthority, incarnation, epoch, principal);
             },
