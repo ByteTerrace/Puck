@@ -153,7 +153,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             : EmptyScreenSurfaceTransforms);
         m_width = width;
         Name = name;
-        MeshPathBake = new SdfMeshPathBake { Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
+        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
         // frames before it, which a restart at another plans again.
         frameSource.ObserveBuilds(built: (program, transforms) => {
@@ -165,6 +165,29 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the residency's name.</summary>
     public string Name { get; }
+
+    /// <summary>Gets the demand points the residency's mesh residency follows: every view of its latest captured frame,
+    /// observed before the frame is dressed.</summary>
+    public SdfMeshDemand MeshDemand { get; } = new();
+
+    /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
+    /// start, near the demand points and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
+    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), the latest program's emission, build and
+    /// size, and the irradiance volume's probe cache.</summary>
+    /// <param name="radius">The distance, in metres, from a demand point within which a group counts as near.</param>
+    /// <returns>The description, one part a line.</returns>
+    public IReadOnlyList<string> DescribeResidency(float radius) {
+        var composition = (m_frameSource as SdfCompositionFrameSource);
+        var program = m_frame?.Program;
+
+        return [
+            MeshPathBake.DescribeResidency(radius: radius),
+            (MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none"),
+            (m_tables?.DescribeLanding() ?? "region=none"),
+            string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={ProgramBuilds} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
+            MeshIrradiance.DescribeCache(),
+        ];
+    }
 
     // The package frame the residency's frame was last started for (SdfWorldPasses.Begin).
     internal long PackageFrame { get; set; }
@@ -518,6 +541,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // The bake takes its batch before the upload, which carries the batch's surface points.
         MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
+        MeshPathBake.ObserveResidency(tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if (!m_frame!.TickLocked || !MeshPathBake.Pending) {
@@ -786,7 +810,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             }
         }
 
-        // Every view draws the program's baked meshes.
+        // Every view draws the program's baked meshes, landed first where its views stand.
+        MeshDemand.Observe(frame: frame, height: m_height);
         frame = MeshPathBake.Dress(frame: frame);
 
         m_frame = frame;

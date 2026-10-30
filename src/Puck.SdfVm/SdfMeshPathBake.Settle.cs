@@ -114,6 +114,7 @@ public sealed partial class SdfMeshPathBake {
             transforms: frame.DynamicTransforms
         )!;
 
+        group.TakeDemandSphere();
         Library.Settles.Count(kind: SdfMeshSettle.Queued);
         StartSettle(time: frame.Time);
         group.Replaces = old;

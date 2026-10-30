@@ -168,6 +168,7 @@ public sealed partial class SdfWorldTables {
         }
 
         WriteOwedMeshes(draws: draws);
+        CountOwed();
 
         // A draw whose mesh's words are still owed waits for them: the staged list holds the draws whose meshes are
         // written, and the next frames write the rest.
@@ -338,11 +339,62 @@ public sealed partial class SdfWorldTables {
     // Owes one placed mesh's words: the region keeps no copy of the mesh section, and the upload's flush stages the words
     // from the mesh itself (WriteSourcedMeshWords). The byte offset is a long: a mesh placed past 512 M words starts past
     // 2 GiB.
-    private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) =>
+    private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) {
+        var words = SdfMeshRegion.WordsOf(mesh: mesh);
+
+        m_meshWordsWritten += words;
         m_meshRegion.OweSourced(
-            length: (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)),
+            length: (((long)words) * sizeof(uint)),
             offset: (((long)placement.VertexWord) * sizeof(uint))
         );
+    }
+
+    // The mesh words the region has written, the frames and time it spent owing words, the words it owes now, and since
+    // when it has owed them (a Stopwatch timestamp; zero while it owes none).
+    private long m_meshWordsWritten;
+    private long m_owedFrames;
+    private long m_owedTicks;
+    private long m_owedWords;
+    private long m_owedSince;
+
+    // Counts a staging that still owes meshes, and the time from the first such staging to the one that owes none.
+    private void CountOwed() {
+        var words = 0L;
+
+        foreach (var mesh in m_meshesOwed) {
+            if (m_meshArena.Placements.ContainsKey(key: mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
+        }
+        Volatile.Write(location: ref m_owedWords, value: words);
+
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        if (words > 0) {
+            m_owedFrames++;
+            if (m_owedSince == 0) { m_owedSince = now; }
+        } else if (m_owedSince != 0) {
+            m_owedTicks += (now - m_owedSince);
+            m_owedSince = 0;
+        }
+    }
+
+    /// <summary>Returns whether the mesh region holds a mesh's words: the latest staged draw list placed it and its words
+    /// are written, so its draws are staged. Read on the frame's thread.</summary>
+    /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
+    /// <returns><see langword="true"/> when the region holds it.</returns>
+    public bool HoldsMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && !m_meshesOwed.Contains(item: mesh));
+
+    /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
+    /// into it, the bytes it still owes, the frames and seconds it spent owing them, and the words a frame lands at most.
+    /// Safe to read from any thread, the counts being a frame's.</summary>
+    /// <returns>One line of <c>key=value</c> pairs.</returns>
+    public string DescribeLanding() {
+        var since = Volatile.Read(location: ref m_owedSince);
+        var ticks = (Volatile.Read(location: ref m_owedTicks) + ((since == 0) ? 0 : (System.Diagnostics.Stopwatch.GetTimestamp() - since)));
+        var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
+        var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
+
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s landing-words-per-frame={MeshLandingWords}");
+    }
     // One placed mesh's words, from its first vertex word, in the mesh scratch.
     private Span<uint> MeshWordsOf(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
