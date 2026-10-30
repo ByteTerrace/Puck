@@ -414,14 +414,17 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     private int m_preparedPresentation = -1;
 
+    private int m_preparedCode;
+
     public void PrepareFrame() {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
         m_client.WriteRevision(revision);
-        if (m_prepared && revision.SequenceEqual(m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && !m_census.TryTakeMove()) { return; }
+        if (m_prepared && revision.SequenceEqual(m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
         revision.CopyTo(m_preparedRevision);
         m_prepared = true;
         m_preparedPresentation = m_continuum.PresentationRevision;
+        m_preparedCode = Puck.Abstractions.CodeRevision.Current;
         var definition = m_client.Definition;
 
         m_census.Refresh(source: m_client);

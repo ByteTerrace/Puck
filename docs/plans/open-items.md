@@ -36,9 +36,8 @@ resolves their edits to this file at merge.
    dynamic-member refinement; the remaining scale-normal finding is in
    [Lighting and GI](#lighting-and-gi).
 4. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-   a hot-reload code revision as one invalidation contract (emitter revisions
-   and the static field), then the persisted caches keyed by the modules as
-   built; a product of edited code under the unedited identity is the hazard.
+   the bake's kept groups under a moved identity, a reboot for an edit outside
+   `PuckHotReload`, and the windowed C# loop timed on a quiet machine.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), then the schema switch.
@@ -527,38 +526,25 @@ surviving red findings by cluster, starting with the hall stairs.
   across load; that cause is an inference, not yet confirmed. Owner: boot/reload
   lane. C7's genre sweeps boot each source fresh.
 
-Owner: hot-reload follow-up (boot and build) · two medium, the rest ordinary ·
-Next: the hot-reload code revision as one invalidation contract (the
-compositor's emitter revisions and the static-field rebuild), then the
-persisted cache identities, then the parse count; then a reboot for an edit
-outside `PuckHotReload`.
+Owner: hot-reload follow-up (boot and build) · ordinary ·
+Next: the bake's kept groups under a moved identity, then a reboot for an edit
+outside `PuckHotReload`, then the windowed C# loop timed on a quiet machine.
 
 - Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
-- Decide (the lead's call): every persisted product is keyed by a hash of what
-  it read, and `CodeRevision.Current` folds into that identity while an update
-  is applied, so a hot-reloaded process never reads or writes a product of
-  edited code under the unedited identity; a built process derives the
-  ordinary identities.
 
-- [medium] A hot-reload code revision never invalidates the compositor's emitter
-  revisions, and the static-field rebuild also needs a changed program, so
-  hot-reloading scene emission with unchanged world revisions keeps the old
-  geometry and query field (`src/Puck.World.Client/WorldFramePresenter.cs:567`).
-  (from: edit-to-run review)
-- [medium] `CompiledWorldCache` counts its synthetic parse before a possible real
-  authored parse while writing the cache, so a source-hash hit that keeps
-  `DEFN`/`ASST` but regenerates a missing `CURV` counts two parses where the
-  next complete-cache boot counts one
-  (`src/Puck.World.Schema/CompiledWorldCache.cs:318`). (from: edit-to-run review)
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does.
-- Persisted caches keyed by the modules as built (the compile cache's compiler
-  identity and the compiled world's engine build, both module version ids, and
-  the mesh bake's closure read from the built IL) cannot see an applied update,
-  so a hot-reloaded process could read or write a product of edited code under
-  the unedited identity. `WorldSourceIndex` bypasses its persisted declarations
-  once `CodeRevision.Current` moves; the others do not yet.
+- A bake identity that moves under a running residency (an applied update to
+  the bake's code, which the residency follows through
+  `SdfMeshBakeIdentity.UnderRunningCode`, or
+  `world.shaders.reload` of a bake kernel) keys new groups and the store apart,
+  but `SdfMeshPathBake.Keeps` still keeps a group whose geometry is unchanged
+  with the mesh the previous identity baked, until its geometry moves. The fix
+  is one more term in `Keeps` (`old.Identity == Identity.Value`); it is an edit
+  to a bake root, so the next boot of every store rebakes once (314 s on
+  Direct3D 12, 333 s on Vulkan, cold), which is why it was left for the lead
+  to schedule.
 - An applied update leaves the installed SDF pipeline set as it is: the
   pass-pipeline cache is keyed by bytecode, so an edit to the C# that describes
   a pipeline shows only after a reboot.
@@ -571,8 +557,12 @@ outside `PuckHotReload`.
   Direct3D 12 World, a new constant in `passes/sdf-light-stage.hlsli` went from
   save to `world.shaders.reload` answering `state=applied` (`sdf-world-views`
   alone) in 8.04 and 8.24 s, harness round trips of about 1-1.5 s included; a
-  revert to bytecode already in the shader cache took 2.65 s. The C# loop
-  (`dotnet watch`, windowed) was not reached in that window and is still owed.
+  revert to bytecode already in the shader cache took 2.65 s. The windowed C#
+  loop (`dotnet watch`) was not reached in that window and is still owed. On a
+  loaded machine, headless, a `Puck.World.Transpiler` body edit went from save
+  to `[world.hot-reload] applied revision 1` in under 1.5 s (`changes applied in
+  876ms`; the next edit 61 ms, under 1.2 s end to end), and the next
+  `world.reload` compiled the debug world under the edited code.
 - Re-measure the C# loops on an idle machine against the targets: a
   `Puck.World.Client` edit to ready under 20 s, boot to ready under 6 s. On the
   loaded lead machine a hot-reloaded

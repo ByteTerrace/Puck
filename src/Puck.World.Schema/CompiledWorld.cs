@@ -51,23 +51,31 @@ public static class CompiledWorld {
 
     private const int MaximumTextBytes = 4096;
 
-    private static readonly Lazy<string> Build = new(valueFactory: ComputeEngineBuild);
+    private static readonly Lazy<(string Text, string Built, IReadOnlySet<string> Modules)> Build = new(valueFactory: ComputeEngineBuild);
 
     /// <summary>Gets the magic a compiled world's container opens with.</summary>
     public static ReadOnlySpan<byte> Magic => "PWLD"u8;
     /// <summary>Gets the identity of the running engine build: the <c>sha256-64</c> pin over the module version id of
-    /// every <c>Puck.*</c> assembly the document model's assembly reaches, so any change to code a derivation can run
-    /// moves it.</summary>
-    public static string EngineBuild => Build.Value;
+    /// every <c>Puck.*</c> assembly the document model's assembly reaches and any hot-reload update applied to one of them
+    /// (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), so any change to code a derivation can run moves it.</summary>
+    public static string EngineBuild {
+        get {
+            var (text, built, modules) = Build.Value;
+            var applied = Puck.Abstractions.CodeRevision.AppliedToAssemblies(assemblies: modules);
 
-    private static string ComputeEngineBuild() {
+            return ((applied.Length == 0) ? built : AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: $"{text}applied:{applied}\n")).ToString());
+        }
+    }
+
+    private static (string Text, string Built, IReadOnlySet<string> Modules) ComputeEngineBuild() {
         var text = new StringBuilder();
+        var reach = AssemblyReach.Of(root: typeof(WorldDefinition).Assembly);
 
-        foreach (var (name, assembly) in AssemblyReach.Of(root: typeof(WorldDefinition).Assembly)) {
+        foreach (var (name, assembly) in reach) {
             _ = text.Append(value: name).Append(value: ':').Append(value: assembly.ManifestModule.ModuleVersionId.ToString(format: "N")).Append(value: '\n');
         }
 
-        return AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).ToString();
+        return (text.ToString(), AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).ToString(), reach.Keys.ToHashSet(comparer: StringComparer.Ordinal));
     }
 
     /// <summary>Returns the file a compiled world of the document at <paramref name="documentPath"/> sits in beside

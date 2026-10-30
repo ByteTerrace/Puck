@@ -112,8 +112,9 @@ public sealed record WorldCompiledSource(byte[]? Document, bool EmitsDocument, I
 /// <para>
 /// Held compiles live in memory for the process and, once <see cref="Persist"/> names a directory, in that directory
 /// too, so a later process compiles nothing an earlier one already compiled. An entry belongs to one compiler build:
-/// the identity of every non-framework assembly the compiler loads is part of the entry's name and is recorded inside
-/// it, so a rebuilt compiler never reads an older one's output, and builds that share a directory (an editor's
+/// the identity of every non-framework assembly the compiler loads, with any hot-reload update applied to one of them
+/// (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), is part of the entry's name and is recorded inside it, so a
+/// rebuilt or hot-reloaded compiler never reads an older one's output, and builds that share a directory (an editor's
 /// <c>puck lsp</c>, a candidate CLI, the game) keep their own entries rather than overwriting each other's. A read
 /// that serves an entry stamps it as used, and a write keeps the directory within <see cref="MaxPersistedEntries"/>
 /// entries and <see cref="MaxPersistedBytes"/> bytes, least recently used out
@@ -163,9 +164,16 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
     /// only.</summary>
     public string? Directory => Volatile.Read(location: ref m_directory);
 
-    // The pin over every Puck module the compiler reaches: a persisted product of the parser or compiler is valid only
-    // under the identity it was written by.
-    internal static string CompilerIdentity => Identity.Value;
+    // The pin over every Puck module the compiler reaches, with the update applied to any of them folded in
+    // (CodeRevision.AppliedTo): a product of the parser or compiler is valid only under the identity it was written by.
+    internal static string CompilerIdentity {
+        get {
+            var (built, modules) = Identity.Value;
+            var applied = Puck.Abstractions.CodeRevision.AppliedToAssemblies(assemblies: modules);
+
+            return ((applied.Length == 0) ? built : ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: $"{built}\n{applied}")).Hex);
+        }
+    }
 
     // The identity walks the compiler's reference graph from its own assembly. In a trimmed application a reference
     // the trimmer removed is code the compile cannot run, so its load failing and entering the identity as absent is
@@ -175,7 +183,7 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
         checkId: "IL2026",
         Justification = "A reference the trimmer removed cannot run, and its failed load enters the identity as absent."
     )]
-    private static string ComputeCompilerIdentity() {
+    private static (string Built, IReadOnlySet<string> Modules) ComputeCompilerIdentity() {
         var modules = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
         var pending = new Stack<Assembly>();
 
@@ -212,7 +220,7 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
             _ = text.Append(value: name).Append(value: '=').Append(value: version.ToString(format: "N")).Append(value: ';');
         }
 
-        return ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex;
+        return (ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
     }
     private static bool IsFramework(string? name) => (
         (name is null) ||
@@ -285,7 +293,9 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
         var fullPath = Path.GetFullPath(path: path);
-        var key = (KeyOf(fullPath: fullPath) + (includeTests ? "\0tests" : "\0document"));
+        // A held compile is a product of the compiler, so the compiler's identity keys it in memory as on disk: a compile
+        // held before an update to the compiler was applied is never served after it.
+        var key = (CompilerIdentity + "\0" + KeyOf(fullPath: fullPath) + (includeTests ? "\0tests" : "\0document"));
 
         failure = null;
 
@@ -510,5 +520,5 @@ public sealed partial class WorldCompileCache : IWorldCompositionStore {
         }
     }
 
-    private static readonly Lazy<string> Identity = new(valueFactory: ComputeCompilerIdentity);
+    private static readonly Lazy<(string Built, IReadOnlySet<string> Modules)> Identity = new(valueFactory: ComputeCompilerIdentity);
 }
