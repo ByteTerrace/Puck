@@ -577,6 +577,14 @@ thing the owner cares about, not machine load alone:
   quota);
 - the board's age against the newest lane change.
 
+Read lane state with `puck lanes` ([reference](../../../docs/reference/cli.md#puck-lanesone-line-per-worktree)),
+never an ad hoc scan of the worktrees: one line per worktree with its commits
+ahead, changed files, last commit, newest write, log exit, GPU lease state and a
+`STALL` mark, in seconds, read-only, and without walking `bin/` or `obj/`.
+`puck lanes --watch 0` is the stall watcher: run it as the one background
+monitor, and it prints only a lane finishing, stalling or resuming, a lease
+changing, or a lane appearing or leaving.
+
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the
 drift it exists for. On each audit, act on what degraded in the same turn: a

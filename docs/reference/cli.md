@@ -108,6 +108,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
+| [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
@@ -130,8 +131,8 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck sweep`](#puck-sweepthe-debug-worlds-sweep) | the debug world's sweep: drives its tools for a bounded span, reads every signal its plan (`worlds/debug/sweep.json`) names on a headless World, and with `--tour` (or `--attach`) the rendered signals and a capture tour on a windowed one, and writes a `puck.sweep.v1` report with contact sheets that `--baseline` compares with. |
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's SPIR-V to another and compare it byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
+| [`puck sweep`](#puck-sweepthe-debug-worlds-sweep) | the debug world's sweep: drives its tools for a bounded span, reads every signal its plan (`worlds/debug/sweep.json`) names on a headless World, and with `--tour` (or `--attach`) the rendered signals and a capture tour on a windowed one, and writes a `puck.sweep.v1` report with contact sheets that `--baseline` compares with. |
 | [`puck test`](#puck-testtest-worlds) | compiles a `.puck` source's `test` blocks — a world's own, a module's under the arguments a test gives it, and a module's own at every instantiation — into test worlds, boots each through the real `Puck.World` executable, headless, and reads its verdict rows out of the state export the world writes at its own declared export tick. |
 | [`puck verbs`](#puck-verbsconsole-verb-catalog) | the console verb catalog `src/Puck.World.Vocabulary/Assets/puck.console.verbs.json`, every verb any boot shape registers, read from a headless and a windowed World's `world.affordances` and checked against them; authored commands are validated against it. |
 | [`puck vocabulary`](#puck-vocabularyworld-authoring-vocabulary) | the world authoring vocabulary `docs/reference/world-vocabulary.md`, generated from the one construct table the parser, the printer and the language server read, and checked against it. |
@@ -4288,6 +4289,45 @@ Exit **0** means the report is produced, even with no removable entries or with
 unreadable worktrees. Missing or unknown `--into`, failure to read the local
 branch inventory, or a partial clone under a git without `--no-lazy-fetch` exits
 **2** with a reason on stderr.
+
+## `puck lanes`—one line per worktree
+
+`puck lanes` is the lead's lane roster: one line per worktree (the main
+checkout first, then by name), read in a few seconds however large the
+worktrees are. It is report-only and changes nothing, the lease queue included.
+It walks no build output or source tree: it asks git for each worktree's state
+with read-only calls and stats the git index, the changed files, the worktree's
+`.claude/scratch/` entries (top level only) and the lane's log.
+
+```text
+active  controls  codex/controls  ahead 3 files 2 commit 14m "controls: ..." write 2m log 2m lease gpu:queued#5(2/3,ahead 4) brief controls done
+```
+
+- `ahead` counts commits on the branch that `--base` (default
+  `lead/catch-up`) lacks; `files` counts paths with a staged or unstaged change.
+- `commit` is the last commit's age and subject; `brief` is the last `Brief:`
+  trailer between the base and HEAD.
+- `write` is the age of the newest write among the git index, the git log of
+  `HEAD`, the changed files, the scratch entries and the lane's log.
+- `log` is `.claude/scratch/<name>.log` (or `<branch>.log`) in the worktree or
+  the main checkout: its age, and its final `codex exit N` or `agy exit N` line
+  when the log ends with one.
+- `lease` lists the `gpu`, `heavy` and `build` leases the lane holds
+  (`gpu:holding`) or waits for (`gpu:queued#5(2/3,ahead 4)`: ticket 5, the
+  lane's turn 2 of 3 in the round, four admissions before it). A lane is matched
+  by the lease's lane name against the worktree name, the branch, or the
+  branch's last segment.
+- The first column is the lane's state: `active`; `done` or `blocked` (the last
+  commit's `Brief:` trailer); `exited` (the log ends with an exit line); `main`;
+  or `STALL`, an active lane whose newest write is older than `--stall` minutes
+  (default 30) while it neither holds a lease nor waits for one.
+
+`--json` prints the same rows as one JSON document with ages in seconds.
+`--watch <minutes>` polls every `--interval` seconds (default 30) for that long
+(0 until cancelled), prints one summary line, then one line per change: a lane
+finishing, stalling or resuming, a lease changing, a lane appearing or leaving.
+Run it as the lead's one background monitor. Exit 0; 2 for a bad option or a
+directory that is no git worktree.
 
 ## `puck branding`—maintained assets
 
