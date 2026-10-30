@@ -29,9 +29,9 @@ resolves their edits to this file at merge.
 1. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings, with quiet
    timing and frame-cost qualification of the probe-depth fixes at integration.
-2. [Dynamic body scale and the mesh bake](#dynamic-body-scale-and-the-mesh-bake):
-   the walkthrough's other high; `SdfMeshInstance.Matrix` already scales at
-   draw, so the fix is in the dynamic bake path's identity and detail.
+2. [Bake detail](#bake-detail): measure static curvature refinement and local
+   dynamic-member refinement; the remaining scale-normal finding is in
+   [Lighting and GI](#lighting-and-gi).
 3. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
    a hot-reload code revision as one invalidation contract (emitter revisions
    and the static field), then the persisted caches keyed by the modules as
@@ -336,8 +336,9 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   process: `RunDirectory.Sweep` deletes stale `puck-*` directories with .NET's
   recursive `Directory.Delete`, which overflows the stack past about 3,500
   levels (a launcher-pruning depth law's red run left one at 5,000). Delete with
-  the iterative, link-refusing removal in `src/Puck.Confinement`, and have the
-  sweep refuse a directory it cannot remove rather than crash. (from: the
+  the pruning lane's iterative, link-refusing confined removal (not yet landed
+  here), and have the sweep refuse a directory it cannot remove rather than
+  crash. (from: the
   prune-redesign lane)
 - [medium] Re-measure complete-boot reuse on a quiet machine and profile Go's
   reproduction replica. The boot-reuse-2 correction requires identical composed
@@ -351,7 +352,7 @@ replica cost and repeat the paired CPU measurements on a quiet machine.
   boundary over rebuilding every derived section merely to retain broader
   reuse; they do not establish quiet-machine performance. Per-file CPU, wall
   time, boot counts and red/green evidence are in
-  `.claude/scratch/boot-reuse-2-evidence/report.md` (lead checkout). The
+  .claude/scratch/boot-reuse-2-evidence/report.md (lead checkout, ignored). The
   earlier incomplete-identity implementation also showed no clear loaded-machine
   speedup; its replica profiling remains relevant below. (from: boot-reuse-2)
 
@@ -438,6 +439,16 @@ surviving red findings by cluster, starting with the hall stairs.
   interpenetrating meshes.
 
 ### Edit to running, hot reload and boot
+
+- [high · owner: lead integration] The combined debug document at integration
+  45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
+  PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for
+  progress. This appears after the card-table merge and blocks the latest
+  probe-depth-fix World smoke qualification; the preceding integrated build
+  booted on both backends. Reconcile the composed recurring work and search
+  allowance without disabling chess. The focused probe/tooling builds and
+  96 cases still pass. The diagnostic is in the probe-depth-fix hand-back's
+  `integrated-latest-debug-compile.log`.
 
 - [medium] A `world.load` from debug into a same-capacity input fixture leaves
   authored state-writing rules refused with `the live edit grant refuses
@@ -661,8 +672,9 @@ movement-facing scheme returns.
   camera, bars and dash scripts under the controls worktree's
   `.claude/scratch/controls-evidence/`; inspect the same workload on Vulkan,
   read standing/walking frame time and patrol the stage. The hand-back is
-  `.claude/scratch/controls-handback.md`. Judge the dash's feel and the authored
-  secondary wings spacing; their appearance remains unconfirmed. The durable
+  .claude/scratch/controls-handback.md (lead checkout, ignored). Judge the dash's
+  feel and the authored secondary wings spacing; their appearance remains
+  unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
 - [high · owner: lead integration] Land the controls review's follow-up
@@ -1449,7 +1461,7 @@ material defect needs no taste call); new content and art on the owner's call.
     guard and recessed cyan heel light are missing, and the heel needs a housing
     designed around the downward nozzle the air jump's plume leaves (the bake
     detail these parts get is the
-    [mesh-bake packet's](#dynamic-body-scale-and-the-mesh-bake)).
+    [mesh-bake packet's](#bake-detail)).
 - The suit toggle's handheld: only body 0 holds the brick (`pilotHold` declares
   the one key `"0"`); she holds it only while captured standing still, so a
   mirrored engagement that walks or carrying it about wants a hold pose that
