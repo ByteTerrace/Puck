@@ -1,7 +1,7 @@
 // The K row's four independent eight-bit visibilities. A queried slot holds its visibility as a code of zero through
 // SDF_SHADOW_SCALE; a slot the surface pass did not query holds SDF_SHADOW_UNQUERIED, which decodes as fully visible and
-// which the views filter leaves out of its averages (sdfViewsFilter). The CPU pair is SdfVisibility.PackShadows/ShadowAt,
-// with its ShadowUnqueried and ShadowScale.
+// which the views filter leaves out of its averages (sdfViewsFilter). No CPU code reads the word; SdfVisibility.ShadowBits
+// and ShadowMask generate its lane constants.
 #ifndef FRAME_SDF_SHADOW_VISIBILITY_HLSLI
 #define FRAME_SDF_SHADOW_VISIBILITY_HLSLI
 #include "../isa/sdf-render.hlsli"
