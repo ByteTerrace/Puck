@@ -12,7 +12,10 @@ namespace Puck.Launcher.Tests;
 public sealed class FixedStepPumpStepGateTests {
     private const ulong StepTicks = (FixedTickConversion.TicksPerSecond / 30UL);
 
-    private sealed class CountingSimulation : IFixedStepSimulation {
+    // Doubles as the pump's wall clock: every step it takes costs StepCostTicks of wall time.
+    private sealed class CountingSimulation : IFixedStepSimulation, IInputClock {
+        public ulong StepCostTicks { get; set; }
+        public ulong NowTicks => (((ulong)Steps) * StepCostTicks);
         // Answers AwaitsFrame from the completed step count, the way a capture armed at one tick owes one frame.
         public Func<int, bool>? AwaitsFrameAfter { get; set; }
         public bool AwaitsFrame => (AwaitsFrameAfter?.Invoke(arg: Steps) ?? false);
@@ -44,14 +47,14 @@ public sealed class FixedStepPumpStepGateTests {
         public Principal PrincipalOf(int slot) => Principal.Console;
     }
 
-    private static (FixedStepPump Pump, CountingSimulation Simulation, InputRouter Router) NewPump(Action? beforeStep, Func<bool>? mayStep, bool holdsClock = false) {
+    private static (FixedStepPump Pump, CountingSimulation Simulation, InputRouter Router) NewPump(Action? beforeStep, Func<bool>? mayStep, bool holdsClock = false, ulong? stepCostTicks = null) {
         var registry = new CommandRegistry(modules: []);
         var router = new InputRouter(
             bindings: new NoBindings(),
             principalResolver: new ConsolePrincipal(),
             registry: registry
         );
-        var simulation = new CountingSimulation();
+        var simulation = new CountingSimulation { StepCostTicks = (stepCostTicks ?? 0UL) };
 
         return (new FixedStepPump(
             beforeStep: beforeStep,
@@ -60,7 +63,8 @@ public sealed class FixedStepPumpStepGateTests {
             inputRouter: router,
             mayStep: mayStep,
             registry: registry,
-            simulation: simulation
+            simulation: simulation,
+            wallClock: ((stepCostTicks is null) ? null : simulation)
         ), simulation, router);
     }
 
@@ -547,6 +551,46 @@ public sealed class FixedStepPumpStepGateTests {
             Assert.Equal(
                 expected: 0UL,
                 actual: simulation.WithheldTicks
+            );
+        }
+    }
+    // Each row: wall time a step costs, in quarter periods; the steps one call owing eight takes.
+    [InlineData(0UL, 8)]
+    [InlineData(1UL, 4)]
+    [InlineData(3UL, 2)]
+    [InlineData(8UL, 1)]
+    [Theory]
+    public void ABurstStopsOnceItHasSpentOneStepsPeriodOfWallTimeAndShedsTheRest(ulong costQuarters, int expectedSteps) {
+        var (pump, simulation, router) = NewPump(
+            beforeStep: null,
+            mayStep: null,
+            stepCostTicks: ((costQuarters * StepTicks) / 4UL)
+        );
+
+        using (router) {
+            for (var frame = 1; (frame <= 3); frame++) {
+                Assert.Equal(
+                    expected: expectedSteps,
+                    actual: pump.Advance(
+                        deltaTicks: ((8UL * StepTicks) + 7UL),
+                        maxFrameTicks: ulong.MaxValue,
+                        stepTicks: StepTicks
+                    )
+                );
+                // Nothing shed is owed: the next call steps only what its own interval brings, and the capture pin
+                // moved by every shed step, so input stays due now.
+                Assert.Equal(
+                    expected: (((ulong)frame) * 7UL),
+                    actual: pump.AccumulatorTicks
+                );
+                Assert.Equal(
+                    expected: ((((ulong)frame) * (8UL - ((ulong)expectedSteps))) * StepTicks),
+                    actual: pump.CaptureOriginTicks
+                );
+            }
+            Assert.Equal(
+                expected: (3UL * ((ulong)expectedSteps) * StepTicks),
+                actual: pump.ElapsedTicks
             );
         }
     }

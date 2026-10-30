@@ -103,9 +103,11 @@ public sealed class CliLease : IDisposable {
     private static string Enqueue(string queue, string holder, string lane, TimeProvider clock) {
         Directory.CreateDirectory(path: queue);
         var lines = Metadata(clock: clock, holder: holder, lane: lane);
+        var floor = 1L;
+        var denied = 0;
 
         while (true) {
-            var next = 1L;
+            var next = floor;
 
             foreach (var file in Directory.EnumerateFiles(path: queue)) {
                 if (long.TryParse(s: Path.GetFileName(path: file), provider: CultureInfo.InvariantCulture, result: out var sequence) && (sequence >= next)) { next = (sequence + 1); }
@@ -120,6 +122,9 @@ public sealed class CliLease : IDisposable {
                 foreach (var line in lines) { writer.WriteLine(value: line); }
                 return path;
             } catch (IOException) when (File.Exists(path: path)) { }
+            // Windows refuses a name whose deleted file is still held open elsewhere, and the listing may not show it:
+            // take the next sequence, and give up only when the directory itself refuses.
+            catch (UnauthorizedAccessException) when (++denied <= 64) { floor = (next + 1); }
         }
     }
     /// <summary>Where a ticket stands in the admission order: tickets ahead, its lane's turn among the queued lanes, and how many lanes are queued.</summary>
@@ -146,8 +151,9 @@ public sealed class CliLease : IDisposable {
                 using var reader = new StreamReader(stream: stream);
 
                 lines = reader.ReadToEnd().Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            } catch (IOException) {
-                // Vanished, or being written: a ticket we cannot read yet is counted, never skipped.
+            } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+                // Vanished, being written, or deleted but still held open (Windows answers access denied): a ticket we
+                // cannot read yet is counted, never skipped.
                 if (!File.Exists(path: file)) { continue; }
             }
             if (lines is not null) {
@@ -189,7 +195,7 @@ public sealed class CliLease : IDisposable {
     private static string LanePath(string lane, string rotation) => Path.Combine(path1: rotation, path2: Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: lane))));
     /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
     private static long Served(string path) {
-        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (IOException) { return 0; }
+        try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return 0; }
     }
     /// <summary>Records that a lane holds the lease now, as the highest serial any lane has had. Only the guard's owner writes.</summary>
     private static void Serve(string rotation, string lane) {
@@ -209,7 +215,7 @@ public sealed class CliLease : IDisposable {
     }
 
     private static string[]? ReadHolder(string directory) {
-        try { return File.ReadAllLines(path: Path.Combine(path1: directory, path2: "holder")); } catch (IOException) { return null; }
+        try { return File.ReadAllLines(path: Path.Combine(path1: directory, path2: "holder")); } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
     }
 
     /// <summary>Names the lane a checkout's own runs take the lease for: its directory name, one lane per worktree.</summary>

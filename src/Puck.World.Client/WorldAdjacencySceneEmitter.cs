@@ -310,8 +310,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             probeWorstCase: false,
             slotBase: slotBase,
             rigFor: index => m_emittedRigs[(appearanceBase + index)],
-            slotFor: index => m_liveSlots[(appearanceBase + index)],
-            scaleFor: index => m_emittedScales[(appearanceBase + index)]
+            slotFor: index => m_liveSlots[(appearanceBase + index)]
         );
     }
     private bool IsSuppressed(IWorldAdjacencyNeighbour neighbour, int index) =>

@@ -388,6 +388,11 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   leaves a ticket the next waiter drops; a stale `<name>.queue` entry needs no
   manual cleanup
   ([CLI reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work)).
+- The GPU is the scarce resource (the owner's direction): most running lanes are
+  GPU-free (CPU work shown headless), and a lane whose finish line needs a
+  windowed World is started only when the GPU queue can take it. Windowed checks
+  owed by several lanes are batched into one lead verification window rather than
+  each lane waiting on the lease.
 - A check that needs the owner present (their hardware, their eyes on a window)
   goes ahead of the GPU queue for its short run: the owner's time is the scarcest
   resource. The lead keeps it to a minute or two and discounts any lane timing

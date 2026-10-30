@@ -200,6 +200,39 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.True(condition: (population.EntryBody(index: 1)!.FixedPosition.Y > height));
         Assert.False(condition: population.EntryBody(index: 1)!.Resting);
     }
+    // A moving carrier wakes what its contact reaches, and contact reaches a whole authored skin past its surface: a
+    // sleeper resting on a car under a two-metre skin wakes and rides the car down.
+    [Fact]
+    public void ASleeperRestingAtSkinDistanceAboveAMovingCarrierWakes() {
+        var source = Document();
+        var car = CreationCanonicalizer.Canonicalize(document: new CreationDocument(CreationDocument.CurrentSchema, "car", null,
+            [new ShapeDocument(0, "car", SdfSolidPrimitive.Box, Vector3.Zero, Quaternion.Identity, new Vector3(x: 2, y: .1f, z: 2),
+                0, SdfBlendOp.Union, 0, 0)], null), source: "car");
+        var definition = source with {
+            CollisionRaw = source.Collision with { Requirements = [], ContactSkin = 2 },
+            CreationsRaw = [.. source.Creations, new WorldPrototype("car", car.Document, car.Hash)],
+            KitRowsRaw = [.. source.Kits, source.Kits[0] with { Name = "carrier", Rigid = null, Collider = null }],
+            AssignmentRaw = new WorldRowAssignment(WorldSequence.IndexDefault, ["ball", "carrier"]),
+            PlacementRowsRaw = [.. source.Placements, new WorldPlacement("car", "car", Vector3.Zero, 0, 1, Solid: new WorldSolid(Margin: 0),
+                Attach: new WorldPlacementAttach(BodyIndex: 1, LocalOffset: new Vector3(x: 0, y: -3, z: 0)))],
+        };
+        var population = new WorldPopulation(definition: definition);
+
+        population.SetSimulatedCount(2);
+        Pose(index: 1, population: population, x: 0, y: 9, z: 0);
+        Pose(index: 0, population: population, x: 0, y: 9, z: 0);
+        Settle(count: 1, population: population);
+        var ball = population.EntryBody(index: 0)!;
+        var carrier = population.EntryBody(index: 1)!;
+        var height = ball.FixedPosition.Y;
+
+        Assert.True(condition: (height > FixedQ4816.FromInteger(value: 7)), userMessage: $"the ball rests on the car, not the floor ({height})");
+        for (var tick = 1200; (tick < 1216); tick++) {
+            carrier.Glide(position: (carrier.FixedPosition - (FixedVector3.UnitY * FixedQ4816.FromDouble(value: .0625))));
+            Step(population: population, tick: tick);
+        }
+        Assert.True(condition: (ball.FixedPosition.Y < height), userMessage: $"the sleeper stayed at {ball.FixedPosition.Y} above the falling car");
+    }
     [Fact]
     public void ASelectedRigidKitRestoresItsSleepingContinuation() {
         var source = Document();

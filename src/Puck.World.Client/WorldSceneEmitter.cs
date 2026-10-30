@@ -233,9 +233,6 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             rigFor: (probe
             ? null
             : index => m_emittedAvatarRigs[index]),
-            scaleFor: (probe
-            ? null
-            : index => m_emittedAvatarScales[index]),
             picks: (probe ? null : m_picks)
         );
     }

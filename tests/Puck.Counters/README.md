@@ -1,7 +1,7 @@
 # Render work counters
 
 While the debug world is the one live world, only its two workloads stay here:
-`debug.world.json` with `shadow.script.txt` and `avatar.world.json` with
+`debug.puck` with `shadow.script.txt` and `avatar.puck` with
 `avatar.script.txt`, and the report schema; the debug workload is
 `puck counters`' default. Every other
 workload, script, batch and reference is quarantined at the
@@ -27,8 +27,8 @@ before it and one from after it on the same device, held to each other with
 
 | Workload | Scene | Script |
 |---|---|---|
-| `debug.world.json` | The debug world's wide key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` |
-| `avatar.world.json` | The debug world as played: its Moth avatar seated before the default third-person camera, inherited from `debug.puck` | `avatar.script.txt` |
+| `debug.puck` | The debug world's wide key light over its ground, cubes and Moth, inherited from `debug.puck`, seen from the fixed counters camera | `shadow.script.txt` |
+| `avatar.puck` | The debug world as played: its Moth avatar seated before the default third-person camera, inherited from `debug.puck` | `avatar.script.txt` |
 
 Every view renders from the meshes its program is baked into
 ([frame rendering](../../docs/rendering/sdf/handbook/frame-rendering.md#the-bake)),
@@ -54,7 +54,7 @@ one GPU at a time:
 
 ```text
 dotnet <cli-copy>/Puck.Cli.dll counters --output <reports>/debug.json
-dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/avatar.world.json --script tests/Puck.Counters/avatar.script.txt --output <reports>/avatar.json
+dotnet <cli-copy>/Puck.Cli.dll counters --world tests/Puck.Counters/avatar.puck --script tests/Puck.Counters/avatar.script.txt --output <reports>/avatar.json
 ```
 
 Keep each report beside the corresponding comparison report:
