@@ -33,6 +33,8 @@ internal sealed class WorldOverlayFeed {
     // follows the connected family and an action icon follows its live icon-row cell.
     private readonly OverlayResolvedGlyph[][] m_hintMembers;
     private readonly OverlayBindingHint[][] m_hints;
+    // The slot-set controls the live layout places, rebuilt per seat per frame for the chord hints.
+    private readonly List<string> m_placedSlots = [];
     // A chord row's action icon: its own authored icon name, else the bar's icon row keyed by its action.
     private readonly Func<BindingChordCommandView, OverlayResolvedGlyph> m_resolveHintAction;
     // Each seat's icon-row cells, read through whichever mirror the seat is routed to.
@@ -330,6 +332,12 @@ internal sealed class WorldOverlayFeed {
                 )
                 : 0
             );
+            BindingBarSeatComposer.PlacedSlots(
+                destination: m_placedSlots,
+                layout: barStatus.Compiled,
+                slotSet: slotSet
+            );
+
             var hintCount = BindingBarSeatComposer.ComposeHints(
                 declaredOnly: authoring.DeclaredModifiersOnly,
                 destination: m_hints[viewIndex],
@@ -337,7 +345,7 @@ internal sealed class WorldOverlayFeed {
                 modifiers: authoring.Modifiers,
                 resolveAction: m_resolveHintAction,
                 resolveBadge: m_resolveBadge,
-                slotSet: slotSet,
+                slotSet: m_placedSlots,
                 text: barText,
                 view: view
             );
