@@ -143,7 +143,10 @@ driver keeps its lasting state in registers.
 The receiving side classifies what it admits from what it can verify (the
 cap-trust rule): an arriving companion is autonomous, lands with no grant from
 its sender, and receives Drive from the destination's own policy, scoped to the
-landed generation. The destination's replay tape pins its own add-on receipts,
+landed generation. Home mints a companion's incarnation with a title mark that
+is part of its identity, so a sender cannot pass the companion off as an
+ordinary traveller: a marked incarnation lands only under a hop home confirms,
+and an unmarked copy is another incarnation home holds no title of. The destination's replay tape pins its own add-on receipts,
 so a replay of the destination needs nothing from home. One driver instance per
 role per instance drives every arriving companion of that role, under that
 world's fuel and budget; placement capacity bounds how many a world takes, and
