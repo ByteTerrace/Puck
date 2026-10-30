@@ -1,15 +1,16 @@
-// The valley: the debug world's floor is the flat bottom of a caldera whose walls rise close around it. Eight sectors ring
-// the floor, one creation and one solid placement each, so each is edited and baked on its own: a main mass and two
-// shoulders from the standard terrain library (../standard/terrain.puck), with fBm relief seeded per sector. The floor
-// (debug.puck's "floor") runs on under the walls, so no slab edge shows. An overlook deck stands near the summit of the
-// south-west sector, and a body that falls out of the world is stood back up on the floor below the sector it fell from,
-// not at one global spawn. docs/plans/valley-and-moons.md records the bake, contact and audit numbers it was measured at.
+// The valley: the debug world's floor is the flat bottom of a caldera whose walls rise close around it. Eight
+// sectors ring the floor, one creation and one solid placement each, so each is edited and baked on its own: a main
+// mass and two shoulders from the standard terrain library (../standard/terrain.puck), with fBm relief seeded per
+// sector. The floor (debug.puck's "floor") runs on under the walls, so no slab edge shows. An overlook deck stands
+// near the summit of the south-west sector, and a body that falls out of the world is stood back up on the floor
+// below the sector it fell from, not at one global spawn. docs/plans/valley-and-moons.md records the bake, contact
+// and audit numbers it was measured at.
 //
 //   compass 0 is world +Z (north), 90 world +X (east)
-//   the floor is clear to the walls' feet, 205 to 230 m from the origin: every exhibit, the hall, the studio, the camera
-//   course, the devices and the rate range (x -112, z 118 at its far corner, 163 m out) stand inside 170 m
-//   the combat yard (north, x 24 .. 50, z 40 .. 66) and the climate wing (east, x 72 .. 122, z 12 .. 28) are reserved on
-//   the floor; nothing here stands there
+//   the floor is clear to the walls' feet, 205 to 230 m from the origin: every exhibit, the hall, the studio, the
+//   camera course, the devices and the rate range (x -112, z 118 at its far corner, 163 m out) stand inside 170 m
+//   the combat yard (north, x 24 .. 50, z 40 .. 66) and the climate wing (east, x 72 .. 122, z 12 .. 28) are
+//   reserved on the floor; nothing here stands there
 
 import "../standard/terrain"
 
@@ -202,8 +203,8 @@ prototypes {
   }
 }
 
-// Forty metres under the floor a body is out of the world, whichever way it got there (a wall's outer face, a seam): the
-// rule stands it back up on the floor below the sector it fell from.
+// Forty metres under the floor a body is out of the world, whichever way it got there (a wall's outer face, a
+// seam): the rule stands it back up on the floor below the sector it fell from.
 let recoveryFloor = -40
 
 rule "fall-recovery" {

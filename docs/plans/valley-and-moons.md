@@ -155,6 +155,9 @@ detail (`CreationNoiseDocument.DetailSpacing`: a quarter of the wavelength of
 the finest octave carrying a sixteenth of the amplitude, 1.56 m here) and the
 floor cut keeps the masses' buried halves off the lattice; without either a
 sector baked at 20.6 m cells into 10,364 triangles and the relief aliased away.
+The gallery's NOISE exhibit, the world's other scoped noise creation, bakes at
+6.3 mm instead of 18.7 mm by the same rule: 137,372 triangles instead of
+15,936, its face normal p99 8.7 instead of 23.6 degrees.
 The CPU audit measures a sector against a fixed-point field that now reads a
 514 m superellipsoid radius at full precision (through its Q16 inverse it read
 surface points 0.06 to 0.85 m off, with no gradient at a 1 mm probe), and it

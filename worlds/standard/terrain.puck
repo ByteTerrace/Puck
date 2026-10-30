@@ -1,6 +1,7 @@
-// Macro terrain from the engine's own SDF, contact and mesh systems: a sector of a ring of walls (a basin, a caldera, a
-// crater's rim) as a few superellipsoid masses with fBm relief over their union. A library: it emits no document; a world
-// imports it and places one creation per sector, so each sector is separately editable and bakes as its own group.
+// Macro terrain from the engine's own SDF, contact and mesh systems: a sector of a ring of walls (a basin, a
+// caldera, a crater's rim) as a few superellipsoid masses with fBm relief over their union. A library: it emits no
+// document; a world imports it and places one creation per sector, so each sector is separately editable and bakes
+// as its own group.
 //
 //   import "../standard/terrain"
 //
