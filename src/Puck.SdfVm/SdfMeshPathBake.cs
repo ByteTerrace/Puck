@@ -250,6 +250,24 @@ public sealed partial class SdfMeshPathBake {
             lock (m_gate) { return m_program; }
         }
     }
+    /// <summary>Reads the mesh a group landed, whole: a chunked group's parent, whose surface concatenates the chunks
+    /// <see cref="Dress"/> draws one by one.</summary>
+    /// <param name="selector">The group's <see cref="SdfMeshBakeGroup.Selector"/>.</param>
+    /// <param name="mesh">The landed mesh, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the group is planned and has landed a mesh.</returns>
+    public bool TryLandedMesh(int selector, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh) {
+        lock (m_gate) {
+            foreach (var group in m_groups) {
+                if ((group.Selector == selector) && (group.Mesh is { } landed)) {
+                    mesh = landed;
+                    return true;
+                }
+            }
+        }
+
+        mesh = null;
+        return false;
+    }
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, or a field slice
     /// (<see cref="Probe"/>) still samples, or a landed mesh has not reached the dressed frame yet.</summary>
     public bool Pending {

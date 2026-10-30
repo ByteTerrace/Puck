@@ -1,4 +1,4 @@
-// The debug world: a flat 256 m ground under a clear day, with axis markers beside the spawn, reference cubes and
+// The debug world: the flat floor of a caldera (valley.puck) under a clear day, with axis markers beside the spawn, reference cubes and
 // the Moth avatar to walk it, and an open-fronted coloured room beside them for judging indirect light. Its portals
 // are paintings in the gallery hall's east wing (paintings.puck): two onto other lands, the garden (garden.puck) and
 // the night field (night.puck), two facing each other across the room, and the endless fall's floor and ceiling. It is
@@ -46,6 +46,7 @@ import "watchdog"
 import "guide"
 import "machine-debugger"
 import "range"
+import "valley"
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA
@@ -54,7 +55,7 @@ let roomGreen = 2 // #2FA84A
 
 metadata {
   title: "Debug"
-  description: "A flat 256 m ground under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a gallery hall whose east wing holds five portal paintings."
+  description: "The flat floor of a caldera ringed by eight terrain sectors with an overlook, under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a gallery hall whose east wing holds five portal paintings."
 }
 
 // A traveller coming back from the garden or the night field arrives here, and their windows onto this world observe
@@ -251,10 +252,12 @@ prototypes {
         }
       ]
       schema: "puck.creation.v1"
-      shape Box "ground" {
+      // The valley's floor (valley.puck): a disc running on under the walls to their outer feet, so its rim never shows
+      // inside the ring.
+      shape Cylinder "ground" {
         material: 0
         position [0, -0.2, 0]
-        scale [128, 0.2, 128]
+        scale [740, 0.2, 740]
       }
     }
   }
@@ -439,7 +442,7 @@ render {
     scatter: 0.04
     radius: 0.08
   }
-  farDistance: 200
+  farDistance: 6000
   temporal: true
   sky {
     clearDay(cloudiness: 0.3)
@@ -449,13 +452,3 @@ render {
   }
 }
 
-// The ground is 256 m across with nothing beneath it. Forty metres under the lowest ground a body is out of the world,
-// and the rule stands every live body that falls there, a seat's Moth or any other, back up at the hero spawn.
-let respawnFloor = -40
-
-rule "fall-respawn" {
-  when bodyPosition(each, y) < respawnFloor
-  mode: Level
-  forEach: $bodies
-  pose(key: $each, spawnPoint: "hero")
-}
