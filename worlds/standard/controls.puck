@@ -62,6 +62,14 @@ hud {
 
 icons {
   rows [
+    { name: "bar.cluster", label: "::" }
+    { name: "bar.keys", label: "KB" }
+    { name: "bar.pad", label: "PD" }
+    { name: "bar.wings", label: "WG" }
+    { name: "bar.sides", label: "||" }
+    { name: "bar.single", label: "1" }
+    { name: "bar.compact", label: "S" }
+    { name: "bar.full", label: "L" }
     // Key caps.
     { name: "key.w", label: "W" }
     { name: "key.a", label: "A" }
@@ -155,6 +163,7 @@ icons {
     { name: "act.view", label: "DV" }
     { name: "act.wheel", label: "WH" }
     { name: "act.run", glyph { font: mono, glyph: "U+00BB" } }
+    { name: "act.dash", label: "DS" }
     { name: "act.autorun", label: "AR" }
     { name: "act.fly", glyph { font: mono, glyph: "U+21D1" } }
     { name: "act.autofly", label: "AF" }
@@ -284,6 +293,7 @@ state {
       rise = "act.rise"
       run = "act.run"
       runToggle = "act.run"
+      dash = "act.dash"
       fly = "act.fly"
       frame = "act.frame"
       descend = "act.descend"
@@ -356,6 +366,14 @@ state {
       wide = "Wide"
       face = "Face"
       autoCamera = "Chase camera"
+      barStandard = "Clusters"
+      barKeys = "Keyboard strip"
+      barPad = "Pad strip"
+      barWings = "Wings"
+      barSidebars = "Sidebars"
+      barSingle = "Single page"
+      barCompact = "Compact"
+      barFull = "Full size"
       cancel = "Cancel"
     }
 
@@ -376,6 +394,14 @@ state {
       wide = "view.wide"
       face = "view.face"
       autoCamera = "view.auto"
+      barStandard = "bar.cluster"
+      barKeys = "bar.keys"
+      barPad = "bar.pad"
+      barWings = "bar.wings"
+      barSidebars = "bar.sides"
+      barSingle = "bar.single"
+      barCompact = "bar.compact"
+      barFull = "bar.full"
     }
   }
 }
@@ -386,6 +412,25 @@ bindingOverlays [
     id: "bare"
     bindingBar {
       slotSet [
+        "keyboard.w"
+        "keyboard.a"
+        "keyboard.s"
+        "keyboard.d"
+        "keyboard.space"
+        "keyboard.controlLeft"
+        "keyboard.f"
+        "mouse.button1"
+        "mouse.button2"
+        "keyboard.1"
+        "keyboard.2"
+        "keyboard.3"
+        "keyboard.4"
+        "keyboard.5"
+        "keyboard.f2"
+        "keyboard.f3"
+        "keyboard.f4"
+        "gamepad.leftStick"
+        "gamepad.rightStick"
         "gamepad.dpadUp"
         "gamepad.dpadRight"
         "gamepad.dpadDown"
@@ -452,6 +497,194 @@ bindingOverlays [
             debug { pieces: standardPieces, anchor: standardAnchor }
           }
         }
+        keys {
+          tables {
+            move [
+              { source: "keyboard.w", x: 0, y: 1, badge [0, 1] }
+              { source: "keyboard.a", x: -1, y: 0, badge [-1, 0] }
+              { source: "keyboard.s", x: 0, y: 0, badge [0, -1] }
+              { source: "keyboard.d", x: 1, y: 0, badge [1, 0] }
+            ]
+            act [
+              { source: "keyboard.space", x: 0, y: 0 }
+              { source: "keyboard.controlLeft", x: 1, y: 0 }
+              { source: "keyboard.f", x: 2, y: 0 }
+            ]
+            mouse [
+              { source: "mouse.button1", x: 0, y: 0 }
+              { source: "mouse.button2", x: 1, y: 0 }
+            ]
+            cameras [
+              { source: "keyboard.1", x: 0, y: 0 }
+              { source: "keyboard.2", x: 1, y: 0 }
+              { source: "keyboard.3", x: 2, y: 0 }
+              { source: "keyboard.4", x: 3, y: 0 }
+              { source: "keyboard.5", x: 4, y: 0 }
+            ]
+            functions [
+              { source: "keyboard.f2", x: 0, y: 0 }
+              { source: "keyboard.f3", x: 1, y: 0 }
+              { source: "keyboard.f4", x: 2, y: 0 }
+            ]
+          }
+          buttonSize: 0.054
+          anchor { edge: Bottom, inset: 1.5 }
+          banks {
+            move {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+            view {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+            debug {
+              pieces [
+                { table: "move", at [-6, 0] }
+                { table: "act", at [-3, 0] }
+                { table: "mouse", at [4, 0] }
+                { table: "cameras", at [-3, 1] }
+                { table: "functions", at [3, 1] }
+              ]
+            }
+          }
+        }
+
+        // The left stick and Back on the left, the right stick and its press in the middle, the face diamond right.
+        pad {
+          tables {
+            left [
+              { source: "gamepad.leftStick", x: 0, y: 0 }
+              { source: "gamepad.back", x: 2, y: 0 }
+            ]
+            right [
+              { source: "gamepad.rightStick", x: 0, y: 0 }
+              { source: "gamepad.rightStickPress", x: 1, y: 0 }
+            ]
+            face [
+              { source: "gamepad.buttonNorth", x: 0, y: 1, badge [0, 1] }
+              { source: "gamepad.buttonWest", x: -1, y: 0, badge [-1, 0] }
+              { source: "gamepad.buttonEast", x: 1, y: 0, badge [1, 0] }
+              { source: "gamepad.buttonSouth", x: 0, y: -1, badge [0, -1] }
+            ]
+          }
+          buttonSize: 0.054
+          anchor { edge: Bottom, inset: 1.5 }
+          banks {
+            move {
+              pieces [
+                { table: "left", at [-5, 0] }
+                { table: "right", at [-1, 0] }
+                { table: "face", at [4, 0] }
+              ]
+            }
+            view {
+              pieces [
+                { table: "left", at [-5, 0] }
+                { table: "right", at [-1, 0] }
+                { table: "face", at [4, 0] }
+              ]
+            }
+            debug {
+              pieces [
+                { table: "left", at [-5, 0] }
+                { table: "right", at [-1, 0] }
+                { table: "face", at [4, 0] }
+              ]
+            }
+          }
+        }
+        // The addon's mirrored modulo diamonds: 45/600 plates, 60/45 central gap, 24/45 badges.
+        wings {
+          buttonSize: 0.075
+          glyphOffsetRatio: 0.4375
+          glyphSizeRatio: 0.5333333
+          anchor { edge: Bottom, inset: 4.8888889 }
+          tables {
+            left [
+              { source: "gamepad.dpadUp", x: -4.333333, y: 1, badge [0, 1] }
+              { source: "gamepad.dpadRight", x: -3.333333, y: 0, badge [1, 0] }
+              { source: "gamepad.dpadDown", x: -4.333333, y: -1, badge [0, -1] }
+              { source: "gamepad.dpadLeft", x: -5.333333, y: 0, badge [-1, 0] }
+              { source: "gamepad.leftShoulder", x: -5.333333, y: 1, badge [-1, 1] }
+              { source: "gamepad.leftStickPress", x: -4.333333, y: 0, badge [0, 0] }
+            ]
+            right [
+              { source: "gamepad.buttonNorth", x: 4.333333, y: 1, badge [0, 1] }
+              { source: "gamepad.buttonWest", x: 3.333333, y: 0, badge [-1, 0] }
+              { source: "gamepad.buttonSouth", x: 4.333333, y: -1, badge [0, -1] }
+              { source: "gamepad.buttonEast", x: 5.333333, y: 0, badge [1, 0] }
+              { source: "gamepad.rightShoulder", x: 5.333333, y: 1, badge [1, 1] }
+              { source: "gamepad.rightStickPress", x: 4.333333, y: 0, badge [0, 0] }
+            ]
+          }
+          // The three-bank union bottoms at -2.5 pitches: inset + half + 2.5 = 220/45.
+          banks {
+            move {
+              pieces [{ table: "left", at [0, 0] }, { table: "right", at [0, 0] }]
+              anchor { edge: Bottom, inset: 1.8888889 }
+            }
+            view {
+              pieces [{ table: "left", at [-3, -0.75] }, { table: "right", at [3, -0.75] }]
+              anchor { edge: Bottom, inset: 1.8888889 }
+            }
+            debug {
+              pieces [{ table: "left", at [-6, -1.5] }, { table: "right", at [6, -1.5] }]
+              anchor { edge: Bottom, inset: 1.8888889 }
+            }
+          }
+        }
+        // A bottom action strip flanked by page columns on independent viewport anchors.
+        sidebars {
+          buttonSize: 0.054
+          anchor { edge: Bottom, inset: 1.5 }
+          tables {
+            strip [
+              { source: "gamepad.dpadUp", x: -5.5, y: 0 }
+              { source: "gamepad.dpadRight", x: -4.5, y: 0 }
+              { source: "gamepad.dpadDown", x: -3.5, y: 0 }
+              { source: "gamepad.dpadLeft", x: -2.5, y: 0 }
+              { source: "gamepad.leftShoulder", x: -1.5, y: 0 }
+              { source: "gamepad.leftStickPress", x: -0.5, y: 0 }
+              { source: "gamepad.buttonNorth", x: 0.5, y: 0 }
+              { source: "gamepad.buttonWest", x: 1.5, y: 0 }
+              { source: "gamepad.buttonSouth", x: 2.5, y: 0 }
+              { source: "gamepad.buttonEast", x: 3.5, y: 0 }
+              { source: "gamepad.rightShoulder", x: 4.5, y: 0 }
+              { source: "gamepad.rightStickPress", x: 5.5, y: 0 }
+            ]
+            column [
+              { source: "gamepad.dpadUp", x: 0, y: 5.5 }
+              { source: "gamepad.dpadRight", x: 0, y: 4.5 }
+              { source: "gamepad.dpadDown", x: 0, y: 3.5 }
+              { source: "gamepad.dpadLeft", x: 0, y: 2.5 }
+              { source: "gamepad.leftShoulder", x: 0, y: 1.5 }
+              { source: "gamepad.leftStickPress", x: 0, y: 0.5 }
+              { source: "gamepad.buttonNorth", x: 0, y: -0.5 }
+              { source: "gamepad.buttonWest", x: 0, y: -1.5 }
+              { source: "gamepad.buttonSouth", x: 0, y: -2.5 }
+              { source: "gamepad.buttonEast", x: 0, y: -3.5 }
+              { source: "gamepad.rightShoulder", x: 0, y: -4.5 }
+              { source: "gamepad.rightStickPress", x: 0, y: -5.5 }
+            ]
+          }
+          banks {
+            move { pieces [{ table: "strip" }] }
+            view { pieces [{ table: "column" }], anchor { edge: Left, inset: 1.5 } }
+            debug { pieces [{ table: "column" }], anchor { edge: Right, inset: 1.5 } }
+          }
+        }
+
       }
     }
   }
@@ -473,6 +706,8 @@ bindingOverlays [
             id: "base"
             label: "Move"
             entries [
+              { command: "player.camera.boom", id: "zoom", sources ["mouse.wheel"] }
+              { command: "player.camera.reset", id: "cameraReset", activateOn: Started, sources ["mouse.button3"] }
               {
                 command: "player.build"
                 id: "build"
@@ -498,6 +733,7 @@ bindingOverlays [
             inherits: "base"
             label: "Wheel"
             entries [
+              { command: "player.wheel.scroll", sources ["mouse.wheel"] }
               {
                 command: "player.wheel.select"
                 sources ["mouse.motion"]
@@ -532,6 +768,7 @@ bindingOverlays [
             inherits: "base"
             label: "Wheel"
             entries [
+              { command: "player.wheel.scroll", sources ["mouse.wheel"] }
               {
                 command: "player.wheel.select"
                 sources ["gamepad.rightStick"]
@@ -710,4 +947,19 @@ bindingOverlays [
       ]
     }
   }
+]
+
+// These are designs expressed through the generic per-seat preference mechanism.
+commands [
+  {
+    name: "controls.bar"
+    help: "Selects this seat's bar layout and model (single or wings); preferences save with identity.bindings.save."
+    parameters [
+      { name: "layout", kind: Choice, values ["standard", "keys", "pad", "wings", "sidebars"] }
+      { name: "model", kind: Choice, values ["single", "wings"], default: "single" }
+    ]
+    lines ["player.binding-bar layout {layout}", "player.binding-bar model {model}"]
+  }
+  { name: "controls.bar.compact", help: "Uses compact plates for this seat.", lines ["player.binding-bar scale 0.72"] }
+  { name: "controls.bar.full", help: "Uses full size plates for this seat.", lines ["player.binding-bar scale 1"] }
 ]

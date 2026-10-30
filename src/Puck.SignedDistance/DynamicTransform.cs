@@ -12,4 +12,10 @@ namespace Puck.SignedDistance;
 public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation, Vector4 Lanes = default) {
     /// <summary>Gets the uniform scale of a shared local asset's material coordinates. Field transforms remain rigid.</summary>
     public float MaterialScale { get; init; } = 1f;
+    /// <summary>Gets the uniform scale of the geometry riding the slot: what a program emits under it is in the slot's
+    /// own units, so the mesh bake samples a group in its slot's frame at its own size, whatever this scale
+    /// (<c>Puck.SdfVm.SdfMeshGeometryBuilder</c> reads the other slots it reads in those units), and the group's draws
+    /// take the scale. A body drawn at another size therefore keeps its mesh. Field transforms remain rigid, and every
+    /// position here stays a world position.</summary>
+    public float Scale { get; init; } = 1f;
 }

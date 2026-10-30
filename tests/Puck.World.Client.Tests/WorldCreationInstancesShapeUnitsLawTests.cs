@@ -7,245 +7,56 @@ using Xunit;
 namespace Puck.World.Client.Tests;
 
 /// <summary>
-/// THE LAW: a shape's creation-unit edge radii (<see cref="ShapeDocument.Rounding"/>, <see cref="ShapeDocument.Chamfer"/>)
-/// scale with the body look in the animated stamp pool exactly as the static stamper scales them through its
-/// <c>Scale(transform.Scale)</c> chain — a look at scale 2 emits the same shape lanes as the creation authored at
-/// twice its scale with twice its radius at scale 1, and a look at scale 1 emits the authored radius verbatim.
+/// THE LAW: the animated stamp pool emits a body in its slots' own units, so a look at any scale emits the program a
+/// look at scale one emits — every instruction, bound and declared detail — and its slots carry the scale
+/// (<see cref="DynamicTransform.Scale"/>). That is what keeps a body's meshes when it changes size: the bake keys and
+/// samples a group in its slot's units, and the group's draws scale it.
 /// </summary>
 public sealed class WorldCreationInstancesShapeUnitsLawTests {
     private const string PrototypeId = "radii";
 
-    private static SdfProgram Program(IReadOnlyList<ShapeDocument> shapes, float bodyScale) => CreationFixtures.EmitPool(
-        bodyScale: bodyScale,
-        name: PrototypeId,
-        shapes: shapes
-    );
-    private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, float? rounding, float? chamfer) => new(
-        Id: 0,
+    private static ShapeDocument Shape(int id, SdfSolidPrimitive type, Vector3 scale, int group = 0) => new(
+        Id: id,
         Name: null,
         Type: type,
-        Position: Vector3.Zero,
+        Position: new Vector3(x: (0.1f * id), y: 0.2f, z: 0f),
         Rotation: Quaternion.Identity,
         Scale: scale,
         Material: 0,
         Blend: SdfBlendOp.Union,
         Smooth: 0f,
-        Group: 0,
-        Rounding: rounding,
-        Chamfer: chamfer
+        Group: group
     );
-    private static SdfInstruction ShapeInstruction(ShapeDocument shape, float bodyScale) {
-        var program = Program(
-            bodyScale: bodyScale,
-            shapes: [shape]
-        );
+    // Every creation-unit length a shape authors: edge radii, field ops, a smooth blend radius, a flare's height and
+    // span, a fold, and a round section that declares detail.
+    private static IReadOnlyList<ShapeDocument> Shapes() => [
+        Shape(1, SdfSolidPrimitive.Cylinder, new Vector3(x: 0.3f, y: 0.2f, z: 0.3f)) with { Rounding = 0.02f },
+        Shape(2, SdfSolidPrimitive.Box, new Vector3(x: 0.3f, y: 0.2f, z: 0.3f)) with { Chamfer = 0.03f, Dilate = 0.02f },
+        Shape(3, SdfSolidPrimitive.Box, new Vector3(x: 0.3f, y: 0.2f, z: 0.3f)) with { Onion = 0.02f },
+        Shape(4, SdfSolidPrimitive.Box, Vector3.One, group: 1),
+        Shape(5, SdfSolidPrimitive.Sphere, new Vector3(value: 0.03f), group: 1) with { Blend = SdfBlendOp.SmoothUnion, Smooth = 0.05f },
+        Shape(6, SdfSolidPrimitive.Box, Vector3.One) with { Flare = new(Amount: 0.3f, Bulge: 0.1f, Span: 0.4f, Top: 0.2f) },
+        Shape(7, SdfSolidPrimitive.Box, new Vector3(value: 0.1f)) with { Domain = [new ShapeDomainOp.Symmetry(Normal: Vector3.UnitX)] },
+        Shape(8, SdfSolidPrimitive.Capsule, new Vector3(x: 0.01f, y: 0.05f, z: 0.01f)),
+    ];
 
-        // The compact live pool emits only the authored primitive and its modifiers.
-        return program.Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape != ((uint)SdfShapeType.Sphere))));
-    }
-
-    [Fact]
-    public void AGroupAtLookScaleTwoDoublesTheEmittedDilate() {
-        var baseShape = (Shape(
-            SdfSolidPrimitive.Box,
-            Vector3.One,
-            null,
-            null
-        ) with { Id = 1, Group = 1 });
-        var dilated = (Shape(
-            SdfSolidPrimitive.Sphere,
-            new Vector3(value: 0.3f),
-            null,
-            null
-        ) with {
-            Id = 2,
-            Group = 1,
-            Dilate = 0.02f,
-        });
-        var program = Program(
-            bodyScale: 2f,
-            shapes: [baseShape, dilated]
-        );
-        var instruction = program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.Dilate));
-
-        Assert.Equal(
-            0.04f,
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void AGroupAtLookScaleTwoDoublesTheEmittedSmoothBlendRadius() {
-        // A grouped member's smooth-blend radius (Data1.x on its own ShapeBlend instruction) composes it against the
-        // group's shared accumulator (Pass 2, EmitGroup) — a WORLD-space blend-radius parameter, not a baked-local
-        // one, so it takes the placement scale exactly like Dilate/Onion do, never the rounding/chamfer exemption.
-        var baseShape = (Shape(
-            SdfSolidPrimitive.Box,
-            Vector3.One,
-            null,
-            null
-        ) with { Id = 1, Group = 1 });
-        var smoothed = (Shape(
-            SdfSolidPrimitive.Sphere,
-            new Vector3(value: 0.3f),
-            null,
-            null
-        ) with {
-            Id = 2,
-            Group = 1,
-            Blend = SdfBlendOp.SmoothUnion,
-            Smooth = 0.05f,
-        });
-        var program = Program(
-            bodyScale: 2f,
-            shapes: [baseShape, smoothed]
-        );
-        var instruction = program.Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == ((uint)SdfBlendOp.SmoothUnion))));
-
-        Assert.Equal(
-            0.1f,
-            instruction.Data1.X,
-            precision: 6
-        );
-    }
-    // Dilate/Onion are field ops of their own (SdfOp.Dilate/Onion), not a lane on the shape's own instruction: a look
-    // at scale one emits the authored radius verbatim and a look at scale two doubles it.
-    [InlineData(SdfOp.Dilate, 1f)]
-    [InlineData(SdfOp.Dilate, 2f)]
-    [InlineData(SdfOp.Onion, 2f)]
+    [InlineData(0.25f)]
+    [InlineData(2f)]
     [Theory]
-    public void ALooksScaleMultipliesTheAuthoredFieldOpRadius(SdfOp op, float bodyScale) {
-        const float Authored = 0.02f;
+    public void ALookAtAnyScaleEmitsTheProgramOfALookAtScaleOne(float bodyScale) {
+        var unit = CreationFixtures.EmitPool(bodyScale: 1f, name: PrototypeId, shapes: Shapes());
+        var scaled = CreationFixtures.EmitPool(bodyScale: bodyScale, name: PrototypeId, shapes: Shapes());
 
-        var shape = Shape(
-            SdfSolidPrimitive.Box,
-            new Vector3(
-                x: 0.3f,
-                y: 0.2f,
-                z: 0.3f
-            ),
-            null,
-            null
-        );
-        var program = Program(
-            bodyScale: bodyScale,
-            shapes: [((op == SdfOp.Dilate)
-                ? (shape with { Dilate = Authored })
-                : (shape with { Onion = Authored }))]
-        );
-        var instruction = program.Instructions.Single(predicate: instruction => (instruction.Op == op));
-
-        Assert.Equal(
-            (Authored * bodyScale),
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void ALookAtScaleOneEmitsTheAuthoredRoundingVerbatim() {
-        // A Cylinder emits its rounding on Data1.w (the family fillet lane) and insets Data0.xy by it.
-        var instruction = ShapeInstruction(
-            shape: Shape(
-                SdfSolidPrimitive.Cylinder,
-                new Vector3(
-                    x: 0.3f,
-                    y: 0.2f,
-                    z: 0.3f
-                ),
-                0.02f,
-                null
-            ),
-            bodyScale: 1f
-        );
-
-        Assert.Equal(
-            ((uint)SdfShapeType.Cylinder),
-            instruction.Shape
-        );
-        Assert.Equal(
-            0.02f,
-            instruction.Data1.W,
-            precision: 6
-        );
-        Assert.Equal(
-            (0.3f - 0.02f),
-            instruction.Data0.X,
-            precision: 6
-        );
-    }
-    [Fact]
-    public void ALookAtScaleTwoDoublesTheEmittedRounding_TheDiscriminator() {
-        // The lane read directly: raw authored 0.02 at look scale 2 must land as 0.04, never 0.02.
-        var instruction = ShapeInstruction(
-            shape: Shape(
-                SdfSolidPrimitive.Cylinder,
-                new Vector3(
-                    x: 0.3f,
-                    y: 0.2f,
-                    z: 0.3f
-                ),
-                0.02f,
-                null
-            ),
-            bodyScale: 2f
-        );
-
-        Assert.Equal(
-            0.04f,
-            instruction.Data1.W,
-            precision: 6
-        );
-    }
-    [InlineData(SdfSolidPrimitive.Cylinder, 0.02f, 0f)]
-    [InlineData(SdfSolidPrimitive.Prism, 0.02f, 0f)]
-    [InlineData(SdfSolidPrimitive.Cylinder, 0f, 0.03f)]
-    [InlineData(SdfSolidPrimitive.Box, 0f, 0.03f)]
-    [Theory]
-    public void ALookAtScaleTwoEmitsTheCreationAuthoredAtTwiceItsScaleAndRadius(SdfSolidPrimitive type, float rounding, float chamfer) {
-        // X == Z keeps the Cylinder on its native arm at every scale; the Prism and Box take their native extents.
-        var scale = new Vector3(
-            x: 0.3f,
-            y: 0.2f,
-            z: 0.3f
-        );
-        var scaled = ShapeInstruction(
-            shape: Shape(
-                chamfer: ((chamfer > 0f)
-            ? chamfer
-            : null),
-                rounding: ((rounding > 0f)
-            ? rounding
-            : null),
-                scale: scale,
-                type: type
-            ),
-            bodyScale: 2f
-        );
-        var authoredTwice = ShapeInstruction(
-            shape: Shape(
-                chamfer: ((chamfer > 0f)
-            ? (chamfer * 2f)
-            : null),
-                rounding: ((rounding > 0f)
-            ? (rounding * 2f)
-            : null),
-                scale: (scale * 2f),
-                type: type
-            ),
-            bodyScale: 1f
-        );
-
-        Assert.Equal(
-            authoredTwice.Shape,
-            scaled.Shape
-        );
-        Assert.Equal(
-            authoredTwice.Data0,
-            scaled.Data0
-        );
-        Assert.Equal(
-            authoredTwice.Data1,
-            scaled.Data1
-        );
+        Assert.Equal(expected: unit.Instructions.Count, actual: scaled.Instructions.Count);
+        for (var index = 0; (index < unit.Instructions.Count); index++) {
+            Assert.Equal(expected: unit.Instructions[index], actual: scaled.Instructions[index]);
+        }
+        Assert.Equal(expected: unit.Instances.Count, actual: scaled.Instances.Count);
+        Assert.Contains(collection: unit.Instances, filter: static instance => (instance.Detail > 0f));
+        for (var index = 0; (index < unit.Instances.Count); index++) {
+            Assert.Equal(expected: unit.Instances[index].Radius, actual: scaled.Instances[index].Radius);
+            Assert.Equal(expected: unit.Instances[index].Center, actual: scaled.Instances[index].Center);
+            Assert.Equal(expected: unit.Instances[index].Detail, actual: scaled.Instances[index].Detail);
+        }
     }
 }

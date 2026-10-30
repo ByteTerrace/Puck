@@ -47,6 +47,8 @@ public sealed record BindingProfileDocument(
 /// <param name="ContrastBoost">A multiplier, in <c>[1, 2]</c>, applied over the resolved theme's scrim alphas and
 /// text contrast at the one theme resolve point — 1 leaves the authored theme unchanged; 2 pushes every scrim
 /// toward opaque and every text role toward its highest-contrast tone. An accessibility seam, never a binding.</param>
+/// <param name="Layout">The authored layout id preferred by this seat; null follows the world selector.</param>
+/// <param name="Model">The authored bar model preferred by this seat; null follows the world selector.</param>
 /// <param name="UiScale">A multiplier, in <c>[0.5, 2]</c>, applied over the resolved theme's spacing and type sizes
 /// at the same resolve point — 1 leaves the authored theme unchanged. An accessibility seam, never a binding.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -54,5 +56,7 @@ public sealed record BindingBarPreferences(
     bool? HideUnbound = null,
     float? Scale = null,
     float? ContrastBoost = null,
-    float? UiScale = null
+    float? UiScale = null,
+    string? Layout = null,
+    string? Model = null
 );
