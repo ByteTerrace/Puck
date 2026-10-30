@@ -44,19 +44,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     /// <summary>Attaches the host router once, for authority-published destination latch cancellations.</summary>
     public void UseInputRouter(InputRouter router) => m_inputRouter = router;
-    /// <summary>Discards local producers and publications before an isolated host restores its boot checkpoint.</summary>
-    public void ResetInputTimeline() {
-        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
-            if (m_roster.Seat(slot: slot) is { } seat) { seat.Input = null; seat.ReleaseAllHeld(); }
-            m_seatRouter.TryRoute(slot: slot)?.Endpoint.Mirror.ResetInputTimeline();
-        }
-        Array.Clear(array: m_inputProfiles);
-        Array.Clear(array: m_inputRoutes);
-        Array.Clear(array: m_inputDefinitions);
-        Array.Clear(array: m_submissionRoutes);
-        Array.Clear(array: m_lastSubmissionEpoch);
-        Array.Clear(array: m_lastSubmissionTick);
-    }
     /// <summary>Admits a changed routed binding profile and applies the authority's published source decisions.</summary>
     public void SynchronizeInput(int slot, IReadOnlyList<BindingSourceContract> sources) {
         if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot) is not { } seat) || (m_seatRouter.TryRoute(slot: slot) is not { } route)) { return; }

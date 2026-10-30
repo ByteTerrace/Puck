@@ -10,7 +10,7 @@ namespace Puck.Cli.Sweep;
 /// <param name="Signals">The signals, read in order on every leg they name.</param>
 /// <param name="Tour">The capture tour, run on the windowed leg.</param>
 /// <param name="Note">The plan's explanatory note.</param>
-/// <param name="Scenarios">Test source paths or file patterns, run serially with boot reuse.</param>
+/// <param name="Scenarios">Test source paths or file patterns, run serially by <c>puck test</c>.</param>
 public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<SweepSignal> Signals, SweepTour Tour, string? Note = null, IReadOnlyList<string>? Scenarios = null) {
     private static readonly JsonSerializerOptions Options = new() {
         AllowTrailingCommas = true,

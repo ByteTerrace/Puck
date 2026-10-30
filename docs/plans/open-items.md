@@ -42,9 +42,8 @@ resolves their edits to this file at merge.
 5. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
    cached wait refusal (`OperatorMcpFront.Record` caches any non-pending wait
    answer), then the schema switch.
-6. [Test runner and replay](#test-runner-and-replay): the batch loop's one-line
-   break (`WorldTestBatch.cs:89`), then delete complete-boot reuse and make the
-   per-tick authority hash incremental, as the quiet measurement supports.
+6. [Test runner and replay](#test-runner-and-replay): make the per-tick
+   authority hash incremental, as the quiet measurement supports.
 7. [Card tables in the board game room](#card-tables-in-the-board-game-room):
    the owner's direction; Klondike first on the revived rules and SDF faces,
    headless, its look in the lead's window.
@@ -373,9 +372,7 @@ holds the fixed poses and the approaches already rejected.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: the batch loop's break (`WorldTestBatch.cs:89`, one line), then delete
-complete-boot reuse and make the per-tick authority hash incremental (both
-measured below).
+Next: make the per-tick authority hash incremental (measured below).
 
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] A deep tree in a kept `%TEMP%` run directory crashes every later test
@@ -386,33 +383,6 @@ measured below).
   here), and have the sweep refuse a directory it cannot remove rather than
   crash. (from: the
   prune-redesign lane)
-- [medium] Delete complete-boot checkpoint reuse and keep the warm worker
-  (decided on the quiet measurement). Under the complete identity no two
-  scenarios of a file share a composed document: alchemy boots 8 hosts for 8
-  scenarios, Go 15 for 15, and boot-reuse-2's suite 83 for 84, so restoring the
-  pristine checkpoint saves at most one warm boot (about 3.3 s) per suite run.
-  What does pay is the worker process staying alive: its first boot is 8.5-9.2 s
-  and every later boot in it 3.1-3.5 s. The reuse path still costs on every run:
-  the coordinator composes and canonicalizes every staged `.world.json` of every
-  scenario to compute `BatchShape` (`src/Puck.Cli.Worlds/Test/TestCommand.Batch.cs`),
-  part of the 30-55 s of coordinator preparation per file below, and the
-  scenario-restore machinery (`WorldPersistence.ScenarioCheckpoint`,
-  `WorldInstanceHost.RestoreScenario`, the seat-route and input-timeline resets
-  in `WorldTestBatch.StartLeg`) carries the hazards the verification skill lists.
-  Boot every scenario fresh in the warm worker, delete the shape comparison and
-  the scenario restore, and re-time alchemy and Go. Quiet readings (load under
-  15 % before each run, about 25-38 % during, the run's own work), `--jobs 1`,
-  whole-process-tree CPU by job object:
-
-  | File, mode | Runs | Wall s, median (spread) | CPU s, median (spread) | Host boots |
-  |---|---:|---:|---:|---:|
-  | alchemy, ordinary | 3 | 113.1 (113.0-115.8) | 208.9 (205.6-209.0) | 8 |
-  | alchemy, `--reproduce` | 3 | 214.5 (213.9-215.8) | 351.2 (350.8-353.1) | 8 |
-  | Go, ordinary | 1 | 243.2 | 515.7 | 15 |
-  | Go, `--reproduce`, traced | 1 | 604.7 | 1,065.0 | 15 |
-
-  Chess, the whole-suite `--jobs 1`/`--reproduce`/`--jobs 2` runs and two more
-  Go runs were not reached in the measurement window. (from: quiet-measure)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
   per-tick hashing and recording, not host reuse. Recording slows the authored
   phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
@@ -431,7 +401,17 @@ measured below).
   about 15 %) the rest. Make the per-tick hash incremental (fold only changed
   arena columns and changed body continuations), and find whether a headless
   test worker's session mirrors have any reader before delivering to them;
-  then re-time Go.
+  then re-time Go. The hash is one sequential FNV-1a stream over the
+  components in `WorldStateHashComposition.AuthoritativeOrder`, so an
+  incremental form changes its structure to a combination of per-segment
+  digests (hash values change, which rule 4 allows) and needs a change signal
+  at every write path: the arena's numeric columns are row-local
+  `ArenaColumnBuffer<T>` arrays but text, vector, visibility and observation
+  columns, import, restore, growth and relayout write beside them; a body's
+  continuation (`WorldAuthorityCheckpointCodec.WriteContinuationEntry`) has no
+  version at all. A missed signal makes the hash stale and a divergence
+  invisible, so land it with a law that compares the incremental digest against
+  a full recompute over the same states, tick by tick, in `--reproduce`.
   Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
   (from: quiet-measure)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
@@ -444,13 +424,6 @@ measured below).
   lane remove the avoidable companion workload while preserving the scenarios'
   claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
   from: boot-reuse profiling; the machine contribution is not isolated.)
-- [low] `WorldTestBatch`'s loop breaks on `batch.m_failed`, which stops the retry
-  of a leg that failed to open but also every remaining leg after any earlier
-  failure (a `--reproduce` divergence) wherever the next leg needs a fresh host,
-  so those scenarios report "did not finish successfully" without running; the
-  same-host branch (`CompleteLeg`) keeps going. Break only when opening or
-  starting leg `m_index` failed (`src/Puck.World/WorldTestBatch.cs:89`). (from:
-  reproduce-cost review)
 - [low] `--cache-dir` redirects only the `puck test` workers: the `puck test`
   process itself still persists compiles to the per-user `compilations`
   directory (`src/Puck.Cli.Worlds/WorldsRoot.cs:48`), and `TestCommandLawTests`

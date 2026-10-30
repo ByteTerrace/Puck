@@ -2,7 +2,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace Puck.World;
 
-/// <summary>Builds the ordinary native host a scenario worker retains until its batch completes.</summary>
+/// <summary>Builds the ordinary native host a scenario worker boots for each of its scenarios.</summary>
 public sealed class WorldTestHost {
     internal Action<IHost>? Initialize { get; set; }
 
@@ -13,8 +13,8 @@ public sealed class WorldTestHost {
     /// <param name="builder">The world's fully configured native builder.</param>
     /// <returns>The native host, owned by the caller.</returns>
     public IHost Build(HostApplicationBuilder builder) {
-        // Arbitrary factories and extensions can create child scopes or supply caller-owned instances. Rewriting
-        // singleton lifetimes cannot preserve their native semantics. Keep the native host and restore authorities.
+        // Arbitrary factories and extensions can create child scopes or supply caller-owned instances, so every
+        // scenario builds the native container; rewriting singleton lifetimes cannot preserve those semantics.
         var host = builder.Build();
 
         Boots++;
