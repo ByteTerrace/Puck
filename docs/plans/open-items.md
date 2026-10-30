@@ -492,6 +492,8 @@ then the diagnostics' windowed checks, then the three developer exhibits.
 Owner: specialist or Astra design lane · ordinary · Next: the thread's design
 consensus, once the owner queues it.
 
+- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
+
 - The thread itself is an idea discussed with the owner and not yet queued:
   a design consensus across the families, which the owner's ruling says starts
   only when the owner reviews it and says so. The input lane it waited on has
