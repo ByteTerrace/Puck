@@ -68,7 +68,8 @@ public sealed class SdfMeshStore {
     }
 
     /// <summary>Returns the identity of this process's bake on a kernel set: the code it runs
-    /// (<see cref="SdfMeshBakeClosure.Current"/>) and its bake kernels' bytecode.</summary>
+    /// (<see cref="SdfMeshBakeClosure.Current"/>, with any hot-reload update applied to it) and its bake kernels'
+    /// bytecode.</summary>
     /// <param name="kernels">The kernel set the bake dispatches.</param>
     /// <returns>The identity.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
@@ -296,6 +297,7 @@ public sealed class SdfMeshStore {
             if (nearest.Version != identity.EntryVersion) { parts.Add(item: $"the entry version ({nearest.Version} -> {identity.EntryVersion})"); }
             if (nearest.Mask != identity.MaskKernel) { parts.Add(item: "the mask kernel's bytecode"); }
             if (nearest.Bake != identity.BakeKernel) { parts.Add(item: "the bake kernel's bytecode"); }
+            if (identity.Applied.Length > 0) { parts.Add(item: $"the code, by the hot-reload update {identity.Applied}"); }
             if (nearest.Code != identity.Code) {
                 var changed = ChangedMembers(identity: identity, path: nearest.Path);
 
