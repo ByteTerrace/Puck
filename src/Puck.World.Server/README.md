@@ -902,11 +902,14 @@ reconfigure, `WorldColliderSet.RefreshAttached` finding an attached row at a
 new pose, and the field lattice's own `Revision`—so an unchanged sum proves
 none of them moved since a sleeping body last observed it. A parked rigid
 island wakes on that bump only where the change can reach it: when only attached
-rows moved, `PrepareBodyStep` wakes the sleepers whose broadphase radius plus
-1 m meets the box the moved colliders swept (before and after the move,
+rows moved, `PrepareBodyStep` wakes the sleepers whose broadphase radius,
+grown by the set's contact reach (two contact skins and a fixed-point step,
+`WorldColliderSet.ContactReach`) and a rigid support probe's travel
+(`collision.bodyContacts.rigidSubstepMinimumTravel`), meets the box the moved
+colliders swept (before and after the move,
 `WorldColliderSet.TakeAttachedChange`), and a response swap that rebuilds the
-analytic set wakes only the rigid bodies the changed rows' colliders reach
-(`InstallResponseSolids`, old and new colliders). Every other sleeper observes
+analytic set wakes only the rigid bodies within that same reach of the changed
+rows' colliders (`InstallResponseSolids`, old and new colliders). Every other sleeper observes
 the new version without waking; a document install, a field step, a half-space
 or a change already owed wakes them all, as does any change for a non-rigid
 sleeper. Waking every rigid island on each tick a carrier moves costs the debug
