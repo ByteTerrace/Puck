@@ -903,7 +903,7 @@ public sealed partial class SdfFieldEvaluator {
                 lift: instruction.Data1Y,
                 capChamfer: instruction.Data0Z
             ) - Point(value: instruction.Data1W)),
-            SdfShapeType.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W), exponent: instruction.Data0W),
+            SdfShapeType.Superellipsoid => SuperellipsoidBounds(p: p, radii: Vector(instruction: instruction), exponent: instruction.Data0W),
             SdfShapeType.Sweep => SweepBounds(p: p, curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")), strandOffset: instruction.Data0W),
             SdfShapeType.Path => PathBounds(instruction: in instruction, p: p),
             SdfShapeType.ConvexPolygon => (LiftedBounds(
@@ -950,21 +950,17 @@ public sealed partial class SdfFieldEvaluator {
     }
     // SdfSuperellipsoid over a box. The point side scales each ratio q_i/m into [0, 1] (each q_i is at most the largest,
     // m), raises it, sums, and roots the sum; the largest axis's ratio is exactly one and so is its power, so the sum is
-    // at least one, which keeps the lower bound the gauge's own (m − 1)·min(r). A box reaching the centre (m = 0) joins
-    // the centre arm, −min(r).
-    private static FixedInterval SuperellipsoidBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii, FixedQ4816 exponent) {
+    // at least one, which keeps the lower bound the gauge's own m − min(r), each ratio scaled by min(r) as the point side
+    // carries it. A box reaching the centre (m = 0) joins the centre arm, −min(r).
+    private static FixedInterval SuperellipsoidBounds(IntervalVector3 p, FixedVector3 radii, FixedQ4816 exponent) {
+        var minimumRadius = Point(value: FixedQ4816.Min(x: radii.X, y: FixedQ4816.Min(x: radii.Y, y: radii.Z)));
+        var q = SuperellipsoidScaledRatioBounds(absolute: p.Abs(), minimumRadius: minimumRadius.Lower, radii: radii);
+
         if (exponent == SuperellipsoidSphereExponent) {
-            return SuperellipsoidSphereBounds(inverseRadii: inverseRadii, p: p, radii: radii);
+            return (q.Length - minimumRadius);
         }
 
-        var absolute = p.Abs();
-        var q = new IntervalVector3(
-            X: (absolute.X * Point(value: inverseRadii.X)),
-            Y: (absolute.Y * Point(value: inverseRadii.Y)),
-            Z: (absolute.Z * Point(value: inverseRadii.Z))
-        );
         var m = FixedInterval.Max(first: q.X, second: FixedInterval.Max(first: q.Y, second: q.Z));
-        var minimumRadius = Point(value: FixedQ4816.Min(x: radii.X, y: FixedQ4816.Min(x: radii.Y, y: radii.Z)));
 
         if (m.IsUnbounded) {
             return FixedInterval.Entire;
@@ -985,10 +981,33 @@ public sealed partial class SdfFieldEvaluator {
             var sum = ((FixedInterval.Pow(exponent: power, value: Ratio(component: q.X)) + FixedInterval.Pow(exponent: power, value: Ratio(component: q.Y))) + FixedInterval.Pow(exponent: power, value: Ratio(component: q.Z)));
             var root = FixedInterval.Pow(exponent: (Point(value: FixedQ4816.One) / power), value: FixedInterval.Max(first: sum, second: Point(value: FixedQ4816.One)));
 
-            joined = Join(joined: joined, next: (((m * root) - Point(value: FixedQ4816.One)) * minimumRadius));
+            joined = Join(joined: joined, next: ((m * root) - minimumRadius));
         }
 
         return joined!.Value;
+    }
+    // SdfFieldEvaluator.SuperellipsoidScaledRatio over a box, each step's rounding enclosed: the product-first form where
+    // every magnitude the box holds takes it, and both forms joined where the box reaches the divide-first side.
+    private static IntervalVector3 SuperellipsoidScaledRatioBounds(IntervalVector3 absolute, FixedVector3 radii, FixedQ4816 minimumRadius) {
+        FixedInterval Axis(FixedInterval magnitude, FixedQ4816 radius) {
+            if (magnitude.IsUnbounded) {
+                return FixedInterval.Entire;
+            }
+
+            var productFirst = ((magnitude * Point(value: minimumRadius)) / Point(value: radius));
+
+            if ((magnitude.Upper.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit)) {
+                return productFirst;
+            }
+
+            var divideFirst = ((magnitude / Point(value: radius)) * Point(value: minimumRadius));
+
+            return (((magnitude.Lower.Value < SuperellipsoidScaledMagnitudeLimit) && (minimumRadius.Value < SuperellipsoidScaledRadiusLimit))
+                ? FixedInterval.Union(first: productFirst, second: divideFirst)
+                : divideFirst);
+        }
+
+        return new(X: Axis(magnitude: absolute.X, radius: radii.X), Y: Axis(magnitude: absolute.Y, radius: radii.Y), Z: Axis(magnitude: absolute.Z, radius: radii.Z));
     }
     // SdfSweep over a box, whatever parameter the point search picks: the centreline over the whole parameter range is
     // the box of the Bézier's interval evaluation, the radius the interval of every radius, and the strand offset the
@@ -1048,25 +1067,6 @@ public sealed partial class SdfFieldEvaluator {
     private static FixedInterval PlaneBounds(IntervalVector3 p, IntervalVector3 normal, FixedInterval offset) =>
         ((((p.X * normal.X) + (p.Y * normal.Y)) + (p.Z * normal.Z)) + offset);
     private static IntervalVector3 Interval(FixedVector3 value) => new(X: Point(value: value.X), Y: Point(value: value.Y), Z: Point(value: value.Z));
-    private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii) =>
-        SuperellipsoidSphereBounds(p: p, radii: Interval(value: radii), inverseRadii: Interval(value: inverseRadii));
-    private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, IntervalVector3 radii, IntervalVector3 inverseRadii) =>
-        SuperellipsoidNormBounds(p: p, radii: radii, inverseRadii: inverseRadii, lowerFactor: Point(value: FixedQ4816.One));
-    private static FixedInterval SuperellipsoidNormBounds(IntervalVector3 p, IntervalVector3 radii, IntervalVector3 inverseRadii,
-        FixedInterval lowerFactor) {
-        var absolute = p.Abs();
-        var q = new IntervalVector3(
-            X: (absolute.X * inverseRadii.X),
-            Y: (absolute.Y * inverseRadii.Y),
-            Z: (absolute.Z * inverseRadii.Z)
-        );
-        var minimumRadius = FixedInterval.Min(first: radii.X, second: FixedInterval.Min(first: radii.Y, second: radii.Z));
-
-        var norm = q.Length;
-
-        return FixedInterval.Union(first: (((lowerFactor * norm) - Point(value: FixedQ4816.One)) * minimumRadius),
-            second: ((norm - Point(value: FixedQ4816.One)) * minimumRadius));
-    }
     private static FixedInterval RoundConeBounds(IntervalVector3 p, FixedQ4816 lowerRadius, FixedQ4816 upperRadius, FixedQ4816 height, FixedQ4816 b, FixedQ4816 a) {
         var qx = FixedInterval.Magnitude(x: p.X, y: p.Z);
         var qy = p.Y;

@@ -92,10 +92,11 @@ template overcast(cover = 0.85, luminance = 3200) {
   ]
 }
 
-// A clear day's air: a light fog in-scattering the sky.
+// A clear day's air: a light fog in-scattering the sky, thin enough that the valley's rim (valley.puck) 500 to 750 m out
+// keeps about two thirds of its light and the draw distance's 6 km fades to sky.
 template clearDayAir() {
   fog {
-    density: 0.004
+    density: 0.0006
   }
 }
 

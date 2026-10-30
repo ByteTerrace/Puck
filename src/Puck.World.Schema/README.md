@@ -2326,10 +2326,11 @@ computed value; the tabletop primitive's own use is gating a piece's board
 occupancy derive so a knocked-over piece reads as displaced),
 `$bodyPosition:<bodyRef>:x|y|z` (one world axis of a body's live position in
 metres, fixed point, 0 for no live body; any other axis refuses as
-`BodyPositionMalformed`; the debug world's `fall-respawn` rule sweeps
-`forEach: $bodies` and gates a `pose` on it to recover any body that falls off
-the ground), `$engaged:<bodyRef>:<screen>` (1 while the body's participant
-holds a control application onto that declared screen, captured or mirrored,
+`BodyPositionMalformed`; the debug world's `fall-recovery` rule sweeps
+`forEach: $bodies` and gates a `pose` on it to stand any body that falls out of
+the world on the floor below the valley sector it fell in),
+`$engaged:<bodyRef>:<screen>` (1 while the body's participant holds a control
+application onto that declared screen, captured or mirrored,
 0 otherwise or for no live body; an undeclared screen refuses as
 `EngagedMalformed`), and
 `$link:<adjacencyName>` (simulation ticks since that `adjacencies` row last

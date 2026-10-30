@@ -302,4 +302,17 @@ public sealed class CreationNoiseLawTests {
 
         Assert.Empty(collection: violations);
     }
+    // THE LAW: a relief's bake spacing is a quarter of the wavelength of its finest octave carrying at least a
+    // sixteenth of the amplitude. Gain one keeps every octave; gain a half drops those past the fourth.
+    [Theory]
+    [InlineData(0.02f, 6, 0.5f, 2f, 1.5625f)]
+    [InlineData(0.02f, 6, 1f, 2f, 0.390625f)]
+    [InlineData(0.02f, 1, 0.5f, 2f, 12.5f)]
+    [InlineData(4f, 4, 0.5f, 3f, 0.0023148148f)]
+    public void TheDetailSpacingIsAQuarterOfTheFinestResolvedOctave(float frequency, int octaves, float gain, float lacunarity, float spacing) =>
+        Assert.Equal(
+            expected: spacing,
+            actual: new CreationNoiseDocument(Amplitude: 1f, Frequency: frequency, Gain: gain, Lacunarity: lacunarity, Octaves: octaves).DetailSpacing(),
+            precision: 6
+        );
 }

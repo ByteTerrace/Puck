@@ -1,0 +1,62 @@
+// Macro terrain from the engine's own SDF, contact and mesh systems: a sector of a ring of walls (a basin, a
+// caldera, a crater's rim) as a few superellipsoid masses with fBm relief over their union. A library: it emits no
+// document; a world imports it and places one creation per sector, so each sector is separately editable and bakes
+// as its own group.
+//
+//   import "../standard/terrain"
+//
+// A sector is authored in its own frame: author +Z points out from the ring's centre and the creation is placed at that
+// centre, turned by the placement's yawDegrees. With the author frame's half turn, a placement yaw of (compass + 180)
+// points the sector at compass bearing `compass` (0 is world +Z, 90 is world +X): terrainYaw(compass) says so once.
+//
+// Contact rides the masses alone. The debug world's analytic provider collides each superellipsoid with its exact Lp
+// surface, and creation noise is render-only relief (CreationNoiseDocument), so keep its amplitude to the error a body
+// may sink into or float over the drawn slope. Walkable decks on the terrain are separate creations without noise.
+
+// The placement yaw that points a sector authored along author +Z at a compass bearing.
+let terrainYaw = 180
+
+// One wall mass: an ellipsoid (exponent 2) or a cliffier superellipsoid sunk below the floor plane, so that the floor
+// plane cuts it at `foot` from the ring's centre and it rises to `peak` above that plane.
+//   radial      the mass's half-extent along the sector's outward axis
+//   across      its half-extent along the ring
+//   offset      its centre's shift along the ring (author +X), for ridges that do not repeat
+//   sink        the fraction of its vertical half-extent below the floor plane, so a deeper sink steepens the foot
+// With exponent 2 the centre stands radial · √(1 − sink²) beyond the foot; a larger exponent moves the foot outward by
+// at most a few percent, which the authored foot absorbs.
+template terrainMass(label, foot, peak, radial, across, offset = 0, sink = 0.3, exponent = 2, material = 0) {
+  // A union only: a creation's smooth blends are bounded at CreationDocument.MaxSmooth (half a metre), far under a
+  // wall's scale, and the analytic provider collides any blend as the hard union.
+  shape Superellipsoid $"{label}" {
+    exponent: exponent
+    material: material
+    position [offset, (0 - ((peak / (1 - sink)) * sink)), (foot + (radial * squareRoot((1 - (sink * sink)))))]
+    scale [across, (peak / (1 - sink)), radial]
+  }
+}
+
+// The floor plane's cut through a sector: everything composed before it is intersected with the slab from `below` under
+// the floor plane up to `top`, so the masses' buried halves neither bake nor size the sector's lattice. A detail shape:
+// contact keeps colliding each mass whole, and nothing stands under the floor.
+template terrainFloorCut(top, below = 10, reach = 2000) {
+  shape Box "floor-cut" {
+    blend: Intersection
+    detail: true
+    material: 0
+    position [0, ((top - below) / 2), 0]
+    scale [reach, ((top + below) / 2), reach]
+  }
+}
+
+// The fBm relief over a sector's union: amplitude in metres, frequency in cells per metre. Six octaves of lacunarity 2
+// put the finest at 32 times the base frequency.
+template terrainRelief(seed, amplitude = 4, frequency = 0.02, octaves = 6) {
+  noise {
+    frequency: frequency
+    amplitude: amplitude
+    octaves: octaves
+    gain: 0.5
+    lacunarity: 2
+    seed: seed
+  }
+}

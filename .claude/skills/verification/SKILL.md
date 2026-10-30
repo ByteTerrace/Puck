@@ -275,6 +275,10 @@ does not wait on itself and siblings still exclude one another; [lease reference
 In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
 shell can split the colon-bearing switch before the lease receives it
 ([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
+On Windows, a forwarded bare `bash` resolves to WSL's `bash.exe`, which cannot see
+`D:/` paths and exits 127 after the lease was granted; forward Git Bash by its full
+path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`) to run several commands
+under one lease.
 
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed

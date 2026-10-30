@@ -613,11 +613,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             SdfShapeType.Superellipsoid => SdfSuperellipsoid(
             p: p,
             radii: Vector(instruction: instruction),
-            inverseRadii: new FixedVector3(
-                X: instruction.Data1Y,
-                Y: instruction.Data1Z,
-                Z: instruction.Data1W
-            ),
             exponent: instruction.Data0W
         ),
             SdfShapeType.ConvexPolygon => (SdfConvexPolygonSolid(
@@ -776,11 +771,23 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // e == 2 is the ellipsoid, every ellipsoid the ISA carries: it takes the pow-free fast path (|q| - 1) * min(r), the
     // same scaled L2 gauge without four Pow evaluations, and the same m <= 0 center value -min(r) (|q| = 0 there).
     // KEEP the fast path IN SYNC with sdfSuperellipsoid's own e == 2 branch.
-    private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedVector3 inverseRadii, FixedQ4816 exponent) {
+    // The kernel's q = |p| · (1 / r) is carried here as q · min(r) = (|p| · min(r)) / r, in metres: the packed inverse
+    // radius has a Q16 raw of 65536 / r, so 1 / 514 carries seven bits and moves a 514 m surface by metres, and a q of
+    // 2^-16 resolution steps the distance by min(r) / 65536. Each scaled ratio rounds twice, at the product and the
+    // quotient, which SuperellipsoidScaledRatioBounds encloses.
+    private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedQ4816 exponent) {
         var absP = FixedVector3.Abs(value: p);
-        var q = FixedVector3.Multiply(
-            left: absP,
-            right: inverseRadii
+        var minRadius = FixedQ4816.Min(
+            x: radii.X,
+            y: FixedQ4816.Min(
+                x: radii.Y,
+                y: radii.Z
+            )
+        );
+        var q = new FixedVector3(
+            X: SuperellipsoidScaledRatio(magnitude: absP.X, minRadius: minRadius, radius: radii.X),
+            Y: SuperellipsoidScaledRatio(magnitude: absP.Y, minRadius: minRadius, radius: radii.Y),
+            Z: SuperellipsoidScaledRatio(magnitude: absP.Z, minRadius: minRadius, radius: radii.Z)
         );
         var m = FixedQ4816.Max(
             x: q.X,
@@ -789,16 +796,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 y: q.Z
             )
         );
-        var minRadius = FixedQ4816.Min(
-            x: radii.X,
-            y: FixedQ4816.Min(
-                x: radii.Y,
-                y: radii.Z
-            )
-        );
 
         if (exponent == Two) {
-            return ((q.Length - FixedQ4816.One) * minRadius);
+            return (q.Length - minRadius);
         }
 
         if (m <= FixedQ4816.Zero) {
@@ -820,11 +820,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var sum = ((ux + uy) + uz);
         var inverseExponent = (FixedQ4816.One / exponent);
 
-        return (((m * FixedQ4816.Pow(
+        return ((m * FixedQ4816.Pow(
             x: sum,
             y: inverseExponent
-        )) - FixedQ4816.One) * minRadius);
+        )) - minRadius);
     }
+    // The product |p_i| · min(r) fits the carrier below 2^20 m on a radius under 2^26 m; past either the ratio divides
+    // first, at the coarser resolution, rather than wrap.
+    private const long SuperellipsoidScaledMagnitudeLimit = (1L << 36);
+    private const long SuperellipsoidScaledRadiusLimit = (1L << 42);
+
+    // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres.
+    private static FixedQ4816 SuperellipsoidScaledRatio(FixedQ4816 magnitude, FixedQ4816 radius, FixedQ4816 minRadius) =>
+        (((magnitude.Value < SuperellipsoidScaledMagnitudeLimit) && (minRadius.Value < SuperellipsoidScaledRadiusLimit))
+            ? ((magnitude * minRadius) / radius)
+            : ((magnitude / radius) * minRadius));
     // KEEP IN SYNC with sdfConvexPolygon2D in field/sdf-shapes.hlsli: the edge-list core (SdfPolygon2D) walked from each
     // vertex back to the one before it.
     private static FixedQ4816 SdfConvexPolygon2D(FixedVector2 p, FixedVector2[] vertices) =>

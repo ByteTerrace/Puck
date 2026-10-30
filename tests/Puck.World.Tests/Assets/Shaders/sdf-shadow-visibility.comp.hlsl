@@ -1,4 +1,4 @@
-// Calls the production K-word packer and decoder with independent expected words supplied by the law.
+// Calls the production K-word packer, decoder and queried mask with independent expected words supplied by the law.
 [[vk::binding(0, 3)]] StructuredBuffer<float4> visibilityCases : register(t0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> expectedWords : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> visibilityResults : register(u2, space3);
@@ -13,4 +13,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // Two exactly representable halves preserve every packed bit through a floating-point readback image.
     visibilityResults[uint2(id.x, 0u)] = float4(packed & 0xFFFFu, packed >> 16u, repacked & 0xFFFFu, repacked >> 16u);
     visibilityResults[uint2(id.x, 1u)] = decoded;
+    visibilityResults[uint2(id.x, 2u)] = sdfShadowQueried(expectedWords[id.x]);
 }
