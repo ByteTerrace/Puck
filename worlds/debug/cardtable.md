@@ -4,12 +4,24 @@ The debug world stands a card table in the gallery hall's board game room, the
 east end of level 2 ([`shapes.md`](shapes.md#the-board-game-room)), north of the
 Go table. It plays Klondike patience with 52 physical cards on a felt board
 centred at (60.8, 9.86, 35.9), on a table 1.6 m by 1.5 m whose top is 0.8 m over
-the floor. [`cardtable.puck`](cardtable.puck) holds the table, its cards and
-its seat; [`klondike.puck`](klondike.puck) holds the rules and
-[`solitaire.puck`](solitaire.puck) the collection they belong to (`solitaire.table`
-names the game in play); `debug.puck` imports the table whole (`import
-"cardtable"`). The deck is the standard package's ([`cards.puck`](../standard/cards.puck)):
-52 faces and a back as signed-distance creations that any author imports.
+the floor. The felt is 0.96 m by 1.2 m and the pick grid (21 by 27 cells of 4 cm)
+fills it evenly: a 10.6 by 14.9 cm card, seven columns 12 cm apart and a fan
+step of 4 cm, so the deepest column (six face-down cards and a king down to an
+ace) ends on the grid's last row. [`cardtable.puck`](cardtable.puck) holds the
+table, its cards and its seat; [`klondike.puck`](klondike.puck) holds the rules
+and [`solitaire.puck`](solitaire.puck) the collection they belong to
+(`solitaire.table` names the game in play); `debug.puck` imports the table whole
+(`import "cardtable"`). The deck is the standard package's
+([`cards.puck`](../standard/cards.puck)): 52 faces and a back as signed-distance
+creations that any author imports, in two variants an author chooses: `light`
+(an ivory ground, red hearts and diamonds, black spades and clubs, the gold rim
+and court figures kept) and `dark` (a near-black ground, bright pips). This
+table wears `cardDeckPrototypes(variant: "light")`; the pips and the rank and
+suit index are large and share the suit's colour so they read from the seat. A
+face's relief stays within a few hundredths of a card's thickness and a court
+figure is flattened into the card (`courtFlat`), so no card pokes through the
+one laid over it; a layer of the stack (`cardLayer`, 3.4 mm) is the card's
+thickness and both faces' raised rims.
 
 The game is two layers. The rules are state: the stock, the waste, seven
 tableau columns and four foundations are ordered piles of card keys
@@ -67,6 +79,35 @@ diamonds is 39).
 | Read where the table put each card | `world.state kSlotOf` |
 | Read the seat's cursor and lifted run | `world.state kSeat` |
 | Frame the table from the seat | `view.override camera look 60.8 11.2 37.6 60.8 9.86 35.9`, then `view.override camera auto` |
+
+## Looking at the table
+
+A windowed check of the deck's look, close and wide, runs as one `puck_exec`
+script on a windowed World booted with `puck_world_start` (the deal takes about
+100 ticks, so the script waits it out):
+
+```text
+debug.go cards
+world.wait bakes 180
+world.wait 160
+view.override camera look 60.8 11.0 38.0 60.8 9.86 35.9
+world.wait captures 30
+world.screenshot <abs-path>/cards-wide.png
+world.wait captures 30
+view.override camera look 60.8 10.35 37.1 60.8 9.86 35.6
+world.wait 10
+world.screenshot <abs-path>/cards-close.png
+world.wait captures 30
+view.override camera look 60.8 10.15 36.3 60.8 9.86 35.55
+world.wait 10
+world.screenshot <abs-path>/cards-fan.png
+world.wait captures 30
+view.override camera auto
+```
+
+The wide shot shows the whole felt with the layout centred on it, the close one
+the top row and the first columns' fans (a face-down stack is a plain red back:
+no figure's head stands through it) and the third a face-up fan from just above.
 
 A test or a script plays by setting the mailbox cells and bumping `request`
 (`world.state.cell.set solitaireKlondike from 8`, and `to`, `card`, `action 2`,
