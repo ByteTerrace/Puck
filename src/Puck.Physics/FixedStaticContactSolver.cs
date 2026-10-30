@@ -255,7 +255,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);
         }
         if ((volumes.IsEmpty) || ((colliders.IsEmpty) && (dynamicColliders.IsEmpty))) {
-            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
+            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
         }
         var radius = FixedQ4816.MaxValue;
 
@@ -269,7 +269,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var parts = travel.CeilingDivide(divisor: ((Int128)slice));
 
         if (parts <= 1) {
-            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
+            return ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: previousPosition, up: up, velocity: ref velocity, volumes: volumes);
         }
         if (parts > long.MaxValue) {
             position = previousPosition;
@@ -291,7 +291,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 velocity = originalVelocity;
                 return new ContactResolution(Grounded: false, ObstructionNormal: default, Refusal: ContactRefusal.UnrepresentableSweep);
             }
-            result = ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: resolved, up: up, velocity: ref velocity, volumes: volumes);
+            result = ResolveEndpoint(candidates: candidates, colliderExtents: colliderExtents, colliders: colliders, dynamicColliders: dynamicColliders, orientation: orientation, position: ref position, previousPosition: previousPosition, sliceStart: resolved, up: up, velocity: ref velocity, volumes: volumes);
             resolved = position;
             if (result.ObstructionNormal != FixedVector3.Zero) { obstruction = result.ObstructionNormal; }
             stepHeight = FixedQ4816.Max(x: stepHeight, y: result.RequiredStepHeight);
@@ -301,11 +301,13 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight, Unproved = (parts > count) };
     }
 
+    // previousPosition is the whole move's start, the pre-move foot every slice's edge test measures from, as
+    // FixedStepUp raises from that start; sliceStart begins this slice, whose displacement is the approach direction.
     private ContactResolution ResolveEndpoint(ReadOnlySpan<FixedStaticCollider> colliders, ReadOnlySpan<FixedStaticCollider> dynamicColliders,
-        in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
+        in FixedVector3 previousPosition, in FixedVector3 sliceStart, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
         ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up, ReadOnlySpan<FixedVector3?> colliderExtents,
         FixedColliderCandidates candidates) {
-        var movement = (position - previousPosition);
+        var movement = (position - sliceStart);
         var requiredStepHeight = FixedQ4816.Zero;
         var grounded = false;
         ContactSupportWitness? support = null;
