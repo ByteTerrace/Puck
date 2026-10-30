@@ -46,6 +46,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
   module library (a source emitting no document) hands over its `let`s and
   templates; anything else is a document the importer composes at load, whose
   own `let`s stay its own. A library importing a document is refused (PUCK017).
+  A source of imports alone hands over nothing of its own, so it is a document
+  fragment that composes what it imports, not a library (`worlds/standard/standard.puck`).
 - **Compile-time `for` generates rows; builtins generate values.**
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time, and the document carries the rows they produce. Inside one
