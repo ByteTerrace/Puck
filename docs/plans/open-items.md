@@ -416,6 +416,13 @@ holds the fixed poses and the approaches already rejected.
 Owner: test runner and replay specialist · medium and low ·
 Next: make the per-tick authority hash incremental (measured below).
 
+- [medium] Strict `TemporaryDirectory` teardown still removes its root with
+  recursive `Directory.Delete` (`tests/Shared/TemporaryDirectory.cs:75`), bypassing
+  `RunDirectory.Delete`. A passing law that leaves a 5,000-deep tree can still
+  overflow its host's stack; strict cleanup also deletes links that the shared
+  confined remover refuses. Route strict teardown through the shared remover
+  while preserving its writer-release checks, and migrate link-owning fixtures
+  and unsupported-host teardown behavior together. (from: the sweep-crash review)
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
   per-tick hashing and recording, not host reuse. Recording slows the authored

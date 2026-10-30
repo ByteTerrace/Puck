@@ -194,7 +194,7 @@ internal sealed partial class RunDirectory : IDisposable {
         }
     }
     /// <summary>Deletes a directory best-effort, retrying for a short while as handles under it close and clearing
-    /// read-only attributes that refuse a delete.</summary>
+    /// read-only attributes through handles. Unsupported platforms leave the directory and return false.</summary>
     /// <param name="path">The directory to remove recursively.</param>
     /// <returns>Whether the directory is gone.</returns>
     public static bool TryDelete(string path) {
@@ -206,8 +206,10 @@ internal sealed partial class RunDirectory : IDisposable {
             } catch (IOException) {
                 // A handle under the directory has not closed yet.
             } catch (UnauthorizedAccessException) {
-                // A read-only file, or one still held open for deletion.
-                ClearReadOnly(path: path);
+                // A file whose permissions may change while its owner closes it.
+            } catch (PlatformNotSupportedException) {
+                // Optional cleanup must not turn a successful run into a failure on an unsupported host.
+                return false;
             }
 
             Thread.Sleep(millisecondsTimeout: DeleteRetryMilliseconds);
@@ -332,26 +334,6 @@ internal sealed partial class RunDirectory : IDisposable {
         } catch (Exception exception) when ((exception is System.ComponentModel.Win32Exception or NotSupportedException or UnauthorizedAccessException)) {
             // Another user's process, or a platform that will not say: it may be the owner, so it is.
             return false;
-        }
-    }
-    private static void ClearReadOnly(string path) {
-        try {
-            foreach (var file in Directory.EnumerateFiles(
-                path: path,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*"
-            )) {
-                var attributes = File.GetAttributes(path: file);
-
-                if ((attributes & FileAttributes.ReadOnly) != 0) {
-                    File.SetAttributes(
-                        fileAttributes: attributes & ~FileAttributes.ReadOnly,
-                        path: file
-                    );
-                }
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // The next attempt reports what still refuses.
         }
     }
 }

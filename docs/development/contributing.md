@@ -254,7 +254,7 @@ entry costs its next reader a derivation, never a different answer.
 Every directory a run makes under the temporary directory follows one policy,
 `RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
 into the CLI and every test and validation project, and `Directory.Build.props`
-into file apps. Every removal goes through `Puck.Confinement`
+into file apps. Every `RunDirectory` removal goes through `Puck.Confinement`
 (`ConfinedDirectory.DeleteTree`: iterative, link-refusing), which those projects
 reference (file apps compile its sources), so a tree of any depth cannot
 overflow the removing process's stack; a directory holding a link, or one
@@ -272,6 +272,12 @@ process id that a later process reuses is told apart by its start time. The
 [CLI conventions](../reference/cli.md#conventions) list the verbs that follow
 it and the directories that are deleted whatever the outcome.
 
+Confined removal supports Windows and Linux x64. On other hosts, direct
+`RunDirectory.Delete` throws `PlatformNotSupportedException`; best-effort
+`TryDelete` returns false immediately, and a sweep reports the refusal. Optional
+cleanup therefore preserves the run's result. Read-only attributes are handled
+through the remover's held handles, without walking paths outside its tree.
+
 A law takes its directory from `TemporaryDirectory`
 (`tests/Shared/TemporaryDirectory.cs`, linked into every test project), never
 from `Directory.CreateTempSubdirectory`, `Path.GetTempPath()` or
@@ -281,7 +287,10 @@ the law's output. A directory disposed while its law runs waits for the
 verdict, which an assembly-level xUnit `BeforeAfterTestAttribute` reads once the
 law ends. A deletion failure fails a passing law, so a handle the code under
 test leaves open is caught; `bestEffortDelete` relaxes that for a law whose
-host may still hold a file as it is disposed.
+host may still hold a file as it is disposed. Strict teardown currently uses
+its own recursive `Directory.Delete`; only best-effort teardown uses `RunDirectory.TryDelete`.
+The remaining strict-path depth limitation is tracked in
+[open items](../plans/open-items.md#test-runner-and-replay).
 
 ## Build output and hard links
 
