@@ -17,8 +17,9 @@ public interface IWorldCameraProgramRig : ISdfCameraRig {
     /// <summary>Gets the response the last resolve reported (the program's
     /// <see cref="WorldCameraProgramOp.Dynamics"/>, or <see cref="SdfCameraDynamics.None"/>).</summary>
     SdfCameraDynamics Dynamics { get; }
-    /// <summary>Gets the close-target migration reported by the last resolved program.</summary>
-    SdfCameraTargetShift TargetShift { get; }
+    /// <summary>Gets the chase clearance the last resolved program reported, or <see langword="null"/> when it authors
+    /// none.</summary>
+    SdfCameraClearance? Clearance { get; }
     /// <summary>Gets the first-person destination reported by the resolved program.</summary>
     SdfCameraFirstPerson? FirstPerson { get; }
 
@@ -207,49 +208,9 @@ public static class WorldCameraRigCompiler {
         public List<ScalarSource> ScalarSources { get; } = [];
         public List<SubjectSource> SubjectSources { get; } = [];
 
-        // The document-wide camera-program name table a blend op resolves against: views.seatRig, views.cameraRig,
-        // and every cameras[].rig — the same namespace WorldDefinitionValidator walks for dangling names and cycles.
-        private WorldCameraProgram? ResolveProgram(string name) {
-            if (string.IsNullOrEmpty(value: name)) {
-                return null;
-            }
-
-            var views = definition.ViewsRaw;
-
-            if (
-                (views?.SeatRig is { } seatRig) &&
-                string.Equals(
-                a: seatRig.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return seatRig;
-            }
-
-            if (
-                (views?.CameraRig is { } cameraRig) &&
-                string.Equals(
-                a: cameraRig.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return cameraRig;
-            }
-
-            foreach (var camera in definition.Cameras) {
-                if (string.Equals(
-                    a: camera.Rig.Name,
-                    b: name,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    return camera.Rig;
-                }
-            }
-
-            return null;
-        }
+        // The document-wide camera-program name table a blend or select op resolves against, the same namespace
+        // WorldDefinitionValidator walks for dangling names and cycles.
+        private WorldCameraProgram? ResolveProgram(string name) => WorldCameraPrograms.Find(definition: definition, name: name);
         private SdfCameraScalar Angle(BindableAngle angle, float fallback, WorldValueField field, in WorldValueSite site) {
             var scalar = angle.Value;
 
@@ -338,24 +299,9 @@ public static class WorldCameraRigCompiler {
             Section: $"{LocationOf(program: program)}.operations"
         );
         private string LocationOf(WorldCameraProgram program) {
-            var views = definition.ViewsRaw;
-
-            if (ReferenceEquals(objA: views?.SeatRig, objB: program)) {
-                return "views.seatRig";
-            }
-
-            if (ReferenceEquals(objA: views?.CameraRig, objB: program)) {
-                return "views.cameraRig";
-            }
-
-            var cameras = definition.Cameras;
-
-            for (var index = 0; (index < cameras.Count); index++) {
-                if (ReferenceEquals(
-                    objA: cameras[index].Rig,
-                    objB: program
-                )) {
-                    return $"cameras[{index}].rig";
+            foreach (var (path, declared) in WorldCameraPrograms.Declared(definition: definition)) {
+                if (ReferenceEquals(objA: declared, objB: program)) {
+                    return path;
                 }
             }
 
@@ -391,12 +337,27 @@ public static class WorldCameraRigCompiler {
                             ? Subject(subject: lookSubject)
                             : SdfCameraProgram.FacingSubject),
                             TargetOffset: (lookAt.TargetOffset?.Value ?? Vector3.Zero),
-                            WorldAxes: lookAt.WorldAxes,
-                            CloseTargetOffset: ((lookAt.CloseTargetOffset is { } closeTarget)
-                                ? new SdfCameraClearanceOffsets(Fade: closeTarget.Fade.Value, Cutaway: closeTarget.Cutaway.Value)
-                                : null),
-                            CloseTargetStartFraction: lookAt.CloseTargetStartFraction,
-                            CloseTargetFullFraction: lookAt.CloseTargetFullFraction
+                            WorldAxes: lookAt.WorldAxes
+                        ));
+
+                        break;
+                    case WorldCameraProgramOp.Clearance clearance:
+                        var site = SiteOf(index: index, program: program);
+
+                        operations.Add(item: new SdfCameraOp.Clearance(
+                            Cutaway: Scalar(fallback: 0f, field: WorldValueFields.ClearanceCutaway, scalar: clearance.Cutaway, site: site),
+                            EyeRadius: Scalar(fallback: 0f, field: WorldValueFields.ClearanceEyeRadius, scalar: clearance.EyeRadius, site: site),
+                            SurfaceSkin: Scalar(fallback: 0f, field: WorldValueFields.ClearanceSurfaceSkin, scalar: clearance.SurfaceSkin, site: site),
+                            MaxRise: Scalar(fallback: 0f, field: WorldValueFields.ClearanceMaxRise, scalar: clearance.MaxRise, site: site),
+                            MinimumBoom: Scalar(fallback: 0f, field: WorldValueFields.ClearanceMinimumBoom, scalar: clearance.MinimumBoom, site: site),
+                            FadeStart: Scalar(fallback: 0f, field: WorldValueFields.ClearanceFadeStart, scalar: clearance.FadeStart, site: site),
+                            FadeEnd: Scalar(fallback: 0f, field: WorldValueFields.ClearanceFadeEnd, scalar: clearance.FadeEnd, site: site),
+                            CloseTargetOffset: clearance.CloseTargetOffset?.Value,
+                            CloseTargetStartFraction: Scalar(fallback: 0f, field: WorldValueFields.ClearanceCloseTargetStart, scalar: clearance.CloseTargetStartFraction, site: site),
+                            CloseTargetFullFraction: Scalar(fallback: 0f, field: WorldValueFields.ClearanceCloseTargetFull, scalar: clearance.CloseTargetFullFraction, site: site),
+                            NearMargin: Scalar(fallback: 0f, field: WorldValueFields.ClearanceNearMargin, scalar: clearance.NearMargin, site: site),
+                            RetractionSkin: Scalar(fallback: 0f, field: WorldValueFields.ClearanceRetractionSkin, scalar: clearance.RetractionSkin, site: site),
+                            ObstructedTargetSkin: Scalar(fallback: 0f, field: WorldValueFields.ClearanceObstructedTargetSkin, scalar: clearance.ObstructedTargetSkin, site: site)
                         ));
 
                         break;
@@ -613,7 +574,7 @@ public static class WorldCameraRigCompiler {
             set => m_rig.Look = value;
         }
         public float Spread { get; set; }
-        public SdfCameraTargetShift TargetShift => m_rig.TargetShift;
+        public SdfCameraClearance? Clearance => m_rig.Clearance;
         public SdfCameraFirstPerson? FirstPerson => m_rig.FirstPerson;
 
         // Refills the evaluator's per-frame slots: a bound operand presents its state mirror slot, which the mirror

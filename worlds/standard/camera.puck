@@ -1,21 +1,25 @@
 // The standard camera, a library. `cameraFeel()` authors the shared input feel, the `camera-boom` response and the
 // interactive zoom bounds and step; `standard.puck` expands it, so every world importing the standard has them.
-// `chaseCamera(...)` authors a seated body's third-person chase camera: the seat control (pitch limits, clearance,
-// character fade, automatic first person, the boom) and the rig, a camera program parameterised by the body's own
-// offsets. An avatar expands it in a document of its own and imports that document (the debug world's Moth:
-// `../debug/avatars/moth-camera.puck`):
+// `chaseCamera(...)` authors a seated body's third-person chase camera: the seat control (pitch limits, automatic first
+// person, the boom), the rig, and the player's clearance preference. An avatar expands it in a document of its own with
+// its body offsets and imports that document (the debug world's Moth: `../debug/avatars/moth-camera.puck`):
 //
 //   import "../../standard/camera"
 //   chaseCamera(rig: "my-camera", pivotOffset: [0, 0.9, 0], fadeCloseTarget: [0, 1.5, 0], cutawayCloseTarget: [0, 1.35, 0], eyePoint: [0, 1.6, 0.2])
 //
-// The defaults are the standard template's values from the chase-camera decision (docs/decisions/play.md, "The chase
-// camera"): fade with the waist-to-head target shift, a 4.2 m boom at 0.3 rad, automatic first person off. Distances
-// are full-size metres, angles radians. Cutaway is one argument away (`clearanceMode: "Cutaway"`), and a player
-// switches between the two live (`player.camera.clearance`). Each treatment has its own rise ceiling above the rig's
-// elevation (`fadeMaxRise`, `cutawayMaxRise`) and its own close target (`fadeCloseTarget`, `cutawayCloseTarget`): the
-// boom rises only when no level pull-in keeps the eye out past the fade's minimum boom, or past the body in cutaway.
-// `eyeRadius` is the sphere the eye keeps clear of geometry (and the body, in cutaway), and `surfaceSkin` the nearest the
-// eased eye's centre comes to geometry along the boom.
+// How the eye meets a room narrower than its boom is the `clearance` camera-program operation, and the feel is
+// authored here as two cases of the rig: `<rig>-fade` keeps the room and fades the body, `<rig>-cutaway` keeps the
+// body solid and cuts the walls away. The seat rig selects between them by the `cameraClearance` state row, the
+// player's preference (Fade or Cutaway): `camera.clearance Cutaway` switches it live, and `clearance: 1` starts a world
+// on cutaway. The defaults are the chase-camera decision's values (docs/decisions/play.md, "The chase camera"): a 4.2 m
+// boom at 0.3 rad, the waist-to-head target shift, automatic first person off. Distances are full-size metres, angles
+// radians. Each case has its own rise ceiling above the rig's elevation (`fadeMaxRise`, `cutawayMaxRise`) and close
+// target (`fadeCloseTarget`, `cutawayCloseTarget`): the boom rises only when no level pull-in keeps the eye out past
+// the fade's minimum boom, or past the body in cutaway. `eyeRadius` is the sphere the eye keeps clear of geometry (and
+// the body, in cutaway), `surfaceSkin` the nearest the eased eye's centre comes to geometry along the boom,
+// `nearMargin` how far short of the body cutaway's near plane stops, `retractionSkin` how far short of a hit the probe
+// reports the room, and `obstructedTargetSkin` how far out cutaway's sweep starts when the target is inside geometry
+// (a portal frame round the pivot).
 
 // The interactive boom's zoom: the nearest and farthest requested distance and the distance one input unit moves.
 let cameraBoom = { minimum: 1.5, maximum: 12, step: 0.6 }
@@ -61,33 +65,50 @@ template cameraFeel() {
 }
 
 // A seated body's chase camera. `pivotOffset` is the rest look target at full boom length, `fadeCloseTarget` and
-// `cutawayCloseTarget` the targets the look migrates to, under each treatment, as geometry shortens the boom from
-// `closeTargetStart` to `closeTargetFull` of its length,
-// and `eyePoint` the first-person eye, each in the body's frame. The fade dissolves the body from `fadeStart` to `fadeEnd`
-// metres of boom and keeps at least `minimumBoom` where the room allows it; first person hides the body inside
-// `hideRadius` and eases in over `transitionSeconds`. Automatic first person, when enabled, enters after the room behind
-// the head stays under `autoEntryDistance` for `autoEntrySeconds` and leaves once it stays over `autoExitDistance` for
-// `autoExitSeconds`.
+// `cutawayCloseTarget` the targets the look migrates to, in each case, as geometry shortens the boom from
+// `closeTargetStart` to `closeTargetFull` of its length, and `eyePoint` the first-person eye, each in the body's frame.
+// The fade case dissolves the body from `fadeStart` to `fadeEnd` metres of boom and keeps at least `minimumBoom` where
+// the room allows it; first person hides the body inside `hideRadius` and eases in over `transitionSeconds`. Automatic
+// first person, when enabled, enters after the room behind the head stays under `autoEntryDistance` for
+// `autoEntrySeconds` and leaves once it stays over `autoExitDistance` for `autoExitSeconds`. `clearance` is the
+// preference row's starting value: 0 fade, 1 cutaway.
 template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0], cutawayCloseTarget = [0, 1.55, 0], eyePoint = [
   0, 1.75, 0.22
-], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearanceMode = "Fade", fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
+], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearance = 0, fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, nearMargin = 0.05, retractionSkin = 0.05, obstructedTargetSkin = 1.1, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
   cameraResponse()
+
+  exports {
+    bindings [cameraClearance]
+  }
+
+  state {
+    // Written as a row: an `enum` a template expands is not carried into the document.
+    enums [
+      { name: "CameraClearance", members ["Fade", "Cutaway"] }
+    ]
+
+    world {
+      // The player's tight-space preference: the seat rig selects its fade or cutaway case by it.
+      slot cameraClearance: CameraClearance = clearance
+    }
+  }
+
+  commands [
+    {
+      name: "camera.clearance"
+      help: "Chooses how the chase camera meets a room narrower than its boom: Fade keeps the room ahead and fades the body as the eye nears it, Cutaway keeps the body solid, rising over it and cutting away the walls between. Writes the cameraClearance preference row, which the seat rig selects its case by; world.view.camera reads the parameters the case resolves."
+      parameters [
+        { name: "mode", kind: Choice, values ["Fade", "Cutaway"] }
+      ]
+      lines [
+        "world.state.cell.set cameraClearance $value {mode}"
+      ]
+    }
+  ]
 
   views {
     seatControl {
       boom: cameraBoom
-      clearanceMode: clearanceMode
-      characterFade {
-        startDistance: fadeStart
-        endDistance: fadeEnd
-        minimumBoom: minimumBoom
-      }
-      maxRise {
-        fade: fadeMaxRise
-        cutaway: cutawayMaxRise
-      }
-      eyeRadius: eyeRadius
-      surfaceSkin: surfaceSkin
       autoFirstPerson {
         enabled: autoFirstPerson
         entryDistance: autoEntryDistance
@@ -104,21 +125,64 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
       name: rig
       version: "puck.camera.program.v1"
       operations [
-        orbit(distance: distance, opcode: "orbit", pitch: pitch, pivotOffset: pivotOffset, yaw: 0)
-        lookAt(
-          focusDistance: distance,
-          opcode: "lookAt",
-          subject: reference(),
-          targetOffset: pivotOffset,
-          worldAxes: true,
-          closeTargetOffset: { fade: fadeCloseTarget, cutaway: cutawayCloseTarget },
-          closeTargetStartFraction: closeTargetStart,
-          closeTargetFullFraction: closeTargetFull
-        )
-        fieldOfView(fieldOfViewRadians: fieldOfView, opcode: "fov")
-        dynamics(row: `camera-boom`)
-        firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: transitionSeconds, hideRadius: hideRadius)
+        selectProgram(key: "state.cameraClearance", cases: [
+          { value: 0, program: $"{rig}-fade" }
+          { value: 1, program: $"{rig}-cutaway" }
+        ], default: $"{rig}-fade")
       ]
     }
+
+    // The two cases the seat rig selects between: one orbit, look, lens, ease and first-person eye, and the
+    // clearance each trades the room by.
+    programs: map(
+      [
+        {
+          suffix: "fade"
+          closeTarget: fadeCloseTarget
+          cutaway: 0
+          maxRise: fadeMaxRise
+          minimumBoom: minimumBoom
+          fadeStart: fadeStart
+          fadeEnd: fadeEnd
+          obstructedTargetSkin: 0
+        }
+        {
+          suffix: "cutaway"
+          closeTarget: cutawayCloseTarget
+          cutaway: 1
+          maxRise: cutawayMaxRise
+          minimumBoom: 0
+          fadeStart: 0
+          fadeEnd: 0
+          obstructedTargetSkin: obstructedTargetSkin
+        }
+      ],
+      case => {
+        name: $"{rig}-{case.suffix}"
+        version: "puck.camera.program.v1"
+        operations [
+          orbit(distance: distance, pitch: pitch, pivotOffset: pivotOffset, yaw: 0)
+          lookAt(focusDistance: distance, subject: reference(), targetOffset: pivotOffset, worldAxes: true)
+          clearance(
+            cutaway: case.cutaway,
+            eyeRadius: eyeRadius,
+            surfaceSkin: surfaceSkin,
+            maxRise: case.maxRise,
+            minimumBoom: case.minimumBoom,
+            fadeStart: case.fadeStart,
+            fadeEnd: case.fadeEnd,
+            closeTargetOffset: case.closeTarget,
+            closeTargetStartFraction: closeTargetStart,
+            closeTargetFullFraction: closeTargetFull,
+            nearMargin: nearMargin,
+            retractionSkin: retractionSkin,
+            obstructedTargetSkin: case.obstructedTargetSkin
+          )
+          fieldOfView(fieldOfViewRadians: fieldOfView)
+          dynamics(row: `camera-boom`)
+          firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: transitionSeconds, hideRadius: hideRadius)
+        ]
+      }
+    )
   }
 }
