@@ -11,7 +11,7 @@ before code.
 
 | Area | Where | What limits terrain |
 |---|---|---|
-| Creation relief | `CreationNoiseDocument` (`src/Puck.World.Authoring/Authoring/CreationDocument.cs`), `SdfOp.NoiseDisplace`; GPU `sdfValueNoise3` (`field/sdf-noise.hlsli`), CPU `SdfFieldEvaluator.RenderEditField` (`Queries/SdfFieldEvaluator.RenderOps.cs`) | fBm value noise added to the field: `MaxAmplitude` 4 m, `MaxNoiseOctaves` 8, no ridges, warp or erosion. The evaluator's fixed-point lattice is a second copy beside `Pcg3dLatticeNoise` in `Puck.Maths`. |
+| Creation relief | `CreationNoiseDocument` (`src/Puck.World.Authoring/Authoring/CreationDocument.cs`), `SdfOp.NoiseDisplace`; GPU `sdfValueNoise3` (`field/sdf-noise.hlsli`), CPU `SdfFieldEvaluator.RenderEditField` (`Queries/SdfFieldEvaluator.RenderOps.cs`) | fBm value noise added to the field: `MaxAmplitude` 4 m, `MaxNoiseOctaves` 8, no ridges, warp or erosion. |
 | Smooth blends | `CreationDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
 | The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
 | Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldPlacementStamper.ReliefDetail` | Declares 1.56 m, but the scoped bound is a 770 m sphere about the ring's centre and refinement stops at eight cells a coarse axis, so sectors bake at 2.8 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)): the metre-scale grain. |
@@ -45,9 +45,9 @@ goes). Its parameters are authored data on the creation:
 The cut derives from the document alone, so the geometric field is the same on
 every machine and nothing feeds back from presentation.
 
-The fixed-point evaluation moves into `Puck.Maths` beside `Pcg3dLatticeNoise`
-(value noise with derivative, the band kinds, the warp); the evaluator's
-private `ValueNoise3` is deleted. The HLSL twin keeps the PCG3D corner hash, so
+The evaluator already calls `Pcg3dLatticeNoise.Fbm3` in `Puck.Maths`
+(`SdfFieldEvaluator.PointWalk.cs`). Extend that shared implementation with the
+closed-form derivative, band kinds, and warp. The HLSL twin keeps the PCG3D corner hash, so
 CPU and GPU agree to the float blend's LSB as today. The step factor
 (`SdfProgram.NoiseDisplaceStepFactor`'s successor) keeps the undamped bound,
 which the erosion divisor can only lower. Caps become relative: amplitude at
@@ -122,8 +122,11 @@ over a mask built from:
 
 Solid 3D noise needs no triplanar projection, so steep walls do not stretch.
 Layers evaluate in `sdf-light-stage.hlsli` beside `applyWeathering`, whose
-up-facing `deposit` migrates into layers and is deleted, leaving one slope
-mechanism. A rigid copy's layers read its own frame, as paints do.
+up-facing `deposit` migrates into layers and is deleted. Regional weather
+coatings drive these same layer masks, leaving one mechanism for retained
+wetness and deposits as well as terrain slope and altitude
+([weather decision](../decisions/engine-design.md#weather-is-a-regions-composition-of-generic-pieces)).
+A rigid copy's layers read its own frame, as paints do.
 
 ### Exposure at its cause
 
@@ -153,8 +156,8 @@ settles the output transfer.
   spherical shell replaces this flat model later.
 - **Far shadows:** a terrain cascade from 120 m to the far distance draws static
   draws at their coarsest level, refreshed only when the sun or a static draw
-  changes, so ridges shadow the walls behind them (beside the open look call on
-  caching far casters, [owner decisions](open-items.md#owner-decisions)).
+  changes, so ridges shadow the walls behind them. Caching preserves the
+  authored shadow precision and never coarsens the cascade snap.
 
 ### What the bake needs
 
@@ -210,15 +213,16 @@ bake numbers come from `puck mesh audit --cpu --group "(valley-"`.
 | 0. Baseline | lead, GPU | GPU free | Six stills on both backends; frame p50/p99 and per-pass GPU ms at each pose; `world.exposure` at each stop after two tour orders on one World. |
 | 1. Image meter | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. The summit, the lobby and the card table meter on both backends, and the probe meter answers at the summit. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it. Composite plus meter costs under 0.2 ms more than the composite alone. |
 | 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
-| 3. `TerrainRelief` op | field/maths C | none | Fixed-point and kernel bakes of one sector match to the triangle (`--cpu` against a stored bake). The exact noise result is pinned by one Maths law. Sector CPU bake time at the same cell is within 1.5× of today's 24 to 43 s. |
+| 3. `TerrainRelief` op | field/maths C | [bake fundamental](open-items.md#bake-proportional-to-change), kernel edits batched | Fixed-point and kernel bakes of one sector match to the triangle (`--cpu` against a stored bake). The exact noise result is pinned by one Maths law. Sector CPU bake time at the same cell is within 1.5× of today's 24 to 43 s. |
 | 4. Relative caps, shape bound, tiles | authoring/bake D | 3 for relief; the bound fix none | A sector bakes at its declared spacing (cell under 1.6 m before tiles). With tiles, demanded triangles at any valley stop stay under today's 2.16 M plus 1.5 M, and the mesh region grows under 150 MB. Warm boot is unchanged; time to the demanded set after a sector edit is under today's sector bake. |
-| 5. Field collider | physics E | 3 | The colliders report finds 0 red over the valley's witnesses (12 today). The Moth on the 58° face has her feet within skin plus bake error of the drawn mesh. Creep at rest is 0. Rim and slope simulate p99 stays at or under 9 ms (8.1 today). `puck test --reproduce` agrees. |
+| 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve for both contact paths closes R4 to R8; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and replay agrees after deliberate corrections are re-recorded. No coarser contact cut is allowed. |
 | 6. Material layers, deposit migrated | rendering/shading F | none | Views pass GPU ms rises at most 10% at `valley-slope`. The register count on Direct3D 12 does not exceed today's. The weathering exhibits' stills are unchanged within the 2% threshold. |
 | 7. Far shadows | rendering A, after 1 | 0 | `valley-rim` shows ridge shadows on the far walls. The shadow passes cost at most 0.5 ms more with the sun still. |
-| 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. The valley is re-authored with each in turn, six stills each, for the owner's pick. |
+| 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. Six stills demonstrate each set; the valley wears the painterly set under the owner's ruling. |
 
-Steps 1, 2, 3, 6 and 4's bound fix run in parallel from the start, in disjoint
-files. Step 5 and the tiles follow 3; 7 follows 1 in the same lane; 8 closes.
+Steps 1, 2, 6, and 4's bound fix can run in parallel. Step 3's kernel edit is
+batched behind the bake fundamental. Step 5 belongs to the certified-contact
+packet; terrain integration and tiles follow 3, 7 follows 1, and 8 closes.
 Steps 1, 2, 6 and 7 need windowed legs on both backends; 3, 4 and 5 are CPU
 work until their stills.
 
@@ -227,13 +231,16 @@ work until their stills.
 Risks:
 
 - **Bake identity churn.** Step 3 edits the field kernel, which rebakes every
-  mesh (a cold debug world takes about 440 s); land it once and batch kernel
-  edits. A relief edit afterwards rebakes its own tiles, nearest first.
+  mesh. The lead-machine cold readings are 132.0 s on Direct3D 12 and 226.9 s
+  on Vulkan for 2,090 groups, with other lanes building; these are loaded
+  readings, not quiet-machine qualification. Batch step 3 behind the
+  [bake fundamental](open-items.md#bake-proportional-to-change) and land kernel
+  edits together. A relief edit afterwards rebakes its own tiles, nearest first.
 - **Field contact cost.** The field solve's worst case is 1,033 samples a
   capsule, each about twelve octaves of eight hashes, against about 50 convex
-  queries on a slope today. If step 5 misses its p99, contact cuts its octaves
-  coarser, declared as the terrain's spacing so the diagnostics measure it,
-  never as an allowance.
+  queries on a slope today. If step 5 misses its p99, fix cost through a
+  closed-form gradient, cached samples, and the job system's parallel contact
+  work. Contact keeps every geometric octave and its declared precision.
 - **Loose fields.** Warp and amplitude raise the step factor, slowing the bake
   and the sweep; the erosion mask and relative cap hold it.
 - **Views-pass registers** (168 on Direct3D 12 drove paints out of the
@@ -243,10 +250,9 @@ Risks:
 
 Owner calls:
 
-- Which set the valley wears (ruled: picked later, from step 8's stills).
+- The valley wears the painterly set; step 8 demonstrates the ruled direction.
 - Whether the "pale, bright" +2.5 EV compensation stays once the meter reads
   the image.
 - How strongly distance fades toward blue (each set's haze is a proposal).
 - The valley's sun direction and time of day, with the lighting-direction pass
   the lighting packet holds.
-- Whether the far terrain cascade may cache at a coarser snap.
