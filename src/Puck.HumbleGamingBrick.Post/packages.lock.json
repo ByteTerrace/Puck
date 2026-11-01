@@ -10,28 +10,28 @@
       },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "4tnWU9vrU/A8NwYe9Z6wvieZ0EBb/uM82LAT+edNhdepOBWREZ7M7mzb941EIDPJaeOFdbVrDd5+7s9e89U6bQ=="
+        "resolved": "10.0.14",
+        "contentHash": "2LzcuVjemeXR+WdY9wGIr8iGb7fYsDAit+IScxXX2XJnX0b++mWcE/WO6fEGIqhdMfSQM2ZS5JGMHYZix7YXZg=="
       },
       "Parlot": {
         "type": "Transitive",
-        "resolved": "2.0.0",
-        "contentHash": "wkWsCyotLwtERMwQvjYOdeq7Md2ERfbCq+jP35jCoeTd/AG/QDqTN4W7tPiMK9EI/p9uDHrAmBwnKwnu2Oy+qQ=="
+        "resolved": "2.1.0",
+        "contentHash": "KLxxx2gEJ4ncOV4MNHdWJ2M+EkzHTan3JcCzvRR20b2PtvyV0MgzE2uAT2lzgCjYImOheaYJ8vD2dyd0H9R/5g=="
       },
       "System.CommandLine": {
         "type": "Transitive",
-        "resolved": "2.0.13",
-        "contentHash": "TIO2lMV+sSP7WW7pD/oCRHD9ENWY+jqwXmYzgks3R46cEdDzwjQOAhsiBn+M3EegfGjgTpa2h+eIrcU+AM2k6A=="
+        "resolved": "2.0.14",
+        "contentHash": "15fyVO4aG6poR6IKmhM74zf7PUzaU6FZAGm2d3SQSO9yIyGAeo44e6t9qeKjjaqyMEqYdqcb2G1B0gpLoDU2cA=="
       },
       "System.Formats.Cbor": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "WdxppUxfamltxOsieYg3gJCJW+lB/udiWrya4UCUg0DjTr/w07E4XoivqS35xoM5kVfMyyXEkRgPBRb24H+fWA=="
+        "resolved": "10.0.14",
+        "contentHash": "eHnlBHHk6ft/5TsuZPtz9xgxKFIILf3nA+yKVZaKmJ7GCHpz8nd4cjnMys5NQF3PvBpWcb0u01LNR2jX9jrRFw=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "ZlcywyQ7FJmgOV2nctdfOEPGS0kRK8T2CdOoPr6F4HPYpmjSo6GQfj3yTyOzNO6B+2U84/JKSPkJJMWqLmVsMw=="
+        "resolved": "10.0.14",
+        "contentHash": "lVqovhCt3HlZe7ONG5ydaj6BYwYI004gldVfMMkJl/lR5ueeCtWNpW4nejOX75sPmzm8vXCxB69GqwHaYCnyUQ=="
       },
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
@@ -61,6 +61,9 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
         }
+      },
+      "ByteTerrace.Puck.Confinement": {
+        "type": "Project"
       },
       "ByteTerrace.Puck.GamingBricks.Forge": {
         "type": "Project",
@@ -141,15 +144,12 @@
           "Parlot": "[2.*, )"
         }
       },
-      "puck.confinement": {
-        "type": "Project"
-      },
       "puck.machines.post": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Confinement": "[1.0.0, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       }
     }

@@ -10,13 +10,13 @@
       },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "4tnWU9vrU/A8NwYe9Z6wvieZ0EBb/uM82LAT+edNhdepOBWREZ7M7mzb941EIDPJaeOFdbVrDd5+7s9e89U6bQ=="
+        "resolved": "10.0.14",
+        "contentHash": "2LzcuVjemeXR+WdY9wGIr8iGb7fYsDAit+IScxXX2XJnX0b++mWcE/WO6fEGIqhdMfSQM2ZS5JGMHYZix7YXZg=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "ZlcywyQ7FJmgOV2nctdfOEPGS0kRK8T2CdOoPr6F4HPYpmjSo6GQfj3yTyOzNO6B+2U84/JKSPkJJMWqLmVsMw=="
+        "resolved": "10.0.14",
+        "contentHash": "lVqovhCt3HlZe7ONG5ydaj6BYwYI004gldVfMMkJl/lR5ueeCtWNpW4nejOX75sPmzm8vXCxB69GqwHaYCnyUQ=="
       },
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
@@ -31,6 +31,9 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.IO.Hashing": "[10.*, )"
         }
+      },
+      "ByteTerrace.Puck.Confinement": {
+        "type": "Project"
       },
       "ByteTerrace.Puck.HumbleGamingDeck": {
         "type": "Project",
@@ -60,15 +63,12 @@
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
-      "puck.confinement": {
-        "type": "Project"
-      },
       "puck.machines.post": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Confinement": "[1.0.0, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       }
     }
