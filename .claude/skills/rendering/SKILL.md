@@ -576,11 +576,11 @@ compares and fails naming the file that drifted, it writes nothing.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`); a placed mesh's words are owed without a
   compare (`GpuRegion.OweSourced`) and the upload's flush writes them from the
-  `SdfMesh` arrays (`SdfWorldTables.WriteSourcedMeshWords`, an
+  `SdfMesh` buffers (`SdfWorldTables.WriteSourcedMeshWords`, an
   `IGpuRegionSource`). The irradiance scene likewise reads its triangles through
   each mesh's positions and indices, never a copy. A new consumer of baked
-  triangles reads the `SdfMesh` arrays rather than copying them: the debug
-  world's meshes are about 1.1 GB of managed arrays, and every copy costs that
+  triangles reads the `SdfMesh` buffers rather than copying them: the debug
+  world's published meshes are native payloads with explicit consumer claims, and every copy costs that
   much again in working set.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
@@ -764,6 +764,11 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   finished scene, use `world.wait bakes <seconds>` and require its settled
   result, then check for `[sdf.mesh-gi] done` in the log. A tick wait or
   `world.wait ready` alone does not establish that all meshes are present.
+  A byte comparison sets `world.lockstep on` before the first tick in both legs,
+  then waits for bake settlement before requesting the still. An ordinary settled screenshot converges temporal views
+  but does not set `SdfFrame.TickLocked`; it can capture before a background GI
+  trace finishes. Pin the camera and tick in both legs and use lockstep's
+  synchronous scene/refill/trace drain for the comparison.
   `world.rate pause` also stops tick waits: several timing reads separated by
   `world.wait` then repeat the same completed GPU window. Use separate control
   requests spaced in wall time when measuring a paused scene.

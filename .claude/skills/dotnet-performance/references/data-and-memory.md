@@ -13,7 +13,7 @@ data costs.
 | Question | Tool | Reads |
 |---|---|---|
 | Did a frame collect, and how long did it pause? | `host.frames [frames] [budget-ms] [worst]` on a windowed World ([`HostFrameCommandModule`](../../../../src/Puck.Launcher/Commands/HostFrameCommandModule.cs)) | Collections by generation and GC pause time inside each worst iteration, beside produce and simulate. |
-| Where does the heap sit? | `host.memory`, `host.memory collect` ([`HostMemoryCommandModule`](../../../../src/Puck.World/HostMemoryCommandModule.cs)) | Working set, private bytes, gen0/gen1/gen2/LOH/POH sizes and collection counts; `collect` compacts the LOH first, so the heap it reads is what is still reachable. |
+| Where does the heap sit? | `host.memory`, `host.memory collect`, `host.memory budget <bytes\|auto>` ([`HostMemoryCommandModule`](../../../../src/Puck.World/HostMemoryCommandModule.cs)) | Process and managed readings beside the process account's live, reserved, cached, retirement and metadata bytes, and mimalloc committed/reserved bytes. `collect` trims cache claims, compacts the LOH and asks mimalloc to collect. `budget` lowers admission without revoking live storage. |
 | Does the server tick allocate? | `puck bench world` ([CLI reference](../../../../docs/reference/cli.md#puck-bench-world)) | Median and mean bytes a tick, standing and over three gallery walks. |
 | Does this body allocate? | `AllocationWindow.Least`, `.Measure`, `.Total` ([`AllocationWindow`](../../../../src/Puck.Abstractions/Counting/AllocationWindow.cs)) | Least bytes over up to 16 windows, naming the sampled types when every window allocated. |
 | Which stacks allocate in a running World? | `dotnet-trace collect -p <pid> --profile gc-verbose`, then `dotnet-trace convert --format speedscope` | Allocation ticks with stacks and the GC's own events; a commit names types and MiB per window from it. |
@@ -197,7 +197,8 @@ way.
 ## Touch the bytes once
 
 Memory bandwidth bounds a loop that streams more than the caches hold: the
-debug world's mesh region is 1.78 GB, its meshes about 1.1 GB of managed arrays.
+debug world's mesh region is 1.78 GB; its published bake payloads use native
+storage through the host's `IAllocator`.
 
 - **Measured here.** A layout that moved placed meshes when one landed rewrote
   the whole million-triangle region at each landing (45 to 120 ms frames);
@@ -210,6 +211,52 @@ debug world's mesh region is 1.78 GB, its meshes about 1.1 GB of managed arrays.
 
 Sources: bandwidth and the cost of streaming past the last-level cache
 ([DREPPER], [INTEL-OPT]).
+
+## Owned storage and byte admission
+
+`Puck.Hosting.Jobs.MemoryAccount.Shared` is the process's byte authority.
+An owner reserves its simultaneous peak before admission; unused promises are
+`reserved`, not allocated memory. A reservation that does not fit defers the
+bake and reports `[sdf.mesh-bake] deferred`. `host.memory budget 1`, followed by
+`host.memory budget auto`, exercises deferral and resumption. The
+low-budget check waits for that stderr line in wall time, never for a tick:
+a deferred lockstep bake holds its frame and therefore cannot satisfy a tick wait.
+The mesh library's
+unused cache allowance and every residency's admitted bake groups draw from
+this account. The account reads physical availability as an observation and
+leaves failure/allocator headroom; it never promises that another process or a
+driver cannot consume memory. Its categories cover participating owners, while
+the managed heap and process readings still expose unmigrated storage.
+
+The host injects `MimallocAllocator` through `IAllocator`; the accounting owner
+stores byte totals, never addresses or buffer registry entries. `OwnedBuffer<T>`
+keeps capacity and logical length for reference-free storage. Growth allocates,
+copies and publishes before releasing the old block, including overlap in the
+owner's charge. Every borrowed span or memory slice ends before growth, reset
+or disposal. Managed backing serves standalone geometry callers without an
+injected allocator; published World bake payloads, readback copies, lattice
+planes, lattice indices and point workspaces use the injected native allocator.
+Reference-bearing contour roots and the bounded worker-slot refinement
+collections stay managed under their existing ownership.
+
+`SdfMesh.Storage` owns each published mesh's blocks. Cache, residency, dressed
+frame, upload arena and GI scene claims are specific to that resource; the last
+claim frees its storage. Material variants share geometry and allocate only
+remapped materials. A group hands its final lattice to the running contour
+stage, clearing `Final` before crease/material answers can arrive. Retirement
+drops queued stages, joins running borrowers and frees their owned workspaces;
+no finalizer recovers an abandoned owner. `host.memory collect` also drops idle
+upload-source and retained-GI claims; an in-flight scene reader retains its
+storage until its claim ends.
+
+Allocator readings come from mimalloc 3.3's
+[`mi_stats_get_json`](https://github.com/microsoft/mimalloc/blob/v3.3.0/src/stats.c)
+(`committed.current`, `reserved.current`), rather than treating
+[`mi_process_info`](https://microsoft.github.io/mimalloc/group__stats.html)
+as allocator payload accounting. Address-space reservation, committed pages,
+logical payload charges and process working set are different readings and are
+not added together. Allocator commit includes its own metadata and slack;
+managed metadata charged by the library is its material-remapping vectors.
 
 ## Give each worker its own lines
 
