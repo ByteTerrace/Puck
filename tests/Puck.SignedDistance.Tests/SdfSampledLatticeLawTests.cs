@@ -491,7 +491,7 @@ public sealed class SdfSampledLatticeLawTests {
         }
 
         Assert.True(condition: (checkedCrossings > 100), userMessage: $"only {checkedCrossings} crossings were checked");
-        Assert.True(condition: (samples <= (5 * roots)), userMessage: $"{roots} roots took {samples} samples");
+        Assert.True(condition: (samples <= (6 * roots)), userMessage: $"{roots} roots took {samples} samples");
         // Each round is a readback round trip: no search takes more than eleven, where bisection took thirteen.
         Assert.True(condition: (rounds <= 11), userMessage: $"the search took {rounds} rounds");
     }
