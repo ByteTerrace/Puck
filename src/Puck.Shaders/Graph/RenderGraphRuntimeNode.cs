@@ -130,6 +130,8 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                 FrameTicks = context.FrameDeltaTicks,
                 GridHertz = context.GridHertz,
                 PresentedTicks = m_presentedTicks,
+                Steps = context.Steps,
+                StepsNext = context.StepsNext,
             }
         );
 

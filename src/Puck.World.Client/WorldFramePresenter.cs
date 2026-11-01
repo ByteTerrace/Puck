@@ -84,6 +84,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The instance each view FilmViews appended renders as, and the display pixels each of the frame's views is shown over.
     private readonly List<string?> m_filmedViewNames = [];
     private readonly List<float> m_rateViewPixels = [];
+    // The shadow cascades' caster culls of the frame's views, each with its view's index, which the bodies lever reads.
+    private readonly List<(int View, SdfMeshCull Cull)> m_rateShadows = [];
 
     // The display extent this frame's cameras and placements share.
     private uint m_displayHeight;
@@ -1642,6 +1644,36 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return m_rateViewPixels;
     }
+    // The caster cull of each shadow cascade the frame's views render, fitted on this frame's views with the previous
+    // frame's lights and far distance (a frame's lag, as the views' own): the bodies lever holds a body none may draw.
+    // The previous frame's views are the m_frameViews list itself, which this frame has refilled.
+    // Null while no previous frame names the lights, which the lever reads as every body's shadow possibly shown.
+    private List<(int View, SdfMeshCull Cull)>? RateShadows(uint width, uint height) {
+        m_rateShadows.Clear();
+
+        if ((m_dressedFrame is not { } frame) || !ReferenceEquals(objA: frame.Views, objB: m_frameViews)) {
+            return null;
+        }
+
+        for (var view = 0; (view < m_frameViews.Count); view++) {
+            var cascades = SdfMeshShadowCascades.Fit(frame: frame, view: view);
+
+            if (cascades.Count == 0) {
+                continue;
+            }
+
+            var snapshot = m_frameViews[view];
+            var viewWidth = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Width * width)));
+            var viewHeight = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Height * height)));
+            var count = ((cascades.SecondPenumbraSlope > 0f) ? 3 : 2);
+
+            for (var cascade = 0; (cascade < count); cascade++) {
+                m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
+            }
+        }
+
+        return m_rateShadows;
+    }
     // Each screen's tier code as the graph host's footprints asked for it this frame, or none without a host.
     private byte[] ScreenRateCodes() {
         var codes = new byte[SdfProgramBuilder.MaxScreenSurfaces];
@@ -2130,6 +2162,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             rate: m_presentationRate,
             rates: m_settings.UpdateRates,
             readings: m_settings.RateReadings,
+            shadows: RateShadows(height: height, width: width),
             views: m_frameViews
         );
 

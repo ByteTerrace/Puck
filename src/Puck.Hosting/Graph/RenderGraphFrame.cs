@@ -100,9 +100,17 @@ public readonly record struct RenderGraphFrame(
     /// <see langword="null"/> for none: a floor refresh never holds one, since it has no current update to hold, so a
     /// bake or build it waits on keeps advancing on frames that present no new time, as lockstep's held ticks do.</summary>
     public IReadOnlyList<string>? Stale { get; init; }
-    /// <summary>Gets the frame's presentation rate: its display rate and grid.</summary>
+    /// <summary>Gets whether the frame's host iteration ran a simulation step (<see cref="FrameContext.Steps"/>).</summary>
+    public bool Steps { get; init; }
+    /// <summary>Gets whether the host expects its next iteration to run a simulation step
+    /// (<see cref="FrameContext.StepsNext"/>).</summary>
+    public bool StepsNext { get; init; }
+    /// <summary>Gets the frame's presentation rate: its display rate and grid, and whether it and the next frame run a
+    /// simulation step, which a floor keeps its updates off (<see cref="PresentationRate.Holds"/>).</summary>
     public PresentationRate Rate => new(
         DisplayHertz: DisplayHertz,
-        GridHertz: GridHertz
+        GridHertz: GridHertz,
+        Steps: Steps,
+        StepsNext: StepsNext
     );
 }
