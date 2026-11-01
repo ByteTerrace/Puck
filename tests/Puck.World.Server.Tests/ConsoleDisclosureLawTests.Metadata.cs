@@ -54,7 +54,7 @@ public sealed partial class ConsoleDisclosureLawTests {
         using var zero = new DisclosureHost(MetadataDocument(0));
         using var one = new DisclosureHost(MetadataDocument(1));
         using var two = new DisclosureHost(MetadataDocument(2));
-        foreach (var command in new[] { "world.state", "world.state vectors", "world.row state vectors", "world.observe seat2" }) {
+        foreach (var command in new[] { "world.state", "world.state vectors", "world.state vectors secret0", "world.row state vectors", "world.observe seat2" }) {
             var first = one.Seat(slot: 1, line: command).Output;
             Assert.Equal(zero.Seat(slot: 1, line: command).Output, first);
             Assert.Equal(first, two.Seat(slot: 1, line: command).Output);

@@ -235,13 +235,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         }
 
         if (!value.HasValue) {
-            return CommandResult.Error(output: ((view.Withheld(row: row.Name.Value) is null)
-                ? $"[world.state {rowName} {key}: no such cell]"
-                : view.Refusal(
-                    key: key,
-                    row: rowName,
-                    verb: "world.state"
-                )));
+            return CommandResult.Error(output: $"[world.state {rowName} {key}: no such cell]");
         }
 
         var cell = StateRows.FindCell(
