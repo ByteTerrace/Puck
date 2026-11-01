@@ -1533,7 +1533,7 @@ colliders report's only red findings left are the valley's relief
 
 - [medium] Sub-cell features draw badly across the gallery (the root is addressed
   by the delivered work below; the regressions it left are the Next; the owner's
-  walkthrough, `.claude/scratch/lead-window/owner-stairs.png` and `owner-annotated-level.png`): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). (from: the owner's walkthrough)
+  walkthrough screenshots): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). (from: the owner's walkthrough)
   Delivered (bake-seams): boxes are sharp unless authored `rounding`; a union's
   refinement budget serves its thin members' own boxes, smallest first; a
   transition ring's crossings are searched; the field correction keeps a vertex
