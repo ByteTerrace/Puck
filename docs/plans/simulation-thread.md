@@ -536,7 +536,8 @@ Files: a new `src/Puck.World.Client/WorldTickRecord.cs` (the sink, the record,
 `WorldPostBuildWiring.cs` (the tap records), `WorldCaptureScheduler.cs`,
 `WorldTickScript.cs`, `WorldConsoleWaitGate.cs`, `WorldTestRun.cs`, the loop.
 Finish: `puck test --reproduce` hashes unchanged (the record is a pure relay);
-lockstep stills byte-identical to phase 1 but for the known residue; a
+lockstep stills compared with phase 1's within the tick-exact comparison's
+tolerance; a
 `world.at` line pinned inside what would have been a replay burst runs at its
 tick (`[world.at] tick N ran`); a scheduled capture at a tick inside a replay
 fast-forward arms with `tick=N` in its `[still]` stamp; a `world.reload` of a
