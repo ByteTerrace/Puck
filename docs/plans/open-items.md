@@ -3020,6 +3020,10 @@ ordinary · Next: new content and art on the owner's call.
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
 
+- [low] The build lease cannot nest: `src/Puck.Cli.Harness/WorldArtifactBuild.cs:199`
+  acquires it with no `ancestor` recognizer, so a `puck test` run under `puck
+  lease build` waits on itself. Pass `ProcessInspection.IsAncestor` as the
+  heavy lease does. (from: test-lease)
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor
   PreToolUse payload carries `tool_input.command` is unverified. Log one
