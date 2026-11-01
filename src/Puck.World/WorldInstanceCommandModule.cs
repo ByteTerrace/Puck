@@ -173,7 +173,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
         );
         yield return Simulation(
             name: "world.instance.stop",
-            description: "Retires a running world instance and disposes what it owned: world.instance.stop <name>. Refuses the reserved name 'boot' (the world this process booted with — every other verb, the client, the seats and the tape address it), an unknown name, or an instance currently presenting a local traveler (transfer that seat out first), naming which.",
+            description: "Retires a running world instance and disposes what it owned, never the companion custody it holds: world.instance.stop <name>. An instance embodying visiting companions sends them home and retires after the drain that settles them ('stopping', then a narrated 'retired'); one holding a companion's title abroad is refused, since no durable image here carries the title until its custodian returns it. Refuses the reserved name 'boot' (the world this process booted with — every other verb, the client, the seats and the tape address it), an unknown name, or an instance currently presenting a local traveler (transfer that seat out first), naming which. world.instance.status <name> reads the custody an instance holds.",
             handler: (_, args) => {
                 if (args.Count < 1) {
                     return CommandResult.Error(output: "[world.instance.stop: expected <name>]");
@@ -181,13 +181,14 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 var name = args[0].ToString();
 
-                return (m_instances.TryStop(
+                return m_instances.Stop(
                     name: name,
                     reason: out var reason
-                )
-                    ? new CommandResult(Output: $"[world.instance.stop: '{name}' retired]")
-                    : CommandResult.Error(output: $"[world.instance.stop: refused ({reason})]")
-                );
+                ) switch {
+                    WorldInstanceStop.Retired => new CommandResult(Output: $"[world.instance.stop: '{name}' retired]"),
+                    WorldInstanceStop.Stopping => new CommandResult(Output: $"[world.instance.stop: stopping ({reason})]"),
+                    _ => CommandResult.Error(output: $"[world.instance.stop: refused ({reason})]"),
+                };
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -222,9 +223,15 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
 
                 var definition = instance.Server.Definition;
 
+                var custody = (m_instances.TryDescribeCustody(
+                    custody: out var held,
+                    name: name,
+                    stopping: out var stopping
+                ) ? held : string.Empty);
+
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.instance.status {name}: source {instance.SourcePath} document {definition.DocumentId} schema {definition.Schema} tick {instance.CompletedTicks} capacity {instance.Server.Population.Capacity} simulated {instance.Server.Population.SimulatedCount} dirty {instance.Server.JournalLength} owned-worlds {m_instances.OwnedWorldsDirectory(name: name)}]"
+                    handler: $"[world.instance.status {name}: source {instance.SourcePath} document {definition.DocumentId} schema {definition.Schema} tick {instance.CompletedTicks} capacity {instance.Server.Population.Capacity} simulated {instance.Server.Population.SimulatedCount} dirty {instance.Server.JournalLength} owned-worlds {m_instances.OwnedWorldsDirectory(name: name)} custody: {custody}{(stopping ? " (stopping)" : string.Empty)}]"
                 ));
             },
             routing: CommandRouting.Immediate

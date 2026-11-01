@@ -556,7 +556,7 @@ public sealed class WorldScreenBinderLawTests {
 
         // The garden retires: the screen holds its last image; the screen goes, and every level beneath it.
         Assert.True(condition: binder.TryDescribeSession(description: out var described, index: BinderScene.Session));
-        Assert.True(condition: scene.Host.TryStop(name: described.InstanceName, reason: out _));
+        Assert.True(condition: scene.Host.TryRetire(name: described.InstanceName, reason: out _));
         binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.True(condition: binder.TryDescribeSession(description: out described, index: BinderScene.Session));
         Assert.True(condition: described.InstanceGone);

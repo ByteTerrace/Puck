@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <see cref="m_active"/>'s own remarks for both.</para>
 /// <para><b>Generation lifecycle.</b> Ephemeral: the first scoped resolution mints a generation and its instance
 /// name; every later resolution against the same key while that instance is still running reuses it;
-/// <see cref="NotifyInstanceRetired"/> — called from <c>Puck.World.WorldInstanceHost.TryStop</c>, which is also
+/// <see cref="NotifyInstanceRetired"/> — called from <c>Puck.World.WorldInstanceHost.TryRetire</c>, which is also
 /// <c>Puck.World.WorldInstanceHost.ReapIfEmpty</c>'s own apply path — clears the cache entry the moment the
 /// instance actually goes away, so the next scoped resolution mints a genuinely new generation rather than reusing
 /// a name nothing answers to. Persisted: the same cache carries a stable entry that is never cleared by
@@ -86,7 +86,7 @@ public sealed class WorldSessionResolver {
     // on the other's traveler.
     private readonly Dictionary<(string Destination, WorldDestinationDurability Durability, string ScopeKey, string ReferencedDocument), Generation> m_active = new();
     // The reverse index NotifyInstanceRetired needs: a caller reports an instance NAME going away (that is what
-    // TryStop/ReapIfEmpty know), never the key(s) that minted it. A HashSet per instance name, not a single key:
+    // TryRetire/ReapIfEmpty know), never the key(s) that minted it. A HashSet per instance name, not a single key:
     // origin adoption (TryAdopt) can install MORE THAN ONE key against the SAME already-running instance — e.g. two
     // distinct persisted destinations that both resolve to the boot instance's own document — so retirement must
     // clear EVERY key this instance name was ever installed under, not just the last one.
@@ -491,7 +491,7 @@ public sealed class WorldSessionResolver {
         return rows;
     }
     /// <summary>Clears the cache entry an instance name resolved to, if any — called from
-    /// <c>Puck.World.WorldInstanceHost.TryStop</c> (which is also
+    /// <c>Puck.World.WorldInstanceHost.TryRetire</c> (which is also
     /// <c>Puck.World.WorldInstanceHost.ReapIfEmpty</c>'s own apply path) so the NEXT scoped resolution against the
     /// same (destination, scope key) mints a genuinely new generation rather than reusing a name nothing answers to
     /// any more. A no-op for a name this resolver never minted (an instance started through

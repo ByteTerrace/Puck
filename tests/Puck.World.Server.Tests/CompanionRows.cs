@@ -113,8 +113,20 @@ internal sealed class CompanionRows : IDisposable {
     /// the row's latest image, redoes its crossing log on a new activation of that log, and is admitted under the same
     /// authority, where its peers' in-doubt transfers find it.</summary>
     public void Restart(string name) {
-        Assert.True(condition: Host.TryStop(name: name, reason: out var reason), userMessage: reason);
-        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: m_images[name], checkpoint: out var checkpoint, reason: out reason), userMessage: reason);
+        Assert.True(condition: Host.TryRetire(name: name, reason: out var reason), userMessage: reason);
+        Activate(name: name);
+    }
+    /// <summary>Makes every explicit stop write its row's final checkpoint as the row's durable image.</summary>
+    public void KeepFinalImages() => Host.FinalCheckpoints = (WorldInstance row, WorldAuthorityCheckpoint checkpoint, out string reason) => {
+        m_images[row.Name] = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        reason = string.Empty;
+        return true;
+    };
+    /// <summary>Starts a row no longer running from its latest durable image and its crossing log, as a later activation
+    /// of a stopped authority does.</summary>
+    public void Activate(string name) {
+        Assert.False(condition: Host.TryGet(instance: out _, name: name));
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: m_images[name], checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         var machines = new WorldMachineHost(engines: [], screens: definition.Screens);

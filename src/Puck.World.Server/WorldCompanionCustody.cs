@@ -160,10 +160,18 @@ public sealed class WorldCompanionCustody {
     /// <summary>Gets a copy of every custody record this authority folded, in fold order: what a checkpoint captures. Each
     /// call returns records of its own, so nothing a caller does to them reaches this authority's history.</summary>
     public IReadOnlyList<WorldCrossingRecord> History => [.. m_history.Select(selector: Owned)];
-    /// <summary>Gets whether an unsettled title or crossing still requires this authority. An empty population is
-    /// not evidence that its companions are gone: their home and recovery records must remain reachable.</summary>
-    public bool HoldsCustody => m_titles.Values.Any(predicate: static title => title.Kind is WorldCustodyKind.Pending or WorldCustodyKind.Away) ||
-        m_ownDepartures.Keys.Any(predicate: key => !m_ownSettlements.ContainsKey(key: key)) ||
+    /// <summary>Returns every title this home holds abroad: away at a custodian, or pending a hop. Only that custodian's
+    /// return, a recall or the hop's resolution ends one, so an authority holding one must stay reachable or carry it in
+    /// a durable image. An empty population is not evidence that its companions are gone.</summary>
+    /// <returns>The titles, by held slot.</returns>
+    public IReadOnlyList<WorldCustodyTitle> TitlesAbroad() => [.. m_titles.Values
+        .Where(predicate: static title => title.Kind is WorldCustodyKind.Pending or WorldCustodyKind.Away)
+        .OrderBy(keySelector: static title => title.Incarnation.Index)
+        .Select(selector: title => TitleOf(incarnation: title.Incarnation)!)];
+    /// <summary>Gets whether this authority still owes a custody step its host's drain makes: a departure with companions
+    /// not yet settled, a key not yet abandoned, a settlement notice home has not acknowledged, or a settlement of its own
+    /// hop not yet recorded.</summary>
+    public bool OwesCustodySteps => m_ownDepartures.Keys.Any(predicate: key => !m_ownSettlements.ContainsKey(key: key)) ||
         (UnsettledOwnKeys().Count > 0) || (OwedHopNotices().Count > 0) || (OwedOwnHopSettlements().Count > 0);
 
     /// <summary>Gets every incarnation a custodian retired here on home's word.</summary>
