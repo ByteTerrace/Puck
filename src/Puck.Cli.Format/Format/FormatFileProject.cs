@@ -10,7 +10,7 @@ public static class FormatFileProject {
     // configuration this build just produced.
     private const string Configuration = "Release";
     // The disposable project is no project of the architecture map, so the repository's architecture gate (an operation of
-    // the inline task every build node compiles) has nothing to hold it to.
+    // the repository's build task) has nothing to hold it to.
     private const string NoArchitectureGate = "-p:PuckArchitectureGateEnabled=false";
     // The item the injected target copies @(Compile) into once the reference set is resolved. The build adds its own
     // generated sources (assembly info and attributes) to @(Compile) just before compiling, so the copy is what a
@@ -77,9 +77,9 @@ public static class FormatFileProject {
                     path1: scratch,
                     path2: "Format.cs.csproj"
                 );
-                // An MSBuild inline task (a RoslynCodeTaskFactory <Code Source=...> under build/) is compiled by no
-                // project: the factory compiles it against the running SDK's MSBuild assemblies, with no implicit usings
-                // and none of this repository's analyzers, and its disposable project does the same. Tasks such as
+                // An MSBuild task source under build/ is compiled by no project: build/PuckBuildTasks.targets compiles
+                // it against the running SDK's MSBuild assemblies, with no implicit usings and none of this
+                // repository's analyzers, and its disposable project does the same. Tasks such as
                 // Exec belong to Tasks.Core beside the Framework and Utilities.Core task APIs.
                 File.WriteAllText(
                     contents: (IsInlineTask(source: original)

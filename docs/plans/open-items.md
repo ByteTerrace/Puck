@@ -998,9 +998,13 @@ timed on a quiet machine.
   `.puck` cartridges again (`CartridgeSource.Prepare` through
   `HgbCartridgeCompiler`, about 4 % of a headless boot), though the image is a
   pure function of the source, its imports and the compiler. Key a cache by the
-  inputs the compile read, as `WorldCompileCache` keys a world compile. Deferred
-  by the build-time lane for cost: about 4 % of a boot, against a cache that needs the
-  emitter's import list and the compiler's module identity.
+  inputs the compile read, as `WorldCompileCache` keys a world compile. Measured
+  in a scratch app calling `IMachineContentProvider.Prepare` on the loaded lead
+  machine: the boot's `tetromino.cgb.puck` costs 108 ms cold and 100 ms warm,
+  `pip.agb.puck` 12 ms and 8 ms; all nine debug cartridges 547 ms cold, 304 ms
+  warm. Deferred by the build-time lane for that cost (about 0.1 to 0.3 s a
+  boot) against a cache that needs `ModuleResolver.ImportModules` to report the
+  files it read and the compiler's module identity.
 - Source-generate the document model's JSON metadata. A headless boot to
   `world.status` JIT-compiles 43,941 methods from the IL build and 24,248 from
   a ReadyToRun publish; of those 24,248, 22,401 are generic instantiations and

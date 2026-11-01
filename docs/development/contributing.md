@@ -340,8 +340,12 @@ so never derive a runtime path from one.
 Compile it without executing its operational code:
 
 ```sh
-dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release -nodeReuse:false
+MSBUILDDISABLENODEREUSE=1 dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
 ```
+
+A file-based app takes no MSBuild switch: `-nodeReuse:false` makes the SDK
+read the `.cs` file as a project file and fail (MSB4025), so node reuse is
+turned off through the environment instead.
 
 Use `puck format --file-list files.json` from the repository root, with a JSON array
 of paths relative to the working directory, such as `["src/Puck.Azure.Resources/bootstrap.cs"]`. The CLI converts a
