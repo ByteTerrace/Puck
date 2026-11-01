@@ -1,6 +1,5 @@
 using System.Text;
 using Puck.Abstractions;
-using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Cli.Shaders;
 using Puck.Confinement;

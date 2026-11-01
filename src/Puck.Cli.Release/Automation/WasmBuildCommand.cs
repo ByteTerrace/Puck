@@ -101,7 +101,7 @@ public static class WasmBuildCommand {
                 var path = Path.Combine(path1: root, path2: output);
 
                 // A module ships as content, so built outputs hold hard links to it: replace it, never write through it.
-                Puck.Assets.AtomicFile.WriteAllBytes(bytes: module, path: path);
+                Puck.Abstractions.AtomicFile.WriteAllBytes(bytes: module, path: path);
                 // Use the same full content pin the host checks before compiling a guest.
                 Console.WriteLine(value: $"{output} {Puck.Assets.ContentPin.Compute(content: module).ToString()} (cargo {string.Join(separator: ' ', values: build.CargoArguments)})");
             }

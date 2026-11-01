@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Assets.Documents;
 
 namespace Puck.Launcher.Release;

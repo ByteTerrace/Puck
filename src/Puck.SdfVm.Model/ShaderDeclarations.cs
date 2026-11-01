@@ -1,4 +1,4 @@
-using System.Text;
+using Puck.Abstractions;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -160,19 +160,10 @@ public static class ShaderDeclarations {
             }
 
             written.Add(item: declaration.Path);
-            var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
-
-            try {
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-                File.WriteAllText(
-                    contents: text,
-                    encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                    path: temporary
-                );
-                File.Move(destFileName: path, overwrite: true, sourceFileName: temporary);
-            } finally {
-                File.Delete(path: temporary);
-            }
+            AtomicFile.WriteAllText(
+                contents: text,
+                path: path
+            );
         }
     }
 }

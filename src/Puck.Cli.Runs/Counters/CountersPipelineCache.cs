@@ -36,8 +36,8 @@ public static class CountersPipelineCache {
         to: Path.Combine(path1: root, path2: backend)
     );
 
-    // Each file is written beside its destination and moved over it, so a reader never sees a partial cache file. The
-    // World writes its cache files the same way and leaves its own temporaries, which are never carried.
+    // Each file replaces its destination atomically, so a reader never sees a partial cache file. The World writes its
+    // cache files the same way and leaves its own temporaries, which are never carried.
     private static int Copy(string from, string to, bool prune) {
         if (!Directory.Exists(path: from)) { return 0; }
         var copied = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -46,11 +46,20 @@ public static class CountersPipelineCache {
             if (source.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".tmp")) { continue; }
             var relative = Path.GetRelativePath(path: source, relativeTo: from);
             var destination = Path.Combine(path1: to, path2: relative);
-            var staging = $"{destination}.{Environment.ProcessId}.tmp";
 
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: destination)!);
-            File.Copy(destFileName: staging, overwrite: true, sourceFileName: source);
-            File.Move(destFileName: destination, overwrite: true, sourceFileName: staging);
+            AtomicFile.Write(
+                path: destination,
+                write: stream => {
+                    using var input = File.OpenRead(path: source);
+
+                    input.CopyTo(destination: stream);
+                }
+            );
+            // The backend prunes its cache files by last write, so a copy carries its source's time as a file copy does.
+            File.SetLastWriteTimeUtc(
+                lastWriteTimeUtc: File.GetLastWriteTimeUtc(path: source),
+                path: destination
+            );
             copied.Add(item: relative);
         }
         if (prune && Directory.Exists(path: to)) {

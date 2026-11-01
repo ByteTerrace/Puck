@@ -1,74 +1,82 @@
-# The simulation thread
+# The simulation step off the frame thread
 
 Design memo for the [simulation tick off the frame thread](open-items.md#simulation-tick-off-the-frame-thread)
 packet, which the owner queued. It settles the shape from the code and hands
-specialist lanes a phased build. The pre-phase file and line citations below
-refer to commit `8075db0d56`; Phase 1's delivery notes name the current seams.
-A builder re-reads the cited source before editing. Phase 1 rechecked the
-citations against that source, including the full cited ranges, rather than
-treating their line numbers as current after the moves.
+specialist lanes a phased build. File and line citations name the sources as
+they stand before phase 1 at `8075db0d56`; a builder re-reads each before editing.
+The delivery notes below map the current seams after phase 1.
+This is the second revision: the first (one free-running simulation thread
+owning the pump, with a folding mailbox to the frame) had its one cross-family
+review, and [its findings](#review-resolution) changed the shape.
 
 The goal is the [frame-rate bar](../decisions/rendering.md#the-frame-rate-bar):
 on the RTX 4070 every frame under 16.7 ms at the highest settings. Today a
-windowed iteration that carries a 30 Hz tick pays the tick (6 to 12 ms) and the
-frame's produce (6 to 7 ms on Direct3D 12) on one thread, so one iteration in
-two or three misses the blank
+windowed iteration that carries a 30 Hz tick pays the tick (6 to 12 ms walking,
+2 to 4 standing) and the frame's produce (6 to 7 ms on Direct3D 12, 8 to 11 on
+Vulkan) on one thread, so one iteration in two or three misses the blank
 ([frame time](open-items.md#frame-time-on-the-lead-machine)).
 
 ## Decisions
 
-1. **One simulation thread owns the pump and everything the pump steps.** The
-   lead's shape holds: `FixedStepPump`, `WorldHostStep`, `WorldServer`,
-   `WorldInstanceHost`, the replay tape, the console drain, the capture
-   scheduler's arming and every machine's segment submission move to a thread
-   of their own, started by the same `LauncherHostLoop.RunPump`
-   (`src/Puck.Launcher/LauncherHostLoop.cs:84`) the host loops already run on.
-2. **The handoff is the existing client sink, not a new snapshot ring.** The
-   frame thread's consumer is `WorldClient`, whose state is incremental
-   (previous and current poses, correction easers, the state mirror's rows,
-   `WorldClient.cs:883-1038`) and which receives six delivery kinds, not one.
-   So `LoopbackTransport.Bind` (`src/Puck.World.Protocol/Protocol/LoopbackTransport.cs:214`)
-   binds a mailbox: the simulation thread records each tick's deliveries into
-   a slot of its own buffers, and the frame thread applies the pending slots,
-   in order, into the real `WorldClient` at frame start. A snapshot a slow
-   frame never saw is folded into the next with `EntityContinuity.Then`
-   (`src/Puck.World.Protocol/Protocol/WorldSnapshot.cs:56`), the primitive the
-   engine already has for "two pose changes before any client saw either".
-   Overturned: a "latest-complete" read of immutable snapshots, which would
-   drop definition and state deliveries that are not idempotent.
-3. **The frame derives its clock and alpha from what it applied, never from
-   the pump.** `WorldClient.Tick`/`EngineTick` (`WorldClient.cs:132-135`)
+1. **The frame thread keeps everything it owns today; one worker runs only
+   the step body.** The pump, the input router, the console drain, the
+   capture scheduler, the tick script, the wait gate, the test-run scheduler,
+   the seat half of `WorldClient` and every hook that publishes a tick stay on
+   the thread that produces frames. The worker runs `WorldHostStep`'s body
+   (`WorldServerStepShell.Step` for boot and `StepInstances`,
+   `src/Puck.World/WorldHostStep.cs:140-151`), which touches server-owned
+   state only, between a *dispatch* and a *join* on the frame thread.
+   Overturned: a simulation thread that owns the pump and the client's seat
+   half (review F05 to F09, F15).
+2. **The step overlaps the frame's idle, not its work.** The loop dispatches
+   the body right after present and joins it after the next iteration's input
+   capture, so the body runs under the present block and the pacer's wait.
+   The frame never waits for the body: a body still running at the join is
+   applied one iteration later, counted, and the frame shows the last applied
+   tick with alpha clamped at one.
+3. **The handoff is a tick record, written by the worker and replayed by the
+   frame thread, never shared live.** The hub delivers the body's ticks into
+   one recording sink; at the join the frame thread replays the record into
+   `WorldClient` and the boot endpoint's `WorldSessionMirror`, calling the
+   `IClientSink` methods the hub would have called. The writer runs only
+   between dispatch and join and the reader only between join and dispatch,
+   so the record needs no ring, no fold and no publication protocol beyond the
+   join's own barrier. Every delivery is applied, in order, before the next
+   dispatch. Overturned: a depth-four mailbox folding superseded snapshots
+   with `EntityContinuity.Then` (F01 to F04).
+4. **The frame derives its clock and alpha from the record it applied.**
+   `WorldClient.Tick`/`EngineTick` (`src/Puck.World.Client/WorldClient.cs:132-135`)
    replace `IWorldSimulationClock` and every `m_server.NextInputTick` read on
-   the frame path; the interpolation fraction is the wall time since the
-   applied tick's publication over its step period, the formula
-   `WorldSessionMirror.ResolveInterpolationAlpha` already uses for session
-   views (`src/Puck.World.Protocol/Protocol/WorldSessionMirror.cs:896`). One
-   formula for the boot world and every session view.
-4. **Input capture stays on the frame thread and changes nothing.** The
-   router's two capture doors already take `m_captureGate`
-   (`src/Puck.Commands/InputRouter.Capture.cs:176,229`) and the drain merges
-   by `(captureTick, sequence)` under the same gate (`InputRouter.cs:2271`).
-   The tick's inputs and their order are what they are today.
-5. **The console drain runs between steps on the simulation thread**, where
-   `world.at` and `world.wait` exactness live (`WorldTickScript.cs:10-15`).
-   A verb that touches presentation declares `CommandRouting.Presentation`
-   on the one routing axis the registry already dispatches by
-   (`src/Puck.Commands/CommandRouting.cs:15`), and the frame drain runs it.
-   This adds no second queue and no second dispatcher: `TextCommandSource`
-   stays the one ingress (`TextCommandSource.cs:10-14`), stdin and the MCP
-   control endpoint included (`src/Puck.World/WorldControlCommandModule.cs:10`).
-6. **Offscreen, `world.lockstep` and unpaced headless step inline on the
-   thread that produces frames**, through the same pump, mailbox and loop. The
-   pump has one owner at any instant; the owner changes only at a tick
-   boundary (the lockstep handoff below).
-7. **Backpressure never blocks the simulation thread and never spins the
-   frame thread.** A full mailbox folds (decision 2) and counts; a late
-   simulation leaves the frame holding the last applied tick with alpha
-   clamped at one. Shed steps are counted where the pump sheds them today.
-8. **The three host loops converge into one before any thread is added**
-   (the owner's duplication ruling, AGENTS.md). The lockstep branch inside the
-   windowed loop is the offscreen loop written a second time; the thread is
-   built once, on the one loop.
+   the frame path; the interpolation fraction is the wall time since the join
+   that applied the tick over its step period, the formula
+   `WorldSessionMirror.ResolveInterpolationAlpha` already uses
+   (`src/Puck.World.Protocol/Protocol/WorldSessionMirror.cs:896`). One formula
+   for the boot world and every session view.
+5. **One console drain, on the frame thread, between join and dispatch.**
+   Every verb runs where it runs today, with the server idle. No routing axis
+   is added and no verb is reclassified; `TextCommandSource` stays the one
+   single-threaded arbiter it is (`src/Puck.Commands/TextCommandSource.cs:21-45`).
+   The drain is skipped in an iteration whose body has not joined (the server
+   is busy), so a console line waits at most a late tick. Overturned:
+   `CommandRouting.Presentation` and a second, filtered drain (F08, F09).
+6. **One step per dispatch.** The pump decides a step as now (accumulator,
+   `mayStep`, `HoldsClock`, rate), snapshots and applies its commands on the
+   frame thread, and dispatches exactly one body. Catch-up after a slow frame
+   proceeds one step per iteration against the accumulator the runaway clamp
+   already bounds (`src/Puck.Launcher/FixedStepPump.cs:203-210`). Only a
+   replay drive bursts inside a body, to a budget the frame thread computes
+   before dispatch from the next tick barrier (section 2).
+7. **Lockstep, offscreen and unpaced headless dispatch and join in the same
+   iteration**, through the same code: the join is immediate. The record path
+   therefore runs in `puck test --reproduce` too, which is what proves it a
+   pure relay. There is no pump handoff between threads and no parked state.
+8. **While a body is in flight the frame reads no server state**, which a
+   debug guard on the server's frame-facing seams enforces (section 1). What
+   the frame needs from the server during produce arrives in the record or is
+   copied at the join.
+9. **The three host loops converge into one before any thread is added** (the
+   owner's duplication ruling, AGENTS.md); the thread is built once, on the one
+   loop, with the one drain operation at both of its scheduling points (F16).
 
 ## 1. Thread ownership
 
@@ -76,310 +84,327 @@ two or three misses the blank
 
 Every boot shape drives one pump on one thread. The windowed loop
 (`src/Puck.Launcher/LauncherWindowHostedService.cs:395-720`) polls the window,
-captures input (`:452-567`), drains the console (`:574`), runs
-`FixedStepPump.Advance` or the lockstep `TryStep`/`Hold` (`:600-618`), builds a
-`FrameContext` from the pump's accumulator (`:671-682`) and produces the frame
-(`:684`). The headless loop (`HeadlessTickHostedService.cs:151-230`) and the
-offscreen loop (`OffscreenTickHostedService.cs:236-330`) repeat the drain, the
-flush, the exit deadline, the snapshot-input captures and the step with their
-own pacing. `WorldHostStep.Step` (`src/Puck.World/WorldHostStep.cs:107-159`) is
-the one step sequence, wrapped twice: `WorldSimulation` (windowed,
-`WorldSimulation.cs:16`) and `HeadlessWorldSimulation`
-(`HeadlessWorldSimulation.cs:17`), which differ only in their post-step.
+captures input (`:460-568`), drains the console (`:577`), runs
+`FixedStepPump.Advance` or the lockstep `TryStep`/`Hold`, builds a
+`FrameContext` from the pump's accumulator and produces the frame. The headless
+and offscreen loops (`HeadlessTickHostedService.cs`,
+`OffscreenTickHostedService.cs:221-260`) repeat the drain, the flush, the exit
+deadline, the snapshot-input captures and the step with their own pacing.
+`WorldHostStep.Step` (`src/Puck.World/WorldHostStep.cs:107-159`) is the one
+step sequence, wrapped twice (`WorldSimulation.cs:16`,
+`HeadlessWorldSimulation.cs:17`), which differ only in their post-step.
 
-Inside the step, the server delivers the tick's snapshot synchronously to
-every typed subscriber (`WorldTick.Step.cs:244-256`, `WorldOutputHub.cs:315`)
-from one borrowed scratch array the next tick overwrites
-(`WorldDocument.Apply.cs:900-905`). The boot world has two subscribers: the
-presentation `WorldClient` (bound at `WorldBootComposition.cs:329`) and the boot
-authority endpoint's own `WorldSessionMirror`
-(`WorldAuthorityEndpoint.cs:121-125`), which the seat intent projection reads
-(`WorldClient.cs:1158-1236`, `:421-426` for the camera-frame yaw).
+Inside the step, the server delivers the tick's snapshot synchronously to every
+typed subscriber (`WorldOutputHub.cs:315`) from one borrowed scratch array the
+next tick overwrites (`WorldDocument.Apply.cs:900-905`), and a state delivery's
+`MovedRows` alias the server's buffer until `ForgetMovedRows`
+(`WorldServer.StateStamp.cs:15`, `WorldStateStamp.cs:12-13`). The boot world has
+two local subscribers: the presentation `WorldClient` (bound at
+`WorldBootComposition.cs:329`) and the boot authority endpoint's own
+`WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121-125`), which the seat
+intent projection reads (`WorldClient.cs:406-426`, `:1158-1236`).
+
+### The step, split in three
+
+`WorldHostStep.Step` becomes three calls in today's order, the middle one
+dispatched:
+
+| Part | Thread | Runs |
+|---|---|---|
+| Prologue | Frame | `sourceWatch.Poll`; `DeliverRouteChanges`; `ShouldStepBoot`; `PrepareBootSeatIntents` (the client's `SubmitAuthorityIntents`, `ComposeMoveFrame`, the seat view's yaw); `DrainPendingTransfers`; `DeliverRouteChanges`; `SubmitExternallyClockedSeatIntents` (`WorldHostStep.cs:108-139`). |
+| Body | Worker | `StepBoot` (`WorldServerStepShell.Step` with its peer drain, authority gate, `Advance`, tape close, and the replay burst to its budget; `ScanBootBoundaryTriggers`; `SettleBootScreenSessions`) and `StepInstances` (`:140-151`). The shell records each completed tick's `(hostTick, serverTick)` pair in the record instead of calling `publishTick`. |
+| Epilogue | Frame, at the join | Replay the record into the local sinks; replay the recorded echo-tap effects; `DeliverRouteChanges`; `PublishSeats` (the seat bindings' `SyncRoute`, which now reads a current mirror); `FinishSeatIntents`; the publish hooks per completed tick in order (`waitGate`, `captureScheduler`, `tickScript`, `scheduleRunner`, `WorldHostStep.cs:26-31`); `extensions.Pump`. |
+
+Nothing in the prologue or the epilogue changes thread, and nothing in the body
+touches a client, a seat, the router, a session or the renderer. The split
+is the whole of the ownership change.
 
 ### After
 
 | Thread | Owns and touches |
 |---|---|
-| Simulation | `FixedStepPump`; `WorldHostStep`; `WorldServer` and the arena; `WorldInstanceHost` and every instance; `WorldReplayTape` (`WorldReplayTape.cs:64-66` already assumes one thread); `TextCommandSource.Collect` and every `Immediate` and `Simulation` verb; `WorldTickScript`, `WorldConsoleWaitGate`, `WorldTestRun`; the capture scheduler's arming, `HoldsClock` and `PublishTick`; `WorldMachineHost.Advance` and queued segment submission (`WorldMachineHost.Instances.cs:462`); `WorldPeerHost.DrainPending` (`WorldPeerHost.cs:1980`); the seat half of `WorldClient`: `AdvanceSeatViews`, `SubmitAuthorityIntents`, roster and seat-binding sync (`WorldSimulation.cs:68-87`); the mailbox's write side. |
-| Frame | The window and swap chain; input capture into the router; `WorldClient`'s presentation half (poses, easers, `WorldStateMirror`, delivered definition); `WorldFramePresenter`, residencies, GPU uploads and present; `WorldScreenBinder`; the audio director's frame feed; the overlay and HUD; `Presentation`-routed verbs; capture serving (`FrameCaptureController`); the mailbox's read side; `SettleOwedFrames` at shutdown. |
-| Already their own | The audio render thread (`WorldAudioRenderService.cs:179`); queued machine workers (`QueuedMachineHost.cs:11`, one per cabinet); socket readers and the accept loop (`WorldPeerHost.cs:206,2039`), which reach the server only through `ExecuteAuthorityOperation` (`WorldServer.cs:465-495`) and the tick-thread drain; extension workers; the hot-reload agent (`CodeRevision.cs:80-83`); the code warmer. |
+| Frame | The window and swap chain; input capture into the router, `ReleaseHeld` included (`LauncherWindowHostedService.cs:480`, `InputRouter.cs:2060`); the pump, `SnapshotForTick` and `ApplySnapshot`; the one console drain and every verb; `WorldClient` whole; `WorldSeatBindings`, `WorldSeatViewState` and its `Nudge`; the capture scheduler (arming, `HoldsClock`, publication, serving), `WorldTickScript`, `WorldConsoleWaitGate`, `WorldTestRun`; `WorldFramePresenter`, residencies, uploads, present, `WorldScreenBinder`; the audio director's frame feed; overlay and HUD; `HostFrameTimeline`; the record's read side; machine and instance retirement; `SettleOwedFrames` at shutdown. |
+| Worker (between dispatch and join only) | `WorldServer.Advance` and the arena; `WorldInstanceHost.StepInstances`; `WorldReplayTape` taps and `NoteTick` (`WorldReplayTape.cs:64-66` already assumes one thread at a time); `WorldPeerHost.DrainPending`; `WorldMachineHost.Advance` and queued segment submission; `WorldAdjacencyFields.BeginTick`; the hub's delivery into the record; the server's `EchoTap` into the record. |
+| Already their own | The audio render thread (`WorldAudioRenderService.cs:179`); queued machine workers (`QueuedMachineHost.cs:11`); socket readers and the accept loop, which reach the server only through `ExecuteAuthorityOperation` (`WorldServer.cs:465-476`, contending with the body's gate as they contend with the step today) and the body's drain; extension workers; the hot-reload agent; the code warmer. |
 
-Hot reload needs no new seam: `CodeRevision.Applied` fires on the agent's
-thread and every cache compares `Current` on its own thread
-(`CodeRevision.cs:29-34`); `Program.cs:27` only narrates. Audio needs none
-either: the server's music taps (`WorldPostBuildWiring.cs:500-520`) will fire
-from the simulation thread into a director that already gates every entry
-(`WorldAudioDirector.cs:180-205,1393-1551`) and feeds a separate render thread.
+The worker is one dedicated thread (`LauncherHostLoop.StartBackgroundThread`),
+the same thread for every body, woken by a dispatch event and signalling a
+done event; never the thread pool. The server's and instance host's
+thread-affine scratch (the hub's borrowed arrays, the snapshot cells) is then
+always touched from one thread.
 
-### Cross-thread reads that must move behind the handoff
+### What the frame reads from the server during produce
 
-Found by walking what the frame path reads from simulation state today.
-Each either moves into the mailbox's tick record, becomes a published
-(volatile) value, or takes the authority gate.
+Produce overlaps the body, so every server-side read on the produce path must
+go through the record, a join-time copy, or a reference-swapped record. Found
+by walking the frame path; the guard below finds the rest.
 
 | Read today | Where | After |
 |---|---|---|
-| `IWorldSimulationClock.Tick` = `server.NextInputTick - 1` | `WorldFramePresenter.cs:119,690,957,1227,2113`; `.Convergence.cs:117` (`TickedSeconds`) | `m_client.Tick`; delete the interface (decision 3). |
-| `m_server.NextInputTick` | `WorldOverlayFacts.cs:26,64` | `client.Tick`/`EngineTick`. |
-| `FrameContext.AccumulatorTicks/ElapsedTicks/DeltaTicks` from the pump | `LauncherWindowHostedService.cs:671-682`; `SdfWorldResidency.cs:817-822` | Filled from the mailbox's applied tick record (decision 3); `FrameContext` keeps its shape. |
-| `WorldSimulation.PublishSeats` reads `m_composer.ActiveLayoutName` | `WorldSimulation.cs:84`; set per frame at `WorldViewComposer.cs:423` | A volatile published string (reference writes are atomic; add the `Volatile` pair). |
-| `PublishSeats` writes `WorldPerceptionAnchor`; the presenter reads it per frame | `WorldSimulation.cs:79-86`; `WorldFramePresenter.cs:1727` | The anchor's per-seat values ride the tick record. |
-| `WorldOverlayFacts` reads the router's held tables through `Func<InputRouter>` | `WorldOverlayFacts.cs:39`; the tables are pump-thread only (`InputRouter.cs:2012`) | Held-channel facts ride the tick record. |
-| `WorldStateMirror` refresh at the tick, apply per frame, no lock | `WorldStateMirror.cs:44-45` | Both on the frame thread by construction: refresh happens when the frame applies the tick record. Nothing changes inside the mirror. |
-| `IWorldAdjacencySource` is server-side `WorldAdjacencyFields`, read per frame | `WorldAdjacencyFields.cs:505-540`; `WorldContinuum.cs:34-36`; `WorldFramePresenter.cs:1140-1148` | Audit: its pin state is written on delivery (simulation thread) and read per frame. The handle's fields become one published record swapped by reference, as `WorldSessionMirror.Document` is (`WorldSessionMirror.cs:283`). |
-| `WorldCaptureScheduler`: armed, held and published on the pump; served from the frame | `WorldCaptureScheduler.cs:117,219,345,1116`; "every member runs on the host pump" | One gate inside the scheduler; the hold protocol crosses the thread (section 2). |
-| `HostFrameTimeline` written and read on one thread | `HostFrameTimeline.cs:24-28` | A tick lane written by the simulation thread (section 5). |
-| `WorldClient`'s seat half reads the endpoint mirror, not the pose arrays | `WorldClient.cs:409-426` (`endpoint.TryEntityPose`) | Holds. Split the file so the seat half (`AdvanceSeatViews`, `SubmitAuthorityIntents`, `ComposeMoveFrame`, roster submission bookkeeping) is visibly simulation-owned and never touches `m_renderPosition`, `m_stateMirror` or `m_definition`; `ResolveSeatKit` must read the endpoint's definition. |
-| `PresentPacingControl.TickLocked` | `PresentPacingControl.cs:52` (already volatile) | Holds; becomes the lockstep handoff's flag. |
-| `WorldSeatViewState` mutated by input, read by rendering | `WorldSeatViewState.cs:9-11,21` (already gated) | Holds. |
+| `IWorldSimulationClock.Tick` = `server.NextInputTick - 1` | `WorldFramePresenter.cs` (five sites), `.Convergence.cs:117` | `m_client.Tick`; delete the interface (decision 4; phase 1). |
+| `m_server.NextInputTick` | `WorldOverlayFacts.cs:26,64` | `client.Tick`/`EngineTick` (phase 1). |
+| `FrameContext.InterpolationAlpha` from the accumulator | `LauncherWindowHostedService.cs`, `SdfWorldResidency.cs:817-822` | From the applied record's join timestamp (decision 4); `FrameContext` keeps its shape. |
+| `IWorldAdjacencySource` tick-side state written in `BeginTick`, read in `Pin` | `WorldAdjacencyFields.cs:290`, `:669-700`; `WorldFramePresenter.cs:1140-1148` | `BeginTick` builds an immutable tick record (projections, frame, field, reason) and publishes it by one reference write; `Pin` reads it once. The pose copy already goes through the mirror's gated `CopySnapshotTo` and is coherent. |
+| Machine video outputs and instance servers resolved live per frame | `WorldScreenBinder.Device.Sources.cs:27-42` (`MachinesOf(world)?.VideoOutput`), `WorldScreenBinder.Sources.cs:56`; `WorldMachineHost.Instances.cs:50-61` reads `m_instances`, which `CommitInstances` (`:996-1010`) replaces | The binder resolves its source table at the join (frame thread, server idle) and holds it until the next join. A machine plan's commit happens in the body; its disposals (retired runtimes and leases, `:1059`, `:1104`) are queued and run at the *following* join, after the binder re-resolved. An instance stop's `Dispose` (`WorldInstanceHost.cs:1405-1419`) is likewise deferred to the join. |
+| The server's `EchoTap` runs presentation callbacks inside the step | `WorldPostBuildWiring.cs:302-345` (`editorSeats.Reconcile`, `graphHost.Rebase`, `definitionSource.SourcePath`, `deferredVerbAnswers.Answer`, `sourceWatch.NoteResult`, toasts and cues) | The tap records each `WorldEditEcho` into the record; the epilogue invokes today's tap body per echo, in order, on the frame thread. The tap's body does not change. |
+| `WorldCaptureScheduler.PublishTick` arms the renderer inside the step | `WorldCaptureScheduler.cs:426-532`, `:249-277`; `WorldHostStep.cs:28` | Runs in the epilogue, after the record applied, with the server at the completed tick (barriers below). Its state hash (`:282-285`, `:433`) is computed with the server idle. |
+| `HostFrameTimeline` written and read on one thread | `HostFrameTimeline.cs:24-28` | Still one thread: the body returns its step cost in the record; the timeline's tick lane is written at the join. |
+| `WorldSessionMirror` of the boot endpoint delivered in place, read per property | `WorldSessionMirror.cs:533-594`; `WorldSessionSceneEmitter.cs:693-705` | Delivered at the join, on the frame thread, so no write overlaps a frame's reads. A *remote* mirror's per-property reads against its socket thread are a pre-existing hazard, filed in the packet, not this design's. |
+| `server.Definition`, `server.Grants`, `server.Population`, `server.Machines` reads during produce | Audit | Every such read either moves to the prologue or epilogue, or copies at the join; the guard finds the ones the walk missed. |
+
+Rows of the first revision's table that needed no work once the client's seat
+half stays on the frame thread: `ActiveLayoutName`, the perception anchor,
+the overlay facts' router tables, `WorldStateMirror`, the capture scheduler's
+fields, `WorldClient`'s file split, `TickLocked`, `WorldSeatViewState`.
+
+**The guard.** `WorldServer` and `WorldInstanceHost` gain a `StepInFlight`
+flag the loop sets at dispatch and clears at the join, and a
+`[Conditional("DEBUG")]` `AssertFrameMayRead()` on their frame-facing seams
+(`Definition`, `Grants`, `Population`, `Machines`, `NextInputTick`,
+`CompletedEngineTicks`, `Body`, `TryGet`/`Boot`, `VideoOutput`), which throws
+naming the seam when called off the worker while a body is in flight.
+`ExecuteAuthorityOperation` is exempt (it takes the gate). Phase 3 arms the
+guard in *rehearsal*: the loop sets the flag around produce with no thread
+running, so a sweep of the debug world throws at every read the audit missed
+before any thread exists.
+
+Hot reload needs no new seam: `CodeRevision.Applied` fires on the agent's
+thread and every cache compares `Current` on its own thread
+(`CodeRevision.cs:29-34`). `CodeDerivedTable` has a separate, pre-existing
+defect (F17) fixed in phase 2. Audio needs none: the server's music taps fire
+from the body into a director that gates every entry
+(`WorldAudioDirector.cs:180-205`) and feeds its own render thread.
 
 ## 2. The handoff
 
-### What the presenter consumes
+### The iteration
 
-The frame reads `RenderTicks`, `InterpolationAlpha`, `DeltaTicks` and
-`FrameDeltaTicks` from `FrameContext` (`src/Puck.Hosting/FrameContext.cs:30-62`),
-then `WorldClient.UpdateRenderPoses(alpha)` and `StateMirror.Apply(fraction)`
-(`WorldFramePresenter.Convergence.cs:74-78`), the delivered definition and
-state mirror throughout, and the tick for camera clocks and the binder.
+```
+pacer wait → poll window, capture input → JOIN (if the body is done:
+apply the record, run the epilogue) → drain (skipped while a body is in
+flight) → flush → pump: gate; if a step is due: SnapshotForTick,
+ApplySnapshot, prologue, DISPATCH → produce (from the applied state)
+→ present → next iteration
+```
 
-### The tick record
+Under `StepsOneTickPerFrame` and unpaced headless the dispatch is followed by
+an immediate join inside the pump's step, so `TryStep` keeps its meaning (one
+step, its record applied, before the host produces the frame that shows it).
+`HostPacing` (`src/Puck.Hosting/HostPacing.cs`) grows from two values to the
+policy: wall clock overlapped, wall clock inline, one tick per frame, unpaced;
+the overlap applies only when the step period is at least the frame period,
+and a world whose rate exceeds the display's steps inline, as today.
 
-The mailbox is a ring of `Depth = 4` slots. Each slot owns its buffers
-(`EntitySnapshot[capacity]`, `long[]` state, `FieldCellDelta[]`,
-`WorldInputPublication[]`), grown once to the population's capacity and never
-reallocated in steady state. A slot holds one tick's deliveries in order:
+### The record
 
-- `Snapshot`: the copied `WorldSnapshot` (the hub's borrowed scratch is copied
-  here and nowhere else; `EntitySnapshot.State` is sliced from the slot's
-  `long[]`).
-- `Definition`, `State`, `Composition`, `SessionLever`, `Answer`: recorded as
-  they arrive on the sink, each a reference to an already immutable object
-  (`WorldDefinition`, `WorldStateStamp`, `WorldComposition`) or a small struct.
-- The clock: `Tick`, `EngineTick`, `StepTicks`, `ElapsedTicks` and the
-  publication timestamp (`Stopwatch.GetTimestamp()` at the end of the step).
-- The seat facts the frame reads (section 1): perception anchor, held-channel
-  facts, the seats' presented look.
+One `WorldTickRecord`, owned by the recording sink, reused every step, grown
+once to its high-water mark:
 
-The simulation thread writes a slot, then publishes it with one
-`Volatile.Write` of the ring's head. The frame thread, at frame start, applies
-every slot from its tail to the head in order, calling exactly the
-`IClientSink` methods the hub would have called, so `WorldClient`'s code does
-not change. Steady state allocates nothing on either side.
+- Entries in delivery order, each one of: `Snapshot` (the copied
+  `WorldSnapshot`: entries, `State` longs sliced from the record's own
+  `long[]`, `FieldCells`, `Inputs`), `Definition` (reference and version),
+  `State` (definition reference, version, and the stamp with `MovedRows`
+  copied into the record's `int[]`, F02), `Composition`, `SessionLever`,
+  `Answer`, `Echo` (a `WorldEditEcho` for the tap).
+- The completed ticks: a list of `(hostTick, serverTick)` for the publish
+  hooks, one per tick the body completed (several under a replay burst).
+- The body's cost: start and end timestamps, and `StepTicks`.
+
+The recording sink subscribes to the hub with full disclosure in place of the
+two local sinks, which subscribe to it. It *records* between dispatch and
+join and *passes through* otherwise, so the attach primer
+(`WorldDocument.Delivery.cs:59-123`), a checkpoint restore delivered outside
+the tick, and every delivery an Immediate verb causes in the drain reach the
+sinks synchronously on the frame thread, as today. Socket and federation
+sinks stay directly on the hub: they serialize to their own writers and are
+already cross-thread.
+
+`Replay` calls each local sink's `IClientSink` method per entry, in order;
+`WorldClient`'s code does not change. Every entry is applied: there is no
+fold and no loss, because nothing can be superseded between a join and the
+next dispatch (F03, F04). The record's memory is bounded by one body's
+deliveries: one tick in steady state, the replay burst's budget at most.
 
 ### Alpha
 
-`alpha = clamp((now - publishedAt) / stepPeriod, 0, 1)` (decision 3), pinned to
+`alpha = clamp((now - joinedAt) / stepPeriod, 0, 1)` (decision 4), pinned to
 one under lockstep, offscreen and a converging capture, as `PinsPresentation`
-pins it today (`WorldFramePresenter.Convergence.cs:74`). `RenderTicks`
-becomes `ElapsedTicks + alpha * StepTicks`, rounded down.
+pins it today (`WorldFramePresenter.Convergence.cs:74`). `RenderTicks` becomes
+`ElapsedTicks + alpha * StepTicks`, rounded down. The arrival form is smooth
+where the accumulator form would jump by the body's latency at every join.
 
-### When the frame is slow
+### Latency
 
-If the frame thread has not applied a slot by the time the ring is full, the
-simulation thread folds the oldest unapplied slot into the one after it: the
-later snapshot wins per entity with `Continuity = older.Then(later)`,
-`FieldCells` concatenate (a `FieldsFull` later image replaces), `Inputs` take
-the later publication, and every non-snapshot delivery of the older slot is
-kept ahead of the later slot's. The fold is counted (`frames.folded-ticks`).
-The simulation thread never waits for the frame thread.
+A tick's visible effect lands one iteration later than today: dispatched after
+present, applied at the next join, drawn by that iteration's produce. At 60 Hz
+that is about one frame period more input-to-photon than today, and about
+8 ms more than a free-running simulation thread would give, which is the price
+of keeping every client object single-owner. The owner sees this trade under
+Needs you in the packet.
 
-### When the simulation is slow
+### Barriers and the replay budget
 
-`FixedStepPump.Advance` already bounds a catch-up burst by one step's period of
-wall time and sheds the rest (`FixedStepPump.cs:248-259`), so a tick that costs
-more than its period runs one step per call and the World runs slower than
-real time. The frame interpolates to the last applied tick and holds there
-(alpha clamps at one). The shed count becomes a counter (section 5).
+A body steps one tick, except a replay drive, whose shell burst
+(`WorldServerStepShell.cs:45-78`, `WorldReplayTape.Drive.cs:65-77`) steps up
+to a *budget* the frame thread computes before dispatch:
+`min(FastForwardBurst, nextBarrier - completedTick)`, where `nextBarrier` is
+the least of the publish hooks' next due ticks: the tick script's earliest
+pinned line, the wait gate's release tick, the schedule runner's next due
+step, the capture schedule's next row tick. Each hook owner exposes
+`NextDueTick`. The shell takes the budget as a parameter beside the pacing
+policy (phase 1 already threads the policy through it, F14) and returns the
+ticks it completed; the epilogue runs the hooks per tick in order, so a
+pinned line still runs between its tick and the next, and a capture still
+arms with the server at exactly its tick. An unscheduled capture
+(`world.screenshot`) and `world.rate pause` are drain verbs and take effect
+at the next dispatch, as today.
 
-### Pacing the simulation thread
+### Holds
 
-The headless loop's waitable-timer pacing (`HeadlessTickHostedService.cs:210-230`,
-`LauncherHostLoop.WaitUntil`) paces the simulation thread: one `Advance` per
-period, with the same catch-up grid. The frame thread paces on the display as
-now. Neither thread samples the other's clock.
+A capture armed at tick N owes a frame of tick N before N+1 steps. The pump
+asks `HoldsClock` before each step on the frame thread, which is also the
+thread that presents, so a hold is the frame thread declining to dispatch
+until it has presented a frame whose applied tick is N. No thread waits on
+another; the hold budget is spent in host time as now
+(`WorldCaptureScheduler.cs:345-364`, `FixedStepPump.cs:305-311`), and
+`AwaitsFrame` ends the pump's call as now (F10, F15).
+
+### When the body is late
+
+A body still running at the join leaves the frame on the last applied tick
+with alpha at one, skips the drain, and is counted (`steps.late`). The pump
+does not dispatch another body until the join, so the accumulator grows and
+the runaway clamp (`FixedStepPump.cs:203-210`) sheds what one frame cannot
+owe; the shed count is a counter (`steps.shed`, phase 1). Device-loss
+recovery on the frame thread therefore pauses the simulation as it does
+today, with nothing folded.
 
 ### Garbage collections
 
 Workstation concurrent GC suspends every managed thread for a pause, so a
-10 to 12 ms gen0 lands on both threads at once; nothing here changes that
-(the young-object work is the frame-time packet's). What the split must
-guarantee is that neither side waits on the other across a pause: the ring
-depth of four ticks (133 ms at 30 Hz) covers a pause on the frame side, the
-burst bound covers one on the simulation side, and no lock is held across a
-step except the authority gate the step already holds
-(`WorldServerStepShell.cs:49-57`).
-
-### Captures and holds
-
-A capture armed at tick N owes a frame of tick N before N+1 steps. Today the
-pump asks `HoldsClock` before each step and the same thread produces the
-frame (`FixedStepPump.cs:187-190,305-311`). After the split the pump still
-asks; a held step parks the simulation thread on a mailbox event the frame
-thread sets after it presents a frame whose applied tick is N (or the
-scheduler's hold budget expires and refuses the capture by name, as now).
-`AwaitsFrame` ends a burst in the same way. The contract is unchanged; only
-the waiter is on another thread.
-
-### The lockstep handoff
-
-`world.lockstep on` (`WorldLockstepCommandModule.cs:7-10`) and the offscreen
-host mean one tick per produced frame with the frame producing the tick it
-just stepped. The pump's owner becomes the frame thread: on seeing
-`TickLocked` flip, the simulation thread finishes its current `Advance`, marks
-the pump parked, and waits; the frame thread, seeing the pump parked, runs
-`TryStep`/`Hold` inline before producing (the offscreen loop's body,
-`OffscreenTickHostedService.cs:250-258`) and drains the mailbox immediately
-after the step. Flipping back releases the simulation thread at a frame
-boundary. The offscreen host simply starts parked and never releases. The
-pump itself stays single-owner and unlocked.
+10 to 12 ms gen0 lands on both threads at once; nothing here changes that.
+Neither thread holds anything the other waits on across a pause: the join is
+a done-event read the frame never blocks on, and the only lock across a body
+is the authority gate the step already holds (`WorldServerStepShell.cs:49-57`).
 
 ## 3. Determinism
 
 What a tick computes depends on its `CommandSnapshot` and the server state;
-neither changes. The order is: drain (`beforeStep`), `SnapshotForTick`,
-`ApplySnapshot`, `Step` (`FixedStepPump.cs:332-360`), every step, on the
-simulation thread. Inputs enter the router under `m_captureGate` with a
-`CaptureTick` stamped by the shared input clock and a sequence number
-(`InputRouter.Capture.cs:176-183,229-235`), and the drain takes everything
-with `CaptureTick < windowEndTick` in `(captureTick, sequence)` order
-(`InputRouter.Capture.cs:82-105`, `InputRouter.cs:2223-2274`). Moving the
-drain to another thread moves no stamp and no comparison. The windows are
-`[CaptureOriginTicks + elapsed - step, CaptureOriginTicks + elapsed)`
-(`FixedStepPump.cs:340-346`), pump-owned and unchanged.
-
-The replay tape records the server's input stream at the loopback taps
-(`LoopbackTransport.cs:17-25`, `WorldReplayTape.Capture.cs:6-8`) and closes
-each tick inside the step (`WorldServerStepShell.cs:56`); every tap and
-`NoteTick` stays on the pump's thread, which is what the tape requires
-(`WorldReplayTape.cs:64-66`). State hashes therefore do not move: the same
-document and the same captured input give the same snapshots and the same
-steps. A live run's wall-clock arrival still decides which tick a physical
-press lands in, exactly as today; a replay restores the recorded stream.
+neither changes. `SnapshotForTick`, `ApplySnapshot` and the prologue run on
+the frame thread immediately before the dispatch, in today's order
+(`FixedStepPump.cs:332-360`); the body runs the step; the tape's taps and
+`NoteTick` stay inside the body on one thread (`WorldReplayTape.cs:64-66`).
+State hashes do not move: the same document and the same captured input give
+the same snapshots and the same steps. A live run's wall-clock arrival still
+decides which tick a physical press lands in, exactly as today, because
+capture, `ReleaseHeld`, the seat view's `Nudge` and the snapshot all stay on
+the frame thread, in today's order (F06, F07).
 
 One-tick-per-frame shapes:
 
 - `puck test --reproduce` boots `--headless true --unpaced true`
-  (`TestCommand.Leg.cs:111-112`): the headless host, one `TryStep` per
-  iteration, no frame thread, no mailbox reader. Nothing in this design runs
-  there except the converged loop (phase 1), which must keep `TryStep`
-  per iteration.
-- `world.lockstep`, offscreen and the sweep's tours step inline on the frame
-  thread (section 2), one tick per produced frame, mailbox drained after the
-  step, alpha pinned to one.
-- `world.at` lines run in the drain between the tick they name and the next
-  (`WorldTickScript.cs:10-15`); the drain is on the thread that steps, in every
-  shape, so the tick is exact whether the line arrived over stdin or the MCP
-  control attachment.
+  (`TestCommand.Leg.cs:111-112`): one `TryStep` per iteration, dispatch and
+  immediate join, the record replayed before the next step. Hashes identical
+  to today is the check that the record is a pure relay.
+- `world.lockstep`, offscreen and the sweep's tours: one tick per produced
+  frame, immediate join, alpha pinned to one.
+- `world.at` lines run in the epilogue's tick script hook, between the tick
+  they name and the next, because the budget never steps past a pinned tick.
 
 ## 4. Commands
 
-- **Simulation-routed verbs** (`body.*`, `player.*`, `world.row.set`,
-  `world.grant`, `world.rate pause/resume`, `world.instance.*`) are injected
-  into the router (`CommandRegistry.cs:1738`) and fold into the next tick's
-  snapshot; unchanged.
-- **Immediate verbs that read or write server state** (`world.status`,
-  `body.where`, `world.grants`, `world.why`, `world.save`, `world.history`,
-  `replay.*`, `world.wait`, `world.at`) run in the drain on the simulation
-  thread, between steps, where they run today. The read-after-write barrier
-  (`TextCommandSource.cs:49-120`) is unchanged.
-- **`world.reload` and live edits**: `WorldSourceWatch.Poll` runs at the top
-  of the step (`WorldHostStep.cs:108`) and submits the ordinary reload line;
-  the swap applies at the tick boundary and reaches the frame as a
-  `Definition` delivery in the tick record. Unchanged in substance.
-- **Crossings between worlds and instance steps** are inside `WorldHostStep`
-  (`:137-151`) on the simulation thread. Session views of another world read
-  their endpoint's `WorldSessionMirror`, which is already a cross-thread
-  mirror (`WorldSessionMirror.cs:515`).
+- **Simulation-routed verbs** are injected into the router
+  (`CommandRegistry.cs:1738`) and fold into the next tick's snapshot;
+  unchanged. A bound Simulation verb whose handler touches presentation
+  (`view.override`, `WorldViewCommandModule.cs:277-294`) runs in
+  `ApplySnapshot` on the frame thread, as today (F08).
+- **Immediate verbs** run in the one drain, on the frame thread, with the
+  server idle; the read-after-write barrier (`TextCommandSource.cs:49-163`)
+  is unchanged. A verb reaching the server while a body is in flight is
+  impossible by construction: the drain does not run then.
+- **Host operations** (`ConsoleControlSession.InvokeAsync`, the MCP capture
+  at `ConsoleControlSession.cs:104-121`) run in the same drain, on the frame
+  thread, ordered behind the session's prior submissions as today.
+- **`world.reload` and live edits**: `WorldSourceWatch.Poll` runs in the
+  prologue and submits the ordinary reload line; the swap applies in the
+  body at the tick boundary and reaches the frame as a `Definition` entry
+  followed by the tap's `Echo` entry, so the frame installs the document and
+  then reconciles the editor and rebases the graph host, in that order
+  (F11).
+- **`world.save`** runs in the drain: `WorldSaveSnapshot.Compose`
+  (`WorldSaveSnapshot.cs:21-35`) reads the server and folds the presentation
+  levers on one thread with no body in flight, so the saved generations are
+  coherent (F11).
 - **Socket, federation and extension work** enters through
-  `ExecuteAuthorityOperation` or the tick-thread drain, as now.
-- **Presentation verbs** declare `CommandRouting.Presentation` and run in the
-  frame thread's drain, before the frame's mailbox apply. The families:
-  `view.*` and `world.view.*` (composer, cameras, pick, panes), `host.frames`,
-  `world.gpu-timing`, `world.counters gpu`, `world.shaders.reload`,
-  `world.quality` and the render levers, `world.debug-view`, `capture.*`,
-  `world.screenshot`'s arming, `gpu.*`, `backend`, `console` display verbs,
-  and `host.memory`. A presentation verb that also reads server state does so
-  through `ExecuteAuthorityOperation`, the door every off-thread caller uses.
-  The drain is the same `Collect` with a routing filter; a line's answer
-  settles through its session as a Simulation line's does.
+  `ExecuteAuthorityOperation` or the body's peer drain, as now.
 - **Hot reload** needs no marshalling (section 1).
 
 ## 5. Shutdown, exceptions, diagnostics
 
-**Shutdown.** The simulation thread is a hosted service's pump
-(`LauncherHostLoop.RunPump`), so an exception faults the service and stops the
-host with the exception in hand, as a loop fault does today
-(`LauncherHostLoop.cs:79-83`). Stop order: the host cancels; the frame loop
-finishes its frame and signals the simulation thread; the simulation thread
-finishes its step, drains nothing further and exits; the frame thread applies
-the last tick record, calls `SettleOwedFrames` (owed captures refused by name,
-`FixedStepContext.cs:43-47`), then disposes the render root. A parked pump
-(lockstep) is released by the stop signal. `StopAsync` joins the simulation
-thread with a bound and reports a thread that did not return.
+**Shutdown.** The host cancels; the loop finishes its iteration: it joins the
+in-flight body with a bound (30 s, enough for a replay burst), applies the
+record, runs the epilogue, calls `SettleOwedFrames` (owed captures refused by
+name), stops the worker thread, then disposes the render root and the
+instances. A body that faults completes the done event with its exception;
+the join rethrows it on the frame thread, which faults the hosted service and
+stops the host with the exception in hand, as a loop fault does today
+(`LauncherHostLoop.cs:85-102`). A join that times out means a hung step: the
+loop fails the process fast with the tick and the elapsed time, rather than
+disposing the server underneath a live worker (F15). Pending host operations
+and captures settle with that error on either abort.
 
-**Device loss** is recovered on the frame thread only (`LauncherWindowHostedService.cs:700-740`);
-the simulation keeps ticking and the mailbox folds. Today recovery also
-stalled the tick; the clamp absorbed it. After the split it stalls nothing.
+**Device loss** is recovered on the frame thread (`LauncherWindowHostedService.cs:700-740`)
+with no dispatch until it ends; the simulation pauses as today.
 
-**Diagnostics.** `HostFrameTimeline` gains a tick lane written by the
-simulation thread: per tick, its step cost, the steps the pump shed, folded
-tick records, and the parked time of a held step. `host.frames` prints the
-frame iterations as now (produce, begin, present, wait) with `simulate` read
-from the tick lane instead of a frame phase, then the tick lane's avg, p50,
-p99 and max and the counters: `steps.shed`, `ticks.folded`, `ticks.held`.
-`world.rate` adds `shed` to its read-back. A diagnostic read of a ring
-another thread writes may see one torn iteration; that is accepted for a
-timing read, not for a counter (counters are `Interlocked`).
+**Diagnostics.** `HostFrameTimeline` gains a `Join` phase (record replay and
+epilogue) beside the frame phases, and a tick lane written at the join: the
+body's cost, late joins, steps the pump shed. `host.frames` prints the frame
+iterations with `simulate` read from the tick lane, the `join` phase's avg,
+p50, p99 and max, and the counters `steps.shed`, `steps.late`, `drain.skipped`.
+`world.rate` adds `shed` to its read-back. Counters are `Interlocked`; the
+timeline is written on one thread.
 
 ## 6. Duplicated mechanisms on this path
 
 Named under the owner's duplication ruling; the plan converges each on one
 rather than building the thread beside them.
 
-1. **Three host loops**, each re-implementing drain, flush, exit deadline,
-   snapshot-input captures, step and hold: `LauncherWindowHostedService.cs:395-720`,
-   `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`;
-   the windowed loop's lockstep branch (`:600-618`) is the offscreen body a
-   fourth time. One loop with a pacing policy (`HostPacing`,
-   `src/Puck.Hosting/HostPacing.cs`, extended from two values to the shapes:
-   wall-clock threaded, wall-clock inline, one tick per frame, unpaced).
-2. **Two step shells** over `WorldHostStep`: `WorldSimulation.cs:16` and
-   `HeadlessWorldSimulation.cs:17`, differing in `afterInstances` only. One
-   `WorldSimulation` taking its post-step.
-3. **Two console drain implementations per windowed iteration**: the loop's own
-   `m_textSource.Collect()` (`LauncherWindowHostedService.cs:574`) and the pump's
-   `beforeStep` drain (`FixedStepPump.cs:150-154`). One shared operation must
-   serve both scheduling points: before input snapshots between ticks, and
-   iterations with no due step, a held capture or no simulation. Deleting the
-   iteration scheduling point strands quit, recovery and presentation work
-   while `Hold` or a host with no pump runs (memo review F16).
-4. **Three simulation clocks the frame reads**: `IWorldSimulationClock.Tick`
-   (`WorldHostStep.cs:55`), `WorldClient.Tick` (`WorldClient.cs:132`), and
-   `WorldOverlayFacts.CompletedTick` (`WorldOverlayFacts.cs:62-69`). One:
-   the client's.
-5. **Two interpolation fractions**: `FrameContext.InterpolationAlpha`
-   (`FrameContext.cs:52`, the accumulator) and
-   `WorldSessionMirror.ResolveInterpolationAlpha` (`:896`, wall arrival),
-   with a pinned copy in `WorldAdjacencyFields.cs:526`. One: the arrival form.
-6. **Two mirrors of the boot world's snapshot**, both subscribed to the hub and
-   both copying every entry per tick: `WorldClient` (presentation) and the
-   boot endpoint's `WorldSessionMirror` (routing and intents,
-   `WorldAuthorityEndpoint.cs:121`). The split makes the duplication
-   legible (one per thread); folding them is larger than this packet and is
-   filed in the [refactoring campaign](open-items.md#refactoring-campaign).
-7. **Three per-sink redaction scratch buffers**: `WorldOutputHub.cs:71`,
-   `WorldSessionSink.cs:29`, `WorldFederationProjectionSink.cs:42`. Filed with
-   the above; the mailbox adds none (it copies the delivered, already redacted
-   snapshot).
+1. **Three host loops** (`LauncherWindowHostedService.cs`,
+   `HeadlessTickHostedService.cs`, `OffscreenTickHostedService.cs`), the
+   windowed loop's lockstep branch being the offscreen body a fourth time.
+   One loop with a pacing policy (`HostPacing`).
+2. **Two step shells** over `WorldHostStep` (`WorldSimulation.cs:16`,
+   `HeadlessWorldSimulation.cs:17`), differing in `afterInstances` only. One.
+3. **Two console drain sites per windowed iteration**: the loop's own
+   `Collect` (`LauncherWindowHostedService.cs:577`) and the pump's
+   `beforeStep` (`FixedStepPump.cs:150-154`). They serve two scheduling
+   points, not one: the pump's runs only on a step path, and `Hold`
+   (`:305`) and a render host with no simulation (`:139-144`) never reach
+   it. One drain *operation*, kept at both the between-step and the
+   held/no-step points (F16).
+4. **Three simulation clocks the frame reads**: `IWorldSimulationClock.Tick`,
+   `WorldClient.Tick`, `WorldOverlayFacts.CompletedTick`. One: the client's.
+5. **Two interpolation fractions**: the accumulator's
+   (`FrameContext.cs:52`) and the arrival form
+   (`WorldSessionMirror.cs:896`), with a pinned copy in
+   `WorldAdjacencyFields.cs`. One: the arrival form.
+6. **Two mirrors of the boot world's snapshot**, both hub subscribers:
+   `WorldClient` and the boot endpoint's `WorldSessionMirror`. Both now
+   receive through the one record; folding them is larger than this packet
+   and is filed in the [refactoring campaign](open-items.md#refactoring-campaign).
+7. **Three per-sink redaction scratch buffers** (`WorldOutputHub.cs:71`,
+   `WorldSessionSink.cs:29`, `WorldFederationProjectionSink.cs:42`). Filed
+   with the above; the record adds none (it copies the delivered, already
+   redacted snapshot).
 
 ## 7. Phased build
 
 Each phase is a branch that builds and runs on its own. Finish lines name
 what to run; test requirements are lifted (AGENTS.md), so each phase is
-verified by building and running what it touched.
+verified by building and running what it touched, plus the one check that
+would catch its main risk.
 
-### Phase 1: one host loop, no thread
+### Phase 1: one host loop, no thread (delivered)
 
 **Delivered by `sim-phase1`.** `Puck.Launcher.HostLoop` owns the iteration,
 input contributions, console scheduling, stepping, holds, deadlines and pacing.
@@ -417,8 +442,8 @@ per-step cost ring (count, avg, p50, p99, max). `steps.shed` is an atomic,
 host-lifetime counter of whole steps discarded when a catch-up burst spends
 its wall-time budget; holds and the runaway-frame clamp are distinct and are
 not counted as shed. `host.frames`, `world.rate` and `world.rate shed` report
-it. Resetting the frame sample window does not reset that counter. Folded and
-parked tick metrics remain for the phases that introduce a mailbox and thread.
+it. Resetting the frame sample window does not reset that counter. The join phase, late-step and skipped-drain metrics remain for the phases
+that introduce the tick record and worker.
 
 Verification and windowed measurements are recorded in the delivery commits.
 The four focused debug sources are `controls-dash-tests.puck`,
@@ -429,82 +454,127 @@ canonical state exports before and after. The standard package has no
 30 and reads tick 31 hash `d8484552ca622a93`, then tick 32 hash
 `b30470686bd27afd`, before and after.
 
-Original scope: converge duplicates 1 to 5. Files: `src/Puck.Launcher/LauncherWindowHostedService.cs`,
-`HeadlessTickHostedService.cs`, `OffscreenTickHostedService.cs` (become one
-`HostLoop` plus a thin hosted service per registration), `LauncherHostLoop.cs`,
-`src/Puck.Hosting/HostPacing.cs`, `src/Puck.World/WorldSimulation.cs`,
+Original scope and finish:
+
+Converge duplicates 1 to 5; keep one drain operation at both scheduling
+points (F16); carry one pacing policy through `WorldServerStepShell` and the
+replay fast-forward (F14's first half). Files: the three hosted services
+(become one `HostLoop` plus a thin hosted service per registration),
+`LauncherHostLoop.cs`, `HostPacing.cs`, `WorldSimulation.cs`,
 `HeadlessWorldSimulation.cs` (deleted), `WorldHostStep.cs`,
-`src/Puck.World.Client/IWorldSimulationClock.cs` (deleted),
-`WorldFramePresenter*.cs`, `src/Puck.World/WorldOverlayFacts.cs`,
-`WorldBootComposition.cs`, `HostFrameTimeline.cs` (tick lane and `steps.shed`,
-the packet's open low), `WorldRateCommandModule.cs`.
+`IWorldSimulationClock.cs` (deleted), `WorldFramePresenter*.cs`,
+`WorldOverlayFacts.cs`, `WorldBootComposition.cs`, `HostFrameTimeline.cs`
+(tick lane and `steps.shed`), `WorldRateCommandModule.cs`.
 Finish: a windowed debug World's `host.frames` standing and walking reads the
 same phases as before with `simulate` intact; `puck test --reproduce` on
 `worlds/debug` and the standard's test worlds matches the pre-phase hashes;
 `puck sweep` headless green; a lockstep `world.at` still with identical
-`[still]` hashes before and after.
+`[still]` hashes; a capture-held World and a render host with no simulation
+both still answer `quit` and `world.status` over stdin (the F16 check).
 
-### Phase 2: the mailbox, still one thread
+### Phase 2: the record, still one thread
 
-Introduce the mailbox behind `LoopbackTransport.Bind` and drain it on the same
-thread right after `Advance`. Files: a new `src/Puck.World.Client/WorldClientMailbox.cs`
-(the `IClientSink` with its slots and the fold), `WorldBootComposition.cs:329`,
-the loop, `FrameContext` filling. Finish: hashes unchanged (the mailbox is a
-pure relay on one thread); lockstep stills byte-identical to phase 1 but for
-the known residue; `frames.folded-ticks` reads zero; a run with the ring
-forced to depth one (a diagnostic lever) shows the fold producing no streak on
-a teleporting body.
+The recording sink between the hub and the two local sinks, recording between
+dispatch and join and passing through otherwise; `MovedRows` copied (F02);
+`WorldHostStep` split into prologue, body and epilogue with the publish hooks
+and the echo tap's effects moved to the epilogue; the shell's tick budget and
+`NextDueTick` on the four hook owners (F14's second half); the loop
+dispatching and joining *inline* (an immediate join on the same thread).
+Also here, independent of threading: `CodeDerivedTable` ties each
+derivation to the generation it read, so a derivation that started under
+revision R never enters the table published for R+1 (F17): `Refresh` returns
+a generation object owning its own weak table, and `GetValue` inserts into
+that generation only.
+Files: a new `src/Puck.World.Client/WorldTickRecord.cs` (the sink, the record,
+`Replay`), `WorldBootComposition.cs`, `WorldAuthorityEndpoint.cs`,
+`WorldHostStep.cs`, `WorldServerStepShell.cs`, `WorldReplayTape.Drive.cs`,
+`WorldPostBuildWiring.cs` (the tap records), `WorldCaptureScheduler.cs`,
+`WorldTickScript.cs`, `WorldConsoleWaitGate.cs`, `WorldTestRun.cs`,
+`src/Puck.Abstractions/CodeDerivedTable.cs`, the loop.
+Finish: `puck test --reproduce` hashes unchanged (the record is a pure relay);
+lockstep stills byte-identical to phase 1 but for the known residue; a
+`world.at` line pinned inside what would have been a replay burst runs at its
+tick (`[world.at] tick N ran`); a scheduled capture at a tick inside a replay
+fast-forward arms with `tick=N` in its `[still]` stamp; a `world.reload` of a
+document with a changed row shape, under a stdin script that edits a
+selection, keeps the editor's selection consistent (the tap's effects applied
+after the definition); a `CodeDerivedTable` test with a revision bump between
+derive and insert reads the fresh derivation.
 
-### Phase 3: ownership moves
+### Phase 3: the produce path reads no server state
 
-Mark the presentation verbs `CommandRouting.Presentation` and add the frame
-drain; move every read in section 1's table behind the handoff; split
-`WorldClient`'s seat half into its own file; gate `WorldCaptureScheduler`;
-publish `ActiveLayoutName`. Still one thread. Files: `src/Puck.Commands/CommandRouting.cs`,
-`CommandRegistry.cs`, `TextCommandSource.cs`, the verb modules named in
-section 4, `src/Puck.World.Client/WorldClient*.cs`, `WorldContinuum.cs`,
-`src/Puck.World.Server/WorldAdjacencyFields.cs`,
-`src/Puck.World.Console/WorldCaptureScheduler.cs`, `WorldViewComposer.cs`,
-`WorldSimulation.cs`. Finish: every verb family in section 4 answers as
-before over stdin and over `puck_exec`; `world.view.pick` still answers under
-pause; hashes unchanged.
+Every row of section 1's table: the adjacency tick record; the binder's
+join-time source table with deferred machine and instance retirement (F12);
+the alpha from the join; the guard on the server's and instance host's
+frame-facing seams, armed in rehearsal around produce. Still one thread.
+Files: `WorldAdjacencyFields.cs`, `WorldContinuum.cs`,
+`WorldScreenBinder*.cs`, `WorldMachineHost.Instances.cs`,
+`WorldInstanceHost.cs`, `WorldServer.cs`, `WorldFramePresenter*.cs`,
+`SdfWorldResidency.cs`, `FrameContext` filling in the loop.
+Finish: a debug build of the windowed debug World under the rehearsal guard
+runs the sweep's tour, a cabinet engaged and reset, a `world.instance.stop`
+of a visible instance and a crossing into the garden and back with no guard
+throw; a release build's `host.frames` phases unchanged from phase 2;
+hashes unchanged.
 
-### Phase 4: the thread
+### Phase 4: the worker
 
-Start the simulation thread; the frame applies the mailbox; alpha from
-arrival; the lockstep handoff and capture holds; shutdown order. Files: the
-loop, `FixedStepPump.cs` (the parked state), `WorldClientMailbox.cs`,
-`HostFrameTimeline.cs`, `WorldLockstepCommandModule.cs`. Finish: a windowed
-debug World (Direct3D 12, 1280x900, `world.quality high`, `world.lockstep
-off`) standing at the lobby and walking the gallery (`body.pose 30 - 22 90 - -`,
-`player.move 1 0` for 60 ticks) reads `host.frames` with no iteration over
-16.7 ms attributable to `simulate` and the tick lane's p99 within 1 ms of the
-headless tick cost; `world.lockstep on` then a `world.at` still matches the
-phase 1 still; `puck test --reproduce` unchanged; a stdin script with
-`world.wait`, `world.at` and `quit` ends cleanly with
-`--exit-after-seconds`; the MCP `puck_exec` script path answers every line.
+The dedicated worker thread; dispatch after present, join after input, the
+frame never waiting; the drain skipped while in flight; the immediate join
+under one-tick-per-frame and unpaced; shutdown's bounded join and the
+fail-fast policy; the `Join` phase, `steps.late`, `drain.skipped`. Files:
+the loop, `LauncherHostLoop.cs`, `FixedStepPump.cs`, `WorldTickRecord.cs`,
+`HostFrameTimeline.cs`, `HostPacing.cs`.
+Finish: a windowed debug World (Direct3D 12, 1280x900, `world.quality high`,
+`world.lockstep off`) standing at the lobby and walking the gallery
+(`body.pose 30 - 22 90 - -`, `player.move 1 0` for 60 ticks) reads
+`host.frames` with: total frame p99 and max lower than phase 3's by at least
+the tick lane's p50; the `join` phase p99 under 2 ms; `steps.late` zero
+standing and under 1 % walking; the tick lane's p99 within 1 ms of a headless
+`host.frames` at the same stop. Then `world.lockstep on` and a `world.at`
+still matching the phase 1 still; `puck test --reproduce` unchanged; a stdin
+script with `world.wait`, `world.at`, `world.screenshot` and `quit` ending
+cleanly with `--exit-after-seconds`; the MCP `puck_exec` script path answering
+every line, a pinned capture included; a shutdown issued while a body is in
+flight and one while a capture holds, both exiting with the owed capture
+refused by name.
 
 ### Phase 5: hardening
 
 A windowed Vulkan boot of the same stops (the owner's ruling on Vulkan);
 `host.frames` under a forced gen2 (`host.memory collect`) showing neither
-thread waiting on the other beyond the pause; cabinets engaged under lockstep
-and free-running; hot reload under `dotnet watch` with a body edit on the
-presenter and on a rule host; a crossing into the garden and back.
+thread waiting on the other beyond the pause; cabinets engaged, removed,
+replaced and their instance stopped while visible on a screen; hot reload
+under `dotnet watch` with a body edit on the presenter and on a rule host; a
+crossing into the garden and back; a capture whose frame faults (a target
+that throws) refused and the World continuing; a replay drive fast-forwarding
+under `world.lockstep on` and off with a capture row inside the tape; a
+`world.reload` while the frame is mid-produce on a slow frame
+(`world.quality` forced high, large window). Each is a run that is read, not
+a test.
 
 ### The riskiest phase, and what would end the approach
 
-Phase 4's lockstep handoff and capture holds carry the risk: two owners of
-one pump across a mode flip, and a hold that waits on the other thread. The
-plan-B inside the approach is to leave the pump on the simulation thread
-under lockstep too and make the frame thread wait on a tick-complete event
-per frame; the semantics (one tick per presented frame, the frame shows the
-tick it waited for) are the same, with the simulation thread as the only
-owner ever. The approach itself is abandoned only if, after phase 4, the
-standing tick lane's p99 exceeds the headless tick cost by more than the
-margin above, meaning the gates the frame path needs cost more than the
-frame gained; the measurement is the finish line's `host.frames` beside a
-headless `host.frames` of the same stop.
+Phase 3 carries the correctness risk: a server read on the produce path the
+audit missed. The rehearsal guard is built for exactly that, and it runs
+before any thread exists. Phase 4 carries the payoff risk: the join (record
+replay plus epilogue) is work moved onto the frame, and the one-step-per-
+dispatch rule couples the simulation's catch-up to the frame rate.
+
+The approach is abandoned if, after phase 4, either holds on the walking
+workload above: the total frame p99 did not fall by at least the tick lane's
+p50 (the overlap did not remove the tick from the frame), or the `join`
+phase's p99 exceeds 2 ms once the frame-time packet's delivery work is
+subtracted (the record's replay is itself a frame cost the split cannot
+hide). The tick lane's p99 against headless is the second reading, the gate
+cost on the worker, not the criterion. The measurements are the finish
+line's `host.frames`, phase 3 beside phase 4, on a quiet machine.
+
+If it is abandoned, the fallback is already in hand: phases 1 to 3 stand on
+their own (one loop, a pure-relay record, a produce path that reads no server
+state), the tick-cost lane keeps cutting the body, and the remaining frame
+work is the [frame time](open-items.md#frame-time-on-the-lead-machine)
+packet's.
 
 ## 8. What this cannot fix
 
@@ -512,23 +582,45 @@ Costs that stay on the frame thread, with the packet that owns each:
 
 - Produce: 6 to 7 ms on Direct3D 12, 8 to 11 ms on Vulkan
   ([frame time](open-items.md#frame-time-on-the-lead-machine)).
-- View recording on tick frames: the session and window views whose
-  residencies change with the tick record on tick frames only
-  (`ShaderPipelineRenderNode.RenderFrame` 2.8 ms against 0.9 between; the
-  [simulation tick packet](open-items.md#simulation-tick-off-the-frame-thread)'s
-  measured facts, owned by [frame time](open-items.md#frame-time-on-the-lead-machine)
-  and the look call on rendering portal and session views a frame late in
-  [owner decisions](open-items.md#owner-decisions)).
-- First-visit bursts: window feeds' first binding, `WriteOwedMeshes`,
-  `PackDynamicTransforms`, the exposure meter's trace
-  ([frame time](open-items.md#frame-time-on-the-lead-machine),
-  [residency and streaming](open-items.md#residency-and-streaming)).
-- GC pauses suspend both threads: gen0 10 to 12 ms with 4 MB promoted, the
-  glass resize's gen2 ([frame time](open-items.md#frame-time-on-the-lead-machine)).
-- Irradiance publication and the far cascade
-  ([lighting and GI](open-items.md#lighting-and-gi)).
-- The tick's own cost (rule evaluation 44 %, snapshot delivery 17 %, the
-  scoped replay hash 10 %) moves off the frame but still bounds how far
-  behind real time a slow machine runs
-  ([frame time](open-items.md#frame-time-on-the-lead-machine),
-  [test runner and replay](open-items.md#test-runner-and-replay)).
+- View recording on tick frames (`ShaderPipelineRenderNode.RenderFrame`
+  2.8 ms against 0.9 between), now on the join's frame rather than the
+  step's; owned by frame time and the look call on rendering portal and
+  session views a frame late in [owner decisions](open-items.md#owner-decisions).
+- The record's replay into the two local sinks: the delivery share of today's
+  tick (about 17 % of it), which the join now pays. Folding the two mirrors
+  (section 6, item 6) halves it.
+- First-visit bursts, GC pauses, irradiance publication and the far cascade,
+  as before.
+- The body's own cost (rule evaluation 44 %, the scoped replay hash 10 %)
+  moves off the frame but still bounds how far behind real time a slow
+  machine runs, and under one step per dispatch a frame rate below the tick
+  rate slows the World.
+- One iteration of added presentation latency for a tick's visible effect
+  (section 2).
+
+## Review resolution
+
+The one cross-family review (Codex Astra, 12 high, 6 medium) against the
+first revision. Each finding was re-verified against the code before its
+resolution was chosen; file and line are the citation that holds.
+
+| Finding | Verified | Resolution |
+|---|---|---|
+| F01 high: publication does not establish ownership or slot reclamation | Holds; the first revision specified none. | Removed by construction: the record's writer runs only between dispatch and join and its reader only between join and dispatch, so no slot is ever read and written at once; no ring, no fold (decision 3). |
+| F02 high: `WorldStateStamp.MovedRows` is borrowed | Holds (`WorldStateStamp.cs:12-13`, `WorldServer.StateStamp.cs:15`). | The record copies `MovedRows` into its own `int[]`, as it copies `EntitySnapshot.State`; every nested memory in a delivery is copied (phase 2). |
+| F03 high: the fold loses document cells and crosses schema barriers | Holds (`WorldDocument.Apply.cs:965,996,1006`: document cells publish independently of `FieldsFull`). | No fold exists: every entry is replayed in delivery order before the next dispatch (decision 3). |
+| F04 medium: four slots bound neither payload nor allocation | Holds for a folding ring. | One record holding one body's deliveries, grown once to its high-water mark; a body is one tick or a budgeted replay burst, so the bound is the burst (phase 2's finish measures no steady-state allocation). |
+| F05 high: seat binding and roster consumers defeat the client split | Holds (`WorldSeatBindings.cs:1523-1531` reads `client.StateMirrorFor`, the presentation mirror, in the post-step). | The client is not split: `PublishSeats` runs in the epilogue on the frame thread after the record applied, so the mirror it reads is current; the primer passes through the recording sink synchronously (decision 1, section 2). |
+| F06 high: `ReleaseHeld` mutates the input fold outside the capture gate | Holds (`InputRouter.cs:2060-2078`, `InputRouter.Sustain.cs:117`). | `ReleaseHeld`, `Capture` and `SnapshotForTick` all stay on the frame thread in today's order; nothing of the router crosses a thread (decision 1). |
+| F07 high: a gated camera yaw changes authoritative input by schedule | Holds (`WorldSeatViewState.cs:380-409`, `WorldClient.cs:424`). | `Nudge` and `ComposeMoveFrame` both stay on the frame thread; the prologue composes intents immediately before dispatch, so the yaw a tick sees is decided exactly as today (decision 1, section 3). |
+| F08 high: filtering text collection does not route bound commands, nested scripts or host operations | Holds (`WorldTickScript.cs:249-261`, `WorldViewCommandModule.cs:281`, `ConsoleControlSession.cs:104`). | No routing axis and no second drain: every dispatch path runs on the frame thread with the server idle (decision 5, section 4). |
+| F09 high: two filtered drains race session state; the barrier does not see frame application | Holds (`TextCommandSource.cs:21-45,71-124`). | One drain, one arbiter, on the frame thread; a query after a mutation runs after the join that applied the mutation's tick, because the drain never runs while a body is in flight (decision 5). |
+| F10 high: capture arming is a cross-owner transaction | Holds (`WorldCaptureScheduler.cs:249-277,426-532`, arming the renderer from the step). | Arming, holding, publishing and serving all stay on the frame thread; `PublishTick` runs in the epilogue with the server at the completed tick; a hold is the frame thread declining to dispatch (section 2, Holds). |
+| F11 high: reload callbacks bypass the sink; saves read presentation in reverse | Holds (`WorldPostBuildWiring.cs:302-345`, `WorldSaveSnapshot.cs:21-35`). | The echo tap records each echo into the record and the epilogue runs the tap's body in order after the definition; `world.save` runs in the drain with no body in flight (section 1 table, section 4). |
+| F12 high: machine worker isolation does not protect frame-held video outputs or instance lifetimes | Holds (`WorldScreenBinder.Device.Sources.cs:27-42`, `WorldMachineHost.Instances.cs:50-61,996-1010`, `WorldInstanceHost.cs:1405-1419`). | The binder resolves its source table at the join; machine and instance disposals are deferred to the following join, after the binder re-resolved (section 1 table; phase 3 and phase 5 exercise removal, replacement and stop while visible). |
+| F13 high: session mirrors are not coherent frame images; a swapped adjacency record can alias arrays | Holds for the mirror (`WorldSessionMirror.cs:533-594` in place; `WorldSessionSceneEmitter.cs:693-705` per property); half-holds for adjacency, whose `Pin` already copies through the gated `CopySnapshotTo` (`WorldAdjacencyFields.cs:676-693`). | The boot mirror is delivered at the join on the frame thread, so no write overlaps a frame's reads; adjacency's tick-side state becomes one immutable record swapped by reference. The remote mirror's socket-thread hazard is pre-existing and filed in the packet. |
+| F14 medium: one outer `TryStep` can advance many replay ticks | Holds (`WorldServerStepShell.cs:65-71`, `WorldReplayTape.Drive.cs:65-77`). | Phase 1 carries the pacing policy through the shell; phase 2 adds the tick budget from the hooks' `NextDueTick`, so a burst never steps past a pinned line, a wait release, a schedule step or a capture row. Check: phase 2's finish (`world.at` and a capture row inside a fast-forward). |
+| F15 medium: parking needs timeout, fault wakeup and a disposal rule | Holds for a parked pump. | No parking exists; shutdown joins the body with a bound, a faulted body rethrows at the join, a hung body fails the process fast rather than disposing under it (section 5). Check: phase 4's two shutdown runs. |
+| F16 medium: removing the outer drain breaks held and no-simulation loops | Holds (`FixedStepPump.cs:139-144,305-330`, `OffscreenTickHostedService.cs:222,252`). | Folded into phase 1: one drain operation at both scheduling points, with the capture-held and no-simulation runs as its check (section 6, item 3). |
+| F17 medium: `CodeDerivedTable` can retain a stale derivation under the new revision | Holds (`CodeDerivedTable.cs:30-41,66-73`): a derivation begun under R inserts after a `Clear` for R+1. | Pre-existing; fixed in phase 2 by a generation object owning its own table, with a test bumping the revision between derive and insert (the one check running cannot show). |
+| F18 medium: the finish lines can pass without a safe handoff or the frame-time goal | Holds. | Phase 4's finish reads total frame p99 and max, the `join` phase, `steps.late` and the tick lane; the abandonment criterion is the total-frame improvement and the join cost, not the tick lane alone; phase 3's rehearsal guard and phase 5's fault runs are the adversarial interleavings (section 7). |

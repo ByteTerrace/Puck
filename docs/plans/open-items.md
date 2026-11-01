@@ -81,7 +81,8 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    [the memo](simulation-thread.md)'s phase 2, the mailbox on one thread.
+    [the memo](simulation-thread.md)'s phase 2, the tick record on one thread,
+    then the produce audit and the step body on a worker.
 
 ## Owner decisions
 
@@ -90,6 +91,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
+- Whether a tick's visible effect may arrive one frame later (about 16.7 ms
+  at 60 Hz) so the simulation step overlaps present on a worker, keeping every
+  client object on the frame thread; the lower-latency shape brings back the
+  cross-thread protocols its review found unsafe
+  ([simulation thread](simulation-thread.md#latency)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
@@ -161,33 +167,28 @@ The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
 velocity and correctness first; paths are under `src/`). `puck scan --only
 clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
 mostly short emulator `TransferState` bodies); the duplicates that matter are
-second implementations of one mechanism under other names:
+second implementations of one mechanism under other names (group 1, the
+file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
+`FileLock` and `Retry`; its remainder is filed here):
 
-1. File-system primitives (M, implementer). One survivor each: `AtomicFile`
-   (`Puck.Assets/AtomicFile.cs`) for writes, moved down to `Puck.Abstractions`
-   so its lowest caller reaches it; one exclusive file lock beside it; one retry.
-   - `[medium]` Six exclusive lock files, each with its own idea of contention:
-     `CliLease.TryAcquire` (`Puck.Cli.Core/CliLease.cs:308`, HResult low word
-     11/32/33), `ShaderBuild.AcquireLock` (`Puck.Shaders.Model/Compiler/ShaderBuild.Publication.cs:30`,
-     any `IOException` until a deadline), `ShaderPackager.LockPackageAsync`
-     (`Puck.Shaders/Packaging/ShaderPackager.Store.cs:182`, the precise test:
-     sharing violation or the platform's `EWOULDBLOCK` only), `WorldArtifactStore.TryOpen`/`Acquire`
-     (`Puck.Cli.Harness/WorldArtifactStore.cs:65`, any `IOException` or
-     `UnauthorizedAccessException`), `LawProofTree.TryAcquire` and `Prune`
-     (`Puck.Cli.Laws/LawProofTree.cs:55`), `FileReleaseSequenceStore.TryAcquireLease`
-     (`Puck.Launcher/Release/IReleaseSequenceStore.cs:96`). Every one but the
-     packager's treats a missing directory or a full disk as another holder and
-     waits out its deadline. Survivor: the packager's contention test, with a
-     try-once, a deadline and a cancellable wait.
-   - Hand-rolled temp-and-rename writes beside `AtomicFile`:
-     `GpuPipelineCacheFile.Save` (`Puck.Abstractions/Gpu/Pipelines/GpuPipelineCacheFile.cs:161`),
-     `ShaderBuild.Publish` (`ShaderBuild.Publication.cs:67`, with its own
-     `Retry` at 85 beside `CliRetry`), `CountersPipelineCache.Copy`
-     (`Puck.Cli.Runs/Counters/CountersPipelineCache.cs:41`),
-     `ShaderDeclarations` (`Puck.SdfVm.Model/ShaderDeclarations.cs:163`), and
-     `CliLease.Serve` (`CliLease.cs:265`), whose fixed `<path>.tmp` name two
-     writers share `[low]`. None keeps the mapped-file `File.Replace` fallback
-     `AtomicFile` has for Windows.
+1. File-system primitives, remainder (S, implementer). Temp-and-rename writes
+   `AtomicFile` cannot serve yet `[low]`: `ShaderCompiler.Entries.cs:49` publishes
+   a cache entry only if the name is absent (`File.Move` with no overwrite) and
+   wants an `AtomicFile` write that refuses to replace; `Puck.Launcher.Stub/StubHealth.cs:88`
+   and `StubInstall.cs:132` write beside the destination and rename, in a project
+   that references only `Puck.Confinement` and `Puck.Maths`; and
+   `Puck.Storage/DirectoryObjectBlobStoreBackend.cs:189` stages through a
+   confined directory handle. A lock file `FileLock` opens can be pending delete
+   on Windows when a stale-lock sweep (`WorldArtifactStore.PruneLocked`) removes
+   it as `AcquireBuild` opens it; the open then throws `UnauthorizedAccessException`
+   instead of waiting `[low]`. A seventh lock, `ConfinedDirectory.TryAcquireLock`/`AcquireLock`
+   (`Puck.Confinement/ConfinedDirectory.cs:173`, `188`), opens its file relative to
+   a directory handle without following links, with its own contention test
+   (`ConfinedDirectory.Windows.cs:213`, `ConfinedDirectory.Linux.cs:137`, which also
+   counts Windows lock violation 33). It sits in a BCL-only leaf below
+   `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
+   cannot replace it; whether the two contention tests should share one
+   definition is open.
 2. The document binding walk (M, specialist). `WorldPresentationManifest`
    (`Puck.World.Protocol/Protocol/WorldPresentationManifest.cs:55-70`,
    `345-418`, its `Builder` from 420) and `WorldKeyedValues`
@@ -315,6 +316,76 @@ Duplicates the survey left to the lanes that own their areas:
   closure, so it lands with that lane's closure change.
 - Simulation thread: its host-loop duplicates are filed above; this survey
   found none beyond them.
+
+An independent audit (Antigravity) confirmed every group above as one
+mechanism implemented twice, with corrections a lane taking the group checks
+first:
+- Group 1: three of the five non-packager lock sites already refuse a missing
+  directory rather than waiting (`CliLease.TryAcquire` filters HResult 11, 32
+  and 33 at `Puck.Cli.Core/CliLease.cs:316`), so the `[medium]` overstates
+  them; a seventh lock lives in `Puck.Confinement` (`InstallRegistration.cs:134`).
+- Group 2: the vector-binding bug is not one: `BindableDirection`,
+  `BindableVector2` and `BindableVector3` bind no state row by design
+  (`Puck.World.Schema/BindableValue.cs:339`, `391`, `444`).
+- Group 3: `GpuRangeAllocator` and `GpuMemoryRanges` share first-fit and
+  neighbour coalescing; unify that core (array-backed, `ulong`, aligned) and
+  keep each caller's own bookkeeping.
+- Groups 5b, 6b, 7a, 8a and 8b hold for most named sites; the exceptions are
+  structural: `WorldTestBatch` and `OperatorWorlds` cannot reference
+  `Puck.Cli.Harness`, each `.Post` keeps its core-specific `EmbeddingStage`,
+  `WorldTabletopFrame.Footprint` stays a class for its `ConditionalWeakTable`,
+  and `PuckParser.ParseHexColor` (`Puck.Transpiler/Parsing/PuckParser.cs:1357`)
+  accepts `#RGB` and `#RGBA` that `HexColor.TryParse`
+  (`Puck.World.Authoring/Authoring/HexColor.cs:107`) refuses `[medium]`.
+
+The audit's blind scan found more, ranked by payoff (the lead confirmed the
+benchmark and AV1 items in the code; the rest are unconfirmed):
+1. Machine cores and hosts (M): `HumbleGamingBrickCore.RestoreState` and
+   `FlushSave` (`Puck.HumbleGamingBrick/Hosting/HumbleGamingBrickCore.cs:120`,
+   `245`), `AdvancedGamingBrickCore` (`:114`) and `HumbleGamingDeckCore`
+   (`:122`) each carry the save and restore lifecycle, and `MachineHost`,
+   `AdvancedMachineHost` and `DeckMachineHost` each forward
+   `IMachineMemoryPeek` and pin `DefaultMaximumPendingSteps = 8` beside
+   `QueuedMachineHost` (`Puck.Machines/QueuedMachineHost.cs:11`). Restoring a
+   GB/GBC checkpoint whose snapshot has `ExternalRamDirty == false` after an
+   earlier flush leaves the un-rewound save on disk `[medium]`; HGB writes saves
+   with `File.WriteAllBytes`, not `AtomicFile` `[low]`.
+2. `WorldCompileCache.ComputeCompilerIdentity` and `Trim`
+   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
+   `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
+   `CompiledWorld.ComputeEngineBuild` and `CacheRetention.EnforceOnWrite`,
+   skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
+   write (S) `[low]`.
+3. The machine benchmark harness, written twice
+   (`Puck.AdvancedGamingBrick.Post/BenchDiagnostic.cs`,
+   `Puck.HumbleGamingBrick.Post/BenchDiagnostic.cs`, M); HGB's `determinismHeld`
+   accumulates across rows (`:678-681`), so every row after a broken one prints
+   `<< DETERMINISM BROKEN` `[low]` (confirmed).
+4. Camera plane validation and L8/BGRA packing:
+   `Win32FaceAuthenticationPixelGraph`
+   (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
+   `CameraFramePacking` (`Puck.Platform/CameraFramePacking.cs:15`); the first
+   throws on a bottom-up (negative stride) frame (S) `[low]`.
+5. AV1 OBU framing: `Av1Bitstream.TryReadObu`
+   (`Puck.Platform.Windows/Recording/Av1Bitstream.cs:273`) beside
+   `Av1TemporalDelimiterFilter.Strip`
+   (`Puck.Recording/Session/Av1TemporalDelimiterFilter.cs:30`); the first omits
+   the forbidden-bit check the second makes (S) `[low]` (confirmed).
+6. Latest-value seqlock publication: `PublishBuffer<T>`
+   (`Puck.Hosting/PublishBuffer.cs:12`) beside `ProbeReadingRing`
+   (`Puck.Platform/Probes/ProbeReadingRing.cs:12`) (S).
+7. Controller HID feature-report framing, IMU timestamp delta and rumble
+   deadline across `SteamController`, `SteamControllerTriton` and
+   `DualSenseController` (`Puck.Input/Devices/`), and `GamepadDevice` beside
+   `XInputGamepadConnection` (S).
+8. `BindableDirectionJsonConverter` beside `BindableVector3JsonConverter`
+   (`Puck.World.Schema/BindableValue.cs:627-788`) (S).
+9. SingleStepTests bus-trace and RAM harnesses: `Sm83SstHarness` and
+   `Sm83SstBus` (`Puck.HumbleGamingBrick.Post/`) beside `Nes6502SstHarness` and
+   `CpuTestMemory` (`Puck.HumbleGamingDeck.Post/`) (S).
+10. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
+    (`:122`) and `engineBoot.ts` (`:83`) under
+    `Puck.Dashboard/src/portal/src/native/` (S).
 
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
@@ -991,22 +1062,43 @@ empty store (AGENTS.md).
 ### Simulation tick off the frame thread
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: build [the simulation thread](simulation-thread.md) phase 2, the mailbox
-on the existing single host thread. Phase 1 delivered the shared loop, clock,
-interpolation, step shell, console operation and shed-step diagnostics. The owner queued the thread.
+Next: build [the simulation step off the frame thread](simulation-thread.md)
+by its phases: phase 1 delivered the shared host loop, shell, console operation,
+client clock, arrival interpolation and tick/shed diagnostics; next is phase 2
+(the tick record, still one thread), phase 3 (the produce path reads no
+server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
+(hardening). The owner queued the thread.
 
-- Decided in [the simulation thread](simulation-thread.md#decisions): one
-  simulation thread owns the pump, the server, every instance host, the
-  console drain and the seat half of the client; the handoff is a mailbox
-  behind the existing `IClientSink` seam, applied in order on the frame
-  thread, folding a superseded snapshot with `EntityContinuity.Then`; the
-  frame derives its clock and alpha from what it applied; input capture is
-  unchanged (the router's capture gate already crosses threads);
-  presentation verbs declare a routing on the registry's one routing axis;
-  offscreen, `world.lockstep` and unpaced headless step inline through the
-  same pump and loop; the three host loops converge into one before the
-  thread is added. The memo's build plan, duplicates and limits are its
-  sections 6 to 8.
+- Owner decision owed: the design costs one iteration of presentation
+  latency for a tick's visible effect (about one frame period at 60 Hz, and
+  about 8 ms more than a free-running simulation thread would), the price of
+  keeping every client object on one thread
+  ([latency](simulation-thread.md#latency)). Under one step per dispatch a
+  World whose tick rate exceeds the display's refresh steps inline, as today.
+- Decided in [the simulation step off the frame thread](simulation-thread.md#decisions),
+  after the memo's one cross-family review (its findings and each one's
+  resolution are the memo's [review resolution](simulation-thread.md#review-resolution)):
+  the frame thread keeps everything it owns today (the pump, the router, the
+  one console drain, the capture scheduler, the client whole); one dedicated
+  worker runs only `WorldHostStep`'s body (the server step and the instance
+  steps) between a dispatch after present and a join after the next input
+  capture, so the step overlaps the present block and the pacer's wait; the
+  hub delivers the body's ticks into one tick record the frame thread replays
+  into the local sinks at the join, so writer and reader never overlap and
+  no ring, fold or second drain exists; the frame derives its clock and alpha
+  from the record it applied; one step per dispatch, with a replay drive's
+  burst budgeted to the next tick barrier (a pinned `world.at` line, a wait
+  release, a schedule step, a capture row); lockstep, offscreen and unpaced
+  headless join immediately through the same code; a debug guard on the
+  server's frame-facing seams proves the produce path reads no server state
+  before any thread exists; the three host loops converge first.
+- Filed by the review, outside this design: a remote `WorldSessionMirror`'s
+  per-property pose reads (`WorldSessionSceneEmitter.cs:693-705`) against its
+  socket thread's in-place delivery (`WorldSessionMirror.cs:533-594`) can
+  compose a frame from two ticks; the fix is the coherent-copy path the
+  adjacency pin already uses (`CopySnapshotTo`). Pre-existing; owner: the
+  federation lane. `CodeDerivedTable`'s stale-generation insert is fixed in
+  the memo's phase 2.
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
