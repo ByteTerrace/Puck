@@ -102,6 +102,16 @@ experimental worlds have that it lacks is ported into it
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
+- The debug world's composition: four look questions the references leave open
+  ([composition plan](debug-world-composition.md)). They are the avatar
+  studio's home (a lawn pavilion, or the gallery's level 3), the stream's
+  course (centre-west to the pool, or hugging the far wall as the overview
+  paints it), tree form (rounded broadleaf crowns, flat acacia-like crowns, or
+  both), and the sun's direction and time of day.
+- Whether the Moth climbs: the standard's `crawlHold` (wall and ceiling, spends
+  stamina) is ready, and the spiders use it. Giving it to the Moth means she
+  climbs any wall she walks into, which changes the Wonderland mouse-hole
+  wall's role.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -260,7 +270,13 @@ One engine-wide job system answers all of it:
   60 Hz display only every other refresh is free of a step, so the useful
   periods are two and four refreshes, which the tiers already are; a continuous
   rate would be quantized back to them and adds no placement freedom.
-- [medium] Kit bodies' advance stays serial, so the parallel tick partitions
+- [high] The creature garden, the parallel tick's forcing workload, is all kit
+  bodies. At 128 creatures a tick is about 3.7 ms, and body advance is 80 % of
+  it (motion programs 33 %, their contact sweeps 30 %, producers 17 %). The
+  planned rigid-body step (T2) takes none of that, so this item, not T2,
+  carries the parallel tick's main gain. It follows T1 and T3 in the memo's
+  order. (from: garden, `worlds/debug/garden-crowd.puck`)
+  Kit bodies' advance stays serial, so the parallel tick partitions
   only the snapshot, the crossing scan and the rigid bodies, which is less than
   the measured 70 %. A kit body's advance is one arena transaction on the one
   journal: `BeginKitStep` opens a scope (`WorldInputRuntime.Effects.cs:18-24`),
@@ -2512,6 +2528,15 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- Decide (the language lane's call): whether a rule's effect list merges by
+  `key` when a template is re-expanded over a basis. Today a rule whose effects
+  write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with
+  "the basis list carries it more than once", so the garden's crowd fixture
+  re-expands only `pondFlocks`. Effects are ordered actions, not a keyed set.
+  (from: garden)
+- [low] The rule work-unit ceiling reads 4,250,000 on the port page and
+  4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
+  (from: composition)
 - [medium] A solid creation shape without `position` throws instead of giving
   an authoring diagnostic. Removing `position [0, 0, 0]` from
   `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
