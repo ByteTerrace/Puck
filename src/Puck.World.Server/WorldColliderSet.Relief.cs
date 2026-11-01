@@ -10,8 +10,7 @@ namespace Puck.World.Server;
 // A relieved creation (one carrying a noise facet) collides as the surface its bake draws: one field collider per
 // stamped copy, whose field is the creation's own fixed-point program (its contact shapes and the relief over their
 // union, in one scope), read by the evaluator the field provider uses. A collider follows the drawn solid
-// (docs/decisions/engine-design.md); its primitives' analytic colliders stand only as its bounds and the diagnostic's
-// witnesses.
+// (docs/decisions/engine-design.md); its primitives' analytic colliders stand only as the diagnostic's witnesses.
 public sealed partial class WorldColliderSet {
     // The gradient taps' half-span: a thirty-second of a metre, or a sixteenth of the relief's finest wavelength when that
     // is shorter, and never under a 1024th of a metre.
@@ -24,10 +23,19 @@ public sealed partial class WorldColliderSet {
     /// <returns><see langword="true"/> when the creation has a noise facet of nonzero amplitude.</returns>
     internal static bool Relieves(CreationDocument document) => (document.Noise is { } noise) && (noise.Amplitude != 0f);
 
-    // One placement copy's analytic primitive colliders: the witnesses a relieved field projects, and its bounds.
-    private static List<FixedStaticCollider> PrimitiveColliders(CreationDocument document, in FixedCreationStampTransform transform, FixedQ4816 margin, out bool unbounded) {
+    // One placement copy's analytic primitive colliders, the witnesses a relieved field projects, and the world box that
+    // holds its relieved surface: each primitive's own drawn bound (never a witness collider's inset core), grown by the
+    // relief's reach, which the composed field reads at most `growth` below its shapes' union. Within an exact primitive
+    // that reading is within `growth` of it; a superellipsoid's field is its gauge times its least radius, so it grows by
+    // 1 + growth over that radius.
+    private static List<FixedStaticCollider> PrimitiveColliders(CreationDocument document, in FixedCreationStampTransform transform, FixedQ4816 margin,
+        FixedQ4816 growth, out bool unbounded, out (FixedVector3 Center, FixedVector3 HalfExtent) bounds) {
         var colliders = new List<FixedStaticCollider>();
         var plane = false;
+        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
+        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+        var reach = (growth + margin);
+        var pad = new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon);
 
         CreationStampEmitter.VisitFixedPrimitiveCopies(
             document: document,
@@ -36,57 +44,64 @@ public sealed partial class WorldColliderSet {
                 if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                     plane = true;
                     colliders.Add(item: FixedStaticCollider.HalfSpace(point: (copy.Center + (copy.PlaneNormal * margin)), normal: copy.PlaneNormal));
-                } else if ((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero)) {
+                    return;
+                }
+
+                if ((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero)) {
                     colliders.Add(item: FixedStaticCollider.Sphere(center: copy.Center,
                         radius: ((FixedQ4816.FromDouble(value: SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere).HalfExtents.X) * copy.UniformScale) + margin)));
                 } else {
                     colliders.Add(item: PlacementFinite(copy: copy, margin: margin));
                 }
+
+                FixedVector3 half;
+
+                if (copy.Shape.Type == SdfSolidPrimitive.Superellipsoid) {
+                    var least = FixedQ4816.Max(x: FixedQ4816.Epsilon,
+                        y: FixedQ4816.Min(x: copy.LocalHalfExtents.X, y: FixedQ4816.Min(x: copy.LocalHalfExtents.Y, y: copy.LocalHalfExtents.Z)));
+
+                    half = ((copy.HalfExtents * (FixedQ4816.One + (reach / least))) + pad);
+                } else {
+                    half = ((copy.HalfExtents + new FixedVector3(X: reach, Y: reach, Z: reach)) + pad);
+                }
+
+                low = -FixedVector3.Max(left: -low, right: (half - copy.Center));
+                high = FixedVector3.Max(left: high, right: (copy.Center + half));
             }
         );
+
         unbounded = plane;
+        bounds = (((low + high) / FixedQ4816.FromInteger(value: 2)), ((high - low) / FixedQ4816.FromInteger(value: 2)));
         return colliders;
     }
-    // The world box that holds a relieved copy's surface. The relief moves the surface to where the union's field reads
-    // its negation, at most the amplitude: within the amplitude of an exact primitive, and within a superellipsoid's
-    // gauge scaled by 1 + amplitude over its least radius, since its field is that gauge times its least radius.
-    private static (FixedVector3 Center, FixedVector3 HalfExtent) ReliefBounds(List<FixedStaticCollider> primitives, FixedQ4816 amplitude) {
-        var low = new FixedVector3(X: FixedQ4816.MaxValue, Y: FixedQ4816.MaxValue, Z: FixedQ4816.MaxValue);
-        var high = new FixedVector3(X: FixedQ4816.MinValue, Y: FixedQ4816.MinValue, Z: FixedQ4816.MinValue);
+    // How far below the least of its shapes' readings a composed program can read: a smooth union lowers the lesser
+    // operand by at most a quarter of its radius, a hard union, subtraction or intersection never below it, and every
+    // other blend by at most its radius. A soft blend's radius floors at the kernels' minimum.
+    private static FixedQ4816 BlendGrowth(SdfProgram program) {
+        var growth = 0.0;
 
-        foreach (var primitive in primitives) {
-            FixedVector3 half;
-
-            if (primitive.Kind == FixedStaticColliderKind.Superellipsoid) {
-                var least = FixedQ4816.Min(x: primitive.Extent.X, y: FixedQ4816.Min(x: primitive.Extent.Y, y: primitive.Extent.Z));
-                var grown = (primitive with { Extent = (primitive.Extent * (FixedQ4816.One + (amplitude / FixedQ4816.Max(x: least, y: FixedQ4816.Epsilon)))) });
-
-                // A convex solid's support along each world axis is its exact world box.
-                half = new FixedVector3(
-                    X: (grown.SupportPoint(direction: FixedVector3.UnitX).X - grown.Center.X),
-                    Y: (grown.SupportPoint(direction: FixedVector3.UnitY).Y - grown.Center.Y),
-                    Z: (grown.SupportPoint(direction: FixedVector3.UnitZ).Z - grown.Center.Z)
-                ) + new FixedVector3(X: FixedQ4816.Epsilon, Y: FixedQ4816.Epsilon, Z: FixedQ4816.Epsilon);
-            } else {
-                half = (primitive.WorldHalfExtent()!.Value + new FixedVector3(X: amplitude, Y: amplitude, Z: amplitude));
+        foreach (var instruction in program.Instructions) {
+            if (!(((instruction.Op == SdfOp.ShapeBlend) && !instruction.Detail) || (instruction.Op == SdfOp.PopField))) {
+                continue;
             }
 
-            low = new FixedVector3(X: FixedQ4816.Min(x: low.X, y: (primitive.Center.X - half.X)), Y: FixedQ4816.Min(x: low.Y, y: (primitive.Center.Y - half.Y)),
-                Z: FixedQ4816.Min(x: low.Z, y: (primitive.Center.Z - half.Z)));
-            high = FixedVector3.Max(left: high, right: (primitive.Center + half));
+            var blend = ((SdfBlendOp)instruction.Blend);
+            var radius = Math.Max(val1: Math.Abs(value: (double)instruction.Data1.X), val2: SdfProgram.SmoothRadiusMin);
+
+            if (blend == SdfBlendOp.SmoothUnion) {
+                growth += (radius / 4.0);
+            } else if (!((blend == SdfBlendOp.Union) || SdfBoundAlgebra.IsSubtraction(blend: blend) || SdfBoundAlgebra.IsIntersection(blend: blend))) {
+                growth += radius;
+            }
         }
 
-        var two = FixedQ4816.FromInteger(value: 2);
-
-        return (((low + high) / two), ((high - low) / two));
+        return (FixedDirectedRounding.TryCeilingFromDouble(result: out var ceiling, value: growth) ? ceiling : FixedQ4816.MaxValue);
     }
-    // The relieved program of one copy, its frame origin at offset from the copy's stamp origin, read as contact reads it.
-    private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded, IReadOnlyList<FixedStaticCollider> bases) {
+    // The relieved program of one copy, its frame origin at offset from the copy's stamp origin, read as contact reads it,
+    // with the unrelieved program as its envelope: the surface lies where the shapes' union reads at most the amplitude.
+    private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
+        IReadOnlyList<FixedStaticCollider> bases, SdfProgram envelope) {
         var noise = document.Noise!;
-        var program = ReliefProgram(document: document, margin: margin, relieved: true, transform: transform);
-        // The shapes without their relief bound it: the surface lies where their union reads at most the amplitude.
-        var envelope = ReliefProgram(document: document, margin: margin, relieved: false, transform: transform);
-        var envelopeScale = BoundScale(program: envelope);
         // The finest octave's wavelength in world units: the creation's units scaled by the stamp.
         var finest = MathF.Abs(x: noise.Frequency);
 
@@ -98,15 +113,13 @@ public sealed partial class WorldColliderSet {
         var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ReliefGradientStep, val2: (wavelength / 16f)));
 
         return new FixedColliderField(
-            field: new SdfFieldEvaluator(program: program),
-            boundScale: BoundScale(program: program),
+            field: new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: true, transform: transform)),
             gradientStep: FixedQ4816.FromDouble(value: step),
             bounded: bounded
         ) {
             Bases = bases,
             Envelope = new SdfFieldEvaluator(program: envelope),
-            EnvelopeScale = envelopeScale,
-            EnvelopeGrowth = (envelopeScale * FixedQ4816.FromDouble(value: MathF.Abs(x: noise.Amplitude))),
+            EnvelopeGrowth = FixedQ4816.FromDouble(value: MathF.Abs(x: noise.Amplitude)),
         };
     }
     // A creation copy's contact shapes in one scope, with its relief over their union or without it.
@@ -124,21 +137,23 @@ public sealed partial class WorldColliderSet {
         WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);
         return builder.Build();
     }
-    // The program's step scale floored onto the fixed grid, so the scaled field never reads above the distance.
-    private static FixedQ4816 BoundScale(SdfProgram program) =>
-        (FixedDirectedRounding.TryFloorFromDouble(result: out var floored, value: program.StepScale)
-            ? FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Epsilon, value: floored)
-            : FixedQ4816.Epsilon);
     // One static copy's field collider: its frame is the world box's centre, unturned, so the program carries the stamp's
-    // own translation less that centre, and its rotation.
-    private static FixedStaticCollider ReliefCollider(CreationDocument document, FixedCreationStampTransform transform, float margin) {
+    // own translation less that centre, and its rotation. Null for a copy contact keeps no shape of.
+    private static FixedStaticCollider? ReliefCollider(CreationDocument document, FixedCreationStampTransform transform, float margin) {
+        if (!CreationStampEmitter.EmitsContact(document: document)) {
+            return null;
+        }
+
         var fixedMargin = FixedQ4816.FromDouble(value: margin);
-        var primitives = PrimitiveColliders(document: document, transform: transform, margin: fixedMargin, unbounded: out var unbounded);
-        var (center, half) = (unbounded
-            ? (transform.Origin, FixedVector3.Zero)
-            : ReliefBounds(primitives: primitives, amplitude: FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude))));
-        var field = ReliefField(document: document, transform: (transform with { Origin = (transform.Origin - center) }), margin: margin,
-            bounded: !unbounded, bases: primitives);
+        // The unrelieved program, at the stamp's own origin: its blends bound how far the relief's union reaches.
+        var envelope = ReliefProgram(document: document, margin: margin, relieved: false, transform: transform);
+        var growth = (FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) + BlendGrowth(program: envelope));
+        var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, transform: transform,
+            unbounded: out var unbounded);
+        var (center, half) = (unbounded ? (transform.Origin, FixedVector3.Zero) : box);
+        var local = (transform with { Origin = (transform.Origin - center) });
+        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document,
+            envelope: ReliefProgram(document: document, margin: margin, relieved: false, transform: local), margin: margin, transform: local);
 
         return FixedStaticCollider.FieldSurface(center: center, rotation: FixedQuaternion.Identity, halfExtent: half, field: field);
     }

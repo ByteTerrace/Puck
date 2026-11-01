@@ -119,7 +119,7 @@ public sealed partial class SdfFieldEvaluator {
                             return false;
                         }
 
-                        var scale = ((instruction.Data1Y > FixedQ4816.Zero) ? ((double)instruction.Data1Y) : 0.0);
+                        var scale = ((instruction.ScopeScale > 0L) ? (instruction.ScopeScale / ScopeScaleOne) : 0.0);
 
                         for (var member = scopeStart; (member < lowering.Count); member++) {
                             lowering[member] = lowering[member].Scaled(scale: scale, slack: (slackRaws * RawUnit));
