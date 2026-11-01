@@ -1734,6 +1734,15 @@ them verbatim repeats) under-use the language:
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
+- From step 1 (illum-step1): stretching the far cascade to cover the valley
+  costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
+  0.24 against 8.4 ms, 13.9 against 55.3 cm texels), so the valley waits for the
+  terrain pass's step 7 static cascade; indoors a cel style tints bounced light
+  as its shadow band, so banded materials in the hall read as shadow tone until
+  step 2 feeds GI to the style; `world.debug-view shadow` paints unqueried
+  pixels white like lit ones; at the noon sun the meadow lies in the east
+  wall's shadow. Step 1's checks and the frame bar are owed again on the moving
+  day cycle, with a low-sun cel style for the dawn penumbra check.
 - [high] A sun that moves every frame freezes indirect light. Each direction
   change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
   hashes every directional and traced light record), and a trace batch landing
