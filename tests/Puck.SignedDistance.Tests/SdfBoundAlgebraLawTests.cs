@@ -414,7 +414,8 @@ public sealed class SdfBoundAlgebraLawTests {
 
         var program = scopeOnly.Build();
         var scopeCost = program.InspectInstance(index: 0);
-        var evaluator = new SdfFieldEvaluator(program: program);
+        // The rescale bounds the field the renderer draws; contact keeps a union scope's own resolution unscaled.
+        var evaluator = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render);
         var random = new Random(Seed: 2061);
         var sampled = 0;
         var belowTheBareDistance = 0;

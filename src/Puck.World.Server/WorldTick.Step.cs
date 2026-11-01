@@ -148,6 +148,8 @@ public sealed partial class WorldTick {
 
     private readonly List<WorldPendingOp.Mutate> m_cellBurst = [];
 
+    internal bool ExecutionInterrupted { get; private set; }
+
     private bool ApplyPendingOp(WorldPendingOp op, ulong tick) {
         var ok = op switch {
             // An addon-sourced op was already metered at the seam's pre-flight (before decode, deliberately), so
@@ -159,7 +161,8 @@ public sealed partial class WorldTick {
             engineTick: CompletedEngineTicks,
             connectionId: mutate.ConnectionId,
             correlationId: mutate.CorrelationId,
-            preMetered: (mutate.SourceAddonInstanceId >= 0L)
+            preMetered: (mutate.SourceAddonInstanceId >= 0L),
+            derived: (mutate.SourceAddonInstanceId >= 0L)
         ),
             WorldPendingOp.Rebuild rebuild => Host.Document.ApplyRebuild(
             request: rebuild.Request,
@@ -320,7 +323,12 @@ public sealed partial class WorldTick {
         foreach (var scope in Host.ScopedReplaySpan) { scope.BeforeTick(); }
         Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
-        Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
+        try { Host.Addons?.TickAddons(tick: (context.Tick + 1UL)); } catch (TimeoutException) {
+            // Wall time is a host failure, never a simulation result. Keep the last durable boundary intact.
+            ExecutionInterrupted = true;
+            Host.FreezeForRetirement();
+            throw;
+        }
         _ = DrainPendingOps(tick: context.Tick);
         WorldAdjacencyOwnership.ResolveContinuations(server: Host);
         Host.InputHold.PrepareParticipants(population: Host.Population);

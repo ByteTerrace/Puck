@@ -29,6 +29,12 @@ Discovery runs on the ordinary command pump and filters registered help through
 the same remote command guard. It requires Replica admission and advertises no
 framebuffer on this headless host.
 
+Activation explicitly leaves the Orleans scheduler before constructing
+the authority and awaits storage without capturing it. `silo.activate.timing`
+reports storage, checkpoint decode, authority construction/restore, and addon wiring
+separately, so cold-process work can be distinguished from recovery work. The storage
+phase includes root-qualified definition admission, rather than measuring I/O alone.
+
 ## Hosted test world
 
 The silo selects Orleans membership through the composition root's registry.
@@ -243,8 +249,9 @@ activation's fence and requires recovery.
   `IWorldGrain.StatusAsync` and `silo.grains` both answer with.
 - `WorldAddonRuntime` (`Puck.World.Addons`)—the same mounting transaction the
   World host uses, owned by each activation and used by its replay factory.
-  Attachment restores the checkpoint's guest image before journal replay or
-  admission; row retirement disposes the runtime.
+  Attachment prepares and restores the checkpoint's guest image once before journal
+  replay or admission; row retirement disposes the runtime. A failed attachment
+  reports a named refusal and disposes the activation's machines and adjacencies.
 - `WorldSiloBareInputBindings`/`WorldSiloBarePrincipalResolver`—the minimal
   `IInputBindings`/`IPrincipalResolver` pair `Puck.Launcher`'s
   simulation/router pairing rule needs; the silo embodies no local seats.
@@ -289,7 +296,7 @@ activation's fence and requires recovery.
 
 ## Live journaling
 
-Every mutation `WorldServer` applies fires `WorldServer.MutationJournalTap`
+Every non-guest mutation `WorldServer` applies fires `WorldServer.MutationJournalTap`
 (wired once per row, right after activation's own tail replay so a replayed
 entry is never re-appended as a duplicate). `WorldSiloHost.ScheduleJournalAppend`
 re-encodes it (`WorldSubmissionCodec.TryEncodeCommittedMutation`) and schedules the
@@ -300,6 +307,9 @@ journal blob if-match per append and a race would drop one. Appends are
 acknowledged **asynchronously with a bounded lag**, never a block on the tick
 thread: `silo.grains`' `journalPending`/`journalOutcome` columns read the
 count of outstanding appends and the most recently acknowledged one back.
+Guest-derived mutations stay in the checkpoint's tick image and are excluded from
+the external-edit tail: recovery never applies later guest decisions to earlier
+guest memory. Console and peer edits still enter that tail.
 Recovery uses `TryDecodeCommittedMutation`. These trusted-storage leaves admit
 the world's own authored effects; live submissions still refuse a world actor.
 
@@ -316,7 +326,13 @@ A parsed machine declaration does not establish that its provider is installed
 or its runtime state can be checkpointed. Qualification must exercise the
 distribution's supplied machine catalog. Addon checkpoints preserve guest and
 cross-tick host state through the ordinary authority checkpoint section; unsupported
-guest resources refuse capture by name. The [addon runtime](../Puck.World.Addons/README.md#durable-guest-state)
+guest resources refuse mounting by name, before they can disable durable capture.
+Each captured guest retains its pinned module source. A deployment that changes
+the file therefore restores old guest memory under its old module first, then
+ordinary published-content reconciliation replaces changed guests with fresh
+ones. Unchanged guests and the surrounding recovered world state survive. Managed
+candidates keep the recovered module until explicit release reconciliation.
+The [addon runtime](../Puck.World.Addons/README.md#durable-guest-state)
 owns the captured inventory and current resource limitations.
 
 ## Production deployment

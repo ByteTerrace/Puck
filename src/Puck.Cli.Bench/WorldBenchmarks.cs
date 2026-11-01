@@ -52,6 +52,8 @@ internal static class WorldBenchmarks {
         );
 
         constructionTimer.Stop();
+        using var addons = Puck.World.Addons.WorldAddonRuntime.Create(definition: bench.Server.Definition, server: bench.Server);
+
         rows.Add(item: ("world: server construction", $"{constructionTimer.Elapsed.TotalSeconds:F1} s"));
 
         MeasureGallery(catalog: catalog, definition: definition!, rows: rows);
@@ -121,13 +123,13 @@ internal static class WorldBenchmarks {
         );
     }
     // The live simulation workload, including the guests and the console's edit echoes. The other rows isolate
-    // server operations without guests; these rows keep the debug guide/watchdog/companion running throughout.
+    // server operations; every benchmark host mounts the document's declared guests.
     private static void MeasureGallery(WorldDefinition definition, Puck.World.Machines.WorldMachineCatalog catalog, List<(string Name, string Value)> rows) {
         using var bench = WorldBenchServer.Boot(catalog: catalog, definition: definition);
         var server = bench.Server;
 
         server.Population.ActivateSeat(profile: null, slot: 0);
-        using var addons = Puck.World.Addons.WorldAddonRuntime.Create(definition: server.Definition, server: server);
+        using var addons = Puck.World.Addons.WorldAddonRuntime.Create(server.Definition, server: server);
         var tape = new Puck.Hosting.ConsoleTape(store: new Puck.Hosting.ConsoleTapeStore());
 
         server.EchoTap = echo => tape.RecordEcho(message: echo.Message, refused: echo.Rejected);

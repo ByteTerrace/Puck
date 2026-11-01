@@ -113,9 +113,10 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets whether this body's own collider, at its CURRENT pose, overlaps the static contact field — a
     /// zero-displacement probe sweep (previous position equal to current) that still reports a correction exactly
-    /// when the pose is already embedded. Used to refuse a carry release whose left-behind pose would penetrate a
-    /// wall — see <c>WorldPopulation.TryEndCarry</c>. <see langword="false"/> for a body with no collider or contact
-    /// field, since there is nothing there to embed in.</summary>
+    /// when the pose is already embedded, or proves neither (an embedded pose the field measures no way out of). Used to
+    /// refuse a carry release whose left-behind pose would penetrate a wall — see <c>WorldPopulation.TryEndCarry</c>.
+    /// <see langword="false"/> for a body with no collider or contact field, since there is nothing there to embed
+    /// in.</summary>
     public bool IsPenetratingStaticGeometry() {
         if (
             (m_contactField is not { } field) ||
@@ -128,7 +129,7 @@ public sealed partial class WorldBody {
         var probePosition = m_position;
         var probeVelocity = FixedVector3.Zero;
 
-        field.ResolveSweep(
+        var resolution = field.ResolveSweep(
             orientation: in m_orientation,
             position: ref probePosition,
             previousPosition: in m_position,
@@ -137,7 +138,7 @@ public sealed partial class WorldBody {
             volumes: volumes
         );
 
-        return (probePosition != m_position);
+        return ((probePosition != m_position) || resolution.Unproved);
     }
 
     /// <summary>Ends this body's active carry, handing <paramref name="target"/> back to the rigid solver with this

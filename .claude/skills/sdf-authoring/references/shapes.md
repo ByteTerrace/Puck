@@ -254,18 +254,19 @@ are the authored ones. Strands closer than twice their radius fuse.
   per stamped copy instead of its primitives' colliders. Its field is the
   copy's contact shapes in one scope with the relief over their union, the
   program the field provider reads too (`NoiseDisplace` is a contact op), so
-  contact and the bake read one field. The narrowphase estimates distance as
-  the field over its gradient's length and proves a body clear from the
-  shapes' unrelieved union grown by the amplitude (`FixedColliderField`,
-  `FixedFieldColliderContact`); `world.counters physics.contact` prices it as
-  `field-queries`, `field-bounds` and `field-samples`. Every boolean inside
-  the creation still collides as its contact shapes do (detail shapes drop).
-  This estimate is not a conservative clearance certificate: curved relief,
-  quantized scope clamps, degenerate gradients and composed bounds have open
-  findings in the [terrain packet](../../../../docs/plans/open-items.md#the-valleys-terrain).
-  A capsule's endpoint normal does not certify the rest of a nonconvex core;
-  the contact search samples the whole core. Exact zero gradients still cannot
-  supply a measured contact normal; small nonzero gradients remain usable.
+  contact and the bake read one field. The narrowphase is the certified
+  surface solve the field provider reads too (`FixedFieldColliderContact.Solve`):
+  the field's certified bound (its evaluator's step scale less its value error,
+  or the shapes' unrelieved union grown by the amplitude) proves a body clear,
+  and otherwise a converged solve measures the Euclidean distance to a
+  bracketed surface point, never the field's value. `world.counters
+  physics.contact` prices it as `field-queries`, `field-bounds`, `field-reads`,
+  `field-samples` and `field-unproved`. Every boolean inside the creation
+  still collides as its contact shapes do (detail shapes drop), and a creation
+  whose shapes contact drops entirely compiles no collider. An embedded body
+  the field measures no way out of (a symmetric point) is stuck, never pushed
+  along an invented normal; box and ellipsoid bodies still solve from their
+  centre ([certified field contact](../../../../docs/plans/open-items.md#certified-field-contact)).
 
 A low-level SDF operation's CPU support does not guarantee that a creation's
 contact compiler emits it. Conversely, a supported primitive or profile name

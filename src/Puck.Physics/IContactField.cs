@@ -119,9 +119,10 @@ public enum ContactRefusal {
 /// consuming integrator's frame policy decides whether to adopt it.</param>
 /// <param name="Refusal">Why the step was refused, or <see cref="ContactRefusal.None"/> when it was resolved; a refused
 /// step reports no contact.</param>
-/// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
-/// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
-/// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
+/// <param name="Unproved">Whether the solve proved neither contact nor clearance where it mattered: the sweep that held
+/// the step short of its target ran out of its bounds-query budget or reached a box its field could not bound, or a
+/// volume lies embedded where the field measures no way out (<see cref="FixedFieldContact.Stuck"/>). The body keeps only
+/// the ground it proved, and nothing may treat the result as a contact's correction or as clear.</param>
 /// <param name="RequiredStepHeight">The lift needed to clear the local approached edge, including its fillet and
 /// skin, measured from the pre-move body's bottom. A step must buy this whole clearance.</param>
 public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false, FixedQ4816 RequiredStepHeight = default) {

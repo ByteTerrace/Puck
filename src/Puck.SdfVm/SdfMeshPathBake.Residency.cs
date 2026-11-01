@@ -157,7 +157,7 @@ public sealed partial class SdfMeshPathBake {
 
         lock (m_gate) {
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!m_groups.Contains(item: group)) { mesh?.Release(); return; }
             if (!taken) {
                 _ = Begin(group: group);
                 return;
@@ -171,15 +171,21 @@ public sealed partial class SdfMeshPathBake {
     // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
     // order it came, and starts a worker for it if one is free. Work that takes the bake's gate waits while a caller
     // holds it, as a restart does.
-    private static void Schedule(Group group, Action<SdfSampledLattice.RefinementScratch> work, bool urgent = false) {
+    private static bool Schedule(Group group, Action<SdfSampledLattice.RefinementScratch> work, bool urgent = false) {
+        if (!group.QueueWork()) { return false; }
+        void Run(SdfSampledLattice.RefinementScratch scratch) {
+            try { if (!group.Retired) { work(scratch); } } finally { group.EndWork(); }
+        }
         lock (WorkGate) {
             if (urgent) {
-                AnswerQueue.Enqueue(item: work);
+                // An answer owns its copied readback even when its group retires. Its callback returns it.
+                AnswerQueue.Enqueue(item: scratch => { try { work(scratch); } finally { group.EndWork(); } });
             } else {
-                WorkQueue.Add(item: (group, work));
+                WorkQueue.Add(item: (group, Run));
             }
             StartWorkers();
         }
+        return true;
     }
     // Called only with WorkGate held. The task's finally returns ownership of the slot after its last borrower ends.
     private static void StartWorkers() {
@@ -195,8 +201,18 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Retires every group of the bake, for a residency released: their queued work is dropped before it runs,
     /// so a stage running for one queues no further stage.</summary>
     public void Retire() {
+        Group[] retiring;
+
         lock (m_gate) {
+            retiring = m_groups.Concat(second: m_retiredGroups).Distinct().ToArray();
             foreach (var group in m_groups) { group.Retired = true; }
+        }
+        lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
+        foreach (var group in retiring) { group.WaitForWork(); group.InFlight = false; }
+        m_drawClaims?.Dispose(); m_drawClaims = null;
+        lock (m_answerGate) {
+            m_answerValues?.Dispose(); m_answerMaterials?.Dispose(); m_answerGradients?.Dispose(); m_answerSlots?.Dispose();
+            m_pointTableStorage?.Dispose(); m_workspaceMemory.Dispose();
         }
     }
 
@@ -231,7 +247,7 @@ public sealed partial class SdfMeshPathBake {
 
             // Work of a group its bake no longer plans (a program replaced it, or its residency was released) is dropped
             // before it runs.
-            _ = WorkQueue.RemoveAll(match: static item => item.Group.Retired);
+            _ = WorkQueue.RemoveAll(match: static item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; });
             for (var index = 0; (index < WorkQueue.Count); index++) {
                 if ((best < 0) || (WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority)) { best = index; }
             }

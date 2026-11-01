@@ -205,7 +205,7 @@ laws exercise that boundary.
   group of the same restart already bakes or loads waits on it
   (`Group.Leader`, `Follow`) and takes the library's mesh, renumbered, when the
   leader lands; the debug world plans 1,115 of its 2,090 groups that way. The
-  renumbering copies arrays as large as the mesh, so it runs on the pool
+  renumbering shares immutable geometry and allocates remapped triangle materials, so it runs on the pool
   (`TakeFollowed`), outside the gate the frame takes; a leader that found no
   surface lands the follower empty too (`Draw(group, null)`), or it would keep
   drawing the mesh it had before the rebake. An offline bake of chosen groups

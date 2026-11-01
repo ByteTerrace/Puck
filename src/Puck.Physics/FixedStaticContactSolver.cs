@@ -162,11 +162,14 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     var probe = ((position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal)) +
                         (push.Normal * (push.Penetration - ContactSkin)));
 
-                    var (witness, normal) = FixedSurfaceQuery.NearestOnCollider(collider: in collider, probe: probe);
+                    // A nearly flat fillet at or below the pre-move foot is support, not a new riser. A surface that
+                    // offers no witness keeps the climb blocked and asks no step height.
+                    var witnessed = FixedSurfaceQuery.TryNearestOnCollider(collider: in collider, normal: out var normal, point: out var witness, probe: probe);
 
-                    // A nearly flat fillet at or below the pre-move foot is support, not a new riser.
-                    blockClimb = ((FixedVector3.Dot(left: witness, right: up) - bottom) > FixedQ4816.Epsilon);
-                    if (blockClimb) {
+                    if (witnessed) {
+                        blockClimb = ((FixedVector3.Dot(left: witness, right: up) - bottom) > FixedQ4816.Epsilon);
+                    }
+                    if (blockClimb && witnessed) {
                         requiredStepHeight = FixedQ4816.Max(x: requiredStepHeight, y: ((EdgeTop(collider: in collider, normal: in normal,
                             up: in up, witness: in witness) + ContactSkin) - bottom));
                     }

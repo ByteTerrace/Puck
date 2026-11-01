@@ -38,6 +38,7 @@ public sealed class WorldHistoryShadow : IDisposable {
 
     /// <inheritdoc/>
     public void Dispose() {
+        Server.Addons?.Dispose();
         m_machines.Dispose();
 
         try {
@@ -102,6 +103,7 @@ public sealed partial class WorldHistory {
             // A rule's save effect re-derives on the shadow like any other effect; writing the world's file is
             // engine I/O the shadow never performs.
             server.SaveEffectTap = static _ => { };
+            server.AttachAddons(runtime: m_tape.CreateAddonHost(definition: server.Definition, server: server));
 
             return new WorldHistoryShadow(
                 directory: directory,

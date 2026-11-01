@@ -17,7 +17,7 @@ namespace Puck.SdfVm;
 /// The plan states what it owes: <see cref="Relocated"/>, or the meshes it placed (<see cref="Placed"/>), of which the
 /// <see cref="Moved"/> ones held words a draw read until this plan.</para>
 /// </summary>
-public sealed class SdfMeshRegionArena {
+public sealed class SdfMeshRegionArena : IDisposable {
     /// <summary>The fewest draw records the region reserves.</summary>
     public const int MinimumDrawCapacity = 256;
     /// <summary>The words outside the named meshes (meshes no list names any more) the arena keeps, however few words the
@@ -30,11 +30,15 @@ public sealed class SdfMeshRegionArena {
     private readonly List<SdfMesh> m_placed = [];
     private readonly HashSet<SdfMesh> m_moved = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMesh> m_reserved = [];
+
     private readonly int m_retainedSlackWords;
+
     private int m_drawCapacity;
     private int m_end;
+
     // The meshes the latest full plan's list named, in its order.
     private SdfMesh?[] m_latestMeshes = [];
+
     private int m_latestMeshCount;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshRegionArena"/> class.</summary>
@@ -135,7 +139,8 @@ public sealed class SdfMeshRegionArena {
                 m_drawCapacity = GrownCapacity(drawCount: draws.Count);
             }
 
-            m_end = checked(m_drawCapacity * SdfMeshRecord.DrawWords);
+            m_end = checked((m_drawCapacity * SdfMeshRecord.DrawWords));
+            foreach (var mesh in m_placements.Keys) { mesh.Release(cached: true); }
             m_placements.Clear();
             m_moved.Clear();
         }
@@ -146,12 +151,13 @@ public sealed class SdfMeshRegionArena {
             var mesh = draw.Mesh;
             var words = SdfMeshRegion.WordsOf(mesh: mesh);
             var vertexWord = m_end;
-            var materialWord = checked(vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
-            var indexWord = checked(materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh));
-            var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : checked(indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
+            var materialWord = checked((vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords)));
+            var indexWord = checked((materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
+            var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : checked((indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh))));
 
             m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
-            m_end = checked(m_end + words);
+            mesh.Acquire(cached: true);
+            m_end = checked((m_end + words));
             m_placed.Add(item: mesh);
         }
 
@@ -165,6 +171,7 @@ public sealed class SdfMeshRegionArena {
         Array.Clear(array: m_latestMeshes, index: draws.Count, length: (m_latestMeshCount - Math.Min(val1: m_latestMeshCount, val2: draws.Count)));
         m_latestMeshCount = draws.Count;
     }
+
     private bool NamesLatestMeshes(IReadOnlyList<SdfMeshDraw> draws) {
         if ((draws.Count != m_latestMeshCount) || (m_drawCapacity == 0)) {
             return false;
@@ -189,7 +196,7 @@ public sealed class SdfMeshRegionArena {
     private void GrowReserve(int drawCount) {
         m_drawCapacity = GrownCapacity(drawCount: drawCount);
 
-        var reserveEnd = checked(m_drawCapacity * SdfMeshRecord.DrawWords);
+        var reserveEnd = checked((m_drawCapacity * SdfMeshRecord.DrawWords));
 
         m_reserved.Clear();
         foreach (var (mesh, placement) in m_placements) {
@@ -199,6 +206,7 @@ public sealed class SdfMeshRegionArena {
         }
         foreach (var mesh in m_reserved) {
             _ = m_placements.Remove(key: mesh);
+            mesh.Release(cached: true);
 
             if (m_named.Contains(item: mesh)) {
                 _ = m_moved.Add(item: mesh);
@@ -206,5 +214,18 @@ public sealed class SdfMeshRegionArena {
         }
         m_reserved.Clear();
         m_end = Math.Max(val1: m_end, val2: reserveEnd);
+    }
+
+    /// <summary>Releases the arena's CPU source claims after all uploads and staged draw readers finish.</summary>
+    public void Dispose() {
+        foreach (var mesh in m_placements.Keys) { mesh.Release(cached: true); }
+        m_placements.Clear();
+    }
+    /// <summary>Releases CPU source claims no current draw names, keeping every current mesh address standing.</summary>
+    public void TrimUnused() {
+        m_reserved.Clear();
+        foreach (var mesh in m_placements.Keys) { if (!m_named.Contains(item: mesh)) { m_reserved.Add(item: mesh); } }
+        foreach (var mesh in m_reserved) { m_placements.Remove(key: mesh); mesh.Release(cached: true); }
+        m_reserved.Clear();
     }
 }

@@ -14,7 +14,8 @@ public sealed partial class AddonInstance {
     private sealed record Image(string? Hash, byte[] Memory, long Pages, GlobalImage[] Globals,
         AddonState State, AddonFault Fault, bool Admitted, ulong Fuel, ulong LastFuel);
     [JsonSerializable(typeof(Image))]
-    [JsonSourceGenerationOptions(Converters = [typeof(Puck.Abstractions.Documents.StrictEnumConverter<ValueKind>),
+    [JsonSourceGenerationOptions(RespectRequiredConstructorParameters = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        Converters = [typeof(Puck.Abstractions.Documents.StrictEnumConverter<ValueKind>),
         typeof(Puck.Abstractions.Documents.StrictEnumConverter<AddonState>), typeof(Puck.Abstractions.Documents.StrictEnumConverter<AddonFaultKind>)])]
     private sealed partial class CheckpointJsonContext : JsonSerializerContext;
 
@@ -44,17 +45,23 @@ public sealed partial class AddonInstance {
     /// <summary>Restores a captured guest into a freshly instantiated and admitted copy of the same pinned module.</summary>
     /// <param name="checkpoint">The opaque image captured by this implementation.</param>
     public void RestoreCheckpoint(byte[] checkpoint) {
-        var image = (JsonSerializer.Deserialize(checkpoint, CheckpointJsonContext.Default.Image) ?? throw new InvalidDataException(message: "Missing guest checkpoint."));
+        Image image;
 
-        if ((image.Hash != m_hash?.ToString()) || (m_checkpointGlobals is null) ||
+        try {
+            image = (JsonSerializer.Deserialize(checkpoint, CheckpointJsonContext.Default.Image)
+            ?? throw new InvalidDataException(message: "Missing guest checkpoint."));
+        } catch (JsonException error) { throw new InvalidDataException(innerException: error, message: "Malformed guest checkpoint."); }
+
+        if ((image.Memory is null) || (image.Globals is null) || image.Globals.Any(predicate: global => (global is null)) ||
+            (image.Hash != m_hash?.ToString()) || (m_checkpointGlobals is null) ||
             (image.Globals.Length != m_checkpointGlobals.Length) || (m_memory is null) || (m_store is null) ||
-            (image.Memory.Length > AddonModuleLimits.MemoryBytes) || !Enum.IsDefined(image.State) || !Enum.IsDefined(image.Fault.Kind)) {
+            (image.Memory.Length > AddonModuleLimits.MemoryBytes) || !Enum.IsDefined(value: image.State) || !Enum.IsDefined(value: image.Fault.Kind)) {
             throw new InvalidDataException(message: $"addon '{Name}': checkpoint module or resource inventory differs");
         }
         var pages = m_memory.GetSize();
 
         if (image.Pages < pages) { throw new InvalidDataException(message: "Guest restore requires a fresh store; memory cannot shrink."); }
-        if (image.Pages > pages) { m_memory.Grow((image.Pages - pages)); }
+        if (image.Pages > pages) { m_memory.Grow(delta: (image.Pages - pages)); }
         if (image.Memory.Length != m_memory.GetLength()) { throw new InvalidDataException(message: "Guest checkpoint memory size differs."); }
         for (var index = 0; (index < image.Globals.Length); index++) {
             var global = m_instance!.GetGlobal(name: m_checkpointGlobals[index])!;
@@ -66,13 +73,13 @@ public sealed partial class AddonInstance {
                 ValueKind.Int32 => ((object)unchecked((int)saved.Bits)),
                 ValueKind.Int64 => saved.Bits,
                 ValueKind.Float32 => BitConverter.Int32BitsToSingle(value: unchecked((int)saved.Bits)),
-                ValueKind.Float64 => BitConverter.Int64BitsToDouble(saved.Bits),
+                ValueKind.Float64 => BitConverter.Int64BitsToDouble(value: saved.Bits),
                 _ => throw new InvalidDataException(message: "Unsupported checkpoint global type."),
             };
 
-            global.SetValue(value);
+            global.SetValue(value: value);
         }
-        image.Memory.CopyTo(m_memory.GetSpan(0, image.Memory.Length));
+        image.Memory.CopyTo(destination: m_memory.GetSpan(address: 0, length: image.Memory.Length));
         m_state = image.State; m_fault = image.Fault; m_admitted = image.Admitted;
         m_store.Fuel = image.Fuel; m_lastFuelConsumed = image.LastFuel; m_lastCount = 0;
     }

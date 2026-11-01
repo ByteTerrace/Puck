@@ -183,6 +183,13 @@ head. "What the merge touched" includes what consumes it:
 - a change to simulation state, maths or determinism also runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
 
+A merge is not finished until every line of the lane's Found section, and every
+Needs-you item it hands the lead, is routed. Each one is filed in its owning
+packet, sent to a running lane, or dismissed with a reason in the merge
+report. A finding read and left in the hand-back is lost: one about authors'
+worlds failing to boot on the standard sat unrouted until a side observer
+caught it.
+
 The sweep is the batch's proof: the whole debug world, every signal compared with
 the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
 `puck sweep --tour --baseline <previous report.json>` runs it under the GPU lease

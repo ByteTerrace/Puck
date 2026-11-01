@@ -85,9 +85,11 @@ public sealed class AddonPrepareGateLawTests {
     public void ShortAddonPinsAreRefusedBeforePreparingTheGuest() {
         using var fixture = Fixtures.FreshServer();
         var host = new RecordingAddonHost();
+
         fixture.Server.AttachAddons(runtime: host);
         host.Reset();
         var before = fixture.DefinitionBytes();
+
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertAddon(
             Addon: new WorldAddonRow(Name: "guest", ModulePath: "unreachable.wasm",
                 Hash: "sha256-64/0000000000000000", Fuel: 1000UL, Enabled: true),
@@ -96,10 +98,9 @@ public sealed class AddonPrepareGateLawTests {
 
         Assert.Equal(before, fixture.DefinitionBytes());
         Assert.Equal(0, host.TryPrepareCallCount);
-        Assert.True(ApplyAndObserveChange(fixture, "guest"));
+        Assert.True(condition: ApplyAndObserveChange(fixture: fixture, name: "guest"));
         Assert.Equal(1, host.TryPrepareCallCount);
     }
-
     // The plan-ownership guard now covers contention-array staging, not only Commit — see WorldServer.
     // MutationApply.cs's TryApplyMutation (and its ApplyRebuild/ApplyUndo siblings): the whole sequence from a
     // successful TryPrepare through Commit runs under ONE try/finally. A MountedCount this large forces
@@ -430,6 +431,12 @@ public sealed class AddonPrepareGateLawTests {
 /// leaves nothing, commit runs once on acceptance, a throwaway plan is disposed) without a real Wasmtime guest,
 /// which this project cannot reference.</summary>
 internal sealed class RecordingAddonHost : IWorldAddonHost {
+    public byte[] CaptureCheckpoint() => [];
+    public IWorldAddonPreparedPlan PrepareCheckpoint(WorldDefinition definition, byte[] checkpoint) {
+        TryPrepare(candidate: definition, current: null, plan: out var plan, reason: out _);
+        return plan!;
+    }
+
     /// <inheritdoc/>
     public bool AnyEverPumped => false;
     /// <summary>Gets how many times <see cref="Commit"/> was called.</summary>

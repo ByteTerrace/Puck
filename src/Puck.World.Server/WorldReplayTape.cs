@@ -79,6 +79,9 @@ public sealed partial class WorldReplayTape {
     private const string Extension = ".puckreplay";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
+
+    internal IWorldAddonHost CreateAddonHost(WorldDefinition definition, WorldServer server) => m_addonHostFactory(definition, server);
+
     private readonly IReadOnlyList<IMachineEngine> m_engines;
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldServer m_liveServer;
@@ -653,8 +656,8 @@ public sealed partial class WorldReplayTape {
     /// image, the tape starts from its definition's boot image with the active seats joined and the live sessions
     /// re-admitted at its first tick. Afterwards the tape starts from an authority checkpoint of the live state,
     /// captured now without the owned-world catalog (<see cref="WorldReplaySnapshot.ForTape"/>), which holds the
-    /// sessions, the screen selectors and links, and the machine cores. Mounted addon guests restart from their pinned
-    /// modules at the arm, matching the re-drive's fresh guests; their old memory is discarded only after capture succeeds.
+    /// sessions, the screen selectors and links, the machine cores, and live guest memory and host continuations.
+    /// Arming never replaces guests or retires their input controllers.
     /// A state no checkpoint captures — a stepped machine without checkpoint support, a coupled link or rewind history, an engagement
     /// in flight, or an edit not yet applied — refuses by name (<see cref="ReplayRefusal.StartNotCheckpointable"/>).
     /// <see cref="Protocol.WorldGrant.KindMask"/> (and its <see cref="Protocol.WorldGrant.WriteMask"/> sibling) ride the
