@@ -812,8 +812,6 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
-    // real duplication risk (a magazine entry could otherwise name an undeclared camera).
     // The screen materials: unique ids, and every term in its range.
     private static void ValidateScreenMaterials(IReadOnlyList<WorldScreenMaterial> materials, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -853,6 +851,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{material}' is refused on a window: a window is an opening, not a display.");
         }
     }
+    // The one screen-source gate, shared by a declared source and every magazine entry, so a magazine entry cannot name
+    // an undeclared camera.
     private static void ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors, ICollection<string>? deferred) {
         var cameras = scope.Cameras;
         var destinationNames = scope.DestinationNames;

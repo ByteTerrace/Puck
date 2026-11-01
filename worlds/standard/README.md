@@ -19,10 +19,16 @@ It imports the standard and refines it, so a world imports it in the standard's 
 its `walker` kit, look and prototype by id, or replaces it (the debug world's Moth, whose own controls refine the
 standard's in [`../debug/moth-controls.puck`](../debug/moth-controls.puck)).
 
+`motion.puck` authors the standard's body motion programs: `walk`, which both the walker and the Moth import, so a
+correction to it reaches every avatar that walks. An avatar's speeds, holds, turn and actions stay in its own kit; a
+world refines the program itself by declaring a `bodyMotionPrograms` row named `walk` in its own body.
+
 `skin.puck` also authors the standard's screen materials (`screenMaterials`): the display treatment a screen row or a
-creation face names by id (`material: "crt"`), the CRT among them. A screen's picture always fills its face; a
+creation face names by id (`material: crt`), the CRT among them. A screen's picture always fills its face; a
 material draws the display's pixel structure over it (scanlines, subpixel stripes, a vignette, a glint and a soft
-rounded edge), and a device's bezel is geometry it authors round the face.
+rounded edge), and a device's bezel is geometry it authors round the face. A material id is a module's name like a
+state row's: an aliased import qualifies it, and a host names one an import declares only when that import exports it
+under `bindings`, as `skin.puck`, `standard.puck` and `walker.puck` export `crt`.
 
 `inputs.puck` declares the shared semantic channels (`forward`, `strafe`, `turn`, the face axes, `jump`, `run`,
 `flight`, `rise`, `dash`, `interact`, `start`, `select`, `confirm`, `cancel`) the controls and the games bind; a world

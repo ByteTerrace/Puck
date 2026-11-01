@@ -16,8 +16,9 @@ namespace Puck.World;
 /// match: a bare name position, the name positions of a reserved <c>$</c> channel's colon segments (read by the
 /// channel's grammar, <see cref="DescribesChannel"/>), a cell key's <c>$cell:</c>/<c>cell:</c> spelling, an infix
 /// expression's state reads and topology arguments, a postfix token's row, and a <c>state.&lt;row&gt;</c> binding.
-/// A placement and a prototype each live in their own namespace, apart from every state-side name. The engine's own
-/// words are never renamed: a function an expression calls, and a channel's operation, facet, or body-reference kind.
+/// A placement, a prototype, a clock and a screen material each live in their own namespace, apart from every
+/// state-side name. The engine's own words are never renamed: a function an expression calls, and a channel's
+/// operation, facet, or body-reference kind.
 /// A name the fragment does not declare is left as written, so a fragment may still address its host's rows by
 /// name. Runs on the fragment's composed raw JSON tree before the strict parse, in the same pass that strips
 /// <c>basis</c>/<c>imports</c>.
@@ -843,19 +844,22 @@ public static class WorldModuleNamespace {
         }
     }
 
-    // Where a declared name lives: a placement, a prototype and a clock each keep their own namespace, and every other
-    // kind shares the document's, so a module's placement 'gate' never renames a host row 'gate' the module reads.
+    // Where a declared name lives: a placement, a prototype, a clock and a screen material each keep their own
+    // namespace, and every other kind shares the document's, so a module's placement 'gate' never renames a host row
+    // 'gate' the module reads.
     private enum NameSpace : byte {
         Document,
         Placement,
         Prototype,
         Clock,
+        ScreenMaterial,
     }
 
     private static NameSpace SpaceOf(WorldNameKind kind) => kind switch {
         WorldNameKind.Placement => NameSpace.Placement,
         WorldNameKind.Prototype => NameSpace.Prototype,
         WorldNameKind.Clock => NameSpace.Clock,
+        WorldNameKind.ScreenMaterial => NameSpace.ScreenMaterial,
         _ => NameSpace.Document,
     };
 
@@ -899,7 +903,7 @@ public static class WorldModuleNamespace {
                 );
             }
 
-            foreach (var space in ((ReadOnlySpan<NameSpace>)[NameSpace.Document, NameSpace.Placement, NameSpace.Prototype])) {
+            foreach (var space in ((ReadOnlySpan<NameSpace>)[NameSpace.Document, NameSpace.Placement, NameSpace.Prototype, NameSpace.Clock, NameSpace.ScreenMaterial])) {
                 if (m_spaced.TryGetValue(
                     key: (space, name),
                     value: out mapped

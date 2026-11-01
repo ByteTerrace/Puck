@@ -1194,6 +1194,12 @@ a design built into C# or living only in the debug world.
   0.05 m), the retraction skin (0.05 m) and the obstructed-target shell skip
   (1.1 m) in `src/Puck.World.Client/WorldCameraClearance.cs`; the eye radius,
   surface skin, rise ceilings and gyro mapping are authored.
+- [low] `screenMaterials` has no `world.row` section
+  (`src/Puck.World.Console/WorldRowCommandModule.cs` refuses the path), so a
+  material is read back and tuned only through its source and `world.reload`.
+  Add the row section with an upsert/remove mutation kind
+  ([mutations](../../.claude/skills/puck-world/references/mutations.md)), keyed
+  by `id`.
 - The standard's binding bar slot set (`worlds/standard/controls.puck`, the
   `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
   show as unbound plates in a world without her controls.
@@ -2615,6 +2621,18 @@ hang, then the pre-`main` language findings.
   refuse the missing position before the domain-expansion walk. The port
   authors the explicit position and boots successfully. (from: meadow)
 
+- [low] Two `exports { … }` blocks in one document keep only the later block's
+  lists (the object section replaces, where the `export <facet> <names>`
+  statement appends, `WorldDocumentEmitter.cs` `ExportNode`), and `export` does
+  not parse inside a template, so a template that exports
+  (`cameraResponse` in `worlds/standard/camera.puck`) makes every document
+  expanding it write its own exports as statements after the expansion
+  (`worlds/standard/standard.puck`, `walker.puck`). Merge repeated `exports`
+  blocks the way the statement does, or admit `export` in a template body.
+  Related: a material the standard's skin declares is re-exported by every
+  document a world imports in the skin's place (`standard.puck`, `walker.puck`,
+  `worlds/debug/moth-controls.puck`, `controls.puck`); decide whether an
+  import's surface should carry its own imports' exports. (from: leaks3)
 - [low] An imported module named `roles` changes how its importer lints. Add a
   file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
   accept: true } ]` section and append `import "roles"` to
