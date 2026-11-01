@@ -24,6 +24,20 @@ bodies {
   sleepAfterSeconds: 0s
 }
 
+// A 1280 by 900 window at 60 Hz, as the debug world's.
+host {
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  height: 900
+  journalDepth: 2000
+  presentMode: Vsync
+  presentation: Windowed
+  surfaceFormat: r8g8b8a8
+  targetHertz: 60
+  width: 1280
+}
+
 spawnPoints [
   { id: "start", position [0, 0, 0], yawDegrees: 0 }
 ]
