@@ -39,7 +39,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
+    private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 9);
     // A screen's record in the mapping region: its ScreenMappingByteLength mapping, then its ripple record, which the
     // emission and sky-environment change checks leave out because it moves every frame and lights nothing. KEEP IN SYNC
     // with WorldScreenMappingRows in frame/sdf-screen-mapping.hlsli.
@@ -57,6 +57,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // frame/sdf-screen-mapping.hlsli.
     private const int ScreenFaceOffset = (ScreenBoundOffset + (sizeof(float) * 3));
     private const int ScreenStateFloats = 4;
+    // The eighth and ninth ScreenMappingData rows: the display treatment (SdfScreenTreatment). KEEP IN SYNC with
+    // ScreenMappingData.treatment and .treatmentShape in frame/sdf-screen-mapping.hlsli.
+    private const int ScreenTreatmentOffset = ((sizeof(float) * 4) * 7);
+    private const int ScreenTreatmentFloats = 8;
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with frame/sdf-environment.hlsli)
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = ((sizeof(float) * 4) * SdfVolume.VectorsPerEntry);
@@ -167,6 +171,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // while its handle and extent hold, so an unchanged screen packs nothing.
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     private readonly SdfScreenFace[] m_screenFaces = new SdfScreenFace[MaxScreenSurfaces];
+    private readonly SdfScreenTreatment[] m_screenTreatments = new SdfScreenTreatment[MaxScreenSurfaces];
     private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
     // Each screen's SdfUpdateRateCode as SetScreenRate wrote it, which SetScreenRipple's rewrite of the record keeps.
     private readonly float[] m_screenRates = new float[MaxScreenSurfaces];

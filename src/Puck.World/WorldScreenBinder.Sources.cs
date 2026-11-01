@@ -35,9 +35,24 @@ public sealed partial class WorldScreenBinder : ISdfScreenSources {
     /// <inheritdoc/>
     public SdfScreenFace FaceOf(int screen) => FaceOf(row: RowOf(screen: screen));
 
-    // A screen row's face: a window opens onto its world, and every other row is a display, drawn through a CRT's glass
-    // only when its material opts in (the same rule WorldScreenMappings.WarpOf maps a hit by).
-    private static SdfScreenFace FaceOf(WorldScreen? row) => (((row is not null) && WorldPrototypeFacets.IsOpening(source: row.Source)) ? SdfScreenFace.Opening : ((row?.Material == WorldScreenMaterial.Crt) ? SdfScreenFace.Crt : SdfScreenFace.Display));
+    // A screen row's face: a window opens onto its world, and every other row is a display.
+    private static SdfScreenFace FaceOf(WorldScreen? row) => (((row is not null) && WorldPrototypeFacets.IsOpening(source: row.Source)) ? SdfScreenFace.Opening : SdfScreenFace.Display);
+
+    /// <inheritdoc/>
+    public SdfScreenTreatment TreatmentOf(int screen) => TreatmentOf(material: WorldScreenMaterial.Find(id: RowOf(screen: screen)?.Material, materials: m_screenMaterials));
+
+    // The display treatment an authored screen material draws, or none.
+    private static SdfScreenTreatment TreatmentOf(WorldScreenMaterial? material) => ((material is null)
+        ? SdfScreenTreatment.None
+        : new SdfScreenTreatment(
+            CornerRadius: material.CornerRadius,
+            EdgeSoftness: material.EdgeSoftness,
+            Glint: material.Glint,
+            GlintPower: material.GlintPower,
+            Scanlines: material.Scanlines,
+            SubpixelStripes: material.SubpixelStripes,
+            Vignette: material.Vignette
+        ));
 
     /// <inheritdoc/>
     /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>

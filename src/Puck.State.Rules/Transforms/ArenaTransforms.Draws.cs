@@ -62,21 +62,14 @@ public static partial class ArenaTransforms {
 
         return true;
     }
-    // One sample of an open stream: constant work, and nothing written until the stream closes.
-    private static bool TrySample(ref GeneratorEngine.DrawStream draws, TransformRefusal code, out long sample, out EffectRefusal refusal) {
-        if (!draws.TryNext(
-            reason: out var reason,
-            value: out sample
-        )) {
-            return Refuse(
-                code: code,
-                reason: reason,
-                refusal: out refusal
-            );
+    // Keep the actual stream (including private HMAC words) as the source. Every rejected word advances it.
+    private static bool TrySelect(ref GeneratorEngine.DrawStream draws, int count, TransformRefusal code, out int selected, out long sample, out EffectRefusal refusal) {
+        if (!draws.TryNextBounded(exclusiveHigh: ((uint)count), reason: out var reason, sample: out sample, value: out var value)) {
+            selected = 0;
+            return Refuse(code: code, reason: reason, refusal: out refusal);
         }
-
+        selected = ((int)value);
         refusal = EffectRefusal.None;
-
         return true;
     }
     // Stores the advanced cursor, then records the last sample in the site's slot cell, the way an ordinary draw
@@ -113,7 +106,4 @@ public static partial class ArenaTransforms {
 
         return true;
     }
-    // The multiply-high map from a 32-bit sample onto 0..count-1: the one selection arithmetic a random transfer
-    // and a shuffle share.
-    private static int Select(long sample, int count) => ((int)((((ulong)sample) * ((ulong)count)) >> 32));
 }

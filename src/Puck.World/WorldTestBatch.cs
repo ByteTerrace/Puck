@@ -12,7 +12,11 @@ namespace Puck.World;
 
 /// <summary>A worker process boots its scenarios one after another, each in a fresh native host.</summary>
 internal sealed class WorldTestBatch {
-    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, bool Reproduce = false, string? CacheDirectory = null);
+    // Workers is the --workers count the leg boots with (absent, the host's own); Record writes the leg's per-tick
+    // authority hashes and crossing log beside its exports, which a worker-count or oracle comparison reads.
+    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, bool Reproduce = false, string? CacheDirectory = null, int? Workers = null, bool Record = false) {
+        public bool Probed => (Reproduce || Record);
+    }
 
     private readonly Leg[] m_legs;
     private readonly Output m_output;
@@ -35,6 +39,7 @@ internal sealed class WorldTestBatch {
 
     private Timer? m_legDeadline;
     private string? m_reproductionFailure;
+    private CrossingLog m_crossings = null!;
 
     private string m_workingDirectory = string.Empty;
 
@@ -81,6 +86,7 @@ internal sealed class WorldTestBatch {
                 "--exit-after-seconds", "0",
                 "--state-dir", stateDirectory,
                 .. ((first.CacheDirectory is { } cache) ? new[] { "--cache-dir", cache } : []),
+                .. ((first.Workers is { } workers) ? new[] { "--workers", workers.ToString(provider: CultureInfo.InvariantCulture) } : []),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),
             ], null);
                 batch.m_legDeadline?.Dispose();
@@ -109,6 +115,10 @@ internal sealed class WorldTestBatch {
         Get<WorldTestRun>().FirstTick += () => m_firstTickTicks = (Stopwatch.GetTimestamp() - m_runStarted);
         Get<WorldTestRun>().Progress += tick => Console.WriteLine(value: $"[test.batch: tick {tick}]");
         Get<WorldInstanceHost>().Admitted += Observe;
+        var server = Get<WorldServer>();
+
+        m_crossings = new CrossingLog(tick: () => (server.NextInputTick - 1UL));
+        _ = Get<WorldInstanceHost>().AttachNarrationSink(sink: m_crossings);
         StartLeg();
     }
     private void OpenLeg() {
@@ -134,7 +144,7 @@ internal sealed class WorldTestBatch {
         m_output.Flush();
     }
     private void Observe(WorldInstance instance) {
-        if (m_observing && m_legs[m_index].Reproduce && m_observed.Add(item: instance)) {
+        if (m_observing && m_legs[m_index].Probed && m_observed.Add(item: instance)) {
             try { m_probes.Add(item: (instance.Name, Get<WorldReplayTape>().ObserveReplay(instance: instance))); } catch (InvalidOperationException exception) { m_reproductionFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
         }
     }
@@ -157,6 +167,7 @@ internal sealed class WorldTestBatch {
         Get<WorldDefinitionSource>().SourcePath = WorkingWorld;
         Get<WorldTestRun>().Reset(WorkingWorld, Path.Combine(path1: leg.Directory, path2: "out"));
         m_observing = true;
+        m_crossings.Recording = leg.Record;
         foreach (var name in Get<WorldInstanceHost>().Names) {
             if (Get<WorldInstanceHost>().TryGet(instance: out var row, name: name) && (row is not null)) { Observe(instance: row); }
         }
@@ -167,6 +178,7 @@ internal sealed class WorldTestBatch {
     private void FreezeLeg() {
         m_authoredTicks = (Stopwatch.GetTimestamp() - m_runStarted);
         m_observing = false;
+        m_crossings.Recording = false;
         foreach (var (_, probe) in m_probes) { probe.Dispose(); }
         try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_reproductionFailure = $"cannot archive authored state: {exception.Message}"; }
         _ = m_control.InvokeAsync(operation: CompleteLegSafely);
@@ -191,19 +203,24 @@ internal sealed class WorldTestBatch {
 
             if (m_reproductionFailure is not null) { throw new InvalidOperationException(message: m_reproductionFailure); }
             foreach (var (name, probe) in m_probes) {
-                int divergence;
+                int? divergence = null;
 
-                try {
-                    Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
-                    divergence = probe.Verify(progress: tick => {
-                        if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick replay {name} {tick}]"); }
-                    });
-                } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
+                if (leg.Reproduce) {
+                    try {
+                        Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
+                        divergence = probe.Verify(progress: tick => {
+                            if ((tick % 120) == 0) { Console.WriteLine(value: $"[test.batch: tick replay {name} {tick}]"); }
+                        });
+                    } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
+                }
 
                 results.Add(item: new { world = name, divergence, hashes = probe.Hashes });
                 if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}"); }
             }
-            if (leg.Reproduce) { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "reproduction.json"), JsonSerializer.Serialize(results)); }
+            // One row per authority: the per-tick hashes the probe recorded during the authored run, and under
+            // --reproduce the replay's first divergent tick (-1 when it reproduced).
+            if (leg.Probed) { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "reproduction.json"), JsonSerializer.Serialize(results)); }
+            if (leg.Record) { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "crossings.json"), m_crossings.Serialize()); }
             var replayTicks = (Stopwatch.GetTimestamp() - replayStarted);
             var run = Get<WorldTestRun>();
 
@@ -244,6 +261,24 @@ internal sealed class WorldTestBatch {
             Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
             File.Copy(file, target, overwrite: true);
         }
+    }
+
+    // The run's crossing log: every crossing line the instance host narrates (a portal or adjacency entry queuing a
+    // transfer, its refusal, a departure and arrival, an in-place crossing), stamped with the booted authority's
+    // completed tick. The lines carry transfer ids, cohorts and poses, and none carries a wall-clock value.
+    private sealed class CrossingLog(Func<ulong> tick) : IWorldNarrationSink {
+        private readonly Lock m_gate = new();
+        private readonly List<object> m_entries = [];
+
+        public volatile bool Recording;
+
+        public void Narrate(in WorldNarration narration) {
+            if (!Recording || narration.Channel is not ("world.transfer" or "world.portal" or "world.adjacency" or "world.continuum")) { return; }
+            var entry = new { tick = tick(), channel = narration.Channel, text = narration.Text };
+
+            lock (m_gate) { m_entries.Add(item: entry); }
+        }
+        public string Serialize() { lock (m_gate) { return JsonSerializer.Serialize(value: m_entries); } }
     }
 
     // HostLog and logging providers retain this writer for the native host's entire lifetime.

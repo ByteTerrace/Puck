@@ -632,6 +632,18 @@ through `puck embed` with the fixture generator, never a network service.
 carry the constructs the forcing world cannot reach on its own; the rest are
 scheduled unchanged when a capability they force is otherwise unproven.
 
+## Unbiased bounded draws and raw cursors
+
+State ranges, random transfers and shuffles share Maths' Lemire rejection
+mapping. Fixed result consumption is withdrawn: a cursor counts actual raw
+words for every source, including rejected words, so seeking remains exact
+without replaying earlier results. Batches return their raw cursor delta.
+A bounded selection has a priced 64-word attempt budget and refuses atomically
+if exhausted; it never falls back to a biased result. Scripted range values
+compile to accepted raw preimages, so their authored prefix costs one word
+per value. Corrected outputs and persisted raw cursor values may change; no
+path preserves the previous biased mapping.
+
 ---
 
 [Decisions](README.md) · [The programme](../plans/state-and-language.md)

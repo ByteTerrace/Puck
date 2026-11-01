@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.Abstractions.Presentation;
-using Puck.Commands;
 using Puck.SdfVm.Views;
 using Puck.World.Authoring;
 
@@ -17,13 +16,12 @@ public readonly record struct WorldHeldView(Vector3 Eye, Vector3 Target, float F
 }
 /// <summary>
 /// The engaged view: a seat captured on a screen it engaged pans and zooms its own camera onto the screen's picture (the
-/// face, or a CRT's glass inside its bezel band), square-on, until the picture fills the matte (<see cref="Matte"/>), the rect a desktop
+/// face), square-on, until the picture fills the matte (<see cref="Matte"/>), the rect a desktop
 /// emulator would show the console's picture in, and the window shows nothing else. Every number derives from the screen
-/// row's own frame (origin, right, up, half extents and depth), a CRT's bezel (<see cref="WorldScreenMappings.WarpOf"/>),
-/// the source's extent, the window's size and the seat camera's field of view, so a resized window refits at once. One
+/// row's own frame (origin, right, up, half extents and depth), the source's extent, the window's size and the seat camera's field of view, so a resized window refits at once. One
 /// instance per seat eases between the seat's ordinary camera and that framing on the seat rig's own reported dynamics,
 /// and back again when the seat leaves; a rig reporting no dynamics cuts. The ease's weight is the view's screen fidelity:
-/// at one the screen's pixels reach the window untouched, and below it a CRT's treatment and the world's atmosphere and
+/// at one the screen's pixels reach the window untouched, and below it a screen material's treatment and the world's atmosphere and
 /// tone fade back in. While framed, the camera's near plane stands just short of the glass, so the engaging avatar and
 /// anything else between the eye and the device draws nothing, and once the ease settles (<see cref="Framed"/>) the
 /// root shows only the matte's part of the seat's view, which renders at native scale, so the pixels inside it are the
@@ -53,27 +51,15 @@ public sealed class WorldScreenFraming {
     /// screen's frame is degenerate.</summary>
     public WorldScreen? Framed { get; private set; }
 
-    /// <summary>Returns the half extents of a screen's picture: the whole face, or for a CRT its face inside the tube's
-    /// bezel band (<see cref="WorldScreenMappings.WarpOf"/>).</summary>
+    /// <summary>Returns the half extents of a screen's picture: its whole face, since a device's glass is exactly its
+    /// picture.</summary>
     /// <param name="screen">The screen row.</param>
     /// <returns>The picture's half width and half height, in world units, along the row's right and up axes.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
     public static Vector2 PictureHalfExtents(WorldScreen screen) {
         ArgumentNullException.ThrowIfNull(argument: screen);
 
-        if (
-            (WorldScreenMappings.WarpOf(screen: screen)?.Inverse is not SourceWarpInverse.Affine glass) ||
-            !(glass.M11 > 0f) ||
-            !(glass.M22 > 0f)
-        ) {
-            return new Vector2(x: screen.HalfWidth, y: screen.HalfHeight);
-        }
-
-        // The glass maps a face point to the image by M11 and M22, so the image spans 1/M11 and 1/M22 of the face.
-        return new Vector2(
-            x: (screen.HalfWidth / glass.M11),
-            y: (screen.HalfHeight / glass.M22)
-        );
+        return new Vector2(x: screen.HalfWidth, y: screen.HalfHeight);
     }
     /// <summary>Returns the matte a screen's picture fills inside a seat's view, the rect a desktop emulator shows the
     /// picture in: each source row the largest whole number of display pixels that lets the picture fit the view on both

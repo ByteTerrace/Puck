@@ -1,5 +1,26 @@
-// Debug places extend the standard control library.
+// The Moth's and the debug world's play-wheel rings: the standard's rings (../standard/pad-kit.puck) with the sectors
+// only these worlds provide. A library: moth-controls.puck draws the Moth's rings in every world she walks into, and
+// controls.puck the debug world's, with its Places ring.
 import "../standard/pad-kit"
+
+// Back to the debug world's stage from anywhere, a fall or a portal loop included; from a painting's world the seat
+// is carried home.
+let respawnSector = { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
+let suitSector = { id: "suit", command: "body.press", text: "suit 1 0.2", sources: null }
+
+// The Moth's inspection layouts (avatars/moth.puck).
+let mothViewEntries = [
+  { id: "play", command: "view.override", text: "layout play", value: neverRead, sources: null }
+  { id: "threeQuarter", command: "view.override", text: "layout three-quarter", value: neverRead, sources: null }
+  { id: "front", command: "view.override", text: "layout front", value: neverRead, sources: null }
+  { id: "rear", command: "view.override", text: "layout rear", value: neverRead, sources: null }
+  { id: "wide", command: "view.override", text: "layout flight-stage", value: neverRead, sources: null }
+  { id: "face", command: "view.override", text: "layout face", value: neverRead, sources: null }
+]
+
+let mothActRing = { id: "play-acts", label: "Act", entries: concat(actEntries, [respawnSector, suitSector]) }
+let mothViewRing = { id: "play-views", label: "View", entries: concat(mothViewEntries, viewEntries) }
+let mothRings = [mothActRing, mothViewRing, barRing]
 
 let placesRing = {
   id: "play-places"
@@ -16,5 +37,15 @@ let placesRing = {
   ]
 }
 
+// The debug world's View ring adds its computer's desktop layout (desktop.puck).
+let debugViewRing = {
+  id: "play-views"
+  label: "View"
+  entries: concat(
+    mothViewEntries,
+    [{ id: "desktop", command: "view.override", text: "layout desktop", value: neverRead, sources: null }],
+    viewEntries
+  )
+}
 
-let debugRings = [actRing, viewRing, placesRing, barRing]
+let debugRings = [mothActRing, debugViewRing, placesRing, barRing]

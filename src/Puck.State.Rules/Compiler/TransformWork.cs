@@ -58,23 +58,24 @@ public static class TransformWork {
         );
 
         var lanes = 3L; // number, presence and member key
+
         if (context.FindRowAt(rowOrdinal: rowOrdinal) is { } row) {
             var columns = ArenaLayout.ColumnsOf(row: row);
+
             foreach (var column in new[] { ArenaColumn.Text, ArenaColumn.ClockEpochTick, ArenaColumn.ClockEpochEngineTick,
                 ArenaColumn.ClockY0, ArenaColumn.ClockV0, ArenaColumn.ClockSubstepTicks, ArenaColumn.ClockSet,
                 ArenaColumn.Behavior, ArenaColumn.Visibility, ArenaColumn.Observation }) {
-                if ((columns & (1UL << (int)column)) != 0UL) { lanes++; }
+                if ((columns & (1UL << ((int)column))) != 0UL) { lanes++; }
             }
         } else { lanes += 10L; }
-        return 2L * (lanes + (dimensions > 0L ? 1L + dimensions : 0L));
+        return (2L * (lanes + ((dimensions > 0L) ? (1L + dimensions) : 0L)));
     }
     /// <summary>Prices permutation checks, the positional view, two links per member and the row endpoints.</summary>
     /// <param name="context">The compile context.</param>
     /// <param name="rowOrdinal">The row ordinal.</param>
     /// <param name="members">The admitted member room.</param>
     public static long Reorder(RuleCompileContext context, int rowOrdinal, long members) =>
-        (8L * members) + 2L + Membership(context: context, rowOrdinal: rowOrdinal, members: members);
-
+        (((8L * members) + 2L) + Membership(context: context, members: members, rowOrdinal: rowOrdinal));
     /// <summary>Prices one stable-slot removal and insertion, including link edits, payloads and derived boards.</summary>
     /// <param name="context">The compile context.</param>
     /// <param name="fromOrdinal">The source row.</param>
@@ -82,21 +83,23 @@ public static class TransformWork {
     /// <param name="toOrdinal">The destination row.</param>
     /// <param name="toMembers">The admitted destination room.</param>
     public static long Move(RuleCompileContext context, int fromOrdinal, long fromMembers, int toOrdinal, long toMembers) =>
-        (3L * Door) + Dimensions(context: context, rowOrdinal: fromOrdinal) + Cell(context: context, rowOrdinal: fromOrdinal) +
-        Cell(context: context, rowOrdinal: toOrdinal) + 10L + ((toMembers + 63L) / 64L) +
-        Membership(context: context, rowOrdinal: fromOrdinal, members: fromMembers) + Membership(context: context, rowOrdinal: toOrdinal, members: toMembers);
-    /// <summary>Returns the work drawing up to <paramref name="samples"/> samples from one site's stream costs: the
+        ((((((((3L * Door) + Dimensions(context: context, rowOrdinal: fromOrdinal)) + Cell(context: context, rowOrdinal: fromOrdinal)) +
+        Cell(context: context, rowOrdinal: toOrdinal)) + 10L) + ((toMembers + 63L) / 64L)) +
+        Membership(context: context, members: fromMembers, rowOrdinal: fromOrdinal)) + Membership(context: context, members: toMembers, rowOrdinal: toOrdinal));
+    /// <summary>Returns the work drawing up to <paramref name="samples"/> bounded selections from one site's stream costs, charging the full
+    /// raw-word attempt budget for each selection: the
     /// open's cursor and mask reads and its one seek, each sample, and the close's cursor and mask stores and the
     /// recorded sample. The site's seed was folded when the host was built, so no term here reads the instance's
     /// identity or the site's descriptor.</summary>
     /// <param name="context">The compile context the site's row resolves against.</param>
     /// <param name="rowOrdinal">The draw site row's catalog ordinal.</param>
-    /// <param name="samples">The most samples one firing draws.</param>
+    /// <param name="samples">The most bounded selections one firing makes.</param>
     /// <returns>The work units.</returns>
     /// <remarks>A secret site takes one keyed sample per draw and seeks nothing. An extended source rebuilds its
     /// table when its cached generator is not already at the site's cursor, seeks the whole extended generator, and
     /// ticks its table at most once per <c>2^16</c> draws.</remarks>
     public static long Draws(RuleCompileContext context, int rowOrdinal, long samples) {
+        samples *= GeneratorCapacity.MaxBoundedAttempts;
         var draw = context.FindRowAt(rowOrdinal: rowOrdinal)?.Draw;
         var generator = (((draw is not null) && GeneratorEngine.TryResolveSource(
             draw: draw,
@@ -121,7 +124,8 @@ public static class TransformWork {
             var rebuild = ((2L * k) + (extended.Script?.Count ?? 0));
             var extendedSeek = ((Seek + SeekSteps) + (k * Seek));
 
-            return ((((edges + rebuild) + (2L * extendedSeek)) + (samples * (Sample + 1L))) + ((1L + (samples / TableTickPeriod)) * (2L * k)));
+            // A refused bounded sample can rebuild once more to restore the open stream.
+            return ((((edges + (2L * rebuild)) + (4L * extendedSeek)) + (samples * (Sample + 1L))) + ((1L + (samples / TableTickPeriod)) * (2L * k)));
         }
 
         return ((edges + Seek) + (samples * Sample));

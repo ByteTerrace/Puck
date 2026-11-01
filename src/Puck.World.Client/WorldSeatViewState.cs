@@ -343,13 +343,12 @@ public sealed class WorldSeatViewState {
                 up: up,
                 targetShift: targetShift,
                 choice: choice,
-                characterFade: control.CharacterFade,
-                scale: scale,
-                maxElevation: control.ClearanceMaxElevation
+                control: control,
+                scale: scale
             );
             if (firstPerson is { } destination) {
                 var head = subject.Point(local: destination.EyePoint);
-                var room = (WorldCameraClearance.AvailableRoom(backward: -forward, field: field, head: head, length: authoredLength, scale: scale) / scale);
+                var room = (WorldCameraClearance.AvailableRoom(backward: -forward, eyeRadius: control.EyeRadius, field: field, head: head, length: authoredLength, scale: scale) / scale);
 
                 m_viewTransition.Advance(destination, control.AutoFirstPerson,
                     m_viewTransition.Automatic(control: control, feel: (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);

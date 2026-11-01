@@ -79,7 +79,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         if (sampledScreen) {
             // An opening (a portal's window) is the world beyond its glass, which the resolve's clip keeps current like
             // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge. A
-            // display is reactive only over its picture: its edge band (a CRT's bezel, or a plain face's outermost pixel)
+            // display is reactive only over its picture: its edge band (a screen material's soft edge, or a plain face's outermost pixel)
             // is as steady as the device around it, and keeps its history, so the face's jittered edge resolves like any
             // other edge. An opening that ripples is the one
             // reactive opening: its refraction moves on its own, and a history would smear it.

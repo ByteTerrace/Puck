@@ -1866,6 +1866,11 @@ puck test <path> --keep <dir>          run in <dir> and keep it: every generated
 puck test <path> --jobs <n>            run at most n worker processes concurrently (default: 2,
                                      or 1 on a machine with fewer than four logical CPUs)
 puck test <path> --reproduce           restore each authority's checkpoint and replay its recorded input
+puck test <path> --workers 1,2,0       run every scenario at each Puck.World --workers count and
+                                       require their hashes, exports and crossing logs to match
+puck test <path> --record <dir>        keep each world's hashes, exports and crossing log
+                                       under <dir>/<world> (lane scratch, never committed)
+puck test <path> --compare <dir>       require each world to match its recording under <dir>
 puck test <path> --cache-dir <dir>     share this device-cache root across workers and runs
 puck test -h / --help                  this text
 ```
@@ -1875,8 +1880,8 @@ that a passing run deletes and a failing run keeps and names (see
 [Conventions](#conventions)).
 
 Each collected world owns a numbered directory under `<dir>/worlds`, starting
-at `000000/run1`. Its `out` exports, manifest and transcripts describe that
-scenario. Each report names the source and artifact directory. The worker uses
+at `000000/run1` (`000000/workers-<count>`, one per count, under `--workers`).
+Its `out` exports, manifest and transcripts describe that scenario. Each report names the source and artifact directory. The worker uses
 an isolated state root that each scenario starts empty.
 `--reproduce` writes `reproduction.json` beside the transcript, one verdict per
 authority; it creates no second run directory. `process-id` identifies the worker.
@@ -1941,6 +1946,34 @@ schedule runs once: its outcomes and edit echoes remain in
 `test-run.json`; replay consumes the resulting inputs instead of executing console
 commands again. External input is captured once, so this checks deterministic
 continuation rather than agreement between two samples of an external source.
+
+`--workers 1,2,0` is the parallel tick's proof
+([job system](../plans/engine-job-system.md#proof-by-reproduce-and-by-recorded-oracle)).
+`Puck.World --workers N` sets how many threads run the engine's parallel
+partitions, the frame thread included: `1` runs every partition on the frame
+thread, and `0`, the default, takes the machine's logical processor count
+(`JobWorkers`, the one worker-count setting the host's composition registers
+for the job system); `--jobs` still bounds the worker processes that boot those
+Worlds. State never depends on the thread count. For each count in the list the
+verb runs every scenario as a full authored host run, the batch host with its
+instance host and portal scan, under `<dir>/worlds/<n>/workers-<count>`, one
+count after another, and prints each count's wall time. Each leg records
+`reproduction.json` (each authority's per-tick state hash, from the same replay
+probe `--reproduce` uses; its `divergence` is set only under `--reproduce`) and
+`crossings.json` (every crossing line the instance host narrates, stamped with
+the booted authority's completed tick) beside its `out` exports and manifest.
+Every count must match the first: a mismatch prints `DIVERGED` with the first
+recorded tick whose hash differs per authority, the first JSON path where an
+export differs, and the first differing crossing entry, and exits 2. Verdicts are
+read from the first count.
+
+`--record <dir>` keeps the first count's `reproduction.json`,
+`crossings.json` and `out` under `<dir>/<world>`, and a later run with
+`--compare <dir>` must match it the same way: the before-and-after oracle a
+step that should not change semantics runs against. A recording is a lane-local
+tool, never committed and never a gate; keep it under the lane's
+`.claude/scratch`. Either flag records legs without `--workers`, at the host's
+own count.
 
 Only a rule's own effect writes a verdict row. The rule-effect door stamps the
 firing's simulation tick into the row's reserved `$firedTick` cell. Generated

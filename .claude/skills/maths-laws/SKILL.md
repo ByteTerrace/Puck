@@ -5,6 +5,11 @@ description: "Authors Puck.Maths.Tests laws: laws/*.json rows, LawRegistry bindi
 
 # Writing a Puck.Maths law that bites
 
+During the refactoring campaign, AGENTS.md suspends blanket coverage, testing
+and gate requirements. Follow an explicit brief's verification, and write laws
+for exact properties that running cannot show. The declaration/binding workflow
+below keeps any laws a change does add structurally complete.
+
 This skill owns authoring and validating `tests/Puck.Maths.Tests`. The suite's
 code and tests are authoritative; reconcile its README, XML documentation and
 this skill with them when they disagree.

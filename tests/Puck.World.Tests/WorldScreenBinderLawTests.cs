@@ -153,8 +153,14 @@ public sealed class WorldScreenBinderLawTests {
         Assert.True(condition: scene.Binder.State(index: BinderScene.Cabinet)?.Assigned);
         Assert.True(condition: scene.Binder.TryExtent(height: out var height, screen: BinderScene.Cabinet, width: out var width));
         Assert.Equal(actual: (width, height), expected: (1, 1));
-        // The cabinet's row opts into the CRT; every other display, and a screen with no row, is plain.
-        Assert.Equal(actual: scene.Binder.FaceOf(screen: BinderScene.Cabinet), expected: SdfScreenFace.Crt);
+        // The cabinet's row names the CRT material, which reaches its treatment; every other display, and a screen with no
+        // row, draws none.
+        Assert.Equal(actual: scene.Binder.FaceOf(screen: BinderScene.Cabinet), expected: SdfScreenFace.Display);
+        Assert.Equal(
+            actual: scene.Binder.TreatmentOf(screen: BinderScene.Cabinet),
+            expected: new SdfScreenTreatment(Scanlines: 0.06f, SubpixelStripes: 0.05f, Vignette: 0f, Glint: 0f, GlintPower: 3f, CornerRadius: 0.004f, EdgeSoftness: 0.004f)
+        );
+        Assert.True(condition: scene.Binder.TreatmentOf(screen: BinderScene.Pattern).IsNone);
         Assert.Equal(actual: scene.Binder.FaceOf(screen: BinderScene.Pattern), expected: SdfScreenFace.Display);
         Assert.Equal(actual: scene.Binder.FaceOf(screen: 31), expected: SdfScreenFace.Display);
     }
@@ -299,18 +305,18 @@ public sealed class WorldScreenBinderLawTests {
         var rows = scene.Rows;
 
         // Every screen but the pattern goes: each slot is dropped, the session released, the camera's view with it.
-        binder.ReconcileScreens(screens: [rows[0]]);
+        binder.ReconcileScreens(materials: [], screens: [rows[0]]);
         Assert.Null(@object: binder.State(index: BinderScene.Session));
         Assert.Null(@object: binder.InstanceOf(screen: BinderScene.View));
 
         // A boot index comes back with a new source, and a new index waits for the next boot.
-        binder.ReconcileScreens(screens: [rows[0], (rows[BinderScene.Text] with { Source = new WorldScreenSource.Text(Lines: ["again"]) }), (rows[0] with { Index = 40 })]);
+        binder.ReconcileScreens(materials: [], screens: [rows[0], (rows[BinderScene.Text] with { Source = new WorldScreenSource.Text(Lines: ["again"]) }), (rows[0] with { Index = 40 })]);
         Assert.Equal(actual: binder.TextSourceAt(index: BinderScene.Text)?.Lines, expected: ["again"]);
         Assert.Null(@object: binder.State(index: 40));
 
         // The same rows again change nothing; a changed row's source applies, a machine's through its host.
-        binder.ReconcileScreens(screens: [rows[0], (rows[BinderScene.Text] with { Source = new WorldScreenSource.Text(Lines: ["again"]) })]);
-        binder.ReconcileScreens(screens: [(rows[0] with { Source = new WorldScreenSource.None() }), rows[BinderScene.Text], (rows[0] with { Index = BinderScene.None, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") })]);
+        binder.ReconcileScreens(materials: [], screens: [rows[0], (rows[BinderScene.Text] with { Source = new WorldScreenSource.Text(Lines: ["again"]) })]);
+        binder.ReconcileScreens(materials: [], screens: [(rows[0] with { Source = new WorldScreenSource.None() }), rows[BinderScene.Text], (rows[0] with { Index = BinderScene.None, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") })]);
         Assert.Null(@object: binder.InstanceOf(screen: BinderScene.Pattern));
         Assert.Equal(actual: binder.TextSourceAt(index: BinderScene.Text)?.Lines, expected: ["hello"]);
         Assert.False(condition: binder.TryExtent(height: out _, screen: BinderScene.None, width: out _));
@@ -318,7 +324,7 @@ public sealed class WorldScreenBinderLawTests {
         // A camera row authors its seat's camera controls; the first row authoring a seat's wins.
         var camera = WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings(Controls: new WorldCameraControls(Zoom: 2)));
 
-        binder.ReconcileScreens(screens: [(rows[0] with { Source = camera }), (rows[BinderScene.Text] with { Source = camera })]);
+        binder.ReconcileScreens(materials: [], screens: [(rows[0] with { Source = camera }), (rows[BinderScene.Text] with { Source = camera })]);
     }
     [Fact]
     public void ConfiguredViewsRegisterTheCamerasTheScreensShow() {
@@ -394,7 +400,7 @@ public sealed class WorldScreenBinderLawTests {
         binder.RetainFrameSource(seat: 1, source: hud);
         binder.ForgetFrameSource(seat: 1, source: hud);
         Assert.True(condition: binder.ApplyNonMachineSource(index: BinderScene.None, source: new WorldScreenSource.None()).Ok);
-        binder.ReconcileScreens(screens: [.. scene.Rows.Where(predicate: static row => (row.Index != BinderScene.View))]);
+        binder.ReconcileScreens(materials: [], screens: [.. scene.Rows.Where(predicate: static row => (row.Index != BinderScene.View))]);
         Assert.Equal(actual: binder.ActiveCameraViewCount, expected: 1);
         binder.ReleaseFrameSource(seat: 1, source: hud);
         binder.ReleaseFrameSource(seat: 1, source: hud);
@@ -407,7 +413,7 @@ public sealed class WorldScreenBinderLawTests {
 
         // The camera rows move: an edit in place, a row the views no longer have, a row arriving for a faulted screen, a
         // row that comes to ride a seat and so registers again.
-        binder.ReconcileScreens(screens: scene.Rows);
+        binder.ReconcileScreens(materials: [], screens: scene.Rows);
         Assert.Equal(actual: binder.ActiveCameraViewCount, expected: 1);
         binder.ReconcileCameras(cameras: [(scene.Camera with { RenderWidth = 256U })]);
         binder.ReconcileCameras(cameras: [(scene.Camera with { RenderWidth = 256U }), (scene.Camera with { Name = "missing" })]);
@@ -501,7 +507,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.TryGetViewExport(cameraName: "cam", fault: out fault, generation: out _, ring: out _));
         Assert.Equal(actual: fault, expected: "view export awaiting a first rendered frame");
         Assert.False(condition: binder.TryGetViewExport(cameraName: "cam", fault: out _, generation: out _, ring: out _));
-        binder.ReconcileScreens(screens: [.. scene.Rows.Where(predicate: static row => (row.Index != BinderScene.View))]);
+        binder.ReconcileScreens(materials: [], screens: [.. scene.Rows.Where(predicate: static row => (row.Index != BinderScene.View))]);
         Assert.False(condition: binder.TryGetViewExport(cameraName: "cam", fault: out _, generation: out _, ring: out _));
         binder.RetainViewExport(cameraName: "cam");
         binder.RetainViewExport(cameraName: "cam");
@@ -518,7 +524,7 @@ public sealed class WorldScreenBinderLawTests {
         var binder = scene.Binder;
 
         // A frame over screens that show nothing external converts no capture fill until a HUD frame names a webcam.
-        binder.ReconcileScreens(screens: [scene.Rows[0]]);
+        binder.ReconcileScreens(materials: [], screens: [scene.Rows[0]]);
         binder.Publish(context: scene.Frame(device: new FakeGpuDevice { AdapterLuid = 7L }));
         Assert.False(condition: binder.TryGetRenderedKernelHost(fault: out var fault, host: out _));
         Assert.Equal(actual: fault, expected: "this platform hosts no probe kernels");
@@ -560,7 +566,7 @@ public sealed class WorldScreenBinderLawTests {
         binder.Publish(context: scene.Frame(device: new FakeGpuDevice()));
         Assert.True(condition: binder.TryDescribeSession(description: out described, index: BinderScene.Session));
         Assert.True(condition: described.InstanceGone);
-        binder.ReconcileScreens(screens: [scene.Rows[0]]);
+        binder.ReconcileScreens(materials: [], screens: [scene.Rows[0]]);
         binder.PresentFrame(authoritativeTick: 1UL, transforms: []);
     }
     [Fact]
@@ -570,7 +576,7 @@ public sealed class WorldScreenBinderLawTests {
         var repointed = (scene.Rows[BinderScene.Session] with { Source = new WorldScreenSource.Session(Destination: "closed") });
 
         scene.ConfigureViews();
-        binder.ReconcileScreens(screens: [.. scene.Rows.Select(selector: row => ((row.Index == BinderScene.Session) ? repointed : row))]);
+        binder.ReconcileScreens(materials: [], screens: [.. scene.Rows.Select(selector: row => ((row.Index == BinderScene.Session) ? repointed : row))]);
         scene.Boot.Server.EnqueueMutation(mutation: new WorldMutation.UpsertScreen(Principal: Principal.Console, Screen: repointed));
         scene.Boot.Server.Advance(stepTicks: BinderScene.Step);
         scene.Host.SettleBootScreenSessions(stepped: true);
@@ -596,7 +602,7 @@ public sealed class WorldScreenBinderLawTests {
         binder.Dispose();
         binder.Dispose();
         binder.NotifyDeviceLost();
-        binder.ReconcileScreens(screens: []);
+        binder.ReconcileScreens(materials: [], screens: []);
         binder.ReconcileCameras(cameras: []);
         binder.DeclareFrameSource(seat: 1, source: new WorldScreenSource.Probe(Id: "probe"));
         binder.RetainFrameSource(seat: 1, source: new WorldScreenSource.Probe(Id: "probe"));
@@ -711,7 +717,8 @@ public sealed class WorldScreenBinderLawTests {
             if (options.Cabinet) {
                 boot = (boot with {
                     MachinesRaw = [new WorldMachine("cabinet", CabinetEngine.EngineId, CabinetEngine.Configuration())],
-                    ScreensRaw = [.. boot.Screens, (Template with { Index = Cabinet, Material = WorldScreenMaterial.Crt, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") })],
+                    ScreenMaterialsRaw = [new WorldScreenMaterial(Id: "crt", Scanlines: 0.06f, SubpixelStripes: 0.05f, GlintPower: 3f, CornerRadius: 0.004f, EdgeSoftness: 0.004f)],
+                    ScreensRaw = [.. boot.Screens, (Template with { Index = Cabinet, Material = "crt", Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") })],
                 });
             }
             var bootPath = m_files.PathOf(name: "boot.world.json");
@@ -722,7 +729,7 @@ public sealed class WorldScreenBinderLawTests {
             );
             boot = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: bootPath));
 
-            var cabinet = (Template with { Index = Cabinet, Material = WorldScreenMaterial.Crt, Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") });
+            var cabinet = (Template with { Index = Cabinet, Material = "crt", Source = new WorldScreenSource.Machine(Instance: "cabinet", Output: "video") });
 
             Machines = new WorldMachineHost(
                 engines: (options.Cabinet ? [new CabinetEngine()] : []),
@@ -798,6 +805,7 @@ public sealed class WorldScreenBinderLawTests {
                 perception: new WorldPerceptionAnchor(),
                 probeKernels: new NullProbeKernelHostService(),
                 producers: options.Producers,
+                screenMaterials: boot.ScreenMaterials,
                 roster: Roster,
                 screens: Rows,
                 speech: new WorldSpeechClock(),

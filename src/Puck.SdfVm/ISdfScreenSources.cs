@@ -10,11 +10,27 @@ public enum SdfScreenFace : byte {
     /// <summary>An opening onto another place (a window): its picture is the world beyond it, shown at that world's own
     /// luminance with no display treatment.</summary>
     Opening = 0,
-    /// <summary>A display: its picture as its source made it, filling the face, at the display's luminance.</summary>
+    /// <summary>A display: its picture filling the face, at the display's luminance, drawn through its
+    /// <see cref="SdfScreenTreatment"/>.</summary>
     Display = 1,
-    /// <summary>A cathode-ray tube's display: its picture inset in the tube's bezel and drawn through its glass
-    /// (scanlines, an aperture grille, a bright-pixel bloom), which a framed view's screen fidelity fades out.</summary>
-    Crt = 2,
+}
+/// <summary>The display treatment a screen's face draws its picture through: an authored screen material's model of
+/// the display's own pixel structure over the picture, which always fills the face. A view's screen fidelity scales every
+/// term toward zero as a seat frames the screen. Each value IS what the screen's mapping record carries to the kernels
+/// (<c>ScreenMappingData.treatment</c> and <c>.treatmentShape</c>, <c>frame/sdf-screen-mapping.hlsli</c>).</summary>
+/// <param name="Scanlines">How dark the gap between source rows draws, in [0, 1].</param>
+/// <param name="SubpixelStripes">How strong the red, green and blue stripes across each source column draw, in [0, 1].</param>
+/// <param name="Vignette">How much the face darkens toward its corners, in [0, 1].</param>
+/// <param name="Glint">How bright the rim glint at grazing view angles adds, in [0, 1].</param>
+/// <param name="GlintPower">The exponent of one minus the view cosine the glint follows; positive.</param>
+/// <param name="CornerRadius">The face's corner rounding, as a fraction of the face.</param>
+/// <param name="EdgeSoftness">The width over which the face's edge fades to black, as a fraction of the face.</param>
+public readonly record struct SdfScreenTreatment(float Scanlines, float SubpixelStripes, float Vignette, float Glint, float GlintPower,
+    float CornerRadius, float EdgeSoftness) {
+    /// <summary>Gets the absent treatment: the picture as its source made it.</summary>
+    public static SdfScreenTreatment None => default;
+    /// <summary>Gets whether this is the absent treatment, which the shading draws as a plain display.</summary>
+    public bool IsNone => (this == default);
 }
 /// <summary>
 /// What each diegetic screen an <see cref="SdfWorldResidency"/> renders shows: the render-graph instance whose image it
@@ -41,10 +57,14 @@ public interface ISdfScreenSources {
     /// <returns>The peak luminance, in nits; <see cref="SdfScreenEmission.DefaultLuminance"/> unless the screen's row
     /// authors one.</returns>
     float LuminanceOf(int screen) => SdfScreenEmission.DefaultLuminance;
-    /// <summary>Returns what a screen's face is: an opening, a display, or a CRT display.</summary>
+    /// <summary>Returns what a screen's face is: an opening or a display.</summary>
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>The screen's face.</returns>
     SdfScreenFace FaceOf(int screen);
+    /// <summary>Returns the display treatment a screen's face draws its picture through.</summary>
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <returns>The screen's treatment; <see cref="SdfScreenTreatment.None"/> unless its row names a screen material.</returns>
+    SdfScreenTreatment TreatmentOf(int screen) => SdfScreenTreatment.None;
     /// <summary>Returns the mapping a screen publishes, which the screen shading draws its face from.</summary>
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>The screen's surface mapping, or <see langword="null"/> when it publishes none: it then shades as unbound

@@ -63,6 +63,7 @@ public sealed partial class WorldDocument {
                 masks: siteRow.DrawnMasks,
                 sampleCount: cellCount,
                 masksAfter: out var masksAfter,
+                advances: out var advances,
                 reason: out var fillFireReason
             )) {
                 reason = $"state row '{mutation.Row}' draw fill {fillFireReason}";
@@ -73,7 +74,7 @@ public sealed partial class WorldDocument {
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.AuthoredState,
                 item: (siteRow with {
-                    DrawCursor = (siteRow.DrawCursor + cellCount),
+                    DrawCursor = (siteRow.DrawCursor + advances),
                     DrawnMasks = GeneratorEngine.MasksAfter(
                     generator: fillSource,
                     fired: masksAfter,
@@ -193,7 +194,7 @@ public sealed partial class WorldDocument {
             list: current.AuthoredState,
             item: (siteRow with {
                 Cells = [cell],
-                DrawCursor = (siteRow.DrawCursor + fired.Samples),
+                DrawCursor = (siteRow.DrawCursor + fired.Advances),
                 DrawnMasks = GeneratorEngine.MasksAfter(
                 generator: generator,
                 fired: fired.Masks,

@@ -109,7 +109,7 @@
           "type": "number"
         },
         "gyro": {
-          "description": "The optional full-axis gyro projection. Absent resolves to Default.",
+          "description": "The optional full-axis gyro projection. Absent resolves to None.",
           "type": [
             "object",
             "null"
@@ -121,7 +121,7 @@
               "default": 1
             },
             "deadZone": {
-              "description": "Independent X/Y/Z dead zones in radians per second.",
+              "description": "Gets the independent X/Y/Z dead zones in radians per second; zero where none is authored.",
               "default": null,
               "type": "array",
               "items": {
@@ -146,7 +146,7 @@
               "default": false
             },
             "yaw": {
-              "description": "The X/Y/Z projection weights producing semantic look-right angular velocity.",
+              "description": "Gets the X/Y/Z projection weights producing semantic look-right angular velocity; zero where none is authored.",
               "default": null,
               "type": "array",
               "items": {
@@ -156,7 +156,7 @@
               "maxItems": 3
             },
             "pitch": {
-              "description": "The X/Y/Z projection weights producing semantic look-up angular velocity.",
+              "description": "Gets the X/Y/Z projection weights producing semantic look-up angular velocity; zero where none is authored.",
               "default": null,
               "type": "array",
               "items": {

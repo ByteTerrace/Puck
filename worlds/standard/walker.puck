@@ -1,0 +1,195 @@
+// The standard's plain walker: the smallest avatar a world needs to seat a player. A capsule body that walks, runs
+// while `run` is held, jumps once from the ground and falls, drawn as a grey capsule with a darker visor so its facing
+// reads, framed by the standard chase camera (camera.puck's `chaseCamera`). It imports the standard and refines it, so
+// a world imports it in the standard's place and declares its bodies and spawn points (../minimal/minimal.puck); an
+// author's own avatar replaces it by refining the `walker` kit, look and prototype by id, or by not importing it (the
+// debug world's Moth is her own, ../debug/avatars/moth.puck):
+//
+//   import "../standard/walker"
+//
+// Distances are full-size metres: the capsule stands 1.7 m, its eye at 1.6 m.
+import "standard"
+import "camera"
+
+chaseCamera(
+  rig: "walker-camera",
+  pivotOffset: [0, 0.9, 0],
+  fadeCloseTarget: [0, 1.5, 0],
+  cutawayCloseTarget: [0, 1.35, 0],
+  eyePoint: [0, 1.6, 0.2]
+)
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "walk"
+    operations [
+      ResolveYawAttitudeAndPlanarFrame
+      ResolveHold
+      ComputePlanarTargetVelocity
+      ShapeVelocity
+      SnapYawToPlanarIntent
+      RunActionTriggers
+      ApplyHold
+      IntegratePlanarAndVerticalVelocity
+      CommitPose
+    ]
+    planarTarget {
+      backward: 0.7
+      strafe: 0.85
+    }
+    version: "puck.body.program.v1"
+  }
+]
+
+defaultSeatKit: "walker"
+
+// How bodies meet the world: a 2 cm contact skin, slopes walkable to 60 degrees.
+collision {
+  contactSkin: 0.02
+  defaultHold: false
+  gradientProbe: 0
+  gridCellSize: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+kits [
+  {
+    name: "walker"
+    bodyContact: Solid
+    bodyMotionProgram: "walk"
+    // Its 0.3 m spheres span the ground to 1.7 m: the endpoint is the top sphere's centre above the bottom one's.
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    mass: 0
+    motion {
+      facingSnap: false
+      groundSnap: 0.3
+      holds [
+        {
+          name: "ground"
+          bond: Surface
+          hold: Gravity
+          cone [0, 60]
+          reach: 1.2
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          envelope {
+            sinkSpeed: 40
+          }
+        }
+        {
+          name: "fall"
+          bond: Free
+          hold: Gravity
+          forward: Heading
+          gravity {
+            fall: 46
+            rise: 28
+          }
+          envelope {
+            sinkSpeed: 40
+          }
+        }
+      ]
+      moveFrame: World
+      shaping [
+        {
+          along {
+            engage: 40
+            release: 50
+          }
+          turnScale: 1
+        }
+      ]
+      // A 4 m/s walk, doubled while the run channel is held.
+      speed {
+        value: 4
+        held {
+          channel: "run"
+          multiplier: 2
+        }
+      }
+      stepHeight: 0.3
+      turn {
+        falloff: 1
+        maxPitch: 1.2
+        pitchRate: 0
+        rate: 2.5
+      }
+    }
+    // One jump from the ground, cut short by letting go while still rising.
+    actions {
+      jump {
+        onPress {
+          gate: now(fact: Grounded)
+          latchSeconds: 0
+          effects [
+            setVerticalVelocity(velocity: 5)
+          ]
+        }
+        onRelease {
+          gate: now(fact: Rising)
+          latchSeconds: 0
+          effects [
+            scaleVerticalVelocity(factor: 0.45)
+          ]
+        }
+      }
+    }
+  }
+]
+
+looks {
+  assignment {
+    rows ["walker"]
+    sequence {
+      name: "index"
+      offset: 0
+      step: 0
+    }
+  }
+  rows [
+    {
+      name: "walker"
+      scale: 1
+      source: creation(prototypeId: walker)
+      // A rigid capsule: no gait swing and no timeline.
+      motion {
+        gaitAmplitude: 0
+        replayFrames: false
+        secondsPerFrame: 0
+      }
+    }
+  ]
+}
+
+prototypes {
+  prototype "walker" {
+    document {
+      name: "walker"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#9AA0A8", roughness: 0.6, specular: 0.04, emissive: 0 }
+        { color: "#22262C", roughness: 0.3, specular: 0.04, emissive: 0 }
+      ]
+      // The body: a 0.3 m capsule round the segment from 0.3 m to 1.4 m (half its y scale above its position), so it
+      // spans the ground to 1.7 m, as its collider does.
+      shape Capsule "body" {
+        material: 0
+        position [0, 0.3, 0]
+        scale [0.3, 2.2, 0.3]
+      }
+      // The visor across its face, on the +Z side it faces.
+      shape Box "visor" {
+        material: 1
+        position [0, 1.5, 0.27]
+        scale [0.2, 0.06, 0.05]
+      }
+    }
+  }
+}

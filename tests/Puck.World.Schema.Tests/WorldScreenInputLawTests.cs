@@ -14,12 +14,12 @@ namespace Puck.World.Schema.Tests;
 public sealed class WorldScreenInputLawTests {
     // The face coordinate the CRT glass shows image coordinate `image` at: its inverse, run backwards.
     private static double FaceOf(double image) {
-        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.CrtGlass.Inverse!);
+        var glass = new SourceWarpInverse.Affine(M11: 1f, M12: 0f, M13: 0f, M21: 0f, M22: 1f, M23: 0f);
 
         return ((image - glass.M13) / glass.M11);
     }
     // A CRT screen (unless another material is named) facing +z at (1, 2, 3), two units wide and one and a half tall.
-    private static WorldScreen Screen(SourceDestination? input, WorldScreenMaterial material = WorldScreenMaterial.Crt) => new(
+    private static WorldScreen Screen(SourceDestination? input, string? material = null) => new(
         HalfDepth: 0.1f,
         HalfHeight: 0.75f,
         HalfWidth: 1f,
@@ -204,7 +204,7 @@ public sealed class WorldScreenInputLawTests {
             ))
         );
         Assert.Equal(
-            expected: SourceHitOutcome.OutsideWarp,
+            expected: SourceHitOutcome.OnSource,
             actual: mapping.MapRay(ray: RayAt(
                 u: (FaceOf(image: 0.0) / 2),
                 v: 0.5
@@ -214,7 +214,7 @@ public sealed class WorldScreenInputLawTests {
         // A plain screen's picture fills its face: an image point sits at its own face point, and the band a CRT's
         // bezel would cover is picture.
         var plain = WorldScreenMappings.Of(
-            screen: Screen(input: SourceDestination.Simulation, material: WorldScreenMaterial.Plain),
+            screen: Screen(input: SourceDestination.Simulation, material: null),
             source: SourceHandle.Producer(name: "cabinet"),
             sourceHeight: 144,
             sourceWidth: 160
@@ -258,12 +258,12 @@ public sealed class WorldScreenInputLawTests {
         );
 
         Assert.Equal(expected: SourceHitOutcome.OnSource, actual: mapping.MapRay(ray: hit).Outcome);
-        Assert.Equal(expected: SourceHitOutcome.OutsideWarp, actual: mapping.MapRay(ray: bezel).Outcome);
+        Assert.Equal(expected: SourceHitOutcome.OnSource, actual: mapping.MapRay(ray: bezel).Outcome);
         Assert.Equal(expected: SourceHitOutcome.OutsidePlacement, actual: mapping.MapRay(ray: miss).Outcome);
         Assert.Equal(expected: 1L, actual: operands[2].Read(ray: hit));
         Assert.All(
             action: ray => Assert.Equal(expected: 0L, actual: operands[2].Read(ray: ray)),
-            collection: new SourceRay?[] { bezel, miss, null }
+            collection: new SourceRay?[] { miss, null }
         );
 
         var sink = 0L;

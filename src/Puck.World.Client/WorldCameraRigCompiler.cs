@@ -392,7 +392,9 @@ public static class WorldCameraRigCompiler {
                             : SdfCameraProgram.FacingSubject),
                             TargetOffset: (lookAt.TargetOffset?.Value ?? Vector3.Zero),
                             WorldAxes: lookAt.WorldAxes,
-                            CloseTargetOffset: lookAt.CloseTargetOffset?.Value,
+                            CloseTargetOffset: ((lookAt.CloseTargetOffset is { } closeTarget)
+                                ? new SdfCameraClearanceOffsets(Fade: closeTarget.Fade.Value, Cutaway: closeTarget.Cutaway.Value)
+                                : null),
                             CloseTargetStartFraction: lookAt.CloseTargetStartFraction,
                             CloseTargetFullFraction: lookAt.CloseTargetFullFraction
                         ));

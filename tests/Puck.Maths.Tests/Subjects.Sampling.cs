@@ -5,6 +5,21 @@ using Puck.Abstractions.Counting;
 namespace Puck.Maths.Tests;
 
 internal static partial class Subjects {
+    public static string? BoundedWordExactRejection() {
+        foreach (var bound in new uint[] { 1, 2, 3, 208, 2147483649, uint.MaxValue }) {
+            foreach (var word in new uint[] { 0, 1, 2, 17, 0x80000000, uint.MaxValue }) {
+                var quotient = BigInteger.DivRem(dividend: (((BigInteger)word) * bound), divisor: (BigInteger.One << 32), remainder: out var remainder);
+                var expected = (remainder >= ((BigInteger.One << 32) % bound));
+
+                if ((BoundedRandomSampling.TryMap(exclusiveHigh: bound, value: out var actual, word: word) != expected) || (expected && actual != quotient)) {
+                    return $"word {word}, bound {bound}: acceptance or exact quotient differs";
+                }
+            }
+        }
+        try { BoundedRandomSampling.TryMap(exclusiveHigh: 0, value: out _, word: 1); return "zero bound was admitted"; } catch (ArgumentOutOfRangeException) { }
+        return null;
+    }
+
     // ---- sampling ----
 
     // A primitive degree-4 generator (t^4 + t + 1) and a non-primitive irreducible one (t^4 + t^3 + t^2 + t + 1), the
