@@ -67,9 +67,14 @@ their percentiles. Install the console build with `winget install --id
 Intel.PresentMon.Console --exact` (no elevation needed); it lands on the PATH
 as `presentmon`. Capture a running World with `presentmon --process_id <pid>
 --timed 20 --terminate_after_timed --output_file <csv> --no_console_stats
---stop_existing_session`. The capture reads ETW, so the user must be in the
-Performance Log Users group (the lead machine's user is) or the capture runs
-elevated.
+--stop_existing_session --no_track_gpu --no_track_display`. The capture reads
+ETW. Without elevation (the lead machine's user is in Performance Log Users),
+GPU and display tracking fail silently and leave the CSV empty, so pass the
+two `--no_track_*` flags. The capture then gives present-to-present only. That
+is a weak proxy on Direct3D 12: it is bimodal (8 to 12 ms and 20 to 24 ms),
+because each present lands at the end of an iteration's work and alternates
+with tick and non-tick frames. The time a frame reaches the display needs an
+elevated capture.
 
 **RenderDoc (Vulkan).** From a build that carries SPIR-V (a solution build, or
 `-p:PuckShaderSpirvEnabled=true`; [kernels](kernels.md#building)), boot with
