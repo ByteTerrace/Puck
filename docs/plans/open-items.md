@@ -40,9 +40,10 @@ experimental worlds have that it lacks is ported into it
    not the vsync-paced interval, against `host.frames`' budget. No new thread;
    this alone removes the traced slow frames.
 2. [Engine job system](#engine-job-system), the garbage-collection cuts on
-   today's runtime [high]: scene emission's 5.4 MB per call and the cold bake's
-   345 collections (2.9 s), both owned-storage reuse (`IAllocator` and
-   `MimallocAllocator` where the storage goes native).
+   today's runtime [high]: remaining bake readback copies and fine-sample
+   indexes, and steady irradiance blocks and dressed-pick snapshots; measured
+   residuals are in the packet. Native storage uses `IAllocator` and
+   `MimallocAllocator`.
 3. [Engine job system](#engine-job-system), the memo [high]: the scheduler, the
    deterministic parallel tick (about 70 % of a tick partitions), parallel view
    recording (about 36 % of produce), memory ownership (scratch, borrowing and
@@ -168,18 +169,46 @@ One engine-wide job system answers all of it:
 - [medium] `host.frames` counts vsync-paced 16.7x ms intervals as over budget
   (`src/Puck.Launcher/HostFrameTimeline.cs:250`): judge the work time against
   the budget with the paced wait excluded, as `Scan` does (`:168`), or count
-  intervals past one and a half periods.
+  intervals past one and a half periods. The scheduling lane also owns
+  `Describe`'s collection total (`:239`): it adds three inclusive generation
+  counters and counts an upper-generation collection more than once. Use the
+  gen0 increment for the actual count; retain gen1/gen2 as its breakdown.
 - Check the effector solver against the "Puck code over engine code" ruling: it
   is a generic motion primitive only if every per-rig decision (which effectors,
   reach, standoff, when a foot seeks) is authored rig data. If it encodes
   behaviour that a motion program should express, that is a leak to fix with the
   scheduling change (author the behaviour; the solver stays the executor), not a
   C# default to keep.
-- [high] The garbage-collection cuts, on today's runtime and before any custom
-  runtime: scene emission allocates 5.4 MB per call (the gen0 source), and a
-  cold bake runs 345 collections, 2.9 s in all. Both are owned-storage reuse
-  (scratch kept by its owner), through `IAllocator` and `MimallocAllocator`
-  where the storage goes native.
+- [high] Remaining managed allocation churn, measured by `gc-cuts` on the
+  Release .NET 11 debug World, before any custom runtime:
+  - `puck bench world`'s `WorldSceneEmitter.Emit` window (builder construction
+    excluded) falls from 5,471,368 to 460,880 B/call unchanged, and 5,539,488 to
+    529,000 after a hall-light change. Rigid templates reuse retained emissions;
+    composition owns its builder and avatar scratch. Residual emission includes
+    pick material labels (`WorldPickMap.cs:64`) and shape-specific materials.
+  - Direct3D standing (300 ticks) and walking (290 ticks) gen0 increments from
+    `host.memory` fall from 4/4 to 1/1 (`host.frames` prints 5/4 before because
+    of its inclusive-counter sum above); pauses are 18.85/26.19 ms before and
+    18.41/12.12 ms after. The 23 s steady trace tail falls from 499.4 to
+    169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
+    (`SdfMeshIrradiance.cs:1010`), dressed-pick arrays, 32.0 MiB
+    (`SdfDressedPickMap.cs:24-25`), and dressed motion identities, 9.1 MiB
+    (`SdfMeshPathBake.cs:389`). Zero steady gen0 is not yet reached.
+  - Empty, lane-owned `--cache-dir` boots through bake settlement sample
+    174,453 to 159,435 MiB, but collections increase from 555 to 619 and GC
+    suspension from 12,813 to 15,083 ms. Counts include higher generations and
+    startup; these loaded-machine observations establish no pause gain.
+    Main bake counts agree: 999,550,075 samples and 38,652,955 triangles.
+    Remaining sampled sites include readback-copy byte arrays, 12,350 MiB
+    (`SdfMeshPathBake.cs:691`), fine-key dictionary entries, 14,669 MiB across
+    inlined/non-inlined stacks (`SdfSampledLattice.cs:861`), and contour merge
+    doubles, 5,022 MiB (`SdfDualContouring.cs:702`). Answer decoding reuses
+    exclusive bake-owned spans; final lattices reuse point-conversion storage.
+    Worker-slot index retention is bounded to one fine-sample budget across
+    slots: retaining every slot's maximum grew standing LOH to 8,530 MiB;
+    bounded retention reads 5,404 MiB versus the baseline's 6,222 MiB.
+    Continue with owned storage, through `IAllocator` and `MimallocAllocator`
+    where it goes native; a shared cross-thread pool belongs to the memo.
 - Decide (the lead's call): whether the 30 and 15 Hz update tiers become a
   continuous rate.
 - [medium] Kit bodies' advance stays serial, so the parallel tick partitions
