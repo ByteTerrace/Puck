@@ -239,7 +239,9 @@ public sealed class HostFrameTimeline {
             var work = WorkOf(slot: slot);
 
             total += intervals[i];
-            collections += ((m_collections[(slot * 3)] + m_collections[((slot * 3) + 1)]) + m_collections[((slot * 3) + 2)]);
+            // GC.CollectionCount is inclusive (a gen1 collection counts in gen0's too), so gen0's increment is the
+            // iteration's collections and gen1 and gen2 its breakdown.
+            collections += m_collections[(slot * 3)];
             pause += m_pauses[slot];
             if (work > busiest) {
                 busiest = work;
