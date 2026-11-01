@@ -26,7 +26,12 @@ to create work.
 
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
-what the machine can verify. The owner's direction:
+what the machine can verify. How many lanes run at once has no fixed maximum
+or minimum (the owner's ruling): the lead judges it each time from the work in
+hand (concurrent builds, measuring lanes that load would skew, GPU legs,
+shared files, its own capacity to inspect and merge) and launches more only
+when that judgement says the machine and the lead can absorb them. The owner's
+direction:
 
 - **Review before landing where a defect does damage before review lands.** Code
   that deletes files, crosses a trust boundary (grants, federation, admission,
@@ -116,6 +121,10 @@ shared-file edits are sequenced; its report shape is the three headings that
 brief:
 
 - an id, used in the brief file name, the commit trailer and every message;
+- its family and model, chosen from the whole roster (Claude, Codex and
+  Antigravity, [select models](#select-models-and-route-findings)) with a
+  one-line reason: a batch the lead briefs entirely to one family is a
+  lapse to correct, not a default;
 - the base commit, verified by the lead before the brief goes out;
 - a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
   startup repository text while preserving current owner and system precedence.
@@ -197,6 +206,15 @@ The open items are the batches' queue
   the durable fact it carries is in its owning home (AGENTS.md rule 9);
 - a programme's phase-scale work stays in its plan's open items, and a packet
   points at it.
+
+Before the owner's push to `main`, rehearse the release on the hosted runners,
+not only locally: push the integration branch and dispatch Release Azure on it
+without deploying (`gh workflow run azure.yml --ref <branch> -f deploy=false`),
+then read every job's result. A local rehearsal of the build and checks missed
+the published World's startup step, which boots the published debug world from
+its compiled package and failed once that package imported another
+(`worlds/standard`); the dispatched run shows exactly what a push to `main`
+will do.
 
 ### Coding lanes and the integration lane
 

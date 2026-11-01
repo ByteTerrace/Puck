@@ -81,7 +81,7 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    the thread itself, a design consensus the owner has yet to queue.
+    [the memo](simulation-thread.md)'s phases, one host loop first.
 
 ## Owner decisions
 
@@ -143,6 +143,21 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `GpuRegion.Grow`, which grows under every residency policy.
 - Two directory removers: `tests/Shared/TemporaryDirectory.cs` still deletes
   recursively beside the confined removal `RunDirectory.Delete` uses.
+- The host loop's duplicates, converged by
+  [the simulation thread](simulation-thread.md#6-duplicated-mechanisms-on-this-path)'s
+  phase 1: three host loops (`LauncherWindowHostedService.cs:395-720`,
+  `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`,
+  with the windowed lockstep branch a fourth copy), two step shells
+  (`WorldSimulation.cs:16`, `HeadlessWorldSimulation.cs:17`), two console
+  drains per windowed iteration, three simulation clocks the frame reads and
+  two interpolation fractions.
+- Two mirrors of the boot world's snapshot, both hub subscribers copying every
+  entry per tick: `WorldClient` (presentation) and the boot endpoint's
+  `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121`); and three per-sink
+  redaction scratch buffers (`WorldOutputHub.cs:71`, `WorldSessionSink.cs:29`,
+  `WorldFederationProjectionSink.cs:42`). Larger than the thread's packet;
+  take them after its phase 4 lands, when the two mirrors sit on their own
+  threads and the fold is in one place.
 
 The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
 velocity and correctness first; paths are under `src/`). `puck scan --only
@@ -455,6 +470,10 @@ packet), and re-read these stops on a quiet machine.
   reaching its bound, or the queue idle behind the back buffer) would. The
   Linux windows hold no display request (Wayland's idle inhibit, X11's
   screensaver suspend). (from: frame-time)
+- [low · unconfirmed] A windowed Direct3D 12 debug World started with
+  `--exit-after-seconds 840` and a stdin script ran about 25 minutes until it
+  was stopped by PID, through its whole cold bake. Find whether the auto-exit
+  counts wall time, ticks the bake starved, or nothing once stdin closes.
 - [low] `WorldGpuTiming` (`world.gpu-timing` and its `timeline`) has no CPU
   test over a fake runtime, so its lines rely on a live render root.
   (from: frame-time)
@@ -953,18 +972,23 @@ empty store (AGENTS.md).
 ### Simulation tick off the frame thread
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: the design memo, then its build. The owner queued the thread.
+Next: build [the simulation thread](simulation-thread.md) by its phases, phase
+1 (one host loop, no thread) first. The owner queued the thread.
 
-- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
+- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
 
-- Decide (the lead's call, for the design memo to confirm or overturn): one simulation
-  thread owns the pump, the server and every instance host and publishes
-  immutable per-tick snapshots into a small ring the frame thread reads
-  latest-complete; input is captured on the frame thread into a per-tick queue;
-  offscreen and `world.lockstep` run the tick inline under the same pump;
-  console, MCP and live-edit commands marshal through the pump's existing
-  queue; lifetime and bounded backpressure are settled before any lock-free
-  claim, since a collection pauses both threads.
+- Decided in [the simulation thread](simulation-thread.md#decisions): one
+  simulation thread owns the pump, the server, every instance host, the
+  console drain and the seat half of the client; the handoff is a mailbox
+  behind the existing `IClientSink` seam, applied in order on the frame
+  thread, folding a superseded snapshot with `EntityContinuity.Then`; the
+  frame derives its clock and alpha from what it applied; input capture is
+  unchanged (the router's capture gate already crosses threads);
+  presentation verbs declare a routing on the registry's one routing axis;
+  offscreen, `world.lockstep` and unpaced headless step inline through the
+  same pump and loop; the three host loops converge into one before the
+  thread is added. The memo's build plan, duplicates and limits are its
+  sections 6 to 8.
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a

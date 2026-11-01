@@ -133,7 +133,10 @@ agent works in that mode by default, without asking:
     change gets is decided per change, by what it risks; no rule fits every
     change ([orchestration](.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)).
   - Self-modification is explicitly approved: agents edit AGENTS.md, the
-    skills and their evals as part of ordinary work.
+    skills and their evals as part of ordinary work. Continual
+    self-improvement is expected: when a session learns that a process wastes
+    time or fails, it changes the process in that session, and judgement
+    outranks any fixed numeric rule in these documents.
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
@@ -224,6 +227,12 @@ settles a question, decide by that principle and say why.
    world work is mostly wiring its documents to what exists; new code is for a
    gap you can name after that search. A second implementation is a defect,
    and a skill wrong about its own area is corrected in the same change.
+   Act on the code, never on memory (the owner's ruling): before stating how
+   something works, naming a cause, briefing a lane or changing code, read the
+   current source, document or measurement it rests on, and cite it
+   (`file:line`, the command and its output). A recollection, an earlier
+   session's summary, a skill's prose or a lane's report is a lead to check,
+   not a fact; when in doubt, look it up first.
 8. **Line endings are LF and are never a topic.** `.gitattributes`
    (`* text=auto eol=lf`) and `.editorconfig` hold the contract, with
    `*.bat`/`*.cmd` and `*.slnx` pinned CRLF in both. Never investigate, report,
