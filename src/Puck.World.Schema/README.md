@@ -1335,12 +1335,12 @@ A `draw` fill (`{ "$type": "draw", "source": … | "generator": … }`, at most 
 per row, numeric sources only) is one whole-field pass of the row's own draw
 stream, seeded through the same ladder as a state-row site under the row's
 `state.<row>` descriptor: cell `k`, in cell-index order, takes the sample a site
-at `drawCursor + k` would draw, with a weighted source's mask threaded cell to
+at the preceding result's reported raw cursor would draw, with a weighted source's mask threaded cell to
 cell—so a `weightedNumeric` bag in `restartOnExhaustion` mode draws its
 units across the field and restarts as it goes, and outcome `multiplicity`s make
 a field carry exactly N cells of a value per pass. The row's `drawCursor`/
 `drawnMasks` name the pass currently painted; `world.generate <row>` advances
-them one whole pass (the cell count) and repaints. The draw occupies its authored
+them by the whole pass's actual raw-word consumption and repaints. The draw occupies its authored
 position in `paint`: it overwrites earlier fills and later fills overwrite it.
 Boot, whole-document rebuild/load/reset, and an undo that rewinds the draw
 position repaint the pass the document names, so restored state lands on the
@@ -1483,14 +1483,13 @@ adds one—silently re-pointing a live site's stream while its cursor kept
 counting. The `Pcg32XshRr` stream id derives from the descriptor alone, masked
 small so derived ids stay far inside the `2^62` band that primitive warns about.
 
-**The engine SEEKS; it never replays.** Every source costs a FIXED number of
-generator advances per sample (`AdvancesPerSample`), which is why `uniformRange`
-is a multiply-high map of a `UnitFraction32` rather than the rejection-sampled
-`NextUInt32(min, max)`: resuming a site at cursor `n` is one `Advance(n * cost)`,
-an O(1) jump. There is no per-tick cadence ceiling—a rule redrawing a site
-every tick costs the same at cursor 1,000,000 as at cursor 0. The trade is
-honest and stated: the uniform map is uniform to within `n/2^32`, exactly zero
-when `n` divides `2^32`, rather than exactly uniform.
+**The engine SEEKS; it never replays.** Every cursor counts raw generator words,
+including rejected words. `uniformRange` uses Maths' shared unbiased rejection
+sampler, with at most 64 attempts per result and atomic refusal if its work
+budget is exhausted. Resuming seeks directly to `skip + cursor`. Successful
+single and batch draws report their actual raw advances; persist that delta,
+never the number of results. Weighted and orbit draws use two words and Markov
+emissions use two per token.
 
 **A source may declare `extended`** (`GeneratorExtended`): an authored
 `Pcg32Extended` table replacing that generator's own self-seeding, so the site
@@ -1502,8 +1501,8 @@ compiles as: word `i` is `wanted_i XOR base_i`, where `base_i` is the base
 generator's own `i`-th raw draw (independent of table content) and `wanted_i`
 is the raw draw the source's own sampling maps onto the scripted value; words
 past the script are the self-seeded table's own. Only `streamDraw` and
-`uniformRange` admit a script—the two sources that sample in one fixed-cost
-draw with no drawn-mask state, so a wanted output maps back to a single raw
+`uniformRange` admit a script—the two sources whose scripted values map to one accepted raw
+word with no drawn-mask state, so a wanted output maps back to a single raw
 draw; `markov`, `weightedNumeric` and `symmetryOrbit` draw through an alias
 table whose selection depends on the site's own drawn masks, so no script maps
 back. The table is a pure function of (seed ladder, authored table/script,
@@ -1513,7 +1512,7 @@ generator beside the cursor it corresponds to, so a per-tick site draws in
 place with no rebuild and no allocation; a cursor mismatch (a reload, an undo,
 a checkpoint restore) rebuilds once. `Draw.skip` (non-negative, default `0`) is
 an authored seek belonging to the same class as the seed: a rebuild advances by
-`(skip + cursor) * cost` rather than `cursor * cost`, and never writes the
+`skip + cursor` rather than `cursor`, and never writes the
 persisted cursor.
 
 **One site type, never cleared.** Every draw site is a `WorldStateRow.Draw`
@@ -1525,7 +1524,7 @@ bare literal and nothing is cleared. A KEYED row may be a site too—a dice
 tray: its numeric source fills one sample per authored cell in cell order at
 its first fill (cursor zero), and `world.generate <row> [key ...]` /
 `WorldMutation.Generate(row, keys)` redraws every cell or only the named ones
-with the rest held, advancing the cursor by the cells drawn. A text source
+with the rest held, advancing the cursor by the raw words consumed. A text source
 refuses a keyed site. `bodies.capacityRow`/
 `host.backendRow` are boot-time READS layered over this, resolved AFTER every
 row's first fill so a boot-drawn row is readable the same boot it draws:

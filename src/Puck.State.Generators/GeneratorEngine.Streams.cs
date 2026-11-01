@@ -50,14 +50,13 @@ public sealed class ArenaDrawSeeds {
     public DrawSeed this[int rowOrdinal] => m_seeds[rowOrdinal];
 }
 public static partial class GeneratorEngine {
-    /// <summary>One site's numeric samples, positioned once at the site's cursor and then drawn in order: the first
-    /// <see cref="TryNext"/> answers exactly what <see cref="TryFire"/> would at the cursor, and the k-th what it would at
-    /// the cursor plus k. Opening seeks once; each sample after that is one generator step, or one keyed sample of a
-    /// secret site, so a pass of n samples costs one seek plus n constant steps rather than n seeks.</summary>
+    /// <summary>One site's numeric results, positioned once at its raw cursor. Every successful result advances
+    /// by the raw words it actually consumed; reopening at that cursor continues exactly, including after rejection.
+    /// A refused result restores the stream's position and masks.</summary>
     /// <remarks>An extended source draws in place from the generator its compiled source caches, so no other draw of
     /// the same source may run between opening a stream and its last sample. A mutable value: hold it in one local and
     /// draw through that local.</remarks>
-    public struct DrawStream {
+    public struct DrawStream : IRawWordSource {
         private StateGenerator m_generator;
         private CellKind m_targetKind;
         private Pcg32XshRr m_base;
@@ -68,12 +67,13 @@ public static partial class GeneratorEngine {
         private long m_start;
         private ClosedBitset256 m_mask;
         private bool m_exhausts;
-        private long m_samples;
+        private long m_skip;
+        private long m_advances;
 
-        /// <summary>Gets how many samples the stream has drawn.</summary>
-        public readonly long Samples => m_samples;
+        /// <summary>Gets how many raw words the stream has consumed, including rejections.</summary>
+        public readonly long Advances => m_advances;
         /// <summary>Gets the site's cursor after the samples drawn: the value a caller stores back into the site.</summary>
-        public readonly long Cursor => (m_start + m_samples);
+        public readonly long Cursor => (m_start + m_advances);
         /// <summary>Gets the drawn masks the site persists after the samples drawn, or <see langword="null"/> when its
         /// source never exhausts and the site's stored masks stand.</summary>
         public readonly IReadOnlyList<ClosedBitset256>? MasksAfter => (m_exhausts
@@ -85,7 +85,7 @@ public static partial class GeneratorEngine {
         /// <param name="generator">The site's resolved numeric source; a text source is refused.</param>
         /// <param name="targetKind">The site's declared cell kind; a mismatch refuses by name before anything is drawn.</param>
         /// <param name="seed">The site's seed.</param>
-        /// <param name="cursor">The site's current sample count.</param>
+        /// <param name="cursor">The site's current raw-word position.</param>
         /// <param name="masks">The site's current drawn masks (may be empty).</param>
         /// <param name="stream">The positioned stream, on success.</param>
         /// <param name="reason">Why the stream was refused, or empty on success.</param>
@@ -126,6 +126,7 @@ public static partial class GeneratorEngine {
                 m_secret = secret,
                 m_seedState = seed.State,
                 m_start = cursor,
+                m_skip = skip,
                 m_stream = seed.Stream,
                 m_targetKind = targetKind,
             };
@@ -159,7 +160,7 @@ public static partial class GeneratorEngine {
                 state: seed.State,
                 stream: seed.Stream
             );
-            stream.m_base.Advance(count: unchecked((((ulong)(skip + cursor)) * AdvancesPerSample(source: generator.Source))));
+            stream.m_base.Advance(count: (((ulong)skip) + ((ulong)cursor)));
 
             return true;
         }
@@ -172,6 +173,7 @@ public static partial class GeneratorEngine {
             if (m_generator is null) {
                 throw new InvalidOperationException(message: "The draw stream was never opened.");
             }
+            if (Cursor == long.MaxValue) { value = 0; reason = "draw cursor would overflow"; return false; }
             if (m_secret is { } key) {
                 value = PrivateDraw.Sample(
                     cursor: Cursor,
@@ -180,34 +182,72 @@ public static partial class GeneratorEngine {
                     stream: m_stream
                 );
                 reason = string.Empty;
-                m_samples++;
+                m_advances++;
 
                 return true;
             }
 
+            var before = this;
+            var mask = m_mask;
+            long advances;
             var drawn = ((m_extended is { } extended)
-                ? TryDrawNumeric(
-                    generator: m_generator,
-                    mask: ref m_mask,
-                    reason: out reason,
-                    rng: ref extended.ExtendedGenerator,
-                    targetKind: m_targetKind,
-                    value: out value
-                )
-                : TryDrawNumeric(
-                    generator: m_generator,
-                    mask: ref m_mask,
-                    reason: out reason,
-                    rng: ref m_base,
-                    targetKind: m_targetKind,
-                    value: out value
-                ));
+                ? TryDrawNumeric(m_generator, m_targetKind, ref extended.ExtendedGenerator, ref mask, out value, out advances, out reason)
+                : TryDrawNumeric(advances: out advances, generator: m_generator, mask: ref mask, reason: out reason, rng: ref m_base, targetKind: m_targetKind, value: out value));
 
-            if (drawn) {
-                m_samples++;
+            if (drawn && (advances <= (long.MaxValue - Cursor))) {
+                m_advances += advances;
+                m_mask = mask;
+                return true;
             }
+            // A refused sample owns no continuation. Restore both the raw source and its masks before retrying.
+            Restore(before: before);
+            if (drawn) { reason = "draw cursor would overflow"; }
+            value = 0;
+            return false;
+        }
+        /// <summary>Draws a bounded index from a raw stream, counting rejected public or private words.</summary>
+        /// <param name="exclusiveHigh">The nonzero exclusive upper bound.</param>
+        /// <param name="value">The accepted index, on success.</param>
+        /// <param name="sample">The last raw word consumed, on success.</param>
+        /// <param name="reason">Why the source or its finite work budget refused.</param>
+        /// <returns>Whether an index was drawn. Failure leaves the stream at its previous cursor.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The bound is zero.</exception>
+        /// <exception cref="InvalidOperationException">The stream is unopened or is not a raw source.</exception>
+        public bool TryNextBounded(uint exclusiveHigh, out uint value, out long sample, out string reason) {
+            ArgumentOutOfRangeException.ThrowIfZero(exclusiveHigh);
+            if (m_generator?.Source != GeneratorSource.StreamDraw) { throw new InvalidOperationException(message: "Bounded indices require an open raw stream."); }
+            var before = this;
 
+            if (BoundedRandomSampling.TrySampleRange(
+                maxAttempts: GeneratorCapacity.MaxBoundedAttempts,
+                maximum: (exclusiveHigh - 1U),
+                minimum: 0U,
+                reason: out reason,
+                source: ref this,
+                value: out value,
+                word: out var word,
+                words: out _
+            )) {
+                sample = word;
+                return true;
+            }
+            Restore(before: before);
+            value = 0;
+            sample = 0;
+            return false;
+        }
+        bool IRawWordSource.TryNextWord(out uint word, out string reason) {
+            var drawn = TryNext(reason: out reason, value: out var raw);
+
+            word = ((uint)raw);
             return drawn;
+        }
+
+        private void Restore(DrawStream before) {
+            this = before;
+            if (m_extended is { } cache) {
+                _ = TryPositionExtended(cache, m_generator, m_seedState, m_stream, m_skip, Cursor, out _);
+            }
         }
     }
 
@@ -215,7 +255,7 @@ public static partial class GeneratorEngine {
     // write the site's kind, and a secret only on an integer streamDraw site drawing with replacement.
     private static bool TryCheckFire(StateGenerator generator, CellKind targetKind, long cursor, long skip, ClosedBitset256? secret, out string reason) {
         if (cursor < 0) {
-            reason = $"cursor {cursor} is negative — a draw cursor is a non-negative sample count";
+            reason = $"cursor {cursor} is negative — a draw cursor is a non-negative raw-word count";
 
             return false;
         }

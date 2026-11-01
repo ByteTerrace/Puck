@@ -11,6 +11,7 @@ export type WorldDefinition = {
   spawnPoints?: WorldSpawnPoint[] | null;
   render?: WorldRenderDefaults | null;
   screens?: (WorldScreen | null)[] | null;
+  screenMaterials?: (WorldScreenMaterial | null)[] | null;
   cameras?: (WorldCamera | null)[] | null;
   bodies?: WorldBodiesDefaults | null;
   seatDefaults?: WorldPlayerDefaults | null;
@@ -2935,7 +2936,7 @@ export type StateTransformSetRay = {
 };
 
 /**
- * Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site's cursor advances by exactly that and a replay reproduces the permutation.
+ * Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells make n - 1 unbiased bounded selections. The cursor counts every raw word, including rejections, so reopening it reproduces the permutation.
  */
 export type StateTransformShuffle = {
   $type?: "shuffle";
@@ -3876,6 +3877,31 @@ export type WorldCameraCharacterFade = {
  */
 export type WorldCameraClearanceChoice = "Auto" | "Cutaway" | "Fade";
 
+export type WorldCameraClearanceRise = {
+  /**
+   * The rise ceiling while the seat fades its body, in [0, π/2].
+   */
+  fade: number;
+  /**
+   * The rise ceiling while the seat cuts walls away, in [0, π/2].
+   */
+  cutaway: number;
+};
+
+/**
+ * The target a chase boom's look migrates to as geometry shortens it, per treatment of a close obstruction, in the axes of the look-at's own target offset.
+ */
+export type WorldCameraCloseTarget = {
+  /**
+   * The close target while the seat fades its body.
+   */
+  fade: DocumentVector3;
+  /**
+   * The close target while the seat cuts walls away.
+   */
+  cutaway: DocumentVector3;
+};
+
 /**
  * An authored camera program — the ordered op list a rig resolves through every frame.
  */
@@ -4041,9 +4067,9 @@ export type WorldCameraProgramOpLookAt = {
    */
   focusDistance?: number;
   /**
-   * The target offset approached as collision shortens a seat's boom; absent keeps the rest target.
+   * The target offsets approached as collision shortens a seat's boom, one per clearance treatment, in the axes of TargetOffset; absent keeps the rest target.
    */
-  closeTargetOffset?: DocumentVector3;
+  closeTargetOffset?: WorldCameraCloseTarget | null;
   /**
    * The boom fraction below which target migration begins.
    */
@@ -7492,9 +7518,9 @@ export type WorldPlacementFace = {
    */
   filter?: GpuSamplerFilter;
   /**
-   * How the face's screen presents its picture, as a screen row's Material does: Plain, the default, or Crt. Refused on a window. Omitted from the wire when Plain.
+   * The id of the screen material the face's screen draws its picture through, as a screen row's Material does, or null for none. Refused on a window. Omitted from the wire when null.
    */
-  material?: WorldScreenMaterial;
+  material?: string | null;
 };
 
 export type WorldPlacementFaceList = (WorldPlacementFace | null)[];
@@ -11385,9 +11411,9 @@ export type WorldScreen = {
    */
   carry?: WorldScreenCarry | null;
   /**
-   * How the face presents its picture (WorldScreenMaterial): Plain, the default, shows it as its source made it, filling the face; Crt draws it through a cathode-ray tube's glass, and a pointer hit maps through that glass's bezel. Refused on a window, which is an opening rather than a display. Omitted from the wire when Plain.
+   * The id of the screen material (WorldScreenMaterial, the document's screenMaterials) the face draws its picture through, or null for none: the picture as its source made it, filling the face. Refused on a window, which is an opening rather than a display. Omitted from the wire when null.
    */
-  material?: WorldScreenMaterial;
+  material?: string | null;
 };
 
 export type WorldScreenCarry = {
@@ -11431,7 +11457,40 @@ export type WorldScreenMagazine = {
   wrap?: boolean;
 };
 
-export type WorldScreenMaterial = "Plain" | "Crt";
+export type WorldScreenMaterial = {
+  /**
+   * The id screens and faces name the material by; unique among the document's materials.
+   */
+  id: string;
+  /**
+   * How dark the gap between source rows draws, in [0, 1]: one source row a cosine period.
+   */
+  scanlines?: number;
+  /**
+   * How strong the red, green and blue stripes across each source column draw, in [0, 1].
+   */
+  subpixelStripes?: number;
+  /**
+   * How much the face darkens toward its corners, in [0, 1].
+   */
+  vignette?: number;
+  /**
+   * How bright the glass's rim glint at grazing view angles adds, in [0, 1].
+   */
+  glint?: number;
+  /**
+   * How tightly the glint hugs grazing angles: the exponent of one minus the view cosine, positive.
+   */
+  glintPower?: number;
+  /**
+   * The face's corner rounding, as a fraction of the face, in [0, 0.5).
+   */
+  cornerRadius?: number;
+  /**
+   * The width over which the face's edge fades to black, as a fraction of the face, in [0, 0.5).
+   */
+  edgeSoftness?: number;
+};
 
 export type WorldScreenPadPointer = {
   /**
@@ -11848,7 +11907,7 @@ export type WorldSeatCameraFeel = {
    */
   stickLookRate: number;
   /**
-   * The optional full-axis gyro projection. Absent resolves to Default.
+   * The optional full-axis gyro projection. Absent resolves to None.
    */
   gyro?: WorldSeatGyro | null;
   /**
@@ -11878,7 +11937,7 @@ export type WorldSeatGyro = {
    */
   scale?: number;
   /**
-   * Independent X/Y/Z dead zones in radians per second.
+   * Gets the independent X/Y/Z dead zones in radians per second; zero where none is authored.
    */
   deadZone?: [number, number, number];
   /**
@@ -11894,11 +11953,11 @@ export type WorldSeatGyro = {
    */
   invertZ?: boolean;
   /**
-   * The X/Y/Z projection weights producing semantic look-right angular velocity.
+   * Gets the X/Y/Z projection weights producing semantic look-right angular velocity; zero where none is authored.
    */
   yaw?: [number, number, number];
   /**
-   * The X/Y/Z projection weights producing semantic look-up angular velocity.
+   * Gets the X/Y/Z projection weights producing semantic look-up angular velocity; zero where none is authored.
    */
   pitch?: [number, number, number];
 };
@@ -11947,9 +12006,17 @@ export type WorldSeatViewControl = {
    */
   clearanceMode: WorldCameraClearanceChoice;
   /**
-   * The cutaway boom's highest elevation above the seat's level plane, in radians, within [0, π/2]. Fade never rises, so only cutaway reads it.
+   * The most the boom rises above the rig's own elevation, in radians, for each treatment.
    */
-  clearanceMaxElevation: number;
+  maxRise: WorldCameraClearanceRise;
+  /**
+   * The full-size radius, in metres, of the sphere the chase eye keeps clear of geometry and, in cutaway, the body.
+   */
+  eyeRadius: number;
+  /**
+   * The full-size nearest distance, in metres, the eased eye's centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.
+   */
+  surfaceSkin: number;
   /**
    * The follow camera: with no look input the camera yaw eases in behind the body's heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World — a body-relative yaw already rides the body.
    */
@@ -12403,12 +12470,12 @@ export type WorldStateRow = {
      */
     secret?: ClosedBitset256 | null;
     /**
-     * An authored seek, non-negative, default 0: a rebuild advances the generator by (skip + cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site's does.
+     * An authored seek, non-negative, default 0: a rebuild advances the generator by skip + cursor rather than cursor. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site's does.
      */
     skip?: number;
   };
   /**
-   * How many samples this site's Draw has ever consumed — engine-minted bookkeeping and the position the engine re-seeks to (GeneratorEngine.AdvancesPerSample scales it into Pcg32XshRr advances, so resuming is an exact O(1) advance rather than a replay of the earlier draws). Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.
+   * How many raw words this site's Draw has consumed, including rejections. Resuming seeks directly to that position rather than replaying earlier results. Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.
    */
   drawCursor?: number;
   /**

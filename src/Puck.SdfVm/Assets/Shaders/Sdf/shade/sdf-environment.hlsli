@@ -5,34 +5,18 @@
 #include "../frame/sdf-environment.hlsli"
 
 #ifdef SDF_SCREEN_SOURCES
-// The face kinds ScreenMappingData.state.w carries — KEEP IN SYNC with Puck.SdfVm.SdfScreenFace: 0 an opening, which
-// shows the world beyond it; 1 a display, which shows its picture as its source made it, filling the face; 2 a CRT
-// display, which draws it through the tube's glass below.
-static const float SdfScreenFaceCrt = 2.0;
-// The CRT material's knobs, which only a screen that opts into the material reaches. The glass's warp, the bezel's
-// width among it, is the screen's published mapping (ScreenMappingData); these are its look: near-square corners, a
-// crisp dark bezel edge, faint aperture-grille stripes and subtle native-line scanlines.
-// The bezel's mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
-//
-// The two knobs at 0 (vignette, glint) are live and free: DXC emits `fmul fast`, so each zero folds and its whole
-// chain, the glint's cross, normalize and pow included, is eliminated on both backends. Raising one brings the effect it
-// names back; an #if would trade a free runtime knob for a compile-time one.
-static const float CrtCornerRadius = 0.004;  // corner rounding of the bezel mask (near-square)
-static const float CrtBezelSoft = 0.008;     // a crisp bezel edge
-static const float CrtScanAmplitude = 0.06;  // subtle scanlines, one a source row — a hint of CRT, not a filter
-static const float CrtApertureGrille = 0.05; // aperture-grille strength, one triad a source column — barely there (0 = off)
-// The share of the scanlines' and the grille's strength that survives a pixel whose footprint spans this many source
+// A display's treatment is its screen material's (ScreenMappingData.treatment and .treatmentShape, the authored
+// Puck.World.WorldScreenMaterial through Puck.SdfVm.SdfScreenTreatment): the display's own pixel structure over the
+// picture. The edge mask is continuous (smoothstep), so a cross-backend UV delta never flips it.
+// The share of the row and column patterns' strength that survives a pixel whose footprint spans this many source
 // texels: whole while a row or column covers four or more pixels, none once it covers two or fewer, where the pattern
 // would alias against the pixel grid and the temporal jitter would move that alias every frame.
-float sdfCrtPatternGain(float footprintTexels) {
+float sdfScreenPatternGain(float footprintTexels) {
     return (1.0 - smoothstep(0.25, 0.5, footprintTexels));
 }
-static const float CrtVignette = 0.0;        // radial corner darkening (0 = flat, even brightness)
-static const float CrtGlint = 0.0;           // fresnel rim brighten at glancing angles (0 = no glass glint)
-static const float CrtGlintPower = 3.0;
-// The aperture grille's three phosphor stripes, 120 degrees apart (2pi/3, 4pi/3), so each channel peaks in its own
-// column third. Spelled as literals rather than SDF_TAU/3: the divide would round differently by an ULP.
-static const float3 CrtGrillePhase = float3(0.0, 2.0943951023931953, 4.1887902047863905);
+// The subpixel stripes' three colours, 120 degrees apart (2pi/3, 4pi/3), so each channel peaks in its own column
+// third. Spelled as literals rather than SDF_TAU/3: the divide would round differently by an ULP.
+static const float3 SdfScreenStripePhase = float3(0.0, 2.0943951023931953, 4.1887902047863905);
 
 // === OPENING RIPPLE: an event horizon ===============================================================================
 // An opening that opts in (ScreenRippleData.state.x) refracts the image it shows: slow travelling waves that interfere
@@ -201,12 +185,12 @@ float4 sampleScreenSource(uint screenIndex, float2 uv, float2 footprint, out flo
 // overload), resolves the surface UV at the hit and shades it. Two tiers, decal-first: a screen slot carrying a GLYPH
 // DECAL (a per-screen cell grid — see sdfSampleGlyphDecal) samples TEXT at the hit (no bound source needed — a decal
 // terminal has no bound image); otherwise, when a source is bound and mapped this frame, draws it from the screen's
-// mapping, through its material (untreated, or a CRT's glass), and the sampler its row names. outColor is valid only
+// mapping, through its screen material's treatment (none, or the authored one), and the sampler its row names. outColor is valid only
 // when this returns true; the caller falls back to the unbound glass otherwise (the plain sentinel, or a declared surface
 // with neither a decal nor a bound source this frame).
 // footprintDiameter = the hit pixel's world diameter (pixelFootprint * traveled) — the decal's analytic AA source.
-// `picture` is the share of the face the picture covers rather than a CRT's bezel: zero over the bezel band, so the
-// face's own edge, which the temporal jitter moves, is never part of a reactive screen.
+// `picture` is the share of the face the picture covers rather than its edge band, so the face's own edge, which the
+// temporal jitter moves, is never part of a reactive screen.
 bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, float footprintDiameter, out float3 outColor, out float picture) {
     outColor = float3(0.0, 0.0, 0.0);
     picture = 1.0;
@@ -252,16 +236,10 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         }
     }
 
-    // The mapping's warp: the face point the picture samples, the identity on all but a CRT's glass. The image fills
-    // the area inside a CRT's bezel rather than being masked by it, so a bezel frames a screen and never eats picture.
+    // The mapping's warp: the face point the picture samples, the identity for a screen's face, whose glass is exactly
+    // its picture.
     float3 face = float3(imageUv, 1.0);
     float2 image = float2(dot(mapping.warpU.xyz, face), dot(mapping.warpV.xyz, face));
-
-    // Bezel: a smooth rounded-rect mask on the face that fades to black where the warped point leaves the unit square,
-    // each axis's overshoot measured in face units.
-    float2 edgeDistance = (((abs(image - 0.5) - 0.5) * float2(mapping.warpU.w, mapping.warpV.w)) + CrtCornerRadius);
-    float outside = (length(max(edgeDistance, 0.0)) - CrtCornerRadius);
-    float bezel = (1.0 - smoothstep(0.0, CrtBezelSoft, outside));
 
     // The layout, the fit and the crop take the warped point to the source; outside the crop of a letterboxing fit, the
     // half-open [left, right) x [top, bottom) SourceMapping.MapRay holds a hit to, lies a black bar.
@@ -288,9 +266,9 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         return true;
     }
 
-    // A plain display shows its picture untreated: its mapping has no warp, so the picture fills the face. With no
-    // bezel band, the pixel or so along the face's own edge, which the temporal jitter moves, is kept out of `picture`.
-    if (mapping.state.w < SdfScreenFaceCrt) {
+    // A display with no treatment shows its picture as its source made it. The pixel or so along the face's own edge,
+    // which the temporal jitter moves, is kept out of `picture`.
+    if (mapping.treatmentShape.w == 0.0) {
         float2 edge = ((min(uv, (1.0 - uv)) * 2.0) * float2(surface.right.w, surface.up.w));
 
         outColor = sampled;
@@ -301,30 +279,37 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
 
     // How many source texels the pixel's footprint spans along each axis.
     float2 footprintTexels = (footprint * sourceSize);
-    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the CRT glass's treatment below:
-    // at one the picture's pixels leave exactly as sampled and the bezel band is a hard edge, which a framed seat's matte
-    // hides, so a framed screen shows its source as a desktop emulator does; at zero the glass is the in-world tube.
+    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the treatment below: at one the
+    // picture's pixels leave exactly as sampled and the face's edge is a hard edge, which a framed seat's matte hides, so
+    // a framed screen shows its source as a desktop emulator does; at zero the face is the in-world display.
     float treatment = (1.0 - saturate(passGroup.screenFidelity));
     bool inPicture = all(image >= 0.0) && all(image <= 1.0);
+    float cornerRadius = mapping.treatmentShape.y;
+    float edgeSoftness = mapping.treatmentShape.z;
 
-    // Aperture grille — faint vertical RGB phosphor stripes, one triad a source column: three cosines 120 degrees apart.
-    // Continuous (cos), so a cross-backend UV delta never flips a hard edge; the period rides the source, so the stripe
-    // stays on the image. CrtApertureGrille = 0 is a no-op.
-    float3 grille = (0.5 + (0.5 * cos(((source.x * sourceSize.x) * SDF_TAU) - CrtGrillePhase)));
-    sampled *= (1.0 - (((CrtApertureGrille * treatment) * sdfCrtPatternGain(footprintTexels.x)) * (1.0 - grille)));
+    // The face's edge: a smooth rounded-rect mask that fades to black over the edge softness inside the face's own
+    // edge, each axis measured in face units.
+    float2 edgeDistance = (((abs(image - 0.5) - 0.5) * float2(mapping.warpU.w, mapping.warpV.w)) + (cornerRadius + edgeSoftness));
+    float outside = (length(max(edgeDistance, 0.0)) - cornerRadius);
+    float edge = (1.0 - smoothstep(0.0, max(edgeSoftness, 1.0e-6), outside));
 
-    // Native-line scanlines (soft cosine, dark between source rows), and a radial vignette when CrtVignette is non-zero.
-    float scanline = (1.0 - (((CrtScanAmplitude * treatment) * sdfCrtPatternGain(footprintTexels.y)) * (0.5 + (0.5 * cos(((source.y * sourceSize.y) * SDF_TAU))))));
-    float vignette = (1.0 - ((CrtVignette * treatment) * radiusSquared));
+    // Subpixel stripes, one red-green-blue triad a source column: three cosines 120 degrees apart. Continuous (cos), so
+    // a cross-backend UV delta never flips a hard edge; the period rides the source, so the stripe stays on the image.
+    float3 stripes = (0.5 + (0.5 * cos(((source.x * sourceSize.x) * SDF_TAU) - SdfScreenStripePhase)));
+    sampled *= (1.0 - (((mapping.treatment.y * treatment) * sdfScreenPatternGain(footprintTexels.x)) * (1.0 - stripes)));
 
-    // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The pair is
-    // orthonormal by contract (SdfScreenSurface), so the normalize only absorbs the uploaded table's float drift.
+    // Scanlines (a soft cosine, dark between source rows) and a radial vignette.
+    float scanline = (1.0 - (((mapping.treatment.x * treatment) * sdfScreenPatternGain(footprintTexels.y)) * (0.5 + (0.5 * cos(((source.y * sourceSize.y) * SDF_TAU))))));
+    float vignette = (1.0 - ((mapping.treatment.z * treatment) * radiusSquared));
+
+    // A glint at grazing view angles. The pair is orthonormal by contract (SdfScreenSurface), so the normalize only
+    // absorbs the uploaded table's float drift.
     float3 screenNormal = normalize(cross(surface.right.xyz, surface.up.xyz));
-    float glint = pow((1.0 - saturate(dot(-rayDirection, screenNormal))), CrtGlintPower);
+    float glint = pow((1.0 - saturate(dot(-rayDirection, screenNormal))), max(mapping.treatmentShape.x, 1.0e-3));
 
-    bezel = lerp((inPicture ? 1.0 : 0.0), bezel, treatment);
-    outColor = ((((sampled * scanline) * vignette) * bezel) + ((CrtGlint * treatment) * glint));
-    picture = bezel;
+    edge = lerp((inPicture ? 1.0 : 0.0), edge, treatment);
+    outColor = ((((sampled * scanline) * vignette) * edge) + ((mapping.treatment.w * treatment) * glint));
+    picture = edge;
 
     return true;
 }

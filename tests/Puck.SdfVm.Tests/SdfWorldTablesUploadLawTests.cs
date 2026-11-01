@@ -417,8 +417,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
-        // A screen's seven mapping rows, then its ripple's rows, all zero for a screen that does not ripple.
-        const int Rows = (7 + SdfScreenRipple.Rows);
+        // A screen's nine mapping rows, then its ripple's rows, all zero for a screen that does not ripple.
+        const int Rows = (9 + SdfScreenRipple.Rows);
         const float Border = 0.03f;
         using var rig = new Rig(slots: 1);
         var mapping = new SourceMapping(
@@ -433,7 +433,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var table = new float[((SdfWorldTables.MaxScreenSurfaces * Rows) * 4)];
         // The warp's rows carry the face distance one warped unit spans, the inner width; the image rows the identity,
         // mapped and not letterboxing; then the whole crop, the crop inset by half a pixel, and the state row: unbound,
-        // through the nearest sampler, a CRT's face.
+        // through the nearest sampler, a display's face.
         float[] rows = [
             inset.M11, 0f, inset.M13, (1f / inset.M11),
             0f, inset.M22, inset.M23, (1f / inset.M22),
@@ -441,13 +441,16 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             0f, 1f, 0f, 0f,
             0f, 0f, 1f, 1f,
             (0.5f / 160f), (0.5f / 144f), (1f - (0.5f / 160f)), (1f - (0.5f / 144f)),
-            0f, ((float)GpuSamplerFilter.Nearest), 0f, ((float)SdfScreenFace.Crt),
+            0f, ((float)GpuSamplerFilter.Nearest), 0f, ((float)SdfScreenFace.Display),
+            // No treatment: both treatment rows zero.
+            0f, 0f, 0f, 0f,
+            0f, 0f, 0f, 0f,
         ];
 
         byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));
 
         rig.Warm();
-        rig.Engine.SetScreenMapping(face: SdfScreenFace.Crt, mapping: mapping, screenIndex: Screen);
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: mapping, screenIndex: Screen);
         rig.Render(time: 0f);
         rows.CopyTo(array: table, index: ((Screen * Rows) * 4));
         Assert.Equal(
@@ -455,13 +458,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: Table()
         );
 
-        rig.Engine.SetScreenMapping(face: SdfScreenFace.Crt, mapping: mapping, screenIndex: Screen);
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: mapping, screenIndex: Screen);
         rig.Render(time: 0f);
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
 
         var linear = (mapping with { Filter = GpuSamplerFilter.Linear });
 
-        rig.Engine.SetScreenMapping(face: SdfScreenFace.Crt, mapping: linear, screenIndex: Screen);
+        rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: linear, screenIndex: Screen);
         rig.Render(time: 0f);
         table[((((Screen * Rows) + 6) * 4) + 1)] = ((float)GpuSamplerFilter.Linear);
         Assert.Equal(
@@ -494,11 +497,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     [Fact]
     public void ATierViewsCodesRideTheSlotsAndScreensAndClearOnceItEnds() {
         const int Screen = 3;
-        const int Rows = (7 + SdfScreenRipple.Rows);
+        const int Rows = (9 + SdfScreenRipple.Rows);
         using var rig = new Rig(slots: 4);
 
         float W(int slot) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)))[((slot * 12) + 3)];
-        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)((SdfWorldTables.MaxScreenSurfaces * Rows) * 16))))[((((Screen * Rows) + 7) * 4) + 2)];
+        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)((SdfWorldTables.MaxScreenSurfaces * Rows) * 16))))[((((Screen * Rows) + 9) * 4) + 2)];
 
         rig.Warm();
         rig.Engine.DebugMode = DebugViewModes.Rates;

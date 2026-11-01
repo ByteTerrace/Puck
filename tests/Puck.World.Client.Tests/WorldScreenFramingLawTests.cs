@@ -54,13 +54,13 @@ public sealed class WorldScreenFramingLawTests {
 
     [Fact]
     public void ThePictureFillsItsShareOfTheViewSquareOnWithTheNearPlaneJustShortOfIt() {
-        var screen = (Screen() with { Material = WorldScreenMaterial.Crt });
+        var screen = (Screen() with { Material = "crt" });
         var picture = WorldScreenFraming.PictureHalfExtents(screen: screen);
 
-        // A CRT's bezel band takes three hundredths of the face on each side.
-        Assert.Equal(actual: picture.X, expected: (0.2f * 0.94f), tolerance: 1e-6f);
-        Assert.Equal(actual: picture.Y, expected: (0.15f * 0.94f), tolerance: 1e-6f);
-        // A plain display's picture, and a window's, is the whole face.
+        // A device's glass is exactly its picture: a screen material draws over the whole face.
+        Assert.Equal(actual: picture.X, expected: 0.2f, tolerance: 1e-6f);
+        Assert.Equal(actual: picture.Y, expected: 0.15f, tolerance: 1e-6f);
+        // A plain display's picture, and a window's, is the whole face too.
         Assert.Equal(
             expected: new Vector2(x: 0.2f, y: 0.15f),
             actual: WorldScreenFraming.PictureHalfExtents(screen: Screen())

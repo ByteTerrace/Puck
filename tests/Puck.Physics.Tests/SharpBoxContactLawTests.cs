@@ -15,16 +15,16 @@ public sealed class SharpBoxContactLawTests {
         var body = new FixedBodyColliderVolume(FixedBodyColliderKind.Box, FixedVector3.Zero, FixedVector3.Zero,
             V(x: 1, y: 0.1, z: 0.1), FixedQuaternion.FromAxisAngle(FixedVector3.UnitY, FixedQ4816.FromDegrees(degrees: 45)), FixedQ4816.Zero);
 
-        Assert.False(condition: wall.TryGetPush(rotation.Rotate(vector: V(x: 1.5, y: 0, z: 1.5)), rotation, body, FixedQ4816.Zero, out _));
+        Assert.False(condition: wall.TryGetPush(rotation.Rotate(vector: V(x: 1.5, y: 0, z: 1.5)), rotation, body, FixedQ4816.Zero, out _, out _));
         var position = rotation.Rotate(vector: V(x: 1.04, y: 0, z: 1.04));
 
-        Assert.True(condition: wall.TryGetPush(position, rotation, body, FixedQ4816.Zero, out var push));
+        Assert.True(condition: wall.TryGetPush(position, rotation, body, FixedQ4816.Zero, out var push, out _));
         var expectedNormal = rotation.Rotate(vector: V(x: 1, y: 0, z: 1).Normalize());
 
         Assert.InRange((push.Normal - expectedNormal).Length, FixedQ4816.Zero, Q(value: 0.0002));
         Assert.InRange(push.Penetration, Q(value: 0.0432), Q(value: 0.0437));
         Assert.False(condition: wall.TryGetPush((position + (push.Normal * (push.Penetration + Q(value: 0.001)))), rotation,
-            body, FixedQ4816.Zero, out _));
+            body, FixedQ4816.Zero, out _, out _));
     }
     [InlineData(false)]
     [InlineData(true)]
@@ -41,7 +41,7 @@ public sealed class SharpBoxContactLawTests {
 
         Assert.True(condition: FixedDynamicBodyContacts.TryCorrection(correction: out var correction, leftOrientation: rotation, leftPosition: position, leftVolumes: [capsule], rightOrientation: rotation,
             rightPosition: boxPosition, rightVolumes: [box], tieBreaker: 0));
-        Assert.True(condition: wall.TryGetPush(position, rotation, capsule, FixedQ4816.Zero, out var push));
+        Assert.True(condition: wall.TryGetPush(position, rotation, capsule, FixedQ4816.Zero, out var push, out _));
         Assert.Equal((push.Normal * push.Penetration), correction);
         Assert.InRange(correction.Length, Q(value: 0.0670), Q(value: 0.0673));
         Assert.InRange((correction.Normalize() - rotation.Rotate(vector: V(x: 1, y: 0, z: 1).Normalize())).Length, FixedQ4816.Zero, Q(value: 0.0003));

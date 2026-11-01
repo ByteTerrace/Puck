@@ -24,6 +24,9 @@
     "screens": {
       "$ref": "./schema/screens.schema.json"
     },
+    "screenMaterials": {
+      "$ref": "./schema/screenMaterials.schema.json"
+    },
     "cameras": {
       "$ref": "./schema/cameras.schema.json"
     },

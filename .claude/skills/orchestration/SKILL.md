@@ -436,6 +436,13 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   around each heavy suite, sample headroom while holding it, and release it on
   every exit. Nested runs under `puck lease heavy` serialize on child leases
   after validating the ancestor holder's process identity.
+- A lane never runs a full `puck test worlds/debug` sweep (112 worlds, 30 to 60
+  minutes, several GB per world process): the brief names the test files its
+  change can reach, and the lead runs one full sweep on the integrated head.
+  Two lanes' full sweeps once ran together, one outside the heavy lease, while
+  four GPU waiters and an hour-long heavy ticket queued behind them. A lane
+  waiting on a lease keeps working (code, docs, its hand-back) instead of
+  idling on the ticket.
 - Lease admission is a queue that rotates between lanes, not a race:
   `puck lease` waiters take tickets, and the lease goes to the oldest ticket of
   the lane that held it least recently. A lane is the first word of `--holder`
@@ -596,6 +603,14 @@ long-horizon work. Route it accordingly:
 | Whole-area analysis that needs a large context | Anything that must push or mutate shared Git state |
 | Portal, dashboard and other TypeScript/UI work | |
 | Research synthesis | |
+
+An `agy -p` lane cannot open web pages directly. Its search tool returns
+summaries, and in one research round it labelled those summaries "Opened URL"
+until a cross-family consensus round made it retract them. Treat its citations,
+figures and quotes as leads for a Claude or Codex lane to open and verify.
+Never take them as sources, and never let them carry a verdict alone. A
+research round therefore always runs a consensus step in which other families
+check its citations.
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden

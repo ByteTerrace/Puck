@@ -241,14 +241,39 @@ T2 and R1; C10 runs whenever its three inputs have landed. The combat yard (lane
 13) and the climate wing keep their reservations and join when the job-system
 memo and the weather decision reach them.
 
-## Open to the owner
+## The owner's answers
 
-- Whether the avatar studio stays a pavilion on the south-east lawn (this plan)
-  or moves into the gallery's level 3 as the discovery pack proposes.
-- Whether the stream may run through the centre-west of the floor past the
-  spawn (this plan), or should hug the west wall as the overview frames it.
-- The sun's direction and the time of day, which the terrain pass already lists
-  as the owner's call and which fixes where the rim's shadow falls on the lawn.
+- **The avatar studio stays a pavilion on the south-east lawn**: a photo area
+  for visitors that happens to be a studio. The owner's rule for the whole
+  world is that most of its features are debug tools disguised as
+  architecture.
+- **The stream follows this plan's centre-west course** to the pool (the
+  lead's call, which the owner deferred). Its condition is that it forces the
+  water interactions properly: swimming and buoyancy in the medium, flow and
+  spill across basins, depth read by regions, and bodies and creatures meeting
+  the water at the bridge, the banks and the pool. Lane C3's check covers each.
+- **Tree variety:** several families that are interestingly varied and
+  distinct, not one form or a binary choice. They read as different species at
+  a glance, and each family varies in height, crown, lean and palette, so no
+  two placed trees look cloned.
+- **Time of day varies, and the sun's direction is authored.** The valley's
+  light runs through an authored cycle rather than one fixed sun. Lane C10 and
+  the terrain pass's lighting-direction step take it.
+- **The Moth climbs:** an indoor rock-climbing wall near the lift is a
+  must-have, and it joins lane C2's hall work. Climbability scales from one
+  wall to a whole world, because the owner expects some worlds to be fully
+  climbable. It is authored policy resolved from contact, with precedence:
+  - a world default (the debug world: not climbable; a fully climbable world:
+    climbable);
+  - a material or surface class over the default (the debug world's
+    rock-wall material is climbable; a climbable world can opt out ice or
+    glass);
+  - a placement over its material.
+
+  The ability (reach, speed, stamina) stays in the standard's `crawlHold`,
+  which the Moth refines. The engine only resolves climbability at contact, at
+  the same per-contact cost whatever the world's default, so a fully climbable
+  world costs no more per contact than one wall does.
 
 [Plans](README.md) · [The valley, the moons and the flight between](valley-and-moons.md) ·
 [Port the experimental worlds' features](port-experimental.md)

@@ -156,6 +156,11 @@ agent works in that mode by default, without asking:
     self-improvement is expected: when a session learns that a process wastes
     time or fails, it changes the process in that session, and judgement
     outranks any fixed numeric rule in these documents.
+  - Regular research is worth it (the owner's ruling), even down paths Puck
+    has checked before, if only as a refresher. Before a major area of work
+    (the illumination round before further graphical work is the example), the
+    lead runs a research round across the families, each with its own focus
+    and verified citations, then synthesizes it into the area's plan.
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
@@ -171,7 +176,9 @@ agent works in that mode by default, without asking:
     cover: grasses, flowers, shrubs and trees. The places compose into one
     cohesive world under the selected valley-and-gallery art direction
     ([references](docs/game/art/valley-and-gallery.md)), so features meet at
-    their seams instead of standing apart.
+    their seams instead of standing apart. Most of its features are debug
+    tools disguised as architecture: the avatar studio, for example, is a
+    lawn pavilion that visitors use as a photo area.
 - The gates, ledgers and red-leg proofs described in this file and the skills
   were written by agents, not ordered by the owner. They are tools to use when
   they pay for themselves, never preconditions for landing. An engine change's
@@ -311,6 +318,13 @@ Workflows orchestrate verbs and bash composite actions; harness hooks are the sc
 - Report through the hand-back report and the final commit's `Brief:` trailer;
   use `<worktree>/.claude/scratch/<lane>-*` for scratch. Preserve needed output
   outside a worktree Claude may remove; [lane work](.claude/skills/orchestration/references/lane-work.md) owns details.
+- One watcher per running job, stopped before another is armed and ending on
+  success, failure or exit; no `sleep` timers, no polling a job that will
+  report its own exit, and no full `worlds/debug` sweep (the brief names the
+  test files). Keep working while a lease ticket waits, and stop a windowed
+  World (it holds the GPU lease) as soon as its captures are done, never
+  keeping it open across code edits
+  ([lane work](.claude/skills/orchestration/references/lane-work.md)).
 - Merge the integration tip into your own branch before reporting and re-run
   checks, except for a read-only brief or after a stop order.
 - A lane (Claude subagent, `codex exec` or `agy -p`) never pushes; the lead pushes.

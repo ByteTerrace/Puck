@@ -84,7 +84,7 @@ public sealed class WorldCameraViewTransitionTests {
     public void AutomaticPreferenceIsSeatLocalAndPortablePreferenceBeatsAuthor() {
         var seat = new WorldSeatViewState();
         var other = new WorldSeatViewState();
-        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, WorldCameraClearanceChoice.Cutaway, 1.1f);
+        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, WorldCameraClearanceChoice.Cutaway, new WorldCameraClearanceRise(Fade: 0.35f, Cutaway: 1.1f), 0.3f, 0.1f);
         var feel = WorldSeatCameraFeel.Default;
         Assert.False(seat.AutomaticFirstPerson(control, feel));
         control = control with { AutoFirstPerson = Automatic with { Enabled = true } };
@@ -108,7 +108,7 @@ public sealed class WorldCameraViewTransitionTests {
         var orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.7f);
         var subject = new WorldChaseBody(null, root, orientation, scale);
         var head = (root + Vector3.Transform(Destination.EyePoint * scale, orientation));
-        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, WorldCameraClearanceChoice.Cutaway, 1.1f);
+        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, WorldCameraClearanceChoice.Cutaway, new WorldCameraClearanceRise(Fade: 0.35f, Cutaway: 1.1f), 0.3f, 0.1f);
         seat.SetView(true);
         var target = (root + (Vector3.UnitY * scale));
         var eye = (target + (Vector3.UnitZ * 4.2f * scale));

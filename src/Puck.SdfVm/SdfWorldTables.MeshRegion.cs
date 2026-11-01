@@ -25,6 +25,8 @@ public sealed partial class SdfWorldTables {
         if (m_disposed) { return; }
         m_meshArena.TrimUnused();
         m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
+        // The source order walks the placements, so a trim that forgot one rebuilds it.
+        m_meshOrderStale = true;
     }
 
     // Whether the arena has written its meshes into the region.
@@ -130,13 +132,10 @@ public sealed partial class SdfWorldTables {
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimMeshSources; m_meshTrimListening = true; }
         if (ReferenceEquals(objA: draws, objB: m_meshSource) && (revision == m_meshSourceRevision)) { StageMeshRegionCore(draws: draws, revision: revision); return; }
-        var candidate = new SdfMeshClaims(meshes: draws.Select(selector: static draw => draw.Mesh));
-
-        try { StageMeshRegionCore(draws: draws, revision: revision); } catch { candidate.Dispose(); throw; }
-        var previous = m_meshClaims;
-
-        m_meshClaims = candidate;
-        previous?.Dispose();
+        // The staged list's meshes hold live claims; the arena's placement claims keep every placed mesh's storage, the
+        // ones the list stopped naming included, until the arena forgets them.
+        (m_meshClaims ??= new SdfMeshClaims()).Update(draws: draws);
+        StageMeshRegionCore(draws: draws, revision: revision);
     }
     private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (

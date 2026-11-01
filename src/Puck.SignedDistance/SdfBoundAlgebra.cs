@@ -31,13 +31,39 @@ public static class SdfBoundAlgebra {
     /// <returns><see langword="true"/> for <see cref="SdfBlendOp.Intersection"/>, <see cref="SdfBlendOp.SmoothIntersection"/>
     /// and <see cref="SdfBlendOp.ChamferIntersection"/>.</returns>
     public static bool IsIntersection(SdfBlendOp blend) => (blend is (SdfBlendOp.Intersection or SdfBlendOp.SmoothIntersection or SdfBlendOp.ChamferIntersection));
-    /// <summary>Whether <paramref name="blend"/> is a subtraction, whose result is bounded by its accumulated operand.</summary>
+    /// <summary>Whether <paramref name="blend"/> is a subtraction whose result is bounded by its accumulated operand: one
+    /// that reads at least <c>max(a, -b)</c>. A pipe subtraction is not one, since its bead,
+    /// <c>hypot(a, b) - radius</c>, lays solid outside its subject (<see cref="Growth"/>).</summary>
     /// <param name="blend">The blend.</param>
-    /// <returns><see langword="true"/> for every subtraction family member.</returns>
+    /// <returns><see langword="true"/> for every subtraction family member but <see cref="SdfBlendOp.PipeSubtraction"/>.</returns>
     public static bool IsSubtraction(SdfBlendOp blend) => (blend is (
         SdfBlendOp.Subtraction or SdfBlendOp.SmoothSubtraction or SdfBlendOp.ChamferSubtraction or
-        SdfBlendOp.GrooveSubtraction or SdfBlendOp.PipeSubtraction or SdfBlendOp.StairsSubtraction
+        SdfBlendOp.GrooveSubtraction or SdfBlendOp.StairsSubtraction
     ));
+    /// <summary>Returns how far below the lesser of its operands' readings a blend's result may read, so that wherever
+    /// the result reads at most a level <c>λ ≥ 0</c>, the lesser operand reads at most <c>λ</c> plus this: the outward
+    /// growth a composed solid can have past its operands. A smooth union sags by at most a quarter of its radius, a
+    /// chamfered union's bevel by at most half its radius, a pipe (union or subtraction) or stairs union by at most its
+    /// radius; every blend that reads at least the lesser operand (the hard set operations, xor, a morph, the
+    /// intersections, the other subtractions, the grooves) grows nothing. A blend this algebra does not know grows by its
+    /// radius.</summary>
+    /// <param name="blend">The blend.</param>
+    /// <param name="radius">The blend's radius, in field units, as authored; a smooth blend's floors at
+    /// <see cref="SdfProgram.SmoothRadiusMin"/>.</param>
+    /// <returns>The growth, in field units, at least zero.</returns>
+    public static float Growth(SdfBlendOp blend, float radius) {
+        var magnitude = MathF.Abs(x: radius);
+
+        return blend switch {
+            SdfBlendOp.Union or SdfBlendOp.Subtraction or SdfBlendOp.Intersection or SdfBlendOp.Xor or SdfBlendOp.Morph or
+            SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction or SdfBlendOp.ChamferIntersection or
+            SdfBlendOp.ChamferSubtraction or SdfBlendOp.GrooveUnion or SdfBlendOp.GrooveSubtraction or
+            SdfBlendOp.StairsSubtraction => 0f,
+            SdfBlendOp.SmoothUnion => (MathF.Max(x: magnitude, y: SdfProgram.SmoothRadiusMin) / 4f),
+            SdfBlendOp.ChamferUnion => (magnitude / 2f),
+            _ => magnitude,
+        };
+    }
     /// <summary>Composes a bound with the next operand's: the accumulated field <paramref name="blend"/> the operand.</summary>
     /// <param name="accumulated">The bound of the field so far.</param>
     /// <param name="operand">The bound of the operand joining it.</param>

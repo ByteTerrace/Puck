@@ -75,7 +75,7 @@ public static class WorldDrawBootResolver {
     }
 
     /// <summary>Draws one numeric sample per selected cell of a keyed draw site, in cell order, advancing the site's
-    /// cursor by the cell count — the whole-row roll of a dice tray, or a re-roll of the named <paramref name="keys"/>
+    /// cursor by the raw words actually consumed — the whole-row roll of a dice tray, or a re-roll of the named <paramref name="keys"/>
     /// alone with every other cell held.</summary>
     /// <param name="definition">The document the site's source resolves against.</param>
     /// <param name="worldSeed">The document's world seed.</param>
@@ -160,8 +160,10 @@ public static class WorldDrawBootResolver {
             masks: row.DrawnMasks,
             values: values,
             masksAfter: out var masksAfter,
+                advances: out var advances,
             reason: out var fireReason,
-            skip: draw.Skip
+            skip: draw.Skip,
+            secret: draw.Secret
         )) {
             reason = $"{site} {fireReason}";
 
@@ -174,7 +176,7 @@ public static class WorldDrawBootResolver {
 
         filled = row with {
             Cells = cells,
-            DrawCursor = checked((row.DrawCursor + selected.Count)),
+            DrawCursor = checked((row.DrawCursor + advances)),
             DrawnMasks = GeneratorEngine.MasksAfter(
             generator: generator,
             fired: masksAfter,
@@ -276,7 +278,7 @@ public static class WorldDrawBootResolver {
             state ??= new List<WorldStateRow>(collection: authored);
             state[index] = row with {
                 Cells = [cell],
-                DrawCursor = (row.DrawCursor + fired.Samples),
+                DrawCursor = (row.DrawCursor + fired.Advances),
                 DrawnMasks = GeneratorEngine.MasksAfter(
                 generator: generator,
                 fired: fired.Masks,

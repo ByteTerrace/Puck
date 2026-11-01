@@ -1,5 +1,6 @@
-// Debug-only Go and Tour pages, gallery icons and Places ring refine the standard.
-import "../standard/standard"
+// Debug-only Go and Tour pages, gallery icons and Places ring refine the Moth's controls (moth-controls.puck), which
+// refine the standard's.
+import "moth-controls"
 import "pad-kit"
 
 commands [
@@ -106,7 +107,8 @@ bindingOverlays [
           }
         }
       ]
-      // The play wheel again with its third ring: a later layer's wheel replaces the earlier one whole.
+      // The play wheel again with its Places ring and the desktop layout: a later layer's wheel replaces the earlier one
+      // whole.
       wheels [
         {
           id: "play-primary"
@@ -183,6 +185,7 @@ state {
       tourNight = "tour.night"
     }
     table wheelLabels {
+      desktop = "Desktop"
       goStage = "Stage"
       goHero = "Hero"
       goGallery = "Gallery"
@@ -193,6 +196,7 @@ state {
       goWonderland = "Wonderland"
     }
     table wheelIcons {
+      desktop = "act.desktop"
       goStage = "go.stage"
       goHero = "go.hero"
       goGallery = "go.gallery"

@@ -116,7 +116,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
                     stream: stream
                 );
 
-                expectedRng.Advance(count: unchecked((((ulong)cursor) * 2UL)));
+                expectedRng.Advance(count: ((ulong)cursor));
                 var expectedEntry = WeightedSampler.Create<int>(entries: remaining).Sample(generator: ref expectedRng);
                 var actual = Fire(
                     generator: generator,
@@ -169,7 +169,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
             );
 
             trail.Add(item: (cursor, masks?.ToArray(), fired.Numeric!.Value));
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 
@@ -201,7 +201,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
                 );
 
                 drawn.Add(item: fired.Numeric!.Value);
-                cursor += fired.Samples;
+                cursor += fired.Advances;
                 masks = fired.Masks;
             }
 
@@ -375,8 +375,8 @@ public sealed class WorldGeneratorExhaustionLawTests {
             );
 
             Assert.Equal(
-                expected: 1L,
-                actual: fired.Samples
+                expected: 2L,
+                actual: fired.Advances
             );
             Assert.NotNull(@object: fired.Masks);
             Assert.Single(collection: fired.Masks!);
@@ -386,7 +386,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
             );
 
             drawn.Add(item: fired.Numeric!.Value);
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 

@@ -535,26 +535,29 @@ public static partial class WorldDefinitionValidator {
     }
     // The bank PageId existence check — run AFTER the composed profile compiles successfully (a bank's page
     // reference is only checkable against the WHOLE overlay stack's result, never one overlay's own document).
-    private static void ValidateBindingBarPageReferences(IReadOnlyList<WorldBindingOverlay> overlays, CompiledBindingProfile profile, List<string> errors) {
+    private static void ValidateBindingBarPageReferences(IReadOnlyList<WorldBindingOverlay> overlays, WorldBindingBarAuthoring? editorBar, CompiledBindingProfile profile, List<string> errors) {
         for (var index = 0; (index < overlays.Count); index++) {
-            var banks = overlays[index]?.BindingBar?.Banks;
+            ValidateBindingBarPageReferences(banks: overlays[index]?.BindingBar?.Banks, errors: errors, path: $"bindingOverlays[{index}].bindingBar", profile: profile);
+        }
 
-            if (banks is null) {
-                continue;
-            }
+        ValidateBindingBarPageReferences(banks: editorBar?.Banks, errors: errors, path: "editor.bar", profile: profile);
+    }
+    private static void ValidateBindingBarPageReferences(IReadOnlyList<WorldBindingBarBank>? banks, string path, CompiledBindingProfile profile, List<string> errors) {
+        if (banks is null) {
+            return;
+        }
 
-            for (var bankIndex = 0; (bankIndex < banks.Count); bankIndex++) {
-                var pageId = banks[bankIndex]?.PageId;
+        for (var bankIndex = 0; (bankIndex < banks.Count); bankIndex++) {
+            var pageId = banks[bankIndex]?.PageId;
 
-                if (
-                    !string.IsNullOrWhiteSpace(value: pageId) &&
-                    !profile.TryGetPageView(
-                    pageId: pageId,
-                    view: out _
-                )
-                ) {
-                    errors.Add(item: $"bindingOverlays[{index}].bindingBar.banks[{bankIndex}].pageId '{pageId}' names no page in the composed binding profile.");
-                }
+            if (
+                !string.IsNullOrWhiteSpace(value: pageId) &&
+                !profile.TryGetPageView(
+                pageId: pageId,
+                view: out _
+            )
+            ) {
+                errors.Add(item: $"{path}.banks[{bankIndex}].pageId '{pageId}' names no page in the composed binding profile.");
             }
         }
     }
@@ -651,6 +654,35 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        // The editor's build toggle composes beneath every overlay at run time (WorldSeatBindings), so it is admitted
+        // with them: its vocabulary here, its destinations through the composed compile below; and the editor's bar
+        // crosses the same bar checks an overlay's does.
+        var editorLayer = WorldEditorBindings.Layer(toggle: definition.EditorRaw?.Toggle, worldLayers: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
+
+        if ((editorLayer is not null) && (channels is { } editorChannels)) {
+            var vocabularyErrors = new List<string>();
+
+            BindingVocabularyHook.VocabularyCheck?.Invoke(
+                editorLayer,
+                editorChannels,
+                seatModes,
+                WorldConsoleCommands.For(definition: definition),
+                vocabularyErrors
+            );
+
+            foreach (var error in vocabularyErrors) {
+                errors.Add(item: $"editor.toggle {error}");
+            }
+        }
+
+        ValidateBindingBar(
+            authoring: definition.EditorRaw?.Bar,
+            path: "editor.bar",
+            stateRows: stateRows,
+            errors: errors
+        );
+        layers.Insert(index: 0, item: editorLayer);
+
         var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
 
         try {
@@ -661,6 +693,7 @@ public static partial class WorldDefinitionValidator {
             }
 
             ValidateBindingBarPageReferences(
+                editorBar: definition.EditorRaw?.Bar,
                 errors: errors,
                 overlays: overlays,
                 profile: compiled

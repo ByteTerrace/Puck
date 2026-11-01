@@ -898,6 +898,10 @@ public static partial class WorldDefinitionValidator {
             editor: definition.EditorRaw,
             errors: errors
         );
+        ValidateScreenMaterials(
+            materials: definition.ScreenMaterials,
+            errors: errors
+        );
         ValidateSteerBinding(
             definition: definition,
             errors: errors
@@ -1761,6 +1765,13 @@ public static partial class WorldDefinitionValidator {
                 if (!Enum.IsDefined(value: screen.Filter)) {
                     errors.Add(item: $"{path}.filter {((uint)screen.Filter)} is not a sampler filter; a screen samples its source Nearest or Linear.");
                 }
+                ValidateScreenMaterialName(
+                    definition: definition,
+                    errors: errors,
+                    material: screen.Material,
+                    path: $"{path}.material",
+                    source: screen.Source
+                );
                 if ((screen.Luminance is { } luminance) && (!float.IsFinite(f: luminance) || (luminance <= 0f) || (luminance > SdfScreenEmission.MaxLuminance))) {
                     errors.Add(item: $"{path}.luminance {luminance} is not a display's peak luminance; a screen shows a white picture at a luminance in (0, {SdfScreenEmission.MaxLuminance}] nits.");
                 }
