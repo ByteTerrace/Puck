@@ -1,3 +1,7 @@
+using Puck.Machines;
+
+using Puck.HumbleGamingBrick.Timing;
+
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>The ordered POST stage registry. The battery reports these in array order (Tier A first) and starts its
@@ -6,28 +10,32 @@ namespace Puck.HumbleGamingBrick.Post;
 internal static class PostStages {
     /// <summary>Creates the ordered stage list.</summary>
     /// <returns>The stages, in report order.</returns>
-    public static IPostStage<PostContext>[] Create() =>
-        [
+    public static IPostStage<PostContext>[] Create() {
+        var shared = MachineStageTable.Create<PostContext, MachineHost>(
+            determinism: RunDeterminism, forkDeterminism: RunForkDeterminism,
+            throughput: RunThroughput, allocation: RunAllocation, hosts: HostFactory);
+
+        return [
             // Tier A — core self-tests (self-contained synthetic ROM; run anywhere).
-            new DeterminismStage(),
+            shared["determinism"],
             new EmbeddingStage(),
             new BundledFirmwareStage(),
             new FirmwareReconfigureStage(),
             new SnapshotRoundTripStage(),
             new BatterySaveStage(),
             new VictoryRegionStage(),
-            new ForkDeterminismStage(),
+            shared["fork-determinism"],
             new AgbCostumeStage(),
             // Tier A — every revision's authored boot ROM lands on the same observable handoff as the seeded post-boot
             // state, across the header classes its timing and register tables branch on (self-contained; run anywhere).
             new BootRomHandoffStage(),
             new TrioLockstepStage(),
             new CameraCaptureStage(),
-            new QueuedHostBackpressureStage(),
-            new QueuedHostFramePublicationStage(),
-            new QueuedHostAudioStage(),
-            new QueuedHostMemoryAccessStage(),
-            new QueuedHostTimeTravelStage(),
+            shared["queued-host-backpressure"],
+            shared["queued-host-frame-publication"],
+            shared["queued-host-audio"],
+            shared["queued-host-memory-access"],
+            shared["queued-host-time-travel"],
             // Tier A — two RUNNING queued hosts cable-linked into one owned group: the link steps instead of its
             // members, per-seat pads route by cable order, both members keep publishing, the group backpressures as a
             // unit, and the sever returns independent stepping (self-contained synthetic ROM; run anywhere).
@@ -35,8 +43,8 @@ internal static class PostStages {
             // Tier A — a live cable link is replay-identical and rewinds as one coupled group, pair-stepper pacing
             // included (self-contained synthetic ROM; run anywhere).
             new LinkedHostTimeTravelStage(),
-            new ThroughputStage(),
-            new AllocationStage(),
+            shared["throughput"],
+            shared["zero-alloc"],
             // Tier A — STOP's pad-byte consumption is gated on a pending interrupt (IE & IF, independent of IME), not
             // unconditional (self-contained synthetic ROM; run anywhere).
             new Sm83StopPendingInterruptStage(),
@@ -335,4 +343,67 @@ internal static class PostStages {
             // is identical (self-contained synthetic ROM; runs anywhere).
             new LightGunStage(),
         ];
+    }
+
+    private static PostStageOutcome RunDeterminism(PostContext context) {
+        var rom = SyntheticRom.Create();
+
+        return MachineStageProbes.VerifyDeterminism<MachineInstance, MachineSnapshot, MachineIdentity, Tick>(
+            build: () => PostMachine.Build(
+                model: ConsoleModel.DmgC,
+                rom: rom
+            ),
+            describeDivergence: HashDivergenceProbe.DescribeDivergence,
+            frames: 300,
+            runFrames: PostMachine.RunFrames,
+            snapshot: static instance => instance.Machine.Snapshot()
+        );
+    }
+    private static PostStageOutcome RunForkDeterminism(PostContext context) {
+        using var parent = PostMachine.Build(
+            model: ConsoleModel.DmgC,
+            rom: SyntheticRom.Create()
+        );
+
+        return MachineStageProbes.VerifyForkLifecycle<Machine, MachineConfiguration, MachineSnapshot, MachineIdentity, Tick>(
+            describeDivergence: HashDivergenceProbe.DescribeDivergence,
+            parent: parent,
+            runFrames: PostMachine.RunFrames,
+            snapshot: static machine => machine.Snapshot(),
+            tailFrames: 200,
+            warmFrames: 200
+        );
+    }
+    private static PostStageOutcome RunThroughput(PostContext context) =>
+        MachineStageProbes.MeasureThroughput(
+            benchFrames: 2_000,
+            build: static () => PostMachine.Build(
+                model: ConsoleModel.DmgC,
+                rom: SyntheticRom.Create()
+            ),
+            cycleUnit: "MT/s",
+            cyclesPerFrame: PostMachine.TCyclesPerFrame,
+            hardwareFps: PostMachine.HardwareFps,
+            runFrames: PostMachine.RunFrames,
+            warmFrames: 60
+        );
+    private static PostStageOutcome RunAllocation(PostContext context) =>
+        MachineStageProbes.VerifyZeroAllocation(
+            build: static () => PostMachine.Build(
+                model: ConsoleModel.DmgC,
+                rom: SyntheticRom.Create()
+            ),
+            measureFrames: 600,
+            runFrames: PostMachine.RunFrames,
+            warmFrames: 120
+        );
+    private static QueuedHostStageFactory<MachineHost> HostFactory(PostContext context) => new(
+        WithContent: static () => new MachineHost(bootMode: MachineBootMode.Fast, model: ConsoleModel.DmgC,
+            cartridgeRom: SyntheticRom.Create()),
+        Empty: static () => new MachineHost(model: ConsoleModel.DmgC, bootMode: MachineBootMode.Fast),
+        WithAudio: static () => new MachineHost(bootMode: MachineBootMode.Fast, model: ConsoleModel.DmgC,
+            cartridgeRom: SyntheticRom.Create(), audioSampleRate: 32_000),
+        // The fixture changes I/O and HRAM as its clock advances, including DIV/timer and PPU registers.
+        Observe: static host => MachineStageTable.ObserveMemory(address: 0xFF00, host: host, length: 0x100),
+        ScratchAddress: 0xC200, RegionStart: 0xC000, RegionLength: 0x100);
 }

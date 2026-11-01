@@ -6,8 +6,12 @@ namespace Puck.AdvancedGamingBrick.Post;
 internal static class PostStages {
     /// <summary>Creates the ordered stage list.</summary>
     /// <returns>The stages, in report order.</returns>
-    public static IPostStage<PostContext>[] Create() =>
-        [
+    public static IPostStage<PostContext>[] Create() {
+        var shared = MachineStageTable.Create<PostContext, AdvancedMachineHost>(
+            determinism: RunDeterminism, forkDeterminism: RunForkDeterminism,
+            throughput: RunThroughput, allocation: RunAllocation, hosts: HostFactory);
+
+        return [
             // Tier A — core and queued-host self-tests (hand-assembled vectors + a synthetic cartridge; run anywhere).
             new SmokeStage(),
             new LifecycleStage(),
@@ -23,16 +27,16 @@ internal static class PostStages {
             new PpuTextRowStage(),
             new CartridgeFetchStage(),
             new CycleBudgetExecutionStage(),
-            new DeterminismStage(),
+            shared["determinism"],
             new StateRoundTripStage(),
-            new ForkDeterminismStage(),
+            shared["fork-determinism"],
             new SaveRoundTripStage(),
-            new QueuedHostBackpressureStage(),
-            new QueuedHostFramePublicationStage(),
-            new QueuedHostAudioStage(),
-            new QueuedHostTimeTravelStage(),
-            new ThroughputStage(),
-            new AllocationStage(),
+            shared["queued-host-backpressure"],
+            shared["queued-host-frame-publication"],
+            shared["queued-host-audio"],
+            shared["queued-host-time-travel"],
+            shared["throughput"],
+            shared["zero-alloc"],
             // Tier A — the solar sensor's GPIO protocol, proven directly against AgbCartridge (no ROM asset).
             new SolarDeviceStage(),
             // Tier B — reference conformance suites (r12 verdict register; skip when the corpus is absent).
@@ -84,4 +88,78 @@ internal static class PostStages {
             // churn (AgbLinkSession's credit-preserving resume token), doubled within one run; self-contained.
             new LinkChurnStage(),
         ];
+    }
+
+    private static PostStageOutcome RunDeterminism(PostContext context) {
+        var rom = SyntheticRom.Create();
+
+        return MachineStageProbes.VerifyDeterminism<PostMachine, AgbMachineSnapshot, AgbMachineIdentity, long>(
+            build: () => PostMachine.Build(
+                bios: context.BiosImage,
+                rom: rom
+            ),
+            describeDivergence: HashDivergenceProbe.DescribeDivergence,
+            frames: 200,
+            runFrames: static (machine, frames) => machine.RunFrames(frames: frames),
+            snapshot: static machine => machine.Machine.Snapshot()
+        );
+    }
+    private static PostStageOutcome RunForkDeterminism(PostContext context) {
+        ArgumentNullException.ThrowIfNull(argument: context);
+
+        using var parent = PostMachine.BuildInstance(
+            bios: context.BiosImage,
+            rom: SyntheticRom.Create()
+        );
+
+        return MachineStageProbes.VerifyForkLifecycle<AdvancedGamingBrickMachine, AgbMachineConfiguration, AgbMachineSnapshot, AgbMachineIdentity, long>(
+            describeDivergence: HashDivergenceProbe.DescribeDivergence,
+            parent: parent,
+            runFrames: PostMachine.RunFrames,
+            snapshot: static machine => machine.Snapshot(),
+            tailFrames: 200,
+            warmFrames: 200
+        );
+    }
+    private static PostStageOutcome RunThroughput(PostContext context) =>
+        MachineStageProbes.MeasureThroughput(
+            benchFrames: 200,
+            build: () => PostMachine.Build(
+                bios: context.BiosImage,
+                rom: SyntheticRom.Create()
+            ),
+            cycleUnit: "Mcycle/s",
+            cyclesPerFrame: PostMachine.CyclesPerFrame,
+            hardwareFps: PostMachine.HardwareFps,
+            runFrames: static (machine, frames) => machine.RunFrames(frames: frames),
+            warmFrames: 15
+        );
+    private static PostStageOutcome RunAllocation(PostContext context) =>
+        MachineStageProbes.VerifyZeroAllocation(
+            build: () => PostMachine.Build(
+                bios: context.BiosImage,
+                rom: SyntheticRom.Create()
+            ),
+            measureFrames: 600,
+            runFrames: static (machine, frames) => machine.RunFrames(frames: frames),
+            warmFrames: 120
+        );
+    private static QueuedHostStageFactory<AdvancedMachineHost> HostFactory(PostContext context) {
+        var bios = context.BiosImage.ToArray();
+
+        return new(
+            WithContent: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios),
+            Empty: () => new AdvancedMachineHost(biosImage: bios),
+            WithAudio: () => new AdvancedMachineHost(cartridgeRom: SyntheticRom.Create(), biosImage: bios,
+                audioSampleRate: 32_000),
+            Observe: ObserveState);
+    }
+    // The fixture's palette-entry-0 walk reflects its completed CPU iterations and exact cycle position.
+    private static long ObserveState(AdvancedMachineHost host) {
+        var light = host.EmittedLight;
+
+        return (((long)BitConverter.SingleToUInt32Bits(value: light.X)) << 32)
+            ^ (((long)BitConverter.SingleToUInt32Bits(value: light.Y)) << 16)
+            ^ BitConverter.SingleToUInt32Bits(value: light.Z);
+    }
 }

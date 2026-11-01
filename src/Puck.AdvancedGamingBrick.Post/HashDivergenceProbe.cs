@@ -13,7 +13,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 /// <remarks>
 /// Self-check mode (no second ROM, no perturbation) boots two machines from the same ROM+BIOS and asserts they never
-/// diverge — the core's own claim to determinism, the same claim <see cref="DeterminismStage"/> makes at
+/// diverge — the core's own claim to determinism, the same claim the determinism stage makes at
 /// coarser (register+framebuffer) granularity. Supplying a second ROM path, or a perturbation frame, intentionally
 /// diverges machine B — which exercises the localizer itself: it must name the right component at the right frame.
 /// </remarks>
@@ -121,7 +121,7 @@ internal static class HashDivergenceProbe {
     /// <summary>
     /// The fine localizer: full-state diffs two snapshots and prints which component first differs, at what byte
     /// offset, with a short hex window of both sides. Shared by the CLI diagnostic above and by any POST stage that
-    /// wants a precise failure detail instead of a bare "diverged" (see <see cref="DeterminismStage"/>).
+    /// wants a precise failure detail instead of a bare "diverged" (see the determinism stage).
     /// </summary>
     /// <param name="a">The first snapshot.</param>
     /// <param name="b">The second snapshot.</param>

@@ -13,7 +13,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// window of both sides — turning "somewhere diverged" into "the SystemMemory component, byte 32776".
 /// <para>
 /// Self-check mode (no second ROM, no perturbation) boots two machines from the same ROM and asserts they never
-/// diverge, the same claim <see cref="DeterminismStage"/> makes at coarser (whole-snapshot, frame-boundary)
+/// diverge, the same claim the determinism stage makes at coarser (whole-snapshot, frame-boundary)
 /// granularity. Supplying a second ROM path, or a perturbation frame, intentionally diverges machine B, exercising
 /// the localizer itself.
 /// </para>
