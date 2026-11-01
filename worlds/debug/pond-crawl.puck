@@ -1,0 +1,4 @@
+// The spiders' crawl: the standard crawl hold over walls and ceilings, laid flat on the face. Imported by
+// garden-pond.puck, so the row composes ahead of the spider kit's ground rows (pond.puck).
+import "../standard/abilities"
+crawlHold(kit: "spiderKit", speed: 1.6, reach: 0.5, upLean: 1)

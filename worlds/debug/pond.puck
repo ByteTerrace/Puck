@@ -1,0 +1,2031 @@
+// The garden's pond plot, a library: `pond()` authors the plot's hounds and spiders, every creature's kit and motion
+// programs, the ground they navigate and the rules they follow, and `pondFlocks(creatures)` the plot's one count, the
+// creatures in all. The garden expands both (garden-pond.puck, pond-flocks.puck); garden-crowd.puck expands
+// `pondFlocks` again at 128 over the garden as its basis.
+//
+// Every behaviour here is a Puck program the engine only schedules: the hounds and dragonflies flock
+// (`ProduceFlockIntent`), the spiders stalk the visitor over a navigation domain and face her (`SenseNearestInCone`,
+// `ProduceSteeringIntent`, `FaceSensorTarget`) and crawl walls and the den's ceiling on the standard's crawl hold
+// (pond-crawl.puck), and the hounds' trust in whoever holds the bone spreads by witness and rumour (the rules below).
+//
+// Bodies are numbered by the population: the seats and travellers take the lowest numbers, the `reserve`, and the
+// inhabited placements fill the capacity above them from the top down, the first placement highest. The rules key the
+// hounds and spiders by body number, so they are the last placements: they sit just above the reserve and keep their
+// numbers at every count, while the flocks that read no rule, the dragonflies and the fish, take the rest above them.
+
+// The basis's own room for seats and travellers, and the rule-keyed populations above it.
+let reserve = 8
+let houndCount = 6
+let spiderCount = 4
+let spiderFirst = reserve
+let houndFirst = spiderFirst + spiderCount
+
+// The plot, west of the garden's frames: the pond's centre, the hounds' yard, the bone they claim and the spiders' den.
+let yardAt = [-18, 0, -8]
+let boneAt = [-20, 0, -11]
+let denAt = [-21, 0, -27]
+
+template pond() {
+  state {
+    body [
+      {
+        name: "stamina"
+        kind: "Counter"
+        initial: 3
+        resetFact: "Grounded"
+        envelope { $type: "range", minimum: 0, maximum: 3 }
+      }
+    ]
+
+    world {
+      // Which bodies are hounds and which spiders, by body number; a hound's identity is its own number, the value the
+      // bone's holder and the first witness record.
+      row {
+        name: "hound"
+        kind: "Int"
+        capacity: 64
+        cells: map(range(houndFirst, houndCount), i => { key: $"{i}", value: 1 })
+      }
+      row {
+        name: "houndIdentity"
+        kind: "Int"
+        capacity: houndCount
+        cells: map(range(houndFirst, houndCount), i => { key: $"{i}", value: i })
+      }
+      row {
+        name: "spider"
+        kind: "Int"
+        capacity: 64
+        cells: map(range(spiderFirst, spiderCount), i => { key: $"{i}", value: 1 })
+      }
+
+      // The rumour's state: the hound holding the bone (-1 for none), the hound that saw it first, the claim's
+      // sequence number and when it expires, each hound's trust in every other (one cell a pair) and the last claim
+      // each hound heard.
+      slot eventSeq = 0 bounds(0..)
+      slot claimSeq = 0 bounds(0..)
+      table boneHolder capacity(1) bounds(-1..127) {
+        "0" = -1
+      }
+      table reporter capacity(1) bounds(-1..127) {
+        "0" = -1
+      }
+      slot claimTicks = 0
+      row {
+        name: "boneHolderTrust"
+        kind: "Fixed"
+        capacity: houndCount * houndCount
+        min: "0"
+        max: "1"
+      }
+      table boneHolderClaimMark capacity(houndCount) bounds(0..)
+    }
+  }
+
+  bodyMotionPrograms [
+    // The hounds flock round their companion: the visitor when she is near, or the pack-mate they trust most.
+    {
+      kind: Producer
+      name: "pack"
+      operations [SenseNearestInCone, ProduceFlockIntent]
+      target: designated(register: "companion")
+      version: "puck.body.program.v1"
+    }
+    // The dragonflies and the fish flock with no target, each kept to its own volume of air.
+    {
+      kind: Producer
+      name: "swarm"
+      operations [ProduceFlockIntent]
+      version: "puck.body.program.v1"
+    }
+    {
+      kind: Producer
+      name: "school"
+      operations [ProduceFlockIntent]
+      version: "puck.body.program.v1"
+    }
+    // A spider walks the plot's navigation domain towards its quarry and turns to face it.
+    {
+      kind: Producer
+      name: "stalk"
+      operations [SenseNearestInCone, ProduceSteeringIntent, FaceSensorTarget]
+      target: navigated(domain: "plot", register: "quarry")
+      version: "puck.body.program.v1"
+    }
+    // Every creature's body runs the same motion program over its own kit.
+    {
+      kind: Motion
+      name: "creature"
+      operations [
+        ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent,
+        RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose
+      ]
+      version: "puck.body.program.v1"
+    }
+  ]
+
+  targetRegisters [
+    { name: "companion", maximumRange: 40, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+    { name: "quarry", maximumRange: 40, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
+  ]
+
+  navigation {
+    domains [
+      // The plot's ground, a metre a cell, round the pond's walls and the den.
+      {
+        name: "plot"
+        kind: Surface
+        origin [-30, -2, -34]
+        cellSize: 1
+        width: 36
+        depth: 32
+        layers: 1
+        agentHeight: 0.5
+        agentRadius: 0.2
+        arrivalDistance: 0.9
+        maxExpandedNodes: 1152
+        maxPathNodes: 128
+        maxSlopeDegrees: 60
+        maxStepHeight: 0.55
+        probeDown: 3
+        probeUp: 2.5
+      }
+      // The air over the pond the dragonflies keep to.
+      {
+        name: "reeds"
+        kind: Volume
+        origin [-18, 0.75, -22]
+        cellSize: 1
+        width: 12
+        depth: 12
+        layers: 5
+        agentRadius: 0.3
+        arrivalDistance: 0.5
+        maxExpandedNodes: 720
+        maxPathNodes: 64
+      }
+      // The pond's own volume, inside its walls, the fish keep to. The garden has no water yet, so they school in air.
+      {
+        name: "shallows"
+        kind: Volume
+        origin [-15.5, 0.25, -19.5]
+        cellSize: 1
+        width: 7
+        depth: 7
+        layers: 3
+        agentRadius: 0.3
+        arrivalDistance: 0.4
+        maxExpandedNodes: 147
+        maxPathNodes: 64
+      }
+    ]
+  }
+
+  kits [
+    {
+      name: "houndKit"
+      bodyContact: Solid
+      bodyMotionProgram: "creature"
+      collider: capsule(endpoint: [0, 0.5, 0], radius: 0.16)
+      autonomy {
+        motionSeconds: 0
+        steeringSeconds: 0.1
+      }
+      motion {
+        facingSnap: true
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 0.8
+            gravity { fall: 46, rise: 28 }
+            envelope { sinkSpeed: 40 }
+          }
+          {
+            name: "air"
+            bond: Free
+            hold: Gravity
+            gravity { fall: 46, rise: 28 }
+            envelope { sinkSpeed: 40 }
+          }
+        ]
+        shaping [{ along {} }]
+        speed { value: 3.2 }
+        turn { rate: 2.5 }
+      }
+      producers {
+        pack {
+          channels {}
+          scalars {}
+          // A hound aligns with a pack-mate in proportion to its trust in the bone's holder.
+          flock {
+            range: 8
+            separationRadius: 0.9
+            candidateBudget: 16
+            maxNeighbors: 6
+            updateSeconds: 0.1
+            space: "Tangent"
+            separation: 1
+            alignment: 0.4
+            alignmentAffinity: "boneHolderTrust[$pair:left:cell:boneHolder:0]"
+            cohesion: 0.6
+            goal: 0.8
+            inertia: 0.2
+            arrivalDistance: 1.2
+            halfAngleDegrees: 180
+            requiresLineOfSight: false
+          }
+        }
+      }
+    }
+    {
+      name: "spiderKit"
+      bodyContact: Solid
+      bodyMotionProgram: "creature"
+      collider: capsule(endpoint: [0, 0.2, 0], radius: 0.14)
+      motion {
+        facingSnap: true
+        // pond-crawl.puck puts the standard crawl row ahead of these.
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            hold: Gravity
+            cone [0, 60]
+            reach: 0.6
+            gravity { fall: 46, rise: 28 }
+            envelope { sinkSpeed: 40 }
+          }
+          {
+            name: "air"
+            bond: Free
+            hold: Gravity
+            gravity { fall: 46, rise: 28 }
+            envelope { sinkSpeed: 40 }
+          }
+        ]
+        shaping [{ along {} }]
+        speed { value: 1.6 }
+        turn { rate: 2.5 }
+      }
+      producers {
+        stalk {
+          channels {}
+          scalars {
+            forward: 1
+            approach: 1
+            approachAltitudeGain: 0.5
+            standoffRadius: 0.8
+            orbit: 0
+            softRadius: 2.5
+            inwardGain: 3
+            turnScale: 3
+            weaveAmplitude: 0.4
+            weaveFrequencyBase: 0.6
+            weaveFrequencyRange: 0.2
+            activityRateBase: 1
+            activityRateRange: 0.3
+            altitudeBase: 0
+            altitudeGain: 0.5
+            altitudeRange: 0
+            pitchWave: 0
+            pressThreshold: 0
+            rollTurn: 0
+            strafeWave: 0
+            turnWave: 0
+            upWave: 0
+          }
+        }
+      }
+    }
+    {
+      name: "dragonflyKit"
+      bodyContact: Overlap
+      bodyMotionProgram: "creature"
+      collider: capsule(endpoint: [0, 0.05, 0], radius: 0.08)
+      autonomy {
+        motionSeconds: 0.1
+        steeringSeconds: 0.1
+      }
+      motion {
+        facingSnap: true
+        holds [
+          {
+            name: "air"
+            bond: Free
+            hold: Lift
+            lift: 1
+            forward: Heading
+            speed: 3
+            thrust: 1
+            upLean: 0
+            gravity { fall: 46, rise: 28 }
+          }
+        ]
+        shaping [{ along {} }]
+        speed { value: 3 }
+        turn { rate: 2.5 }
+      }
+      producers {
+        swarm {
+          channels {}
+          scalars {}
+          flock {
+            range: 5
+            separationRadius: 0.6
+            candidateBudget: 16
+            maxNeighbors: 6
+            updateSeconds: 0.1
+            space: "Volume"
+            movementDomain: "reeds"
+            separation: 1
+            alignment: 0.5
+            cohesion: 0.6
+            goal: 0
+            inertia: 0.3
+            arrivalDistance: 0.5
+            halfAngleDegrees: 180
+            requiresLineOfSight: false
+          }
+        }
+      }
+    }
+    // The fish hover where water will be: their row becomes a `Medium` hold when the garden's pond holds a field.
+    {
+      name: "fishKit"
+      bodyContact: Overlap
+      bodyMotionProgram: "creature"
+      collider: sphere(radius: 0.1)
+      autonomy {
+        motionSeconds: 0.1
+        steeringSeconds: 0.1
+      }
+      motion {
+        facingSnap: true
+        holds [
+          {
+            name: "swim"
+            bond: Free
+            hold: Lift
+            lift: 1
+            forward: Heading
+            speed: 1.2
+            thrust: 1
+            upLean: 0
+            gravity { fall: 46, rise: 28 }
+          }
+        ]
+        shaping [{ along {} }]
+        speed { value: 1.2 }
+        turn { rate: 1.5 }
+      }
+      producers {
+        school {
+          channels {}
+          scalars {}
+          flock {
+            range: 3
+            separationRadius: 0.35
+            candidateBudget: 12
+            maxNeighbors: 6
+            updateSeconds: 0.1
+            space: "Volume"
+            movementDomain: "shallows"
+            separation: 1
+            alignment: 0.6
+            cohesion: 0.5
+            goal: 0
+            inertia: 0.3
+            arrivalDistance: 0.2
+            halfAngleDegrees: 180
+            requiresLineOfSight: false
+          }
+        }
+      }
+    }
+  ]
+
+  looks [
+    {
+      name: "hound"
+      scale: 1
+      source: creation(prototypeId: hound)
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+    {
+      name: "spider"
+      scale: 1
+      source: creation(prototypeId: spider)
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+    {
+      name: "dragonfly"
+      scale: 1
+      source: creation(prototypeId: dragonfly)
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+    {
+      name: "fish"
+      scale: 1
+      source: creation(prototypeId: fish)
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+  ]
+
+  placements {
+    // The last inhabited placements, so the hounds and spiders take the numbers just above the reserve that the rule
+    // rows above key (pondFlocks authors the rest, in a document the plot imports ahead of this).
+    placement "houndPack" {
+      prototype: "hound"
+      position: yardAt
+      inhabit {
+        count: houndCount
+        kit: "houndKit"
+        look: "hound"
+        source: producer(name: "pack")
+        distribution {
+          region: disc(radius: 1.5)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
+    }
+
+    placement "spiderDen" {
+      prototype: "spider"
+      position [-20, 0, -26]
+      inhabit {
+        count: spiderCount
+        kit: "spiderKit"
+        look: "spider"
+        source: producer(name: "stalk")
+        distribution {
+          region: disc(radius: 1)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
+    }
+
+
+    // The pond's walls, knee high: fish over the basin, dragonflies over the reeds, and a wall the spiders climb.
+    placement "pondBasin" {
+      prototype: "pondBasin"
+      position [-12, -0.5, -16]
+      grip {
+        holdable: true
+      }
+      solid
+    }
+
+    // The bone: a hound standing on it claims it.
+    placement "bone" {
+      prototype: "bone"
+      position: boneAt
+      region {
+        radius: 1.4
+      }
+    }
+
+    // The den: two walls and a roof 2.5 m up, a ceiling the spiders cross upside down.
+    placement "den" {
+      prototype: "den"
+      position: denAt
+      yawDegrees: 180
+      grip {
+        holdable: true
+      }
+      solid
+    }
+  }
+
+  // Witness: a hound that sees the bone's holder within nine metres trusts it more, by three tenths of the way to full
+  // trust, once each time it comes into view.
+  rule "witness-claim" {
+    when (boneHolder[0] >= 0 and
+      houndIdentity[$each] != boneHolder[0] and
+      los(each, cell, boneHolder, 0) == 1 and
+      distance(each, cell, boneHolder, 0) <= 9)
+    mode: Edge
+    forEach: hound
+    boneHolderTrust[$pair:each:cell:boneHolder:0] += (1 - boneHolderTrust[$pair:each:cell:boneHolder:0]) * 0.3
+  }
+
+  // The first hound to witness a claim reports it.
+  rule "first-witness" {
+    when (boneHolder[0] >= 0 and
+      houndIdentity[$each] != boneHolder[0] and
+      los(each, cell, boneHolder, 0) == 1 and
+      distance(each, cell, boneHolder, 0) <= 9 and
+      reporter[0] < 0)
+    mode: Edge
+    forEach: hound
+    reporter[0] = houndIdentity[$each]
+  }
+
+  // Rumour: a hound that cannot see the holder but stands within six metres of the reporter hears the claim, once a
+  // claim, and trusts the holder more by half a witness's share.
+  rule "rumor" {
+    when (boneHolder[0] >= 0 and
+      houndIdentity[$each] != boneHolder[0] and
+      houndIdentity[$each] != reporter[0] and
+      reporter[0] >= 0 and
+      los(each, cell, boneHolder, 0) == 0 and
+      distance(each, cell, reporter, 0) <= 6 and
+      boneHolderClaimMark[$each] != (boneHolder[0] << 32 | claimSeq))
+    mode: Level
+    forEach: hound
+    boneHolderTrust[$pair:each:cell:boneHolder:0] += (1 - boneHolderTrust[$pair:each:cell:boneHolder:0]) * 0.15
+    boneHolderClaimMark[$each] = boneHolder[0] << 32 | claimSeq
+  }
+
+  // A claim lasts three seconds; then the bone is anyone's and the next claim needs a new reporter.
+  rule "claim-expire" {
+    when $tick >= claimTicks and boneHolder[0] >= 0
+    mode: Edge
+    boneHolder[0] = -1
+    reporter[0] = -1
+  }
+
+  // Each hound picks its companion every second: the pack-mate whose bone claims it trusts most, the visitor within six
+  // metres, or no one.
+  rule "choose-companion" {
+    mode: Level
+    forEach: hound
+    decision {
+      periodSeconds: 1s
+      mode: HighestScore
+      scoreKind: Fixed
+      commitmentSeconds: 3s
+      incumbentBonus: 0.05
+      seed: 11
+      option "follow" {
+        when hound[$right] == 1
+        score: boneHolderTrust[$pair:left:cell:boneHolder:0] * 2.0
+        designate(key: $each, kind: Body, register: "companion", targetKey: $right)
+        neighbors {
+          candidateBudget: 12
+          halfAngleDegrees: 180
+          maxCandidates: 4
+          range: 10
+          requiresLineOfSight: false
+          retainCurrent: true
+        }
+      }
+      option "visitor" {
+        when distance(each, body, 0) <= 6
+        score: 0.6
+        designate(key: $each, kind: Body, register: "companion", targetKey: 0)
+      }
+      option "alone" {
+        score: 0.05
+        designate(key: $each, kind: Clear, register: "companion")
+      }
+    }
+  }
+
+  // Each spider stalks the visitor within ten metres, and otherwise lurks.
+  rule "stalk-visitor" {
+    mode: Level
+    forEach: spider
+    decision {
+      periodSeconds: 0.5s
+      mode: HighestScore
+      scoreKind: Fixed
+      commitmentSeconds: 2s
+      seed: 5
+      option "stalk" {
+        when distance(each, body, 0) <= 10
+        score: 1
+        designate(key: $each, kind: Body, register: "quarry", targetKey: 0)
+      }
+      option "lurk" {
+        score: 0.1
+        designate(key: $each, kind: Clear, register: "quarry")
+      }
+    }
+  }
+
+  // The `hound` row names an interaction side: the bodies whose cell in it is nonzero.
+  properties {
+    names ["hound"]
+  }
+
+  // A hound standing on the bone claims it for three seconds.
+  interactions {
+    interactions [
+      {
+        name: "bone-claim"
+        left: hound
+        right: bone
+        coOccurrence: Region
+        range: 0
+        mode: Edge
+        effects [
+          setState(expression: houndIdentity[$left], key: 0, state: boneHolder)
+          setState(key: 0, state: reporter, value: -1)
+          setState(expression: eventSeq, state: claimSeq)
+          addState(state: eventSeq, value: 1)
+          scheduleState(delaySeconds: 3, state: claimTicks)
+        ]
+      }
+    ]
+  }
+
+  prototypes {
+    prototype "spider" {
+      document {
+        drivers [
+          {
+            cadence: 14
+            name: "stride"
+            signal: "planarTravel"
+            when [
+              "moving"
+            ]
+          }
+          {
+            cadence: 3
+            name: "breath"
+            signal: "time"
+            when [
+              "still"
+            ]
+          }
+        ]
+        effectors [
+          {
+            chain [
+              "coxaLeft1"
+              "femurLeft1"
+            ]
+            name: "footLeft1"
+            plant {
+              driver: "stride"
+              window [0, 3.141592653589793]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurLeft1"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaLeft2"
+              "femurLeft2"
+            ]
+            name: "footLeft2"
+            plant {
+              driver: "stride"
+              window [3.141592653589793, 6.28]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurLeft2"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaLeft3"
+              "femurLeft3"
+            ]
+            name: "footLeft3"
+            plant {
+              driver: "stride"
+              window [0, 3.141592653589793]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurLeft3"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaLeft4"
+              "femurLeft4"
+            ]
+            name: "footLeft4"
+            plant {
+              driver: "stride"
+              window [3.141592653589793, 6.28]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurLeft4"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaRight1"
+              "femurRight1"
+            ]
+            name: "footRight1"
+            plant {
+              driver: "stride"
+              window [3.141592653589793, 6.28]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurRight1"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaRight2"
+              "femurRight2"
+            ]
+            name: "footRight2"
+            plant {
+              driver: "stride"
+              window [0, 3.141592653589793]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurRight2"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaRight3"
+              "femurRight3"
+            ]
+            name: "footRight3"
+            plant {
+              driver: "stride"
+              window [3.141592653589793, 6.28]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurRight3"
+            when [
+              "always"
+            ]
+          }
+          {
+            chain [
+              "coxaRight4"
+              "femurRight4"
+            ]
+            name: "footRight4"
+            plant {
+              driver: "stride"
+              window [0, 3.141592653589793]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: "femurRight4"
+            when [
+              "always"
+            ]
+          }
+        ]
+        name: "spider"
+        palette [
+          {
+            color: "#2B2430"
+          }
+          {
+            color: "#3A3140"
+          }
+          {
+            color: "#C8F03C"
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Sphere "abdomen" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 0
+          position [0, 0.22, -0.16]
+          scale [0.16, 0.135, 0.18]
+          slides [
+            {
+              amplitude: 0.006
+              axis [0, 1, 0]
+              driver: "breath"
+              phase: 0
+              wave: "sine"
+            }
+          ]
+          smooth: 0.04
+        }
+
+        shape Sphere "thorax" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 0
+          parent: "abdomen"
+          position [0, 0.21, 0.08]
+          scale [0.12, 0.1, 0.12]
+          smooth: 0.04
+        }
+
+        shape Sphere "eyeLeft" {
+          group: 0
+          material: 2
+          parent: "abdomen"
+          position [0.05, 0.25, 0.19]
+          scale [0.025, 0.025, 0.02]
+        }
+
+        shape Sphere "eyeRight" {
+          group: 0
+          material: 2
+          parent: "abdomen"
+          position [-0.05, 0.25, 0.19]
+          scale [0.025, 0.025, 0.02]
+        }
+
+        shape Capsule "coxaLeft1" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [0.2532, 0.34, 0.2886]
+          rotation [-0.5594, 0, 0.6666, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: 0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 0
+              pivot [0.1, 0.22, 0.16]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [0.6427876096865393, 0, -0.766044443118978]
+              driver: "stride"
+              phase: 1.5708
+              pivot [0.1, 0.22, 0.16]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurLeft1" {
+          group: 0
+          material: 1
+          parent: "coxaLeft1"
+          position [0.3758, 0, 0.3914]
+          rotation [-0.1402, 0, 0.1671, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [0.6427876096865393, 0, -0.766044443118978]
+              driver: "stride"
+              phase: 1.5708
+              pivot [0.2532, 0.34, 0.2886]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaLeft2" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [0.2932, 0.34, 0.1218]
+          rotation [-0.2252, 0, 0.8405, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: 0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 3.14159
+              pivot [0.1, 0.22, 0.07]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [0.25881904510252074, 0, -0.9659258262890683]
+              driver: "stride"
+              phase: 4.71239
+              pivot [0.1, 0.22, 0.07]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurLeft2" {
+          group: 0
+          material: 1
+          parent: "coxaLeft2"
+          position [0.4477, 0, 0.1632]
+          rotation [-0.0565, 0, 0.2107, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [0.25881904510252074, 0, -0.9659258262890683]
+              driver: "stride"
+              phase: 4.71239
+              pivot [0.2932, 0.34, 0.1218]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaLeft3" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [0.2932, 0.34, -0.0718]
+          rotation [0.2252, 0, 0.8405, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: 0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 0
+              pivot [0.1, 0.22, -0.02]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [-0.25881904510252074, 0, -0.9659258262890683]
+              driver: "stride"
+              phase: 1.5708
+              pivot [0.1, 0.22, -0.02]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurLeft3" {
+          group: 0
+          material: 1
+          parent: "coxaLeft3"
+          position [0.4477, 0, -0.1132]
+          rotation [0.0565, 0, 0.2107, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [-0.25881904510252074, 0, -0.9659258262890683]
+              driver: "stride"
+              phase: 1.5708
+              pivot [0.2932, 0.34, -0.0718]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaLeft4" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [0.2532, 0.34, -0.2386]
+          rotation [0.5594, 0, 0.6666, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: 0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 3.14159
+              pivot [0.1, 0.22, -0.11]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [-0.6427876096865393, 0, -0.766044443118978]
+              driver: "stride"
+              phase: 4.71239
+              pivot [0.1, 0.22, -0.11]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurLeft4" {
+          group: 0
+          material: 1
+          parent: "coxaLeft4"
+          position [0.3758, 0, -0.3414]
+          rotation [0.1402, 0, 0.1671, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [-0.6427876096865393, 0, -0.766044443118978]
+              driver: "stride"
+              phase: 4.71239
+              pivot [0.2532, 0.34, -0.2386]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaRight1" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [-0.2532, 0.34, 0.2886]
+          rotation [-0.5594, 0, -0.6666, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: -0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 3.14159
+              pivot [-0.1, 0.22, 0.16]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [0.6427876096865393, 0, 0.766044443118978]
+              driver: "stride"
+              phase: 4.71239
+              pivot [-0.1, 0.22, 0.16]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurRight1" {
+          group: 0
+          material: 1
+          parent: "coxaRight1"
+          position [-0.3758, 0, 0.3914]
+          rotation [-0.1402, 0, -0.1671, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [0.6427876096865393, 0, 0.766044443118978]
+              driver: "stride"
+              phase: 4.71239
+              pivot [-0.2532, 0.34, 0.2886]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaRight2" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [-0.2932, 0.34, 0.1218]
+          rotation [-0.2252, 0, -0.8405, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: -0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 0
+              pivot [-0.1, 0.22, 0.07]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [0.25881904510252074, 0, 0.9659258262890683]
+              driver: "stride"
+              phase: 1.5708
+              pivot [-0.1, 0.22, 0.07]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurRight2" {
+          group: 0
+          material: 1
+          parent: "coxaRight2"
+          position [-0.4477, 0, 0.1632]
+          rotation [-0.0565, 0, -0.2107, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [0.25881904510252074, 0, 0.9659258262890683]
+              driver: "stride"
+              phase: 1.5708
+              pivot [-0.2932, 0.34, 0.1218]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaRight3" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [-0.2932, 0.34, -0.0718]
+          rotation [0.2252, 0, -0.8405, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: -0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 3.14159
+              pivot [-0.1, 0.22, -0.02]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [-0.25881904510252074, 0, 0.9659258262890683]
+              driver: "stride"
+              phase: 4.71239
+              pivot [-0.1, 0.22, -0.02]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurRight3" {
+          group: 0
+          material: 1
+          parent: "coxaRight3"
+          position [-0.4477, 0, -0.1132]
+          rotation [0.0565, 0, -0.2107, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [-0.25881904510252074, 0, 0.9659258262890683]
+              driver: "stride"
+              phase: 4.71239
+              pivot [-0.2932, 0.34, -0.0718]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "coxaRight4" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [-0.2532, 0.34, -0.2386]
+          rotation [0.5594, 0, -0.6666, 0.4927]
+          scale [0.02, 0.4665, 0.02]
+          swings [
+            {
+              amplitude: -0.35
+              axis [0, 1, 0]
+              driver: "stride"
+              phase: 0
+              pivot [-0.1, 0.22, -0.11]
+              wave: "sine"
+            }
+            {
+              amplitude: 0.5
+              axis [-0.6427876096865393, 0, 0.766044443118978]
+              driver: "stride"
+              phase: 1.5708
+              pivot [-0.1, 0.22, -0.11]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Capsule "femurRight4" {
+          group: 0
+          material: 1
+          parent: "coxaRight4"
+          position [-0.3758, 0, -0.3414]
+          rotation [0.1402, 0, -0.1671, 0.9759]
+          scale [0.016, 0.7515, 0.016]
+          swings [
+            {
+              amplitude: -0.6
+              axis [-0.6427876096865393, 0, 0.766044443118978]
+              driver: "stride"
+              phase: 1.5708
+              pivot [-0.2532, 0.34, -0.2386]
+              wave: "halfSine"
+            }
+          ]
+        }
+      }
+    }
+
+    prototype "dragonfly" {
+      document {
+        drivers [
+          {
+            cadence: 40
+            name: "wingbeat"
+            signal: "time"
+            when [
+              "Unsupported"
+            ]
+          }
+          {
+            cadence: 4
+            name: "hover"
+            signal: "time"
+            when [
+              "Unsupported"
+            ]
+          }
+        ]
+        name: "dragonfly"
+        palette [
+          {
+            color: "#2E7D8C"
+          }
+          {
+            color: "#CFE9F0"
+          }
+          {
+            color: "#1B3A44"
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Sphere "thorax" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 0
+          position [0, 0.9, 0]
+          scale [0.065, 0.065, 0.085]
+          slides [
+            {
+              amplitude: 0.04
+              axis [0, 1, 0]
+              driver: "hover"
+              phase: 0
+              wave: "sine"
+            }
+          ]
+          smooth: 0.03
+        }
+
+        shape Capsule "abdomen" {
+          group: 0
+          material: 0
+          parent: "thorax"
+          position [0, 0.9, -0.4]
+          rotation [0.7071, 0, 0, 0.7071]
+          scale [0.025, 0.68, 0.025]
+        }
+
+        shape Sphere "head" {
+          group: 0
+          material: 0
+          parent: "thorax"
+          position [0, 0.91, 0.11]
+          scale [0.045, 0.045, 0.045]
+        }
+
+        shape Sphere "eyeLeft" {
+          group: 0
+          material: 2
+          parent: "thorax"
+          position [0.03, 0.93, 0.13]
+          scale [0.025, 0.028, 0.025]
+        }
+
+        shape Sphere "eyeRight" {
+          group: 0
+          material: 2
+          parent: "thorax"
+          position [-0.03, 0.93, 0.13]
+          scale [0.025, 0.028, 0.025]
+        }
+
+        shape Box "wingLeft1" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [0.21, 0.94, 0.03]
+          scale [0.16, 0.005, 0.05]
+          swings [
+            {
+              amplitude: -0.6
+              axis [0, 0, 1]
+              driver: "wingbeat"
+              phase: 0
+              pivot [0.05, 0.94, 0.03]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Box "wingLeft2" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [0.2, 0.94, -0.03]
+          scale [0.15, 0.005, 0.05]
+          swings [
+            {
+              amplitude: -0.6
+              axis [0, 0, 1]
+              driver: "wingbeat"
+              phase: 3.14159
+              pivot [0.05, 0.94, -0.03]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Box "wingRight1" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [-0.21, 0.94, 0.03]
+          scale [0.16, 0.005, 0.05]
+          swings [
+            {
+              amplitude: 0.6
+              axis [0, 0, 1]
+              driver: "wingbeat"
+              phase: 0
+              pivot [-0.05, 0.94, 0.03]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Box "wingRight2" {
+          group: 0
+          material: 1
+          parent: "thorax"
+          position [-0.2, 0.94, -0.03]
+          scale [0.15, 0.005, 0.05]
+          swings [
+            {
+              amplitude: 0.6
+              axis [0, 0, 1]
+              driver: "wingbeat"
+              phase: 3.14159
+              pivot [-0.05, 0.94, -0.03]
+              wave: "sine"
+            }
+          ]
+        }
+      }
+    }
+
+    prototype "hound" {
+      document {
+        drivers [
+          {
+            cadence: 7
+            name: "stride"
+            signal: "planarTravel"
+            when [
+              "Grounded"
+              "moving"
+            ]
+          }
+          {
+            cadence: 14
+            name: "bob"
+            signal: "planarTravel"
+            when [
+              "Grounded"
+              "moving"
+            ]
+          }
+          {
+            cadence: 6
+            name: "wag"
+            signal: "time"
+            when [
+              "Grounded"
+            ]
+          }
+        ]
+        effectors [
+          {
+            chain [
+              "upperForeLeft"
+              "lowerForeLeft"
+            ]
+            name: "pawForeLeft"
+            plant {
+              driver: "stride"
+              window [0, 3.141592653589793]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.4
+              standoff: 0.03
+            }
+            tip: "pawForeLeft"
+            when [
+              "Grounded"
+            ]
+          }
+          {
+            chain [
+              "upperHindLeft"
+              "lowerHindLeft"
+            ]
+            name: "pawHindLeft"
+            plant {
+              driver: "stride"
+              window [3.141592653589793, 6.28]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.4
+              standoff: 0.03
+            }
+            tip: "pawHindLeft"
+            when [
+              "Grounded"
+            ]
+          }
+          {
+            chain [
+              "upperForeRight"
+              "lowerForeRight"
+            ]
+            name: "pawForeRight"
+            plant {
+              driver: "stride"
+              window [3.141592653589793, 6.28]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.4
+              standoff: 0.03
+            }
+            tip: "pawForeRight"
+            when [
+              "Grounded"
+            ]
+          }
+          {
+            chain [
+              "upperHindRight"
+              "lowerHindRight"
+            ]
+            name: "pawHindRight"
+            plant {
+              driver: "stride"
+              window [0, 3.141592653589793]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.4
+              standoff: 0.03
+            }
+            tip: "pawHindRight"
+            when [
+              "Grounded"
+            ]
+          }
+        ]
+        name: "hound"
+        palette [
+          {
+            color: "#8A5A2B"
+          }
+          {
+            color: "#E9D3B0"
+          }
+          {
+            color: "#1E1410"
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Sphere "chest" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 0
+          position [0, 0.52, 0.22]
+          scale [0.15, 0.15, 0.2]
+          slides [
+            {
+              amplitude: 0.02
+              axis [0, 1, 0]
+              driver: "bob"
+              phase: 0
+              wave: "sine"
+            }
+          ]
+          smooth: 0.05
+        }
+
+        shape Sphere "rump" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0, 0.5, -0.22]
+          scale [0.14, 0.14, 0.18]
+          smooth: 0.05
+        }
+
+        shape Capsule "belly" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 1
+          parent: "chest"
+          position [0, 0.46, -0.12]
+          rotation [0.7071, 0, 0, 0.7071]
+          scale [0.12, 0.48, 0.12]
+          smooth: 0.05
+        }
+
+        shape Capsule "neck" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0, 0.62, 0.4]
+          rotation [-0.8944, 0, 0, 0.4472]
+          scale [0.06, 0.2, 0.06]
+        }
+
+        shape Sphere "head" {
+          blend: "SmoothUnion"
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0, 0.68, 0.5]
+          scale [0.09, 0.08, 0.11]
+          smooth: 0.03
+        }
+
+        shape Sphere "muzzle" {
+          group: 0
+          material: 1
+          parent: "chest"
+          position [0, 0.64, 0.61]
+          scale [0.05, 0.045, 0.065]
+        }
+
+        shape Sphere "eyeLeft" {
+          group: 0
+          material: 2
+          parent: "chest"
+          position [0.05, 0.71, 0.58]
+          scale [0.02, 0.022, 0.015]
+        }
+
+        shape Capsule "earLeft" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0.07, 0.72, 0.46]
+          rotation [0, 0, -0.1736, 0.9848]
+          scale [0.025, 0.07, 0.025]
+        }
+
+        shape Sphere "eyeRight" {
+          group: 0
+          material: 2
+          parent: "chest"
+          position [-0.05, 0.71, 0.58]
+          scale [0.02, 0.022, 0.015]
+        }
+
+        shape Capsule "earRight" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [-0.07, 0.72, 0.46]
+          rotation [0, 0, 0.1736, 0.9848]
+          scale [0.025, 0.07, 0.025]
+        }
+
+        shape Capsule "tail" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0, 0.62, -0.62]
+          rotation [0.7882, 0, 0, 0.6154]
+          scale [0.03, 0.4948, 0.03]
+          swings [
+            {
+              amplitude: 0.45
+              axis [0, 1, 0]
+              driver: "wag"
+              phase: 0
+              pivot [0, 0.56, -0.38]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Capsule "upperForeLeft" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0.12, 0.26, 0.22]
+          rotation [0.0453, 0, 0.0226, 0.9987]
+          scale [0.045, 0.4423, 0.045]
+          swings [
+            {
+              amplitude: -0.55
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 0
+              pivot [0.11, 0.48, 0.24]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Capsule "lowerForeLeft" {
+          group: 0
+          material: 0
+          parent: "upperForeLeft"
+          position [0.12, 0.05, 0.26]
+          rotation [-0.094, 0, 0, 0.9956]
+          scale [0.035, 0.4276, 0.035]
+          swings [
+            {
+              amplitude: 0.8
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 1.5708
+              pivot [0.12, 0.26, 0.22]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Sphere "pawForeLeft" {
+          group: 0
+          material: 1
+          parent: "lowerForeLeft"
+          position [0.12, 0.04, 0.29]
+          scale [0.045, 0.035, 0.05]
+        }
+
+        shape Capsule "upperHindLeft" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [0.12, 0.26, -0.24]
+          rotation [0.0453, 0, 0.0226, 0.9987]
+          scale [0.045, 0.4423, 0.045]
+          swings [
+            {
+              amplitude: -0.55
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 3.14159
+              pivot [0.11, 0.48, -0.22]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Capsule "lowerHindLeft" {
+          group: 0
+          material: 0
+          parent: "upperHindLeft"
+          position [0.12, 0.05, -0.2]
+          rotation [-0.094, 0, 0, 0.9956]
+          scale [0.035, 0.4276, 0.035]
+          swings [
+            {
+              amplitude: 0.8
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 4.71239
+              pivot [0.12, 0.26, -0.24]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Sphere "pawHindLeft" {
+          group: 0
+          material: 1
+          parent: "lowerHindLeft"
+          position [0.12, 0.04, -0.17]
+          scale [0.045, 0.035, 0.05]
+        }
+
+        shape Capsule "upperForeRight" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [-0.12, 0.26, 0.22]
+          rotation [0.0453, 0, -0.0226, 0.9987]
+          scale [0.045, 0.4423, 0.045]
+          swings [
+            {
+              amplitude: -0.55
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 3.14159
+              pivot [-0.11, 0.48, 0.24]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Capsule "lowerForeRight" {
+          group: 0
+          material: 0
+          parent: "upperForeRight"
+          position [-0.12, 0.05, 0.26]
+          rotation [-0.094, 0, 0, 0.9956]
+          scale [0.035, 0.4276, 0.035]
+          swings [
+            {
+              amplitude: 0.8
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 4.71239
+              pivot [-0.12, 0.26, 0.22]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Sphere "pawForeRight" {
+          group: 0
+          material: 1
+          parent: "lowerForeRight"
+          position [-0.12, 0.04, 0.29]
+          scale [0.045, 0.035, 0.05]
+        }
+
+        shape Capsule "upperHindRight" {
+          group: 0
+          material: 0
+          parent: "chest"
+          position [-0.12, 0.26, -0.24]
+          rotation [0.0453, 0, -0.0226, 0.9987]
+          scale [0.045, 0.4423, 0.045]
+          swings [
+            {
+              amplitude: -0.55
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 0
+              pivot [-0.11, 0.48, -0.22]
+              wave: "sine"
+            }
+          ]
+        }
+
+        shape Capsule "lowerHindRight" {
+          group: 0
+          material: 0
+          parent: "upperHindRight"
+          position [-0.12, 0.05, -0.2]
+          rotation [-0.094, 0, 0, 0.9956]
+          scale [0.035, 0.4276, 0.035]
+          swings [
+            {
+              amplitude: 0.8
+              axis [1, 0, 0]
+              driver: "stride"
+              phase: 1.5708
+              pivot [-0.12, 0.26, -0.24]
+              wave: "halfSine"
+            }
+          ]
+        }
+
+        shape Sphere "pawHindRight" {
+          group: 0
+          material: 1
+          parent: "lowerHindRight"
+          position [-0.12, 0.04, -0.17]
+          scale [0.045, 0.035, 0.05]
+        }
+      }
+    }
+
+    prototype "fish" {
+      document {
+        name: "fish"
+        palette [
+          {
+            color: "#E8A93F"
+            roughness: 0.613
+            specular: 0.3
+          }
+          {
+            color: "#F2D98A"
+            roughness: 0.613
+            specular: 0.3
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Capsule "body" {
+          material: 0
+          position [0, 0, 0]
+          rotation [0.7071, 0, 0, 0.7071]
+          scale [0.09, 0.16, 0.09]
+        }
+
+        shape Cone "tail" {
+          blend: "SmoothUnion"
+          material: 1
+          position [0, 0, -0.22]
+          rotation [0.7071, 0, 0, 0.7071]
+          scale [0.1, 0.08, 0.1]
+          smooth: 0.04
+        }
+      }
+    }
+
+    prototype "bone" {
+      document {
+        name: "bone"
+        palette [
+          {
+            color: "#EDE6D6"
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Capsule "shaft" {
+          material: 0
+          position [0, 0.12, 0]
+          rotation [0, 0, 0.7071, 0.7071]
+          scale [0.07, 0.35, 0.07]
+        }
+
+        shape Sphere "knobA" {
+          material: 0
+          position [0.35, 0.12, 0]
+          scale [0.12, 0.12, 0.12]
+        }
+
+        shape Sphere "knobB" {
+          material: 0
+          position [-0.35, 0.12, 0]
+          scale [0.12, 0.12, 0.12]
+        }
+      }
+    }
+
+    prototype "pondBasin" {
+      document {
+        name: "pondBasin"
+        palette [
+          {
+            color: "#6E6A63"
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "wallWest" {
+          material: 0
+          position [-4.25, 0.4, 0]
+          scale [0.25, 0.9, 4.5]
+        }
+
+        shape Box "wallEast" {
+          material: 0
+          position [4.25, 0.4, 0]
+          scale [0.25, 0.9, 4.5]
+        }
+
+        shape Box "wallNorth" {
+          material: 0
+          position [0, 0.4, -4.25]
+          scale [4.5, 0.9, 0.25]
+        }
+
+        shape Box "wallSouth" {
+          material: 0
+          position [0, 0.4, 4.25]
+          scale [4.5, 0.9, 0.25]
+        }
+      }
+    }
+
+    prototype "den" {
+      document {
+        name: "den"
+        palette [
+          { color: "#6E6A63", roughness: 0.9, specular: 0.04 }
+          { color: "#4A3B2E", roughness: 0.85, specular: 0.04 }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "back" {
+          material: 0
+          position [0, 1.3, -1.5]
+          scale [2, 1.3, 0.15]
+        }
+        shape Box "side" {
+          material: 0
+          position [-1.85, 1.3, 0]
+          scale [0.15, 1.3, 1.5]
+        }
+        shape Box "roof" {
+          material: 1
+          position [0, 2.7, 0]
+          scale [2.1, 0.1, 1.65]
+        }
+      }
+    }
+  }
+}
+
+// The plot's count: `creatures` hounds, spiders, dragonflies and fish in all. The hounds and spiders are fixed (pond());
+// the dragonflies and the fish share the rest. Expand it in a document of its own that the plot's document imports, so
+// its inhabited placements come first and take the highest numbers, leaving the lowest to the rule-keyed hounds and
+// spiders; a document over the garden expands it again in its own body to change the count.
+template pondFlocks(creatures = 32) {
+  let flockCount = creatures - houndCount - spiderCount
+  let dragonflyCount = floorDivide(flockCount, 2)
+
+  bodies {
+    capacity: reserve + creatures
+  }
+
+  placements {
+    placement "dragonflies" {
+      prototype: "dragonfly"
+      position [-12, 2.5, -16]
+      inhabit {
+        count: dragonflyCount
+        kit: "dragonflyKit"
+        look: "dragonfly"
+        source: producer(name: "swarm")
+        distribution {
+          region: disc(radius: 2)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
+    }
+
+    placement "fish" {
+      prototype: "fish"
+      position [-12, 1.2, -16]
+      inhabit {
+        count: flockCount - dragonflyCount
+        kit: "fishKit"
+        look: "fish"
+        source: producer(name: "school")
+        distribution {
+          region: disc(radius: 1.5)
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+        }
+      }
+    }
+  }
+}

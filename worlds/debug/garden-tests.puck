@@ -1,0 +1,64 @@
+// The garden's pond plot (pond.puck), each scenario booted in the garden at its own count: `puck test
+// worlds/debug/garden-tests.puck`, and `--reproduce` to show the flocks, the stalkers, the crawl and the rumour replay
+// bit for bit. The spiders are bodies 8 to 11 and the hounds 12 to 17 (pond.puck's numbering); the visitor is body 0.
+// The garden's frames are dropped: each shows the debug world through a session of its own, which would boot and tick
+// the whole debug world beside every scenario, and none of these reads it.
+
+schema: "puck.world.definition.v1"
+basis: "garden"
+documentId: "garden-tests"
+
+// The crawl scenario drives a spider.
+grants [
+  { capability: Drive, grantee: "seat1", subject: "body:8" }
+]
+
+placements {
+  placement "arrival" {
+    $drop: true
+  }
+  placement "far" {
+    $drop: true
+  }
+}
+
+// Standing on the bone, within six metres of the hounds' yard, the visitor becomes the pack's companion; the pack
+// gathers round her, a hound claims the bone, and the hounds that see the claim trust the holder more (a cell a pair).
+test "the pack follows the visitor to the bone, and a claim spreads trust" {
+  when {
+    seat1: body.pose -20 0 -11.6 0 0 0
+    ticks 240
+  }
+  expect {
+    eventSeq >= 1
+    count(boneHolderTrust) >= 2
+    distance(body, 12, body, 0) <= 3
+  }
+}
+
+// A spider within ten metres of the visitor stalks her across the plot's navigation domain, round the den, until it
+// stands off her. Its first choice, made before she arrives, is to lurk, and it holds a choice two seconds.
+test "a spider stalks the visitor and closes on her" {
+  when {
+    seat1: body.pose -18 0 -18 0 0 0
+    ticks 360
+  }
+  expect {
+    distance(body, 8, body, 0) <= 2
+  }
+}
+
+// Driven into the den's back wall, a spider takes the standard crawl hold up the wall and onto the roof's underside,
+// upside down, spending its stamina as it goes.
+test "a spider driven into the den climbs its wall onto the ceiling on its stamina" {
+  when {
+    seat1: body.pose -20.5 0 -27.6 0 0 0 8
+    ticks 2
+    seat1: body.fly 1 0 0 0 0 0 1.6 8
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 8, y) >= 2
+    bodyState(body, 8, stamina) < 3
+  }
+}
