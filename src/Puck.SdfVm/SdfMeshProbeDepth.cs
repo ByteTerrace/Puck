@@ -3,21 +3,121 @@ using Puck.SignedDistance.Illumination;
 
 namespace Puck.SdfVm;
 
-/// <summary>Angular first-hit surface support and the receiver visibility rule shared with the views shader.</summary>
+/// <summary>
+/// A probe's hit buffer and the angular first-hit surface support derived from it, with the receiver visibility rule
+/// shared with the views shader.
+/// <para>One closest-hit ray per octahedral texel, at the trace's full reach, is the probe's whole geometric
+/// measurement (<see cref="TraceHits"/>): the radiance cubes are shaded from those hits under whatever lighting holds
+/// (<see cref="SdfMeshIrradiance"/>'s relight), and the bounded surface map views test receivers against is the same
+/// hits cut at the receiver support radius (<see cref="Surfaces"/>), so a lighting change re-shades and never re-traces,
+/// and no second ray set measures visibility.</para>
+/// </summary>
 public static class SdfMeshProbeDepth {
     private const int Size = SdfMeshIrradianceProbe.DepthSize;
 
-    private static readonly Vector3[] Directions = BuildDirections();
+    /// <summary>The hits one probe holds: one a texel.</summary>
+    public const int HitCount = (Size * Size);
+    /// <summary>The words one probe's hit buffer takes: per texel, the FP32 ray distance (negative for a back face,
+    /// positive infinity for a miss), then the hit's material in the low sixteen bits and its two signed octahedral normal
+    /// bytes, turned toward the probe, in the high sixteen, as a surface word packs them.</summary>
+    public const int HitWords = (2 * HitCount);
+    /// <summary>The material a hit records when the scene's exceeds sixteen bits; it shades as the default material.</summary>
+    public const int UnknownMaterial = ushort.MaxValue;
 
-    /// <summary>Traces one bounded first hit per texel. Each word packs an FP16 ray distance and
-    /// two signed octahedral normal bytes. A negative distance marks a miss and its measured reach.</summary>
+    private static readonly Vector3[] HitDirections = BuildDirections();
+    private static readonly float[] HitWeights = BuildWeights();
+
+    // The surface map's directions are the hit buffer's.
+    private static Vector3[] Directions => HitDirections;
+
+    /// <summary>Gets each texel's unit ray direction, the octahedral texel's centre.</summary>
+    public static ReadOnlySpan<Vector3> RayDirections => HitDirections;
+    /// <summary>Gets each texel's solid angle in steradians, summing to four pi: the quadrature weight a cube integrates
+    /// the texel's hit with, since octahedral texels are not of equal area.</summary>
+    public static ReadOnlySpan<float> RayWeights => HitWeights;
+
+    /// <summary>Traces one closest hit per texel out to a reach and writes the probe's hit buffer.</summary>
+    /// <param name="scene">The existing static mesh hierarchy.</param>
+    /// <param name="origin">The probe position.</param>
+    /// <param name="maximum">The rays' reach, in metres.</param>
+    /// <param name="hits">Receives <see cref="HitWords"/> words.</param>
+    /// <param name="backFaces">Receives how many rays met a back face.</param>
+    /// <returns>The number of closest-hit rays issued.</returns>
+    public static int TraceHits(SdfMeshIrradianceScene scene, Vector3 origin, float maximum, Span<uint> hits, out int backFaces) {
+        ArgumentNullException.ThrowIfNull(scene);
+        backFaces = 0;
+        for (var texel = 0; (texel < HitCount); texel++) {
+            var direction = HitDirections[texel];
+
+            if (!scene.Intersect(direction: direction, distance: out var distance, material: out var material, maximum: maximum, normal: out var normal, origin: origin)) {
+                hits[(2 * texel)] = BitConverter.SingleToUInt32Bits(value: float.PositiveInfinity);
+                hits[((2 * texel) + 1)] = 0u;
+                continue;
+            }
+
+            var back = (Vector3.Dot(vector1: normal, vector2: direction) > 0f);
+
+            if (back) {
+                normal = -normal;
+                backFaces++;
+            }
+            hits[(2 * texel)] = BitConverter.SingleToUInt32Bits(value: (back ? -distance : distance));
+            hits[((2 * texel) + 1)] = PackNormal(normal: normal) | ((uint)(((material >= 0) && (material < UnknownMaterial)) ? material : UnknownMaterial));
+        }
+        return HitCount;
+    }
+    /// <summary>Reads one texel's hit.</summary>
+    /// <param name="hits">A probe's hit buffer.</param>
+    /// <param name="texel">The texel.</param>
+    /// <param name="distance">Receives the ray distance to the hit.</param>
+    /// <param name="normal">Receives the hit's unit normal, turned toward the probe (a front face's outward normal).</param>
+    /// <param name="material">Receives the hit's material, <see cref="UnknownMaterial"/> when it was out of range.</param>
+    /// <param name="backFace">Receives whether the ray met a back face.</param>
+    /// <returns><see langword="false"/> for a miss.</returns>
+    public static bool TryHit(ReadOnlySpan<uint> hits, int texel, out float distance, out Vector3 normal, out int material, out bool backFace) {
+        var signed = BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)]);
+        var word = hits[((2 * texel) + 1)];
+
+        backFace = (signed < 0f);
+        distance = MathF.Abs(x: signed);
+        material = ((int)(word & 0xFFFFu));
+        if (float.IsPositiveInfinity(f: signed)) {
+            normal = Vector3.Zero;
+            return false;
+        }
+        normal = Normal(word: word);
+        return true;
+    }
+    /// <summary>Traces a probe's hits out to the receiver support radius and derives its surface map, as
+    /// <see cref="TraceHits"/> and <see cref="Surfaces"/> do together.</summary>
     /// <param name="scene">The existing static mesh hierarchy.</param>
     /// <param name="origin">The relocated probe position.</param>
     /// <param name="reach">The receiver support radius, in metres.</param>
     /// <param name="surfaces">Receives the packed surface map.</param>
     /// <returns>The number of closest-hit rays issued.</returns>
     public static int Trace(SdfMeshIrradianceScene scene, Vector3 origin, float reach, Span<uint> surfaces) {
-        var rays = 0;
+        Span<uint> hits = stackalloc uint[HitWords];
+        var rays = TraceHits(backFaces: out _, hits: hits, maximum: reach, origin: origin, scene: scene);
+
+        Surfaces(hits: hits, reach: reach, surfaces: surfaces);
+        return rays;
+    }
+    // A unit normal's two signed octahedral bytes, in a surface word's high sixteen bits.
+    private static uint PackNormal(Vector3 normal) {
+        var uv = SdfOctahedral.Encode(direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
+        var scale = SdfMeshIrradianceProbe.DepthNormalScale;
+        var x = ((int)Math.Round(a: (uv.X * scale)));
+        var y = ((int)Math.Round(a: (uv.Y * scale)));
+
+        return (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
+    }
+    /// <summary>Derives the surface map views test receivers against from a probe's hit buffer: each texel's hit within
+    /// the receiver support radius as an FP16 ray distance beside its two signed octahedral normal bytes, a negative
+    /// distance marking a miss within that reach, then one FP16 normal-gradient curvature per texel.</summary>
+    /// <param name="hits">The probe's hit buffer, traced at least as far as <paramref name="reach"/>.</param>
+    /// <param name="reach">The receiver support radius, in metres.</param>
+    /// <param name="surfaces">Receives the packed surface map.</param>
+    public static void Surfaces(ReadOnlySpan<uint> hits, float reach, Span<uint> surfaces) {
         Span<Vector3> points = stackalloc Vector3[(Size * Size)];
         Span<Vector3> normals = stackalloc Vector3[(Size * Size)];
 
@@ -25,21 +125,14 @@ public static class SdfMeshProbeDepth {
 
         for (var texel = 0; (texel < Directions.Length); texel++) {
             var direction = Directions[texel];
-            var hit = scene.Intersect(direction: direction, distance: out var distance,
-                material: out _, maximum: reach, normal: out var normal, origin: origin);
+            var distance = MathF.Abs(x: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)]));
 
-            rays++;
-            if (!hit) {
+            if (!(distance <= reach)) {
                 surfaces[texel] = BitConverter.HalfToUInt16Bits(value: ((Half)(-reach)));
                 points[texel] = normals[texel] = Vector3.Zero;
                 continue;
             }
-            if (Vector3.Dot(vector1: normal, vector2: direction) > 0f) { normal = -normal; }
-            var uv = SdfOctahedral.Encode(direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z));
-            var scale = SdfMeshIrradianceProbe.DepthNormalScale;
-            var x = ((int)Math.Round(a: (uv.X * scale)));
-            var y = ((int)Math.Round(a: (uv.Y * scale)));
-            var packed = (((uint)((byte)((sbyte)x))) << 16) | (((uint)((byte)((sbyte)y))) << 24);
+            var packed = (hits[((2 * texel) + 1)] & 0xFFFF0000u);
 
             surfaces[texel] = packed | BitConverter.HalfToUInt16Bits(value: ((Half)distance));
             points[texel] = (direction * ((float)((Half)distance)));
@@ -72,7 +165,6 @@ public static class SdfMeshProbeDepth {
 
             surfaces[(Directions.Length + (texel >> 1))] |= (bits << (16 * (texel & 1)));
         }
-        return rays;
     }
 
     private static Vector3 Normal(uint word) {
@@ -222,5 +314,45 @@ public static class SdfMeshProbeDepth {
             }
         }
         return directions;
+    }
+    // Each texel's solid angle: the spherical area of its sub-cells, each split into two spherical triangles
+    // (Van Oosterom and Strackee's formula). A sub-cell a fold line crosses is measured across the fold, a small error
+    // in so fine a subdivision, and the whole is rescaled to the sphere.
+    private static float[] BuildWeights() {
+        const int Steps = 16;
+        var weights = new float[(Size * Size)];
+        var total = 0.0;
+
+        for (var y = 0; (y < Size); y++) {
+            for (var x = 0; (x < Size); x++) {
+                var area = 0.0;
+
+                for (var sy = 0; (sy < Steps); sy++) {
+                    for (var sx = 0; (sx < Steps); sx++) {
+                        var u0 = (((x + (sx / ((double)Steps))) * 2.0 / Size) - 1.0);
+                        var u1 = (((x + ((sx + 1) / ((double)Steps))) * 2.0 / Size) - 1.0);
+                        var v0 = (((y + (sy / ((double)Steps))) * 2.0 / Size) - 1.0);
+                        var v1 = (((y + ((sy + 1) / ((double)Steps))) * 2.0 / Size) - 1.0);
+                        var a = SdfOctahedral.Decode(x: u0, y: v0);
+                        var b = SdfOctahedral.Decode(x: u1, y: v0);
+                        var c = SdfOctahedral.Decode(x: u1, y: v1);
+                        var d = SdfOctahedral.Decode(x: u0, y: v1);
+
+                        area += (Triangle(a: a, b: b, c: c) + Triangle(a: a, b: c, c: d));
+                    }
+                }
+                weights[(x + (Size * y))] = ((float)area);
+                total += area;
+            }
+        }
+        for (var texel = 0; (texel < weights.Length); texel++) { weights[texel] = ((float)((weights[texel] * (4.0 * Math.PI)) / total)); }
+        return weights;
+    }
+    private static double Triangle(Double3 a, Double3 b, Double3 c) {
+        static double Dot(Double3 p, Double3 q) => (((p.X * q.X) + (p.Y * q.Y)) + (p.Z * q.Z));
+        var triple = ((a.X * ((b.Y * c.Z) - (b.Z * c.Y))) + (a.Y * ((b.Z * c.X) - (b.X * c.Z)))) + (a.Z * ((b.X * c.Y) - (b.Y * c.X)));
+        var denominator = (((1.0 + Dot(p: a, q: b)) + Dot(p: b, q: c)) + Dot(p: c, q: a));
+
+        return Math.Abs(value: (2.0 * Math.Atan2(y: triple, x: denominator)));
     }
 }

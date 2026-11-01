@@ -306,6 +306,10 @@ public sealed record SdfFrame(
     /// <summary>Gets requested feedback sweeps after direct, capped by the tier. Null uses its layout limit.</summary>
     public int? IndirectBounces { get; init; }
 
+    /// <summary>Gets the irradiance work each frame grants the volume and the lighting age it reports past; the default
+    /// bounds nothing.</summary>
+    public SdfIndirectBudget IndirectBudget { get; init; }
+
     /// <summary>Gets receiver-only application controls, independent of the traced lighting.</summary>
     public SdfIndirectApplication IndirectApply { get; init; } = SdfIndirectApplication.Default;
 

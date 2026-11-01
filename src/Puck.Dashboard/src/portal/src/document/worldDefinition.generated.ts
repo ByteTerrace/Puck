@@ -9962,6 +9962,10 @@ export type WorldRenderIndirect = {
    * The boot tier, Medium by default. The live session lever and selected quality preset override it.
    */
   tier?: SdfIndirectTier;
+  /**
+   * The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.
+   */
+  budget?: WorldRenderIndirectBudget | null;
 };
 
 export type WorldRenderIndirectApply = {
@@ -9977,6 +9981,21 @@ export type WorldRenderIndirectApply = {
    * How much existing ambient occlusion dims indirect diffuse, zero disabling that attenuation.
    */
   contact?: BindableScalar;
+};
+
+export type WorldRenderIndirectBudget = {
+  /**
+   * The probes relit per frame, at least one.
+   */
+  relight?: number | null;
+  /**
+   * The probes whose hits are traced per frame, at least one.
+   */
+  trace?: number | null;
+  /**
+   * The lighting age, in seconds, past which the volume reports it is behind; positive.
+   */
+  age?: number | null;
 };
 
 export type WorldRenderIndirectSources = {

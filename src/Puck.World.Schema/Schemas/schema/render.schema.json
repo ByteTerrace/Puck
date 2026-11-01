@@ -493,6 +493,42 @@
           ],
           "default": "Medium",
           "title": "SdfIndirectTier"
+        },
+        "budget": {
+          "description": "The irradiance work each frame grants the volume and the lighting age it reports past; absent bounds nothing.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "relight": {
+              "description": "The probes relit per frame, at least one.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null
+            },
+            "trace": {
+              "description": "The probes whose hits are traced per frame, at least one.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "default": null
+            },
+            "age": {
+              "description": "The lighting age, in seconds, past which the volume reports it is behind; positive.",
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderIndirectBudget"
         }
       },
       "additionalProperties": false,

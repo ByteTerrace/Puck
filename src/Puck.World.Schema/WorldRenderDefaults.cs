@@ -320,11 +320,24 @@ public sealed record WorldRenderShadowCoverage(
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>
 /// <param name="Apply">Bindable receiver-only controls. They do not change the traced radiance.</param>
 /// <param name="Tier">The boot tier, Medium by default. The live session lever and selected quality preset override it.</param>
+/// <param name="Budget">The irradiance work each frame grants the volume and the lighting age it reports past; absent
+/// bounds nothing.</param>
 public sealed record WorldRenderIndirect(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectSources? Sources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Bounces = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectApply? Apply = null,
-    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>))] SdfIndirectTier Tier = SdfIndirectTier.Medium);
+    [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>))] SdfIndirectTier Tier = SdfIndirectTier.Medium,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? Budget = null);
+/// <summary>The irradiance volume's budget: a light change costs a relight of the probes' cached hits and a geometry
+/// change costs a trace, each granted per rendered frame, and overload lengthens the lighting's age rather than the
+/// frame. Every member is optional; an absent one leaves that part unbounded.</summary>
+/// <param name="Relight">The probes relit per frame, at least one.</param>
+/// <param name="Trace">The probes whose hits are traced per frame, at least one.</param>
+/// <param name="Age">The lighting age, in seconds, past which the volume reports it is behind; positive.</param>
+public sealed record WorldRenderIndirectBudget(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Relight = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Trace = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Age = null);
 /// <summary>Gains applied once where each source enters the traced light.</summary>
 /// <param name="Lights">Explicit diffuse light gain.</param>
 /// <param name="Emission">Material emission gain.</param>

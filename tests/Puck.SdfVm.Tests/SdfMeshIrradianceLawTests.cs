@@ -152,18 +152,44 @@ public sealed class SdfMeshIrradianceLawTests {
         _ = Trace(volume, frame);
         Assert.Equal(0f, volume.LightVisibility(new Vector3(x: 0f, y: 2f, z: 0f), Vector3.UnitY, 0));
     }
+    /// <summary>A light change relights the probes' cached hits and traces nothing; a budget bounds the relights each
+    /// frame grants.</summary>
     [Fact]
-    public void DepthTracingUsesAtMostOneRayPerTexelPerProbe() {
+    public void ALightChangeRelightsWithoutATraceUnderTheFramesBudget() {
+        var volume = new SdfMeshIrradiance();
+        var frame = Frame();
+
+        _ = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
+        var traced = volume.Counters.Read(kind: SdfMeshIrradiance.Traced);
+        var relit = volume.Counters.Read(kind: SdfMeshIrradiance.Relit);
+        var lights = new SdfLights();
+
+        lights.Set(index: 0, light: frame.Lights.Records[0] with { Weight = (0.5f * frame.Lights.Records[0].Weight) });
+        lights.Count = 1;
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
+
+        var dimmed = frame with { Lights = lights, IndirectBudget = new SdfIndirectBudget(Relight: 100, Trace: 0, Age: 0f) };
+
+        _ = volume.Stage(bakePending: false, frame: dimmed, tier: SdfIndirectTier.Medium, write: _ => { });
+        _ = SpinWait.SpinUntil(condition: () => (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) >= (relit + 100)), millisecondsTimeout: 30_000);
+        // One frame's grant bounds the relights before the next frame grants more.
+        Assert.Equal(expected: 100L, actual: (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) - relit));
+        _ = Trace(frame: dimmed with { IndirectBudget = SdfIndirectBudget.Unbounded }, tier: SdfIndirectTier.Medium, volume: volume);
+        Assert.Equal(expected: traced, actual: volume.Counters.Read(kind: SdfMeshIrradiance.Traced));
+        Assert.True(condition: (volume.Counters.Read(kind: SdfMeshIrradiance.Relit) > (relit + 200L)));
+    }
+    [Fact]
+    public void AProbeTracesOneHitBufferOfOneRayPerTexel() {
         var volume = new SdfMeshIrradiance();
 
         var (parameters, _) = Trace(volume, Frame() with { TickLocked = true, IndirectBounces = 0, MeshDraws = [] }, SdfIndirectTier.Medium);
         var description = volume.Describe();
-        var count = long.Parse(description.Split("depth-rays=")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
+        var count = long.Parse(description.Split("traced-rays=")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
 
         var probes = 0L;
 
         for (var level = 0; (level < SdfMeshIrradianceProbe.Levels); level++) { probes += parameters.Window(level: level).Count; }
-        Assert.InRange(count, 1L, (probes * 256L));
+        Assert.Equal(expected: (probes * SdfMeshProbeDepth.HitCount), actual: count);
     }
     [Fact]
     public void AProbesPublishedSkyIsItsOwnMeasuredVisibility() {
@@ -596,16 +622,22 @@ public sealed class SdfMeshIrradianceLawTests {
 
         Assert.Equal(expected: (here.Low.X + 20), actual: back.Low.X);
     }
-    /// <summary>A lockstep frame waits for its scene and window's trace, including a cold scene and a replacement:
-    /// each writes the same probes the asynchronous trace lands over many frames, in one staging.</summary>
+    /// <summary>A lockstep frame waits for its scene and window's trace and relights the window from no bounce until it
+    /// converges, in one staging, including a cold scene and a replacement: its probes are a function of the scene,
+    /// lighting and window alone, the same on a fresh volume as on one whose asynchronous frames left other bounce.</summary>
     [Fact]
     public void ALockstepFrameRendersTheWindowTracedToTheEnd() {
-        var (_, landed) = Trace(frame: Frame(), volume: new SdfMeshIrradiance());
-        var locked = new SdfMeshIrradiance();
         var frame = (Frame() with { TickLocked = true });
+        var fresh = new SdfMeshIrradiance();
+        var landed = Array.Empty<uint>();
+
+        _ = fresh.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => landed = memory.ToArray());
+
+        var locked = new SdfMeshIrradiance();
         var writes = 0;
         var words = Array.Empty<uint>();
 
+        _ = Trace(frame: (frame with { TickLocked = false }), volume: locked);
         _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => {
             writes++;
             words = memory.ToArray();
@@ -618,9 +650,9 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.Equal(actual: writes, expected: 1);
 
         var changed = frame with { MeshDraws = [frame.MeshDraws[0], frame.MeshDraws[2]] };
+        var replacement = Array.Empty<uint>();
 
-        var (_, replacement) = Trace(frame: changed with { TickLocked = false }, volume: new SdfMeshIrradiance());
-
+        _ = new SdfMeshIrradiance().Stage(bakePending: false, frame: changed, tier: SdfIndirectTier.High, write: memory => replacement = memory.ToArray());
         _ = locked.Stage(bakePending: false, frame: changed, tier: SdfIndirectTier.High, write: memory => {
             writes++;
             words = memory.ToArray();
@@ -679,7 +711,8 @@ public sealed class SdfMeshIrradianceLawTests {
         var (_, unlitWords) = Trace(frame: frame with { Lights = new SdfLights() }, volume: volume);
         var unlitUpper = Probe(parameters: in parameters, words: unlitWords, x: 0, y: 5, z: 0);
 
-        Assert.Equal(expected: 0f, actual: Luminance(face: 3, probe: unlitUpper));
+        // Bounce the lit room left in the cache decays over the relights that converge it, to under a thousandth.
+        Assert.True(condition: (Luminance(face: 3, probe: unlitUpper) < (0.001f * upperLuminance)), userMessage: $"unlit={Luminance(face: 3, probe: unlitUpper)} lit={upperLuminance}");
         Assert.Equal(expected: 0u, actual: unlitUpper[SdfMeshIrradianceProbe.LightsWord]);
     }
     [Fact]
