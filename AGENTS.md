@@ -91,6 +91,12 @@ agent works in that mode by default, without asking:
   - Fundamentals first: the work is the engine's fundamental problems, those
     already known and those found along the way (frame time against the 60 FPS
     bar, build and bake times, duplicated systems), ahead of new features.
+  - Vigilance against duplication: long-term engine code health matters. Every
+    agent watches for duplicate code in whatever it reads or touches (a second
+    implementation of a mechanism, copied logic, parallel helpers, two paths
+    to one result) and refactors it to one, fixing every caller in the same
+    change; one too large for the change at hand goes into the refactoring
+    campaign's packet with its file and line, never left unrecorded.
   - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
     derivation fingerprint, the file-length and comment-smell ratchets, canary
     and counters ceilings, test durations, `VerifiedCode` brands, the emulator
