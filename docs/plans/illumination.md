@@ -450,7 +450,7 @@ needlessly.
 
 ### Step 1 status
 
-Landed and checked on the debug world on Direct3D 12:
+Landed and checked on the debug world on Direct3D 12, and by eye on Vulkan:
 
 - The wrapped-diffuse query, with casters within the receiver's own depth
   transmitting. Indoors under the slab beside the PRIMITIVES plinths, the
@@ -489,8 +489,12 @@ Open in step 1:
   traced bounce, which a style tints as its shadow band, so a banded material
   there reads as its shadow tone; decision 3 (step 2) is what makes that band
   read the volume's colour.
-- **A Vulkan leg and a dawn leg** of the checks above beyond what the lane's
-  report lists.
+- **A dawn leg.** A windowed Vulkan boot showed the same three results (no sun
+  on the cheek under the slab, the soft penumbra under `world.toon on`, the
+  STYLES row's banded sphere beside its continuous twin). With the sun at about
+  10 degrees the default style's 0.45 threshold puts every horizontal surface in
+  the shadow band, so a dawn penumbra check needs the authored day cycle and a
+  style tuned for it.
 
 ## Corrections
 
