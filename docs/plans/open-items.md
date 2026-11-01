@@ -1163,6 +1163,16 @@ The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
+- The leaks-2 review (Codex Astra; the leaks3 lane is fixing all four):
+  [medium] Presentation-tier projection and hydration drop the screen-material
+  table (`src/Puck.World.Schema/WorldProjection.cs:115`, `:316`, `:792`), so a
+  disclosed world's screens render untreated; [medium] screen material ids and
+  both reference sites are absent from `WorldNameRegistry`, so aliased modules
+  collide on a material id; [medium] a neutral or scanline-only material drops
+  the screen edge's footprint protection
+  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:312`);
+  [low] `worlds/standard/walker.puck:22` copies the Moth's `walk` program
+  (`worlds/debug/avatars/moth.puck:223`).
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
