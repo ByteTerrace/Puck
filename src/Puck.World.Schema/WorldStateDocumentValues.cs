@@ -1,9 +1,4 @@
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Linq.Expressions;
-using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 using Puck.Maths;
 
@@ -19,40 +14,37 @@ namespace Puck.World;
 /// indistinguishable from a file-loaded one. A document leaving for a boundary that does not carry the state table
 /// itself runs <see cref="TryFlatten"/> instead, since a reference the receiver cannot answer is a dangling
 /// pointer.</para>
-/// <para>Traversal metadata is shared by runtime type. Branches whose sealed types cannot carry a bound value
-/// are omitted; document contents are always read afresh, including polymorphic and mutable collections.</para>
+/// <para>Each operation is a visitor of the one document walk (<see cref="WorldDocumentWalker"/>) whose surface is
+/// <see cref="IDocumentStateValue"/>: the walk enters only branches that can hold a bound value, reads document contents
+/// afresh (polymorphic and mutable collections included), and never enters a value holder's own members.</para>
 /// </remarks>
 public static class WorldStateDocumentValues {
+    private static readonly WorldDocumentWalker Walker = new(isSurface: static type => typeof(IDocumentStateValue).IsAssignableFrom(c: type));
+    // The rows each definition's document values name, collected once per definition. A value holder can drop its
+    // reference (Detach) but never gain one, so a set collected earlier is never missing a row the definition names.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
+
     /// <summary>Creates an owned projection whose bound values read the live arena. Seed rows remain declarations.</summary>
     public static WorldDefinition BindLive(WorldDefinition definition, StateArena arena, Func<ArenaTime> clock) {
         if (ReferencedRows(definition: definition).Count == 0) { return definition with { }; }
         var owned = (JsonSerializer.Deserialize(utf8Json: WorldDefinitionSerialization.Serialize(definition: definition),
             jsonTypeInfo: WorldJsonContext.Default.WorldDefinition) ?? throw new InvalidOperationException(message: "The binding projection did not deserialize."))
             with { StateRaw = definition.StateRaw, DocumentDirectory = definition.DocumentDirectory };
-        var seen = RentSeen();
-        try {
-            if (!TryVisit(value: owned, path: "definition", definition: owned, walk: Walk.Bind, soughtRow: null, collected: null,
-                seen: seen, deferDrawSites: false, found: out _, reason: out var reason, live: new LiveBindings(arena, clock))) {
-                throw new InvalidOperationException(message: reason);
-            }
-        } finally { ReturnSeen(seen); }
+
+        if (!Run(
+            definition: owned,
+            live: new LiveBindings(arena, clock),
+            reason: out var reason,
+            root: "definition",
+            value: owned,
+            walk: Walk.Bind
+        )) {
+            throw new InvalidOperationException(message: reason);
+        }
+
         return owned;
     }
-    private const int MaxShapeDepth = 64;
 
-    // The visited set one walk on this thread reuses; a walk takes it out while it runs, so a walk started from
-    // inside another (a resolver that parses a nested document) allocates its own rather than sharing one.
-    [ThreadStatic]
-    private static HashSet<object>? Seen;
-
-    private static readonly ConcurrentDictionary<Type, ValueProperty[]> PropertyCache = new();
-    private static readonly ConcurrentDictionary<Type, Traversal> TraversalCache = new();
-    // The rows each definition's document values name, collected once per definition. A value holder can drop its
-    // reference (Detach) but never gain one, so a set collected earlier is never missing a row the definition names.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldDefinition, HashSet<string>> ReferencedRowSets = new();
-
-    private sealed record ValueProperty(string Name, Type PropertyType, Func<object, object?> GetValue);
-    private sealed record Traversal(bool Skip, ValueProperty[] Properties);
     // What the one walk does when it reaches a bound value.
     private enum Walk {
         // Read the referenced cell and fill the value, leaving the reference attached for canonical write-back.
@@ -68,163 +60,6 @@ public static class WorldStateDocumentValues {
         Bind,
     }
 
-    // Only a walk that can name a refusal builds the diagnostic path; a search or a collection touches nothing and
-    // reports no path, so it never formats one.
-    private static bool BuildsPath(Walk walk) => (walk is Walk.Resolve or Walk.Flatten);
-    // Cache type shapes, never the contents of a document: mutable collections and value holders may acquire a
-    // reference between walks. A sealed property's shape can prove an entire literal branch irrelevant. Open
-    // types and recursive shapes stay conservative, since a subtype or a later link may contain a bound value.
-    private static bool CanContainValue(Type type, HashSet<Type> path, bool exactType = false) {
-        if (typeof(IDocumentStateValue).IsAssignableFrom(c: type)) {
-            return true;
-        }
-        if (IsLeaf(type: type)) {
-            return false;
-        }
-        if (
-            !exactType &&
-            !type.IsSealed &&
-            !type.IsValueType
-        ) {
-            return true;
-        }
-        // Recursive generic properties can expand into a new closed type at every level, so type identity alone
-        // does not bound shape discovery. Beyond this depth keep walking actual values conservatively.
-        if (
-            (path.Count >= MaxShapeDepth) ||
-            !path.Add(item: type)
-        ) {
-            return true;
-        }
-
-        try {
-            if (type.IsArray) {
-                return CanContainValue(
-                    type: type.GetElementType()!,
-                    path: path
-                );
-            }
-            if (typeof(IEnumerable).IsAssignableFrom(c: type)) {
-                // These exact BCL implementations enumerate their declared element types through IEnumerable.
-                // An arbitrary generic enumerable may implement its non-generic enumeration differently.
-                if (
-                    type.IsGenericType &&
-                    (type.GetGenericTypeDefinition() == typeof(List<>))
-                ) {
-                    return CanContainValue(
-                        type: type.GenericTypeArguments[0],
-                        path: path
-                    );
-                }
-                if (
-                    type.IsGenericType &&
-                    (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-                ) {
-                    return (
-                        CanContainValue(
-                        type: type.GenericTypeArguments[0],
-                        path: path
-                    ) ||
-                        CanContainValue(
-                        type: type.GenericTypeArguments[1],
-                        path: path
-                    )
-                    );
-                }
-                return true;
-            }
-            return Properties(type: type).Any(predicate: property => CanContainValue(
-                type: property.PropertyType,
-                path: path
-            ));
-        } finally {
-            path.Remove(item: type);
-        }
-    }
-    // Whether a property is DERIVED rather than document data, and so no part of what a document-value reference can
-    // be retained in.
-    //
-    // An unconditional [JsonIgnore] is exactly that marker: the member is computed from the document, never written
-    // to it and never read back from it. Visiting one is not merely redundant work over data the walk already covers
-    // through the member it derives from — it can be an outright fault, because a derived member is free to refuse a
-    // read that has no meaning. WorldDefinition.PopulationReconnectGraceTicks is the live case: at rate 0 a positive
-    // authored grace compiles to CompiledTickDuration.Never, whose Ticks throws BY DESIGN so no caller can read a
-    // plausible-but-wrong tick count out of it. Walking it made every rate-0 world with a positive grace fail to
-    // construct at all.
-    //
-    // A CONDITIONAL ignore is not this marker and must still be visited: the raw backing members that carry a
-    // document's own absent-vs-present distinction are written [JsonIgnore(Condition = WhenWritingNull)], and they
-    // are the document.
-    private static bool IsDerived(PropertyInfo property) => (property.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always });
-    private static bool IsLeaf(Type type) =>
-        (type.IsPrimitive ||
-        type.IsEnum ||
-        type.IsPointer ||
-        (type == typeof(string)) ||
-        (type == typeof(decimal)) ||
-        (type == typeof(DateTime)) ||
-        (type == typeof(DateTimeOffset)) ||
-        (type == typeof(Guid)) ||
-        (type == typeof(JsonElement)));
-    private static Traversal Plan(Type type) => TraversalCache.GetOrAdd(
-        key: type,
-        valueFactory: static type => {
-            if (!CanContainValue(
-                exactType: true,
-                path: [],
-                type: type
-            )) {
-                return new Traversal(
-                    Properties: [],
-                    Skip: true
-                );
-            }
-            return new Traversal(
-                Skip: false,
-                Properties: (typeof(IEnumerable).IsAssignableFrom(c: type)
-                ? []
-                : [.. Properties(type: type).Where(predicate: static property => CanContainValue(
-                        type: property.PropertyType,
-                        path: []
-                    ))])
-            );
-        }
-    );
-    private static ValueProperty[] Properties(Type type) => PropertyCache.GetOrAdd(
-        key: type,
-        valueFactory: static type => {
-            if (WorldModelShape.Of(type: type) is { } shape) {
-                return [.. shape.Members.Concat(second: shape.Properties)
-                    .Where(predicate: static member => (member.Get is not null))
-                    .Select(selector: static member => new ValueProperty(member.Member, member.Type, member.Get!))];
-            }
-            // The graph API also accepts caller-owned shapes. Bind their getters once; walking a value invokes
-            // a delegate, never PropertyInfo.GetValue. Engine documents use the generated readers above.
-            return [.. type.GetProperties(bindingAttr: BindingFlags.Instance | BindingFlags.Public)
-                .Where(predicate: static property => (property.CanRead && !property.PropertyType.IsByRefLike && (property.GetIndexParameters().Length == 0) && !IsDerived(property: property)))
-                .Select(selector: static property => {
-                    var value = Expression.Parameter(name: "value", type: typeof(object));
-                    var getter = Expression.Lambda<Func<object, object?>>(Expression.Convert(expression: Expression.Property(expression: Expression.Convert(expression: value, type: property.DeclaringType!), property: property), type: typeof(object)), value).Compile();
-
-                    return new ValueProperty(property.Name, property.PropertyType, getter);
-                })];
-        }
-    );
-    private static HashSet<object> RentSeen() {
-        var seen = Seen;
-
-        if (seen is null) {
-            return new HashSet<object>(comparer: ReferenceEqualityComparer.Instance);
-        }
-
-        Seen = null;
-
-        return seen;
-    }
-    private static void ReturnSeen(HashSet<object> seen) {
-        seen.Clear();
-        Seen = seen;
-    }
     private sealed record LiveBindings(StateArena Arena, Func<ArenaTime> Clock);
     private sealed class LiveValue(StateArena arena, StateHandle row, CellName name, Func<ArenaTime> clock) {
         private ulong m_generation = ulong.MaxValue;
@@ -247,56 +82,102 @@ public static class WorldStateDocumentValues {
             return m_text;
         }
     }
-    private static bool TryVisit(object? value, string path, WorldDefinition definition, Walk walk, string? soughtRow, ISet<string>? collected, HashSet<object> seen, bool deferDrawSites, out bool found, out string reason, LiveBindings? live = null) {
-        found = false;
-        reason = string.Empty;
+    // Reads or fills each document-value holder the walk reaches, according to the operation; the walk never enters
+    // a holder's members, and stops at the first refusal or, for a search, the first hit.
+    private sealed class Visitor(
+        Walk walk,
+        WorldDefinition? definition,
+        string root,
+        string? soughtRow,
+        ISet<string>? collected,
+        bool deferDrawSites,
+        LiveBindings? live
+    ) : IWorldDocumentVisitor {
+        private bool m_found;
+        private bool m_refused;
 
-        if (value is null) {
+        public bool Found => m_found;
+        public string Reason { get; private set; } = string.Empty;
+        public bool Refused => m_refused;
+        public bool Stopped => (m_refused || m_found);
+
+        public bool Enter(object value, WorldDocumentSite site) {
+            if (value is IDocumentStateValue stateValue) {
+                Read(
+                    site: site,
+                    stateValue: stateValue
+                );
+
+                return false;
+            }
+
             return true;
         }
 
-        if (value is IDocumentStateValue stateValue) {
+        // The diagnostic path is formatted only for a refusal; a search or a collection never builds one.
+        private string Refusal(WorldDocumentSite site, string reference, string message) {
+            var path = site.Path;
+
+            return $"{((path.Length == 0) ? root : $"{root}.{path}")} reference '{reference}' {message}";
+        }
+        private void Read(WorldDocumentSite site, IDocumentStateValue stateValue) {
             if (stateValue.Reference is not { } reference) {
-                return true;
+                return;
             }
 
             if (StateBinding.Parse(token: reference) is not (var row, var key, _)) {
                 // A reference that names no row is still a reference the document retains: a search for any reference
                 // finds it, so its holder is resolved and refused by name rather than read as though it held a value.
                 if (walk == Walk.Find) {
-                    found = (soughtRow is null);
-                    return true;
+                    m_found = (soughtRow is null);
+
+                    return;
                 }
 
-                reason = $"{path} reference '{reference}' must be state.<row>[.<key>]";
-                return false;
+                Refuse(reason: Refusal(message: "must be state.<row>[.<key>]", reference: reference, site: site));
+
+                return;
             }
 
             if (walk == Walk.Find) {
-                found = ((soughtRow is null) || string.Equals(
+                m_found = ((soughtRow is null) || string.Equals(
                     a: row,
                     b: soughtRow,
                     comparisonType: StringComparison.Ordinal
                 ));
-                return true;
+
+                return;
             }
 
             if (walk == Walk.Collect) {
-                collected!.Add(item: row);
-                return true;
+                _ = collected!.Add(item: row);
+
+                return;
             }
 
             if (walk == Walk.Bind) {
-                if ((live is null) || !live.Arena.Catalog.TryResolve(lane: StateLane.Document, name: row, handle: out var handle) ||
-                    !CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out reason)) { return false; }
-                var reader = new LiveValue(live.Arena, handle, name, live.Clock);
-                stateValue.Bind(read: reader.Read);
-                return true;
+                var name = default(CellName);
+                var handle = default(StateHandle);
+                var nameReason = string.Empty;
+
+                if (
+                    (live is null) ||
+                    !live.Arena.Catalog.TryResolve(lane: StateLane.Document, name: row, handle: out handle) ||
+                    !CellName.TryParse(candidate: (key ?? StateRow.SlotKey.Value), name: out name, reason: out nameReason)
+                ) {
+                    Refuse(reason: Refusal(message: $"names no live document row ({nameReason})", reference: reference, site: site));
+
+                    return;
+                }
+
+                stateValue.Bind(read: new LiveValue(live!.Arena, handle, name, live.Clock).Read);
+
+                return;
             }
 
             if (!WorldStateReader.TryRead(
                 arena: live?.Arena,
-                definition: definition,
+                definition: definition!,
                 engineTick: live?.Clock().EngineTick ?? 0UL,
                 key: key,
                 rawValue: out var rawValue,
@@ -305,8 +186,9 @@ public static class WorldStateDocumentValues {
                 text: out var text,
                 tick: live?.Clock().Tick ?? 0UL
             )) {
-                reason = $"{path} reference '{reference}' must name a declared state cell";
-                return false;
+                Refuse(reason: Refusal(message: "must name a declared state cell", reference: reference, site: site));
+
+                return;
             }
 
             // A numeric cell is offered as its decimal spelling — the same text the document would carry literally
@@ -320,16 +202,18 @@ public static class WorldStateDocumentValues {
                 (rawValue is null) &&
                 (text is null)
             ) {
-                return true;
+                return;
             }
             if (stateRow.Kind == CellKind.Vector) {
-                reason = $"{path} reference '{reference}' names vector row '{stateRow.Name}'; vector rows cannot be resolved as document values";
-                return false;
+                Refuse(reason: Refusal(message: $"names vector row '{stateRow.Name}'; vector rows cannot be resolved as document values", reference: reference, site: site));
+
+                return;
             }
             if (stateRow.Kind != CellKind.Text) {
                 if (rawValue is not { } raw) {
-                    reason = $"{path} reference '{reference}' names a cell that holds no value";
-                    return false;
+                    Refuse(reason: Refusal(message: "names a cell that holds no value", reference: reference, site: site));
+
+                    return;
                 }
 
                 text = stateRow.Kind switch {
@@ -342,102 +226,83 @@ public static class WorldStateDocumentValues {
                 };
             }
             if (text is null) {
-                reason = $"{path} reference '{reference}' names a cell that holds no value";
-                return false;
+                Refuse(reason: Refusal(message: "names a cell that holds no value", reference: reference, site: site));
+
+                return;
             }
 
             if (!stateValue.TryResolve(
                 reason: out var parseReason,
                 text: text
             )) {
-                reason = $"{path} reference '{reference}' must hold {stateValue.ExpectedValue}: {parseReason}";
-                return false;
+                Refuse(reason: Refusal(message: $"must hold {stateValue.ExpectedValue}: {parseReason}", reference: reference, site: site));
+
+                return;
             }
 
             if (walk == Walk.Flatten) {
                 stateValue.Detach();
             }
-
-            return true;
         }
-
-        var type = value.GetType();
-
-        var traversal = Plan(type: type);
-
-        if (traversal.Skip) {
-            return true;
+        private void Refuse(string reason) {
+            Reason = reason;
+            m_refused = true;
         }
+    }
 
-        if (
-            !type.IsValueType &&
-            !seen.Add(item: value)
-        ) {
-            return true;
-        }
+    // Runs one operation over a value; false when a reference was refused, with the named reason.
+    private static bool Run(
+        object value,
+        Walk walk,
+        string root,
+        out string reason,
+        WorldDefinition? definition = null,
+        string? soughtRow = null,
+        ISet<string>? collected = null,
+        bool deferDrawSites = false,
+        LiveBindings? live = null
+    ) => Run(
+        collected: collected,
+        definition: definition,
+        deferDrawSites: deferDrawSites,
+        found: out _,
+        live: live,
+        reason: out reason,
+        root: root,
+        soughtRow: soughtRow,
+        value: value,
+        walk: walk
+    );
+    private static bool Run(
+        object value,
+        Walk walk,
+        string root,
+        out bool found,
+        out string reason,
+        WorldDefinition? definition = null,
+        string? soughtRow = null,
+        ISet<string>? collected = null,
+        bool deferDrawSites = false,
+        LiveBindings? live = null
+    ) {
+        var visitor = new Visitor(
+            collected: collected,
+            definition: definition,
+            deferDrawSites: deferDrawSites,
+            live: live,
+            root: root,
+            soughtRow: soughtRow,
+            walk: walk
+        );
 
-        if (value is IEnumerable sequence) {
-            var index = 0;
+        Walker.Walk(
+            root: value,
+            visitor: visitor
+        );
+        found = visitor.Found;
+        reason = visitor.Reason;
 
-            foreach (var item in sequence) {
-                if (!TryVisit(
-                    definition: definition,
-                    found: out var itemFound,
-                    path: (BuildsPath(walk: walk)
-                    ? $"{path}[{index}]"
-                    : string.Empty),
-                    reason: out reason,
-                    seen: seen,
-                    deferDrawSites: deferDrawSites,
-                    soughtRow: soughtRow,
-                    collected: collected,
-                    value: item,
-                    walk: walk
-                    , live: live
-                )) {
-                    return false;
-                }
-
-                if (itemFound) {
-                    found = true;
-                    return true;
-                }
-                index++;
-            }
-            return true;
-        }
-
-        foreach (var property in traversal.Properties) {
-            var child = property.GetValue(value);
-
-            if (child is null) {
-                continue;
-            }
-            if (!TryVisit(
-                value: child,
-                path: (BuildsPath(walk: walk)
-                ? $"{path}.{char.ToLowerInvariant(c: property.Name[0])}{property.Name[1..]}"
-                : string.Empty),
-                definition: definition,
-                soughtRow: soughtRow,
-                collected: collected,
-                seen: seen,
-                deferDrawSites: deferDrawSites,
-                found: out var propertyFound,
-                reason: out reason,
-                walk: walk
-                , live: live
-            )) {
-                return false;
-            }
-
-            if (propertyFound) {
-                found = true;
-                return true;
-            }
-        }
-
-        return true;
+        return !visitor.Refused;
     }
 
     /// <summary>Adds the name of every state row a retained document-value reference in <paramref name="definition"/>
@@ -493,24 +358,13 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: rows);
 
-        var seen = RentSeen();
-
-        try {
-            _ = TryVisit(
-                collected: rows,
-                deferDrawSites: false,
-                definition: null!,
-                found: out _,
-                path: "definition",
-                reason: out _,
-                seen: seen,
-                soughtRow: null,
-                value: graph,
-                walk: Walk.Collect
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
+        _ = Run(
+            collected: rows,
+            reason: out _,
+            root: "definition",
+            value: graph,
+            walk: Walk.Collect
+        );
     }
     /// <summary>Reports whether <paramref name="graph"/> retains any document-value reference at all.</summary>
     /// <param name="graph">The object graph to walk — a definition, or an egress document composed over one.</param>
@@ -518,27 +372,15 @@ public static class WorldStateDocumentValues {
     public static bool HasReference(object graph) {
         ArgumentNullException.ThrowIfNull(argument: graph);
 
-        var seen = RentSeen();
+        _ = Run(
+            found: out var found,
+            reason: out _,
+            root: "document",
+            value: graph,
+            walk: Walk.Find
+        );
 
-        try {
-            return (
-                TryVisit(
-                collected: null,
-                deferDrawSites: false,
-                definition: null!,
-                found: out var found,
-                path: "document",
-                reason: out _,
-                seen: seen,
-                soughtRow: null,
-                value: graph,
-                walk: Walk.Find
-            ) &&
-                found
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
+        return found;
     }
     /// <summary>Reports whether <paramref name="graph"/> — one section or value holder of
     /// <paramref name="definition"/> — carries a document-value reference naming <paramref name="rowName"/>.</summary>
@@ -551,27 +393,17 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentException.ThrowIfNullOrEmpty(argument: rowName);
 
-        var seen = RentSeen();
+        _ = Run(
+            definition: definition,
+            found: out var found,
+            reason: out _,
+            root: "definition",
+            soughtRow: rowName,
+            value: graph,
+            walk: Walk.Find
+        );
 
-        try {
-            return (
-                TryVisit(
-                collected: null,
-                deferDrawSites: false,
-                definition: definition,
-                found: out var found,
-                path: "definition",
-                reason: out _,
-                seen: seen,
-                soughtRow: rowName,
-                value: graph,
-                walk: Walk.Find
-            ) &&
-                found
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
+        return found;
     }
     /// <summary>
     /// Resolves every document-value reference in <paramref name="graph"/> against <paramref name="source"/>'s Text
@@ -592,25 +424,16 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: source);
 
-        var seen = RentSeen();
-
-        try {
-            return TryVisit(
-                collected: null,
-                deferDrawSites: false,
-                definition: source,
-                found: out _,
-                path: "document",
-                reason: out reason,
-                seen: seen,
-                soughtRow: null,
-                value: graph,
-                walk: Walk.Flatten,
-                live: arena is null ? null : new LiveBindings(arena, () => time ?? ArenaTime.Origin)
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
+        return Run(
+            definition: source,
+            live: (arena is null)
+                ? null
+                : new LiveBindings(arena, () => time ?? ArenaTime.Origin),
+            reason: out reason,
+            root: "document",
+            value: graph,
+            walk: Walk.Flatten
+        );
     }
     /// <summary>
     /// Rehydrates and resolves a fresh candidate after a referenced state row changes, retaining the input object
@@ -678,24 +501,14 @@ public static class WorldStateDocumentValues {
     public static bool TryResolve(WorldDefinition definition, out string reason, bool deferDrawSites = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var seen = RentSeen();
-
-        try {
-            return TryVisit(
-                collected: null,
-                deferDrawSites: deferDrawSites,
-                definition: definition,
-                found: out _,
-                path: "definition",
-                reason: out reason,
-                seen: seen,
-                soughtRow: null,
-                value: definition,
-                walk: Walk.Resolve
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
+        return Run(
+            definition: definition,
+            deferDrawSites: deferDrawSites,
+            reason: out reason,
+            root: "definition",
+            value: definition,
+            walk: Walk.Resolve
+        );
     }
     /// <summary>
     /// Resolves every document-value reference in <paramref name="graph"/> against <paramref name="source"/>'s
@@ -717,23 +530,12 @@ public static class WorldStateDocumentValues {
         ArgumentNullException.ThrowIfNull(argument: graph);
         ArgumentNullException.ThrowIfNull(argument: source);
 
-        var seen = RentSeen();
-
-        try {
-            return TryVisit(
-                collected: null,
-                deferDrawSites: false,
-                definition: source,
-                found: out _,
-                path: "document",
-                reason: out reason,
-                seen: seen,
-                soughtRow: null,
-                value: graph,
-                walk: Walk.Resolve
-            );
-        } finally {
-            ReturnSeen(seen: seen);
-        }
+        return Run(
+            definition: source,
+            reason: out reason,
+            root: "document",
+            value: graph,
+            walk: Walk.Resolve
+        );
     }
 }

@@ -198,19 +198,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
    cannot replace it; whether the two contention tests should share one
    definition is open.
-2. A third document walk (S, implementer): `WorldStateDocumentValues`
-   (`Puck.World.Schema/WorldStateDocumentValues.cs`) walks the document model
-   for `IDocumentStateValue` holders with its own traversal and member cache,
-   beside `WorldDocumentWalker` (`Puck.World.Schema/WorldDocumentWalker.cs`),
-   which the presentation manifest and keyed values now share. Its contract
-   differs (it fills or flattens values); make it a visitor of the one walker.
-   Three Schema laws fail independently of the walker change and look stale
-   after box rounding was admitted:
-   `MirroredSolidFieldDeterminismLawTests.AnisotropicBoxScaleBakesIntoMetricShapeDimensions`,
-   `AuthoredShapeAdmissionLawTests.RoundingOnAnUnadmittedPrimitiveIsRefusedByName(Box)`
-   and `BoxChamferEmitsAChamferedRectangleShapeUnderThePlainBoxFillet`; update
-   or delete them with the next change there.
-3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
+2. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`
    (`Puck.Vulkan/VulkanMemoryArena.cs:58`, `102`) repeat one policy over the
@@ -225,7 +213,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    (`Puck.Abstractions/Gpu/Device/GpuMemoryRanges.cs`, `ulong`, aligned,
    `List`-backed) are two first-fit coalescing range allocators; keep one,
    aligned and allocation-free.
-4. Surface upload and readback per backend (L, specialist; a GPU leg).
+3. Surface upload and readback per backend (L, specialist; a GPU leg).
    `DirectXSurfaceUpload` (`Puck.DirectX/Interop/DirectXSurfaceUpload.cs`, 592
    lines) and the readback in `DirectXGpuSurfaceTransferFactory.cs:61`, beside
    `VulkanSurfaceUpload` (367) and `VulkanSurfaceReadback` (283), implement one
@@ -235,7 +223,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `VulkanSurfaceUpload` directly instead of through `IGpuSurfaceUpload`.
    Written once over `IGpuBufferFactory` and `IGpuRecorder`, which needs
    buffer-to-image and image-to-buffer copies added to the recorder.
-5. Paths (M, implementer).
+4. Paths (M, implementer).
    - About 107 hand-rolled `Replace('\\', '/')` calls in 65 files (the CLI
      verbs, `CliPaths.cs:28` and `:51`, `GpuPipelineCacheFile.cs:156`), because
      `PuckPaths.Normalize` (`Puck.Abstractions/PuckPaths.cs:36`) always makes
@@ -257,7 +245,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
      workspace name lands on a client's disk, so the official one is the
      weaker where it matters. Survivor: the release rules, with a parent-segment
      switch for documents.
-6. Child processes and the World boot line (M, implementer).
+5. Child processes and the World boot line (M, implementer).
    `MotionWorldProcess.Start` (`Puck.Cli.Runs/Motion/MotionWorldProcess.Device.cs:54`),
    `SweepCommand.ScenarioFile` (`Puck.Cli.Runs/Sweep/SweepCommand.cs:362`) and
    `OperatorWorlds.Launch` (`Puck.Mcp/OperatorWorlds.cs:461`) build
@@ -271,7 +259,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `CanaryCommand.Stub.cs:93`, `OperatorWorlds.cs:478`,
    `Puck.World/WorldTestBatch.cs:79`, the motion run);
    `Puck.Cli.Harness/WorldDevices.cs` starts the one builder they share.
-7. Emulator Post batteries (M, implementer). The AGB and HGB batteries each
+6. Emulator Post batteries (M, implementer). The AGB and HGB batteries each
    keep one wrapper file per shared stage (`Throughput`, `Allocation`,
    `Determinism`, `ForkDeterminism`, `Embedding`, the five `QueuedHost*`
    stages), differing only in the machine factory, while HGD already folds
@@ -286,7 +274,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    - The runners parse arguments with `CommandLineArguments`
      (`Puck.Machines.Post/CommandLineArguments.cs`) beside the
      `System.CommandLine` every other entry point uses.
-8. Small merges (S each; one implementer lane can take them together).
+7. Small merges (S each; one implementer lane can take them together).
    - Fixed-point boxes (specialist, after the tick-cost lane lands):
      `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
      centre and extent, an `Int128` overlap test that cannot overflow),

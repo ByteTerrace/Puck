@@ -537,7 +537,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
             )
         ) with { Lift = SdfLift.Extrude });
     [Fact]
-    public void BoxChamferEmitsAChamferedRectangleShapeUnderThePlainBoxFillet() {
+    public void BoxChamferEmitsAChamferedRectangleShapeWithNoFillet() {
         var builder = new SdfProgramBuilder();
 
         _ = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -555,11 +555,14 @@ public sealed class AuthoredShapeAdmissionLawTests {
             ((uint)SdfShapeType.ChamferedRectangle),
             instruction.Shape
         );
-        // The document Box's conventional edge fillet rides the family rounding lane on top of the chamfer, and the
-        // packed chamfer is the authored one eroded by it: c' = c - r*(2 - sqrt2).
-        Assert.True(condition: (instruction.Data1.W > 0f));
+        // A box is sharp unless its document rounds it: the rounding lane is empty and the packed chamfer is the
+        // authored one.
         Assert.Equal(
-            (.3f - (instruction.Data1.W * (2f - MathF.Sqrt(x: 2f)))),
+            0f,
+            instruction.Data1.W
+        );
+        Assert.Equal(
+            .3f,
             instruction.Data0.Z,
             tolerance: 1e-6f
         );
@@ -979,7 +982,6 @@ public sealed class AuthoredShapeAdmissionLawTests {
             )
         ));
     }
-    [InlineData(SdfSolidPrimitive.Box)]
     [InlineData(SdfSolidPrimitive.Sphere)]
     [InlineData(SdfSolidPrimitive.Torus)]
     [Theory]
@@ -991,6 +993,11 @@ public sealed class AuthoredShapeAdmissionLawTests {
             ) with { Rounding = .05f },
             "rounding"
         );
+    [Fact]
+    public void RoundingOnABoxIsAdmitted() => AssertCanonicalizerAccepts(shape: Shape(
+        SdfSolidPrimitive.Box,
+        Vector3.One
+    ) with { Rounding = .05f });
     [Fact]
     public void SuperellipsoidIsAdmittedForFieldContact() => AssertWorldValidates(
         Shape(

@@ -87,11 +87,10 @@ public sealed class MirroredSolidFieldDeterminismLawTests {
             ),
             actual: scales[0].Data0
         );
-        var expectedRound = (0.04f * fixedThinAxis);
-
+        // A box is sharp unless its document rounds it, so the fillet lane carries nothing here.
         Assert.Equal(
             expected: new Vector4(
-                w: expectedRound,
+                w: 0f,
                 x: 24f,
                 y: fixedThinAxis,
                 z: 24f

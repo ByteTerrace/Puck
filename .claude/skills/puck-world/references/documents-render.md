@@ -448,11 +448,16 @@ checks and observations see their dependencies. The protocol manifest and
 manifest and `WorldKeyedValues` both take placeholders from
 `WorldScreenText.Placeholders`.
 
-Both are visitors of one walk of the document model,
+Both, and `WorldStateDocumentValues` (which fills, flattens, finds and collects
+`IDocumentStateValue` holders), are visitors of one walk of the document model,
 `WorldDocumentWalker` (`Puck.World.Schema`): a walker is built over a consumer's
-surface types and enters only members that can reach one, with readers, fields
-and member lists cached per type. A walk that finds state a document reads is
-a new visitor of it, never a new walker. `BindableDirection`,
+surface types (or a predicate over types) and enters only members that can reach
+one, with readers, fields and member lists cached per type and `CodeRevision`
+(a hot reload derives them again). A value the generated model table does not
+describe (a mutation, a projection, a list at the root) is followed through its
+public properties; a value shared by two owners is walked under each (only a
+cycle is cut); a visitor ends the walk early through `Stopped`. A walk that
+finds state a document reads is a new visitor of it, never a new walker. `BindableDirection`,
 `BindableVector2` and `BindableVector3` bind no state cell (literal or keys
 only), so the manifest does not list them; a keyed one reads its clock, whose
 state row the manifest records with the timeline. A local
