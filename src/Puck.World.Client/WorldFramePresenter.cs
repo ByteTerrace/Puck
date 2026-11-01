@@ -1440,6 +1440,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         AdvanceDynamicResolution(context: in context);
         m_presentationRate = PresentationRate.Of(context: in context);
         m_settings.RateIntervals.Advance(frameSeconds: context.FrameDeltaSeconds, rate: m_presentationRate);
+        // The stamp pool packs during the capture that follows, so it rates its bodies by this frame's step flags and
+        // levers, none while the frame is held for a settled capture.
+        m_animator.PresentAt(rate: m_presentationRate, rates: RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture));
 
         if (m_graphs is not { } graphs) {
             return;
@@ -1644,16 +1647,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return m_rateViewPixels;
     }
-    // The caster cull of each shadow cascade the frame's views render, fitted on this frame's views with the previous
-    // frame's lights and far distance (a frame's lag, as the views' own): the bodies lever holds a body none may draw.
-    // The previous frame's views are the m_frameViews list itself, which this frame has refilled.
-    // Null while no previous frame names the lights, which the lever reads as every body's shadow possibly shown.
-    private List<(int View, SdfMeshCull Cull)>? RateShadows(uint width, uint height) {
+    // The caster cull of each shadow cascade the dressed frame's views render, with that frame's own lights and far
+    // distance: the bodies lever holds no body one of them may draw. Every view counts, shown on the display or not.
+    private List<(int View, SdfMeshCull Cull)> RateShadows(SdfFrame frame, uint width, uint height) {
         m_rateShadows.Clear();
-
-        if ((m_dressedFrame is not { } frame) || !ReferenceEquals(objA: frame.Views, objB: m_frameViews)) {
-            return null;
-        }
 
         for (var view = 0; (view < m_frameViews.Count); view++) {
             var cascades = SdfMeshShadowCascades.Fit(frame: frame, view: view);
@@ -2159,10 +2156,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             height: height,
             intervals: m_settings.RateIntervals,
             pixels: RateViewPixels(height: height),
-            rate: m_presentationRate,
-            rates: m_settings.UpdateRates,
             readings: m_settings.RateReadings,
-            shadows: RateShadows(height: height, width: width),
             views: m_frameViews
         );
 
@@ -2247,6 +2241,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         };
 
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
+        // The next pack holds no body a shadow of this frame's views and lights may show.
+        m_animator.ShadowBy(shadows: RateShadows(frame: m_dressedFrame, height: height, width: width));
 
         return m_dressedFrame;
     }
