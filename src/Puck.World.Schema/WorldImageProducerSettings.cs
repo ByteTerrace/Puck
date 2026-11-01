@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace Puck.World;
 
@@ -94,7 +93,6 @@ public static class WorldImageProducerSettings {
 
     private static readonly ConditionalWeakTable<WorldScreenSource.Producer, Binding> Bindings = new();
 
-    private static JsonTypeInfo<T> InfoOf<T>() => ((JsonTypeInfo<T>)WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(T)));
     private static bool TryReadShipped<T>(WorldScreenSource? source, string id, [NotNullWhen(returnValue: true)] out T? settings) where T : class {
         if (
             (source is WorldScreenSource.Producer producer) &&
@@ -149,7 +147,7 @@ public static class WorldImageProducerSettings {
             if (binding.Shape != typeof(T)) {
                 try {
                     binding.Value = JsonSerializer.Deserialize(
-                        jsonTypeInfo: InfoOf<T>(),
+                        jsonTypeInfo: WorldJsonContext.Default.For<T>(),
                         utf8Json: binding.Json
                     );
                     binding.Refusal = ((binding.Value is null)
@@ -179,7 +177,7 @@ public static class WorldImageProducerSettings {
         ArgumentNullException.ThrowIfNull(argument: settings);
 
         var element = JsonSerializer.SerializeToElement(
-            jsonTypeInfo: InfoOf<T>(),
+            jsonTypeInfo: WorldJsonContext.Default.For<T>(),
             value: settings
         );
         var members = new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal);

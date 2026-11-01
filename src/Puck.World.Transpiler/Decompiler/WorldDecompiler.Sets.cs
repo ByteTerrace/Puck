@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization.Metadata;
 using Puck.State;
 using Puck.Transpiler.Formatting;
 using Puck.World.Transpiler.Vocabulary;
@@ -13,8 +12,6 @@ namespace Puck.World.Transpiler.Decompiler;
 // the algebra refuses, or one carrying a key the declaration has no place for, sends the whole section through the
 // generic value path, which carries every row unchanged.
 public static partial class WorldDecompiler {
-    private static readonly JsonTypeInfo<CellSetExpression> CellSetTypeInfo =
-        ((JsonTypeInfo<CellSetExpression>)WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(CellSetExpression)));
     // The keys a `set` declaration can carry are its construct's own description.
     private static readonly HashSet<string> SetNodeKeys = WorldConstructs.NodeKeysOf(enclosing: null, keyword: "set");
 
@@ -56,7 +53,7 @@ public static partial class WorldDecompiler {
         CellSetExpression? expression;
 
         try {
-            expression = row["set"].Deserialize(jsonTypeInfo: CellSetTypeInfo);
+            expression = row["set"].Deserialize(jsonTypeInfo: WorldJsonContext.Default.CellSetExpression);
         } catch (JsonException) {
             return null;
         }

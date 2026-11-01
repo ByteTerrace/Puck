@@ -9,9 +9,10 @@ namespace Puck.World;
 /// The host process's memory read-back: <c>host.memory</c> echoes the process's working set and private bytes beside
 /// the managed heap the last garbage collection left (its size, committed and fragmented bytes, and each generation's
 /// size: gen0, gen1, gen2, the large and the pinned object heaps), so the managed share of a large working set is read
-/// apart from native, mapped and driver memory. <c>host.memory collect</c> first runs a full blocking collection that
-/// compacts the large object heap, so the heap it reports is what is still reachable. Presentation-independent; it
-/// reads the process, never the simulation.
+/// apart from native, mapped and driver memory, then the process uptime and what the JIT has compiled so far (methods,
+/// IL bytes, compilation time), which read at boot give its first-use JIT cost. <c>host.memory collect</c> first runs a
+/// full blocking collection that compacts the large object heap, so the heap it reports is what is still reachable.
+/// Presentation-independent; it reads the process, never the simulation.
 /// </summary>
 internal sealed class HostMemoryCommandModule : ICommandModule {
     private static string Mebibytes(long bytes) =>
@@ -30,10 +31,11 @@ internal sealed class HostMemoryCommandModule : ICommandModule {
         }
 
         var heap = string.Join(separator: ' ', value: parts);
+        var uptime = (DateTime.Now - process.StartTime);
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[host.memory: process ws={Mebibytes(bytes: process.WorkingSet64)} peak-ws={Mebibytes(bytes: process.PeakWorkingSet64)} private={Mebibytes(bytes: process.PrivateMemorySize64)} MiB | managed heap={Mebibytes(bytes: info.HeapSizeBytes)} committed={Mebibytes(bytes: info.TotalCommittedBytes)} fragmented={Mebibytes(bytes: info.FragmentedBytes)} {heap} MiB pinned-objects={info.PinnedObjectsCount} collections gen0={GC.CollectionCount(generation: 0)} gen1={GC.CollectionCount(generation: 1)} gen2={GC.CollectionCount(generation: 2)} last={info.Generation}{(info.Compacted ? " compacted" : string.Empty)}]"
+            handler: $"[host.memory: process ws={Mebibytes(bytes: process.WorkingSet64)} peak-ws={Mebibytes(bytes: process.PeakWorkingSet64)} private={Mebibytes(bytes: process.PrivateMemorySize64)} MiB uptime={(long)uptime.TotalMilliseconds}ms | managed heap={Mebibytes(bytes: info.HeapSizeBytes)} committed={Mebibytes(bytes: info.TotalCommittedBytes)} fragmented={Mebibytes(bytes: info.FragmentedBytes)} {heap} MiB pinned-objects={info.PinnedObjectsCount} collections gen0={GC.CollectionCount(generation: 0)} gen1={GC.CollectionCount(generation: 1)} gen2={GC.CollectionCount(generation: 2)} last={info.Generation}{(info.Compacted ? " compacted" : string.Empty)} | jit methods={System.Runtime.JitInfo.GetCompiledMethodCount()} il={Mebibytes(bytes: System.Runtime.JitInfo.GetCompiledILBytes())} MiB compile={(long)System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds}ms]"
         );
     }
 
@@ -42,7 +44,7 @@ internal sealed class HostMemoryCommandModule : ICommandModule {
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: "Reads the host process's memory: host.memory echoes the working set, its peak and the private bytes, then the managed heap the last garbage collection left (size, committed, fragmented, and gen0, gen1, gen2, the large and pinned object heaps), in MiB, with the collection counts. host.memory collect first runs a full blocking collection that compacts the large object heap, so the heap read is what is still reachable.",
+            description: "Reads the host process's memory: host.memory echoes the working set, its peak and the private bytes, then the managed heap the last garbage collection left (size, committed, fragmented, and gen0, gen1, gen2, the large and pinned object heaps), in MiB, with the collection counts, the process uptime and the JIT's compiled-method count, IL bytes and compilation time. host.memory collect first runs a full blocking collection that compacts the large object heap, so the heap read is what is still reachable.",
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: Describe());
