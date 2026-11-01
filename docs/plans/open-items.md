@@ -198,6 +198,18 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
    cannot replace it; whether the two contention tests should share one
    definition is open.
+2. A third document walk (S, implementer): `WorldStateDocumentValues`
+   (`Puck.World.Schema/WorldStateDocumentValues.cs`) walks the document model
+   for `IDocumentStateValue` holders with its own traversal and member cache,
+   beside `WorldDocumentWalker` (`Puck.World.Schema/WorldDocumentWalker.cs`),
+   which the presentation manifest and keyed values now share. Its contract
+   differs (it fills or flattens values); make it a visitor of the one walker.
+   Three Schema laws fail independently of the walker change and look stale
+   after box rounding was admitted:
+   `MirroredSolidFieldDeterminismLawTests.AnisotropicBoxScaleBakesIntoMetricShapeDimensions`,
+   `AuthoredShapeAdmissionLawTests.RoundingOnAnUnadmittedPrimitiveIsRefusedByName(Box)`
+   and `BoxChamferEmitsAChamferedRectangleShapeUnderThePlainBoxFillet`; update
+   or delete them with the next change there.
 3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`
