@@ -24,11 +24,11 @@ public sealed class WorldCameraProgramValidationLawTests {
     }
     [Fact]
     public void CloseTargetsRequireFiniteCoordinatesAndAnOrderedCompressionBand() {
-        var aim = new WorldCameraProgramOp.LookAt(new WorldCameraSubject.Reference(), CloseTargetOffset: new Vector3(x: 0f, y: 1.74f, z: 0f));
+        var aim = new WorldCameraProgramOp.LookAt(new WorldCameraSubject.Reference(), CloseTargetOffset: new WorldCameraCloseTarget(Fade: new Vector3(x: 0f, y: 1.74f, z: 0f), Cutaway: new Vector3(x: 0f, y: 1.55f, z: 0f)));
         var control = Program("close", aim, Fov());
 
         Refuses(Program("close", aim with { CloseTargetFullFraction = 0.7f }, Fov()), control, "closeTargetFullFraction");
-        Refuses(Program("close", aim with { CloseTargetOffset = new Vector3(x: 0f, y: float.NaN, z: 0f) }, Fov()), control, "closeTargetOffset");
+        Refuses(Program("close", aim with { CloseTargetOffset = new WorldCameraCloseTarget(Fade: new Vector3(x: 0f, y: float.NaN, z: 0f), Cutaway: new Vector3(x: 0f, y: 1.55f, z: 0f)) }, Fov()), control, "closeTargetOffset");
         Refuses(Program("close", aim with { Subject = null }, Fov()), control, "requires a subject");
     }
 

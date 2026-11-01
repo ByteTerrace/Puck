@@ -2801,6 +2801,29 @@
       ],
       "title": "WorldCameraSubject"
     },
+    "WorldCameraCloseTarget": {
+      "description": "The target a chase boom\u0027s look migrates to as geometry shortens it, per treatment of a close obstruction, in the axes of the look-at\u0027s own target offset.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "fade": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The close target while the seat fades its body."
+        },
+        "cutaway": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The close target while the seat cuts walls away."
+        }
+      },
+      "required": [
+        "fade",
+        "cutaway"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraCloseTarget"
+    },
     "WorldCameraProgramOpLookAt": {
       "description": "Sets the aim target.",
       "properties": {
@@ -2827,8 +2850,8 @@
           "default": 6
         },
         "closeTargetOffset": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
+          "$ref": "#/$defs/WorldCameraCloseTarget",
+          "description": "The target offsets approached as collision shortens a seat\u0027s boom, one per clearance treatment, in the axes of TargetOffset; absent keeps the rest target.",
           "default": null
         },
         "closeTargetStartFraction": {
@@ -7369,13 +7392,12 @@
           "title": "GpuSamplerFilter"
         },
         "material": {
-          "description": "How the face\u0027s screen presents its picture, as a screen row\u0027s Material does: Plain, the default, or Crt. Refused on a window. Omitted from the wire when Plain.",
-          "enum": [
-            "Plain",
-            "Crt"
+          "description": "The id of the screen material the face\u0027s screen draws its picture through, as a screen row\u0027s Material does, or null for none. Refused on a window. Omitted from the wire when null.",
+          "type": [
+            "string",
+            "null"
           ],
-          "default": "Plain",
-          "title": "WorldScreenMaterial"
+          "default": null
         }
       },
       "required": [

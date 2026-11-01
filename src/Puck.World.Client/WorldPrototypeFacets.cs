@@ -43,7 +43,7 @@ public static class WorldPrototypeFacets {
     // the portal trigger it also feeds is simulation state; fixed-to-float is exactly rounded, so every machine draws
     // the slab it collides with. Everything applied here — proud epsilon, interior fraction, the round radius, the
     // minimum half-depth — is render policy over that one geometry, never part of it.
-    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter, WorldScreenMaterial material) {
+    private static WorldScreen FaceScreen(int index, WorldFaceFrame frame, WorldScreenSource source, GpuSamplerFilter filter, string? material) {
         var normal = frame.Normal.ToVector3();
         var halfDepth = ((float)frame.HalfDepth);
 

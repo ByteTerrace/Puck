@@ -72,7 +72,7 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public SdfViewQuality Quality { get; init; }
     /// <summary>The view's screen fidelity, from 0 to 1, which its pass block carries
     /// (<c>SdfWorldPackage.ScreenFidelity</c>): the share of a screen's own pixels that reaches the view untouched, past
-    /// a CRT material's grille, scanlines, vignette, glint and bezel mask, and past camera bloom and the world's atmosphere. A seat
+    /// a screen material's treatment (scanlines, subpixel stripes, vignette, glint and edge mask), and past camera bloom and the world's atmosphere. A seat
     /// framing the screen it engaged carries its ease's weight; the default, 0, is the in-world look.</summary>
     public float ScreenFidelity { get; init; }
     /// <summary>Whether the view publishes the luminance it shades for a window: a window's view of the world beyond its

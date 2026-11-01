@@ -27,7 +27,9 @@ public sealed class SeatFollowLawTests {
             MinPitch: -0.5f,
             MaxPitch: 1f,
             ClearanceMode: WorldCameraClearanceChoice.Cutaway,
-            ClearanceMaxElevation: 1.1f,
+            MaxRise: new WorldCameraClearanceRise(Fade: 0.35f, Cutaway: 1.1f),
+            EyeRadius: 0.3f,
+            SurfaceSkin: 0.1f,
             Follow: new WorldSeatFollow(Rate: rate)
         ));
 

@@ -33,10 +33,10 @@ public sealed class ConvexContactWorkLawTests {
                                 FixedVector3.Zero, identity, Q(value: 0.35));
                             var position = (surface + (normal * Q(value: 0.349)));
 
-                            Assert.True(condition: shape.TryGetPush(position, identity, body, FixedQ4816.Zero, out var push),
+                            Assert.True(condition: shape.TryGetPush(position, identity, body, FixedQ4816.Zero, out var push, out _),
                                 userMessage: $"Miss: {shape.Kind}, fillet={shape.Radius}, body={kind}, normal={normal}");
                             Assert.True(condition: (push.Penetration > FixedQ4816.Zero));
-                            Assert.False(condition: shape.TryGetPush((surface + (normal * Q(value: 0.351))), identity, body, FixedQ4816.Zero, out _),
+                            Assert.False(condition: shape.TryGetPush((surface + (normal * Q(value: 0.351))), identity, body, FixedQ4816.Zero, out _, out _),
                                 userMessage: $"False contact: {shape.Kind}, fillet={shape.Radius}, body={kind}, normal={normal}");
                         }
                     }

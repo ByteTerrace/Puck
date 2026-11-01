@@ -50,13 +50,13 @@ chaseCamera(rig: "moth-camera", pivotOffset: [0, 1, 0], closeTargetOffset: [0, 1
 ```
 
 It emits `views.seatControl` (pitch limits, `clearanceMode`,
-`clearanceMaxElevation`, `characterFade`, `autoFirstPerson`, `boom`),
+`maxRise`, `eyeRadius`, `surfaceSkin`, `characterFade`, `autoFirstPerson`, `boom`),
 `views.seatRig` (orbit, lookAt with the close target, fieldOfView, the
 `camera-boom` dynamics and firstPerson), the `camera-boom` row and
 `seatDefaults.seatCameraFeel`, every value a template argument defaulting to the
 [chase-camera decision](../../../../docs/decisions/play.md#the-chase-camera)'s
 table. The engine's `WorldSeatViewControl` requires `clearanceMode` and
-`clearanceMaxElevation`; an absent `characterFade` never fades the body and
+`maxRise` (`fade` and `cutaway`), `eyeRadius` and `surfaceSkin`; an absent `characterFade` never fades the body and
 holds no minimum boom, and an absent `autoFirstPerson` makes automatic pull-in
 unavailable.
 
@@ -258,8 +258,12 @@ own separate stamp slots and stay visible.
 
 **Cutaway keeps the body.** The following keep-out/rise/near-plane procedure is
 the cutaway branch. The Moth stays solid even when no room remains behind her.
-`seatControl.clearanceMaxElevation` authors its elevation ceiling (the template
-authors 1.1 rad). The live read-back includes `mode=fade|cutaway` and `fade=0..1` (zero
+`seatControl.maxRise.cutaway` authors its rise ceiling above the rig's elevation
+(the template authors 1.1 rad), and `maxRise.fade` fade's (0.35 rad): one solver
+serves both, and fade rises only when no level boom keeps the eye past its
+character fade's minimum boom. Each treatment migrates to its own close target
+(`lookAt.closeTargetOffset { fade, cutaway }`; the template's `fadeCloseTarget`
+and `cutawayCloseTarget`). The live read-back includes `mode=fade|cutaway` and `fade=0..1` (zero
 means solid) alongside the eye, migrated target, boom, rise, near and clearance.
 
 After the boom ease, a seat framing its own body through `views.seatRig` places
@@ -284,7 +288,7 @@ Each frame answers where the eye belongs:
    direction, so long as the shortened eye still clears the body.
 2. When no length of the boom clears both (a body backed into a wall or a
    corner, its boom pointing in), the boom rises toward the seat's up on the
-   same heading: a coarse scan up to `clearanceMaxElevation` (1.1 rad, short of an
+   same heading: a coarse scan up to `maxRise.cutaway` above the rig's elevation (1.1 rad, never past 1.5 rad, short of an
    overhead view that turns her upside down on screen), then bisection, finds
    the lowest rise where it clears.
 3. When no rise clears both (her back against a wall), the answer is up and

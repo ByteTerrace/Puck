@@ -20,9 +20,9 @@ public sealed class RoundedBoxContactLawTests {
     public void TheSharpCornerCarriesNothingAndAFlatFaceKeepsItsHeight(FixedBodyColliderKind kind) {
         var volume = Volume(kind: kind);
 
-        Assert.False(condition: Cube.TryGetPush(position: V(x: 2, y: 2.01, z: 2), orientation: FixedQuaternion.Identity,
+        Assert.False(condition: Cube.TryGetPush(uncertain: out _, position: V(x: 2, y: 2.01, z: 2), orientation: FixedQuaternion.Identity,
             volume: volume, skin: FixedQ4816.Zero, push: out _));
-        Assert.True(condition: Cube.TryGetPush(position: V(x: 0, y: 2, z: 0), orientation: FixedQuaternion.Identity,
+        Assert.True(condition: Cube.TryGetPush(uncertain: out _, position: V(x: 0, y: 2, z: 0), orientation: FixedQuaternion.Identity,
             volume: volume, skin: FixedQ4816.Zero, push: out var face));
         Assert.Equal(FixedVector3.UnitY, face.Normal);
         Assert.InRange(((double)face.Penetration), 0.0099, 0.0101);
@@ -34,7 +34,7 @@ public sealed class RoundedBoxContactLawTests {
         var velocity = V(x: 0, y: -1, z: 0);
         var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.5), MaxIterations: 8);
 
-        Assert.False(condition: Cube.TryGetPush(position: position, orientation: FixedQuaternion.Identity,
+        Assert.False(condition: Cube.TryGetPush(uncertain: out _, position: position, orientation: FixedQuaternion.Identity,
             volume: volume, skin: FixedQ4816.Zero, push: out _));
         position += V(x: 0, y: -0.03, z: 0);
         var resolution = solver.Resolve(colliders: [Cube], dynamicColliders: [], position: ref position,
@@ -54,11 +54,11 @@ public sealed class RoundedBoxContactLawTests {
         var volume = Volume(kind: kind);
         var rotation = FixedQuaternion.FromAxisAngle(axis: FixedVector3.UnitZ, angle: Q(value: 0.6));
 
-        Assert.True(condition: Cube.TryGetPush(position: V(x: 1.97, y: 1.97, z: 0), orientation: rotation,
+        Assert.True(condition: Cube.TryGetPush(uncertain: out _, position: V(x: 1.97, y: 1.97, z: 0), orientation: rotation,
             volume: volume, skin: FixedQ4816.Zero, push: out var edge));
         Assert.True(condition: (edge.Normal.X > FixedQ4816.Zero));
         Assert.True(condition: (edge.Normal.Y > FixedQ4816.Zero));
-        Assert.True(condition: Cube.TryGetPush(position: FixedVector3.Zero, orientation: rotation,
+        Assert.True(condition: Cube.TryGetPush(uncertain: out _, position: FixedVector3.Zero, orientation: rotation,
             volume: volume, skin: FixedQ4816.Zero, push: out var inside));
         Assert.True(condition: (inside.Penetration > FixedQ4816.One));
     }

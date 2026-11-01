@@ -51,7 +51,7 @@ public sealed class CertifiedFieldContactLawTests {
         Assert.Equal(expected: 0.1100006103515625d, actual: (double)centre.Y);
         Assert.True(condition: Reads(collider: collider, value: out var bottom, world: (centre - V(x: 0d, y: 0.35d, z: 0d))));
         Assert.True(condition: (bottom < FixedQ4816.Zero), userMessage: $"bottom reads {(double)bottom}");
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: centre, push: out var push, skin: Q(value: 0.05d),
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: centre, push: out var push, skin: Q(value: 0.05d),
             volume: Ball(radius: 0.35d)));
         Assert.True(condition: (push.Normal.Y > FixedQ4816.Zero));
     }
@@ -66,7 +66,7 @@ public sealed class CertifiedFieldContactLawTests {
         Assert.True(condition: Reads(collider: collider, value: out var origin, world: FixedVector3.Zero));
         Assert.True(condition: Reads(collider: collider, value: out var witness, world: new FixedVector3(X: FixedQ4816.FromRawBits(value: 64L), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)));
         Assert.True(condition: (origin > FixedQ4816.Zero) && (witness < FixedQ4816.Zero), userMessage: $"{(double)origin} {(double)witness}");
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Q(value: 0.05d),
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Q(value: 0.05d),
             volume: Ball(radius: 0.1d)));
     }
 
@@ -87,7 +87,7 @@ public sealed class CertifiedFieldContactLawTests {
         Assert.True(condition: (inside < FixedQ4816.Zero), userMessage: $"reads {(double)inside}");
         Assert.True(condition: ((collider.Center.Y + collider.WorldHalfExtent()!.Value.Y) >= Q(value: 1.115d)),
             userMessage: $"bound top {(double)(collider.Center.Y + collider.WorldHalfExtent()!.Value.Y)}");
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: body, push: out _, skin: Q(value: 0.001d),
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: body, push: out _, skin: Q(value: 0.001d),
             volume: Ball(radius: 0.01d)));
     }
 
@@ -130,10 +130,128 @@ public sealed class CertifiedFieldContactLawTests {
         var capsule = new FixedBodyColliderVolume(Center: V(x: 0d, y: 0.35d, z: 0d), Endpoint: V(x: 0d, y: 1.7d, z: 0d), HalfExtents: FixedVector3.Zero,
             Kind: FixedBodyColliderKind.Capsule, Radius: Q(value: 0.35d), Rotation: FixedQuaternion.Identity);
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: -0.35d, z: 0d), push: out var push,
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: -0.35d, z: 0d), push: out var push,
             skin: Q(value: 0.05d), volume: capsule));
         Assert.True(condition: (push.Normal.Y > Q(value: 0.99d)));
         Assert.False(condition: FixedSurfaceQuery.TryNearest(candidate: out _, colliders: [collider], dynamicColliders: [], probe: FixedVector3.Zero,
             reach: Q(value: 0.1d)));
+    }
+
+    // A program read as a field collider whose box bounds are its own evaluator's, the contact reading.
+    private static FixedStaticCollider ProgramCollider(SdfProgram program) {
+        var evaluator = new SdfFieldEvaluator(program: program);
+
+        return FixedStaticCollider.FieldSurface(center: FixedVector3.Zero, field: new FixedColliderField(bounded: false, field: evaluator,
+            gradientStep: Q(value: 1d / 32d)) { Bounds = evaluator }, halfExtent: FixedVector3.Zero, rotation: FixedQuaternion.Identity);
+    }
+    private static FixedFieldContact Solve(FixedStaticCollider collider, FixedVector3 position, FixedBodyColliderVolume volume) =>
+        FixedFieldColliderContact.Solve(collider: in collider, orientation: FixedQuaternion.Identity, position: position, skin: FixedQ4816.Zero, volume: in volume);
+
+    // Clearance rests on a true bound: a uniform scale of 1024 amplifies the point walk's rounding past any fixed value
+    // error, so a sphere 128 raws inside the scaled unit sphere is never proved clear.
+    [Fact]
+    public void AScaledShapesRoundingNeverProvesAPenetratingBodyClear() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Scale(scale: new Vector3(value: 1024f)).Sphere(material: material, radius: 1f);
+        var collider = ProgramCollider(program: builder.Build());
+        var body = new FixedVector3(X: (FixedQ4816.FromInteger(value: 1024L) + FixedQ4816.FromRawBits(value: 768L)), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
+        var contact = Solve(collider: collider, position: body, volume: (Ball(radius: 0d) with { Radius = FixedQ4816.FromRawBits(value: 896L) }));
+
+        Assert.NotEqual(expected: FixedFieldContactOutcome.Clear, actual: contact.Outcome);
+    }
+
+    // The core's pieces cover it end to end: a capsule whose top pierces a plane by eight raws is not proved clear.
+    [Fact]
+    public void ACapsulesUpperEndIsInsideItsOwnProof() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Plane(material: material, normal: -Vector3.UnitY, offset: (16f - (8f / 65536f)));
+        var collider = ProgramCollider(program: builder.Build());
+        var capsule = new FixedBodyColliderVolume(Center: FixedVector3.Zero, Endpoint: V(x: 0d, y: 14d, z: 0d), HalfExtents: FixedVector3.Zero,
+            Kind: FixedBodyColliderKind.Capsule, Radius: Q(value: 2d), Rotation: FixedQuaternion.Identity);
+        var contact = Solve(collider: collider, position: FixedVector3.Zero, volume: capsule);
+
+        Assert.NotEqual(expected: FixedFieldContactOutcome.Clear, actual: contact.Outcome);
+        Assert.True(condition: contact.Pushes);
+        Assert.True(condition: (contact.Normal.Y < FixedQ4816.Zero));
+    }
+
+    // A union scope's scale is kept wherever a later operator reads its magnitude: a dilation after a chamfered scope
+    // reads the drawn solid, which holds a small body at (2.4, 0, 0).
+    [Fact]
+    public void AScopeAMagnitudeReaderFollowsKeepsItsScale() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.PushField(compose: SdfBlendOp.Union);
+        _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.ResetPoint().Sphere(blend: SdfBlendOp.ChamferUnion, material: material, radius: 1f, smooth: 1f);
+        _ = builder.PopField();
+        _ = builder.Dilate(radius: 1f);
+        var program = builder.Build();
+        var point = FixedPosition.FromLocal(local: V(x: 2.4d, y: 0d, z: 0d));
+
+        Assert.True(condition: new SdfFieldEvaluator(program: program).TryDistance(distance: out var contact, material: out _, position: point));
+        Assert.True(condition: new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render).TryDistance(distance: out var drawn, material: out _, position: point));
+        Assert.True(condition: (drawn < FixedQ4816.Zero) && (contact < FixedQ4816.Zero), userMessage: $"drawn {(double)drawn}, contact {(double)contact}");
+        Assert.NotEqual(expected: FixedFieldContactOutcome.Clear, actual: Solve(collider: ProgramCollider(program: program), position: V(x: 2.4d, y: 0d, z: 0d),
+            volume: Ball(radius: 0.05d)).Outcome);
+    }
+
+    // An unproved or stuck volume reaches the callers that must not act on it, through both contact paths.
+    [Fact]
+    public void AnUnprovedPoseIsReportedUnprovedByBothSolvers() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Translate(offset: new Vector3(x: -0.75f, y: 0f, z: 0f)).Sphere(material: material, radius: 0.1f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.75f, y: 0f, z: 0f)).Sphere(material: material, radius: 0.1f);
+        var program = builder.Build();
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var collider = ProgramCollider(program: program);
+        var body = Ball(radius: 1d);
+
+        Assert.Equal(expected: FixedFieldContactOutcome.Unproved, actual: Solve(collider: collider, position: FixedVector3.Zero, volume: body).Outcome);
+
+        var provider = new FixedFieldContactSolver(bounds: evaluator, contactSkin: FixedQ4816.Zero, field: evaluator, gradientProbe: FixedQ4816.Zero,
+            gradientUp: false, groundedThreshold: Q(value: 0.7d), maxIterations: 4, query: evaluator, sweep: new CertifiedFieldSweep(field: evaluator),
+            sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget, sweepWork: new FixedContactSweepWork());
+        var position = FixedVector3.Zero;
+        var velocity = FixedVector3.Zero;
+
+        Assert.True(condition: provider.ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: FixedVector3.Zero,
+            up: FixedVector3.UnitY, velocity: ref velocity, volumes: [body]).Unproved);
+
+        var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.7d), MaxIterations: 4);
+
+        Assert.True(condition: solver.ResolveSweep(colliders: [collider], dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
+            previousPosition: FixedVector3.Zero, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [body]).Unproved);
+
+        var sphere = new SdfProgramBuilder();
+        var sphereMaterial = sphere.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = sphere.Sphere(material: sphereMaterial, radius: 10f);
+        Assert.True(condition: solver.ResolveSweep(colliders: [ProgramCollider(program: sphere.Build())], dynamicColliders: [], orientation: FixedQuaternion.Identity,
+            position: ref position, previousPosition: FixedVector3.Zero, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [Ball(radius: 0.35d)]).Unproved);
+    }
+
+    // A pipe subtraction's bead lies outside its subject; the relief collider's bound holds it. A creation clamps the
+    // blend radius to half a unit, so the bead reaches past 1.3 on the spheres' shared seam.
+    [Fact]
+    public void TheBroadphaseBoundHoldsAPipeSubtractionsBead() {
+        var collider = Collider(definition: Document(
+            noise: new CreationNoiseDocument(Frequency: 1f, Amplitude: 0.01f, Octaves: 1, Seed: 7u),
+            shapes: [
+                Shape(id: 0, scale: Vector3.One, type: SdfSolidPrimitive.Sphere),
+                Shape(id: 1, blend: SdfBlendOp.PipeSubtraction, scale: Vector3.One, smooth: 1f, type: SdfSolidPrimitive.Sphere),
+            ]));
+
+        Assert.True(condition: Reads(collider: collider, value: out var bead, world: V(x: 1.3d, y: 0d, z: 0d)));
+        Assert.True(condition: (bead < FixedQ4816.Zero), userMessage: $"reads {(double)bead}");
+        Assert.True(condition: ((collider.Center.X + collider.WorldHalfExtent()!.Value.X) >= Q(value: 1.31d)),
+            userMessage: $"bound right {(double)(collider.Center.X + collider.WorldHalfExtent()!.Value.X)}");
     }
 }

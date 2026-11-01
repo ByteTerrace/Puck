@@ -415,7 +415,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
                 Route: WorldScreenRoute.Passive,
                 Source: pattern,
                 Up: new Puck.Assets.Documents.DocumentVector3(value: Vector3.UnitY),
-                Material: WorldScreenMaterial.Crt
+                Material: "crt"
             )]
         );
         screens.Publish(images: new PatternImages(Height: SourceHeight, Width: SourceWidth));
@@ -442,11 +442,11 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         );
 
         // The pane's point is the view image's (20.5 / 32, 40.5 / 64); its pinhole ray from (0, 1, 5) meets the face 5
-        // units ahead, and the CRT glass's bezel insets the image inside the face.
+        // units ahead, and the picture fills the face whatever screen material draws it.
         var tangent = Math.Tan(a: 0.5);
         var u = (0.5 + ((5.0 * (((2.0 * (20.5 / 32.0)) - 1.0) * tangent)) / 2.4));
         var v = (0.5 - ((5.0 * ((1.0 - (2.0 * (40.5 / 64.0))) * tangent)) / 1.8));
-        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.CrtGlass.Inverse!);
+        var glass = new SourceWarpInverse.Affine(M11: 1f, M12: 0f, M13: 0f, M21: 0f, M22: 1f, M23: 0f);
 
         Assert.Equal(
             actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),
@@ -454,7 +454,7 @@ public sealed partial class WorldViewPaneMappingLawTests : IDisposable {
         );
         Assert.Equal(
             actual: (walk.Steps[1].Hit.PixelX, walk.Steps[1].Hit.PixelY),
-            expected: (134L, 133L)
+            expected: (131L, 130L)
         );
 
         // The second view's camera, three units to the side, misses the screen.
