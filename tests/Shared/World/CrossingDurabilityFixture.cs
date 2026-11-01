@@ -361,7 +361,7 @@ internal sealed class CrossingWorld : IDisposable {
     /// and is admitted under the same authority, where the source's in-doubt transfers find it.</summary>
     public void RecoverDestination() {
         Assert.True(
-            condition: Host.TryStop(
+            condition: Host.TryRetire(
                 name: "row-b",
                 reason: out var reason
             ),

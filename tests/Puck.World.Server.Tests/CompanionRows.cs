@@ -113,8 +113,29 @@ internal sealed class CompanionRows : IDisposable {
     /// the row's latest image, redoes its crossing log on a new activation of that log, and is admitted under the same
     /// authority, where its peers' in-doubt transfers find it.</summary>
     public void Restart(string name) {
-        Assert.True(condition: Host.TryStop(name: name, reason: out var reason), userMessage: reason);
-        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: m_images[name], checkpoint: out var checkpoint, reason: out reason), userMessage: reason);
+        Assert.True(condition: Host.TryRetire(name: name, reason: out var reason), userMessage: reason);
+        Activate(name: name);
+    }
+    /// <summary>Makes every image an explicit stop writes the row's durable image, and records each write: the row and
+    /// whether the image resumes the stop. <paramref name="refuse"/> names the rows whose final image the store
+    /// refuses.</summary>
+    public void KeepDurableImages(Func<string, bool>? refuse = null) => Host.DurableImages = (WorldInstance row, WorldAuthorityCheckpoint checkpoint, out string reason) => {
+        if (!checkpoint.HostRow.Stopping && (refuse?.Invoke(arg: row.Name) == true)) {
+            reason = "the store refused the write";
+            return false;
+        }
+        m_images[row.Name] = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        ImageWrites.Add(item: (row.Name, checkpoint.HostRow.Stopping));
+        reason = string.Empty;
+        return true;
+    };
+    /// <summary>Every image a stop wrote durably, in order: the row and whether the image resumes the stop.</summary>
+    public List<(string Row, bool Stopping)> ImageWrites { get; } = [];
+    /// <summary>Starts a row no longer running from its latest durable image and its crossing log, as a later activation
+    /// of a stopped authority does.</summary>
+    public void Activate(string name) {
+        Assert.False(condition: Host.TryGet(instance: out _, name: name));
+        Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: m_images[name], checkpoint: out var checkpoint, reason: out var reason), userMessage: reason);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint!.Server.DefinitionJson);
         var machines = new WorldMachineHost(engines: [], screens: definition.Screens);

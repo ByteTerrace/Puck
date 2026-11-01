@@ -375,7 +375,7 @@ internal sealed class WorldTestRun {
                 started = false;
                 reason = $"its simulation.rateHz {admitted.Server.Configuration.SimulationRateHz} differs from the booted world's {m_server.Configuration.SimulationRateHz} — an armed run exports every world at one host step, which is a coordinate only worlds sharing a rate reach together";
 
-                _ = m_instances.TryStop(
+                _ = m_instances.TryRetire(
                     name: instance.Name,
                     reason: out _
                 );

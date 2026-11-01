@@ -206,10 +206,12 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
     public string Residency { get; init; } = string.Empty;
+
     /// <summary>Gets the selectors of the groups the bake bakes, every group when <see langword="null"/>: a group outside
     /// it finishes unbaked, with no mesh, and no selected group of its geometry waits on it (an offline audit of chosen
     /// groups).</summary>
     public IReadOnlySet<int>? Selection { get; init; }
+
     /// <summary>Gets the library the bake stores each group's mesh in and takes a group of geometry it holds from, rather
     /// than baking the group again: in a later program of the residency, or in another residency holding the same
     /// library.</summary>
@@ -260,6 +262,7 @@ public sealed partial class SdfMeshPathBake {
             lock (m_gate) { return m_program; }
         }
     }
+
     /// <summary>Reads the mesh a group landed, whole: a chunked group's parent, whose surface concatenates the chunks
     /// <see cref="Dress"/> draws one by one.</summary>
     /// <param name="selector">The group's <see cref="SdfMeshBakeGroup.Selector"/>.</param>
@@ -278,6 +281,7 @@ public sealed partial class SdfMeshPathBake {
         mesh = null;
         return false;
     }
+
     /// <summary>Gets whether a group still owes a lattice the frame can dispatch, a contour still runs, or a field slice
     /// (<see cref="Probe"/>) still samples, or a landed mesh has not reached the dressed frame yet.</summary>
     public bool Pending {
@@ -378,11 +382,11 @@ public sealed partial class SdfMeshPathBake {
                 m_draws.AddRange(collection: frame.MeshDraws);
                 foreach (var group in m_groups) {
                     if (group.Mesh is not { } mesh) { continue; }
-                    if (group.Dynamic && frame.MeshAssetSlots.Contains(group.Slot)) {
+                    if (group.Dynamic && frame.MeshAssetSlots.Contains(value: group.Slot)) {
                         foreach (var copy in frame.MeshInstances) {
-                            if (!copy.UsesSlot(group.Slot)) { continue; }
+                            if (!copy.UsesSlot(slot: group.Slot)) { continue; }
                             copy.FirstInstance = group.FirstInstance;
-                            m_draws.Add(new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true, MotionIdentity = ((copy.MotionIdentity ?? copy.Identity), group.Selector) });
+                            m_draws.Add(item: new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = true, MotionIdentity = ((copy.MotionIdentity ?? copy.Identity), group.Selector) });
                         }
                         continue;
                     }
@@ -399,7 +403,7 @@ public sealed partial class SdfMeshPathBake {
                     }
                 }
                 foreach (var copy in frame.MeshInstances) {
-                    if (copy.Mesh is { } mesh) { m_draws.Add(new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { FrameSlot = copy.FrameSlot, IsDynamic = true, MotionIdentity = ((copy.MotionIdentity ?? copy.Identity), "mesh") }); }
+                    if (copy.Mesh is { } mesh) { m_draws.Add(item: new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { FrameSlot = copy.FrameSlot, IsDynamic = true, MotionIdentity = ((copy.MotionIdentity ?? copy.Identity), "mesh") }); }
                 }
                 // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
                 SdfSlotClip.Apply(
@@ -445,8 +449,10 @@ public sealed partial class SdfMeshPathBake {
     private SdfFrame? m_dressedSource;
     private SdfFrame? m_dressed;
     private SdfDressedPickMap? m_dressedMap;
+
     // The group each chunk of a chunked group's mesh is drawn for, as the last dressing listed them.
     private readonly Dictionary<object, SdfMeshBakeGroup> m_chunkOwners = new(comparer: ReferenceEqualityComparer.Instance);
+
     private SdfDressedPickMap? m_spareMap;
 
     // Whether a pick map extends a host map over exactly the dressed draws.
@@ -591,10 +597,13 @@ public sealed partial class SdfMeshPathBake {
     // Higher priority first, then the plan's order.
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
+
     private long m_frameTaken = -1;
+
     // The groups past their refining lattices, from the first slab of the final lattice until they land, that bake at
     // once: enough to keep every worker busy, few enough that the meshing's working memory stays a few groups' worth.
     private static int MaxAdmitted => (2 * Workers);
+
     private int m_frameBudget = FrameTaps;
 
     private SdfMeshBakeBatch? m_frameBatch;
@@ -682,7 +691,7 @@ public sealed partial class SdfMeshPathBake {
                 var copy = ArrayPool<byte>.Shared.Rent(minimumLength: bytes);
 
                 slice.CopyTo(destination: copy);
-                Schedule(group: group, urgent: true, work: () => {
+                Schedule(group: group, urgent: true, work: _ => {
                     try {
                         Answer(group: group, request: in lattice, samples: copy.AsSpan(length: bytes, start: 0));
                     } finally {
@@ -711,26 +720,45 @@ public sealed partial class SdfMeshPathBake {
             }
         }
     }
+
     // Answers one lattice of a group: a refining lattice narrows its group's box, and a final one starts the group's
     // contour off the frame's thread.
+    // One answer at a time borrows this bake's decoded buffers. The queued continuation owns its final lattice,
+    // never these spans; no borrower survives Answer or a buffer's next growth.
+    private readonly Lock m_answerGate = new();
+    private float[] m_answerValues = [];
+    private float[] m_answerGradients = [];
+    private int[] m_answerMaterials = [];
+    private int[] m_answerSlots = [];
+
     private void Answer(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
+        lock (m_answerGate) { AnswerBorrowed(group: group, request: in request, samples: samples); }
+    }
+    private void AnswerBorrowed(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
         var answered = Stopwatch.GetTimestamp();
         var count = request.Samples;
-        var values = new float[count];
-        var materials = new int[count];
-        var gradients = (request.Gradients ? new float[(3 * count)] : null);
+
+        if (m_answerValues.Length < count) { Array.Resize(array: ref m_answerValues, newSize: count); }
+        if (m_answerMaterials.Length < count) { Array.Resize(array: ref m_answerMaterials, newSize: count); }
+        if (request.Gradients && (m_answerGradients.Length < (3 * count))) { Array.Resize(array: ref m_answerGradients, newSize: (3 * count)); }
+        var values = m_answerValues.AsSpan(length: count, start: 0);
+        var materials = m_answerMaterials.AsSpan(length: count, start: 0);
+        var gradients = (request.Gradients ? m_answerGradients.AsSpan(length: (3 * count), start: 0) : default);
         // A points lattice without gradients answers each point's winning slot where a gradient would lie.
-        var slots = ((!request.Gradients && !request.Points.IsEmpty) ? new int[count] : null);
+        var hasSlots = (!request.Gradients && !request.Points.IsEmpty);
+
+        if (hasSlots && (m_answerSlots.Length < count)) { Array.Resize(array: ref m_answerSlots, newSize: count); }
+        var slots = (hasSlots ? m_answerSlots.AsSpan(length: count, start: 0) : default);
 
         for (var index = 0; (index < count); index++) {
             var record = samples.Slice(start: ((index * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 
             values[index] = BinaryPrimitives.ReadSingleLittleEndian(source: record);
             materials[index] = BinaryPrimitives.ReadInt32LittleEndian(source: record[4..]);
-            if (slots is not null) {
+            if (!slots.IsEmpty) {
                 slots[index] = BinaryPrimitives.ReadInt32LittleEndian(source: record[8..]);
             }
-            if (gradients is not null) {
+            if (!gradients.IsEmpty) {
                 gradients[(3 * index)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[8..]);
                 gradients[((3 * index) + 1)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[12..]);
                 gradients[((3 * index) + 2)] = BinaryPrimitives.ReadSingleLittleEndian(source: record[16..]);
@@ -745,7 +773,7 @@ public sealed partial class SdfMeshPathBake {
                     m_kindSamples[7] += request.Samples;
                     AnswerPoints(group: group, materials: slots!, request: in request);
                 } else if (group.Final is { } final) {
-                    m_kindSamples[2 + (int)final.Stage] += request.Samples;
+                    m_kindSamples[(2 + ((int)final.Stage))] += request.Samples;
                     AnswerFinal(final: final, gradients: gradients, group: group, materials: materials, request: in request, values: values);
                 } else if (group.Creases is not null) {
                     m_kindSamples[5] += request.Samples;
@@ -762,7 +790,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.InFlight = false;
             if (!m_groups.Contains(item: group)) { return; }
-            m_kindSamples[(request.Slab >= 0) ? 1 : 0] += request.Samples;
+            m_kindSamples[((request.Slab >= 0) ? 1 : 0)] += request.Samples;
             if (request.Slab >= 0) {
                 AnswerSlab(group: group, materials: materials, request: in request, values: values);
             } else {
@@ -978,7 +1006,7 @@ public sealed partial class SdfMeshPathBake {
             if (Begin(group: group)) { loading++; } else { rebaked++; }
         }
         Prioritize();
-        if ((rebaked + loading + shared) > 0) {
+        if (((rebaked + loading) + shared) > 0) {
             m_dispatches = 0;
             m_samples = 0;
             m_taps = 0;
@@ -1063,7 +1091,7 @@ public sealed partial class SdfMeshPathBake {
         group.Deferred = group.Next;
         group.Next = null;
         group.Contouring = true;
-        Schedule(group: group, work: () => Load(group: group));
+        Schedule(group: group, work: _ => Load(group: group));
         return true;
     }
     // The lattice over a group's box: `longest` samples along its longest axis and the same spacing along the others,
@@ -1083,7 +1111,7 @@ public sealed partial class SdfMeshPathBake {
         return new SdfMeshBakeRequest(Cell: cell, Dims: dims, Gradients: gradients, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
     }
     // Whether a sheet thinner than the spacing passes between any two samples of a lattice (SdfSampledLattice.SheetsBetween).
-    private static bool SheetBetween(in SdfMeshBakeRequest lattice, float[] values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
+    private static bool SheetBetween(in SdfMeshBakeRequest lattice, ReadOnlySpan<float> values) => Array.Exists(array: SdfSampledLattice.SheetsBetween(cell: lattice.Cell, dims: lattice.Dims, values: values), match: static mask => (mask != 0));
     // Narrows a group's box to the cells the surface can cross: every cell whose corners change sign and every sample
     // whose value is within half the lattice's finest spacing of the surface, widened by one cell along each axis, and
     // every pair of samples neither of which is within that reach that a sheet thinner than the spacing passes between
@@ -1092,7 +1120,7 @@ public sealed partial class SdfMeshPathBake {
     // lattice steps over the plate). A pair with a sample within reach is left to that sample, so the pair test moves
     // the box only where the distance test loses the sheet. A group with no such cell has no surface. Once the box
     // stops shrinking, the group's next lattice is the final one.
-    private void Refine(Group group, in SdfMeshBakeRequest request, float[] values) {
+    private void Refine(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values) {
         var (sx, sy, sz) = request.Dims;
         var near = (0.5f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
         var low = new Vector3(value: float.PositiveInfinity);
@@ -1262,12 +1290,12 @@ public sealed partial class SdfMeshPathBake {
     }
     // Answers a slab of a group's final lattice. Once every plane is answered, the lattice chooses the cells it
     // refines on the thread pool (Prepare).
-    private void AnswerSlab(Group group, in SdfMeshBakeRequest request, float[] values, int[] materials) {
+    private void AnswerSlab(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values, ReadOnlySpan<int> materials) {
         var final = group.Final!;
         var start = (request.Slab * (request.Dims.X * request.Dims.Y));
 
-        values.CopyTo(array: final.Values, index: start);
-        materials.CopyTo(array: final.Materials, index: start);
+        values.CopyTo(destination: final.Values.AsSpan(start: start));
+        materials.CopyTo(destination: final.Materials.AsSpan(start: start));
         final.Planes += request.Dims.Z;
         if (final.Planes < final.Lattice.Dims.Z) {
             group.Next = SlabOf(group: group);
@@ -1297,12 +1325,12 @@ public sealed partial class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        Schedule(group: group, work: () => Prepare(final: final, group: group));
+        Schedule(group: group, work: scratch => Prepare(final: final, group: group, scratch: scratch));
     }
     // Builds a group's sampled lattice from its final lattice and chooses the cells it refines: their fine samples are
     // measured next, or, with none, the gradients the contour reads.
-    private void Prepare(Group group, FinalLattice final) {
-        Vector4[]? points = null;
+    private void Prepare(Group group, FinalLattice final, SdfSampledLattice.RefinementScratch scratch) {
+        Vector3[]? points = null;
         string? refusal = null;
         var started = Stopwatch.GetTimestamp();
 
@@ -1324,7 +1352,7 @@ public sealed partial class SdfMeshPathBake {
                 : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: lattice.Cell.X, y: MathF.Min(x: lattice.Cell.Y, y: lattice.Cell.Z)) / FineCell)))));
 
             if (factor >= 2) {
-                points = Homogeneous(points: final.Sampled.Refine(factor: factor, regions: final.Regions));
+                points = final.Sampled.Refine(factor: factor, regions: final.Regions, scratch: scratch);
             }
             if ((points is null) || (points.Length == 0)) {
                 points = ChooseCrossingPoints(final: final);
@@ -1350,19 +1378,10 @@ public sealed partial class SdfMeshPathBake {
                 Finish();
                 return;
             }
-            final.Points = points;
+            final.SetPoints(points: points);
             final.Answered = 0;
             group.Next = FinalChunk(final: final, group: group);
         }
-    }
-    private static Vector4[] Homogeneous(Vector3[] points) {
-        var homogeneous = new Vector4[points.Length];
-
-        for (var index = 0; (index < points.Length); index++) {
-            homogeneous[index] = new Vector4(value: points[index], w: 1f);
-        }
-
-        return homogeneous;
     }
     // The next chunk of a group's fine, crossing-root or gradient samples, as many as a frame's share of field evaluations
     // takes. Gradient taps are spaced by the contour's finest cell.
@@ -1373,12 +1392,12 @@ public sealed partial class SdfMeshPathBake {
         return new SdfMeshBakeRequest(Cell: final.Sampled!.ContourCell, Dims: (count, 1, 1), Gradients: gradients, Origin: Vector3.Zero, Selector: group.Selector) {
             FrameSlot = (group.Dynamic ? group.Slot : -1),
             Instances = group.Instances,
-            Points = final.Points.AsMemory(length: count, start: final.Answered),
+            Points = final.Points.Slice(start: final.Answered, length: count),
         };
     }
     // Answers fine samples, a round of edge-root values, or gradients. The next crossing round and the final gradients
     // are chosen on the thread pool; once every gradient is answered, the group contours there.
-    private void AnswerFinal(Group group, FinalLattice final, in SdfMeshBakeRequest request, float[] values, int[] materials, float[]? gradients) {
+    private void AnswerFinal(Group group, FinalLattice final, in SdfMeshBakeRequest request, ReadOnlySpan<float> values, ReadOnlySpan<int> materials, ReadOnlySpan<float> gradients) {
         var sampled = final.Sampled!;
 
         if (final.Stage == FinalStage.Refinement) {
@@ -1397,20 +1416,20 @@ public sealed partial class SdfMeshPathBake {
         group.Next = null;
         group.Contouring = true;
         if (final.Stage != FinalStage.Gradients) {
-            Schedule(group: group, work: () => ChooseCrossings(final: final, group: group));
+            Schedule(group: group, work: _ => ChooseCrossings(final: final, group: group));
             return;
         }
 
         group.Final = null;
-        Schedule(group: group, work: () => Contour(group: group, lattice: sampled));
+        Schedule(group: group, work: _ => Contour(group: group, lattice: sampled));
     }
     // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
     // linear estimate can instead land on a different face of a corner, supplying the contour with the wrong plane.
-    private static Vector4[] ChooseCrossingPoints(FinalLattice final) {
+    private static Vector3[] ChooseCrossingPoints(FinalLattice final) {
         var points = final.Sampled!.CrossingPoints();
 
         final.Stage = ((points.Length > 0) ? FinalStage.Crossings : FinalStage.Gradients);
-        return Homogeneous(points: ((points.Length > 0) ? points : final.Sampled.GradientPoints()));
+        return ((points.Length > 0) ? points : final.Sampled.GradientPoints());
     }
     private void ChooseCrossings(Group group, FinalLattice final) {
         var refined = (final.Stage == FinalStage.Refinement);
@@ -1422,7 +1441,7 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
-            final.Points = points;
+            final.SetPoints(points: points);
             final.Answered = 0;
             if (refined) { m_refinedCells += final.Sampled!.MeasuredCells; }
             group.Next = FinalChunk(final: final, group: group);
@@ -1461,7 +1480,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (creases.Count == 0) {
                 group.Contouring = true;
-                Schedule(group: group, work: () => Split(group: group));
+                Schedule(group: group, work: _ => Split(group: group));
                 return;
             }
             group.Creases = [.. creases];
@@ -1505,7 +1524,7 @@ public sealed partial class SdfMeshPathBake {
     // gradient points at that seam, and the move would lift the vertex off the surface onto it. Once every vertex is answered, the
     // contour splits at the creases that remain on the thread pool. Every movement is clipped before an incident
     // triangle reverses its original facing; an incomplete projection keeps its original crease and shading normal.
-    private void AnswerCreases(Group group, in SdfMeshBakeRequest request, float[] values, float[] gradients) {
+    private void AnswerCreases(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values, ReadOnlySpan<float> gradients) {
         var contour = group.Contour!;
         var tolerance = (CreaseTolerance * MathF.Min(x: group.CreaseSpacing.X, y: MathF.Min(x: group.CreaseSpacing.Y, y: group.CreaseSpacing.Z)));
 
@@ -1547,7 +1566,7 @@ public sealed partial class SdfMeshPathBake {
         group.Points = null;
         group.Next = null;
         group.Contouring = true;
-        Schedule(group: group, work: () => Split(group: group));
+        Schedule(group: group, work: _ => Split(group: group));
     }
     // Splits a group's contour at its creases, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).
@@ -1584,8 +1603,8 @@ public sealed partial class SdfMeshPathBake {
     }
     // Answers a chunk of a group's material points; once a round's every point is answered, its material cut takes them
     // on the thread pool (Advance).
-    private void AnswerPoints(Group group, in SdfMeshBakeRequest request, int[] materials) {
-        materials.AsSpan(length: request.Samples, start: 0).CopyTo(destination: group.PointMaterials.AsSpan(start: group.PointsAnswered));
+    private void AnswerPoints(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<int> materials) {
+        materials[..request.Samples].CopyTo(destination: group.PointMaterials.AsSpan(start: group.PointsAnswered));
         group.PointsAnswered += request.Samples;
         if (group.PointsAnswered < group.Points!.Length) {
             group.Next = PointChunk(group: group);
@@ -1594,7 +1613,7 @@ public sealed partial class SdfMeshPathBake {
 
         group.Next = null;
         group.Contouring = true;
-        Schedule(group: group, work: ((group.Skin is null) ? () => Advance(group: group) : () => Land(group: group, mesh: Skinned(group: group))));
+        Schedule(group: group, work: ((group.Skin is null) ? _ => Advance(group: group) : _ => Land(group: group, mesh: Skinned(group: group))));
     }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
     private void Advance(Group group) {
@@ -1667,7 +1686,7 @@ public sealed partial class SdfMeshPathBake {
         var others = group.Geometry.Poses.Where(predicate: pose => (pose.Key != group.Slot)).ToArray();
 
         if (others.Length > SdfMesh.MaxMembers) {
-            throw new InvalidOperationException($"Mesh group {group.FirstInstance} needs {others.Length} independently moving skin members; the representation holds {SdfMesh.MaxMembers}.");
+            throw new InvalidOperationException(message: $"Mesh group {group.FirstInstance} needs {others.Length} independently moving skin members; the representation holds {SdfMesh.MaxMembers}.");
         }
         var vertexMembers = new byte[slots.Length];
         var any = false;
@@ -1776,7 +1795,7 @@ public sealed partial class SdfMeshPathBake {
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        return ($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={m_seconds:0.000}" + DescribeAccounts() + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
+        return (($"[sdf.mesh-bake] done residency={Residency} groups={m_groups.Count} meshes={meshes} dispatches={m_dispatches} samples={m_samples} discarded={m_discarded} taps={m_taps} refined={m_refinedCells} edges={m_cutEdges} softened={m_softened} merged={m_merged} loaded={m_loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={m_seconds:0.000}" + DescribeAccounts()) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty));
     }
 
     // How far off the surface, in the contour's finest cells, an unpinned vertex may lie and stay where the contour put it
@@ -1858,7 +1877,7 @@ public sealed partial class SdfMeshPathBake {
                 (x, y, z) = ((x + reference.X), (y + reference.Y), (z + reference.Z));
             }
 
-            return new Vector3(x: (float)x, y: (float)y, z: (float)z);
+            return new Vector3(x: ((float)x), y: ((float)y), z: ((float)z));
         }
         public Vector3 Move(SdfContour contour, int vertex, Vector3 displacement, out float amount) {
             var original = At(contour: contour, vertex: vertex);
@@ -1944,7 +1963,6 @@ public sealed partial class SdfMeshPathBake {
         public int PointsAnswered { get; set; }
 
         public Quaternion DrawnOrientation { get; set; } = Quaternion.Identity;
-
         public float DrawnScale { get; set; } = 1f;
 
         // The final lattice while its slabs and corner gradients are sampled.
@@ -1961,7 +1979,9 @@ public sealed partial class SdfMeshPathBake {
         // Whether the bake no longer plans the group (a later program replaced it, or its residency was released): the
         // pool drops its queued work. Written under the bake's gate, read under the pool's.
         public bool Retired { get => Volatile.Read(location: ref m_retired); set => Volatile.Write(location: ref m_retired, value: value); }
+
         private bool m_retired;
+
         // The group of the same bake baking this group's geometry, whose mesh this one takes when it finishes, or null.
         public Group? Leader { get; set; }
         // The settle watch (SdfMeshPathBake.Settle): the group a settle rebake replaces until it lands, the slots besides
@@ -1978,7 +1998,6 @@ public sealed partial class SdfMeshPathBake {
         public Quaternion[]? StillOrientations { get; private set; }
         public Vector3[]? StillPositions { get; private set; }
         public float StillSince { get; set; }
-
         // The box a demand point measures the group by: its planned box, taken before the bake narrows it, as a center and
         // half extents in world space or, for a dynamic group, its slot's frame and units.
         public Vector3 DemandCenter { get; private set; }
@@ -1999,7 +2018,6 @@ public sealed partial class SdfMeshPathBake {
             DemandHalf = Vector3.Abs(value: ((High - Low) * 0.5f));
             HasDemandBox = true;
         }
-
         // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place.
         public void Renumber(int[] materials, SdfMesh mesh) {
             Renumber(materials: materials);
@@ -2033,10 +2051,12 @@ public sealed partial class SdfMeshPathBake {
     // its contour reads a gradient at.
     private sealed class FinalLattice(SdfMeshBakeRequest lattice) {
         public SdfMeshBakeRequest Lattice { get; } = lattice;
+
         // Allocated by the first slab's answer, which only an admitted group takes (MaxAdmitted), so a group waiting for
         // admission holds its lattice's description alone.
         public float[] Values => (m_values ??= new float[Lattice.Samples]);
         public int[] Materials => (m_materials ??= new int[Lattice.Samples]);
+
         private float[]? m_values;
         private int[]? m_materials;
 
@@ -2044,7 +2064,16 @@ public sealed partial class SdfMeshPathBake {
         public SdfSampledLattice? Sampled { get; set; }
         public FinalStage Stage { get; set; }
 
-        public Vector4[] Points { get; set; } = [];
+        // All chunks of a round finish before the next round writes or grows this owned storage.
+        private Vector4[] m_points = [];
+
+        public ReadOnlyMemory<Vector4> Points { get; private set; }
+
+        public void SetPoints(ReadOnlySpan<Vector3> points) {
+            if (m_points.Length < points.Length) { Array.Resize(array: ref m_points, newSize: points.Length); }
+            for (var index = 0; (index < points.Length); index++) { m_points[index] = new Vector4(value: points[index], w: 1f); }
+            Points = m_points.AsMemory(0, points.Length);
+        }
 
         public int Answered { get; set; }
         // A union's refinement: the fine cells a coarse cell splits into (zero for the FineCell rule) and the members'

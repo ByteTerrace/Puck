@@ -171,7 +171,8 @@ public sealed record WorldAuthorityHostRowCheckpoint(
     int FreshCounter,
     bool Retained,
     IReadOnlyList<(int Seat, ulong TransferId)> AnnouncedCrossingHolds,
-    IReadOnlyList<(int Seat, string Border)> SeededArrivals
+    IReadOnlyList<(int Seat, string Border)> SeededArrivals,
+    bool Stopping = false
 ) {
     /// <summary>Gets a detached row with no scheduling residue, transfers, or portal history. Used by a replay
     /// shadow that owns no host-side activity.</summary>

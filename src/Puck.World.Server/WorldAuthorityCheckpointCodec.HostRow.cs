@@ -50,6 +50,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteString(value: row.Border);
             }
         );
+        writer.WriteBoolean(value: section.Stopping);
 
         return writer.ToArray();
     }
@@ -121,6 +122,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             },
             maximum: MaxCollectionCount
         );
+        var stopping = reader.ReadBoolean();
 
         if (!reader.TryFinish(failure: out var failure)) {
             section = null!;
@@ -142,7 +144,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             PortalOccupancy: portalOccupancy,
             Retained: retained,
             ScheduleAccumulatorTicks: scheduleAccumulatorTicks,
-            SeededArrivals: seededArrivals
+            SeededArrivals: seededArrivals,
+            Stopping: stopping
         );
         reason = string.Empty;
 

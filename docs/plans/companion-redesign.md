@@ -405,7 +405,13 @@ An authority holding a title away, a pending hop, an in-doubt departure or a she
 not reaped (the forwarding-route rule widened to these records). An explicit stop first
 runs the separation sweep for visiting companions and completes after the drain; a return
 not settled by then stays an in-doubt record in the final checkpoint, which the stop must
-write. Both are new lifetime mechanisms the build adds.
+write. A host that keeps no durable image cannot write one, so it refuses to stop a home
+holding a title abroad and waits while a row owes steps its drain makes. Reaping and stop
+read one guard (`WorldInstanceHost.CustodyHeldBy`). The accepted stop is part of the row's
+image, so a restart resumes it; the sweep repeats at every drain; and the row retires only
+when, in the same hold of its authority gate that closes admission, it embodies no visitor
+and holds no live lease. A visitor whose home runs nowhere the stop can reach makes the stop
+refused, since no return obligation could be recorded for it.
 
 ## 6. Trust derivation
 
@@ -612,7 +618,9 @@ authority fixtures as evidence:
    `EveryRecallIsNoticedOnItsOwn`, `APendingTitleWaitsForItsHopBeforeARecall`, `AReleaseDuringAPendingHopWaitsForTheHopToResolve`,
    `H5_ReleaseIsHomesRecordAndTheCustodianRetiresOnIt`.
 8. **Lifetime.** Reaping widened to titles away, pending hops, in-doubt departures and shed
-   images; the explicit stop's sweep and final checkpoint; retries per obligation bounded
+   images; the explicit stop's sweep and final checkpoint (built: `WorldInstanceHost.Stop`,
+   `CompanionStopLawTests`; the silo's deactivation writes its final checkpoint but does not
+   sweep first, and shed images wait for step 6); retries per obligation bounded
    by the lease deadline and the drain; status racing a delayed commit across a reconnect.
    Laws: `AStatusQueryMayPassADelayedCommitAfterAReconnect`, `AReconnectResendsADelayedReservation`, `ARefusedAppendIsATransientRefusalTheRequesterRetries`,
    `AnUncertainArrivalIsResolvedOnlyByTheDestinationsRecovery`.

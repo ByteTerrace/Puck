@@ -55,7 +55,7 @@ public sealed class WorldNeighbourComposeReuseLawTests {
         Assert.Equal(actual: sameGeneration, expected: generation);
         Assert.Same(actual: sameDefinition, expected: definition);
 
-        Assert.True(condition: host.TryStop(name: name, reason: out reason), userMessage: reason);
+        Assert.True(condition: host.TryRetire(name: name, reason: out reason), userMessage: reason);
         Assert.False(condition: host.TryResolveObservedProjection(boot.Instance, "neighbour", out _, out _, out _, out _, out reason));
         Assert.Contains(actualString: reason, expectedSubstring: "not a valid");
     }

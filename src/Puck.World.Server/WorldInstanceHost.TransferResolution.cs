@@ -30,6 +30,12 @@ public sealed partial class WorldInstanceHost {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
 
+            // A row frozen for retirement answers no authority operation: its own departures in doubt wait for the
+            // activation that replaces it, whose image carries them.
+            if (m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var frozen) && frozen.Server.IsRetiring) {
+                index++;
+                continue;
+            }
             // A settled crossing whose unlanded members could not be restored owes their restoration alone.
             if (pending.RestoreOnly) {
                 if (
@@ -42,7 +48,8 @@ public sealed partial class WorldInstanceHost {
                 }
                 continue;
             }
-            if (!TryBindRecoveryDestination(pending: ref pending)) {
+            // A destination frozen for retirement is asked nothing: the activation that replaces it answers.
+            if (!TryBindRecoveryDestination(pending: ref pending) || (pending.TargetAuthority?.Local?.Server.IsRetiring == true)) {
                 index++;
                 continue;
             }
@@ -421,7 +428,7 @@ public sealed partial class WorldInstanceHost {
     // Reuse-if-running exactly like Persistent (only the retention rule differs — see
     // TransferDestination.Resolved) unless the resolver-minted name is no longer running. Reaching TryStart
     // under that stale name directly, the way the Persistent path always has, would restart an instance
-    // behind the resolver's own back: whatever TryStop call retired the original already cleared
+    // behind the resolver's own back: whatever TryRetire call retired the original already cleared
     // WorldSessionResolver's cache entry via NotifyInstanceRetired, so a blind restart would make one live
     // again with the resolver never told, and the next traveler's resolve would mint a second, different
     // generation for what should be one scoped session. Re-resolving through the resolver instead — using
@@ -501,7 +508,7 @@ public sealed partial class WorldInstanceHost {
     // destination's, through the same WorldFileOrigin.TryResolveCanonicalPath probes ResolveByStableName's name-collision
     // fence already uses, so a spelling difference alone never false-refuses or false-matches. Names order
     // (ordinal) for determinism; a stopped instance is invisible by construction (removed from m_instances
-    // by TryStop already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
+    // by TryRetire already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
     private bool TryFindRunningInstanceByOrigin(string documentPath, out string matchedName, out IReadOnlyList<string>? ambiguous) {
         matchedName = string.Empty;
         ambiguous = null;
@@ -564,6 +571,11 @@ public sealed partial class WorldInstanceHost {
                     value: out resolved
                 )) {
                     reason = $"no instance named '{resolvedName}'";
+
+                    return false;
+                }
+                if (resolved.Server.IsRetiring) {
+                    reason = $"'{resolvedName}' is retiring and admits no arrival";
 
                     return false;
                 }

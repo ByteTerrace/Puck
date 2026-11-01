@@ -61,6 +61,16 @@ them with `pixtool open-capture <path>.wpix list-counters`. PIX analysis needs
 Windows developer mode, which the lead machine has on
 ([Direct3D 12 captures](../../../../docs/rendering/directx.md#gpu-captures)).
 
+**PresentMon (frame pacing, both backends).** Frame pacing is what the display
+shows, which `host.frames` does not measure: present-to-present intervals and
+their percentiles. Install the console build with `winget install --id
+Intel.PresentMon.Console --exact` (no elevation needed); it lands on the PATH
+as `presentmon`. Capture a running World with `presentmon --process_id <pid>
+--timed 20 --terminate_after_timed --output_file <csv> --no_console_stats
+--stop_existing_session`. The capture reads ETW, so the user must be in the
+Performance Log Users group (the lead machine's user is) or the capture runs
+elevated.
+
 **RenderDoc (Vulkan).** From a build that carries SPIR-V (a solution build, or
 `-p:PuckShaderSpirvEnabled=true`; [kernels](kernels.md#building)), boot with
 `--capture-tool renderdoc --backend vulkan`,
