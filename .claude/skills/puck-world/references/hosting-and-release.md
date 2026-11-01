@@ -361,9 +361,10 @@ Each package must preserve the same source import and candidate-written reverse
 import, advance simulation, and checkpoint successfully. A same-image control proves
 the runner only. Named handheld machines support complete durable checkpoints;
 run the real-core `queued-host-time-travel` probes and the world machine continuation
-laws when changing this seam. Pumped addons, applied screen operations, live coupled
-links, and enabled machine rewind history remain uncapturable and must reject
-qualification rather than be omitted from its fixture.
+laws when changing this seam. Pumped addons and applied screen operations use the
+ordinary authority checkpoint. Unsupported guest resources refuse mounting; live
+coupled links and enabled machine rewind history still refuse capture rather than
+being omitted from a qualification fixture.
 `--authentication-config-file` selects an installed client provider and server
 key pin; no token belongs in world content or checkpoints. Azure's provider
 validates ByteTerrace API membership, while generic protocol code sees only the

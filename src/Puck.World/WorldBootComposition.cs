@@ -836,6 +836,7 @@ public static class WorldBootComposition {
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
                 machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true,
+                addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
                 pacing: sp.GetRequiredService<HostPacing>()

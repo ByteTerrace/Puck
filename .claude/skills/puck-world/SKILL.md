@@ -50,6 +50,15 @@ retarget them, and read the references' mentions of them as prior art
 
 ## Live state reads and writes
 
+**Durable addon state.** `IWorldAddonHost` stages guest checkpoint decoding before
+authority adoption. Persistence, recording and history capture the same live
+memory and retained pinned module sources; arming never restarts guests. The silo
+recovery tail contains external edits only, never guest-derived mutations. Changed
+deployment modules reconcile after old guest memory has recovered under its old
+pin. A host epoch timeout freezes the affected authority and refuses a checkpoint
+of its incomplete tick; it is not a timing-dependent simulated fault. See
+[`WorldAddonRuntime`'s contract](../../../src/Puck.World.Addons/README.md#durable-guest-state).
+
 **The standard is authored.** `worlds/standard/standard.puck` composes the
 optional controls and skin. Shared cursor, icons, binding-bar designs, pages
 and wheel belong there; the debug world's Go/Tour pages and Places ring refine

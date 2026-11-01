@@ -501,17 +501,15 @@ public sealed partial class WorldReplayInspector {
     // A forwarding host: every member reaches the ordinary factory's product untouched, and ResolveReads — pump point
     // 3, after the population advanced — additionally fires the observer. Wrapping rather than subclassing keeps the
     // shadow drive's own guest set (and its receipts, which the mount pin compares) exactly what the factory built.
-    private sealed class ObservingAddonHost(IWorldAddonHost inner, Action<ulong> onResolved) : IWorldAddonHost, IWorldAddonCheckpointHost {
+    private sealed class ObservingAddonHost(IWorldAddonHost inner, Action<ulong> onResolved) : IWorldAddonHost {
         private readonly IWorldAddonHost m_inner = inner;
         private readonly Action<ulong> m_onResolved = onResolved;
 
         /// <inheritdoc/>
         public bool AnyEverPumped => m_inner.AnyEverPumped;
 
-        public byte[] CaptureCheckpoint() => ((m_inner as IWorldAddonCheckpointHost)
-            ?? throw new InvalidOperationException(message: "Observed addon host cannot checkpoint state.")).CaptureCheckpoint();
-        public void RestoreCheckpoint(byte[] checkpoint) => ((m_inner as IWorldAddonCheckpointHost)
-            ?? throw new InvalidOperationException(message: "Observed addon host cannot restore state.")).RestoreCheckpoint(checkpoint: checkpoint);
+        public byte[] CaptureCheckpoint() => m_inner.CaptureCheckpoint();
+        public IWorldAddonPreparedPlan PrepareCheckpoint(WorldDefinition definition, byte[] checkpoint) => m_inner.PrepareCheckpoint(checkpoint: checkpoint, definition: definition);
 
         /// <inheritdoc/>
         public int MountedCount => m_inner.MountedCount;

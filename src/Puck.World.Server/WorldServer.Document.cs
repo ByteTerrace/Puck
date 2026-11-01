@@ -99,10 +99,11 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldDocument.ResolveRebuildNeighbours"/>
     public IWorldNeighbourResolver? ResolveRebuildNeighbours(string path) => m_document.ResolveRebuildNeighbours(path: path);
     /// <inheritdoc cref="WorldDocument.TryApplyMutation"/>
-    public bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) =>
+    public bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered, bool derived = false) =>
         m_document.TryApplyMutation(
             connectionId: connectionId,
             correlationId: correlationId,
+            derived: derived,
             engineTick: engineTick,
             mutation: mutation,
             preMetered: preMetered,

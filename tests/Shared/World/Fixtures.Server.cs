@@ -386,6 +386,12 @@ internal sealed class WorldFixture : IDisposable {
 /// unrelated to the addon seam wire a <see cref="WorldReplayTape"/>'s required <c>addonHostFactory</c> parameter
 /// with, since this project cannot reference <c>Puck.World.Addons</c>.</summary>
 internal sealed class NullAddonHost : IWorldAddonHost {
+    public byte[] CaptureCheckpoint() => [];
+    public IWorldAddonPreparedPlan PrepareCheckpoint(WorldDefinition definition, byte[] checkpoint) {
+        TryPrepare(candidate: definition, current: null, plan: out var plan, reason: out _);
+        return plan!;
+    }
+
     /// <inheritdoc/>
     public bool AnyEverPumped => false;
     /// <inheritdoc/>

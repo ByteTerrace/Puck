@@ -212,6 +212,10 @@ public sealed partial class WorldCreationInstances {
         // spread their packs over the period's frames (WorldCreationInstances.Rates).
         public int RatePhaseHertz = SdfUpdateRateTiers.EveryFrameHertz;
         public float RateLead;
+        // The pack count when something outside the pack last read one of the body's parts (NotePoseRead), and the
+        // farthest, in creation units, any full pack has posed one of its parts' geometry from its root.
+        public long PoseReadPack = long.MinValue / 2;
+        public float MotionReach;
 
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;
@@ -1515,6 +1519,7 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
+        NotePoseRead(live: live);
         pose = LatchedShapePose(
             client: client,
             live: live,
@@ -1579,6 +1584,7 @@ public sealed partial class WorldCreationInstances {
         var live = FindBody(bodyIndex);
 
         if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(nameof(shapeIndex)); }
+        NotePoseRead(live: live);
         var pose = live.ShapeTransforms[shapeIndex];
         var shape = live.Creation.EngineDocument.Shapes![shapeIndex];
 
@@ -1616,6 +1622,8 @@ public sealed partial class WorldCreationInstances {
         }
 
         var transformSlot = ((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + live.Motion.ShapeSlots[shapeSlot]);
+
+        NotePoseRead(live: live);
 
         if (((uint)transformSlot) >= ((uint)transforms.Length)) {
             pose = default;
@@ -1675,6 +1683,7 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
+        NotePoseRead(live: live);
         transformSlot = ((m_packedSlotBase + RootSlotOffset(index: poolIndex)) + live.Motion.ShapeSlots[shapeSlot]);
 
         return true;
@@ -1732,6 +1741,7 @@ public sealed partial class WorldCreationInstances {
 
             for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
                 if (shapes[shapeIndex].Id == targetShapeId) {
+                    NotePoseRead(live: live);
                     position = LatchedShapePose(
                         client: client,
                         live: live,
@@ -1803,6 +1813,7 @@ public sealed partial class WorldCreationInstances {
 
             for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
                 if (shapes[shapeIndex].Id == targetShapeId) {
+                    NotePoseRead(live: live);
                     transformSlot = (rootSlot + live.Motion.ShapeSlots[shapeIndex]);
 
                     return true;

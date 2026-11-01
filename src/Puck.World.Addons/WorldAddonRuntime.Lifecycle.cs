@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.Assets;
 using Puck.Scripting;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -349,12 +348,19 @@ public sealed partial class WorldAddonRuntime {
             server: server
         );
 
+        if (server.Persistence.HasPendingAddonCheckpoint) {
+            try { server.AttachAddons(runtime: candidate); } catch { candidate.Dispose(); throw; }
+            runtime = candidate;
+            reason = null;
+            return true;
+        }
         if (!candidate.TryPrepare(
             candidate: definition,
             current: null,
             plan: out var plan,
             reason: out reason
         )) {
+            candidate.Dispose();
             runtime = null;
 
             return false;
@@ -375,7 +381,7 @@ public sealed partial class WorldAddonRuntime {
     }
     /// <inheritdoc/>
     public void Commit(IWorldAddonPreparedPlan plan) {
-        CommitCore(plan, restoring: false);
+        CommitCore(plan, restoring: ((PreparedAddonInstall)plan).Restoring);
     }
 
     private void CommitCore(IWorldAddonPreparedPlan plan, bool restoring) {
@@ -451,6 +457,10 @@ public sealed partial class WorldAddonRuntime {
     }
     /// <inheritdoc/>
     public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out string? reason) {
+        return TryPrepareCore(current, candidate, out plan, out reason, modules: null);
+    }
+
+    private bool TryPrepareCore(WorldDefinition? current, WorldDefinition candidate, out IWorldAddonPreparedPlan? plan, out string? reason, IReadOnlyDictionary<string, byte[]>? modules) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         if (candidate.Addons.Any(predicate: static row => row.Enabled)) { WorldAddonMutationDecoder.Prepare(); }
 
@@ -577,15 +587,11 @@ public sealed partial class WorldAddonRuntime {
                 // boot. hostIsNew tracks whether THIS pass is the one that built it, so a discarded plan disposes
                 // exactly the host it created and none it merely reused.
                 if (host is null) {
-                    var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
-
                     host = new AddonHost(
                         channelResolver: new WorldAddonChannelResolver(channels: stagedChannels),
-                        engine: engine,
-                        loader: new WasmModuleLoader(
-                            engine: engine,
-                            assetSource: new FileSystemAssetSource()
-                        )
+                        engine: SharedModules.Engine,
+                        loader: SharedModules.Loader,
+                        ownsEngine: false
                     );
                     hostIsNew = true;
                 }
@@ -599,7 +605,7 @@ public sealed partial class WorldAddonRuntime {
                 // the instant between Prepare returning and ownership registering could leak the store.
                 freshlyPrepared.EnsureCapacity(capacity: (freshlyPrepared.Count + 1));
 
-                var instance = host.Prepare(descriptor: in descriptor);
+                var instance = host.Prepare(descriptor: in descriptor, moduleSource: ((modules is null) ? (ReadOnlyMemory<byte>?)null : modules[row.Name]));
 
                 // Ownership transfers to this pass the instant the store exists — before any further gate below is
                 // even reached — so the finally's DiscardPrepared releases it on EVERY non-commit exit from here on,
@@ -610,6 +616,11 @@ public sealed partial class WorldAddonRuntime {
                     plan = null;
                     reason = $"'{row.Name}' could not prepare — {instance.Fault.Detail}";
 
+                    return false;
+                }
+                if (instance.CheckpointRefusal is { } checkpointRefusal) {
+                    plan = null;
+                    reason = $"'{row.Name}' cannot mount — durable guest state unavailable: {checkpointRefusal}";
                     return false;
                 }
 
@@ -710,6 +721,10 @@ public sealed partial class WorldAddonRuntime {
             owned = true;
 
             return true;
+        } catch (TimeoutException error) {
+            plan = null;
+            reason = error.Message;
+            return false;
         } finally {
             if (!owned) {
                 DiscardPrepared(
@@ -720,7 +735,6 @@ public sealed partial class WorldAddonRuntime {
             }
         }
     }
-
     // Reconstructs the neutral load descriptor a row prepares under — identical for a freshly-prepared row and a
     // reused one (structural equality already proved every field, including Name/ModulePath/Hash/Fuel, matches),
     // so the SAME helper serves both branches of TryPrepare's loop without a live AddonHost read. The module path
@@ -822,6 +836,8 @@ public sealed partial class WorldAddonRuntime {
     /// plus what disposing an uncommitted plan must release. Linear ownership: exactly one of <see cref="Commit"/>
     /// or <see cref="Dispose"/> runs against a given instance, never both and never neither.</summary>
     private sealed class PreparedAddonInstall(WorldInputCatalog channels, IReadOnlyList<WorldChannel> channelsSource, List<(AddonDescriptor Descriptor, AddonInstance Instance)> freshlyPrepared, AddonHost? host, Dictionary<string, AddonInstance> hostByName, Dictionary<string, AddonDescriptor> hostDescriptors, List<AddonInstance> hostInstances, bool hostIsNew, List<MountedAddon> mounted, List<Func<string?>> narration, List<WorldAddonReceipt> receipts, List<MountedAddon> superseded, AddonHost? supersededHost) : IWorldAddonPreparedPlan {
+        public bool Restoring { get; set; }
+
         private bool m_committed;
         private bool m_disposed;
 

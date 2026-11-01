@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <see cref="ReplayRefusalExtensions"/>'s remarks for why this door's v1 scope stops here.</summary>
 internal enum ReplayRefusal {
     /// <summary>A recording was armed after the world stepped, so it would start from a checkpoint of the live state,
-    /// and its pinned guests cannot restart or its state is one no authority checkpoint captures: a stepped machine
+    /// and its state is one no authority checkpoint captures: an interrupted guest's incomplete tick, a stepped machine
     /// without checkpoint support, a coupled link or rewind history, an engagement in flight, or an edit not yet
     /// applied. Arming refuses rather than produce a tape that cannot re-drive.</summary>
     [Refusal(door: "replay.record", condition: "the world has stepped and its live state is one no authority checkpoint captures", kind: RefusalKind.Verdict, Unsupported = true)]

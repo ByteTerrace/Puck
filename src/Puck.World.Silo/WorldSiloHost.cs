@@ -1194,6 +1194,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     }
 
     private async Task<bool> ActivateCoreAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
+        // A completed storage await need not yield; explicitly leave Orleans' scheduler before CPU construction.
+        await Task.CompletedTask.ConfigureAwait(options: ConfigureAwaitOptions.ForceYielding);
+        var activationTimer = System.Diagnostics.Stopwatch.StartNew();
+        var stageStarted = TimeSpan.Zero;
+
+        void NoteStage(string stage) {
+            var elapsed = activationTimer.Elapsed;
+
+            Console.Error.WriteLine(value: $"[silo.activate.timing: '{RowKey(identity: identity)}' {stage} {(elapsed - stageStarted).TotalMilliseconds:F0} ms; total {elapsed.TotalMilliseconds:F0} ms]");
+            stageStarted = elapsed;
+        }
         if (IsDraining) { return false; }
         if (FindWorldRow(identity: identity) is not { } worldRow) {
             Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (not declared in this silo's document)]");
@@ -1223,7 +1234,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         var acquired = await m_store.AcquireActivationAsync(
             cancellationToken: ct,
             identity: identity
-        );
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (acquired is not { } fence) { return false; }
         var admitted = false;
@@ -1232,7 +1243,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var recovery = (await m_store.LoadRecoveryAsync(
                 cancellationToken: ct,
                 identity: identity
-            )
+            ).ConfigureAwait(continueOnCapturedContext: false)
                 ?? throw new InvalidDataException(message: "The acquired authority has no recovery root."));
 
             if (
@@ -1257,6 +1268,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             }
 
             var checkpointBlob = recovery.Checkpoint;
+
+            NoteStage(stage: "storage");
             WorldAuthorityCheckpoint? checkpoint = null;
 
             if (checkpointBlob is { } blob) {
@@ -1272,6 +1285,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 }
             }
 
+            NoteStage(stage: "checkpoint decode");
             var ownedWorldsDirectory = Path.Combine(
                 path1: m_definition.StateDir,
                 path2: "hosted",
@@ -1332,6 +1346,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 throw;
             }
 
+            NoteStage(stage: "authority construction and restore");
             if (!TryFinishActivationWiring(
                 adjacencies: adjacencies,
                 identity: identity,
@@ -1341,6 +1356,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             )) {
                 return false;
             }
+
+            NoteStage(stage: "activation wiring and addons");
 
             if (!TryBuildFederationIdentity(
                 definition: definition,

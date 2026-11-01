@@ -156,17 +156,26 @@ One engine-wide job system answers all of it:
 - **Schedule as well as spread**, what remains [high]. Rated work keeps off the
   frames that run a step: `PresentationRate.Holds` (the one floor every lever
   decides through) updates early on a frame without a step when the next frame
-  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`).
-  A body neither a view nor a shadow cascade may show holds
-  (`SdfUpdateRateTiers.HeldHertz`; the caster test is the renderer's own
-  `SdfMeshCull`) and resumes as a continuity cut, and bodies taking a tier
-  together alternate their phase by half its period. Open: the rated views and
+  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`);
+  the stamp pool takes this frame's flags and levers before it packs
+  (`WorldCreationInstances.PresentAt`, from `PrepareGraph`), none for a settled
+  capture. A body nothing may show or read holds (`SdfUpdateRateTiers.HeldHertz`):
+  no camera of any view, displayed or not, no shadow cascade (the renderer's own
+  `SdfMeshCull`, fitted on the frame just dressed), and no consumer of its parts
+  since the previous pack (lights, camera anchors, audio emitters and overlay
+  facts all read through the pool's part accessors, which record the read,
+  `NotePoseRead`). Its bound is the larger of the rest reach and the farthest
+  any pack posed a part (`MotionReach`). It resumes as a continuity cut, and
+  bodies taking a tier together alternate their phase by half its period. Open:
+  a held body's motion no pack has posed yet (a slide first driven while held)
+  is outside its bound. The rated views and
   screens (eight machine sources and a session at 15 Hz in the lobby) still
   share one phase, since the render graph's history keeps none to stagger; a
   tick frame's own work (a 6 to 9 ms tick plus the tick-bound session views'
   recording, produce 12 to 16 ms) is what still crosses 16.7 ms, which parallel
   recording and the parallel tick take. A held body shows its held pose for the
-  one frame the rate views lag behind a camera cut. (from: slow-frames)
+  one frame the rate views lag behind a camera cut, since the cameras resolve
+  after the pack. (from: slow-frames)
 - The effector solver passes the "Puck code over engine code" check: which
   effectors, chain, tip, target kind, reach, standoff, direction, gate, plant
   window, replant and weight are authored `CreationEffectorDocument` data, and
@@ -517,6 +526,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   | Direct3D 12 gallery walk, A | 39.76 | 57.86 | 136 of 273 | 31.03 | 39.7 / 57.8 |
   | Direct3D 12 gallery walk, B | 26.11 | 30.54 | 72 of 315 | 16.29 | 32.1 / 36.9 |
   | Vulkan lobby standing, B with the collection cuts | 18.11 | 19.32 | 4 of 600 | 9.93 | 43.2 / 57.5 |
+
+  The first B read its step flags a frame late (the pool packed before `Dress`
+  handed it the frame's rate), so its bodies packed on step frames. With this
+  frame's flags (B2 against that build, A2, on a machine more loaded still,
+  ticks 6.7 to 9.0 ms), the walk's "produce with a step" falls below the frames
+  without one:
+
+  | Reading | p99 | max | work over 16.7 | produce with / without a step, avg |
+  |---|---|---|---|---|
+  | Direct3D 12 lobby standing, A2 | 34.99 | 51.64 | 198 of 600 | 8.91 / 7.70 |
+  | Direct3D 12 lobby standing, B2 | 25.19 | 32.92 | 214 of 600 | 9.39 / 9.28 |
+  | Direct3D 12 gallery walk, A2 | 26.66 | 28.72 | 72 of 313 | 8.96 / 8.61 |
+  | Direct3D 12 gallery walk, B2 | 22.42 | 22.80 | 40 of 320 | 7.86 / 9.17 |
 
   The standing iterations still over 16.7 ms are tick frames: a 7 to 9 ms tick
   plus 12 to 13.6 ms of produce, the tick-bound views (above). Present-to-present
@@ -937,34 +959,31 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · medium · Next: the silo activation's long grain turn,
+Owner: delivery lane · medium · Next: the silo's cold activation,
 then CI's steady state, the shader cache and the GC-hole retirement.
 
-- [high] `puck test --reproduce` fails on every debug-world fixture whose
-  `documentId` is not `debug` (granaries, reversi and others; noclip passes).
-  The error is `cannot capture '6~global4~self': Replay probe cannot capture
-  its start: a checkpoint requires the declared addon host and its restored
-  state`. Such a fixture opens a second instance that `WorldInstanceHost`
-  starts with no addon host (`WorldInstanceHost.cs:1305`), and the addon
-  checkpoint guard (`WorldPersistence.Checkpoint.cs:611`) refuses it. The cause
-  is the same as the silo review's M5 (`puck bench` builds a server the same
-  way), so it is fixed with M5. Every determinism check that lanes run depends
-  on it. (from: granary-live)
-- [medium] A world-silo activation of the debug world runs one synchronous
-  Orleans grain turn of 10.3 to 12.9 s. Orleans warns
-  (`WorkItemGroup[101215]`, "took elapsed time 0:00:10.343"), and the turn ends
-  as the seven addon guests finish mounting. This was measured by
-  `puck azure test-world-container` on a locally built `puck/world-silo` image,
-  where both boots otherwise pass. Nothing else runs on that activation
-  meanwhile, and Orleans' default call timeout is 30 s. Find what the turn spends
-  its time on (document composition, wasm compilation of the guests, the
-  checkpoint) and move it off the turn: precompiled or cached guest modules, and
-  the composition as background work the activation awaits. Never block
-  the scheduler thread.
+- [medium] Cold debug-world silo activation still spends most of its time before
+  checkpoint decode. Construction leaves the Orleans scheduler explicitly
+  (`src/Puck.World.Silo/WorldSiloHost.cs:1196`); both container boots now pass
+  without long-turn warnings. Before the standard-authoring merge, per-step timers
+  (`WorldSiloHost.cs:1202`) measured a portable fresh boot at 10.865 s:
+  storage/definition admission 8.866 s,
+  checkpoint decode 0.001 s, authority construction 1.876 s, addon wiring 0.122 s.
+  A new-process recovery took 14.851 s (10.267 / 1.165 / 3.209 / 0.210 s).
+  Rebuilding with the authored-standard content gave 15.260 / 12.807 s for fresh
+  and new-process recovery; both passed health and authenticated QUIC again.
+  The storage phase includes root-qualified definition admission
+  (`src/Puck.World.Server/WorldAuthorityBlobStore.cs:1065`); it is not an I/O-only
+  measurement. A framework-dependent ReadyToRun experiment took 13.797 / 18.009 s
+  for fresh/recovery boots; its no-build publish took 144.5 s. It is not enabled.
+  These were contended runs (73–100% CPU, 1.3–2.7 GB free RAM), so they establish
+  neither a speedup nor the review's inferred ten seconds of JIT. Profile that
+  admission phase and compare cold/warm activations in one process in the lead's
+  quiet window before choosing a publish or cache change. (from: silo-fixes)
 - [low] Extend addon checkpoints to table/reference and segment-drop state.
-  Capture currently refuses these resources by name
+  Mounting currently refuses these resources by name
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
-  `src/Puck.Scripting/AddonInstance.Checkpoint.cs:35`); the debug world's seven
+  `src/Puck.World.Addons/WorldAddonRuntime.Lifecycle.cs:621`); the debug world's seven
   guests use supported numeric globals and linear memory. The [runtime contract](../../src/Puck.World.Addons/README.md#durable-guest-state)
   owns the supported inventory. (owner: delivery; from: silo-addons)
 - [low] The official tree (`puck official build --worlds worlds/debug`) ships
