@@ -1,0 +1,220 @@
+// The courtyard's foliage, east of the hero studio. Source: the quarantined moth-courtyard meadow rows.
+// The studio ends at x=72; the grove's westernmost bank starts at x=75. No pose stations are imported.
+import "../standard/foliage"
+let meadowOrigin = [114, 0, -62]
+let meadowBanks = [
+  {
+    position [-13, -2, 19],
+    r [12, 4, 10]
+  }
+  {
+    position [16, -3, 27],
+    r [17, 5.5, 12]
+  }
+  {
+    position [35, -2, 15],
+    r [13, 4, 15]
+  }
+  {
+    position [-25, -2, -7],
+    r [14, 3.5, 17]
+  }
+  {
+    position [7, -3, 43],
+    r [23, 6, 15]
+  }
+]
+let meadowSand = [
+  {
+    position [0, -0.49, 0],
+    r [3.3, 0.5, 2.9]
+  }
+  {
+    position [3.5, -0.49, 0.9],
+    r [3.7, 0.5, 1.9]
+  }
+  {
+    position [7, -0.49, 1.7],
+    r [3.3, 0.5, 2.2]
+  }
+  {
+    position [11.5, -0.49, 2.7],
+    r [4.5, 0.5, 3.5]
+  }
+  {
+    position [15, -0.49, 3],
+    r [3.6, 0.5, 4.1]
+  }
+  {
+    position [11.5, -0.49, 7.3],
+    r [2.6, 0.5, 2.5]
+  }
+  {
+    position [-4, -0.49, 6],
+    r [2.4, 0.5, 1.5]
+  }
+  {
+    position [21, -0.49, -0.8],
+    r [2.8, 0.5, 1.8]
+  }
+]
+
+prototypes {
+  mossyRock(id: "meadow-rock")
+  broadleafTree(id: "meadow-tree")
+  grassTuft(id: "meadow-tuft")
+  for (tile, i) in meadowTiles {
+    windMeadowTile(id: $"meadow-{i}", tile: tile, origin: meadowOrigin)
+  }
+  for (bank, i) in meadowBanks {
+    sceneryPatch(id: $"meadow-bank-{i}", radii: bank.r, color: "#78914D")
+  }
+  for (patch, i) in meadowSand {
+    sceneryPatch(id: $"meadow-sand-{i}", radii: patch.r, color: "#C9AF7D")
+  }
+  sceneryPatch(id: "meadow-lawn", radii: [4.1, 0.12, 4.1], color: "#658343")
+}
+
+placements {
+  // The root pivot is 0.1 m below each tile's origin, buried just under the debug floor (top 0.01 m).
+  for (tile, i) in meadowTiles {
+    placement $"meadow-{i}" {
+      prototype: $"meadow-{i}"
+      position [meadowOrigin[0] + tile[0], 0.09, meadowOrigin[2] + tile[1]]
+    }
+  }
+  sceneryScatter(id: "meadow-oak", prototype: "meadow-tree", rows: [
+    {
+      position [-7, 0, 7],
+      scale: 1.15,
+      yaw: 15
+    }
+    {
+      position [-5, 0.7, 16],
+      scale: 1.25,
+      yaw: 112
+    }
+    {
+      position [4, 0, 14],
+      scale: 0.9,
+      yaw: 238
+    }
+    {
+      position [22, 0, 11],
+      scale: 1.1,
+      yaw: 64
+    }
+    {
+      position [28, 1.1, 17],
+      scale: 1.35,
+      yaw: 190
+    }
+    {
+      position [14, 1.25, 22],
+      scale: 1.05,
+      yaw: 310
+    }
+  ], origin: meadowOrigin, contact: { margin: 0 })
+  sceneryScatter(id: "meadow-rock", prototype: "meadow-rock", rows: [
+    {
+      position [-3.8, 0, 5.4],
+      scale: 1.1,
+      yaw: 20
+    }
+    {
+      position [-5.3, 0, 5.9],
+      scale: 0.55,
+      yaw: 138
+    }
+    {
+      position [6.5, 0, 9.8],
+      scale: 1.3,
+      yaw: 225
+    }
+    {
+      position [7.9, 0, 10.4],
+      scale: 0.58,
+      yaw: 320
+    }
+    {
+      position [20.6, 0, 2.2],
+      scale: 1,
+      yaw: 60
+    }
+    {
+      position [21.8, 0, 1.4],
+      scale: 0.46,
+      yaw: 180
+    }
+    {
+      position [25, 0, 10],
+      scale: 1.45,
+      yaw: 270
+    }
+  ], origin: meadowOrigin, contact: { margin: 0 })
+  for (bank, i) in meadowBanks {
+    placement $"meadow-bank-{i}" {
+      prototype: $"meadow-bank-{i}"
+      position [meadowOrigin[0] + bank.position[0], bank.position[1], meadowOrigin[2] + bank.position[2]]
+      solid {
+        margin: 0
+      }
+    }
+  }
+  for (patch, i) in meadowSand {
+    placement $"meadow-sand-{i}" {
+      prototype: $"meadow-sand-{i}"
+      position [meadowOrigin[0] + patch.position[0], patch.position[1] + 0.015, meadowOrigin[2] + patch.position[2]]
+      solid {
+        margin: 0
+      }
+    }
+  }
+  placement "meadow-lawn" {
+    prototype: "meadow-lawn"
+    position [119.5, -0.095, -55.3]
+    solid {
+      margin: 0
+    }
+  }
+  for (center, cluster) in [
+    [-3, 2.6], [-2.7, -2.7], [2.5, -2.5], [6.2, -1.5]
+    [8, 7.8], [10, -2.5], [14.7, -2.2], [18.5, 1]
+    [18.2, 6.5], [14.8, 9], [9.5, 10], [-5.5, 8], [21.7, 4.2]
+  ] {
+    sceneryScatter(
+      id: $"meadow-tuft-{cluster}", prototype: "meadow-tuft", origin: meadowOrigin,
+      rows: map(range(0, 6), i => {
+        position [
+          center[0] + (0.28 + i % 3 * 0.3) * cosine(i * 2.39996323 + cluster)
+          0.025
+          center[1] + (0.28 + i % 3 * 0.3) * sine(i * 2.39996323 + cluster)
+        ]
+        yaw: i * 67 + cluster * 19
+        scale: 0.75 + i % 3 * 0.2
+      })
+    )
+  }
+}
+
+state {
+  world {
+    row {
+      name: "meadowWindSpeed"
+      kind: Fixed
+      value: "1.15"
+    }
+    row {
+      name: "meadowFlutterSpeed"
+      kind: Fixed
+      value: "4.3"
+    }
+    row {
+      name: "meadowWindPose"
+      kind: Fixed
+      value: "0"
+    }
+  }
+}
+
+spawnPoints [{ id: "meadow", position [119.5, 0.04, -55.3], yawDegrees: 0 }]

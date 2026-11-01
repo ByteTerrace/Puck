@@ -1,0 +1,3 @@
+// The garden's creature count (pond.puck): six hounds, four spiders, and the rest dragonflies and fish.
+import "pond"
+pondFlocks(creatures: 32)

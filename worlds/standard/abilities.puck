@@ -1,3 +1,39 @@
+// Reusable wall and ceiling crawl: a Pull hold the named kit takes by driving into a face whose normal lies inside `cone`
+// (degrees from gravity-up: 90 a wall, 180 a ceiling), spending its `stamina` body Counter at `spendRate` a second.
+// `upLean` 0 keeps the body upright on a wall, 1 lays it on the face. Expand it in a document of its own that the kit's
+// document imports: an imported row composes ahead of the kit's own rows, and a held face must outrank the floor a
+// climber stands beside. The importing world declares the `stamina` Counter slot (a `resetFact: "Grounded"` refills it
+// on landing) and the `release` channel, whose held read lets go.
+template crawlHold(kit, name = "crawl", cone = [60, 180], speed = 2, reach = 0.8, upLean = 0, release = "jump", stamina = "stamina", spendRate = 1) {
+  kits [
+    {
+      name: kit
+      motion {
+        holds [
+          {
+            name: name
+            bond: Surface
+            hold: Pull
+            cone: cone
+            pull: 1
+            reach: reach
+            speed: speed
+            upLean: upLean
+            forward: Heading
+            onDrive: true
+            driveAlignment: 0.3
+            release: release
+            spend {
+              state: stamina
+              ratePerSecond: spendRate
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
 // Reusable timed movement burst, authored into the named kit. The importing avatar refines the kit
 // with locomotion, shape and other actions, and declares dash plus the two Timer body slots.
 template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {

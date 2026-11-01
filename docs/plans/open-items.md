@@ -66,9 +66,8 @@ experimental worlds have that it lacks is ported into it
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-    a source-generated JSON context for `WorldDefinition` (15,786 of a
-    ReadyToRun boot's remaining JIT methods), then a reboot for an edit outside
-    `PuckHotReload`; measure the cold and warm builds.
+    the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
+    an edit outside `PuckHotReload`; measure the cold and warm builds.
 11. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
 12. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
@@ -254,7 +253,13 @@ One engine-wide job system answers all of it:
   60 Hz display only every other refresh is free of a step, so the useful
   periods are two and four refreshes, which the tiers already are; a continuous
   rate would be quantized back to them and adds no placement freedom.
-- [medium] Kit bodies' advance stays serial, so the parallel tick partitions
+- [high] The creature garden, the parallel tick's forcing workload, is all kit
+  bodies. At 128 creatures a tick is about 3.7 ms, and body advance is 80 % of
+  it (motion programs 33 %, their contact sweeps 30 %, producers 17 %). The
+  planned rigid-body step (T2) takes none of that, so this item, not T2,
+  carries the parallel tick's main gain. It follows T1 and T3 in the memo's
+  order. (from: garden, `worlds/debug/garden-crowd.puck`)
+  Kit bodies' advance stays serial, so the parallel tick partitions
   only the snapshot, the crossing scan and the rigid bodies, which is less than
   the measured 70 %. A kit body's advance is one arena transaction on the one
   journal: `BeginKitStep` opens a scope (`WorldInputRuntime.Effects.cs:18-24`),
@@ -536,6 +541,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   (52 %), of which the per-body pose pack (`WorldCreationInstances.PackTransforms`,
   effectors included) is 0.89 / 0.78 ms and partitions by registration; graph
   preparation and scheduling are about 0.5 ms.
+- **The creature garden, the parallel tick's forcing workload**
+  (`worlds/debug/garden-crowd.puck`, 128 flocking, stalking and rumouring kit
+  bodies; [port lane 4](port-experimental.md#4-creature-garden--done)). Headless
+  unpaced, on the lead machine with other lanes holding the CPU at 100 %,
+  `host.frames` tick avg / p50: 12 creatures 1.37 / 1.29 ms, 32 (the garden)
+  1.65 to 1.96 / 1.39 to 1.43, 128 3.72 to 3.83 / 3.20 to 3.49 (about 11 % of a
+  30 Hz period), 256 4.88 / 3.90, 512 5.78 / 5.69. By sampled thread time, as a
+  share of `WorldTick.StepCore` at 32 / 128: body advance 89 / 80 % (motion
+  programs 50 / 33 %, their contact sweeps 48 / 30 %; producers 13 / 17 %,
+  flock steering and navigation under 2 %), `WorldEventFeed.Collect` 2.7 /
+  9.0 %, snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 %, pair contacts under
+  1 %, no crossing scan. None of the bodies is rigid, so E1 partitions none of
+  this; it is the measured case for the kit-body item above.
 
 - [high] Steady 60 FPS is not held where a 30 Hz tick and the 15 Hz rated
   presentation burst land on the same frame. Quiet lead machine (the World the
@@ -648,6 +666,27 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
 
 #### Other frame-time findings
 
+- [high] The meadow is now a forcing workload in the real debug world
+  (`debug.go meadow`): 1,994 two-part blades add 4,004 dynamic slots and
+  4,215 retained mesh draws. Direct3D 12's 600-iteration standing/walking
+  observations are 46.59/55.21 ms, produce 35.79/40.54 ms. Whole-world
+  cold-bake observations are 209.996 → 306.639 s on Direct3D 12 and
+  321.246 → 499.573 s on Vulkan, all past the 60 s ruling. Animated placement
+  registrations cannot use the existing pose-rate holds:
+  `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
+  `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
+  rendering lane. Extend the same projection/consumer-based rate
+  mechanism to placement roots, measure pose packing and draw recording, and
+  preserve planted roots, continuous world-phased gusts and independent tip
+  flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
+  do not infer that triangle LOD is missing. Draw count is the other cost:
+  4,215 draws for 288 unique blade geometries, one draw per blade part. The
+  cause fix is one draw per shared geometry with its instances, through the
+  memo's R2 counted indirect path (`SdfMeshOcclusion`), not fewer blades. The
+  meadow is R2's and R1's forcing workload: measure produce's draw-recording
+  share before and after. The controlled-engine-build
+  before/after observations and their machine-load limits are in
+  [port lane 9](port-experimental.md#9-meadow-and-foliage).
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
   (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
@@ -1146,12 +1185,18 @@ a design built into C# or living only in the debug world.
   `clearanceMaxElevation` for cutaway only (fade never rises,
   `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
   `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
-  ceiling (1.1) and the fade close target. Decided (the lead's call): the
-  table is the owner's camera decision and the solver is the mechanism, so the
-  mechanism grows to match. `maxRise` and the close target become per-mode
-  authored values: fade rises up to its own `maxRise` and each mode has its
-  own close target. `chaseCamera` then authors the table's values, and the
-  feel sittings tune them.
+  ceiling (1.1) and the fade close target. Decided: clearance becomes a camera
+  program operation, and the modes leave the engine. The owner's direction is
+  that feel is worked out in Puck expression. The `WorldCameraClearanceChoice`
+  modes (Cutaway, Fade) are behaviours baked into C#, and per-mode C# fields
+  would bake in more. A `Clearance` operation in `WorldCameraProgramOp` is the
+  mechanism. It probes the room (free boom, free rise, intervening walls) and
+  offers wall cutaway and body fade. Every number is an authored, bindable
+  parameter, including the eye radius and skin
+  (`WorldCameraClearance.cs:43,46`). Fade and cutaway are authored cases of
+  `worlds/standard/camera.puck`'s `chaseCamera`, chosen by `SelectProgram`
+  from the player's preference row. The decision table's values are those
+  cases' starting values, tuned in `.puck`. (leaks-2 lane)
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1204,21 +1249,20 @@ worlds in place is rewritten.
   it (wire, standard or gap), its place in the debug world and its size, plus
   what the debug world already has in another form. Almost every feature is
   already built and tested, so a port is wiring documents to what exists; the
-  gaps it names are a region-scoped pair primitive (the combat yard) and, only
-  if measured, a level of detail for instanced animated geometry (the meadow).
+  gaps it names are a region-scoped pair primitive (the combat yard) and the
+  meadow's measured animated-placement pose cost in the Engine job system packet.
   The lanes, ordered by the engine systems the debug world does not yet
   exercise:
   1. Authored render passes: a state-bound HLSL pass, a compare studio (medium).
   2. Seamless topology and carried identity: the quilt, a closing seam, a pitched
      seam, `border` composition, an identity gate (medium).
   3. Water and fields: a medium pool, flow across basins (medium).
-  4. Creature garden: flocks, a stalker, wall crawling, rumor (large).
+  4. Creature garden: flocks, a stalker, wall crawling, rumor (done).
   5. Second seat and hidden information: two seats, Lineup, hidden ranks, Word
      spy (large).
   6. Traversal course: kart, ledge course, planetoids, grapple (large).
   7. Rules arcade: tetromino as rules, snake, rulepush (large; needs lane 1).
   8. Physical judges: billiards, bowling, dominoes, paddleball (medium).
-  9. Meadow and foliage: the wind meadow, trees and rocks (medium).
   10. Packages as examples: the familiars rules module (large).
   11. Board tables II: Chinese checkers, hex lines, mancala, tic-tac-toe,
       backgammon (large).
@@ -1237,20 +1281,52 @@ worlds in place is rewritten.
 
 ### Edit to running, hot reload and boot
 
-Owner: hot-reload follow-up (boot and build) · ordinary · Next: the
-source-generated JSON context for `WorldDefinition`, then a reboot for an edit
-outside `PuckHotReload`, then the windowed C# loop timed on a quiet machine and
-the cold and warm builds measured.
+Owner: hot-reload follow-up (boot and build) · ordinary · Next: the boot's
+JSON round trip in `BindLive`, then a reboot for an edit outside
+`PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
+and warm builds measured.
 
-- Source-generate the document model's JSON metadata. A headless boot to
-  `world.status` JIT-compiles 43,941 methods from the IL build and 24,248 from
-  a ReadyToRun publish; of those 24,248, 22,401 are generic instantiations and
-  15,786 are `System.Text.Json`'s, built by reflection over the
-  `WorldDefinition` graph, which no precompiler outside the framework reaches.
-  A `JsonSerializerContext` over that graph removes them from both builds
-  (the `dotnet-performance` skill's source-generation rule). Local builds stay
-  IL until then: ReadyToRun leaves this cost in place and adds a precompile to
-  every edited project's build.
+- The boot's `System.Text.Json` JIT is the source-generated context's own
+  generic instantiations, not reflection: the world document already rides one
+  generated context (`WorldJsonSourceContext` behind `WorldJsonContext`) with no
+  reflection fallback, and its metadata instantiates the serializer's generics
+  once per value type in the graph. A headless IL boot of the debug world to
+  `world.status` compiles 43,820 methods first (50,153 with tier-ups;
+  `DOTNET_JitDisasmSummary`), 15,341 of them `System.Text.Json`'s:
+  `JsonPropertyInfoValues<T>` 5,568, `JsonPropertyInfo<T>` 2,462,
+  `JsonConverter<T>` 1,227, `JsonMetadataServices` 1,035, and the enum converter
+  family behind `StrictEnumConverter<T>` (`EnumConverter<T>`, its field info,
+  `JsonStringEnumConverter<T>`, the factory helpers) 1,758. `host.memory` reads
+  42,000 to 43,200 `jit methods` and 3.1 to 4.5 s of `compile` there. A
+  ReadyToRun publish leaves them (15,786 of its 24,248), since its version
+  bubble excludes the framework that defines the generics; only the composite
+  publish decided below, or fewer instantiations, removes them. Configuring
+  that metadata cost the boot's main thread 1,513 ms (892 of it JIT and type
+  loading) before its first parse; `WorldJsonContext.StartPreparing` now runs
+  it on a background thread from the World's first line, the main thread waits
+  912 ms for it under load from other lanes, and a boot with an empty compile
+  cache (the edit loop after a Schema, Transpiler or State edit, which moves
+  the compiler identity) reached `world.status` in 14.8 and 15.0 s against
+  16.2 and 15.8 s.
+- `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
+  definition by serializing and parsing it: 323 ms plus 371 ms of a warm boot's
+  main thread, and the boot's only full serialize, so it pays every write
+  path's JIT too. Copy only the mutable value holders the document walker
+  reaches.
+- A cold compile of the debug world spends 8.6 s of the main thread in the
+  composer's `JsonNode` merge (`WorldDocumentBasis`): `DeepEquals` about
+  840 ms, `OrderedDictionary.IndexOf` 366 ms, `RowIdentity` 259 ms and 1.5 s
+  of GC polls under its clones.
+- A strict enum converter of Puck's own would replace the 1,758 enum-family
+  methods and 142 ms of converter creation; it must keep the schema's `enum`
+  lists (the exporter reads `EnumConverter<T>` natively),
+  `JsonStringEnumMemberName` and flags spellings, and the read side's
+  case rules.
+- Two boot reads still resolve by reflection, a few milliseconds each:
+  `WorldSubmissionCodec` reaches its protocol union records through a
+  `DefaultJsonTypeInfoResolver` combined after the world context, and
+  `WorldAssetRowLoader` parses music, table, tune and patch documents through
+  `DocumentJsonOptions.Shared`.
 - [medium] The seeded `World` Edit grant is lost across a load or a reload. A
   `world.load` from debug into a same-capacity input fixture leaves authored
   state-writing rules refused with `the live edit grant refuses state:blink` (and
@@ -1266,7 +1342,21 @@ the cold and warm builds measured.
   then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
   is full` and spawns only what the boot's entity table holds. Decide whether a
   reload grows the live entity table or refuses the raised capacity by name.
-- Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
+- A self-contained composite ReadyToRun publish for the published World and
+  the silo (decided by the lead). Composite brings the framework into the
+  version bubble, so it removes the cause of both first-use JIT costs: the
+  first crossing's 639 methods, and the 15,341 `System.Text.Json` generic
+  instantiations of the source-generated `WorldJsonSourceContext`, which a
+  per-assembly ReadyToRun publish cannot precompile. A rehearsal transfer at
+  boot would hide only the first. Local builds stay IL for the edit loop.
+  Measure before and after: JIT count to `world.status` (`host.memory` prints
+  it), the first crossing's frame, boot wall time, publish size and publish
+  time. The silo lane's non-composite ReadyToRun showed no proven gain under
+  load, so composite is the test.
+- [low] The silo activates worlds without calling
+  `WorldJsonContext.StartPreparing()`, which takes the document metadata's
+  configuration off the activation path as `Puck.World`'s `Program.cs` does.
+  (from: json-sourcegen)
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does. This reboot is the mechanism [in-world editing](#in-world-editing)
@@ -2466,6 +2556,24 @@ the completed 70-stop comparison manifest.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
+
+- Decide (the language lane's call): whether a rule's effect list merges by
+  `key` when a template is re-expanded over a basis. Today a rule whose effects
+  write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with
+  "the basis list carries it more than once", so the garden's crowd fixture
+  re-expands only `pondFlocks`. Effects are ordered actions, not a keyed set.
+  (from: garden)
+- [low] The rule work-unit ceiling reads 4,250,000 on the port page and
+  4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
+  (from: composition)
+- [medium] A solid creation shape without `position` throws instead of giving
+  an authoring diagnostic. Removing `position [0, 0, 0]` from
+  `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
+  and a headless debug boot throw `NullReferenceException` at
+  `WorldDefinitionValidator.Placements.cs:1723`, through
+  `DocumentSpatialValues.cs:143`. Owner: language lane. Default or
+  refuse the missing position before the domain-expansion walk. The port
+  authors the explicit position and boots successfully. (from: meadow)
 
 - [low] An imported module named `roles` changes how its importer lints. Add a
   file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
