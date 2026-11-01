@@ -129,7 +129,12 @@ outside this contract and takes the references as written.
   `host.frames` beside it for produce and simulate per iteration. The sampler
   suspends threads at safe points, so samples pile onto `Thread.PollGC` under
   `Buffer.BulkMoveWithWriteBarrier` and other poll sites: charge that time to
-  the caller's loop, not to the copy. Per-frame costs that matter here come in
+  the caller's loop, not to the copy. `SpanHelpers.ZeroMemoryNative` under a
+  method returning a large struct with references (`WorldBody.CaptureIntegrationResidue`)
+  is the same skid: confirm such a share with an untraced reading before
+  cutting it. The debug world's scoped replay (the chess table's idle demo)
+  starts 60 s after boot, from tick 1800 at 30 Hz: a lobby trace taken earlier
+  holds no scope hash. Per-frame costs that matter here come in
   0.1-0.5 ms pieces; a scan of thousands of objects per call (a cache miss
   each) and a closure a method allocates on entry because one of its lambdas
   captures a parameter are the usual shapes.

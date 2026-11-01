@@ -137,7 +137,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Two field-contact solvers: relief contact's `FixedColliderField` measures
   distance as value over gradient length; `FixedFieldContactSolver` and the field
   provider (`WorldSolidField`) still read the value as the distance, hover on
-  relieved scopes and spend up to 1,033 samples a capsule. Make them one.
+  relieved scopes and spend up to 1,033 samples a capsule. Make them one. At the
+  valley rim, relief contact (`FixedFieldColliderContact.TryPush`,
+  `src/Puck.Physics/FixedColliderField.cs:49`) is about 18 % of a headless
+  tick; merging moves contact results, so it lands as a deliberate correction
+  with re-recorded hashes, not inside a pure performance lane.
 - Two ways to grow a GPU region: `SdfWorldTables.EnsureProgramCapacity` waits
   for the device to idle and rebuilds the program region whole, beside
   `GpuRegion.Grow`, which grows under every residency policy.
@@ -527,7 +531,12 @@ Next: make the per-tick authority hash incremental (measured below).
   invisible, so land it with a law that compares the incremental digest against
   a full recompute over the same states, tick by tick, in `--reproduce`.
   Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
-  (from: quiet-measure)
+  (from: quiet-measure) A live scope's per-tick hash
+  (`WorldScopedReplayRuntime.Hash`) now refolds its rows only when the arena,
+  its layout or one of the rows' versions moved, which leaves its value
+  unchanged; its body continuations (`AppendContinuationHash`, about as costly
+  as the rows were) and rule latches still fold whole every tick, for want of a
+  body continuation version. (from: tick-cost-2)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
