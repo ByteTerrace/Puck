@@ -28,8 +28,8 @@ resolves their edits to this file at merge.
 
 The owner's direction: fundamentals first, known or found along the way
 (AGENTS.md), with vigilance against duplication. The first seven items are the
-highs: the three stages of the engine job system, the bake, the transfers'
-custody loss, certified field contact and the silo's addon hosting. The debug
+highs: the three stages of the engine job system, the bake, the companion
+custody build, certified field contact and the silo's addon hosting. The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
@@ -52,8 +52,8 @@ experimental worlds have that it lacks is ported into it
 4. [Bake proportional to change](#bake-proportional-to-change) [high]: narrow
    the bake closure and share one store across both backends, then
    `CloseSheets` and the collapse.
-5. [Transfers](#transfers-federation-and-server) [high]: close the explicit-stop
-   custody loss in `WorldInstanceHost.TryStop`, then the companion steps 6 to 10.
+5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+   to 10.
 6. [Certified field contact](#certified-field-contact) [high]: one surface solve
    for both contact solvers, R4 to R8 closed in it, re-recorded hashes.
 7. [Delivery](#delivery-launcher-and-ci) [high]: a silo that mounts addon guests
@@ -729,7 +729,7 @@ in closed form before any octave cut. The terrain pass's step 5 is this packet
 
 ### Transfers, federation and server
 
-Owner: specialist, transfers and server · high · Next: close explicit-stop custody loss, then build the companion
+Owner: specialist, transfers and server · high · Next: build the companion
 decision along the [custody protocol](companion-redesign.md) from step 6 of its
 build plan (separation sweep, stranding, shed and retire). Steps 1 to 5 stand:
 the custody records and their reducer, member ids and per-member verdicts, hop
@@ -751,16 +751,14 @@ crossing, opened by a two-silo failover witness.
 
 Still open from the companion build:
 
-- [high] Explicit `WorldInstanceHost.TryStop`
-  (`src/Puck.World.Server/WorldInstanceHost.cs:1379-1423`) still removes the custody peer and
-  disposes a row without a custody sweep or a final durable checkpoint. Stop home
-  after its player and companion move away, or stop a custodian with an embodied
-  visitor: the running authority and committed state disappear without an entitled
-  release/return record. Automatic reaping now retains away/pending titles and
-  in-doubt sources, but explicit stop bypasses that guard. Step 8 must implement
-  the stop lifecycle and prove recovery from the final image plus log. The
-  refinement fixture's retained rows do not cover this path. (from:
-  review-companion adversarial pass, R8; owner: transfers and server)
+- [medium] The silo's deactivation (`WorldSiloHost.DeactivateCoreAsync`) writes
+  its final checkpoint and retires through `WorldInstanceHost.TryRetire` without
+  first sending visiting companions home, so a deactivated custodian keeps them
+  until it is activated again. Route it through `WorldInstanceHost.Stop` with the
+  silo store as `FinalCheckpoints`; the store's upload is asynchronous, so the
+  stop needs a completion that waits for a durable image across drains.
+- [low] An explicit stop of a World-process row disposes ordinary travellers it
+  embodies (a player who crossed in) with the row; only companions are swept home.
 
 - [medium] No law shows the federation correlation of custody steps
   (`WorldRemoteAuthority`: `HopQuery`, `HopRequest`, `CustodyQuery` and
