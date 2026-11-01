@@ -54,8 +54,8 @@ experimental worlds have that it lacks is ported into it
    `CloseSheets` and the collapse.
 5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
    to 10.
-6. [Certified field contact](#certified-field-contact) [high]: one surface solve
-   for both contact solvers, R4 to R8 closed in it, re-recorded hashes.
+6. [Certified field contact](#certified-field-contact) [high]: a clearance
+   certificate that tightens near the skin, then box and ellipsoid bodies.
 7. [Delivery](#delivery-launcher-and-ci) [high]: a silo that mounts addon guests
    and checkpoints their state, so the debug world deploys again.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
@@ -647,86 +647,53 @@ store (AGENTS.md), and work proportional to change.
 ### Certified field contact
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · high · Next:
-one certified surface solve for `FixedColliderField` and
-`FixedFieldContactSolver`, with R4 to R8 closed in it, landed as a deliberate
-correction with re-recorded hashes (AGENTS.md rule 4), and the noise's gradient
-in closed form before any octave cut. The terrain pass's step 5 is this packet
-([terrain pass](terrain-pass.md#order-of-work)).
+the certificate near the skin, then box and ellipsoid bodies. The terrain pass's
+step 5 is this packet ([terrain pass](terrain-pass.md#order-of-work)).
 
-- Two field-contact solvers measure differently: relief contact's
-  `FixedColliderField` measures distance as value over gradient length (a
-  first-order estimate, R4), while `FixedFieldContactSolver` and the field
-  provider (`WorldSolidField`) read the value as the distance, so over a relieved
-  scope divided by its `L` they hold a body up to `L` times its skin off the
-  rock, hover on relieved scopes and spend up to 1,033 samples a capsule. Make
-  them one certified surface solve. At the valley rim, relief contact
-  (`FixedFieldColliderContact.TryPush`, `src/Puck.Physics/FixedColliderField.cs:49`)
-  is about 18 % of a headless tick; merging moves contact results, so it lands as
-  a deliberate correction with re-recorded hashes, not inside a pure performance
-  lane.
+Relief colliders and the field provider read one certified surface solve
+(`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`);
+review findings R4 to R8 are closed in it, each pinned in its stated case by
+`CertifiedFieldContactLawTests`. Remaining:
 
-- Relief-contact review (owner: geometry and bake lane):
-  - **R4 [high]** `src/Puck.Physics/FixedColliderField.cs:119`, `TryMeasure` and
-    `TryPush`: `F / |gradient|` is a first-order estimate, not a distance bound.
-    For a +Y plane with noise frequency 2, amplitude 0.4, three octaves,
-    gain 0.5, lacunarity 2, seed 7, a radius-0.35 sphere at
-    (-0.600006103515625, 0.1100006103515625, 0), skin 0.05, receives no push:
-    the measured distance is 0.4152069091796875, but its bottom reads
-    -0.0157470703125 (inside). The tap offset is 1/128 m. Also, the core's
-    16-sample cap and three refinements cannot certify thin features between
-    samples; box and ellipsoid contact samples only the centre. Use volume
-    bounds or certified subdivision and a converged surface solve. Merely
-    deleting the endpoint shortcut does not settle this finding.
-  - **R5 [high]** `src/Puck.World.Server/WorldColliderSet.Relief.cs:99` trusts
-    the program's global scale after scope quantization. Noise frequency 8,
-    amplitude 4, eight octaves, gain 1, lacunarity 4 (all admitted) produces
-    scope scale 0.0000017619569, compiled to zero at
-    `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:439`; `PopScope`
-    then skips scaling, while the global scale is 1. On a +Y plane, seed 7,
-    F(0) is 0.2293701171875 and F(1/1024, 0, 0) is -0.4313507080078125.
-    A radius-0.1 sphere at the origin with skin 0.05 is rejected by the
-    single-sample check despite containing that negative witness. Preserve
-    conservative scale/error bounds through fixed-point compilation; flooring
-    just the global scale does not suffice.
-  - **R6 [high]** `src/Puck.World.Server/WorldColliderSet.Relief.cs:50`
-    bounds the relieved field from primitive colliders plus noise amplitude,
-    omitting composition growth. Two coincident radius-1 spheres joined with
-    SmoothUnion radius 0.5 have an unrelieved zero set at radius 1.125. Noise
-    amplitude 0.01 leaves the outward surface beyond 1.115, but the compiled
-    collider's padded extent is only 1.04125. A radius-0.01 body at y=1.1,
-    skin 0.001, is inside the solid and outside the broadphase bound. Derive
-    bounds from the composed field, including blend growth, gauge scaling
-    and any inset used only by the analytic witness colliders. This case is
-    established from the formulas; the server fixture is not run.
-  - **R7 [medium]** `src/Puck.World.Server/WorldColliderSet.Relief.cs:116`
-    opens a field scope even when contact emission drops every shape. A
-    solid placement of a noisy creation containing only `detail` shapes
-    (or only sweeps) throws at `PopField` because no shape was emitted;
-    `WorldSolidField` has the same empty-scope path. Skip copies without
-    contact operands and reconcile the census in both providers. The review
-    tree restores only the Physics test closure: the required server build
-    with `--no-restore` fails NETSDK1004 for its missing assets file, so the
-    server fix and its execution remain with integration.
-  - **R8 [medium]** `src/Puck.Physics/FixedColliderField.cs:227`, `TryMeasure`
-    and `Nearest`: a zero gradient is treated as no collision, and a failed
-    projection returns its original probe as a surface. At a radius-10 sphere
-    field's centre, an embedded body receives no push and `TryNearest` accepts
-    an anchor at distance zero even with reach 0.1. The symmetric
-    field law must not require these false-clear results. Distinguish unproved contact from clear,
-    recover embedding without inventing a normal, and propagate projection
-    failure to attachment and diagnostic callers. Removing the absolute
-    small-gradient cutoff fixes measurable gradients only.
-- Field-collider cost before the endpoint-shortcut correction: a Moth standing
-  on relief spends about 70 field queries and 420 relieved samples a tick, each
-  six octaves of value noise (about 3.4 µs on a loaded machine). With the
-  whole-core search a typical capsule against a plane takes 12 relieved samples
-  instead of 6; the worst core query remains bounded by 27 field reads. Remeasure
-  the quiet rim with many bodies near relief; the earlier timings do not qualify
-  the corrected search. If the quiet rim p99 misses its bar, the fix is a cost
-  fix at the cause, never coarser contact: take the noise's gradient in closed
-  form with its value first, cache samples, and run contact over the job system's
-  parallel partitions. An octave cut is only the drawn relief's own cut (the
-  terrain pass's step 3), never a contact approximation.
+- **[high] Clearance near the skin is unproved, not certified.** The value bound
+  (`Sampler.Certifies`, `FixedColliderField.cs:142`) proves a body clear only at
+  about `L` times its reach, so a body resting between its reach and that ends
+  `Unproved` when the converged solve finds the nearest surface beyond the reach
+  (about 23 of 71 field reads a tick at the valley rim; `physics.contact.field-unproved`).
+  Nothing is pushed then, and a thin feature the local solve misses is not
+  excluded. Close it with a certificate that tightens near the surface: the
+  noise's gradient in closed form beside its value with a curvature bound
+  (a second-order Taylor bound), or interval mean-value bounds in the evaluator's
+  box walk, whose `NoiseDisplace` rule is still `±amplitude`
+  (`SdfFieldEvaluator.RenderBounds.cs:126`).
+- **[medium] Box and ellipsoid bodies solve from their centre**
+  (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:576`): the
+  support along the measured normal, not the volume's own nearest point. Cover
+  the volume with core spheres as the certified sweep does
+  (`FixedFieldContactSolver.WalkCores`, `FixedFieldContactSolver.cs:207`).
+- **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.PrimitiveColliders`,
+  `src/Puck.World.Server/WorldColliderSet.Relief.cs:30`): a superellipsoid grows
+  by its gauge and every blend's growth is charged, but a primitive whose field
+  reads under its distance (the cone family) grows only by the reach. Take each
+  shape's gain from the evaluator's reach certificates.
+- **[medium] The evaluator's value error is an estimate**
+  (`SdfFieldEvaluator.CertifiedValueError`, `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:534`):
+  16 raws plus 32 raws and one per octave for each metre of relief amplitude. Pin
+  the fixed-point fBm's rounding against an exact oracle in a Maths law, and
+  derive the shapes' share from the reach certificates.
+- **[medium] The 58° face and the rim's creep are unmeasured against the step's
+  bar.** A Moth standing 3,000 ticks at `body.pose 0 386 470` moves 0.04 m in x on
+  both the old and the new solve; find what drives it.
+- Cost at the valley rim (headless, unpaced, 500 bodies; `dotnet-trace`
+  sampled thread time under `FixedStepPump.Step`): relief contact was 14.6 % of
+  a tick on the old first-order collider and is 13.6 % on the certified solve,
+  at about 71 field reads a tick and 18.5 samples a read (940 samples a tick
+  before, 1,317 after). The certified solve alone cost 29 % until
+  `SignedFixedPointArithmetic.Lerp` gained its narrow lane and value noise its
+  per-cell corner cache. Further cuts: the closed-form gradient above, and
+  contact over the job system's parallel partitions. An octave cut is only the
+  drawn relief's own cut (the terrain pass's step 3), never a contact
+  approximation.
 
 ### Transfers, federation and server
 
