@@ -1961,7 +1961,7 @@ public sealed partial class WorldInstanceHost {
     }
 
     /// <summary>Drains every queued transfer at this host's one fixed point in its per-tick driving sequence —
-    /// <c>WorldSimulation</c> call this before stepping the boot instance or any other
+    /// <c>WorldHostStep</c> calls this before stepping the boot instance or any other
     /// instance this tick (mirroring where <c>WorldServer.DrainPendingOps</c> sits relative to the rest of
     /// <c>WorldServer.Step</c>'s own body). An adjacency arrival carries the source step's consumed-through
     /// engine-time fence: destination topology resolves before population advance, and any overlapping destination

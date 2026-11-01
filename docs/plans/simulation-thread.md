@@ -442,8 +442,9 @@ per-step cost ring (count, avg, p50, p99, max). `steps.shed` is an atomic,
 host-lifetime counter of whole steps discarded when a catch-up burst spends
 its wall-time budget; holds and the runaway-frame clamp are distinct and are
 not counted as shed. `host.frames`, `world.rate` and `world.rate shed` report
-it. Resetting the frame sample window does not reset that counter. The join phase, late-step and skipped-drain metrics remain for the phases
-that introduce the tick record and worker.
+it. Resetting the frame sample window does not reset that counter. The join
+phase, late-step and skipped-drain metrics remain for the phases that introduce
+the tick record and worker.
 
 Verification and windowed measurements are recorded in the delivery commits.
 The four focused debug sources are `controls-dash-tests.puck`,
@@ -453,6 +454,36 @@ canonical state exports before and after. The standard package has no
 `*-tests.puck` source. A headless stdin script lands movement at ticks 10 and
 30 and reads tick 31 hash `d8484552ca622a93`, then tick 32 hash
 `b30470686bd27afd`, before and after.
+
+The merged-head headless sweep returned 0: 19 clean signals, no red or
+unmeasured signals, and the same two collider/contact coverage ambers as the
+earlier run. The focused launcher checks cover a real offscreen adapter
+holding tick 1 on an unrenderable frame, a render host without a simulation,
+between-step input/console ordering and device recovery. A live replay fork
+publishes one authority tick with lockstep on, then publishes the remaining
+three in order with it off; every driven tick matches the recording.
+
+The granted Direct3D windowed run completed under the GPU lease, with devices
+disabled and bakes settled before sampling. Standing: 58 iterations, frame
+avg/p99/max **69.47/205.25/205.25 ms**, simulate avg/p99
+**45.03/168.53 ms**, tick avg/p50/p99/max **45.93/11.05/168.52/168.52 ms**.
+Walking for exactly 60 ticks (movement armed at 144, stopped at 204): 94
+iterations, frame avg/p99/max **25.46/207.07/207.07 ms**, simulate avg/p99
+**10.26/189.91 ms**, tick avg/p50/p99/max **13.73/10.37/171.57/171.57 ms**.
+Both reports retained `simulate`, the tick lane and `steps.shed`;
+`world.rate` and `world.rate shed` read the same final **325** shed steps.
+During a capture hold, `world.state.hash` and `host.frames` answered at tick
+225 before the capture settled; its still stamp reported `tick=225`,
+`shown=225`, state hash `f99b7a4e8581f128`. The World quit normally.
+
+The frame-rate bar is **not met** by this observation. It was not a paired,
+quiet before/after measurement, and the main mesh-GI job completed only later
+in the run; neither an improvement nor a regression is established. The raw
+stdin scripts, exports, replay hashes, sweep report, windowed log and still
+are kept under the lane's `.claude/scratch/sim-phase1-*` paths. The one GPU
+leg did not include a pre-phase still or a Vulkan boot; pixel parity remains
+unconfirmed. The later phases retain their paired-still and frame-budget
+finish lines.
 
 Original scope and finish:
 

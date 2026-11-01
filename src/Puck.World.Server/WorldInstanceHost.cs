@@ -665,8 +665,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// the boot world's own authored rate (falling back to <c>Puck.Launcher.LauncherHostLoop.DefaultUpdateRate</c>
     /// only while this returns <see langword="false"/>, so the window keeps rendering and the console keeps
     /// answering), so boot's own crossing is trivial by the time this is asked — the same pause/rate-0 rule as every
-    /// other instance, expressed without a redundant accumulator field. The caller (<c>WorldSimulation</c>/
-    /// <c>WorldSimulation</c>) is expected to call <see cref="Server.WorldServer.DrainAdministrative"/> on
+    /// other instance, expressed without a redundant accumulator field. The caller (<c>WorldHostStep</c>)
+    /// calls <see cref="Server.WorldServer.DrainAdministrative"/> on
     /// the boot server when this returns <see langword="false"/>, mirroring every other stopped/paused instance's
     /// own administrative drain.</summary>
     /// <remarks><b>The width-match gate.</b> <c>Puck.Launcher.FixedStepPump.Advance</c>

@@ -1069,6 +1069,14 @@ client clock, arrival interpolation and tick/shed diagnostics; next is phase 2
 server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
 (hardening). The owner queued the thread.
 
+- Phase 1's windowed reading still misses the frame-rate bar: frame avg/p99
+  69.47/205.25 ms standing and 25.46/207.07 ms walking, with `simulate` and the
+  tick lane intact. This was not a paired quiet comparison, and mesh GI was
+  still active; attribution is unconfirmed. The
+  [delivery evidence](simulation-thread.md#phase-1-one-host-loop-no-thread-delivered)
+  records the workload and tick/shed readings for the frame-time lane and the
+  later worker comparison.
+
 - Owner decision owed: the design costs one iteration of presentation
   latency for a tick's visible effect (about one frame period at 60 Hz, and
   about 8 ms more than a free-running simulation thread would), the price of
