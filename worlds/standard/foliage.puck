@@ -19,24 +19,28 @@ let meadowBlades = map(range(0, 144), i => {
 })
 
 
-template mossyRock(id) {
+// Stone palettes for mossyRock: the stone, its shoulder and the moss cap.
+let limestoneRock = ["#888778", "#A7A28B", "#657044"]
+let canyonRock = ["#A9573A", "#C9825A", "#5E6E36"]
+
+template mossyRock(id, colors = limestoneRock) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: "weathered-limestone"
       palette [
         {
-          color: "#888778",
+          color: colors[0],
           roughness: 0.93,
           specular: 0.06
         }
         {
-          color: "#A7A28B",
+          color: colors[1],
           roughness: 0.94,
           specular: 0.04
         }
         {
-          color: "#657044",
+          color: colors[2],
           roughness: 0.98,
           specular: 0.01
         }
@@ -75,147 +79,293 @@ template mossyRock(id) {
   }
 }
 
-template broadleafTree(id) {
+// One grouped-shape tree: a trunk, roots and branches in bark, and a handful of overlapping rounded crown masses in
+// flat leaf values, with no relief noise. Rows are authored upright; `lean` (radians about the author Z axis, through
+// the trunk's foot) tips the trunk, branches and crowns, never the roots.
+// trunk { radius, center, half }; roots [{ position, r, yaw }]; branches [{ position, yaw, tilt, r, h }], each a
+// Capsule rising from its position; crowns [{ position, r }], material cycling through the leaves.
+template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
-      name: "courtyard-oak"
-      palette [
-        {
-          color: "#624A33",
-          roughness: 0.96,
-          specular: 0.025,
-          weathering {
-            lines: 0.35,
-            scale: 5,
-            seed: 5123
-            under [
-              {
-                threshold: 0.2,
-                surface {
-                  color: "#977451",
-                  roughness: 0.97,
-                  metal: 0
-                }
-
-              }
-            ]
-          }
-        }
-        {
-          color: "#826344",
-          roughness: 0.94,
-          specular: 0.03
-        }
-        {
-          color: "#365C37",
-          roughness: 0.94,
-          specular: 0.03,
-          wrap: 0.3
-        }
-        {
-          color: "#537640",
-          roughness: 0.93,
-          specular: 0.03,
-          wrap: 0.3
-        }
-        {
-          color: "#73904A",
-          roughness: 0.92,
-          specular: 0.03,
-          wrap: 0.3
-        }
-      ]
-      noise {
-        frequency: 1.6
-        amplitude: 0.025
-        octaves: 2
-        gain: 0.4
-        seed: 5123
-      }
+      name: name
+      palette: concat(
+        [bark, branchBark],
+        map(leaves, color => { color: color, roughness: 0.93, specular: 0.03, wrap: 0.3 })
+      )
       shape Cylinder "trunk" {
-        position [0, 1.45, 0]
-        scale [0.36, 1.5, 0.36]
+        position [-trunk.center * sine(lean), trunk.center * cosine(lean), 0]
+        scale [trunk.radius, trunk.half, trunk.radius]
+        rotation [0, 0, sine(lean / 2), cosine(lean / 2)]
         material: 0
       }
-      for i in range(0, 5) {
+      for (root, i) in roots {
         shape Superellipsoid $"root-{i}" {
           exponent: landscapeExponent
-          position [0.48 * cosine(i * 1.2566370614), 0.14, 0.48 * sine(i * 1.2566370614)]
-          scale [0.75, 0.24, 0.2]
-          rotation [0, sine(-(i * 1.2566370614) / 2), 0, cosine(-(i * 1.2566370614) / 2)]
+          position: root.position
+          scale: root.r
+          rotation [0, sine(-root.yaw / 2), 0, cosine(-root.yaw / 2)]
           material: 0
           blend: SmoothUnion
           smooth: 0.16
         }
       }
-      // The branch endpoints penetrate the crown, leaving a readable fork below.
-      for (branch, i) in [
-        {
-          position [0.62, 2.75, 0],
-          tilt: -0.65,
-          r: 0.23,
-          h: 1.8
-        }
-        {
-          position [-0.62, 2.9, 0.25],
-          tilt: 0.75,
-          r: 0.2,
-          h: 1.7
-        }
-        {
-          position [0.18, 3.2, -0.55],
-          tilt: -0.25,
-          r: 0.18,
-          h: 1.6
-        }
-      ] {
+      for (branch, i) in branches {
         shape Capsule $"branch-{i}" {
-          position: branch["position"]
-          scale [branch["r"], branch["h"], branch["r"]]
-          rotation [0, 0, sine(branch["tilt"] / 2), cosine(branch["tilt"] / 2)]
+          position [
+            branch.position[0] * cosine(lean) - branch.position[1] * sine(lean),
+            branch.position[0] * sine(lean) + branch.position[1] * cosine(lean),
+            branch.position[2],
+          ]
+          scale [branch.r, branch.h, branch.r]
+          rotation [
+            cosine(lean / 2) * sine(branch.yaw / 2) * sine(branch.tilt / 2) - sine(lean / 2) *
+              sine(branch.yaw / 2) *
+              cosine(branch.tilt / 2),
+            cosine(lean / 2) * sine(branch.yaw / 2) * cosine(branch.tilt / 2) + sine(lean / 2) *
+              sine(branch.yaw / 2) *
+              sine(branch.tilt / 2),
+            cosine(lean / 2) * cosine(branch.yaw / 2) * sine(branch.tilt / 2) + sine(lean / 2) *
+              cosine(branch.yaw / 2) *
+              cosine(branch.tilt / 2),
+            cosine(lean / 2) * cosine(branch.yaw / 2) * cosine(branch.tilt / 2) - sine(lean / 2) * cosine(
+              branch.yaw / 2
+            ) * sine(branch.tilt / 2),
+          ]
           material: 1
           blend: SmoothUnion
           smooth: 0.18
         }
       }
-      for (crown, i) in [
-        {
-          position [0, 4.5, 0],
-          r [1.8, 1.2, 1.55]
-        }
-        {
-          position [1.4, 4.05, 0.15],
-          r [1.25, 0.95, 1.15]
-        }
-        {
-          position [-1.4, 4.3, 0.35],
-          r [1.3, 1.05, 1.1]
-        }
-        {
-          position [0.25, 4.1, -1.25],
-          r [1.3, 0.9, 1.1]
-        }
-        {
-          position [-0.45, 4.55, 1.1],
-          r [1.25, 1, 1.1]
-        }
-        {
-          position [0.4, 5.2, 0.25],
-          r [1.3, 0.85, 1.2]
-        }
-        {
-          position [-1, 5, -0.65],
-          r [1.15, 0.9, 1]
-        }
-      ] {
+      for (crown, i) in crowns {
         shape Superellipsoid $"crown-{i}" {
           exponent: landscapeExponent
-          position: crown["position"]
-          scale: crown["r"]
-          material: 2 + i % 3
+          position [
+            crown.position[0] * cosine(lean) - crown.position[1] * sine(lean),
+            crown.position[0] * sine(lean) + crown.position[1] * cosine(lean),
+            crown.position[2],
+          ]
+          scale: crown.r
+          material: 2 + i % length(leaves)
           blend: SmoothUnion
-          smooth: 0.25
+          smooth: smooth
+        }
+      }
+    }
+  }
+}
+
+// The tree families. Each scales its rows by `height` (vertical) and `spread` (crown and branch reach), so one family
+// placed with a few arguments never reads as one tree cloned; `leaves` takes three flat values.
+let broadleafLeaves = ["#365C37", "#537640", "#73904A"]
+let flatCrownLeaves = ["#55702E", "#6E8A36", "#8CA546"]
+let columnLeaves = ["#2C4A35", "#3B5F41", "#4F784B"]
+let weepingLeaves = ["#5D7A3F", "#7A984D", "#9CB465"]
+
+// A rounded courtyard oak: a stout trunk, five roots, a three-way fork and seven crown masses.
+template broadleafTree(id, height = 1, spread = 1, lean = 0, leaves = broadleafLeaves) {
+  groupedTree(
+    id: id, name: "courtyard-oak", lean: lean, leaves: leaves,
+    bark: {
+      color: "#624A33",
+      roughness: 0.96,
+      specular: 0.025,
+      weathering {
+        lines: 0.35,
+        scale: 5,
+        seed: 5123
+        under [{ threshold: 0.2, surface { color: "#977451", roughness: 0.97, metal: 0 } }]
+      }
+    },
+    branchBark: { color: "#826344", roughness: 0.94, specular: 0.03 },
+    trunk: { radius: 0.36, center: 1.45 * height, half: 1.5 * height },
+    roots: map(range(0, 5), i => {
+      position [0.48 * cosine(i * 1.2566370614), 0.14, 0.48 * sine(i * 1.2566370614)]
+      r [0.75, 0.24, 0.2]
+      yaw: i * 1.2566370614
+    }),
+    branches: map([
+      { position [0.62, 2.75, 0], tilt: -0.65, r: 0.23, h: 1.8 }
+      { position [-0.62, 2.9, 0.25], tilt: 0.75, r: 0.2, h: 1.7 }
+      { position [0.18, 3.2, -0.55], tilt: -0.25, r: 0.18, h: 1.6 }
+    ], b => {
+      position [b.position[0] * spread, b.position[1] * height, b.position[2] * spread]
+      yaw: 0
+      tilt: b.tilt
+      r: b.r
+      h: b.h * height
+    }),
+    crowns: map([
+      { position [0, 4.5, 0], r [1.8, 1.2, 1.55] }
+      { position [1.4, 4.05, 0.15], r [1.25, 0.95, 1.15] }
+      { position [-1.4, 4.3, 0.35], r [1.3, 1.05, 1.1] }
+      { position [0.25, 4.1, -1.25], r [1.3, 0.9, 1.1] }
+      { position [-0.45, 4.55, 1.1], r [1.25, 1, 1.1] }
+      { position [0.4, 5.2, 0.25], r [1.3, 0.85, 1.2] }
+      { position [-1, 5, -0.65], r [1.15, 0.9, 1] }
+    ], c => {
+      position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
+      r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
+    })
+  )
+}
+
+// A flat spreading crown on a slender forked trunk: two tiers of wide, thin masses, wider than tall.
+template flatCrownTree(id, height = 1, spread = 1, lean = 0, leaves = flatCrownLeaves) {
+  groupedTree(
+    id: id, name: "flat-crown", lean: lean, leaves: leaves, smooth: 0.3,
+    bark: { color: "#5A4634", roughness: 0.96, specular: 0.025 },
+    branchBark: { color: "#6E5640", roughness: 0.95, specular: 0.025 },
+    trunk: { radius: 0.2, center: 1.5 * height, half: 1.55 * height },
+    roots: map(range(0, 3), i => {
+      position [0.3 * cosine(i * 2.0943951), 0.1, 0.3 * sine(i * 2.0943951)]
+      r [0.45, 0.16, 0.14]
+      yaw: i * 2.0943951
+    }),
+    branches: map(range(0, 3), i => {
+      position [0, 2.3 * height, 0]
+      yaw: i * 2.0943951 + 0.4
+      tilt: 0.72 + 0.08 * (i % 2)
+      r: 0.13 - 0.01 * (i % 2)
+      h: 2.1 * spread
+    }),
+    crowns: map([
+      { position [0, 3.9, 0], r [2.3, 0.55, 2.1] }
+      { position [1.6, 3.6, 0.5], r [1.5, 0.45, 1.3] }
+      { position [-1.5, 3.7, -0.4], r [1.6, 0.5, 1.4] }
+      { position [0.3, 3.65, -1.6], r [1.4, 0.42, 1.2] }
+      { position [-0.4, 3.75, 1.5], r [1.4, 0.45, 1.25] }
+      { position [0.5, 4.35, 0.2], r [1.3, 0.38, 1.2] }
+    ], c => {
+      position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
+      r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
+    })
+  )
+}
+
+// A tall narrow column of stacked masses on a short trunk, poplar-like: a vertical accent among rounded crowns.
+template columnTree(id, height = 1, spread = 1, lean = 0, leaves = columnLeaves) {
+  groupedTree(
+    id: id, name: "column-tree", lean: lean, leaves: leaves, smooth: 0.35,
+    bark: { color: "#4E3D2E", roughness: 0.96, specular: 0.025 },
+    branchBark: { color: "#4E3D2E", roughness: 0.96, specular: 0.025 },
+    trunk: { radius: 0.17, center: 0.8 * height, half: 0.85 * height },
+    roots: [],
+    branches: [],
+    crowns: map([
+      { position [0, 2.4, 0], r [0.95, 1.5, 0.95] }
+      { position [0.15, 4.1, -0.1], r [0.8, 1.5, 0.8] }
+      { position [0.45, 3.1, 0.35], r [0.6, 1, 0.55] }
+      { position [-0.1, 5.6, 0.1], r [0.6, 1.2, 0.6] }
+      { position [-0.35, 3.6, -0.3], r [0.55, 1.1, 0.5] }
+      { position [0.05, 6.7, 0], r [0.35, 0.7, 0.35] }
+    ], c => {
+      position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
+      r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
+    })
+  )
+}
+
+// A weeping tree: a domed crown over a ring of long hanging masses that fall to about a metre above the ground.
+template weepingTree(id, height = 1, spread = 1, lean = 0, leaves = weepingLeaves, drops = 7) {
+  groupedTree(
+    id: id, name: "weeping-tree", lean: lean, leaves: leaves, smooth: 0.3,
+    bark: { color: "#6A5A46", roughness: 0.96, specular: 0.025 },
+    branchBark: { color: "#7A6852", roughness: 0.95, specular: 0.025 },
+    trunk: { radius: 0.28, center: 1.4 * height, half: 1.45 * height },
+    roots: map(range(0, 3), i => {
+      position [0.4 * cosine(i * 2.0943951 + 0.5), 0.12, 0.4 * sine(i * 2.0943951 + 0.5)]
+      r [0.6, 0.2, 0.18]
+      yaw: i * 2.0943951 + 0.5
+    }),
+    branches: map(range(0, 3), i => {
+      position [0, 2.5 * height, 0]
+      yaw: i * 2.0943951
+      tilt: 0.6
+      r: 0.14
+      h: 1.6 * spread
+    }),
+    crowns: concat(
+      [{ position [0, 4 * height, 0], r [1.75 * spread, 1 * height, 1.75 * spread] }],
+      map(range(0, drops), k => {
+        position [
+          1.55 * spread * cosine(k * 6.2831853 / drops),
+          (2.5 + 0.25 * (k % 2)) * height,
+          1.55 * spread * sine(k * 6.2831853 / drops),
+        ]
+        r [0.6 * spread, 1.45 * height, 0.6 * spread]
+      })
+    )
+  )
+}
+
+// A low shrub: two to four rounded crowns at ground level and no trunk, in dark blue-green values.
+let scrubCrowns = [
+  { position [0, 0.38, 0], r [0.85, 0.62, 0.8] }
+  { position [0.75, 0.28, 0.3], r [0.6, 0.48, 0.58] }
+  { position [-0.6, 0.3, -0.35], r [0.62, 0.5, 0.6] }
+  { position [0.1, 0.25, -0.75], r [0.5, 0.4, 0.5] }
+]
+template scrubClump(id, size = 1, crowns = 3, colors = ["#2D4A3B", "#3A5D47", "#4B7050"]) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: "scrub-clump"
+      palette: map(colors, color => { color: color, roughness: 0.95, specular: 0.02, wrap: 0.3 })
+      for (crown, i) in map(range(0, crowns), i => scrubCrowns[i]) {
+        shape Superellipsoid $"crown-{i}" {
+          exponent: landscapeExponent
+          position [crown.position[0] * size, crown.position[1] * size, crown.position[2] * size]
+          scale [crown.r[0] * size, crown.r[1] * size, crown.r[2] * size]
+          material: i % length(colors)
+          blend: SmoothUnion
+          smooth: 0.15 * size
+        }
+      }
+    }
+  }
+}
+
+// A clump of flowers: grass blades at the foot and stems carrying grouped round heads in two colours.
+template flowerCluster(id, head = "#F0CF45", accent = "#E8A93A", stem = "#5A7A35", count = 6) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: "flower-cluster"
+      palette [
+        { color: stem, roughness: 0.97, specular: 0.01 }
+        { color: head, roughness: 0.9, specular: 0.02, wrap: 0.4 }
+        { color: accent, roughness: 0.9, specular: 0.02, wrap: 0.4 }
+      ]
+      for i in range(0, 4) {
+        shape Prism $"leaf-{i}" {
+          position [0.07 * cosine(i * 1.5707963 + 0.4), 0.08, 0.07 * sine(i * 1.5707963 + 0.4)]
+          scale [0.022, 0.1, 0.008]
+          taper: 0
+          rotation [0, sine(i * 0.7853982 + 0.2), 0, cosine(i * 0.7853982 + 0.2)]
+          material: 0
+        }
+      }
+      for k in range(0, count) {
+        shape Prism $"stem-{k}" {
+          position [
+            (0.04 + 0.03 * k) * cosine(k * 2.39996323),
+            (0.2 + 0.05 * (k % 3)) / 2,
+            (0.04 + 0.03 * k) * sine(k * 2.39996323),
+          ]
+          scale [0.012, (0.2 + 0.05 * (k % 3)) / 2, 0.006]
+          taper: 0.6
+          material: 0
+        }
+        shape Superellipsoid $"head-{k}" {
+          exponent: landscapeExponent
+          position [
+            (0.04 + 0.03 * k) * cosine(k * 2.39996323),
+            0.2 + 0.05 * (k % 3),
+            (0.04 + 0.03 * k) * sine(k * 2.39996323),
+          ]
+          scale [0.05, 0.03, 0.05]
+          material: 1 + floor(k % 3 / 2)
         }
       }
     }
@@ -258,7 +408,9 @@ template grassTuft(id) {
 }
 
 // The fringe uses tile-local coordinates; gusts use the placed world X/Z, continuous across tiles.
-template windMeadowTile(id, tile, origin = [0, 0, 0]) {
+// fringe [x, z, rx², rz²] is the patch's ellipse and clearing [x, z, r²] the circle it leaves bare, both in tile
+// coordinates; the defaults are the courtyard meadow's patch and its northern boulder.
+template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3.65], clearing = [6.5, 9.8, 2.1]) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -321,10 +473,12 @@ template windMeadowTile(id, tile, origin = [0, 0, 0]) {
           blendInSeconds: 0
         }
       ]
-      // Elliptical fringe and a clearing around the northern boulder.
-      for blade in filter(filter(meadowBlades, b => (tile[0] + b["x"] - 5.5) * (tile[0] + b["x"] - 5.5) / 3.9 +
-        (tile[1] + b["z"] - 6.7) * (tile[1] + b["z"] - 6.7) / 3.65 < 1 + 0.09 * sine(b["id"] * 7.1)), b => (tile[0] +
-        b["x"] - 6.5) * (tile[0] + b["x"] - 6.5) + (tile[1] + b["z"] - 9.8) * (tile[1] + b["z"] - 9.8) > 2.1) {
+      for blade in filter(filter(meadowBlades, b => (tile[0] + b["x"] - fringe[0]) *
+        (tile[0] + b["x"] - fringe[0]) /
+        fringe[2] + (tile[1] + b["z"] - fringe[1]) * (tile[1] + b["z"] - fringe[1]) / fringe[3] < 1 + 0.09 * sine(
+        b["id"] * 7.1
+      )), b => (tile[0] + b["x"] - clearing[0]) * (tile[0] + b["x"] - clearing[0]) + (tile[1] + b["z"] - clearing[1]) *
+        (tile[1] + b["z"] - clearing[1]) > clearing[2]) {
         shape Prism $"""stem-{blade["id"]}""" {
           position [-blade["x"], -0.1 + blade["h"] * 0.3, -blade["z"]]
           scale [meadowWidth, blade["h"] * 0.3, 0.002]
@@ -434,6 +588,55 @@ template sceneryScatter(id, prototype, rows, origin = [0, 0, 0], contact = null)
       scale: row.scale
       yawDegrees: row.yaw
       solid: contact
+    }
+  }
+}
+
+// A ground of flat painted turf: a disc in the outer turf value and a raised field in the inner value, 1.5 mm proud
+// of it so neither surface ties, carrying painted paths. A paint is colour at the hit, never relief, so the paths
+// cost no draw, bake or contact and keep the art direction's sharp edges. `field` is { position [x, z], r [rx, rz] }
+// in world X/Z; each path is { a [x, z], b [x, z], c [x, z] }, a quadratic Bézier of `pathWidth` in world X/Z,
+// at most eight. Paint positions on a static placement are in the frame of the slot that wins the hit, which for
+// static geometry is world space, so the ground is placed at the origin.
+template paintedGround(id, radius, ground, turf, field, paving, paths = [], pathWidth = 2.4, depth = 0.2) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette [
+        { color: ground, roughness: 0.95, specular: 0.02 }
+        {
+          color: turf
+          roughness: 0.95
+          specular: 0.02
+          paints: map(paths, p => {
+            type: "Sweep"
+            color: paving
+            curve {
+              a [p.a[0], 0, p.a[1]]
+              b [p.b[0], 0, p.b[1]]
+              c [p.c[0], 0, p.c[1]]
+              radiusStart: pathWidth / 2
+              radiusEnd: pathWidth / 2
+            }
+          })
+        }
+      ]
+      shape Cylinder "ground" {
+        material: 0
+        position [0, -depth, 0]
+        scale [radius, depth, radius]
+      }
+      // An elliptical prism extruded along Y, so its top is flat; its position is negated into the author frame.
+      shape Prism "field" {
+        profile {
+          kind: "Ellipse"
+        }
+        material: 1
+        position [-field.position[0], 0.0015 - depth, -field.position[1]]
+        scale [field.r[0], field.r[1], depth]
+        rotation [-0.70710678, 0, 0, 0.70710678]
+      }
     }
   }
 }
