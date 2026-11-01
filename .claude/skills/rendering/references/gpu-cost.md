@@ -111,7 +111,7 @@ the kernel waits on memory.
   albedo before the rest of the material went live (`sdfMaterialPaints`). The resolve summing each tap as it
   reads it (`PuckReconstructionSum`) took 128 to 96 registers and got faster on
   Direct3D 12 but slower on Vulkan (410 to 437 µs), whose kernel then kept
-  fewer loads in flight ([rendering plan](../../../../docs/plans/rendering.md#open-items)).
+  fewer loads in flight ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Shorten live ranges, not instruction counts.** Load a value where it is
   used, finish one stage's state before the next loads, and keep the one
   `mapCore` call site ([SKILL](../SKILL.md#editing-kernels)): each copy adds its
@@ -292,12 +292,12 @@ batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
 ## Puck's open cases
 
 - **Register-limited pixel passes.** Views at 128 registers on Direct3D 12 and
-  96 on Vulkan; surface (56 to 64) and resolve (96) are unexamined ([rendering plan](../../../../docs/plans/rendering.md#open-items)).
+  96 on Vulkan; surface (56 to 64) and resolve (96) are unexamined ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **The main mesh pass shades about 2.8 fragments a pixel,** with no
-  front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#open-items)).
+  front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Each node submits alone** (5 to 9 submissions a frame) and growing the
   program region waits for the device to go idle
-  ([rendering plan](../../../../docs/plans/rendering.md#open-items),
+  ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds),
   [hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
 - **Views record on tick frames** ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way

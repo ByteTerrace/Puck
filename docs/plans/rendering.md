@@ -54,7 +54,7 @@ Read counted work beside that timing as diagnostic evidence. Lower tiers,
 coarser shadow snapping, reduced contact detail and a frame of latency never
 repair a missed bar. The [engine job system](open-items.md#engine-job-system)
 owns scheduling, parallel tick execution and view recording; the
-[bake work](open-items.md#cold-bake-under-a-minute) owns bake speed and identity.
+[bake work](open-items.md#bake-proportional-to-change) owns bake speed and identity.
 
 ## Packages
 
@@ -96,7 +96,7 @@ picker.
 
 The frame-graph package is implemented. Its brick producer and editor levers
 belong to the [editor plan](editor.md). Crossings, Vulkan robustness and GPU
-qualification belong to [cross-backend work](open-items.md#cross-backend-parity-and-gpu-robustness);
+qualification belong to [cross-backend work](open-items.md#vulkan-regressions-and-gpu-robustness);
 first-use JIT belongs to [boot work](open-items.md#edit-to-running-hot-reload-and-boot).
 The remaining rendering-specific details follow.
 
@@ -214,14 +214,14 @@ counting bake steps cannot measure the baked frame's load.
 ### P17 — Assets derived from SDFs
 
 Withdrawn as a separate package. Every frame already draws baked meshes;
-[bake work](open-items.md#cold-bake-under-a-minute) owns their derivation.
+[bake work](open-items.md#bake-proportional-to-change) owns their derivation.
 
 ### P18 — Sky and atmosphere
 
 Only the celestial `bodies` vocabulary and the remaining infinity-view image
 and admission observations stay here. The [frame handbook](../rendering/sdf/handbook/frame-rendering.md#the-sky-once-and-a-composite-last)
 owns clocks, the open layer stack, atmosphere and artist controls.
-[Author leaks](open-items.md#ui-step-1-the-engine-leaks-out) owns the move of
+[Author leaks](open-items.md#author-leaks-to-the-standard) owns the move of
 sky and quality presets into `worlds/standard/`.
 
 P18-7 adds `render.sky.bodies`: discs, crescents and rings; directions,

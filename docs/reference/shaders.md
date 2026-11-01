@@ -1109,9 +1109,7 @@ view, each an `sdf.world` instance the scheduler feeds like any other
 
 ## Pass interfaces
 
-A pass interface is the grouped binding contract as data. It is the model the
-[rendering plan's](../plans/rendering.md#p7--the-binding-contract-and-the-adapter-memory-profile)
-two-group binding spike built. Every pipeline pass and package pass reads its
+A pass interface is the grouped binding contract as data. Every pipeline pass and package pass reads its
 blocks through one. A document pass binds its frame group at set 0 and its pass
 group at set 3 as descriptor sets
 ([frame values, extent and ports](#frame-values-extent-and-ports)), and so does

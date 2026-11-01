@@ -565,7 +565,7 @@ field, in millimetres, and what the exhibit's score is made of:
 ## Known defects the gallery shows
 
 Each of these was seen in a Direct3D 12 capture of the gallery or in
-`puck mesh audit`. The [rendering plan](../../docs/plans/rendering.md#open-items) tracks them.
+`puck mesh audit`. The [rendering plan](../../docs/plans/rendering.md#bake-quality) tracks them.
 
 - **Clipped lattices fold where a clip cuts a copy thin.** An intersection
   that cuts a tile or bead a few millimetres from its face leaves a sheet

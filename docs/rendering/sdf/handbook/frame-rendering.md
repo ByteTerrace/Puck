@@ -711,7 +711,7 @@ tinted; refraction reads a screen-space neighbour, so what lies off screen or
 behind a nearer surface reads the pixel's own sample; an eye inside a glass
 solid sees no front face, so the pixel passes through untinted; the glass
 surface reads no occlusion and no cascade; and tinted shadows and glass in the
-irradiance volume are open items ([open items](../../../plans/rendering.md#open-items)).
+irradiance volume are open items ([lighting and GI](../../../plans/open-items.md#lighting-and-gi)).
 A world with no glass shape allocates and runs none of this; `world.budget`
 prints the glass storages' bytes and the glass draw count, and
 `world.counters gpu` the three passes' work.
@@ -1112,7 +1112,7 @@ plate rims into pale and dark fringes. Pieces of the surface apart from the rest
 under two lattice cells across and a hundredth of the largest piece's quads, are
 dropped: the specks a shell leaves where it thins to a knife edge (the top of the
 Moth's shins). The inner band of the Moth's face opening still shows jagged
-slivers at the fine spacing ([open item](../../../plans/rendering.md#open-items)).
+slivers at the fine spacing ([open item](../../../plans/rendering.md#bake-quality)).
 
 The material is then sampled where a field hit would read it, at points lifted
 half a millimetre off the surface, in rounds the bake writes into the tables'
