@@ -58,10 +58,11 @@ The research round read the code, and the plan rests on these facts:
   and `sdfLightResponse` exits at zero reach). A bound screen lights a surface
   as an unshadowed centre-and-area diffuse term with no specular.
 - The cascades cover 16 m near and 120 m far with casters 200 m toward the
-  light (`SdfMeshShadowCascades.NearSplit`, `FarSplit`, `CasterReach`). The
-  surface pass queries them only where the geometric n·l is positive
-  (`passes/sdf-surface-stage.hlsli`, the `value.shadows.x` line), while a
-  wrapped material still takes diffuse past that terminator.
+  light, authored as `render.shadowCoverage` (`SdfShadowCoverage`) and printed
+  by `world.budget` with each cascade's texel. The surface pass queries them
+  wherever a light's diffuse response is non-zero, a wrapped material's side
+  past the terminator included (`passes/sdf-surface-stage.hlsli`,
+  `sdfMaterialWrap` and `sdfMeshShadowTransmission`).
 
 ## The five decisions
 
@@ -278,19 +279,21 @@ verbs:
 
 ## Cel shading
 
-Cel shading is one per-world setting today, `render.toon`
-(`src/Puck.World.Schema/WorldRenderToon.cs`): a band threshold and softness,
-a `ShadowTint` that recolours indirect light and sky ambient, distance-faded
-outlines, a bounded toon specular, and an exposure shoulder, switched live by
-`world.toon` for every opaque material in the host, the routed worlds and the
-nested views ([the handbook](../rendering/sdf/handbook/lighting-and-shading.md#cel-shading)).
-`shade/sdf-toon.hlsli` bands `saturate(cosine) × saturate(visibility)` in one
-`smoothstep`, so the cascades' filtered penumbra collapses into the band's
-edge, and the light stage under toon drops rim light, skips the environment
-reflection, and passes 1.0 for ambient occlusion into point-light banding. The
-debug world never turns it on. The research round's shadows report (Codex,
-item 1) and stylized-lighting report (Antigravity, item 2) both flagged the
-collapsed penumbra and the dropped terms. Four decisions place cel shading in
+Cel shading is a style per material since step 1
+([the handbook](../rendering/sdf/handbook/lighting-and-shading.md#cel-shading)):
+a palette row's `toon` (`ToonStyleDocument`, `SdfMaterial.Toon`) shades its
+material, every other material inherits the world's default `render.toon`, and
+`world.toon` is the live lever over that default. A style holds a band
+threshold and softness, a `shadowTint` that recolours indirect light and sky
+ambient, distance-faded outlines, a bounded toon specular, an exposure
+shoulder and its band shape; the standard authors `celStyle`, `celHardStyle`
+and `continuousStyle` in `worlds/standard/styles.puck`, and the gallery's
+level 3 STYLES row shows them beside continuous materials. Before step 1 it was
+one per-world setting that banded `saturate(cosine) × saturate(visibility)` in
+one `smoothstep`, collapsing the penumbra into the band's edge, and dropped rim
+light, the environment reflection and point-light ambient occlusion; the
+research round's shadows report (Codex, item 1) and stylized-lighting report
+(Antigravity, item 2) both flagged it. Four decisions place cel shading in
 this plan:
 
 1. **Banding preserves visibility.** The band shapes the lighting response
@@ -429,7 +432,7 @@ the frame thread records, which J1 does not reorder.
 | Step | Lane | Lands | Check on `worlds/debug` |
 |---|---|---|---|
 | 0. Confirm and baseline | rendering, with a Deck leg | The authored day cycle as standard data (a `dayCycle` template in `worlds/standard/skies.puck` driving the key light's direction, colour and the sky from one clock; the debug world imports it, with a lever to hold the sun); the moving-sun run; today's CPU trace and frame timed on the Deck at High; the [corrections](#corrections) below | Headless, key light bound to the clock: whether `[sdf.mesh-gi] done` lines ever print and whether `world.counters sdf.mesh-gi` probes settle or restart each frame; `world.probe` at the teal corner reports `unsettled` for the run's length if the finding holds. Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
-| 1. Direct light correct | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
+| 1. Direct light correct (landed but for the scale-following lengths, the back-plate lines and the terrain cascade; see [step 1's status](#step-1-status)) | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
 | 2. Hits and relight | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the sky transfer with its cosine term; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
 | 3. GPU trace hits | rendering, GPU leg on both backends and the Deck | The trace-hits interface with both legs; rigid bodies cast; the CPU trace deleted once a leg holds on all three | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against today's 8.35; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides the leg |
 | 4. Bitmask AO and bent normal | rendering | The bitmask march over the depth pyramid; the bent normal in the visibility record and in the gather; the cel outline's check ([cel shading](#cel-shading), decision 4) | `meadow.puck` blades without dark halos and thin crevices closed in `world.debug-view ao`; under a cel style with outlines on, a presented burst of eight frames at `debug.go meadow` shows no ink shimmer between frames beyond the blades' own motion, and at `debug.go portals` no ink on the paintings' pictures; `world.gpu-timing` of `surface` against today's on all three; stills at the gather stops compared tolerantly |
@@ -445,16 +448,58 @@ scheduling, B1 narrowing what a scene change re-traces), the GI step keeps its
 unit and the job system supplies the policy, so neither waits on the other
 needlessly.
 
+### Step 1 status
+
+Landed and checked on the debug world on Direct3D 12:
+
+- The wrapped-diffuse query, with casters within the receiver's own depth
+  transmitting. Indoors under the slab beside the PRIMITIVES plinths, the
+  Moth's cheek past the terminator no longer takes the 100 klx sun: one World,
+  the surface kernel hot-swapped between the old and new query, differs only
+  in the two 32-pixel tiles over her cheek; outdoors at the stage no tile
+  differs, and the meadow's blades in the open keep their wrapped light.
+- `band(cosine) × visibility` as the default band shape (`band: Visibility`)
+  and `band(cosine × visibility)` as `band: Combined`; toon keeps rim lights,
+  the environment reflection and ambient occlusion (point lights' banding
+  included). At `debug.go stage` with `world.toon on` the Moth's shadow keeps
+  its soft penumbra where it was a hard cutout.
+- Cel shading as a style per material (decisions 1 and 2 of
+  [cel shading](#cel-shading)), with the gallery's STYLES row mixing banded and
+  continuous materials.
+- Cascade coverage as an authored resource (`render.shadowCoverage`) printed by
+  `world.budget`.
+- No measurable frame cost: `surface` and `views` GPU time at the plinth stop
+  stayed inside the run-to-run spread (surface 0.75 to 1.19 ms before, 0.72 to
+  0.99 ms after; views 8.1 to 10.5 ms before, 7.9 to 9.4 ms after) on a GPU whose
+  timings swung 50 % between identical readings.
+
+Open in step 1:
+
+- **The terrain cascade.** Stretching the far cascade over the valley is not
+  the answer, measured at `valley-rim` with the sun at noon:
+  `render.shadowCoverage { far: 480, casters: 600 }` raised `shadow-far` from
+  208 draws and 0.57 M vertices to 7,170 draws and 14.3 M vertices, and from
+  about 0.24 ms to 8.4 ms, and coarsened its texel from 13.9 cm to 55.3 cm. The
+  far walls need the terrain pass's step 7: a third key-light cascade from the
+  far split to the far distance, drawing static draws at their coarsest level
+  and held while the sun and the static draws hold still.
+- **Scale-following shading lengths** (cascade bias, AO and shadow tap radii,
+  `NormalBias`) and the quarter-size Moth's back-plate lines.
+- **The cel band under indirect light.** Indoors the hall is lit mostly by the
+  traced bounce, which a style tints as its shadow band, so a banded material
+  there reads as its shadow tone; decision 3 (step 2) is what makes that band
+  read the volume's colour.
+- **A Vulkan leg and a dawn leg** of the checks above beyond what the lane's
+  report lists.
+
 ## Corrections
 
 Errors the research found in Puck's own documents and comments, for the first
 lane (step 0 or step 1) to fix:
 
-- `src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-surface-stage.hlsli`: the
-  comment above `sdfMeshShadow` says the blocker search sizes the penumbra
-  from "the gap to the average blocker"; the code takes the nearest blocker
-  inside the light's cone, and the nearest outside it when none is in the
-  cone. Correct the comment to the implemented rule.
+- Fixed in step 1: the comment above `sdfMeshShadow` now states the
+  implemented rule, the nearest blocker inside the light's cone and the nearest
+  outside it when none is in the cone.
 - The [mesh GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
   says depth is traced on the first sweep and reused for later bounces. A
   lighting change resets a probe's sweeps to zero, so it also re-traces the
