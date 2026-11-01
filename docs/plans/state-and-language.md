@@ -4,10 +4,10 @@ A world is a document. This programme makes the document worth writing: one
 storage substrate under it, ceilings that refuse it for a reason an author can
 read, a surface language that projects it instead of competing with it, a price
 for the work it asks per tick, and known games that prove the vocabulary is
-real. Everything is proved against one artifact, the forcing world: a quilt of
-four corner worlds around an island with an arcade district, authored in
-`.puck` from nothing, running on the rebuilt substrate, priced by the schedule
-that refuses it. The reasoning behind every decision here is in
+real. The proving ground is `worlds/debug`: its authored programs exercise the
+state substrate, admission, and composition together. Missing capabilities from
+experimental worlds are ported into debug-world exhibits; those worlds stay
+quarantined. The reasoning behind every decision here is in
 [the decisions register](../decisions/state-and-language.md); this page holds
 the work.
 
@@ -19,14 +19,13 @@ every package is complete.
 - **The rebuild** is landed on `main`: the sweep that deleted the old
   substrate, the relocation into `Puck.State.Topology` and
   `Puck.State.Generators`, and the documentation true-up.
-  [The landing record](state-rebuild.md#what-the-landing-settled) holds what it
-  settled.
+  [State and rules](../reference/state.md) owns the current contract.
 - **Games.** Ten of sixteen are landed: Reversi, Hidden ranks, Hearts, Snake,
   Word spy, Paddleball, Arena, Rulepush, Tetromino, and Go. Lineup landed
   outside the sixteen, in the [Parlor package](../../experimental/worlds/parlor/README.md#lineup).
 - **Embeddings** is done: the open defects in `Puck.Embeddings` and `puck embed`
   are closed, each with a law ([Embeddings](#embeddings-done)).
-- **C1** is open. The reference schedule is implemented in part
+- **C1** inventories semantic accounting and report gaps
   ([C1](#c1--ceilings-as-prices) holds its status and what remains).
 - **S1** is landed: `WorldCompiler.Compile` is the one door, and
   `ProjectionLawTests` holds over every shipped source and a generated corpus
@@ -100,245 +99,55 @@ every package is complete.
   `given`/`when` vocabulary the drafted pages below use — standing at a place,
   walking, pressing a channel, reading a body's own position — waits on the
   operands a rule can read those through.
-- **The forcing world** is drafted below, and four canaries (`rim-drop`,
-  `rim-refused`, `rim-round-trip`, `traveller-kit`) hold what the engine
-  already does for it. The package sections distinguish completed
-  capabilities from the remaining integration and evidence work.
+- **The proving ground** is the debug world. Its device row, board games,
+  traveller records, and authored motion supply composition workloads.
 
 ## The forcing world
 
-Four corner documents from one parameterized module, and hovering over the
-point where the four meet, a sky island of districts — a Dalaran: each district
-a module, an arcade among them, and portals that are federation links to other
-worlds, never worlds inside a world. A cabinet module is instantiated twice
-into two hosted devices, a pool a rule fills and empties, and a record follows
-a player across authorities. It reproduces no existing JSON, so the
-language is pulled toward reading well rather than toward the shapes it
-replaces. Its pages are [drafted below](#the-forcing-world-drafted); each page
-is the check for the package that makes it compile, so the world grows with
-the language instead of arriving after it. It is authored as an asset package
-from its first line ([Runtime and delivery](runtime-and-delivery.md#asset-packages)
-roots it at `worlds/<id>/`).
+The forcing artifact is the debug world, running its authored programs through
+one live store, one write door, and one deterministic allowance. Exercise a
+reusable cabinet module twice in its device row, pool claims and releases in
+its games, and identity-owned records across separate authorities. Missing
+experimental capabilities belong in the [port inventory](open-items.md), with
+their source and destination exhibit identified before implementation.
 
-The place, as a player meets it:
-
-- **The Concourse** is a round plaza at the island's centre, directly above
-  the point where the four corners meet, ringed by portal arches. Every
-  district opens onto it, and no district entrance is more than about 60 m
-  from its centre.
-- **The districts** sit on spokes, one module each: the Arcade (the cabinet
-  module, twice), the Arena, the Studio, the Cistern (the island's reservoir,
-  which is the dive pool), the Garden, and the Granaries. The kart track is
-  the **rim road**, a lap of about 565 m at a 90 m radius with nothing below
-  its outer edge; the jump course is the **spires** that rise over the plaza.
-- **The four corners are four biomes**, one `corner` module given a biome
-  module as a parameter: a glacier to the north-west, a mesa desert to the
-  north-east, a mangrove wetland to the south-west, an old-growth forest to
-  the south-east. Each is its own document, so each owns its one physical
-  field: cold, heat, water, and none. Every biome exports an `ascent`, its own
-  way back up: an ice wall climbed on holds, a thermal updraft, a waterspout,
-  a canopy climb.
-- **There are two ways off the island.** The rim is a real drop: four borders
-  lie flat beneath the island, one per quadrant and facing straight down, so a
-  body that falls through the north-west quadrant is handed to the glacier's
-  authority in mid-air with its velocity and its record intact. The arches are
-  doors: each leads to a disconnected world with no spatial relation to the
-  island, and the first of those are board games, one `parlor` module given a
-  game module as a parameter, one shared parlor per game.
-- **Movement is one kit**, used by the island and all four corners so the feel
-  cannot differ across an authority change: the double jump, jetpack, and
-  coyote-time scheme, tuned tight in the manner of Hollow Knight and
-  Silksong. The island and the corners author 60 Hz so a 0.1 s window is six
-  ticks; a parlor keeps 30 Hz.
-
-**Check:** the world boots and runs in `Puck.World`; a body walks a circuit of
-the four corners under real separate authorities and its record arrives intact
-at each hop; a body that steps off the rim over each quadrant arrives in that
-quadrant's biome still falling, with the velocity, stamina, and record it left
-with, and a body hovering on the border plane does not change authority every
-tick; a body returns to the island by each biome's ascent; winning a game in a
-parlor writes a badge onto the visitor's record, and the badge is on the owned
-identity at home afterward (a colocated seat coming home adopts the carried
-record today; across separate authorities the badge waits on the open
-[remote home adoption](records-and-pools.md#remote-home-adoption) step); the
-cabinet module used twice yields two independent sets of rows and two devices;
-the projection law holds over every source in it; every module in it ships
-tests, the movement kit's among them, and `puck test` is green over them.
-
-Three games finish the proof the world cannot reach on its own. **Rulepush**
-forces a match that answers *where*, a push along a ray, a write across a
-set, and undo across turns. **Go at 19×19** forces the cell-set carriers past
-256 cells. **Tetromino** is the one proof of a staged `workflow` with a drawn bag
-and a saturating score. Six more games are deferred until a capability they
-force is otherwise unproven; the table at the end says what each would prove.
+Run the real debug world through `puck_world_start`, inspect it with `puck sweep`
+and captures, and compare replay state for fixed document and input. Highest
+quality targets are 60 FPS on the RTX 2060 and RTX 4070, and 45 FPS (every frame
+under 22.2 ms) on Steam Deck. The job system and bake fundamentals lead feature
+work. Rulepush, Go at 19×19, and Tetromino supply language workloads where a
+debug-world exhibit does not yet exercise the vocabulary.
 
 ## Packages
 
 Each package names what it **owns**, what it **delivers**, and its **check**.
 Every package lands on the integration branch with its hashes re-recorded in
-the same change (rule 4); a moved export is re-recorded, not explained. The
-[hand-off discipline](state-rebuild.md#hand-off-discipline) says who
-implements, who reviews, and which model.
-
-### The landing
-
-[State system rebuild](state-rebuild.md) is the record of the landing: every
-package it lists is landed on `main`, each with its own check, and the old
-substrate is deleted. Every package below branches from `main`.
+the same change (rule 4); a moved export is re-recorded, not explained. Current substrate contracts live in
+[State and rules](../reference/state.md); branch and review procedures live in
+[contributing](../development/contributing.md).
 
 ### C1 — Ceilings as prices
 
-**Owns:** the constants in `RuleCapacity`, `StateCapacity`, `PatternCapacity`,
-`SearchCapacity`, `GeneratorCapacity`, `ArenaCapacity`, `RuleGroupCapacity`,
-`WorldRuleCapacity`, `TopologyCompilation`; their refusal texts; the reference
-schedule and its activation from [costing](abstract-machine-costing.md).
+C1 inventories the charged operations and the remaining accounting and report
+gaps. [S10 step 7](#s10--the-state-review) owns the single deterministic semantic
+allowance and the deletion of the reference-cycle model. Admission and reports
+share one semantic work sheet; separately measured headroom explains physical
+cost without choosing authoritative prices from host timing.
 
-**Delivers:** two real limits, the per-tick work budget and per-document memory
-bounds; every surviving count names the bytes it sizes or the budget share it
-multiplies, and a count that protects nothing is deleted (the jump-hop count,
-the sort-key count that copied `MaxRows`, the pattern memo's entry count, and
-the total-cell count, replaced by a byte ceiling). No `stackalloc` sized by a
-document: the board transforms take scratch the arena owns, the
-expression evaluator from a host buffer; the gate nesting depth is its own
-constant; the pattern table is capped as one byte figure; `MaxSymbols` is
-bounded so its alphabet runs fit the letter mask. The raises, each landed at
-its target:
+The inventory covers rule setup, binding and gate checks, firing effects,
+interaction gathering and distance tests, neighbour selection, decision queries
+and scores, sorting, arena transforms, transactions, and synchronous mutation
+work. Setup is charged once where execution shares it; every evaluated check
+is charged, and exclusion reasoning applies only to firing work.
 
-| Limit | Value |
-|---|---|
-| `RuleCapacity.MaxLocalsPerRule` | 64 |
-| `RuleCapacity.MaxExpressionTokens`, `MaxSubprograms` | 256, 64 |
-| `RuleCapacity.MaxEffectsPerRule`, `MaxTransactionEffects` | 256 |
-| `RuleCapacity.MaxPredicateTokens`, `MaxPredicateNesting` | 1,024 tokens, 64 nesting |
-| `StateCapacity.MaxRows`; `MaxEnumMembers` / `MaxEnums` / `MaxFamilies` | 1,024; 1,024 / 256 / 256 |
-| `StateCapacity.MaxTextValueLength`; `TopologyCompilation.MaxTopologies` | 1,024; 64 |
-| `StateCapacity.MaxVectorSpaces`, `MaxNearestResults`, `MaxMixTerms` | 64, 256, 32 |
-| `PatternCapacity.MaxRepeat` / `MaxRows` / `MaxStates` | 128 / 256 / 1,024 under the byte cap |
-| Lane widths (`ArenaCapacity.DefaultIdentities`, `DefaultParticipants`), `ArenaCapacity.MaxDrawnMasks`, `GeneratorCapacity.MaxContexts` | 256, 256, 64 |
-| `GeneratorCapacity.MaxDeclaredSources`, `MaxEmissionBound`, `MaxExtendedTableSize` | 256, 256, 4,096 |
-| `SearchCapacity.MaxDepth`, `MaxJobs`, `MaxShapesPerJob`, `MaxPromotions`, `MaxChanceOutcomes` | 64, 16, 16, 16, 256 |
-| `SearchCapacity.TranspositionEntries`, `TreeNodes` | 8,192, 8,192 |
-| `RuleGroupCapacity.MaxMembers` | 256 |
-| `RuleExpressions.MaxArguments`, the evaluator's `MaxTraceEvaluations` | 16, 256 |
-| `ExpressionSpelling.MaxLength` | 16,384 |
-
-`TopologyCompilation.MaxCells` stays 4,096 until a document asks. Every
-ceiling is per document, counted after modules expand: a module used twice
-counts its rows twice, a pool counts its rows once and its capacity in the
-budget, and the refusal names the module instance that crossed it. Every
-ceiling refuses at compile time naming the limit and the alternative. The
-arena's journal and touched-position buffers take a byte ceiling, and a firing
-that would exceed it is one named refusal that rewinds. `ArenaVectorTransforms`'
-`Nearest` allocates its candidate buffer on every call; it moves to scratch the
-arena owns with the other scratch changes here, under the same allocation law. A
-compiled operand over a literal key resolves its slot through the row's key
-dictionary on every read, which is most of a judged search candidate's cost;
-it holds the slot against the row's own reindex instead. The per-tick budget is
-one price: the reference schedule (the benchmark kernels captured, coefficients
-derived, formulas and evidence in one manifest with `CostModel.EvidenceDigest`
-set, every reachable operation priced or explicitly unmodeled) replaces the
-heuristic work-unit count, and `MaxWorkUnitsPerTick` becomes that schedule's
-per-step allowance in reference cycles, calibrated with headroom above every
-shipped world; validator, console, search plans, `BrowserExports`, and the
-portal worker read one report with source-path attribution. The method is
-[costing §3 to §7](abstract-machine-costing.md#3-price-schedule-and-evidence).
-
-**Status:** the scratch changes are landed. `ArenaScratch` is the
-arena's working storage, leased and returned in order: the board transforms, the sorts,
-`arrange`, a jump chain's visited cells, and all four vector transforms (each of
-which allocated on every call, not `Nearest` alone) take their buffers from it,
-and the expression evaluator leases its value stack at the program's own length
-through `IStateReader.Scratch`. The generator
-engine keeps its stack buffers: they are sized by `MaxEntriesPerSet`, a constant,
-and the engine is a pure surface with no arena behind it. The compiled-operand
-slot did not survive its profile. Cell reads are about 43% of a judged
-candidate, but the cost was the arena copying its row's twenty-field layout two
-or three times a read, because `ArenaLayout`'s indexer returned it by value; the
-indexer returns a reference now, and a row's key-to-slot map is an array over
-the row's key ordinals rather than a dictionary. A slot held on the operand was
-rejected: compiled rules are shared by every arena they run over. Chinese
-Checkers measures 4.15 ms a tick against 5.1.
-
-All four counts that protected nothing are gone. The jump-hop
-count bounded nothing the node ceiling did not: a chain over even one direction
-enumerates 8,192 candidates a token at thirteen hops against the 4,096 a job
-judges in a tick, and that check is the one that refuses, overflowing counts
-included. The sort-key count was a copy of `MaxRows` under a check that already
-requires distinct rows. The pattern memo's entry count dropped the memo at 256
-walks, which a board read from every cell in every direction passes at once;
-the memo itself is deleted, and a `match` operand walks its word
-from the first letter at every read. Both storage paths of `sort` lease their
-key buffers instead of allocating them per firing. The total-cell count is gone,
-and so is an unnamed 262,144-cell budget beside it: the document's memory bound
-is `StateArena.Bytes` against
-`ArenaCapacity.MaxBytes` (64 MiB), measured over every column at its full width
-plus the bounded visibility payload in declaration and live state, with
-admission at construction, import and write. The largest shipped world lays out to
-about 5 MiB. The undo record takes `ArenaCapacity.MaxJournalBytes` (16 MiB),
-read between effects; a firing past it is the `JournalCeiling` refusal and
-rewinds, and the positions a settle visits are a subset of the record's, so
-the same figure bounds that buffer.
-
-The rule-program raises are landed: 64 locals, 256 expression tokens, 64
-subprograms of at most 16 arguments, 256 effects and transaction effects, 1,024
-gate tokens with a nesting ceiling of their own (64), 256 traced evaluations,
-and spellings of 16,384 characters. Two of them could not be raised as numbers.
-An expression spelling nested with nothing bounding it, so two thousand
-parentheses, inside the old length limit, ended the process with a stack
-overflow; it nests to 256 now along every path the parser recurses on. And a
-subprogram that calls the level below twice doubles with its depth, which at
-sixteen levels was 65,536 evaluations and at sixty-four never finishes: the
-compiler's constant folder evaluated such a chain before anything priced it,
-and pricing walked every call site. A compiled body carries the tokens one call
-evaluates, the folder leaves a subtree longer than 65,536 of them in the
-program, and pricing takes each shared body once, so the chain compiles and
-prices in its authored size and its price, an overflow, is what refuses it.
-
-The remaining raises are landed at the table's targets: state rows, enums,
-families, text, topologies, vectors, patterns, lanes, drawn masks, generators,
-search, and groups. `MaxSymbols` stays 32, which is what a 64-bit letter mask
-holds. A document's pattern tables are bounded together by
-`PatternCapacity.MaxTableBytes` (4 MiB), refused at the row that crossed, and
-nothing is compiled past the row ceiling. The extended generator table's
-ceiling is `Pcg32Extended.MaxTableSize`, raised in `Puck.Maths` with its laws.
-A fixpoint group runs one pass a tick, so its members times its passes is
-never one tick's work: its members are priced as the rules they are, and its
-passes count ticks. A chance table's weights are multiplied and summed in 128
-bits at the bake and refused when their total passes one word, which is the
-condition the chance ply's exact average rests on; the outcome count never
-was.
-
-The reference schedule and shared report are implemented in part. The manifest
-(`src/Puck.State/ReferenceSchedule.json`) pins eight evidence targets across two
-ISA families (x86-64 and AArch64), prices the unary, binary, bit-field and
-bit-insert expression operations, and registers every other reachable
-operation with its size parameters and an explicit unmodeled reason;
-`puck bench state-evidence` reproduces the pinned instruction-service rows and
-reports the priced and unmodeled counts per vocabulary. A compilation retains
-one work sheet and cost report for server and console consumers; the browser and
-portal worker expose the same analysis with exact cycle strings and explicit
-unresolved bounds. Draft analysis preserves validation refusals alongside a
-report; resource dimensions expose the measured arena admission footprint
-without claiming a total memory bound. Contributor locations retain JSON
-pointers and, for standalone source analysis, defining source lines and module
-instances. C1 is still open: kernel and helper prices, the memory-service
-profile, synchronous edit-cycle bounds, and reference-cycle admission remain
-outstanding, and admission still runs on the heuristic work-unit sheet. The
-capture that a kernel price is derived from is a verb:
-`puck bench state-evidence --capture <dir>` compiles both pinned lowerings,
-walks each declared kernel's maximum permitted path under its declared loop
-bounds, and renders the manifest sections it establishes, naming every
-difference from what is pinned. What the capture cannot supply is what remains:
-reference kernels for the unpriced vocabularies, declared bounds for the helper
-loops that leave a kernel unresolved, and memory-service measurements.
-
-**Check:** the state, rules, search, and World schema suites green with a law
-at each raised edge for the two ceilings that bind today (locals, expression
-tokens) and for each scratch change; every ceiling refusing at compile time;
-the allocation laws still report nothing after warm-up; `puck schema --check`;
-observed modeled service never exceeding admitted static service on
-exhaustively enumerated small worlds, with equal reports native and WASM; every
-document and skill that states a value corrected.
+Still owed: the line-of-sight envelope's field-program visits and grid accesses
+in the semantic sheet; refused speculative prefixes and their rewind costs;
+search restart, replay, cancellation, and output work; and source-attributed
+reports that distinguish known, unmodeled, and overflowing work. Reports must
+survive budget refusal and expose arena bytes separately from measured runtime
+headroom. Server, console, browser, and portal consumers read the same report.
+The operation and failed-work inventory feeds S10 step 7 rather than activating
+or recapturing a reference-machine schedule.
 
 ### C2 — Variable-width cell sets
 
@@ -558,27 +367,21 @@ instantiates nothing; `export alias.name` passes a control upward. A source
 with `world` statements emits one document per `world`; `border a.side, b.side`
 generates both reciprocal adjacency rows and derives each side's centre and
 outward yaw from the two grounds, or takes them as written when the border is
-not between two grounds (the four that lie flat beneath the island). `door
+not between two grounds. `door
 a.arch, b.arrival` generates both halves of a jump between worlds with no
 spatial relation: the destination and reference rows on each side and the
 return arch in the far world. A parameter of kind `Module` may state the
 exports it requires (`biome: Module exporting ascent`), and a `use` of a
 module that lacks one is refused by name at the `use`. `asset "path"` is a
-reference whose hash is pinned in a lock file. A diagnostic and a cost read quilt, island, arcade,
-cabinet, line, and a ceiling crossed inside an expanded module names the
-instance. After it: the shipped island, its seven districts, and the five
-shards move from hand-written JSON onto the same modules, the canaries are
-pointed at the result and re-recorded, and the JSON sources are deleted.
+reference whose hash is pinned in a lock file. A diagnostic and a cost name the debug-world module instance and defining
+source span. The open integration work is reusable modules in the debug world
+and its standard package, with authored tests, source-attributed refusals, and
+independent state for repeated instances. Quarantined JSON shards are never
+migrated in place.
 
-**Check:** the forcing world's check above.
-
-**Open:** `experimental/tests/Puck.World.Canaries/four-corners-sharded/island.world.json`
-(and each of its four quilts) declares `/machines/0/name` as
-`arcade$agb-screen`, a machine an aliased `use` declared. An aliased `use` is
-written in source alone and prints back from no document
-([P1](../decisions/state-and-language.md#the-language)), so `puck decompile`
-refuses the five documents by that name; done when they are authored as `.puck`
-over the module, compile to the documents as parsed, and the JSON is deleted.
+**Check:** boot the debug package, exercise two uses of a module, and observe
+record transfer across authorities. Port missing experimental capabilities
+through the inventory before adding their debug-world exhibits.
 
 ### S7 — Records and pools
 
@@ -646,7 +449,7 @@ code. A checkpoint or a save inside an armed run is refused. A test over several
 `world` statements boots the set in one process and reads its verdict in the
 destination world. The export-hash baseline stays as the determinism check only.
 
-**Check:** every module in the forcing world ships tests, green on the server
+**Check:** every reusable module in the debug world ships tests, green on the server
 host and reproducing under `--reproduce`; the C# laws that pinned a shipped
 game's behavior are deleted with the tests that replace them; a failing verdict
 names the gate and the values it saw.
@@ -790,11 +593,10 @@ transactions, and mutations priced at the paths they execute; a rejecting
 result for an unregistered operation and explicit `Unmodeled` and `Overflow`
 propagation; search spending a bounded, resumable allowance per job with
 chance and playouts obeying it; validation against independently counted
-execution traces on exhaustively enumerated small worlds. The specification is
-[costing §4 to §8](abstract-machine-costing.md#4-composition-rules-and-mathematical-obligations).
+execution traces on exhaustively enumerated small worlds. The surviving composition contract is in [S10 step 7](#s10--the-state-review).
 
 **Check:** `observed modeled service <= admitted static service` on the
-enumerated worlds; the adversarial cases in costing §8; equal reports native
+enumerated worlds; failed speculative work, restart, and cancellation cases; equal reports native
 and WASM.
 
 **Status:** the accounting is corrected and search is bounded. A bound is a
@@ -819,24 +621,11 @@ inside one and a checkpoint carries what it has folded; a tree step is a unit
 like any other. `ArenaSearchAllowanceLawTests` holds every step under its
 allowance against a judge counted from outside the search.
 
-Owed: a line-of-sight test is a flat weight. The test is a budgeted sphere
-trace over the world's compiled solids: at most the evaluator's march budget of
-exact samples, each one a run of the compiled field program, plus one banded
-lookup per bound step along the segment. The evaluators now expose a structural
-work envelope: sample budgets include the terminal sample, and program visits
-cover a lazy grid sample followed by exact fallback. The finite-grid bound-step
-limit follows from the fixed-point direction and minimum step. This does not
-change the flat admission weight. Integrating the envelope into the document's
-cost context and pricing its program, grid, and memory work still require C1's
-reference schedule.
-No document can spell an unpriced operation or an overflowing count, so
-admission's refusal of one is held on admission's own function,
-`WorldRuleWorkBudget.Refuse`, and at the sheet, not through a world. The
-reference schedule, reference-cycle admission, and the shared report are C1's.
-
-The comparison of reference costs with independent full-workload measurements
-([costing §8 step 5](abstract-machine-costing.md#8-implementation-order-and-acceptance)) waits for C1's
-reference schedule.
+Owed: the line-of-sight test's structural work envelope is not integrated into
+the semantic cost context. Charge its bounded exact field-program samples and
+grid accesses through [S10 step 7](#s10--the-state-review), alongside failed
+work and aggregate search accounting. Full-workload timing measures headroom
+separately; it never sets a replay's authoritative allowance.
 
 ### Embeddings (done)
 
@@ -985,13 +774,33 @@ in order; the language work of S9 continues beside it.
 
 | Step | Delivers |
 |---|---|
+| 0 | Fix the state/jobs ownership contract in the [engine job-system memo](open-items.md#engine-job-system): fixed partitions independent of worker count, declared read epochs, partition-owned scratch, stable commit, slot-allocation, key-minting and draw order, and snapshots only at publication boundaries. Parallel rule evaluation must preserve this chosen mapping. |
 | 1 | Addon reads and change deliveries checked against per-recipient disclosure (a correctness repair, first and independent). |
 | 2 ✓ | Charge what is used: the provenance column gone, trait columns reserved only where declared, growth charged, no Cartesian relationship universe, `MoveCell` never materializing an absent column, ordered and evicting rows without whole-row shifts. |
 | 3 ✓ | One live store and one write door: journal-driven publication, one arena reader, grant-checked atomic batches for runtime writers, live disclosure, arena checkpoints, and responses, deals and contribution tenure as projections. |
 | 4 | Hash and checkpoint everything that steers the future, a running addon's continuation included. |
-| 5 | Rewind as a complete continuation bundle. |
+| 5 | Rewind as a complete continuation bundle, extending the existing scoped capture and restore in `WorldScopedReplayRuntime`, the arena columns and key/generation state in `ArenaScopeSnapshot`, and checkpointed scoped replays and undo in `WorldPersistence.Checkpoint.cs`. |
 | 6 | Entities as records in pools, with references, seats as entities and the chess pieces migrated. |
-| 7 | Edges as values, versioned facets and explicit rule order; key-name reclamation; rare traits as facets; one deterministic work allowance with measured reports, the reference-cycle model deleted. |
+| 7 | Edges as values, versioned facets and explicit rule order; key-name reclamation; rare traits as facets; one deterministic semantic allowance with measured reports, the reference-cycle model deleted. |
+
+Step 7 composes setup, checks, and firing separately: sequence adds work, a
+conditional charges its predicate plus the larger branch, and a bounded loop
+charges setup, each permitted iteration, and teardown. All evaluated checks
+remain charged; exclusion discounts only effects whose writers preserve that
+exclusion. Failed speculative work pays for the refused prefix, rewind, and
+failure branch; a shared flush is charged once only where execution shares it.
+Interactions retain their gathering and full candidate scan before selection.
+Synchronous rebuild and installation stay charged to the step that runs them.
+Overflow and reachable unmodeled work refuse explicitly.
+
+Search uses one aggregate allowance after recurring work and input-change
+folding, with deterministic partition shares under the job system. Reserve a
+bounded unit before running it and yield when it cannot fit; restart, replay,
+cancellation, candidate inspection, frame copies, judges, chance expansion,
+playouts, hashing, and output installation all spend that allowance. Refuse a
+share that cannot cover restart, replay, and one unit; publish completed output
+atomically across yields. Worker count and host timing never change shares or
+completion order. Measure physical headroom separately on the debug world.
 
 **Check:** each step's before and after in its commit (arena bytes and work
 sheet for the debug world, allocation, `host.frames`), and `puck test
@@ -1001,7 +810,7 @@ them.
 ## Sequencing
 
 Landed: the rebuild and the means to build and test a world against it
-([the landing](state-rebuild.md)), S1 to S5, S6's expander (modules, `use`,
+([state reference](../reference/state.md)), S1 to S5, S6's expander (modules, `use`,
 `import`, several documents from one source, `border`, `door` and the asset
 lock), S7's substrate and World integration, S8's runner, `test` construct and
 composed run, the costing correction, C2 to C6, and the games G4, G1 and G16.
@@ -1014,9 +823,9 @@ What is open, in order:
 
 | Step | In parallel | Why here |
 |---|---|---|
-| 1 | C1, including the line-of-sight pricing the costing correction leaves to it | C1 is what every later package allocates under, and the correction's remaining item needs its reference schedule. |
-| 2 | S6's remainder: the forcing world as an asset package, and the shipped island, districts, and shards moved onto the modules, with their canaries re-recorded and the JSON sources deleted | Needs the language proven, which the landed packages above supply. |
-| 3 | S7's two open steps: [remote home adoption](records-and-pools.md#remote-home-adoption) and records carrying timed row traits | Remote adoption closes the forcing world's badge check across separate authorities. |
+| 1 | The job-system memo and S10 step 0, then the single allowance in step 7 with C1's accounting inventory | Parallel storage and evaluation need one chosen ownership and ordering contract. |
+| 2 | S6's reusable modules in the debug package, after the fundamentals | Proves the language on the live proving ground; missing experimental features are ported there. |
+| 3 | S7's two open steps: [remote home adoption](records-and-pools.md#remote-home-adoption) and records carrying timed row traits | Remote adoption closes the debug-world record round trip across separate authorities. |
 | 4 | The deferred games, each when the capability it forces is otherwise unproven | See the table above. |
 
 After the landing a package branches from `main` and lands as its own squash.
@@ -1084,441 +893,37 @@ puck embed --check
 puck landing --against origin/main --base <the commit the branch was authored from>
 ```
 
-## The forcing world, drafted
+## Debug-world authoring workloads
 
-These pages are sketches for judging the proposed spellings. Several
-constructs are implemented, but the complete examples still contain planned
-features and are not executable fixtures.
-Statements are keyword-led blocks, as today: the keyword at the start of a
-line is what the construct table, a diagnostic, and a reader key on, and
-composability comes from parameter kinds rather than from making every
-declaration a value.
-
-| Need | Spelling | Lowers to | Carried by |
-|---|---|---|---|
-| A reusable part | `module name(parameters) { }` | nothing until used | replaces `template` |
-| Using one | `use name(arguments)` stamps the body where it stands; `use name as alias(arguments)` also prefixes every name the body declares | the module's statements once per `use` | the import-alias rewrite plus template substitution, made recursive |
-| Another file's modules | `import "path"` brings names into scope | nothing | the import resolver |
-| A name inside a part | the bare name; from outside, `alias.name` | the generated name `alias$name` | the same rewrite |
-| What a part shows | `export read\|action\|binding name`; `export alias.name` passes one upward | the `exports` member | exists; re-export is new |
-| One definition, many live instances | `record Name { field: Kind ... }`, `pool name of Record capacity(n)` | the `pools` member, then keyed rows | S7 |
-| A rule over instances | `rule name for each x in pool { }` with `x.field` | one rule iterating live keys | `forEach` |
-| Making and removing one | `claim pool as x { x.field = value }`, `release x` | two effects | S7 |
-| A named calculation | `function name(parameters) = expression` | inlined at each call | the lambda evaluation `let` has |
-| A choice by value | `select value { 0: a, 1: b, else: c }` | the conditional chain | expression lowering |
-| A rule's working value | `local name : Kind = expression`, read bare | `locals` | the `bind` rename |
-| An input or reduction | `channel(1, strafe)`, `count(zone)`, `history(row, age)` | a structured operand | S3 |
-| Several worlds from one source | `world name = module(arguments)` in an ordinary source | one document per `world` | S6 |
-| State that follows a player | a record instanced in `identity { }` | rows on the owned identity | identity-carried facts |
-| A seam between neighbouring worlds | `border a.side, b.side { }` | both reciprocal `adjacencies` rows | S6 |
-| A jump between unrelated worlds | `door a.arch, b.arrival` | the `destinations` and `references` rows on both sides, and the return arch | S6 |
-| What a module parameter must offer | `biome: Module exporting ascent` | nothing; a `use` that lacks the export is refused | S6 |
-| Bulk data | `asset "path"` | a reference, hash pinned in a lock file | the embedding lock's pattern |
-| A test | `test "name" [with module(arguments)] { given { } when { } expect { } }` | a generated test world | S8 |
-
-### Page 1 — A cabinet, and the arcade that holds two of them
-
-```puck
-// buildings/cabinet.puck
-module cabinet(at: Point, facing: Angle, engine: Engine, cartridge: Asset) {
-  machine console {
-    engine: engine
-    content: cartridge
-  }
-
-  screen display {
-    origin: at + [0, 1.25m, 0]
-    facing: facing
-    size: [0.6m, 0.54m]
-    source: console.video
-    engage { radius: 2.2m  channel: jump  kit: arcadePad }
-  }
-
-  export read display
-  export binding display
-}
-```
-
-```puck
-// districts/arcade.puck
-module arcade(origin: Point) {
-  import "buildings/cabinet"
-
-  use cabinet as left(
-    at: origin + [-1.5m, 0, -2.5m], facing: 0deg,
-    engine: gamingBrick(model: cgb), cartridge: asset "cartridges/mirror.cgb")
-  use cabinet as right(
-    at: origin + [1.5m, 0, -2.5m], facing: 0deg,
-    engine: advancedGamingBrick(boot: fast), cartridge: asset "cartridges/pip.agb")
-
-  record Token { position: Point  value: Int 1..5 = 1  ttl: Int 0..600 = 600 }
-  pool tokens of Token capacity(32)
-
-  slot spawnClock : Int = 0
-
-  rule spawn {
-    when spawnClock == 0 and count(tokens) < 32
-    claim tokens as token {
-      token.position = origin + scatter(radius: 6m)
-      token.value = draw(tokenValue)
-    }
-    spawnClock = 90
-  }
-
-  rule expire for each token in tokens {
-    when token.ttl == 0
-    release token
-  }
-
-  test "a token expires" with arcade(origin: [0, 0, 0]) {
-    given { claim tokens as token { token.ttl = 1 } }
-    when  { ticks 2 }
-    expect { count(tokens) == 0 }
-  }
-
-  export left.display, right.display
-  export read tokens
-}
-```
-
-`screen` loses its hand-picked index; `console.video` is a checked reference
-to a sibling; two `use` lines are two devices; `export left.display` is the
-re-export; `tokens` is a pool a rule fills and empties; the test is a world.
-
-### Page 2 — One corner, four biomes, and the quilt
-
-```puck
-// quilt/corner.puck
-module corner(name: Name, center: Point, biome: Module exporting ascent) {
-  documentId: $"quilt-{name}"
-  basis: "island"
-  simulation { rate: 60hz }
-
-  ground terrain { center: center  size: [132m, 132m] }
-  spawn arrival { at: center }
-
-  use traveller()                       // the one movement kit, page 3
-  use biome as land(origin: center)     // props, the field, the tune, the way up
-  export land.ascent
-}
-```
-
-```puck
-// quilt/biomes/mesa.puck
-module mesa(origin: Point) {
-  field heat { lattice: grid(origin, cells: [32, 32], size: 4m)  ambient: 0.35 }
-
-  // A column of rising air at the canyon mouth: a body inside it is lifted
-  // until it clears the island's rim.
-  gravityArea thermal {
-    at: origin + [40m, 0, -40m]  radius: 9m  height: 140m
-    up: 34
-  }
-
-  export read thermal as ascent
-
-  test "the thermal clears the rim" with mesa(origin: [0, 0, 0]) {
-    given { stand at thermal.at }
-    when  { ticks 600 }
-    expect { self.position.y >= 120m }
-  }
-}
-```
-
-```puck
-// quilt.puck
-record Traveller {
-  tokens: Int 0..999 = 0
-  badges: Int 0..64 = 0
-}
-
-identity {
-  self : Traveller
-}
-
-import "island"
-import "quilt/corner"
-import "quilt/biomes/glacier"
-import "quilt/biomes/mesa"
-import "quilt/biomes/mangrove"
-import "quilt/biomes/forest"
-
-world island = island()
-
-// The corners meet at the origin; the island hovers 120 m above that point.
-for (name, center, biome) in [
-    (nw, [-66m, 0, -66m], glacier), (ne, [66m, 0, -66m], mesa),
-    (sw, [-66m, 0,  66m], mangrove), (se, [66m, 0,  66m], forest)
-] {
-  world name = corner(name: name, center: center, biome: biome)
-}
-
-border nw.east, ne.west   { width: 132m  height: 40m }
-border nw.south, sw.north { width: 132m  height: 40m }
-// ... the remaining two ground seams, one line each
-
-// The rim drop: four borders lying flat 40 m beneath the deck, each facing
-// straight down, one per quadrant. Neither side is a ground, so the centre
-// and the facing are written.
-for (name, center) in [
-    (nw, [-45m, 80m, -45m]), (ne, [45m, 80m, -45m]),
-    (sw, [-45m, 80m,  45m]), (se, [45m, 80m,  45m])
-] {
-  border island.under(name), name.sky {
-    center: center  pitch: -90deg  width: 90m  height: 90m
-    hysteresis: 2m
-  }
-}
-
-test "tokens travel" {
-  given { nw.self.tokens = 3 }
-  when  { walk from nw.arrival across nw.east }
-  expect { ne.self.tokens == 3 }
-}
-
-test "a fall off the north-east rim lands in the mesa, still falling" {
-  given { stand at island.rim(45deg)  self.stamina = 7 }
-  when  { walk off the rim  ticks 90 }
-  expect {
-    authority(self) == ne
-    self.velocity.y < 0
-    ne.self.stamina == 7
-  }
-}
-
-test "hovering on the border plane does not thrash" {
-  given { stand at island.rim(45deg) }
-  when  { walk off the rim  hold rise at height 80m for ticks 120 }
-  expect { authorityChanges(self) <= 1 }
-}
-```
-
-```puck
-// quilt/parlor.puck: one room, any board game
-module parlor(game: Module exporting seats, outcome) {
-  simulation { rate: 30hz }
-
-  ground floor { size: [12m, 12m] }
-  spawn arrival { at: [0, 0, 4m] }
-
-  use traveller()
-  use game as table(at: [0, 0.9m, 0])
-
-  // The parlor is its own authority; the badge is a write onto the visitor's
-  // travelling record, which the next crossing carries home. A colocated seat
-  // adopts it today; remote home adoption is the open records-and-pools step.
-  rule award for each seat in table.seats {
-    when table.outcome == seat.side
-    mode: edge
-    seat.occupant.badges |= table.badge
-  }
-}
-```
-
-```puck
-// in quilt.puck: the arch ring
-import "quilt/parlor"
-import "games/reversi"
-import "worlds/parlor/chess"
-
-world reversiParlor = parlor(game: reversi)
-world chessParlor   = parlor(game: chess)
-
-door island.arch(1), reversiParlor.arrival
-door island.arch(2), chessParlor.arrival
-```
-
-```puck
-// inside the arcade, a rule that pays the player who walks over a token
-rule collect for each token in tokens {
-  when touching(token.position)
-  self.tokens += token.value
-  release token
-}
-```
-
-A source with `world` statements emits several documents; `border` writes
-both halves of a seam and `door` both halves of a jump; `Traveller` is
-declared once and every world shares it; what follows a player is what
-`identity { }` declares, because the owned identity is what the hand-off
-carries. A body's position, heading, and velocity are the engine's to hand
-over and are not authored. `corner` refuses a biome that exports no `ascent`
-and `parlor` a game that exports no `seats` or `outcome`, at the `use` that
-passed it.
-
-### Page 3 — The traveller's kit, and its feel as tests
-
-```puck
-// kits/traveller.puck
-module traveller() {
-  kit traveller {
-    collider: capsule(endpoint: [0, 1m, 0], radius: 0.35m)
-
-    run   { speed: 6.5  acceleration: instant }
-    fall  { gravity: 46  rise: 28  terminal: 40 }
-
-    slot airJumps : Int 0..1 = 1
-    slot airDashes : Int 0..1 = 1
-    timer dashCooldown
-
-    action jump {
-      when pressed(jump, within: 0.12s) and recently(grounded, 0.1s)
-      vertical = 11.5
-    }
-    action doubleJump {
-      when pressed(jump) and not recently(grounded, 0.1s) and airJumps > 0
-      vertical = 10
-      airJumps -= 1
-    }
-    action jumpCut {
-      when released(jump) and rising
-      vertical *= 0.4
-    }
-    action dash {
-      when pressed(dash, within: 0.12s) and dashCooldown.elapsed
-           and (grounded or airDashes > 0)
-      impulse { direction: facing  distance: 5m  duration: 0.2s  gravity: off }
-      airDashes -= 1 unless grounded
-      dashCooldown = 0.5s
-    }
-    action restore {
-      when grounded or holding(wall)
-      airJumps = 1
-      airDashes = 1
-    }
-    action jetpack {
-      when held(rise) and fuel > 0
-      thrust { up: 18 }
-      fuel -= 1 per second
-    }
-  }
-
-  test "coyote time is six ticks, not seven" {
-    given { stand at ledge.edge }
-    when  { walk off the ledge  press jump at tick 6 }
-    expect { self.velocity.y > 0 }
-  }
-  test "a seventh-tick press is a double jump" {
-    given { stand at ledge.edge }
-    when  { walk off the ledge  press jump at tick 7 }
-    expect { self.velocity.y > 0 and airJumps == 0 }
-  }
-  test "a dash is five metres and flat" {
-    given { stand at origin  facing east }
-    when  { press dash  ticks 12 }
-    expect { self.position.x == 5m and self.position.y == 0 }
-  }
-  test "the air dash is spent until touchdown" {
-    when  { jump  press dash  ticks 40  press dash }
-    expect { airDashes == 0 }
-  }
-  test "a released jump is cut to forty percent" {
-    when  { press jump  ticks 3  release jump }
-    expect { self.velocity.y == 0.4 * velocityAt(tick: 3) }
-  }
-}
-```
-
-The kit is one module used by the island and every corner, so the numbers
-cannot drift apart across an authority change. Each window is written in
-seconds and must land on whole ticks at the world's rate: at 60 Hz the coyote
-window is six ticks and the dash twelve, and the tests pin both edges of each
-window because a feel regression is otherwise invisible until someone plays
-it. A press on the seventh tick still leaves the ground behind, but as the
-double jump, which is why it spends the air jump.
-
-The `rim-drop`, `rim-refused`, `rim-round-trip` and `traveller-kit` canaries
-under `experimental/tests/Puck.World.Canaries` hold what the engine already does, measured
-on the real executable. A body that walks off a deck through a border lying
-flat beneath it is handed to the world below while airborne, still falling,
-directly beneath the point it fell from and with no turn, with its per-body
-registers intact. A floor border's ownership deadband is sized from one step at
-the kit's fastest hold or fall, so a body hovering at the plane keeps one
-authority; an authored `hysteresis` takes the larger of itself and that floor.
-A crossing refused through a floor keeps the body falling; only a refusal
-through a wall clamps it and zeroes its velocity. A `schedule` step places a
-press (`body.press`) or an impulse (`body.impulse`) on an authored tick. A kit
-authored at 60 Hz has coyote time (the recency predicate), a buffered press (a
-trigger's latch), the jump cut, a dash of exactly 5 m on the ground, instant
-acceleration (a shaping row with no rate), air charges restored on contact (a
-slot's reset fact), timers, and unequal rise and fall gravity. What these pages
-still ask of the engine:
-
-| Ask | Why |
-|---|---|
-| A flat border pair refused when it is authored wrong | The pair validator proves only that world up survives, so a hand-authored flat pair at one yaw arrives turned 180° without a refusal; the `border` lowering writes the reciprocal frame itself |
-| An impulse that suspends gravity | A dash in the air covers its 5 m and keeps falling |
-| Two actions on one button, chosen by a gate | A kit has one press trigger per channel and refuses `if` in a body action, so a jump and a double jump cannot differ in launch speed |
-| An action gated on a held role channel and a state row | The jetpack is only expressible as a lift hold that spends a row, with no gate of its own |
-| A duration that is not a whole tick is refused | A dash of 0.22 s is accepted and ends on a partial step; the state engine refuses the same mistake by name |
-| Read-backs for a body's velocity and a body's state on a named instance | A test can see that an arrival is falling but not how fast: `body.where` prints no velocity, and `body.state` follows only the routed seat. A hold's spend is read back by `body.hold`, which is not a schedule read |
-| `kit`, `action`, and `timer` as constructs | A kit is an open block of document members |
-
-### Page 4 — Snake's step, as a check on the small scale
-
-```puck
-module snake(width: Int = 8) {
-  function cell(row, column) = row * width + column
-  function wrap(value, delta) = (value + delta + width) % width
-
-  rule step {
-    when alive and tempo.elapsed
-    mode: edge
-    local column : Int = head % width
-    local row : Int = head / width
-    nextCell = select heading {
-      east:  cell(row, wrap(column, 1))
-      south: cell(wrap(row, 1), column)
-      west:  cell(row, wrap(column, -1))
-      north: cell(wrap(row, -1), column)
-    }
-    stepSerial += 1
-  }
-}
-```
-
-The shipped rule is one line of four nested conditionals over `rw * 8`, where
-`rw` is a `local`, and every name carries a `snake` prefix because the source
-declares no module.
+The cabinet module used twice, cross-authority traveller records, pooled game
+entities, and authored motion are the composition workloads. Reusable designs
+belong in `worlds/standard/`; debug owns their places and exhibits. The
+experimental quilt, island, and One World stay quarantined. Inventory their
+missing capabilities and port each to a named debug-world place rather than
+reviving their drafted sources. Snake's variable-age history and a played
+Word spy round remain language scenarios below, independent of those worlds.
 
 ## Open items
 
 What the programme still owes. A line is deleted when its work lands, never
 ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
 
-- C1 ceilings as prices: the reference schedule's kernel, helper and
-  memory-service prices; synchronous edit-cycle bounds; and reference-cycle
-  admission. Every reachable operation is registered with its size parameters
-  and an explicit unmodeled reason, and `puck bench state-evidence` reports that
-  coverage, so the blocking set is a command's output.
-  `puck bench state-evidence --capture <dir>` compiles both pinned Native AOT
-  lowerings, walks each declared kernel's maximum permitted path under its
-  declared loop bounds, renders the manifest sections it establishes and names
-  every difference from what is pinned. The unary, binary, bit-field and
-  bit-insert expression operations are priced. The function kernel needs its
-  remaining loop bounds and its nested dispatch tables read; the evaluator,
-  effect, transform, generator and search vocabularies need focused reference
-  kernels with declared cold-path exclusions, because a whole-closure walk of the
-  evaluator names thousands of unbounded runtime loops; and the memory profile
-  needs published measurements.
-- Recapture the state evidence (`puck bench state-evidence --capture`) under the
-  pinned toolchain. `src/Puck.State/ReferenceSchedule.json`'s schedules were
-  captured under SDK 10.0.402 and runtime packs 10.0.13, while its manifest now
-  pins SDK 11.0.100-rc.2.26504.105 and runtime 11.0.0-rc.2.26504.105 with
-  `global.json`, so each reference target owes a capture under that toolchain,
-  on a machine with the `llvm-mca` its `analysis` entries record.
-  `FusedArithmetic.cs`'s digest was re-pinned by hand after an
-  accessibility-only edit, which moves no kernel path; the capture proves it.
-- S7 pools: records, generation-aware handles, pair storage, snapshots, typed
-  field references, advancing fields, logical body carriers, identity transfer,
-  and the Arena and Paddleball migrations are implemented, and the rulepush
-  scenario is met by the [rulepush package](../../experimental/worlds/rulepush/README.md).
-  The remaining acceptance gates are listed in [records and pools](records-and-pools.md).
-- S6: the five `experimental/tests/Puck.World.Canaries/four-corners-sharded`
-  documents declare the aliased-`use` machine `arcade$agb-screen`, which prints
-  back from no document, so they stay JSON until they are authored as `.puck`
-  over the module ([S6](#s6--modules-and-the-forcing-world)). The remainder: the
-  forcing world, and the island, districts and shards onto its modules.
+- C1: the charged-operation, failed-work, and report inventory above feeds
+  [S10 step 7](#s10--the-state-review).
+
+- S7's substrate and World integration are present: generation-aware single and
+  pair pools, snapshots, lexical claim/release/iteration, logical body carriers,
+  pair interactions, identity record transfer, and the Paddleball and Arena
+  migrations. The open package is [remote home adoption](records-and-pools.md#remote-home-adoption)
+  across separate authorities and the timed row traits still absent from records
+  that [S7](#s7--records-and-pools) names before converting their consumers.
+- S6: reusable modules and source-attributed diagnostics in the debug package;
+  missing experimental capabilities move through the port inventory.
+- S8: server-versus-browser replay remains unsupported; Hidden ranks and Hearts
+  need an authored guarded phase advance, Arena needs a leave scenario, and the
+  runner's pose step still needs authored yaw. These are the remaining scenario
+  gaps from the rebuild, whose WP11b–WP14 packages are closed.
+
 - Namespace the remaining module declarations. A module used under an alias
   namespaces its rows, rules, placements, prototypes and look sources as
   `alias$name`, but spawn points, kits, look names, cameras, navigation domains
@@ -1540,11 +945,7 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
   [baselines README](../../experimental/tests/Puck.World.Games.Tests/ShippedWorldStateBaselines/README.md)
   describes).
 - S10 the state review ([S10](#s10--the-state-review)):
-  - Charge what is used.
-  - One live store and one write door. Deals as projections remain: the deal
-    sweep still upserts and removes runtime children as placement mutations
-    (`WorldTick.Deals.cs`), and contribution tenure stamps runtime deadlines into
-    placements (`WorldTick.Contributions.cs`).
+  - State/jobs ownership and ordering from the memo, before pools and parallel evaluation.
   - Everything that steers the future hashed and checkpointed, running addons
     included.
   - Rewind as a complete continuation. Chess allows undo (the owner's ruling): a
@@ -1569,5 +970,4 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
 ---
 
 [Plans](README.md) · [Decisions](../decisions/state-and-language.md) ·
-[The landing record](state-rebuild.md) ·
-[Abstract-machine costing](abstract-machine-costing.md)
+[State and rules](../reference/state.md)
