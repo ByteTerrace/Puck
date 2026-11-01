@@ -298,6 +298,9 @@ and [LunarG's validation guide](https://www.lunarg.com/wp-content/uploads/2024/0
 agree that WAW needs a memory dependency. `GpuUploadRuns` also keeps every
 range disjoint: a bridge absorbs all touched runs so a batch never copies
 the same destination word twice without a barrier.
+Clamp a carried selection level to the current mesh's table before reading
+its vertex count even when no draw will be emitted: a culled draw retains
+history while its mesh can change to one with fewer levels.
 
 ## Registers and bindings
 

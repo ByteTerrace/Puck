@@ -202,7 +202,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint4 state = sdfMeshOcclusionVisibleRW[draw];
         bool occlude = header.z != 0u;
         bool kept = state.w != 0u;
-        uint level = state.y;
+        // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
+        uint level = min(state.y, d.w);
         if (step == SdfOcclusionEarly) {
             kept = (((a.w >> 1u) & 1u) == header.w) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
             if (kept) {
