@@ -354,8 +354,8 @@ a guest's compute and charged host query work, never its authority. Host queries
 mounted, never the row; only guests that reached the admitted set get one.
 The replay tape pins the receipts at record-start (and Drive re-checks them
 before tick zero on every re-drive) and refuses a re-drive whose fresh
-mounts disagree (see [replay.md](replay.md)). The ABI and replay format are
-still version 1 and develop in place. Re-record tapes after changing their
+mounts disagree (see [replay.md](replay.md)). The ABI and replay format
+admit only their current build's shape. Re-record tapes after changing their
 layout or execution semantics; do not preserve obsolete fields or add
 development version histories. A changed guest hash is independently
 refused by the receipt comparison. A live `world.row.set addons`/`world.row.remove addons` mutation
