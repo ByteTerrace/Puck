@@ -639,6 +639,14 @@ not a spiral:
   arrives as its own notification. Lanes launched together in one background
   command report only when the last one ends: a lane that finished first sat
   unseen for an hour and a half that way.
+- A design memo's one review finishes before its first build lane is briefed:
+  a running Codex lane takes no messages, so findings that land mid-build
+  cost a stop and a relaunch (the simulation-thread memo's review found a
+  phase 1 hazard after phase 1 had started). Code reviews still run beside
+  the next work.
+- Stopping a Codex lane means stopping its `codex.exe` process tree and the
+  builds it started; stopping the background task that launched it leaves
+  them running.
 - Findings never bounce between a reviewer and an author: a finding goes into
   its work packet with its owner and is not argued back and forth.
 - Forward progress over review turns (the owner's ruling): the
