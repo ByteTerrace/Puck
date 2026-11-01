@@ -983,22 +983,33 @@ timed on a quiet machine.
   light-stage constant edit settles through `world.shaders.reload` in 11.8 s, a
   headless boot reaches `world.status` in 4.6-4.8 s, and the `dotnet run` loop
   after a Client edit took 30.5-42.4 s at 100 % load, 22 s of it the build.
-  Known costs left: a cold build pays 20 to 35 s of MSBuild node startup over a
-  warm one; a warm SdfVm body edit spends about 3 s evaluating the World's
-  projects and 5 to 6 s checking the projects below the edit; the boot's
-  largest piece is `System.Text.Json` configuring the `WorldDefinition` metadata,
-  mostly JIT ([contributing](../development/contributing.md#edit-to-running)).
+  With cold nodes (`-nodeReuse:false`) under load from other lanes, a no-op
+  build of `src/Puck.World` now takes 14.3 s (60 projects, every `CoreCompile`
+  skipped, no copy) and a build after a commit and a Client body edit 20.2 s
+  (one `CoreCompile`, Client's 3.4 s; 6 files copied). What is left of a cold
+  build is per-node startup: the first project a fresh node builds spends 1.5
+  to 3.8 s of self time in the SDK's own targets. A warm SdfVm body edit spent
+  about 3 s evaluating the World's projects and 5 to 6 s checking the projects
+  below the edit; re-measure it warm. The project-reference closure's
+  `GetCopyToOutputDirectoryItems` walk sums 15 to 39 s of yielded wall over the
+  60 projects; read whether `MSBuildCopyContentTransitively` can be turned off
+  without losing content the World ships.
 - Prepare machine content once per input: every boot compiles the debug world's
   `.puck` cartridges again (`CartridgeSource.Prepare` through
   `HgbCartridgeCompiler`, about 4 % of a headless boot), though the image is a
   pure function of the source, its imports and the compiler. Key a cache by the
-  inputs the compile read, as `WorldCompileCache` keys a world compile.
-- Measure a ReadyToRun boot. JIT and type loading are about 35 % of a headless
-  boot's main thread; the World README's publish recipe
-  (`dotnet publish src/Puck.World -c Release -r win-x64 …`) fails its locked
-  restore (NU1004: the `-r` reaches every library, whose lock files carry no
-  runtime identifier). Fix the recipe, then decide whether projects outside the
-  edit loop build ReadyToRun locally.
+  inputs the compile read, as `WorldCompileCache` keys a world compile. Deferred
+  by the build-time lane for cost: about 4 % of a boot, against a cache that needs the
+  emitter's import list and the compiler's module identity.
+- Source-generate the document model's JSON metadata. A headless boot to
+  `world.status` JIT-compiles 43,941 methods from the IL build and 24,248 from
+  a ReadyToRun publish; of those 24,248, 22,401 are generic instantiations and
+  15,786 are `System.Text.Json`'s, built by reflection over the
+  `WorldDefinition` graph, which no precompiler outside the framework reaches.
+  A `JsonSerializerContext` over that graph removes them from both builds
+  (the `dotnet-performance` skill's source-generation rule). Local builds stay
+  IL until then: ReadyToRun leaves this cost in place and adds a precompile to
+  every edited project's build.
 - The boot's first guide write cost about 27-30 ms of simulate in a rendering
   World; `WorldCodeWarmer` took the first endless-fall crossing from 20-24 ms to
   8-10 ms and the watchdog's first write from 30-37 ms to 12-19 ms. Recheck the
