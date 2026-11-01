@@ -447,4 +447,52 @@ public sealed class SdfSampledLatticeLawTests {
 
         return used.Select(selector: Root).Distinct().Count();
     }
+
+    // Every searched crossing of a true distance (a sphere, a turned box, the carved box) lies within a 16,384th of its
+    // edge of the zero, so its field is no larger than that; the search takes a few rounds a root, not a dozen.
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [Theory]
+    public void ACrossingLandsWithinASixteenThousandthOfItsEdgeInAFewRounds(int shape) {
+        Func<Vector3, float> field = shape switch {
+            0 => static point => (point.Length() - 0.137f),
+            1 => static point => Box(point: point, turn: 0.3f),
+            _ => Carved,
+        };
+        var count = ((Samples * Samples) * Samples);
+        var values = new float[count];
+
+        for (var index = 0; (index < count); index++) {
+            values[index] = field(arg: (Origin + (new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples))) * Cell)));
+        }
+
+        var lattice = new SdfSampledLattice(cell: new Vector3(value: Cell), materials: new int[count], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values);
+        var roots = 0;
+        var samples = 0;
+        var rounds = 0;
+
+        for (var crossings = lattice.CrossingPoints(); (crossings.Length > 0); crossings = lattice.CrossingPoints()) {
+            rounds++;
+            roots = Math.Max(val1: roots, val2: (crossings.Length / 2));
+            samples += crossings.Length;
+            lattice.AnswerCrossings(first: 0, values: [.. crossings.Select(selector: field)]);
+        }
+
+        var checkedCrossings = 0;
+
+        foreach (var point in lattice.GradientPoints()) {
+            var at = ((point - Origin) / Cell);
+
+            // A lattice sample a gradient is read at, not a crossing.
+            if ((MathF.Abs(at.X - MathF.Round(at.X)) < 1e-3f) && (MathF.Abs(at.Y - MathF.Round(at.Y)) < 1e-3f) && (MathF.Abs(at.Z - MathF.Round(at.Z)) < 1e-3f)) { continue; }
+            checkedCrossings++;
+            Assert.True(condition: (MathF.Abs(field(arg: point)) <= ((Cell / 16384f) + 2e-7f)), userMessage: $"the crossing at {point} reads {field(arg: point)}, past a 16,384th of its {Cell} edge");
+        }
+
+        Assert.True(condition: (checkedCrossings > 100), userMessage: $"only {checkedCrossings} crossings were checked");
+        Assert.True(condition: (samples <= (6 * roots)), userMessage: $"{roots} roots took {samples} samples");
+        // Each round is a readback round trip: no search takes more than eleven, where bisection took thirteen.
+        Assert.True(condition: (rounds <= 11), userMessage: $"the search took {rounds} rounds");
+    }
 }

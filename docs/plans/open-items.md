@@ -1059,44 +1059,77 @@ windowed checks, then the three developer exhibits.
 
 ### Cold bake under a minute
 
-Owner: specialist (rendering) · high · Next: cut the bake's CPU meshing about
-fourfold (collapse, sheet closing, contouring), largest first, to the owner's
-bar: one minute at most per backend from an empty store (AGENTS.md).
+Owner: specialist (rendering) · high · Next: cut the crossing stage's
+`CloseSheets` and the collapse (`SdfMeshCollapse`), now the bake's largest CPU
+stages, toward the owner's bar: one minute at most per backend from an empty
+store (AGENTS.md).
 
 - Measured on the lead machine (RTX 4070, windowed, `--devices none`, an empty
-  `--cache-dir`, `world.gpu-timing on`): Direct3D 12's `world` residency baked
-  its 2,090 groups in 446 s before the cuts below (384 s when the owner set the
-  bar) and in 215 to 226 s after them (two runs, every stored mesh byte for byte
-  alike); the near groups' ninety percent landed at 73 to 79 s (126 s before). Vulkan baked them in 305.3 s, its near groups' ninety
-  percent at 105.6 s (187 groups still pending at 420 s before), its frames
-  slower than Direct3D 12's (produce 127 ms against 65 ms during the bake), so
-  fewer dispatches answered a second. The GPU is no longer the limit:
-  the bake pass ran 0.2 ms a frame before, and with the larger dispatches the
-  frame had a lattice to dispatch in all but 271 of 2,343 frames.
-- The bake is CPU-bound: the shared pool's workers stay saturated. Thread
-  seconds by stage in the 215 s run: crossings 680 (`SdfSampledLattice.CloseSheets`
-  and the crossing rounds), land 510, contour 250, prepare 95, store 54, answer
-  48. Land is `SdfMeshCollapse` on single-instance static groups of 200,000 to
-  520,000 triangles, 20 to 44 s each on one thread, the bake's long pole; chunked
-  unions already level their chunks in parallel. The `[sdf.mesh-bake] slow`
+  `--cache-dir`, stdin `world.gpu-timing on`, `world.wait bakes 600`,
+  `host.frames`; other lanes building beside it): Direct3D 12's `world`
+  residency bakes its 2,090 groups in 132.0 s on the cuts merged with the
+  integration tip (170.5 s before that merge, the same session's base 259.0 s;
+  446 s before the shared pool, 384 s when the owner set the bar), and Vulkan in
+  226.9 s (305.3 s before the cuts; produce 118 ms a frame against Direct3D
+  12's 68 ms, so fewer dispatches answer a second). The cuts, each measured cold: a two-trial bracketed crossing
+  search (`CrossingRoot`: 364 million crossing samples to 241 million, at most
+  eleven readback rounds a group in place of thirteen); fine-sample signs kept
+  in bits (`SdfSampledLattice.FineInside`: contour thread seconds 316 to 124,
+  crossings 934 to 515 with the search); single shapes of 131,072 contour
+  triangles or more chunked as unions are, at most 64 chunks a mesh; a
+  dispatch filled past a lattice too large for what it has left (472,000
+  samples a frame to 599,000); and dispatches of 2^21 samples (186.2 s to
+  170.5 s, the frames that stopped at the sample limit 1,290 of 1,613 to 343 of
+  1,392).
+- Thread seconds by stage in the 132.0 s run: crossings 411 (`CloseSheets`,
+  `CrossingEdges` and the rounds), land 318 (`SdfMeshCollapse`), contour 96,
+  answer 87, prepare 81, store 13. With the dispatches no longer full, the
+  frames that took no lattice because every group was on a worker or in flight
+  are 851 of 1,227: the bake is CPU-bound again. The `[sdf.mesh-bake] slow`
   lines name each long stage's group.
-- Next cuts, measured, largest first: chunk large single-instance statics as
-  unions are (`SdfMeshChunks`), so their collapse runs in parallel and their
-  draws cull and pick levels per chunk; make `SdfMeshCollapse`'s passes cheaper;
-  answer `CloseSheets`' and `Refine`'s `Thickens` line scans from a sign bitset of
-  the fine lattice instead of a `FineValue` a step; speed
-  `SdfDualContouring.ExtractRefined`'s corner masks the same way; replace the
-  thirteen bisection rounds a crossing takes (364 million of 1.09 billion
-  samples, and thirteen readback round trips a group) with a bracketed secant
-  search to the same 4,096th of an edge.
+- Next cuts, measured, largest first: `CloseSheets`' pair scan and face passes
+  still read `FineValue` (slot lookup and interpolation) for every magnitude
+  they test; `SdfMeshCollapse`'s passes re-cost every free place each pass;
+  the answer stage decodes on the workers at 76 thread seconds.
+- `puck mesh audit` over the 803 audited groups, the cuts' store against the
+  base store: score 2,442,906 to 2,425,159, off-surface samples 87,743 to
+  87,556, turned faces 310,043 to 306,836, folds 13,316 to 13,286, flips 8,010
+  to 7,802, non-manifold edges 241 to 236, uncovered 1,514 to 1,512. Open edges
+  rose 97,851 to 98,198: 684 on the television and 132 on `gallery-map`, which
+  the cuts newly chunk, whose seam edges the audit's joined view counts open
+  though neighbouring chunks share them; the rest fell by 469. At a
+  4,096th-of-an-edge search tolerance open edges rose to 103,684 and turned
+  faces to 330,860, which the 8,192th answers. The run with the tighter
+  tolerance baked in 230.6 s while another lane compiled: every stage's thread
+  seconds rose with it, those the tolerance cannot touch (prepare 91 to 177,
+  land 452 to 574) included, so its time is the machine's, and it wants a
+  quiet re-measure.
+- [low] The audit counts a chunked mesh's seam edges as open edges: weld the
+  joined query view's coincident seam vertices, or skip edges two chunks share,
+  so a chunked group's open edges mean holes.
+- [medium] `SdfMeshPathBakeLawTests.AStaticCopyBakesItsUnionKeepingItsSmallShapeAtItsOwnResolution`
+  (a vertex 1.62 m from the union) and
+  `ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget` (no batch carries
+  more table entries than samples) and `SettleRebakesKeepTheirCapsAndARefusedOneKeepsItsMesh`
+  (four settle rebakes queued where the cap allows two) fail on the bake
+  sources before these cuts too; the settle law passed once in a run beside a
+  CPU-heavy audit, so it reads as timing-dependent. The first is a mesh off its
+  field.
+- [medium] Admission (`MaxAdmitted`) counts per residency though the pool is
+  process-wide, and counts groups, not bytes: several cold residencies admit
+  twice the workers each (`SdfMeshPathBake.cs`, `TryTakeForFrame`). The urgent
+  answer queue drops no retired group's answers, and nothing bounds queued
+  answer bytes (`SdfMeshPathBake.Residency.cs`, `Schedule`, `TakeWork`).
 - The irradiance volume's preview trace ran for 201 to 222 s of the bake on its
   four background workers (about 800 thread seconds beside the bake's 1,670),
   rebuilding from the landed meshes every four seconds
   (`SdfMeshIrradiance.PendingSceneInterval`). Pausing or deprioritising it
   while a cold bake lands is the owner's call: the scene would light later.
-- Every frame during the bake still reads over 16.7 ms (avg 111 ms, p99 716 ms,
-  301 collections pausing 2.9 s over 503 frames) with a worker a processor at
-  normal priority; it eases as the CPU meshing above shrinks.
+- Every frame during the bake still reads over 16.7 ms (the 132.0 s run's last
+  600: avg 96 ms, p99 183 ms, simulate 28 ms of it, 353 collections pausing
+  3.1 s) with a worker a processor at normal priority. A frame's work grows
+  with its draws: every pass culls and levels each (`SdfWorldPassRecorder.Choose`),
+  and 160,000 draws took 700 ms a frame.
 - Each backend keeps its own store; a mesh is the same bytes on both when the
   kernels agree, so a shared store would halve the cold cost of using both.
 - The rebakes nobody needed are the [refactoring campaign](#refactoring-campaign)'s

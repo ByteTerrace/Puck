@@ -206,6 +206,10 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Gets the name of the residency whose program the bake meshes, which its start and done lines name.</summary>
     public string Residency { get; init; } = string.Empty;
+    /// <summary>Gets the selectors of the groups the bake bakes, every group when <see langword="null"/>: a group outside
+    /// it finishes unbaked, with no mesh, and no selected group of its geometry waits on it (an offline audit of chosen
+    /// groups).</summary>
+    public IReadOnlySet<int>? Selection { get; init; }
     /// <summary>Gets the library the bake stores each group's mesh in and takes a group of geometry it holds from, rather
     /// than baking the group again: in a later program of the residency, or in another residency holding the same
     /// library.</summary>
@@ -536,7 +540,12 @@ public sealed partial class SdfMeshPathBake {
                     var group = m_groups[index];
                     var next = group.Next!.Value;
 
-                    if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) { stop = 2; break; }
+                    // A lattice past the dispatch's remaining samples waits, and a smaller one behind it fills them: a
+                    // dispatch that stops at the first lattice too large for it leaves half its samples unused.
+                    if ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples) {
+                        stop = 2;
+                        continue;
+                    }
                     // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
                     // in a growable input table; charging them here strands a full 65-cubed lattice forever.
                     // A frame's lattices stay within its share of field evaluations; its first is always taken, and no
@@ -544,7 +553,8 @@ public sealed partial class SdfMeshPathBake {
                     if ((lattices.Count > 0) && ((taps + next.Taps) > m_frameBudget)) { stop = 1; break; }
                     // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
                     // so only MaxAdmitted do at once: the rest keep their small refining lattices until one lands.
-                    if (next.Slab == 0) {
+                    // A first slab a frame returned unanswered keeps the admission it took.
+                    if ((next.Slab == 0) && !group.Admitted) {
                         if (admitted >= MaxAdmitted) { continue; }
                         group.Admitted = true;
                         admitted++;
@@ -887,6 +897,13 @@ public sealed partial class SdfMeshPathBake {
                 if (!old.Done && (old.Leader is null) && (old.Replaces is null)) { _ = leaders.TryAdd(key: old.Sealed, value: old); }
                 continue;
             }
+            // A group outside the bake's selection finishes unbaked, so it neither bakes nor leads a selected group of
+            // its geometry to its unsampled result.
+            if ((Selection is { } selection) && !selection.Contains(item: group.Selector)) {
+                group.Outcome = "not selected";
+                group.Done = true;
+                continue;
+            }
             // Every way below of finishing a group without a bake takes what the library holds under this identity, and
             // a group begun bakes under it, so a later program keeps the group only while the identity stands.
             group.Identity = identity;
@@ -951,6 +968,10 @@ public sealed partial class SdfMeshPathBake {
         // A kept group waiting on a group this program no longer plans bakes its geometry itself.
         var planned = new HashSet<Group>(collection: m_groups, comparer: ReferenceEqualityComparer.Instance);
 
+        // A previous group this program does not keep is retired: its queued work is dropped (TakeWork).
+        foreach (var old in previous.Values) {
+            if (!planned.Contains(item: old)) { old.Retired = true; }
+        }
         foreach (var group in m_groups) {
             if (group.Done || (group.Leader is not { } waited) || planned.Contains(item: waited)) { continue; }
             group.Leader = null;
@@ -1181,10 +1202,14 @@ public sealed partial class SdfMeshPathBake {
             finest = MathF.Min(x: finest, y: MemberCell(radius: radius));
         }
 
-        // One plane along Z holds at most UnionPlaneSamples.
+        // One plane along Z holds at most UnionPlaneSamples, and no axis more samples than a slab's first plane can name
+        // (SdfFrameBlock.MaxSlabPlanes).
         var cell = MathF.Max(
-            x: MathF.Min(x: (longest / (FinalSamples - 1)), y: MathF.Max(x: finest, y: MathF.Cbrt(x: (((extent.X * extent.Y) * extent.Z) / UnionSamples)))),
-            y: MathF.Sqrt(x: ((extent.X * extent.Y) / UnionPlaneSamples))
+            x: MathF.Max(
+                x: MathF.Min(x: (longest / (FinalSamples - 1)), y: MathF.Max(x: finest, y: MathF.Cbrt(x: (((extent.X * extent.Y) * extent.Z) / UnionSamples)))),
+                y: MathF.Sqrt(x: ((extent.X * extent.Y) / UnionPlaneSamples))
+            ),
+            y: (longest / (SdfFrameBlock.MaxSlabPlanes - 2))
         );
 
         int Samples(float length) => Math.Max(val1: FinalMinimum, val2: (((int)MathF.Ceiling(x: (length / cell))) + 1));
@@ -1670,7 +1695,7 @@ public sealed partial class SdfMeshPathBake {
             var started = Stopwatch.GetTimestamp();
 
             mesh = mesh with { BakeCell = group.DiagnosticCell };
-            mesh = ((!group.Dynamic && !group.Glass && (group.Instances > 1))
+            mesh = ((!group.Dynamic && !group.Glass && ((group.Instances > 1) || (mesh.TriangleCount >= SdfMeshChunks.WholeTriangles)))
                 ? SdfMeshChunks.Bake(mesh, preserveFeatures: group.Geometry.ContainsGlyph)
                 : SdfMeshChunks.Merge(levels: !group.Glass, mesh: mesh, preserveFeatures: group.Geometry.ContainsGlyph));
             merged = (contoured - mesh.TriangleCount);
@@ -1933,6 +1958,10 @@ public sealed partial class SdfMeshPathBake {
         public bool Stored { get; set; }
         // Whether the group has taken the first slab of its final lattice (MaxAdmitted).
         public bool Admitted { get; set; }
+        // Whether the bake no longer plans the group (a later program replaced it, or its residency was released): the
+        // pool drops its queued work. Written under the bake's gate, read under the pool's.
+        public bool Retired { get => Volatile.Read(location: ref m_retired); set => Volatile.Write(location: ref m_retired, value: value); }
+        private bool m_retired;
         // The group of the same bake baking this group's geometry, whose mesh this one takes when it finishes, or null.
         public Group? Leader { get; set; }
         // The settle watch (SdfMeshPathBake.Settle): the group a settle rebake replaces until it lands, the slots besides
@@ -2004,8 +2033,12 @@ public sealed partial class SdfMeshPathBake {
     // its contour reads a gradient at.
     private sealed class FinalLattice(SdfMeshBakeRequest lattice) {
         public SdfMeshBakeRequest Lattice { get; } = lattice;
-        public float[] Values { get; } = new float[lattice.Samples];
-        public int[] Materials { get; } = new int[lattice.Samples];
+        // Allocated by the first slab's answer, which only an admitted group takes (MaxAdmitted), so a group waiting for
+        // admission holds its lattice's description alone.
+        public float[] Values => (m_values ??= new float[Lattice.Samples]);
+        public int[] Materials => (m_materials ??= new int[Lattice.Samples]);
+        private float[]? m_values;
+        private int[]? m_materials;
 
         public int Planes { get; set; }
         public SdfSampledLattice? Sampled { get; set; }

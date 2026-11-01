@@ -358,6 +358,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = null;
         ResetReady();
         CancelShaderReload(reason: "the residency was released");
+        MeshPathBake.Retire();
         m_pipelines.Release();
     }
     /// <summary>Gives back the creator's hold (<see cref="Release"/>).</summary>

@@ -124,15 +124,32 @@ public sealed partial class SdfMeshPathBake {
             if (leader.Mesh is null) {
                 group.Outcome = leader.Outcome;
                 group.Done = true;
+                // A follower rebaking keeps drawing its previous mesh until the result lands; an empty one lands too.
+                Draw(group: group, mesh: null);
                 continue;
             }
-            if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh)) {
-                group.Done = true;
-                group.Stored = true;
-                Draw(group: group, mesh: mesh);
-                continue;
+            // Renumbering the mesh for the follower's materials copies arrays as large as the mesh, so it runs on the
+            // workers, outside the gate the frame takes.
+            group.Contouring = true;
+            Schedule(group: group, work: () => TakeFollowed(group: group));
+        }
+    }
+    // Takes the mesh a follower's leader landed, renumbered for the follower's materials; a follower whose mesh the library
+    // no longer holds bakes it itself.
+    private void TakeFollowed(Group group) {
+        var taken = Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh);
+
+        lock (m_gate) {
+            group.Contouring = false;
+            if (!m_groups.Contains(item: group)) { return; }
+            if (!taken) {
+                _ = Begin(group: group);
+                return;
             }
-            _ = Begin(group: group);
+            group.Done = true;
+            group.Stored = true;
+            Draw(group: group, mesh: mesh);
+            Finish();
         }
     }
     // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
@@ -151,10 +168,24 @@ public sealed partial class SdfMeshPathBake {
             }
         }
     }
+    /// <summary>Retires every group of the bake, for a residency released: their queued work is dropped before it runs,
+    /// so a stage running for one queues no further stage.</summary>
+    public void Retire() {
+        lock (m_gate) {
+            foreach (var group in m_groups) { group.Retired = true; }
+        }
+    }
     // A worker: runs the queued work, answers first, then the highest priority, until none is queued.
     private static void Work() {
         try {
-            while (TakeWork() is { } work) { work(); }
+            while (TakeWork() is { } work) {
+                // A stage that throws leaves its group unfinished; the line names the fault rather than a silent stall.
+                try {
+                    work();
+                } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                    Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
+                }
+            }
         } finally {
             lock (WorkGate) {
                 RunningWorkers--;
@@ -173,6 +204,9 @@ public sealed partial class SdfMeshPathBake {
 
             var best = -1;
 
+            // Work of a group its bake no longer plans (a program replaced it, or its residency was released) is dropped
+            // before it runs.
+            _ = WorkQueue.RemoveAll(match: static item => item.Group.Retired);
             for (var index = 0; (index < WorkQueue.Count); index++) {
                 if ((best < 0) || (WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority)) { best = index; }
             }

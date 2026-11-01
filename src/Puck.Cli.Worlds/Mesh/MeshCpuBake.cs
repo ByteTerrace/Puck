@@ -14,7 +14,8 @@ namespace Puck.Cli.Mesh;
 /// its lattices as a World's frames would, and each is answered on the CPU through the group's field
 /// (<see cref="SdfMeshAudit.Field"/>, read by <see cref="SdfFieldEvaluator"/>) as the bake kernel
 /// (<c>sdf-mesh-bake.comp.hlsl</c>) answers it on the GPU: a value, a material and a tetrahedral gradient a sample. A group
-/// not selected answers empty space, so its lattices end at its first. The planning, refinement and contouring are the
+/// not selected is outside the bake's selection (<see cref="SdfMeshPathBake.Selection"/>) and bakes nothing, so a selected
+/// group sharing its geometry bakes it itself. The planning, refinement and contouring are the
 /// bake's own, so a mesh baked here differs from a World's only where the fixed-point evaluator's field differs from the
 /// kernel's and in the gradient's stencil, which spans at least <see cref="MinimumSpacing"/> since the evaluator answers in
 /// steps of 2⁻¹⁶ m.
@@ -38,7 +39,7 @@ public static class MeshCpuBake {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: fields);
 
-        var bake = new SdfMeshPathBake { Residency = "cpu" };
+        var bake = new SdfMeshPathBake { Residency = "cpu", Selection = fields.Keys.ToHashSet() };
         var index = 0L;
 
         while (true) {

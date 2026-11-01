@@ -9,13 +9,22 @@ public static class SdfMeshChunks {
     /// <summary>The side of a spatial bin in metres. Triangles belong to their centroid's bin; its box includes their
     /// complete extent, so bin boundaries never clip a triangle.</summary>
     public const float Side = 8f;
+    /// <summary>The contour triangles past which one static shape's mesh is chunked as a union's is, so its merge and
+    /// collapse run in pieces at once rather than on one worker for seconds. Below it a chunk's locked seams would only
+    /// add triangles to its coarser levels (a terrain sector's first level tripled).</summary>
+    public const int WholeTriangles = 131_072;
+    /// <summary>The most chunks one mesh is cut into: a mesh that would fill more bins of <see cref="Side"/> takes bins of
+    /// twice the side, until it fills no more.</summary>
+    public const int MostChunks = 64;
 
-    /// <summary>Merges and levels a static union in spatial pieces when it spans more than one chunk.</summary>
+    /// <summary>Merges and levels a static group, a union or one shape of at least <see cref="WholeTriangles"/>, in spatial
+    /// pieces when it spans more than one chunk, the pieces at once.</summary>
     /// <param name="mesh">The contour, with its actual bake cell.</param>
     /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell dimension divided by 8.</param>
     /// <returns>The merged mesh, holding independently levelled chunks when larger than one chunk.</returns>
     public static SdfMesh Bake(SdfMesh mesh, bool preserveFeatures = false) {
         ArgumentNullException.ThrowIfNull(mesh);
+        if (mesh.TriangleCount == 0) { return Merge(mesh: mesh, preserveFeatures: preserveFeatures); }
         var positions = mesh.Positions.Span;
         var low = positions[0];
         var high = low;
@@ -33,15 +42,22 @@ public static class SdfMeshChunks {
         var bins = new Dictionary<(int X, int Y, int Z), List<int>>();
         var indices = mesh.Indices.Span;
 
-        for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
-            var centre = (((((positions[((int)indices[(3 * triangle)])] + positions[((int)indices[((3 * triangle) + 1)])]) + positions[((int)indices[((3 * triangle) + 2)])]) / 3f) - low) / Side);
-            var key = (((int)MathF.Floor(x: centre.X)), ((int)MathF.Floor(x: centre.Y)), ((int)MathF.Floor(x: centre.Z)));
+        // A mesh spread wider than MostChunks bins (the world group's far ground) takes bins of twice the side until it
+        // fills no more: at 8 m it split into 160,000 draws, and every pass culls and levels each.
+        for (var side = Side; ; side *= 2f) {
+            bins.Clear();
+            for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
+                var centre = (((((positions[((int)indices[(3 * triangle)])] + positions[((int)indices[((3 * triangle) + 1)])]) + positions[((int)indices[((3 * triangle) + 2)])]) / 3f) - low) / side);
+                var key = (((int)MathF.Floor(x: centre.X)), ((int)MathF.Floor(x: centre.Y)), ((int)MathF.Floor(x: centre.Z)));
 
-            if (!bins.TryGetValue(key: key, value: out var triangles)) {
-                triangles = [];
-                bins.Add(key: key, value: triangles);
+                if (!bins.TryGetValue(key: key, value: out var triangles)) {
+                    if (bins.Count >= MostChunks) { break; }
+                    triangles = [];
+                    bins.Add(key: key, value: triangles);
+                }
+                triangles.Add(item: triangle);
             }
-            triangles.Add(item: triangle);
+            if (bins.Values.Sum(selector: static triangles => triangles.Count) == mesh.TriangleCount) { break; }
         }
         if (bins.Count == 1) { return Merge(mesh: mesh, preserveFeatures: preserveFeatures); }
 
