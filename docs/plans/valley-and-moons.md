@@ -115,7 +115,7 @@ centre and turned to its bearing, built from `worlds/standard/terrain.puck`
 mass and two shoulders sunk 30% below the floor plane, cut 10 m under it, and
 6-octave fBm relief of 4 m amplitude at 0.02 cycles a metre. The feet stand
 205 to 230 m from the origin, the summits 300 to 430 m high; the floor
-(`debug.puck`'s `floor`) is a 740 m disc that runs on under every wall, so the
+(`lawn.puck`'s `floor`) is a 740 m disc that runs on under every wall, so the
 old slab edge is gone. The overlook is a deck at 345 m on the south-west
 face. Draw distance is 6000 m and the clear day's fog 0.0006 a metre, so the
 rim keeps about two thirds of its light. A body under y −40 is stood on the

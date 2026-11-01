@@ -1,0 +1,220 @@
+// The valley floor's ground cover, from the spawn and the approach across the south lawn to the meadow: the standard's
+// foliage families (../standard/foliage.puck) placed in groups along the paths and banks, the middle left open. The
+// paths and the turf are the floor's paints (debug.puck's ground, from lawnPaths here). Positions are world X/Z, and
+// every member is computed from its group by a golden-angle sequence, so the tables say only where each group stands.
+// Kept clear: the hall (x 10 .. 70, z 12 .. 40), the studio (x 24 .. 72, z -76 .. -20), the stream and pool corridor
+// west of x -38, the camera course, the combat yard and the climate wing.
+import "../standard/foliage"
+import "meadow"
+
+// The floor's paths, quadratic Béziers in world X/Z: the spawn to the entrance, north of the studio to the meadow,
+// south past the studio, and west toward the stream.
+let lawnPaths = [
+  { a [-8, -24], b [-4, -6], c [4, -1] }
+  { a [4, -1], b [14, 2], c [16, 11.6] }
+  { a [4, -1], b [32, -12], c [60, -12] }
+  { a [60, -12], b [80, -12], c [84, -36] }
+  { a [84, -36], b [88, -54], c [103, -54.5] }
+  { a [-8, -24], b [-14, -52], c [2, -78] }
+  { a [2, -78], b [16, -100], c [60, -94] }
+  { a [-3, -9], b [-22, -6], c [-38, -12] }
+]
+let lawnPathWidth = 2.4
+
+// What each kind of group places: its prototype variants (lawn-<kind>-<n>), its scale range and its contact.
+let lawnKinds = [
+  { kind: "oak", variants: 3, scale [0.85, 0.3], contact { margin: 0 } }
+  { kind: "flat", variants: 3, scale [0.85, 0.3], contact { margin: 0 } }
+  { kind: "column", variants: 3, scale [0.85, 0.3], contact { margin: 0 } }
+  { kind: "weeping", variants: 2, scale [0.9, 0.2], contact { margin: 0 } }
+  { kind: "scrub", variants: 3, scale [0.7, 0.45], contact: null }
+  { kind: "boulder", variants: 2, scale [0.6, 0.84], contact { margin: 0 } }
+]
+
+// The groups: centre [x, z], kind, member count, radius and seed.
+let lawnGroups = [
+  { center [-18, -20], kind: "oak", count: 3, radius: 5, seed: 1 }
+  { center [14, -24], kind: "flat", count: 2, radius: 4, seed: 2 }
+  { center [-22, -48], kind: "column", count: 3, radius: 4, seed: 3 }
+  { center [-30, -26], kind: "weeping", count: 2, radius: 3.5, seed: 4 }
+  { center [8, -60], kind: "flat", count: 2, radius: 5, seed: 5 }
+  { center [36, -86], kind: "oak", count: 3, radius: 4, seed: 6 }
+  { center [62, -106], kind: "column", count: 2, radius: 3, seed: 7 }
+  { center [78, -2], kind: "flat", count: 2, radius: 4, seed: 8 }
+  { center [77, -47], kind: "weeping", count: 1, radius: 0, seed: 9 }
+  { center [-2, -40], kind: "oak", count: 1, radius: 0, seed: 10 }
+  { center [6, 8.5], kind: "column", count: 1, radius: 0, seed: 11 }
+  { center [66, 6], kind: "column", count: 1, radius: 0, seed: 12 }
+  { center [-20, 6], kind: "flat", count: 1, radius: 0, seed: 13 }
+  { center [-15, -31], kind: "scrub", count: 3, radius: 1.6, seed: 1 }
+  { center [-16, -62], kind: "scrub", count: 3, radius: 1.6, seed: 2 }
+  { center [-5, -88], kind: "scrub", count: 3, radius: 1.8, seed: 3 }
+  { center [22, -106], kind: "scrub", count: 3, radius: 1.6, seed: 4 }
+  { center [48, -104], kind: "scrub", count: 3, radius: 1.6, seed: 5 }
+  { center [40, -2], kind: "scrub", count: 3, radius: 1.5, seed: 6 }
+  { center [66, -2], kind: "scrub", count: 3, radius: 1.5, seed: 7 }
+  { center [90, -20], kind: "scrub", count: 3, radius: 1.6, seed: 8 }
+  { center [75, -58], kind: "scrub", count: 3, radius: 1.6, seed: 9 }
+  { center [24, 9], kind: "scrub", count: 3, radius: 1.4, seed: 10 }
+  { center [36, 9], kind: "scrub", count: 3, radius: 1.4, seed: 11 }
+  { center [48, 9], kind: "scrub", count: 3, radius: 1.4, seed: 12 }
+  { center [60, 9], kind: "scrub", count: 3, radius: 1.4, seed: 13 }
+  { center [-26, -36], kind: "scrub", count: 3, radius: 1.6, seed: 14 }
+  { center [-2, -35], kind: "boulder", count: 3, radius: 1.8, seed: 1 }
+  { center [-14, -72], kind: "boulder", count: 2, radius: 1.5, seed: 2 }
+  { center [14, -94], kind: "boulder", count: 3, radius: 1.8, seed: 3 }
+  { center [54, -102], kind: "boulder", count: 2, radius: 1.5, seed: 4 }
+  { center [66, -18], kind: "boulder", count: 2, radius: 1.5, seed: 5 }
+  { center [92, -30], kind: "boulder", count: 3, radius: 1.8, seed: 6 }
+  { center [-24, 2], kind: "boulder", count: 2, radius: 1.5, seed: 7 }
+  { center [5, -12], kind: "boulder", count: 2, radius: 1.2, seed: 8 }
+]
+
+// Each group's members on a golden-angle spiral, with a seeded scale, yaw and variant.
+let lawnMembers = reduce(lawnGroups, [], (rows, g) => concat(rows, reduce(filter(lawnKinds, k => k.kind == g.kind), [],
+  (none, k) => map(range(0, g.count), j => {
+    prototype: $"lawn-{g.kind}-{(j + g.seed) % k.variants}"
+    position [
+      g.center[0] + g.radius * squareRoot((j + 0.5) / g.count) * cosine(j * 2.39996323 + g.seed),
+      0,
+      g.center[1] + g.radius * squareRoot((j + 0.5) / g.count) * sine(j * 2.39996323 + g.seed),
+    ]
+    scale: k.scale[0] + k.scale[1] * (j * 0.618034 + g.seed * 0.137 - floor(j * 0.618034 + g.seed * 0.137))
+    yaw: 360 * (j * 0.754878 + g.seed * 0.56984 - floor(j * 0.754878 + g.seed * 0.56984))
+  })
+)))
+
+// Samples along each path's edge between a tenth and nine tenths of its length, alternating sides: its point,
+// tangent and distance beyond the paving.
+let lawnEdgeCounts = [10, 10, 7, 5, 5, 7, 6, 10]
+let lawnEdgeSteps = reduce(map(lawnPaths, (p, i) => { p: p, i: i }), [], (rows, e) => concat(rows,
+  map(range(0, lawnEdgeCounts[e.i]), k => { p: e.p, i: e.i, k: k, t: 0.1 + 0.8 * (k + 0.5) / lawnEdgeCounts[e.i] })
+))
+let lawnEdgeSamples = map(lawnEdgeSteps, e => {
+  i: e.i
+  k: e.k
+  side: e.k % 2 * 2 - 1
+  d: lawnPathWidth / 2 + 0.45 + 1.1 * (e.k * 0.618034 + e.i * 0.31 - floor(e.k * 0.618034 + e.i * 0.31))
+  x: (1 - e.t) * (1 - e.t) * e.p.a[0] + 2 * e.t * (1 - e.t) * e.p.b[0] + e.t * e.t * e.p.c[0]
+  z: (1 - e.t) * (1 - e.t) * e.p.a[1] + 2 * e.t * (1 - e.t) * e.p.b[1] + e.t * e.t * e.p.c[1]
+  dx: (1 - e.t) * (e.p.b[0] - e.p.a[0]) + e.t * (e.p.c[0] - e.p.b[0])
+  dz: (1 - e.t) * (e.p.b[1] - e.p.a[1]) + e.t * (e.p.c[1] - e.p.b[1])
+})
+// Points along every path, so an edge sample whose flower lands on a neighbouring path's paving is dropped.
+let lawnPathPoints = reduce(lawnPaths, [], (points, p) => concat(points, map(range(0, 41), k => {
+  x: (1 - k / 40) * (1 - k / 40) * p.a[0] + 2 * k / 40 * (1 - k / 40) * p.b[0] + k / 40 * k / 40 * p.c[0]
+  z: (1 - k / 40) * (1 - k / 40) * p.a[1] + 2 * k / 40 * (1 - k / 40) * p.b[1] + k / 40 * k / 40 * p.c[1]
+})))
+let lawnEdges = filter(map(lawnEdgeSamples, s => {
+  i: s.i
+  k: s.k
+  x: s.x
+  z: s.z
+  nx: -s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz) * s.side
+  nz: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz) * s.side
+  tx: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz)
+  tz: s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz)
+  d: s.d
+}), e => reduce(lawnPathPoints, 1000000, (m, q) => minimum(m, (e.x + e.d * e.nx - q.x) * (e.x + e.d * e.nx - q.x) +
+  (e.z + e.d * e.nz - q.z) * (e.z + e.d * e.nz - q.z))) > (lawnPathWidth / 2 + 0.6) * (lawnPathWidth / 2 + 0.6))
+let lawnFlowers = map(lawnEdges, e => {
+  prototype: $"lawn-flowers-{floor((e.k + e.i) % 3 / 2)}"
+  position [e.x + e.d * e.nx, 0, e.z + e.d * e.nz]
+  scale: 0.9 + 0.12 * (e.k % 3)
+  yaw: e.k * 67 + e.i * 23
+})
+let lawnTufts = reduce(lawnEdges, [], (rows, e) => concat(rows, map(range(0, 3), j => {
+  position [
+    e.x + (e.d + 0.35 + 0.25 * j) * e.nx + (0.45 * j - 0.45) * e.tx,
+    0.025,
+    e.z + (e.d + 0.35 + 0.25 * j) * e.nz + (0.45 * j - 0.45) * e.tz,
+  ]
+  scale: 0.75 + 0.2 * ((e.k + j) % 3)
+  yaw: j * 67 + e.k * 19 + e.i * 41
+})))
+
+// A small wind-grass patch beside the spawn, on the meadow's blades: four tiles of an ellipse 0.8 m across its
+// half-axes, the gust phase continuous with the meadow's through the placed world X/Z.
+let lawnGrassCenter = [-5, -5]
+let lawnGrassTiles = [[5.05, 6.25], [5.95, 6.25], [5.05, 7.15], [5.95, 7.15]]
+let lawnGrassOrigin = [lawnGrassCenter[0] - 5.5, 0, lawnGrassCenter[1] - 6.7]
+
+// Flat painted masses of turf in two values: shade under the tree groups and lighter sweeps in the open lawn.
+let lawnPatches = [
+  { position [-18, -20], r [8, 0.12, 6], yaw: 20, tone: 0 }
+  { position [-22, -48], r [6, 0.12, 5], yaw: 70, tone: 0 }
+  { position [36, -86], r [8, 0.12, 5.5], yaw: 10, tone: 0 }
+  { position [8, -60], r [7, 0.12, 6], yaw: 120, tone: 0 }
+  { position [78, -2], r [7, 0.12, 5], yaw: 160, tone: 0 }
+  { position [-30, -26], r [5, 0.12, 4.5], yaw: 40, tone: 0 }
+  { position [-14, -6], r [9, 0.12, 4], yaw: 15, tone: 1 }
+  { position [24, -36], r [12, 0.12, 5], yaw: 100, tone: 1 }
+  { position [-2, -96], r [10, 0.12, 4.5], yaw: 30, tone: 1 }
+  { position [84, -88], r [11, 0.12, 5], yaw: 140, tone: 1 }
+]
+let lawnPatchTones = ["#4F6E2C", "#8DA845"]
+
+prototypes {
+  // The valley's floor (valley.puck), placed by the Moth basis: a disc running on under the walls to their outer feet,
+  // so its rim never shows inside the ring, warmer toward the walls than the lawn field it carries.
+  paintedGround(
+    id: "floor", radius: 740, ground: "#8A9A46", turf: "#7C9A3C", paving: "#C08A62", paths: lawnPaths,
+    pathWidth: lawnPathWidth, field: { position [45, -40], r [150, 120] }
+  )
+  broadleafTree(id: "lawn-oak-0")
+  broadleafTree(id: "lawn-oak-1", height: 1.12, spread: 0.92, lean: 0.06)
+  broadleafTree(id: "lawn-oak-2", height: 0.9, spread: 1.12, lean: -0.05, leaves: ["#3E6338", "#5C7E42", "#7E9A4E"])
+  flatCrownTree(id: "lawn-flat-0")
+  flatCrownTree(id: "lawn-flat-1", height: 1.15, spread: 1.2, lean: 0.08)
+  flatCrownTree(id: "lawn-flat-2", height: 0.85, spread: 0.9, lean: -0.1, leaves: ["#4E692B", "#66833A", "#84A04A"])
+  columnTree(id: "lawn-column-0")
+  columnTree(id: "lawn-column-1", height: 1.2, spread: 0.9, lean: 0.03)
+  columnTree(id: "lawn-column-2", height: 0.8, spread: 1.1, leaves: ["#33533A", "#466A45", "#5C8450"])
+  weepingTree(id: "lawn-weeping-0")
+  weepingTree(id: "lawn-weeping-1", height: 0.9, spread: 1.15, lean: 0.07, drops: 6)
+  scrubClump(id: "lawn-scrub-0")
+  scrubClump(id: "lawn-scrub-1", size: 0.8, crowns: 2)
+  scrubClump(id: "lawn-scrub-2", size: 1.2, crowns: 4)
+  mossyRock(id: "lawn-boulder-0", colors: canyonRock)
+  mossyRock(id: "lawn-boulder-1", colors: ["#B9724C", "#D9A47A", "#64713A"])
+  flowerCluster(id: "lawn-flowers-0")
+  flowerCluster(id: "lawn-flowers-1", head: "#F1EDE0", accent: "#F2D257", count: 5)
+  grassTuft(id: "lawn-tuft")
+  for (tile, i) in lawnGrassTiles {
+    windMeadowTile(id: $"lawn-grass-{i}", tile: tile, origin: lawnGrassOrigin, fringe: [5.5, 6.7, 0.67, 0.67],
+      clearing: [0, 0, 0]
+    )
+  }
+  for (patch, i) in lawnPatches {
+    sceneryPatch(id: $"lawn-patch-{i}", radii: patch.r, color: lawnPatchTones[patch.tone])
+  }
+}
+
+placements {
+  for kind in lawnKinds {
+    for v in range(0, kind.variants) {
+      sceneryScatter(id: $"lawn-{kind.kind}-{v}", prototype: $"lawn-{kind.kind}-{v}",
+        rows: filter(lawnMembers, m => m.prototype == $"lawn-{kind.kind}-{v}"), contact: kind.contact
+      )
+    }
+  }
+  for v in range(0, 2) {
+    sceneryScatter(id: $"lawn-flowers-{v}", prototype: $"lawn-flowers-{v}",
+      rows: filter(lawnFlowers, f => f.prototype == $"lawn-flowers-{v}")
+    )
+  }
+  sceneryScatter(id: "lawn-tuft", prototype: "lawn-tuft", rows: lawnTufts)
+  for (tile, i) in lawnGrassTiles {
+    placement $"lawn-grass-{i}" {
+      prototype: $"lawn-grass-{i}"
+      position [lawnGrassOrigin[0] + tile[0], 0.09, lawnGrassOrigin[2] + tile[1]]
+    }
+  }
+  for (patch, i) in lawnPatches {
+    placement $"lawn-patch-{i}" {
+      prototype: $"lawn-patch-{i}"
+      position [patch.position[0], -0.095, patch.position[1]]
+      yawDegrees: patch.yaw
+    }
+  }
+}
