@@ -13,6 +13,31 @@ public sealed class SdfMeshLawTests {
     private static readonly uint[] Indices = [0, 1, 2];
 
     [Fact]
+    public void EveryLevelSharesOneGeometryTableAcrossDraws() {
+        var mesh = new SdfMesh(indices: Indices, positions: Positions) {
+            Levels = [
+                new SdfMeshLevel(Error: 0.1f, Indices: Indices, TriangleMaterials: default),
+                new SdfMeshLevel(Error: 0.2f, Indices: Indices, TriangleMaterials: default),
+                new SdfMeshLevel(Error: 0.3f, Indices: Indices, TriangleMaterials: default),
+            ],
+        };
+        var first = new SdfMeshDraw(Identity: 0, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity);
+        var draws = new[] { first, first with { Identity = 1 } };
+        var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(ReferenceEqualityComparer.Instance);
+        var layout = SdfMeshRegion.Plan(draws: draws, meshes: placements);
+        var words = new uint[layout.Words];
+
+        SdfMeshRegion.Write(destination: words, draws: draws, layout: layout, meshes: placements);
+        var table = words[SdfMeshRecord.LevelTableWord];
+        Assert.Equal(expected: table, actual: words[SdfMeshRecord.DrawWords + SdfMeshRecord.LevelTableWord]);
+        Assert.Equal(expected: 3u, actual: words[SdfMeshRecord.LevelTableWord + 1]);
+        Assert.Equal(expected: new uint[] {
+            0, 3, 0, 1, 3, BitConverter.SingleToUInt32Bits(0.1f),
+            2, 3, BitConverter.SingleToUInt32Bits(0.2f), 3, 3, BitConverter.SingleToUInt32Bits(0.3f),
+        }, actual: words.AsSpan((int)table, 12).ToArray());
+    }
+
+    [Fact]
     public void AMeshCarriesEachAttributeWhole() {
         var plain = new SdfMesh(
             indices: Indices,
@@ -76,7 +101,7 @@ public sealed class SdfMeshLawTests {
             ],
         };
 
-        Assert.Equal(expected: (4, 12, 4), actual: (mesh.LevelledTriangleCount, SdfMeshRegion.IndexWordsOf(mesh: mesh), SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
+        Assert.Equal(expected: (4, 21, 4), actual: (mesh.LevelledTriangleCount, SdfMeshRegion.IndexWordsOf(mesh: mesh), SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
         Assert.Equal(expected: [(0, 2), (2, 1), (3, 1), (3, 1)], actual: [SdfMeshRegion.LevelOf(level: 0, mesh: mesh), SdfMeshRegion.LevelOf(level: 1, mesh: mesh), SdfMeshRegion.LevelOf(level: 2, mesh: mesh), SdfMeshRegion.LevelOf(level: 5, mesh: mesh)]);
 
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);

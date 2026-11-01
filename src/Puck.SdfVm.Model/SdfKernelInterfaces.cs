@@ -46,7 +46,7 @@ public sealed class SdfKernelInterfaces {
     public const string BakePool = "brickPool";
     /// <summary>The bit the level of detail starts at in the index a <see cref="Mesh"/> draw call pushes, and in a counted
     /// indirect draw's identity; the bits below it name the draw. A draw of level <c>L</c> above zero draws the triangles
-    /// from the one its record names (<see cref="SdfMeshRecord.LevelTriangleWord"/>). The occlusion kernel's pushed index
+    /// from the one its record names (<see cref="SdfMeshRecord.LevelTableWord"/>). The occlusion kernel's pushed index
     /// holds its step from this bit up and the pyramid level it writes below it.</summary>
     public const int MeshLevelShift = 24;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows and ten cull rows.

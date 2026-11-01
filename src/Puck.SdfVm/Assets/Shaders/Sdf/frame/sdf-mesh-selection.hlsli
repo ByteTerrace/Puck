@@ -1,5 +1,5 @@
 // GPU cull and level selection. Pass controls are SdfMeshOcclusion.Stage, SdfMeshCull.WriteGpu and
-// SdfMeshDetail.WriteGpu. Draw metadata is the six rows at SdfMeshRecord.SelectionWord, written once per changed draw.
+// SdfMeshDetail.WriteGpu. Draw metadata is the four rows at SdfMeshRecord.SelectionWord, written once per changed draw.
 uint4 sdfSelectionRow(uint record, uint row) {
     uint word = record + SDF_MESH_SELECTION_WORD + 4u * row;
     return uint4(sdfMeshRegion[word], sdfMeshRegion[word + 1u], sdfMeshRegion[word + 2u], sdfMeshRegion[word + 3u]);
@@ -61,12 +61,12 @@ uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed) {
     float4 detail = asfloat(sdfMeshOcclusionCandidates[1]);
     if (unboxed || count == 0u || detail.x == 0.0) { return 0u; }
     if (detail.x == 3.0) { return min((uint)detail.y, count); }
-    float2 errors = asfloat(uint2(sdfSelectionRow(record, 4u).w, sdfSelectionRow(record, 5u).x));
+    uint table = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD];
     float scale = asfloat(x.w);
     uint chosen = 0u;
     if (detail.x == 2.0) {
-        if (errors.x * scale <= detail.w) { chosen = 1u; }
-        if (chosen == 1u && count > 1u && errors.y * scale <= detail.w) { chosen = 2u; }
+        [loop]
+        while (chosen < count && asfloat(sdfMeshRegion[table + 3u * (chosen + 1u) + 2u]) * scale <= detail.w) { chosen++; }
         return chosen;
     }
     float4 eye = asfloat(sdfMeshOcclusionCandidates[2]);
@@ -77,14 +77,14 @@ uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed) {
     if (!(depth > 0.0)) { return 0u; }
     scale = (detail.z * scale) / depth;
     chosen = (eye.w == 0.0 && previous.z == y.w) ? min(previous.y, count) : 0u;
-    // At most two levels; scalar comparisons keep dynamically indexed local arrays out of driver local memory.
-    if (chosen == 0u && errors.x * scale <= 1.0) { chosen = 1u; }
-    if (chosen == 1u && count > 1u && errors.y * scale <= 1.0) { chosen = 2u; }
-    if (chosen == 2u && errors.y * scale > direction.w) { chosen = 1u; }
-    if (chosen == 1u && errors.x * scale > direction.w) { chosen = 0u; }
+    // Dynamic indices read device storage, never a dynamically indexed local array.
+    [loop]
+    while (chosen < count && asfloat(sdfMeshRegion[table + 3u * (chosen + 1u) + 2u]) * scale <= 1.0) { chosen++; }
+    [loop]
+    while (chosen > 0u && asfloat(sdfMeshRegion[table + 3u * chosen + 2u]) * scale > direction.w) { chosen--; }
     return chosen;
 }
 uint sdfSelectionVertices(uint record, uint level) {
-    uint3 counts = sdfSelectionRow(record, 4u).xyz;
-    return level == 0u ? counts.x : (level == 1u ? counts.y : counts.z);
+    uint table = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD];
+    return sdfMeshRegion[table + 3u * level + 1u];
 }
