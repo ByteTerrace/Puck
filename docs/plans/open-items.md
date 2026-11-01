@@ -1987,9 +1987,9 @@ derived products, removed from git and built on demand.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: make the per-tick authority hash incremental (measured below), its digest
-segments designed with the parallel tick's partitions in the
-[job-system memo](#engine-job-system); keep the recompute-comparison law.
+Next: the per-tick authority hash is incremental
+([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
+reproduce worker for what remains.
 
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
