@@ -1,0 +1,34 @@
+// The garden's pond plot at 128 creatures, the parallel tick's forcing workload: the garden as its basis with the plot's
+// count (pond.puck's `pondFlocks`) expanded again at 128, so every row the count does not touch is the garden's own.
+// The hounds and spiders keep their body numbers; the dragonflies and fish take the rest. Its frames are dropped: each shows the
+// debug world through a session of its own, which would boot and tick the whole debug world beside the plot and swamp
+// what the plot costs. Measure it headless (`--world worlds/debug/garden-crowd.puck --devices none --headless`).
+schema: "puck.world.definition.v1"
+basis: "garden"
+documentId: "garden-crowd"
+import "pond"
+
+pondFlocks(creatures: 128)
+
+placements {
+  placement "arrival" {
+    $drop: true
+  }
+  placement "far" {
+    $drop: true
+  }
+}
+
+// The pack's scenario (garden-tests.puck) among 118 flocking dragonflies and fish: `puck test
+// worlds/debug/garden-crowd.puck --reproduce` replays the whole crowd bit for bit.
+test "among the crowd, the pack follows the visitor to the bone and a claim spreads trust" {
+  when {
+    seat1: body.pose -20 0 -11.6 0 0 0
+    ticks 240
+  }
+  expect {
+    eventSeq >= 1
+    count(boneHolderTrust) >= 2
+    distance(body, 12, body, 0) <= 3
+  }
+}

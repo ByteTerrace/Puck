@@ -20,11 +20,11 @@ public sealed class ChamferedBoxContactLawTests {
     public void EveryVolumeMeetsTheFaceAndNotTheRemovedCorner(FixedBodyColliderKind kind) {
         var body = Body(kind: kind);
 
-        Assert.False(condition: Cube.TryGetPush(V(x: 2, y: 2, z: 2), FixedQuaternion.Identity, body, FixedQ4816.Zero, out _));
-        Assert.True(condition: Cube.TryGetPush(V(x: 0, y: 2, z: 0), FixedQuaternion.Identity, body, FixedQ4816.Zero, out var push));
+        Assert.False(condition: Cube.TryGetPush(V(x: 2, y: 2, z: 2), FixedQuaternion.Identity, body, FixedQ4816.Zero, out _, out _));
+        Assert.True(condition: Cube.TryGetPush(V(x: 0, y: 2, z: 0), FixedQuaternion.Identity, body, FixedQ4816.Zero, out var push, out _));
         Assert.InRange(((double)push.Normal.Y), 0.999, 1.001);
         Assert.InRange(((double)push.Penetration), 0.0098, 0.0102);
-        Assert.False(condition: Cube.TryGetPush(V(x: 0, y: 2.011, z: 0), FixedQuaternion.Identity, body, FixedQ4816.Zero, out _));
+        Assert.False(condition: Cube.TryGetPush(V(x: 0, y: 2.011, z: 0), FixedQuaternion.Identity, body, FixedQ4816.Zero, out _, out _));
     }
     [Fact]
     public void SurfaceHoldAndTetherFindTheExactBevelAndRotatedCopy() {
@@ -54,14 +54,14 @@ public sealed class ChamferedBoxContactLawTests {
         var body = Body(kind: kind);
         var position = V(x: 1.805, y: 1.805, z: 0);
 
-        Assert.True(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var first));
-        Assert.True(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var repeated));
+        Assert.True(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var first, out _));
+        Assert.True(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var repeated, out _));
         Assert.Equal(actual: repeated, expected: first);
         Assert.True(condition: ((first.Normal.X >= Q(x: 0.70)) && (first.Normal.X <= Q(x: 0.72))), userMessage: first.ToString());
         Assert.True(condition: ((first.Normal.Y >= Q(x: 0.70)) && (first.Normal.Y <= Q(x: 0.72))), userMessage: first.ToString());
         Assert.True(condition: first.IsEdge);
         position += (first.Normal * (first.Penetration + Q(x: 0.001)));
-        Assert.False(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out _));
+        Assert.False(condition: Cube.TryGetPush(position, FixedQuaternion.Identity, body, FixedQ4816.Zero, out _, out _));
     }
     [Fact]
     public void FallingUsesTheBevelButLateralApproachNeedsItsLocalClearance() {
@@ -73,7 +73,7 @@ public sealed class ChamferedBoxContactLawTests {
         var falling = solver.ResolveSweep([Cube], [], V(x: 1.805, y: 1.9, z: 0), ref position, ref velocity,
             FixedQuaternion.Identity, [body], FixedVector3.UnitY);
 
-        Cube.TryGetPush(target, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var diagnosticPush);
+        Cube.TryGetPush(target, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var diagnosticPush, out _);
         Assert.True(condition: falling.Grounded, userMessage: $"{falling}; {diagnosticPush}");
         position = target;
         velocity = -FixedVector3.UnitX;

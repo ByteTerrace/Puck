@@ -816,13 +816,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{facePath}.filter {((uint)source.Filter)} is not a sampler filter; a face samples its source Nearest or Linear.");
             }
 
-            // A window is an opening onto another place, not a display, so it has no tube to draw through.
-            if (
-                (source.Material == WorldScreenMaterial.Crt) &&
-                (source.Source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window })
-            ) {
-                errors.Add(item: $"{facePath}.material 'Crt' is refused on a window: a window is an opening, not a display.");
-            }
+            ValidateScreenMaterialName(
+                definition: definition,
+                errors: errors,
+                material: source.Material,
+                path: $"{facePath}.material",
+                source: source.Source
+            );
 
             if (source.Source is null) {
                 errors.Add(item: $"{facePath}.source is required.");

@@ -156,6 +156,11 @@ agent works in that mode by default, without asking:
     self-improvement is expected: when a session learns that a process wastes
     time or fails, it changes the process in that session, and judgement
     outranks any fixed numeric rule in these documents.
+  - Regular research is worth it (the owner's ruling), even down paths Puck
+    has checked before, if only as a refresher. Before a major area of work
+    (the illumination round before further graphical work is the example), the
+    lead runs a research round across the families, each with its own focus
+    and verified citations, then synthesizes it into the area's plan.
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
@@ -171,7 +176,9 @@ agent works in that mode by default, without asking:
     cover: grasses, flowers, shrubs and trees. The places compose into one
     cohesive world under the selected valley-and-gallery art direction
     ([references](docs/game/art/valley-and-gallery.md)), so features meet at
-    their seams instead of standing apart.
+    their seams instead of standing apart. Most of its features are debug
+    tools disguised as architecture: the avatar studio, for example, is a
+    lawn pavilion that visitors use as a photo area.
 - The gates, ledgers and red-leg proofs described in this file and the skills
   were written by agents, not ordered by the owner. They are tools to use when
   they pay for themselves, never preconditions for landing. An engine change's

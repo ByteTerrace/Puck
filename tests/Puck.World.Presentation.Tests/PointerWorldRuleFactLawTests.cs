@@ -45,7 +45,6 @@ public sealed class PointerWorldRuleFactLawTests {
 
         return document with {
             ScreensRaw = [.. document.Screens.Select(selector: row => row with {
-                Material = WorldScreenMaterial.Crt,
                 Route = (row.Route with { Input = input }),
             })],
             StateRaw = new WorldStateSection(World: [
@@ -162,16 +161,16 @@ public sealed class PointerWorldRuleFactLawTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: $"screen:0=on({FixedQ4816.FromRawBits(value: x)}, {FixedQ4816.FromRawBits(value: y)})"
         );
-        // The CRT glass's bezel insets the image, so face point (1/4, 3/4) is source fraction ((1/4 − b) / (1 − 2b), (3/4 − b) / (1 − 2b)).
+        // The picture fills the face, so face point (1/4, 3/4) is source fraction (1/4, 3/4).
         Assert.InRange(
             actual: ((double)FixedQ4816.FromRawBits(value: x)),
-            high: 0.235,
-            low: 0.233
+            high: 0.251,
+            low: 0.249
         );
         Assert.InRange(
             actual: ((double)FixedQ4816.FromRawBits(value: y)),
-            high: 0.767,
-            low: 0.765
+            high: 0.751,
+            low: 0.749
         );
 
         // A miss: the same ray pointed away from the screen meets its plane behind its origin.
@@ -186,14 +185,10 @@ public sealed class PointerWorldRuleFactLawTests {
             expected: (0L, 0L, 0L)
         );
 
-        // Off the face and onto the bezel both read off, and so does a tick with no ray at all.
+        // Off the face reads off, and so does a tick with no ray at all.
         foreach (var ray in new SourceRay?[] {
             RayTo(
                 x: 3f,
-                y: 1f
-            ),
-            RayTo(
-                x: 0.99f,
                 y: 1f
             ),
             null,

@@ -1,0 +1,60 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "An authored screen material: how a display\u0027s face draws its picture through the screen shading\u0027s display treatment, a row of the document\u0027s screenMaterials that screens and creation faces name by Id. The treatment models a display\u0027s own pixel structure over the picture, which always fills the face: a darkening between source rows, coloured stripes across each source column, a radial vignette, a glint at grazing angles, and the face\u0027s rounded, softened edge. Every term is the author\u0027s (the standard package authors a cathode-ray tube, worlds/standard/skin.puck); zero turns a term off, and a view\u0027s screen fidelity fades the whole treatment out as a seat frames the screen. Presentation only: a material never moves the mapping a pointer hit takes.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "id": {
+        "description": "The id screens and faces name the material by; unique among the document\u0027s materials.",
+        "type": "string"
+      },
+      "scanlines": {
+        "description": "How dark the gap between source rows draws, in [0, 1]: one source row a cosine period.",
+        "type": "number",
+        "default": 0
+      },
+      "subpixelStripes": {
+        "description": "How strong the red, green and blue stripes across each source column draw, in [0, 1].",
+        "type": "number",
+        "default": 0
+      },
+      "vignette": {
+        "description": "How much the face darkens toward its corners, in [0, 1].",
+        "type": "number",
+        "default": 0
+      },
+      "glint": {
+        "description": "How bright the glass\u0027s rim glint at grazing view angles adds, in [0, 1].",
+        "type": "number",
+        "default": 0
+      },
+      "glintPower": {
+        "description": "How tightly the glint hugs grazing angles: the exponent of one minus the view cosine, positive.",
+        "type": "number",
+        "default": 1
+      },
+      "cornerRadius": {
+        "description": "The face\u0027s corner rounding, as a fraction of the face, in [0, 0.5).",
+        "type": "number",
+        "default": 0
+      },
+      "edgeSoftness": {
+        "description": "The width over which the face\u0027s edge fades to black, as a fraction of the face, in [0, 0.5).",
+        "type": "number",
+        "default": 0
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false,
+    "title": "WorldScreenMaterial"
+  },
+  "default": null
+}

@@ -432,16 +432,17 @@ shows at the screen's peak luminance (`WorldScreen.Luminance`, nits; a window
 onto another world shows that world's own luminance), and the view's screen
 fidelity eases that to the value the exposure leaves as the picture itself. Its pixels are the
 source's image, drawn from the screen's published mapping (the layout, any letterbox and the crop) and,
-by default, shown untreated, filling the screen's authored face. A screen whose row opts into the CRT
-material (`WorldScreen.Material`, `Crt`; a placement face's `material` the same) draws its picture
-inset in a bezel three hundredths of the face wide (`WorldScreenMappings.CrtGlass`, a warp whose
-inverse maps a hit) through a CRT glass-face model—a soft bezel edge, soft cosine scanlines between the
-source's rows, an aperture-grille stripe tint one triad a source column, and (both off by default) a vignette and a fresnel rim glint. The scanlines and the grille fade
-out as a source row or column shrinks toward two pixels, so they never alias against the pixel grid; the
-tuned look is a flat square tube, a hint of CRT, not a heavy filter. The face kind reaches the kernels in
-the mapping record's state row (`SdfScreenFace`: an opening, a display or a CRT). A view's screen fidelity
-(`SdfViewSnapshot.ScreenFidelity`, 0 to 1) scales every term of the CRT treatment away and turns its soft
-bezel into a hard picture edge, and clears the atmosphere and the tone map from the view, so a seat that
+by default, shown untreated, filling the screen's authored face. A screen whose row names a screen
+material (`WorldScreen.Material`, an id in the document's `screenMaterials`; a placement face's
+`material` the same) draws its picture, still filling the face, through the display treatment that
+material authors: soft cosine scanlines between the source's rows, red, green and blue subpixel stripes
+one triad a source column, a vignette, a rim glint at grazing angles, and a soft rounded edge. The
+scanlines and the stripes fade out as a source row or column shrinks toward two pixels, so they never
+alias against the pixel grid. The standard's `crt` material (`worlds/standard/skin.puck`) is a flat
+square tube, a hint of CRT, not a heavy filter. The face kind reaches the kernels in the mapping record's
+state row (`SdfScreenFace`: an opening or a display) and the treatment in its two treatment rows
+(`SdfScreenTreatment`). A view's screen fidelity (`SdfViewSnapshot.ScreenFidelity`, 0 to 1) scales
+every term of the treatment away and turns its soft edge into a hard picture edge, and clears the atmosphere and the tone map from the view, so a seat that
 has framed the screen it engaged sees its pixels exactly as the source holds them; every other view
 carries 0.
 

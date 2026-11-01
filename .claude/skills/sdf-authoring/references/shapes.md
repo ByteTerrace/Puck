@@ -256,8 +256,8 @@ are the authored ones. Strands closer than twice their radius fuse.
   program the field provider reads too (`NoiseDisplace` is a contact op), so
   contact and the bake read one field. The narrowphase is the certified
   surface solve the field provider reads too (`FixedFieldColliderContact.Solve`):
-  the field's certified bound (its evaluator's step scale less its value error,
-  or the shapes' unrelieved union grown by the amplitude) proves a body clear,
+  the field's certified box bounds (its evaluator's interval walk, the relief
+  charged at the most its own arithmetic can move the field) prove a body clear,
   and otherwise a converged solve measures the Euclidean distance to a
   bracketed surface point, never the field's value. `world.counters
   physics.contact` prices it as `field-queries`, `field-bounds`, `field-reads`,

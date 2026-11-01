@@ -798,10 +798,9 @@ answered and the pixel it answered at (see
 [presentation picking](../rendering/sdf/handbook/frame-rendering.md#presentation-picking)).
 
 Every screen in the world publishes a mapping too. The World's screen binder
-builds each row's mapping through `WorldScreenMappings.Of`, with no warp for a
-plain screen, whose picture fills its face, and the CRT glass's bezel
-(`WorldScreenMappings.CrtGlass`) for a screen whose `material` is `Crt`, and
-names it by the instance its source is: a
+builds each row's mapping through `WorldScreenMappings.Of`, whose picture fills
+the face whatever screen material draws it, and names it by the instance its
+source is: a
 producer, machine or probe source by its source instance
 (`source$<producer>$<digest>`, from `WorldSourceInstances`), a view by its
 camera's registration and a session by its screen's session view. A view's and

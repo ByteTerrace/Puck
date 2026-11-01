@@ -1,0 +1,6 @@
+{
+  "schema": "puck.asset-package.v1",
+  "id": "minimal",
+  "name": "Puck Minimal World",
+  "entry": "minimal"
+}

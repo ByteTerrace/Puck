@@ -53,7 +53,7 @@ public sealed class OrientedBoxContactLawTests {
     }
     [Fact]
     public void ACapsuleIsPushedAlongTheYawedWallsNormal() {
-        Assert.True(condition: Wall.TryGetPush(
+        Assert.True(condition: Wall.TryGetPush(uncertain: out _, 
             orientation: FixedQuaternion.Identity,
             position: Foot(offset: 0.3d),
             push: out var push,
@@ -71,7 +71,7 @@ public sealed class OrientedBoxContactLawTests {
 
         // The foot sits about 0.35 m inside the wall's world-axis bounds on both X and Z.
         Assert.InRange(actual: ((double)foot.X), high: 1.4d, low: 0.3d);
-        Assert.False(condition: Wall.TryGetPush(
+        Assert.False(condition: Wall.TryGetPush(uncertain: out _, 
             orientation: FixedQuaternion.Identity,
             position: foot,
             push: out _,

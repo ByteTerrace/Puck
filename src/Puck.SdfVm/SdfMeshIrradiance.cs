@@ -81,7 +81,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
     }
 
-    /// <summary>Stops new work, joins scene and trace borrowers, then releases the last scene.</summary>
+    /// <summary>Stops new work and returns at once; the last scene is released once the scene and trace jobs still
+    /// borrowing it finish, on the thread pool, so a caller on the frame thread never waits on background work.</summary>
     public void Dispose() {
         Task[] jobs;
 
@@ -92,7 +93,11 @@ public sealed class SdfMeshIrradiance : IDisposable {
             m_owed = m_refillOwed = false;
             jobs = new[] { m_build, m_refill, m_worker }.OfType<Task>().ToArray();
         }
-        try { Task.WhenAll(jobs).GetAwaiter().GetResult(); } finally { lock (m_gate) { m_scene?.Dispose(); m_scene = null; m_materialsScene = null; m_diagnosticDraws = []; } }
+        if (jobs.Length == 0) { ReleaseScene(); return; }
+        _ = Task.WhenAll(jobs).ContinueWith(continuationAction: _ => ReleaseScene(), scheduler: TaskScheduler.Default);
+    }
+    private void ReleaseScene() {
+        lock (m_gate) { m_scene?.Dispose(); m_scene = null; m_materialsScene = null; m_diagnosticDraws = []; }
     }
 
     /// <summary>The most probes a volume holds, the High tier's: its finest window and the coarser levels'.</summary>

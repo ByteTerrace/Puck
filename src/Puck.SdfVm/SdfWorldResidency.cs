@@ -153,7 +153,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             : EmptyScreenSurfaceTransforms);
         m_width = width;
         Name = name;
-        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? new SdfMeshLibrary()), Residency = name };
+        m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
+        MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
         // frames before it, which a restart at another plans again.
         frameSource.ObserveBuilds(built: (program, transforms) => {
@@ -360,8 +361,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ResetReady();
         CancelShaderReload(reason: "the residency was released");
         MeshPathBake.Retire();
+        m_ownedLibrary?.Dispose();
         m_pipelines.Release();
     }
+
+    // The library the residency made for itself when its host shared none, which it disposes on its last release.
+    private readonly SdfMeshLibrary? m_ownedLibrary;
     /// <summary>Gives back the creator's hold (<see cref="Release"/>).</summary>
     public void Dispose() => Release();
     /// <summary>Returns a task that completes once the residency is ready (<see cref="IsReady"/>), for a build on the thread
@@ -949,7 +954,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.SetScreenMapping(
                 face: sources.FaceOf(screen: screen),
                 mapping: sources.MappingOf(screen: screen),
-                screenIndex: screen
+                screenIndex: screen,
+                treatment: sources.TreatmentOf(screen: screen)
             );
             tables.SetScreenLuminance(
                 luminance: sources.LuminanceOf(screen: screen),

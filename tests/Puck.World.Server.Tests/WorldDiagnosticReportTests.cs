@@ -163,14 +163,14 @@ public sealed class WorldDiagnosticReportTests {
 
             Assert.True(condition: FixedSurfaceQuery.TryNearest([collider], [], probe, FixedQ4816.One, out var nearest));
             Assert.InRange(((double)nearest.Distance), 0, budget.Total);
-            Assert.True(condition: collider.TryGetPush(probe, FixedQuaternion.Identity, sphere, FixedQ4816.Zero, out var push));
+            Assert.True(condition: collider.TryGetPush(probe, FixedQuaternion.Identity, sphere, FixedQ4816.Zero, out var push, out _));
             Assert.InRange(((double)push.Penetration), (0.02 - budget.Total), (0.02 + budget.Total));
             Assert.Null(@object: WorldDiagnosticGeometry.ClassifyBoundary(WorldDiagnosticGeometry.SignedDistance(collider: collider, point: point), budget));
             foreach (var offset in new[] { -0.01, 0.01 }) {
                 var displaced = (point + (nearest.Normal.ToVector3() * ((float)offset)));
 
                 Assert.True(condition: collider.TryGetPush(FixedVector3.FromVector3(value: displaced), FixedQuaternion.Identity,
-                    sphere, FixedQ4816.Zero, out var displacedPush));
+                    sphere, FixedQ4816.Zero, out var displacedPush, out _));
                 var signed = ((double)(sphere.Radius - displacedPush.Penetration));
 
                 Assert.InRange(WorldDiagnosticGeometry.SignedDistance(collider: collider, point: displaced), (signed - budget.Total), (signed + budget.Total));

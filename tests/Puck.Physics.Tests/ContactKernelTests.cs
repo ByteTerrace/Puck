@@ -158,7 +158,7 @@ public sealed class ContactKernelTests {
         var volume = Sphere(radius: 1d);
         var orientation = FixedQuaternion.Identity;
 
-        var overlaps = ground.TryGetPush(
+        var overlaps = ground.TryGetPush(uncertain: out _, 
             position: Vector(
                 x: 0d,
                 y: 0.5d,
