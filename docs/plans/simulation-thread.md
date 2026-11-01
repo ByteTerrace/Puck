@@ -522,32 +522,18 @@ same phases as before with `simulate` intact; `puck test --reproduce` on
 `[still]` hashes; a capture-held World and a render host with no simulation
 both still answer `quit` and `world.status` over stdin (the F16 check).
 
-### Phase 2: the record, still one thread
+### Phase 2: the record (dropped)
 
-The recording sink between the hub and the two local sinks, recording between
-dispatch and join and passing through otherwise; `MovedRows` copied (F02);
-`WorldHostStep` split into prologue, body and epilogue with the publish hooks
-and the echo tap's effects moved to the epilogue; the shell's tick budget and
-`NextDueTick` on the four hook owners (F14's second half); the loop
-dispatching and joining *inline* (an immediate join on the same thread).
-Files: a new `src/Puck.World.Client/WorldTickRecord.cs` (the sink, the record,
-`Replay`), `WorldBootComposition.cs`, `WorldAuthorityEndpoint.cs`,
-`WorldHostStep.cs`, `WorldServerStepShell.cs`, `WorldReplayTape.Drive.cs`,
-`WorldPostBuildWiring.cs` (the tap records), `WorldCaptureScheduler.cs`,
-`WorldTickScript.cs`, `WorldConsoleWaitGate.cs`, `WorldTestRun.cs`, the loop.
-Finish: `puck test --reproduce` hashes unchanged (the record is a pure relay);
-lockstep stills compared with phase 1's within the tick-exact comparison's
-tolerance; a
-`world.at` line pinned inside what would have been a replay burst runs at its
-tick (`[world.at] tick N ran`); a scheduled capture at a tick inside a replay
-fast-forward arms with `tick=N` in its `[still]` stamp; a `world.reload` of a
-document with a changed row shape, under a stdin script that edits a
-selection, keeps the editor's selection consistent (the tap's effects applied
-after the definition).
-
-The record waits on the job-system memo's decision whether the tick and the
-views overlap, so this phase is not started until the memo decides. The step
-below does not wait.
+The [job-system memo](engine-job-system.md#what-becomes-of-the-tick-to-produce-memos-phases)
+drops this phase. The job system overlaps no tick with the frame's views: the
+tick is a fork the frame thread joins inside the step, before produce. So no
+record carries a body's deliveries across a dispatch and join, and the hub
+delivers synchronously as it does today. F14's second half stands as
+ordinary work, independent of threading: the shell's tick budget from the
+hooks' `NextDueTick`, so a replay burst never steps past a pinned line, a
+wait release, a schedule step or a capture row. Its check is a `world.at`
+line and a capture row inside a fast-forward, each running at its tick.
+F17 runs now (below).
 
 ### F17: `CodeDerivedTable` ties each derivation to its generation (runnable now)
 
