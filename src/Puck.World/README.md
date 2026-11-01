@@ -151,7 +151,8 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-af
 For repeated launches, publish once for the target desktop and run that artifact:
 
 ```powershell
-dotnet publish src/Puck.World -c Release -r win-x64 --self-contained false -o artifacts/world
+dotnet restore src/Puck.World
+dotnet publish src/Puck.World -c Release -r win-x64 --self-contained false --no-restore -o artifacts/world
 dotnet artifacts/world/Puck.World.dll --world worlds/debug
 ```
 
@@ -159,9 +160,17 @@ Use `linux-x64` for a Linux desktop. World publishes with
 [ReadyToRun](https://learn.microsoft.com/en-us/dotnet/core/deploying/ready-to-run)
 precompilation to reduce first-use JIT work. This makes publishing slower and
 assemblies larger; ordinary `dotnet build` and `dotnet run` still use IL.
-`-p:PublishReadyToRun=false` opts out for a comparison. Restore prepares both
-desktop runtime graphs and the compiler pack, so a later publish can use
-`--no-restore`. CI publishes the already-built portable assemblies with
+`-p:PublishReadyToRun=false` opts out for a comparison. The plain restore
+prepares both desktop runtime graphs and the compiler pack in World's own
+restore, so the publish passes `--no-restore`. A publish that restores with
+`-r` fails with NU1004 in every library: `-r` reaches each project's restore,
+and the libraries' lock files carry no runtime identifier. That failed restore
+also leaves the libraries' assets files broken, so run the plain restore again
+after one. On the debug world headless, a ReadyToRun publish JIT-compiles about
+24,200 methods to `world.status` where the IL build compiles about 43,900;
+22,400 of those left are generic instantiations the precompiler cannot reach
+outside the framework, 15,800 of them `System.Text.Json`'s metadata for the
+document model. CI publishes the already-built portable assemblies with
 `AppendRuntimeIdentifierToOutputPath=false` and `--no-build`; the project
 regenerates the runtime-specific dependency manifest in the publish directory.
 Precompilation does not rebuild C# sources or replace the portable build's
