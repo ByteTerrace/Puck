@@ -60,4 +60,14 @@ The hall (x 10 to 70, z 12 to 40), the studio (x 24 to 72, z -76 to -20), the
 stream and pool corridor west of x -38, the camera course, the combat yard and
 the climate wing hold nothing from the lawn.
 
+## Cost
+
+The lawn's bake, draw, frame and memory measurements before and after it
+landed are in the composition plan's
+[C1 as built](../../docs/plans/debug-world-composition.md#c1-as-built). Each
+static row bakes on its own, so the tufts and flowers are most of the added
+bakes; the wind-grass patch beside the spawn adds 748 dynamic parts and their
+draws, the forcing load for one draw per shared geometry. `lawnGrassTiles = []`
+removes it.
+
 [Debug world](debug.md) · [Wind meadow](meadow.md)
