@@ -16,7 +16,7 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "debug"
 
-import "skies"
+import "../standard/skies"
 import "shapes"
 import "studio"
 import "controls"

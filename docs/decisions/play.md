@@ -233,8 +233,9 @@ preserving the look direction that drives movement, and avoiding jumps or
 looming motion that cause disorientation. The mechanism is the seat rig's
 clearance solver ([Chase eye clearance](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance));
 the rulings below set the standard template's values, which are `.puck` data in
-the standard package (`worlds/standard/camera.puck` and the avatar's `seatRig`),
-never engine constants. The owner's sitting tunes them.
+the standard package (`chaseCamera` in `worlds/standard/camera.puck`, which an
+avatar expands with its own body offsets), never engine constants. The owner's
+sitting tunes them.
 
 **Heading is never deflected.** Orbiting the camera away from a wall is
 eliminated: under camera-relative movement it bends the player's path and

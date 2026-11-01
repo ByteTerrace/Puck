@@ -59,8 +59,7 @@ experimental worlds have that it lacks is ported into it
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
-   authored screen material, the chase-camera template, inputs, skies and
-   quality in the standard, the editor's bindings and feel authored.
+   authored screen material and the standard pad kit's debug sectors.
 9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the inventory lane first.
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
@@ -158,17 +157,26 @@ One engine-wide job system answers all of it:
 - **Schedule as well as spread**, what remains [high]. Rated work keeps off the
   frames that run a step: `PresentationRate.Holds` (the one floor every lever
   decides through) updates early on a frame without a step when the next frame
-  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`).
-  A body neither a view nor a shadow cascade may show holds
-  (`SdfUpdateRateTiers.HeldHertz`; the caster test is the renderer's own
-  `SdfMeshCull`) and resumes as a continuity cut, and bodies taking a tier
-  together alternate their phase by half its period. Open: the rated views and
+  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`);
+  the stamp pool takes this frame's flags and levers before it packs
+  (`WorldCreationInstances.PresentAt`, from `PrepareGraph`), none for a settled
+  capture. A body nothing may show or read holds (`SdfUpdateRateTiers.HeldHertz`):
+  no camera of any view, displayed or not, no shadow cascade (the renderer's own
+  `SdfMeshCull`, fitted on the frame just dressed), and no consumer of its parts
+  since the previous pack (lights, camera anchors, audio emitters and overlay
+  facts all read through the pool's part accessors, which record the read,
+  `NotePoseRead`). Its bound is the larger of the rest reach and the farthest
+  any pack posed a part (`MotionReach`). It resumes as a continuity cut, and
+  bodies taking a tier together alternate their phase by half its period. Open:
+  a held body's motion no pack has posed yet (a slide first driven while held)
+  is outside its bound. The rated views and
   screens (eight machine sources and a session at 15 Hz in the lobby) still
   share one phase, since the render graph's history keeps none to stagger; a
   tick frame's own work (a 6 to 9 ms tick plus the tick-bound session views'
   recording, produce 12 to 16 ms) is what still crosses 16.7 ms, which parallel
   recording and the parallel tick take. A held body shows its held pose for the
-  one frame the rate views lag behind a camera cut. (from: slow-frames)
+  one frame the rate views lag behind a camera cut, since the cameras resolve
+  after the pack. (from: slow-frames)
 - The effector solver passes the "Puck code over engine code" check: which
   effectors, chain, tip, target kind, reach, standoff, direction, gate, plant
   window, replant and weight are authored `CreationEffectorDocument` data, and
@@ -567,6 +575,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   | Direct3D 12 gallery walk, A | 39.76 | 57.86 | 136 of 273 | 31.03 | 39.7 / 57.8 |
   | Direct3D 12 gallery walk, B | 26.11 | 30.54 | 72 of 315 | 16.29 | 32.1 / 36.9 |
   | Vulkan lobby standing, B with the collection cuts | 18.11 | 19.32 | 4 of 600 | 9.93 | 43.2 / 57.5 |
+
+  The first B read its step flags a frame late (the pool packed before `Dress`
+  handed it the frame's rate), so its bodies packed on step frames. With this
+  frame's flags (B2 against that build, A2, on a machine more loaded still,
+  ticks 6.7 to 9.0 ms), the walk's "produce with a step" falls below the frames
+  without one:
+
+  | Reading | p99 | max | work over 16.7 | produce with / without a step, avg |
+  |---|---|---|---|---|
+  | Direct3D 12 lobby standing, A2 | 34.99 | 51.64 | 198 of 600 | 8.91 / 7.70 |
+  | Direct3D 12 lobby standing, B2 | 25.19 | 32.92 | 214 of 600 | 9.39 / 9.28 |
+  | Direct3D 12 gallery walk, A2 | 26.66 | 28.72 | 72 of 313 | 8.96 / 8.61 |
+  | Direct3D 12 gallery walk, B2 | 22.42 | 22.80 | 40 of 320 | 7.86 / 9.17 |
 
   The standing iterations still over 16.7 ms are tick frames: a 7 to 9 ms tick
   plus 12 to 13.6 ms of produce, the tick-bound views (above). Present-to-present
@@ -1056,10 +1077,8 @@ then CI's steady state, the shader cache and the GC-hole retirement.
 ### Author leaks to the standard
 
 Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
-when it is found (AGENTS.md) · Next: the CRT as an authored screen material, the
-chase-camera template in `worlds/standard/camera.puck` with the C# design
-defaults removed, `inputs`, `skies` and `quality` moved to the standard, and the
-editor's bindings and feel authored; then the overlay text advance and the
+when it is found (AGENTS.md) · Next: the CRT as an authored screen material and
+the standard pad kit's debug sectors; then the overlay text advance and the
 helper templates. The engine's neutral default theme
 (`WorldThemeSection.Default`; no phosphor role in `WorldTheme`) and a warp that
 applies only to `WorldScreenMaterial.Crt` are in; [UI step 1](ui.md) is this
@@ -1080,46 +1099,25 @@ a design built into C# or living only in the debug world.
   generic screen-material mechanism (a warp and a shader lane an authored material
   names) with the CRT authored in `worlds/standard/skin.puck`; delete the enum
   value and the constant. A CRT's bezel is geometry authored outside the face.
-- Chase-camera design in C# and the Moth. `WorldViews.cs:177-179`
-  (`ClearanceMode = Cutaway`, `ClearanceMaxElevation = 1.1f`) and `:192-193`
-  (`0.85/0.2/1.35/0.15`), `WorldCameraClearanceChoice.cs:17` (`1.25/0.45/0.35`)
-  and `src/Puck.World.Client/WorldCameraClearance.cs:45` (`LiftCeiling = 1.1f`),
-  with Moth prose at `:28, 45, 315, 473`, put a camera feel in the engine, while
-  `worlds/debug/avatars/moth.puck:8118-8139` authors the policy and
-  `worlds/standard/camera.puck:1-28` holds only boom and zoom. Fix: a chase-camera
-  template in `camera.puck` (seat control, clearance, fade, automatic first person,
-  the rig parameterised by body offsets) that the Moth calls; the C# fields become
-  required or neutral with the numbers removed and the prose made generic. Also
-  drop the derived `fovOp`, `lookAtOp` and `orbitOp` from the authored schema
-  (`moth.puck:8158-8174`, `src/Puck.World.Schema/WorldCameraProgram.cs:213`). The
-  template's values are the camera decision's parameter table (the feel sittings
-  tune them; see [dual-stick play](#dual-stick-play-and-the-moths-motion)).
-- The shared input vocabulary lives in the debug world.
-  `worlds/debug/inputs.puck:1-4` declares it, while `worlds/standard/controls.puck:720`
-  binds `forward` and `rise` without a declaration. Fix: move the shared channels
-  to `worlds/standard/inputs.puck`, import it from `standard.puck` (which imports
-  only skin, controls, camera and companions), and keep `suit` and `noclip` in
-  debug.
-- Sky presets live in the debug world (`worlds/debug/skies.puck:1-3`, "every
-  shipped world can draw from"; `clearDay`, `overcast`, `starryNight`,
-  `polarNight` and their air). Fix: `worlds/standard/skies.puck`, with the terrain
-  pass's haze presets beside it.
-- Quality presets live in the debug world, with a comment against the ruling
-  (`worlds/debug/quality.puck:1-8`: "every shipped world shares"; "`low` is the
-  floor tier a player, or a Steam Deck, drops to"; "The standard world imports
-  this table", which is false). Fix: move the table to the standard, import it,
-  and reword the comment to the ruling (every machine runs `high` until initial
-  development is done).
-- Editor bindings and feel in C#: the bars, pages and keys
-  (`src/Puck.World.Client/WorldEditorBindings.cs:53-110`) and the grid 0.5,
-  snap 15°, orbit, pan, zoom and fly rates and the pitch and distance limits
-  (`src/Puck.World.Schema/WorldEditorDefaults.cs:25-69`). Fix:
-  `worlds/standard/editor.puck` authors them ([editor E1 and E8](editor.md#open-items));
-  the engine keeps the mechanism with required fields.
-- The chess rules fragment in `worlds/debug/chess.puck` is reused by two tables
-  but lives only in debug. Fix: a shared package (the standard or a games package)
-  that the debug table imports, as `worlds/standard/cards.puck` already does for
-  cards.
+- The standard pad kit carries debug-world sectors: the play wheel's Act ring
+  binds `body.press suit` (the debug world's suit channel, `suit.puck`) and
+  `body.pose spawn:stage` (`worlds/standard/pad-kit.puck:44-57`,
+  `controls.puck:567`), and its View
+  ring and the View page name the Moth's inspection layouts (`flight-stage`,
+  `face`, `desktop`; `pad-kit.puck:59-70`, `controls.puck:714, 733`). Fix: the
+  standard's rings and pages name only what the standard authors; the debug
+  refinement (`worlds/debug/controls.puck`) adds its sectors by id.
+- The chase-camera decision's table gives `fade` a 0.35 rad `maxRise` and
+  cutaway its own close target (`[0, 1.55, 0]`), but the solver reads one
+  `clearanceMaxElevation` for cutaway only (fade never rises,
+  `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
+  `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
+  ceiling (1.1) and the fade close target. Decided (the lead's call): the
+  table is the owner's camera decision and the solver is the mechanism, so the
+  mechanism grows to match. `maxRise` and the close target become per-mode
+  authored values: fade rises up to its own `maxRise` and each mode has its
+  own close target. `chaseCamera` then authors the table's values, and the
+  feel sittings tune them.
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1140,8 +1138,6 @@ maths first because the others build on it:
 - rotation and transform maths: turns about each axis in degrees, axis-angle,
   composition, and mirroring a position or rotation;
 - a mirrored-pair template emitting both sides of a part from one definition;
-- skies and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`
-  and their air), now in `worlds/debug/skies.puck`;
 - a toggle ability beside `dashAbility` (`suitToggle` and `noclipToggle` are
   one rule shape);
 - a tabletop kit: grid board, cell placement and piece prototypes, which chess,
@@ -1151,7 +1147,8 @@ maths first because the others build on it:
 - the pad slot list and a mirrored bar-table template in `pad-kit`.
 
 Debug-world-only content stays in `worlds/debug/`: exhibit plinths, section
-signs, places, tours, the alchemy elements and the games' rules.
+signs, places, tours, the alchemy elements and the game tables; a game's rules
+that another table could reuse are a library in `worlds/games/` (`chess.puck`).
 
 ### Port the experimental worlds' missing features
 

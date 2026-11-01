@@ -36,52 +36,29 @@ Primary code:
 
 The engine declares no rig of its own: `views` is REQUIRED exactly when the
 census implies a body (`bodies.capacity > 0`), the same derived refusal
-`kits` carries, and a seatless document may author none. The live seat camera
-is authored in the Moth basis (`worlds/debug/avatars/moth.puck`),
-which the debug world and the garden inherit:
+`kits` carries, and a seatless document may author none. The chase camera is the
+standard's `chaseCamera` template (`worlds/standard/camera.puck`, a library),
+which an avatar expands in a document of its own with its body offsets. The
+Moth's is `worlds/debug/avatars/moth-camera.puck`, imported by the Moth basis
+that the debug world and the garden inherit; her inspection layouts stay in the
+basis's own `views` block:
 
 ```text
-views {
-  // The seat's own camera comes first, so it is what a boot shows; the named inspection cameras follow.
-  layout "play" {
-    seatCount: 0
-    slots [ { height: 1, width: 1, x: 0, y: 0 } ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
-  }
-  cameraLayout("three-quarter")
-  // … more inspection layouts …
+import "../../standard/camera"
 
-  seatControl {
-    clearanceMode: Fade
-    characterFade { startDistance: 1.25, endDistance: 0.45, minimumBoom: 0.35 }
-    clearanceMaxElevation: 1.1
-    maxPitch: 1.2
-    minPitch: -0.5
-    yawReference: "World"
-  }
-
-  seatRig "moth-camera" {
-    version: "puck.camera.program.v1"
-    operations [
-      orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
-      lookAt(focusDistance: 4.2, opcode: "lookAt", subject: reference(), targetOffset: [0, 1, 0], worldAxes: true, closeTargetOffset: [0, 1.74, 0], closeTargetStartFraction: 0.6, closeTargetFullFraction: 0.2)
-      fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
-      dynamics(row: `camera-boom`)
-    ]
-  }
-}
-
-seatDefaults {
-  seatCameraFeel {
-    invertPitch: false
-    invertYaw: false
-    pitchSensitivity: 0.001
-    stickLookRate: 3.5
-    yawSensitivity: 0.001
-  }
-}
+chaseCamera(rig: "moth-camera", pivotOffset: [0, 1, 0], closeTargetOffset: [0, 1.74, 0], eyePoint: [0, 1.75, 0.22])
 ```
+
+It emits `views.seatControl` (pitch limits, `clearanceMode`,
+`clearanceMaxElevation`, `characterFade`, `autoFirstPerson`, `boom`),
+`views.seatRig` (orbit, lookAt with the close target, fieldOfView, the
+`camera-boom` dynamics and firstPerson), the `camera-boom` row and
+`seatDefaults.seatCameraFeel`, every value a template argument defaulting to the
+[chase-camera decision](../../../../docs/decisions/play.md#the-chase-camera)'s
+table. The engine's `WorldSeatViewControl` requires `clearanceMode` and
+`clearanceMaxElevation`; an absent `characterFade` never fades the body and
+holds no minimum boom, and an absent `autoFirstPerson` makes automatic pull-in
+unavailable.
 
 The document members are `views.layouts`, `views.seatControl`, `views.seatRig`
 and `seatDefaults.seatCameraFeel` (C# `WorldDefinition.PlayerDefaults.SeatLook`,
@@ -92,7 +69,7 @@ is `WorldSeatCameraFeel.Default`: zero pointer and stick response, so every look
 input turns the camera by nothing. The camera boom's smoothing is the
 `camera-boom` row of the world's `dynamics` table.
 
-The standard's `worlds/standard/camera.puck` authors that response, the portable
+The standard's `cameraFeel()` (`worlds/standard/camera.puck`) authors that response, the portable
 feel, and `views.seatControl.boom { minimum, maximum, step }` in full-size metres.
 `player.camera.boom` consumes an authored Axis2D binding's vertical delta and
 changes the seat's requested distance within those bounds; an absent policy
@@ -270,7 +247,7 @@ migrated target, to avoid a feedback oscillation under lintels.
 **Fade keeps the room.** The boom shortens along the requested heading and pitch,
 never rises automatically and never advances the near plane through a wall.
 `seatControl.characterFade` authors `startDistance`, `endDistance` and
-`minimumBoom` (1.25, 0.45 and 0.35 m full-size by default). The preferred minimum
+`minimumBoom` (the template authors 1.25, 0.45 and 0.35 m full-size). The preferred minimum
 boom yields to closer geometry. The own body becomes a 4×4 screen-door pattern
 from solid at the start to hidden at the end. `SdfViewSnapshot.StampFade` carries
 only that body's transform-slot range and opacity; the mesh and glass fragment
@@ -281,8 +258,8 @@ own separate stamp slots and stay visible.
 
 **Cutaway keeps the body.** The following keep-out/rise/near-plane procedure is
 the cutaway branch. The Moth stays solid even when no room remains behind her.
-`seatControl.clearanceMaxElevation` authors its elevation ceiling (1.1 rad by
-default). The live read-back includes `mode=fade|cutaway` and `fade=0..1` (zero
+`seatControl.clearanceMaxElevation` authors its elevation ceiling (the template
+authors 1.1 rad). The live read-back includes `mode=fade|cutaway` and `fade=0..1` (zero
 means solid) alongside the eye, migrated target, boom, rise, near and clearance.
 
 After the boom ease, a seat framing its own body through `views.seatRig` places
@@ -307,7 +284,7 @@ Each frame answers where the eye belongs:
    direction, so long as the shortened eye still clears the body.
 2. When no length of the boom clears both (a body backed into a wall or a
    corner, its boom pointing in), the boom rises toward the seat's up on the
-   same heading: a coarse scan up to `LiftCeiling` (1.1 rad, short of an
+   same heading: a coarse scan up to `clearanceMaxElevation` (1.1 rad, short of an
    overhead view that turns her upside down on screen), then bisection, finds
    the lowest rise where it clears.
 3. When no rise clears both (her back against a wall), the answer is up and

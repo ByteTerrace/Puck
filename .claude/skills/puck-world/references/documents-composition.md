@@ -319,12 +319,15 @@ Law suite: `tests/Puck.World.Server.Tests/DocumentBasisLawTests.cs`,
 **Shared content is authored, never an engine default.** The live debug world
 and garden take the Moth avatar (`avatars/moth.puck`: body, channels, bindings,
 kit, motion programs, camera, seat camera feel) as their basis and import
-`worlds/standard/standard.puck` (the authored skin, cursor, key hints, icons,
-binding bar and play wheel) as a document, as the Moth imports `quality.puck`;
+`worlds/standard/standard.puck` (the authored inputs, quality presets, skin,
+cursor, key hints, icons, binding bar, play wheel, camera feel and editor) as a
+document, as the Moth imports the standard's `inputs.puck` and `quality.puck`;
 the debug world's `controls.puck` refines the standard with Go/Tour and Places.
-A world that imports no theme draws the engine's neutral theme.
-`skies.puck`, `shapes.puck` and `studio.puck` beside them are module libraries
-whose templates the importing file expands. The quarantined
+A world that imports no theme draws the engine's neutral theme. The standard's
+`skies.puck` and `camera.puck`, `worlds/games/chess.puck`, and the debug world's
+`shapes.puck` and `studio.puck` are module libraries whose templates the
+importing file expands; a template can emit rules and rows, but an `enum` it
+emits does not fold its members, so the importing source declares enums itself. The quarantined
 `standard.puck` library and the island built on it are prior art. Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),

@@ -196,24 +196,34 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
 
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Anchor"/> op, or <see langword="null"/> when absent
     /// (an absent anchor starts from <see cref="WorldCameraSubject.Reference"/> implicitly).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Anchor? AnchorOp => FirstOrDefault<WorldCameraProgramOp.Anchor>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Blend"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Blend? BlendOp => FirstOrDefault<WorldCameraProgramOp.Blend>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.ClampPitch"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.ClampPitch? ClampPitchOp => FirstOrDefault<WorldCameraProgramOp.ClampPitch>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.FieldOfView"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.FieldOfView? FovOp => FirstOrDefault<WorldCameraProgramOp.FieldOfView>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.LookAt"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.LookAt? LookAtOp => FirstOrDefault<WorldCameraProgramOp.LookAt>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Offset"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Offset? OffsetOp => FirstOrDefault<WorldCameraProgramOp.Offset>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Orbit"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Orbit? OrbitOp => FirstOrDefault<WorldCameraProgramOp.Orbit>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Path"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Path? PathOp => FirstOrDefault<WorldCameraProgramOp.Path>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.SelectProgram"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.SelectProgram? SelectOp => FirstOrDefault<WorldCameraProgramOp.SelectProgram>();
 
     private TOp? FirstOrDefault<TOp>() where TOp : WorldCameraProgramOp {

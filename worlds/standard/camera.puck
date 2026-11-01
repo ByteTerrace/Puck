@@ -1,28 +1,105 @@
-// Shared camera feel. A world or avatar may refine these rows by id.
-exports {
-  bindings [`camera-boom`]
+// The standard camera, a library. `cameraFeel()` authors the shared input feel, the `camera-boom` response and the
+// interactive zoom bounds and step; `standard.puck` expands it, so every world importing the standard has them.
+// `chaseCamera(...)` authors a seated body's third-person chase camera: the seat control (pitch limits, clearance,
+// character fade, automatic first person, the boom) and the rig, a camera program parameterised by the body's own
+// offsets. An avatar expands it in a document of its own and imports that document (the debug world's Moth:
+// `../debug/avatars/moth-camera.puck`):
+//
+//   import "../../standard/camera"
+//   chaseCamera(rig: "my-camera", pivotOffset: [0, 0.9, 0], closeTargetOffset: [0, 1.5, 0], eyePoint: [0, 1.6, 0.2])
+//
+// The defaults are the standard template's values from the chase-camera decision (docs/decisions/play.md, "The chase
+// camera"): fade with the waist-to-head target shift, a 4.2 m boom at 0.3 rad, automatic first person off. Distances
+// are full-size metres, angles radians. Cutaway is one argument away (`clearanceMode: "Cutaway"`), and a player
+// switches between the two live (`player.camera.clearance`); `maxRise` is the ceiling only cutaway rises to, since fade
+// keeps the boom on its requested heading and pitch.
+
+// The interactive boom's zoom: the nearest and farthest requested distance and the distance one input unit moves.
+let cameraBoom = { minimum: 1.5, maximum: 12, step: 0.6 }
+
+// The shared look feel and the `camera-boom` response a chase rig eases on.
+template cameraResponse() {
+  exports {
+    bindings [`camera-boom`]
+  }
+
+  seatDefaults {
+    seatCameraFeel {
+      invertPitch: false
+      invertYaw: false
+      pitchSensitivity: 0.001
+      stickLookRate: 3.5
+      yawSensitivity: 0.001
+    }
+  }
+
+  dynamics [
+    { name: "camera-boom", f: 4, r: 0, zeta: 1 }
+  ]
 }
 
-seatDefaults {
-  seatCameraFeel {
-    invertPitch: false
-    invertYaw: false
-    pitchSensitivity: 0.001
-    stickLookRate: 3.5
-    yawSensitivity: 0.001
+// The shared feel and the zoom the interactive boom answers. A world or avatar may refine these rows by id.
+template cameraFeel() {
+  cameraResponse()
+
+  views {
+    seatControl {
+      boom: cameraBoom
+    }
   }
 }
 
-dynamics [
-  { name: "camera-boom", f: 4, r: 0, zeta: 1 }
-]
+// A seated body's chase camera. `pivotOffset` is the rest look target at full boom length, `closeTargetOffset` the
+// target the look migrates to as geometry shortens the boom from `closeTargetStart` to `closeTargetFull` of its length,
+// and `eyePoint` the first-person eye, each in the body's frame. The fade dissolves the body from `fadeStart` to `fadeEnd`
+// metres of boom and keeps at least `minimumBoom` where the room allows it; first person hides the body inside
+// `hideRadius` and eases in over `transitionSeconds`. Automatic first person, when enabled, enters after the room behind
+// the head stays under `autoEntryDistance` for `autoEntrySeconds` and leaves once it stays over `autoExitDistance` for
+// `autoExitSeconds`.
+template chaseCamera(rig, pivotOffset = [0, 1, 0], closeTargetOffset = [0, 1.74, 0], eyePoint = [0, 1.75, 0.22], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearanceMode = "Fade", maxRise = 1.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
+  cameraResponse()
 
-views {
-  seatControl {
-    boom {
-      minimum: 1.5
-      maximum: 12
-      step: 0.6
+  views {
+    seatControl {
+      boom: cameraBoom
+      clearanceMode: clearanceMode
+      characterFade {
+        startDistance: fadeStart
+        endDistance: fadeEnd
+        minimumBoom: minimumBoom
+      }
+      clearanceMaxElevation: maxRise
+      autoFirstPerson {
+        enabled: autoFirstPerson
+        entryDistance: autoEntryDistance
+        entrySeconds: autoEntrySeconds
+        exitDistance: autoExitDistance
+        exitSeconds: autoExitSeconds
+      }
+      maxPitch: maxPitch
+      minPitch: minPitch
+      yawReference: yawReference
+    }
+
+    seatRig {
+      name: rig
+      version: "puck.camera.program.v1"
+      operations [
+        orbit(distance: distance, opcode: "orbit", pitch: pitch, pivotOffset: pivotOffset, yaw: 0)
+        lookAt(
+          focusDistance: distance,
+          opcode: "lookAt",
+          subject: reference(),
+          targetOffset: pivotOffset,
+          worldAxes: true,
+          closeTargetOffset: closeTargetOffset,
+          closeTargetStartFraction: closeTargetStart,
+          closeTargetFullFraction: closeTargetFull
+        )
+        fieldOfView(fieldOfViewRadians: fieldOfView, opcode: "fov")
+        dynamics(row: `camera-boom`)
+        firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: transitionSeconds, hideRadius: hideRadius)
+      ]
     }
   }
 }

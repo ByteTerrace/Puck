@@ -298,9 +298,12 @@ large blocks.
 - **Keep rated work off the step's frame.** A `world.rates` floor updates early
   on a frame that runs no simulation step when the next one runs a step
   (`PresentationRate.Holds`, `FrameContext.StepsNext`), so rated bodies, views,
-  screens and the far cascade land between ticks; a body no view or shadow
-  cascade may show holds (`SdfUpdateRateTiers.HeldHertz`). New rated work
-  decides through the same floor rather than a schedule of its own.
+  screens and the far cascade land between ticks; a body no camera, shadow
+  cascade or reader of its parts may show holds (`SdfUpdateRateTiers.HeldHertz`).
+  New rated work decides through the same floor rather than a schedule of its
+  own, reads the frame's flags before it runs (the stamp pool takes them in
+  `PresentAt`), and a new reader of a body's parts goes through the pool's part
+  accessors, which record it (`NotePoseRead`).
 
 Sources: minimal fences and no fence where a barrier serves ([NV-SYNC]); heaps
 sub-allocated and residency managed per heap ([AMD-RDNA], [MS-RESIDENCY]).

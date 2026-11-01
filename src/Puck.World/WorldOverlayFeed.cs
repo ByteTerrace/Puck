@@ -150,6 +150,16 @@ internal sealed class WorldOverlayFeed {
         }
     }
 
+    // The read-only label the editor section of the world a seat is routed to authors, or null where it authors none.
+    private string? ReadOnlyLabel(int slot) {
+        m_bindings.GetRoutedState(
+            definition: out var routed,
+            slot: slot,
+            state: out _
+        );
+
+        return routed.EditorRaw?.ReadOnlyLabel;
+    }
     // The primary player's family drives the glyph theme; the first connected pad stands in until per-player
     // family routing exists.
     private GamepadType ResolveFamily() {
@@ -359,8 +369,8 @@ internal sealed class WorldOverlayFeed {
                     start: 0
                 ),
                 Label: ((barText && authoring.PageLabel)
-                ? ((string.Equals(a: view.PageId, b: WorldEditorBindings.BuildPage, comparisonType: StringComparison.Ordinal) && m_editor.IsReadOnly(slot: slot))
-                    ? WorldEditorBindings.ReadOnlyLabel
+                ? ((m_bindings.IsBuilding(slot: slot) && m_editor.IsReadOnly(slot: slot) && (ReadOnlyLabel(slot: slot) is { } readOnly))
+                    ? readOnly
                     : (view.Label ?? view.PageId))
                 : string.Empty),
                 Modifiers: m_modifiers[viewIndex].AsMemory(

@@ -1,7 +1,7 @@
 // The faerie: a 24 cm seed of warm light in a continuous ivory eye. Its character lives in these world sources
 // and companion.wat. The engine supplies ordinary colliding free flight, Drive and Observe.
 // Imported before hall.puck: body 42 remains the companion and the lift keeps its own population slot.
-import "inputs"
+import "../standard/inputs"
 import "companion-senses"
 
 let companionBody = 42

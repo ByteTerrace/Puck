@@ -3057,12 +3057,6 @@
       "additionalProperties": false,
       "title": "WorldCameraSelectCase"
     },
-    "WorldCameraSelectCaseList": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/WorldCameraSelectCase"
-      }
-    },
     "WorldCameraProgramOpSelectProgram": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
       "properties": {
@@ -3074,8 +3068,11 @@
           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases."
         },
         "cases": {
-          "$ref": "#/$defs/WorldCameraSelectCaseList",
-          "description": "The candidate programs, keyed by Value. At most one case per value."
+          "description": "The candidate programs, keyed by Value. At most one case per value.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldCameraSelectCase"
+          }
         },
         "default": {
           "description": "The program resolved when no case\u0027s value matches Key.",
@@ -3187,341 +3184,6 @@
       "items": {
         "$ref": "#/$defs/WorldCameraProgramOp"
       }
-    },
-    "WorldCameraProgramOpAnchorNullable": {
-      "description": "Establishes the CURRENT subject \u2014 the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject\u0027s own position (the \u0022first person\u0022 default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "subject": {
-          "$ref": "#/$defs/WorldCameraSubject",
-          "description": "The subject to resolve."
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "subject"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpAnchorBare"
-    },
-    "WorldCameraProgramOpBlendNullable": {
-      "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "a": {
-          "description": "The program resolved at Weight 0.",
-          "type": "string"
-        },
-        "b": {
-          "description": "The program resolved at Weight 1.",
-          "type": "string"
-        },
-        "weight": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding."
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "a",
-        "b",
-        "weight"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpBlendBare"
-    },
-    "WorldCameraProgramOpClampPitchNullable": {
-      "description": "Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat\u0027s own views.seatControl band already clamps its LIVE delta before this ever runs \u2014 this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "minPitch": {
-          "description": "The minimum pitch, radians.",
-          "type": "number"
-        },
-        "maxPitch": {
-          "description": "The maximum pitch, radians.",
-          "type": "number"
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "minPitch",
-        "maxPitch"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpClampPitchBare"
-    },
-    "WorldCameraProgramOpDynamicsNullable": {
-      "description": "Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame \u2014 never affects the resolved pose itself. At most one per program.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "row": {
-          "description": "The referenced dynamics row name; must resolve.",
-          "type": "string"
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "row"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpDynamicsBare"
-    },
-    "WorldCameraProgramOpFieldOfViewNullable": {
-      "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "fieldOfViewRadians": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The field of view."
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "fieldOfViewRadians"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpFieldOfViewBare"
-    },
-    "WorldCameraProgramOpLookAtNullable": {
-      "description": "Sets the aim target.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "subject": {
-          "$ref": "#/$defs/WorldCameraSubjectNullable",
-          "description": "The subject to look at, or null to look along the current subject\u0027s own forward axis from the eye, at FocusDistance."
-        },
-        "targetOffset": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
-          "default": null
-        },
-        "worldAxes": {
-          "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
-          "type": "boolean",
-          "default": false
-        },
-        "focusDistance": {
-          "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
-          "type": "number",
-          "default": 6
-        },
-        "closeTargetOffset": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
-          "default": null
-        },
-        "closeTargetStartFraction": {
-          "description": "The boom fraction below which target migration begins.",
-          "type": "number",
-          "default": 0.6
-        },
-        "closeTargetFullFraction": {
-          "description": "The boom fraction at which migration reaches the close target.",
-          "type": "number",
-          "default": 0.2
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "subject"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpLookAtBare"
-    },
-    "WorldCameraProgramOpOffsetNullable": {
-      "description": "Places the eye at an offset from the current subject\u0027s pose.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "value": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The offset."
-        },
-        "worldAxes": {
-          "description": "Whether Value uses world axes rather than the subject\u0027s own.",
-          "type": "boolean",
-          "default": false
-        },
-        "spreadPullback": {
-          "description": "The group-spread multiplier applied to the offset \u2014 meaningful only when the program\u0027s OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).",
-          "type": "number",
-          "default": 0
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "value"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpOffsetBare"
-    },
-    "WorldCameraProgramOpOrbitNullable": {
-      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "distance": {
-          "description": "The finite positive orbit distance.",
-          "type": "number"
-        },
-        "yaw": {
-          "$ref": "#/$defs/BindableAngle",
-          "description": "The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc."
-        },
-        "pitch": {
-          "$ref": "#/$defs/BindableAngle",
-          "description": "The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock."
-        },
-        "pivotOffset": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
-          "default": null
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "distance",
-        "yaw",
-        "pitch"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpOrbitBare"
-    },
-    "WorldCameraProgramOpPathNullable": {
-      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B FieldOfView; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "curve": {
-          "description": "The referenced curves row name; must resolve.",
-          "type": "string"
-        },
-        "fraction": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding."
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "curve",
-        "fraction"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpPathBare"
-    },
-    "WorldCameraProgramOpSelectProgramNullable": {
-      "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "key": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases."
-        },
-        "cases": {
-          "$ref": "#/$defs/WorldCameraSelectCaseList",
-          "description": "The candidate programs, keyed by Value. At most one case per value."
-        },
-        "default": {
-          "description": "The program resolved when no case\u0027s value matches Key.",
-          "type": "string"
-        },
-        "opcode": {
-          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "key",
-        "cases",
-        "default"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraProgramOpSelectProgramBare"
     },
     "WorldAnchorNonNullable": {
       "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
@@ -8889,6 +8551,18 @@
       ],
       "title": "WorldCapability"
     },
+    "StringListNullable": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
     "CommandPhase": {
       "enum": [
         "Started",
@@ -8943,16 +8617,7 @@
       ],
       "properties": {
         "sources": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
+          "$ref": "#/$defs/StringListNullable"
         },
         "command": {
           "type": [
@@ -9067,6 +8732,127 @@
       "additionalProperties": false,
       "title": "BindingPageDefinition"
     },
+    "WorldBindingBarBank": {
+      "description": "One stacked binding-bar bank: what it is \u2014 the page it renders and its opacities. Several banks of the same slot set render simultaneously, each showing what that bank\u0027s OWN page binds. Where a bank sits, and which plates it shows, is each layout\u0027s banks table\u0027s to say; draw order is this list\u0027s order (later draws on top).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "id": {
+          "description": "The bank\u0027s stable id \u2014 its mutation address and its key in every layout\u0027s bank table.",
+          "type": "string"
+        },
+        "pageId": {
+          "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile.",
+          "type": "string"
+        },
+        "alpha": {
+          "description": "This bank\u0027s opacity when it is NOT the seat\u0027s currently active page.",
+          "type": "number"
+        },
+        "activeAlpha": {
+          "description": "This bank\u0027s opacity when it IS the seat\u0027s currently active page; null draws fully opaque (1.0) while active.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "pageId",
+        "alpha"
+      ],
+      "additionalProperties": false,
+      "title": "WorldBindingBarBank"
+    },
+    "WorldBindingBarBankList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorldBindingBarBank"
+      }
+    },
+    "WorldBindingBarSlotPlacement": {
+      "description": "One physical control\u0027s plate on a bank, in button pitches from the bank\u0027s anchor \u2014 x right, y UP.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "source": {
+          "description": "The physical control\u0027s input source id (a slotSet member).",
+          "type": "string"
+        },
+        "x": {
+          "description": "Pitches right of the anchor (negative = left).",
+          "type": "number"
+        },
+        "y": {
+          "description": "Pitches above the anchor (negative = below).",
+          "type": "number"
+        },
+        "badge": {
+          "description": "Where the plate\u0027s physical-button badge sits, [x, y] as signed multiples of the layout\u0027s glyph offset: \u002B1 right / up, \u22121 left / down, 0 centered. A plate in a cluster points its badge outward \u2014 a d-pad\u0027s up button badges up, its left button left \u2014 so the badge never lands on a neighbour. null is the up-right corner, [1, 1].",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "source",
+        "x",
+        "y"
+      ],
+      "additionalProperties": false,
+      "title": "WorldBindingBarSlotPlacement"
+    },
+    "WorldBindingBarPiece": {
+      "description": "One placed table: a named table of the layout, moved by At.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "table": {
+          "description": "The key of a table in the layout\u0027s tables.",
+          "type": "string"
+        },
+        "at": {
+          "description": "The displacement, [x, y] in button pitches (x right, y up); null is none.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          },
+          "default": null
+        },
+        "badge": {
+          "description": "A badge direction for every plate of this piece, overriding the table rows\u0027; see Badge. null keeps each row\u0027s own.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "table"
+      ],
+      "additionalProperties": false,
+      "title": "WorldBindingBarPiece"
+    },
     "BindingBarEdge": {
       "enum": [
         "Bottom",
@@ -9096,6 +8882,189 @@
       },
       "additionalProperties": false,
       "title": "WorldBindingBarAnchor"
+    },
+    "WorldBindingBarBankPlacement": {
+      "description": "One bank\u0027s place on a layout \u2014 a bank is a bar: where it hangs and the pieces it is made of. A control in the slot set that no piece places is not shown on this bank; a source placed by two pieces takes the later one.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "pieces": {
+          "description": "The placed tables, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorldBindingBarPiece"
+          }
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldBindingBarAnchor",
+          "description": "Where this bank hangs, or null to share the layout\u0027s anchor (and so its frame: the pieces then nest against the other banks there).",
+          "default": null
+        }
+      },
+      "required": [
+        "pieces"
+      ],
+      "additionalProperties": false,
+      "title": "WorldBindingBarBankPlacement"
+    },
+    "WorldBindingBarLayout": {
+      "description": "The authored layout of one on-screen binding bar: its tables, its banks, and its size tuning. Every tuning field is an optional override of the engine\u0027s resolved default (the Default* constants below): lengths are fractions of the seat viewport\u0027s height, every *Ratio is a multiple of the button size, and every *MinPx is a device-pixel floor.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "tables": {
+          "description": "The plate tables by name \u2014 a cross, a strip, a column \u2014 each authored once and placed by the banks\u0027 pieces as many times as the layout needs.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/$defs/WorldBindingBarSlotPlacement"
+            }
+          },
+          "default": null
+        },
+        "banks": {
+          "description": "Where each bank sits and what it shows, by bank id. A bank with no row here is not drawn in this layout.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/WorldBindingBarBankPlacement"
+          },
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldBindingBarAnchor",
+          "description": "Where the bar\u0027s own anchor (the modifier row, page label, chord hints) hangs, and the anchor every bank without its own shares.",
+          "default": null
+        },
+        "buttonSize": {
+          "description": "The slot-plate size at most: the writer shrinks it so every anchor group fits its seat region, and a seat\u0027s stored bar scale multiplies it.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "glyphOffsetRatio": {
+          "description": "The badge\u0027s offset as a fraction of ButtonSize \u2014 each plate\u0027s badge takes its own signed multiples of it (Badge).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "glyphSizeRatio": {
+          "description": "The badge\u0027s size as a fraction of ButtonSize.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "modifierHalfRatio": {
+          "description": "The modifier indicator\u0027s plate half-extent, in button sizes.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "modifierSpacingRatio": {
+          "description": "The modifier indicators\u0027 pitch, in button sizes.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "modifierGlyphRatio": {
+          "description": "The modifier badge\u0027s half-extent, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "labelCellRatio": {
+          "description": "The page label\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "labelCellMinPx": {
+          "description": "The page label\u0027s glyph-cell floor, px.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "labelGapRatio": {
+          "description": "The page label\u0027s drop below the anchor, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintCellRatio": {
+          "description": "A chord-hint line\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintCellMinPx": {
+          "description": "A chord-hint line\u0027s glyph-cell floor, px.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintLineStepRatio": {
+          "description": "The chord-hint line pitch, as a fraction of the hint cell height.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "hintBaseGapRatio": {
+          "description": "The hint stack\u0027s lift above the anchor, as a fraction of the modifier plate half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldBindingBarLayout"
+    },
+    "IReadOnlyDictionaryStringWorldBindingBarLayout": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/WorldBindingBarLayout"
+      }
     },
     "WorldSpeakerSourceNone": {
       "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state).",
@@ -9259,46 +9228,6 @@
           "$ref": "#/$defs/CameraBloom",
           "description": "The camera\u0027s optical scatter override; absent inherits the world.",
           "default": null
-        },
-        "anchorOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpAnchorNullable",
-          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
-        },
-        "blendOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpBlendNullable",
-          "description": "Gets the program\u0027s Blend op, or null."
-        },
-        "clampPitchOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpClampPitchNullable",
-          "description": "Gets the program\u0027s ClampPitch op, or null."
-        },
-        "dynamicsOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpDynamicsNullable",
-          "description": "Gets the program\u0027s Dynamics op, or null."
-        },
-        "fovOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpFieldOfViewNullable",
-          "description": "Gets the program\u0027s FieldOfView op, or null."
-        },
-        "lookAtOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpLookAtNullable",
-          "description": "Gets the program\u0027s LookAt op, or null."
-        },
-        "offsetOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpOffsetNullable",
-          "description": "Gets the program\u0027s Offset op, or null."
-        },
-        "orbitOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpOrbitNullable",
-          "description": "Gets the program\u0027s Orbit op, or null."
-        },
-        "pathOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpPathNullable",
-          "description": "Gets the program\u0027s Path op, or null."
-        },
-        "selectOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpSelectProgramNullable",
-          "description": "Gets the program\u0027s SelectProgram op, or null."
         }
       },
       "required": [

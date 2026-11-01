@@ -895,7 +895,7 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         ValidateEditor(
-            editor: definition.Editor,
+            editor: definition.EditorRaw,
             errors: errors
         );
         ValidateSteerBinding(

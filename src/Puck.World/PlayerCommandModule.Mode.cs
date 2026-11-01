@@ -375,7 +375,7 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: WorldEditorBindings.ToggleCommand,
-            description: $"Flips a seat between playing and building: player.build [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1), the same flip player.mode editor build|play makes. While a seat builds, its bindings resolve in the engine's build group (the build page: the toggle, the grid and snapping, placing, and nudging and turning the seat's current placement) and its view draws its grid. A seat whose principal may not mutate placements still builds, and the echo marks it read-only.",
+            description: $"Flips a seat between playing and building: player.build [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1), the same flip player.mode editor build|play makes. While a seat builds, the world's authored context row for the editor family selects its build page (the standard's: the toggle, the grid and snapping, placing, and nudging and turning the seat's current placement) and its view draws its grid. A seat whose principal may not mutate placements still builds, and the echo marks it read-only.",
             handler: BuildHandler,
             routing: CommandRouting.Simulation
         );

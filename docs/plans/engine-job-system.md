@@ -276,7 +276,7 @@ Not moved, and why:
 
 The scheduling stage, with no new thread, keeps rated work off the frames that
 run a step (`PresentationRate.Holds` with `FrameContext.StepsNext`), holds the
-bodies no view or shadow cascade can show (`SdfUpdateRateTiers.HeldHertz`), and
+bodies nothing can show or read (`SdfUpdateRateTiers.HeldHertz`), and
 staggers the bodies that take a tier together by half its period
 (`WorldCreationInstances.Rates.cs`). Decision: that stage is the `Frame`
 class's placement policy, and the scheduler re-decides none of it. It is one object the frame thread reads once per
