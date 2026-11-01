@@ -1096,11 +1096,10 @@ signs, places, tours, the alchemy elements and the games' rules.
 
 ### Port the experimental worlds' missing features
 
-Owner: debug-world content lane (an inventory lane first; puck-world, puck-dsl,
-sdf-authoring) · ordinary, the owner's direction · Next: the inventory lane lists
-each feature the experimental worlds have that the debug world lacks, with its
-experimental source and the debug-world place it belongs; then one port lane per
-group of features.
+Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
+ordinary, the owner's direction · Next: lane 1 (authored render passes), then
+the others in the order below; each lane opens by confirming its site in the
+debug world and its work-budget share.
 
 The debug world is the proving ground (AGENTS.md): the benchmark that shows the
 engine's features compose and run well on the target machines, and the
@@ -1110,12 +1109,32 @@ debug world lacks is ported into the debug world, every plan's forcing artifacts
 and checks target `worlds/debug`, and plan text that migrates or revives those
 worlds in place is rewritten.
 
-- Inventory (the first lane, read-only): walk `experimental/` (the quarantined
-  worlds, their districts and rules, their addons, their tests; see the
-  [experimental README](../../experimental/README.md)) and list each feature with
-  its experimental source and the debug-world place it belongs. Search the
-  engine and the standard package first (AGENTS.md rule 7): most features are
-  already built and tested, so a port is mostly wiring documents to what exists.
+- The inventory is [port-experimental](port-experimental.md): each feature with
+  its experimental source, whether the engine and the standard already support
+  it (wire, standard or gap), its place in the debug world and its size, plus
+  what the debug world already has in another form. Almost every feature is
+  already built and tested, so a port is wiring documents to what exists; the
+  gaps it names are a region-scoped pair primitive (the combat yard) and, only
+  if measured, a level of detail for instanced animated geometry (the meadow).
+  The lanes, ordered by the engine systems the debug world does not yet
+  exercise:
+  1. Authored render passes: a state-bound HLSL pass, a compare studio (medium).
+  2. Seamless topology and carried identity: the quilt, a closing seam, a pitched
+     seam, `border` composition, an identity gate (medium).
+  3. Water and fields: a medium pool, flow across basins (medium).
+  4. Creature garden: flocks, a stalker, wall crawling, rumor (large).
+  5. Second seat and hidden information: two seats, Lineup, hidden ranks, Word
+     spy (large).
+  6. Traversal course: kart, ledge course, planetoids, grapple (large).
+  7. Rules arcade: tetromino as rules, snake, rulepush (large; needs lane 1).
+  8. Physical judges: billiards, bowling, dominoes, paddleball (medium).
+  9. Meadow and foliage: the wind meadow, trees and rocks (medium).
+  10. Packages as examples: the familiars rules module (large).
+  11. Board tables II: Chinese checkers, hex lines, mancala, tic-tac-toe,
+      backgammon (large).
+  12. Card tables: Spider, poker, Hearts (needs lane 5 for the last two).
+  13. Combat yard: the arena modules (large; the job-system memo first).
+  14. Small items: the head-track probe, the studio gate.
 - Ports: each group lands as `.puck` content in `worlds/debug/`, or in
   `worlds/standard/` where it is a reusable design, and is verified by running
   the debug world (`puck_world_start`, captures, `puck sweep` signals). New engine
