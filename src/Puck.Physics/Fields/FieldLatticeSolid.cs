@@ -44,9 +44,8 @@ public sealed class FieldLatticeSolid : IFieldEvaluator, IFieldBounds {
         ((cell.Value > 0L) && ((((Int128)cell.Value) * ReachCells) <= long.MaxValue));
 
     /// <inheritdoc/>
-    /// <remarks>A box distance moves no faster than its point (<see cref="StepScale"/>), and each answer rounds one
-    /// exact length once.</remarks>
-    public FieldEvaluatorCapabilities Capabilities => new(StepScale: StepScale, ValueError: FixedQ4816.Epsilon, WarpFree: true);
+    /// <remarks>A box distance moves no faster than its point (<see cref="StepScale"/>).</remarks>
+    public FieldEvaluatorCapabilities Capabilities => new(StepScale: StepScale, WarpFree: true);
 
     // A column's box, exact: the point query and the bounds read it in Int128, where no coordinate of it wraps however
     // near the carrier's ends the lattice, its column tops or the query sit, so the two share one arithmetic.

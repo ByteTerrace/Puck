@@ -27,7 +27,8 @@ public interface IWorldScreenPresenter {
     void ReconcileCameras(IReadOnlyList<WorldCamera> cameras);
     /// <summary>Reconciles the declared-screen slot table against a mutated screen list.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
-    void ReconcileScreens(IReadOnlyList<WorldScreen> screens);
+    /// <param name="materials">The live definition's screen materials, which the screens name.</param>
+    void ReconcileScreens(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreenMaterial> materials);
     /// <summary>Hands the binder a captured frame's packed transforms and simulation tick, once the frame is captured.</summary>
     /// <param name="transforms">This frame's packed dynamic transforms, identical to the main engine's.</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>

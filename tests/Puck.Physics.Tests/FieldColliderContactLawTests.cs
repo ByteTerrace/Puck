@@ -17,7 +17,7 @@ public sealed class FieldColliderContactLawTests {
                 gradientStep: Q(value: 1d / 32d)));
         var sphere = Capsule() with { Kind = FixedBodyColliderKind.Sphere, Center = FixedVector3.Zero, Radius = Q(value: 0.5d) };
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.25d, z: 0d),
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.25d, z: 0d),
             push: out var push, skin: Skin, volume: sphere));
         // One raw of this field's value spans 1024 raws of distance, so its zero set lies within half of that, 1/128 m,
         // of the sphere.
@@ -57,16 +57,35 @@ public sealed class FieldColliderContactLawTests {
                 gradientStep: Q(value: 1d / 32d), bounded: false));
 
         // The foot sphere clears y=0 by 0.2 m, while the head sphere crosses y=2 by 0.25 m.
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 0.2d, z: 0d),
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 0.2d, z: 0d),
             push: out var push, skin: Skin, volume: Capsule()));
         Near(expected: -1d, actual: push.Normal.Y);
         Near(expected: 0.3d, actual: push.Penetration);
     }
 
-    // F(p) = gain·(|p| − radius): its zero set is the sphere, and value over gradient length is the exact distance.
-    private sealed class ScaledSphereField(FixedQ4816 radius, FixedQ4816 gain) : IFieldEvaluator {
+    // F(p) = gain·(|p| − radius): its zero set is the sphere, and value over gradient length is the exact distance. Its
+    // box bounds read the least and greatest distance from the origin to the box, widened a raw past the point rule's
+    // roundings.
+    private sealed class ScaledSphereField(FixedQ4816 radius, FixedQ4816 gain) : IFieldEvaluator, IFieldBounds {
         public int Samples { get; private set; }
-        public FieldEvaluatorCapabilities Capabilities => new(StepScale: FixedQ4816.One, ValueError: FixedQ4816.Zero, WarpFree: true);
+        public int BoxReads { get; private set; }
+        public FieldEvaluatorCapabilities Capabilities => new(StepScale: FixedQ4816.One, WarpFree: true);
+        public FixedQ4816 StepScale => FixedQ4816.One;
+
+        public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
+            distance = default;
+            if (!lower.TryDelta(delta: out var low, origin: FixedPosition.Zero) || !upper.TryDelta(delta: out var high, origin: FixedPosition.Zero)) { return false; }
+            BoxReads++;
+            static double Near(double a, double b) => ((a > 0d) ? a : ((b < 0d) ? -b : 0d));
+            static double Far(double a, double b) => Math.Max(val1: Math.Abs(value: a), val2: Math.Abs(value: b));
+            var (lx, ly, lz, hx, hy, hz) = ((double)low.X, (double)low.Y, (double)low.Z, (double)high.X, (double)high.Y, (double)high.Z);
+            var near = Math.Sqrt(d: ((Math.Pow(x: Near(a: lx, b: hx), y: 2d) + Math.Pow(x: Near(a: ly, b: hy), y: 2d)) + Math.Pow(x: Near(a: lz, b: hz), y: 2d)));
+            var far = Math.Sqrt(d: ((Math.Pow(x: Far(a: lx, b: hx), y: 2d) + Math.Pow(x: Far(a: ly, b: hy), y: 2d)) + Math.Pow(x: Far(a: lz, b: hz), y: 2d)));
+            var slack = (2d / 65536d);
+            distance = new FixedInterval(lower: FixedQ4816.FromDouble(value: (((double)gain * (near - (double)radius)) - slack)),
+                upper: FixedQ4816.FromDouble(value: (((double)gain * (far - (double)radius)) + slack)));
+            return true;
+        }
 
         public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
             material = 0;
@@ -85,12 +104,12 @@ public sealed class FieldColliderContactLawTests {
 
     private static FixedQ4816 Q(double value) => FixedQ4816.FromDouble(value: value);
     private static FixedVector3 V(double x, double y, double z) => new(X: Q(value: x), Y: Q(value: y), Z: Q(value: z));
-    private static FixedStaticCollider Sphere(FixedVector3 center, FixedQuaternion rotation) => FixedStaticCollider.FieldSurface(
-        center: center,
-        field: new FixedColliderField(field: new ScaledSphereField(gain: Q(value: 0.5d), radius: Radius), gradientStep: Q(value: 1d / 32d)),
-        halfExtent: V(x: 10d, y: 10d, z: 10d),
-        rotation: rotation
-    );
+    private static FixedStaticCollider Sphere(FixedVector3 center, FixedQuaternion rotation) {
+        var field = new ScaledSphereField(gain: Q(value: 0.5d), radius: Radius);
+
+        return FixedStaticCollider.FieldSurface(center: center, field: new FixedColliderField(field: field, gradientStep: Q(value: 1d / 32d)) { Bounds = field },
+            halfExtent: V(x: 10d, y: 10d, z: 10d), rotation: rotation);
+    }
     private static FixedBodyColliderVolume Capsule() => new(Center: V(x: 0d, y: 0.35d, z: 0d), Endpoint: V(x: 0d, y: 1.7d, z: 0d),
         HalfExtents: FixedVector3.Zero, Kind: FixedBodyColliderKind.Capsule, Radius: Q(value: 0.35d), Rotation: FixedQuaternion.Identity);
     private static void Near(double expected, FixedQ4816 actual, double tolerance = 2e-3) =>
@@ -102,7 +121,7 @@ public sealed class FieldColliderContactLawTests {
         // The foot 0.1 m inside the sphere's top: the lower core point is 0.25 m above the surface.
         var position = V(x: 0d, y: 9.9d, z: 0d);
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: position, push: out var push, skin: Skin, volume: Capsule()));
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: position, push: out var push, skin: Skin, volume: Capsule()));
         Near(actual: push.Penetration, expected: 0.15d);
         Near(actual: push.Normal.Y, expected: 1d);
         Assert.False(condition: push.IsEdge);
@@ -114,7 +133,7 @@ public sealed class FieldColliderContactLawTests {
         // The upper core point 0.25 m under the sphere's bottom.
         var position = V(x: 0d, y: -11.95d, z: 0d);
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: position, push: out var push, skin: Skin, volume: Capsule()));
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: position, push: out var push, skin: Skin, volume: Capsule()));
         Near(actual: push.Penetration, expected: 0.15d);
         Near(actual: push.Normal.Y, expected: -1d);
     }
@@ -125,37 +144,30 @@ public sealed class FieldColliderContactLawTests {
         // Upright beside the sphere's equator: the core point level with the centre is nearest, 0.3 m out.
         var position = V(x: 10.3d, y: -1d, z: 0d);
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: position, push: out var push, skin: Skin, volume: Capsule()));
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: position, push: out var push, skin: Skin, volume: Capsule()));
         Near(actual: push.Penetration, expected: 0.1d, tolerance: 0.01d);
         Near(actual: push.Normal.X, expected: 1d, tolerance: 0.01d);
     }
 
     [Fact]
-    public void ABodyTheBoundScaleProvesClearTakesOneSampleAndNoPush() {
+    public void BoxBoundsProveAFarBodyClearWithoutReadingTheField() {
         var collider = Sphere(center: FixedVector3.Zero, rotation: FixedQuaternion.Identity);
         var field = Assert.IsType<ScaledSphereField>(@object: collider.Field!.Field);
-
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), push: out _, skin: Skin, volume: Capsule()));
-        Assert.Equal(expected: 1, actual: field.Samples);
-    }
-
-    [Fact]
-    public void AnEnvelopeProvesAFarBodyClearAndLeavesANearOneToTheField() {
-        var plain = Sphere(center: FixedVector3.Zero, rotation: FixedQuaternion.Identity);
-        var collider = (plain with { Field = new FixedColliderField(field: plain.Field!.Field, gradientStep: plain.Field.GradientStep) {
-            Envelope = new ScaledSphereField(gain: FixedQ4816.One, radius: Radius),
-            EnvelopeGrowth = Q(value: 0.1d),
-        } });
         var box = new FixedBodyColliderVolume(Center: FixedVector3.Zero, Endpoint: FixedVector3.Zero, HalfExtents: V(x: 0.5d, y: 0.25d, z: 0.5d),
             Kind: FixedBodyColliderKind.Box, Radius: FixedQ4816.Zero, Rotation: FixedQuaternion.Identity);
 
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), push: out _, skin: Skin, volume: Capsule()));
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), push: out _, skin: Skin, volume: box));
-        Assert.Equal(expected: 0, actual: Assert.IsType<ScaledSphereField>(@object: plain.Field!.Field).Samples);
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 9.9d, z: 0d), push: out var push, skin: Skin, volume: Capsule()));
-        Near(actual: push.Penetration, expected: 0.15d);
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.2d, z: 0d), push: out var boxPush, skin: Skin, volume: box));
-        Near(actual: boxPush.Penetration, expected: 0.1d);
+        Assert.Equal(expected: FixedFieldContactOutcome.Clear, actual: FixedFieldColliderContact.Solve(collider: in collider, orientation: FixedQuaternion.Identity,
+            position: V(x: 0d, y: 20d, z: 0d), skin: Skin, volume: Capsule()).Outcome);
+        Assert.Equal(expected: FixedFieldContactOutcome.Clear, actual: FixedFieldColliderContact.Solve(collider: in collider, orientation: FixedQuaternion.Identity,
+            position: V(x: 0d, y: 20d, z: 0d), skin: Skin, volume: box).Outcome);
+        Assert.Equal(expected: 0, actual: field.Samples);
+        Assert.Equal(expected: 2, actual: field.BoxReads);
+
+        // Without bounds nothing is proved clear: the far body is unproved, never clear.
+        var unbounded = (collider with { Field = new FixedColliderField(field: field, gradientStep: collider.Field.GradientStep) });
+
+        Assert.Equal(expected: FixedFieldContactOutcome.Unproved, actual: FixedFieldColliderContact.Solve(collider: in unbounded,
+            orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 20d, z: 0d), skin: Skin, volume: Capsule()).Outcome);
     }
 
     [Fact]
@@ -165,12 +177,12 @@ public sealed class FieldColliderContactLawTests {
             Kind: FixedBodyColliderKind.Box, Radius: FixedQ4816.Zero, Rotation: FixedQuaternion.Identity);
         var ellipsoid = (box with { Kind = FixedBodyColliderKind.Ellipsoid });
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.2d, z: 0d), push: out var boxPush, skin: Skin, volume: box));
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.2d, z: 0d), push: out var boxPush, skin: Skin, volume: box));
         Near(actual: boxPush.Penetration, expected: 0.1d);
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.2d, z: 0d), push: out var ellipsoidPush, skin: Skin, volume: ellipsoid));
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.2d, z: 0d), push: out var ellipsoidPush, skin: Skin, volume: ellipsoid));
         Near(actual: ellipsoidPush.Penetration, expected: 0.1d);
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.31d, z: 0d), push: out _, skin: Skin, volume: box));
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 40d, z: 0d), push: out _, skin: Skin, volume: box));
+        Assert.False(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 10.31d, z: 0d), push: out _, skin: Skin, volume: box));
+        Assert.False(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: 40d, z: 0d), push: out _, skin: Skin, volume: box));
     }
 
     [Fact]
@@ -180,7 +192,7 @@ public sealed class FieldColliderContactLawTests {
         var sphere = new FixedBodyColliderVolume(Center: FixedVector3.Zero, Endpoint: FixedVector3.Zero, HalfExtents: FixedVector3.Zero,
             Kind: FixedBodyColliderKind.Sphere, Radius: Q(value: 0.5d), Rotation: FixedQuaternion.Identity);
 
-        Assert.True(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 100d, y: 10.4d, z: 0d), push: out var push, skin: Skin, volume: sphere));
+        Assert.True(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 100d, y: 10.4d, z: 0d), push: out var push, skin: Skin, volume: sphere));
         Near(actual: push.Penetration, expected: 0.15d);
         Near(actual: push.Normal.Y, expected: 1d);
 
@@ -220,7 +232,7 @@ public sealed class FieldColliderContactLawTests {
 
     // A field that answers only on one plane of y, reading zero there.
     private sealed class PlaneOnlyField(FixedQ4816 y) : IFieldEvaluator {
-        public FieldEvaluatorCapabilities Capabilities => new(StepScale: FixedQ4816.One, ValueError: FixedQ4816.Zero, WarpFree: true);
+        public FieldEvaluatorCapabilities Capabilities => new(StepScale: FixedQ4816.One, WarpFree: true);
 
         public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
             material = 0;
@@ -240,9 +252,9 @@ public sealed class FieldColliderContactLawTests {
         var box = new FixedBodyColliderVolume(Center: V(x: 0d, y: 3d, z: 0d), Endpoint: FixedVector3.Zero, HalfExtents: V(x: 0.5d, y: 0.25d, z: 0.5d),
             Kind: FixedBodyColliderKind.Box, Radius: FixedQ4816.Zero, Rotation: FixedQuaternion.Identity);
 
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Skin, volume: wide));
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Skin, volume: box));
-        Assert.False(condition: collider.TryGetPush(orientation: FixedQuaternion.Identity, position: V(x: 0d, y: -1.025d, z: 0d), push: out _, skin: Skin, volume: (box with { Center = V(x: 0d, y: 2.05d, z: 0d) })));
+        Assert.False(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Skin, volume: wide));
+        Assert.False(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: FixedVector3.Zero, push: out _, skin: Skin, volume: box));
+        Assert.False(condition: collider.TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: -1.025d, z: 0d), push: out _, skin: Skin, volume: (box with { Center = V(x: 0d, y: 2.05d, z: 0d) })));
     }
 
     [Fact]
@@ -253,7 +265,7 @@ public sealed class FieldColliderContactLawTests {
         Assert.NotNull(@object: bounded.WorldHalfExtent());
         Assert.Null(@object: unbounded.WorldHalfExtent());
         Assert.Throws<InvalidOperationException>(testCode: () => bounded.SupportPoint(direction: FixedVector3.UnitX));
-        Assert.Throws<InvalidOperationException>(testCode: () => (bounded with { Field = null }).TryGetPush(orientation: FixedQuaternion.Identity,
+        Assert.Throws<InvalidOperationException>(testCode: () => (bounded with { Field = null }).TryGetPush(uncertain: out _, orientation: FixedQuaternion.Identity,
             position: FixedVector3.Zero, push: out _, skin: Skin, volume: Capsule()));
         Assert.Throws<ArgumentNullException>(testCode: () => FixedStaticCollider.FieldSurface(center: FixedVector3.Zero, field: null!, halfExtent: FixedVector3.Zero, rotation: FixedQuaternion.Identity));
         Assert.Throws<ArgumentNullException>(testCode: () => new FixedColliderField(field: null!, gradientStep: FixedQ4816.One));

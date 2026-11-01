@@ -78,33 +78,23 @@ public sealed partial class WorldColliderSet {
         bounds = (((low + high) / FixedQ4816.FromInteger(value: 2)), ((high - low) / FixedQ4816.FromInteger(value: 2)));
         return colliders;
     }
-    // How far below the least of its shapes' readings a composed program can read: a smooth union lowers the lesser
-    // operand by at most a quarter of its radius, a hard union, subtraction or intersection never below it, and every
-    // other blend by at most its radius. A soft blend's radius floors at the kernels' minimum.
+    // How far below the least of its shapes' readings a composed program can read: each blend's growth past its operands
+    // (SdfBoundAlgebra.Growth), summed down the stream, since each compose sags from the least of what it joins.
     private static FixedQ4816 BlendGrowth(SdfProgram program) {
         var growth = 0.0;
 
         foreach (var instruction in program.Instructions) {
-            if (!(((instruction.Op == SdfOp.ShapeBlend) && !instruction.Detail) || (instruction.Op == SdfOp.PopField))) {
-                continue;
-            }
-
-            var blend = ((SdfBlendOp)instruction.Blend);
-            var radius = Math.Max(val1: Math.Abs(value: (double)instruction.Data1.X), val2: SdfProgram.SmoothRadiusMin);
-
-            if (blend == SdfBlendOp.SmoothUnion) {
-                growth += (radius / 4.0);
-            } else if (!((blend == SdfBlendOp.Union) || SdfBoundAlgebra.IsSubtraction(blend: blend) || SdfBoundAlgebra.IsIntersection(blend: blend))) {
-                growth += radius;
+            if (((instruction.Op == SdfOp.ShapeBlend) && !instruction.Detail) || (instruction.Op == SdfOp.PopField)) {
+                growth += SdfBoundAlgebra.Growth(blend: ((SdfBlendOp)instruction.Blend), radius: instruction.Data1.X);
             }
         }
 
         return (FixedDirectedRounding.TryCeilingFromDouble(result: out var ceiling, value: growth) ? ceiling : FixedQ4816.MaxValue);
     }
-    // The relieved program of one copy, its frame origin at offset from the copy's stamp origin, read as contact reads it,
-    // with the unrelieved program as its envelope: the surface lies where the shapes' union reads at most the amplitude.
+    // The relieved program of one copy, its frame origin at offset from the copy's stamp origin, read as contact reads it;
+    // its evaluator's own box bounds prove a body clear.
     private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
-        IReadOnlyList<FixedStaticCollider> bases, SdfProgram envelope) {
+        IReadOnlyList<FixedStaticCollider> bases) {
         var noise = document.Noise!;
         // The finest octave's wavelength in world units: the creation's units scaled by the stamp.
         var finest = MathF.Abs(x: noise.Frequency);
@@ -116,14 +106,15 @@ public sealed partial class WorldColliderSet {
         var wavelength = ((finest > 0f) ? (((float)transform.Scale) / finest) : float.PositiveInfinity);
         var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ((float)FixedColliderField.DefaultGradientStep), val2: (wavelength / 16f)));
 
+        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: true, transform: transform));
+
         return new FixedColliderField(
-            field: new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: true, transform: transform)),
+            field: evaluator,
             gradientStep: FixedQ4816.FromDouble(value: step),
             bounded: bounded
         ) {
             Bases = bases,
-            Envelope = new SdfFieldEvaluator(program: envelope),
-            EnvelopeGrowth = FixedQ4816.FromDouble(value: MathF.Abs(x: noise.Amplitude)),
+            Bounds = evaluator,
         };
     }
     // A creation copy's contact shapes in one scope, with its relief over their union or without it.
@@ -156,8 +147,7 @@ public sealed partial class WorldColliderSet {
             unbounded: out var unbounded);
         var (center, half) = (unbounded ? (transform.Origin, FixedVector3.Zero) : box);
         var local = (transform with { Origin = (transform.Origin - center) });
-        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document,
-            envelope: ReliefProgram(document: document, margin: margin, relieved: false, transform: local), margin: margin, transform: local);
+        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, transform: local);
 
         return FixedStaticCollider.FieldSurface(center: center, rotation: FixedQuaternion.Identity, halfExtent: half, field: field);
     }

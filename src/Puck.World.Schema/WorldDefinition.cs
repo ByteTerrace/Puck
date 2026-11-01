@@ -30,6 +30,7 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("spawnPoints"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpawnPoint>? SpawnPointsRaw = null,
     [property: JsonPropertyName("render"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderDefaults? RenderRaw = null,
     [property: JsonPropertyName("screens"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreen>? ScreensRaw = null,
+    [property: JsonPropertyName("screenMaterials"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMaterial>? ScreenMaterialsRaw = null,
     [property: JsonPropertyName("cameras"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCamera>? CamerasRaw = null,
     [property: JsonPropertyName("bodies"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodiesDefaults? PopulationRaw = null,
     [property: JsonPropertyName("seatDefaults"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlayerDefaults? PlayerDefaultsRaw = null,
@@ -383,6 +384,14 @@ public sealed partial record WorldDefinition(
     /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldScreen> Screens => (ScreensRaw ?? []);
+    /// <summary>Gets the screen materials screens and creation faces name; absent declares none, so every screen draws
+    /// its picture untreated.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldScreenMaterial> ScreenMaterials => (ScreenMaterialsRaw ?? []);
+    /// <summary>Returns the screen material a screen or face names.</summary>
+    /// <param name="id">The material's id, or <see langword="null"/> for none.</param>
+    /// <returns>The declared material, or <see langword="null"/> when <paramref name="id"/> is null or names none.</returns>
+    public WorldScreenMaterial? ScreenMaterialOf(string? id) => WorldScreenMaterial.Find(id: id, materials: ScreenMaterials);
     /// <summary>Gets the <c>search</c> section — ABSENT resolves to no jobs.</summary>
     [JsonIgnore]
     public WorldSearchSection Search => (SearchRaw ?? WorldSearchSection.Absent);

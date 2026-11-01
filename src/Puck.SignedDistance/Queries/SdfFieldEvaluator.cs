@@ -73,12 +73,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // A scope's compiled candidate scale is a 2⁻³² fraction (CompileScopeScale).
     private const int ScopeScaleBits = 32;
     private const double ScopeScaleOne = 4294967296.0;
-    // The raws every answer may lie from the function the step scale bounds before any relief: each shape's and blend's
-    // own rounding.
-    private const long BaseValueErrorRaws = 16L;
-    // The raws, per metre of amplitude, a relief op's lattice blends may round its unit noise by, before one more per
-    // octave summed.
-    private const long NoiseValueErrorRaws = 32L;
 
     // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. Central differences are
     // exact where the field is mirror-symmetric about the probe point ONLY when every op between the probe point and
@@ -100,8 +94,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // a chamfer's bevel arm makes the field OVERESTIMATE, so a march advancing by the
     // raw value steps past thin geometry and tunnels.
     private readonly FixedQ4816 m_stepScale;
-    // The most an answer lies from the function m_stepScale bounds (CertifiedValueError).
-    private readonly FixedQ4816 m_valueError;
     // One certified bound per cullable instance (see BuildCullBounds), sorted by First ascending — the order
     // program.Instances declares them in, since only one instance is open at a time.
     private readonly CullBound[] m_cullBounds;
@@ -141,8 +133,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         m_reading = reading;
         m_instructions = Compile(program: program, reading: reading);
-        m_stepScale = CertifiedStepScale(compiled: m_instructions, program: program, reading: reading);
-        m_valueError = CertifiedValueError(compiled: m_instructions);
+        m_stepScale = CertifiedStepScale(compiled: m_instructions, program: program);
         m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
         var reaches = BuildShapeReaches(compiled: m_instructions, program: program);
 
@@ -191,7 +182,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         );
 
     /// <inheritdoc/>
-    public FieldEvaluatorCapabilities Capabilities => new(StepScale: m_stepScale, ValueError: m_valueError, WarpFree: (m_reading == SdfFieldReading.Contact));
+    public FieldEvaluatorCapabilities Capabilities => new(StepScale: m_stepScale, WarpFree: (m_reading == SdfFieldReading.Contact));
     /// <summary>Gets what the evaluator reads its program as.</summary>
     public SdfFieldReading Reading => m_reading;
     /// <summary>Gets a value indicating whether the compiled stream declares any shape: without one, every query answers nothing.</summary>
@@ -369,6 +360,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var sweepCurves = program.SweepCurves;
         var paths = program.Paths;
         var compiled = new CompiledInstruction[instructions.Count];
+        var deferred = DeferredScopes(instructions: instructions, reading: reading);
 
         for (var index = 0; (index < instructions.Count); index++) {
             var instruction = instructions[index];
@@ -467,7 +459,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                         paths: paths
                     )
                 : null),
-                ScopeScale: (((instruction.Op == SdfOp.PopField) && !DefersScope(instruction: instruction, reading: reading))
+                ScopeScale: (((instruction.Op == SdfOp.PopField) && !deferred[index])
                     ? CompileScopeScale(scale: instruction.Data1.Y)
                     : 0L)
             );
@@ -488,17 +480,78 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return FixedQ4816.FromRawBits(value: ((long)((product >= 0) ? ((product + half) >> ScopeScaleBits) : -((-product + half) >> ScopeScaleBits))));
     }
-    // Whether a scope's pop keeps its candidate unscaled. Read for contact, a scope composed back by hard union changes
-    // no zero set by its positive scale, so it keeps the full Q48.16 resolution of its own field, which a scale under the
-    // grid would erase, and the certified step scale carries the scale instead (CertifiedStepScale).
-    private static bool DefersScope(in SdfInstruction instruction, SdfFieldReading reading) =>
-        ((reading == SdfFieldReading.Contact) && (instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f));
+    // Which scope pops keep their candidate unscaled. A positive scale changes no sign of the candidate, so it changes no
+    // zero set wherever nothing after the pop reads the candidate's magnitude: the pop composes by hard union, and the
+    // field it joins is, from there on, only composed by hard set operations (union, subtraction, intersection), never
+    // displaced, dilated, shelled or softly blended, at its own depth or through each enclosing pop. Such a pop keeps the
+    // full Q48.16 resolution of its own field, which a scale under the grid would erase, and the certified step scale
+    // carries the scale instead (CertifiedStepScale). Only the contact reading defers; the render reading scales as the
+    // kernels do. One backward pass: ok[d] says the depth-d accumulator, from the current position on, is never read by
+    // magnitude.
+    private static bool[] DeferredScopes(IReadOnlyList<SdfInstruction> instructions, SdfFieldReading reading) {
+        var deferred = new bool[instructions.Count];
+
+        if (reading != SdfFieldReading.Contact) {
+            return deferred;
+        }
+
+        var depths = new int[instructions.Count];
+        var depth = 0;
+
+        for (var index = 0; (index < instructions.Count); index++) {
+            depths[index] = depth;
+            depth += ((instructions[index].Op == SdfOp.PushField) ? 1 : ((instructions[index].Op == SdfOp.PopField) ? -1 : 0));
+        }
+
+        Span<bool> ok = stackalloc bool[SdfProgramBuilder.MaxFieldScopeDepth + 2];
+
+        ok.Fill(value: true);
+
+        for (var index = (instructions.Count - 1); (index >= 0); index--) {
+            var instruction = instructions[index];
+            var at = depths[index];
+
+            switch (instruction.Op) {
+                case SdfOp.PopField: {
+                        var hard = HardCompose(blend: instruction.Blend);
+
+                        deferred[index] = ((instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f) && ok[at - 1]);
+                        ok[at] = (hard && ok[at - 1]);
+                        ok[at - 1] &= hard;
+                        break;
+                    }
+                case SdfOp.ShapeBlend: {
+                        if (!instruction.Detail && !HardCompose(blend: instruction.Blend)) {
+                            ok[at] = false;
+                        }
+
+                        break;
+                    }
+                case SdfOp.Onion:
+                case SdfOp.Dilate:
+                case SdfOp.Displace:
+                case SdfOp.NoiseDisplace:
+                case SdfOp.CellDisplace:
+                case SdfOp.GaussianPush: {
+                        ok[at] = false;
+                        break;
+                    }
+                default: {
+                        break;
+                    }
+            }
+        }
+
+        return deferred;
+
+        static bool HardCompose(uint blend) => (blend is ((uint)SdfBlendOp.Union) or ((uint)SdfBlendOp.Subtraction) or ((uint)SdfBlendOp.Intersection));
+    }
     // The certified step scale: the program's, divided by how much steeper the compiled field is than the one its
     // analysis bounds, and floored onto the grid. A deferred scope's candidate is its scale's
     // reciprocal steeper, a scope scale raised to one tick its compiled scale over its baked one, and a scope's content
     // carries the factor its own deferred scopes left; every composition is at most as steep as its steepest operand
     // times that factor, so the factors multiply down a nesting and take the greatest across siblings.
-    private static FixedQ4816 CertifiedStepScale(SdfProgram program, CompiledInstruction[] compiled, SdfFieldReading reading) {
+    private static FixedQ4816 CertifiedStepScale(SdfProgram program, CompiledInstruction[] compiled) {
         Span<double> content = stackalloc double[SdfProgramBuilder.MaxFieldScopeDepth + 1];
         var depth = 0;
 
@@ -517,7 +570,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             var baked = (double)program.Instructions[index].Data1.Y;
             var factor = content[depth--];
 
-            if (DefersScope(instruction: program.Instructions[index], reading: reading)) {
+            if ((compiled[index].ScopeScale == 0L) && (baked > 0.0)) {
                 factor /= baked;
             } else if (compiled[index].ScopeScale > 0L) {
                 factor *= Math.Max(val1: 1.0, val2: (compiled[index].ScopeScale / (baked * ScopeScaleOne)));
@@ -528,23 +581,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return ConservativeStepScale(value: (((double)program.StepScale) / content[0]));
     }
-    // The most an answer lies from the function the certified scale bounds, in field units: a few raws of every shape's
-    // rounding, and each relief op's amplitude times its lattice blends' rounding, which the octave sum carries once per
-    // octave.
-    private static FixedQ4816 CertifiedValueError(CompiledInstruction[] compiled) {
-        var raws = BaseValueErrorRaws;
-
-        foreach (var instruction in compiled) {
-            if (instruction.Op is SdfOp.NoiseDisplace or SdfOp.CellDisplace) {
-                var octaves = ((instruction.Op == SdfOp.NoiseDisplace) ? ((long)instruction.Blend) : 1L);
-
-                raws += (((FixedQ4816.Abs(value: instruction.Data0Y) * FixedQ4816.FromInteger(value: (NoiseValueErrorRaws + octaves))).Value >> FixedQ4816.FractionBitCount) + 1L);
-            }
-        }
-
-        return FixedQ4816.FromRawBits(value: raws);
-    }
-
     private static SweepCurveFixed CompileSweepCurve(IReadOnlyList<SdfSweepCurve> sweepCurves, int instructionIndex) {
         foreach (var curve in sweepCurves) {
             if (curve.InstructionIndex != instructionIndex) {

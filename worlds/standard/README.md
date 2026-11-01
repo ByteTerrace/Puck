@@ -3,15 +3,26 @@
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 
-Import the package from a sibling world:
+Start from the worked example, [`../minimal/minimal.puck`](../minimal/minimal.puck): a world that imports the
+standard through its plain walker and declares only its floor, its spawn point and its seat count. It boots on its
+own (`--world worlds/minimal`), and everything it seats, frames, binds and builds with is the standard's.
 
 ```puck
-import "../standard/standard"
+import "../standard/walker"
 ```
 
 `standard.puck` composes `inputs.puck`, `quality.puck`, `skin.puck`, `controls.puck`, `editor.puck` and
-`companions.puck`, and expands `camera.puck`'s `cameraFeel()`. It names no schema, so it is a fragment that refines
-the importer's rows (the Moth basis's `bare` overlay among them) and not a world that boots on its own.
+`companions.puck`, and expands `camera.puck`'s `cameraFeel()`. It names no schema, so it is a fragment the importer
+composes, and it depends on nothing outside this package: its controls author the resting page (the `bare` overlay)
+they refine. `walker.puck` is the plain avatar: a capsule that walks, runs, jumps and falls, framed by `chaseCamera`.
+It imports the standard and refines it, so a world imports it in the standard's place; an author's own avatar refines
+its `walker` kit, look and prototype by id, or replaces it (the debug world's Moth, whose own controls refine the
+standard's in [`../debug/moth-controls.puck`](../debug/moth-controls.puck)).
+
+`skin.puck` also authors the standard's screen materials (`screenMaterials`): the display treatment a screen row or a
+creation face names by id (`material: "crt"`), the CRT among them. A screen's picture always fills its face; a
+material draws the display's pixel structure over it (scanlines, subpixel stripes, a vignette, a glint and a soft
+rounded edge), and a device's bezel is geometry it authors round the face.
 
 `inputs.puck` declares the shared semantic channels (`forward`, `strafe`, `turn`, the face axes, `jump`, `run`,
 `flight`, `rise`, `dash`, `interact`, `start`, `select`, `confirm`, `cancel`) the controls and the games bind; a world
@@ -26,9 +37,12 @@ selects its build page while a seat builds. A world without the section has no b
 refuse by name. The controls document
 authors the cursor, icon and badge tables, binding bar, shared pages and play
 wheel. `pad-kit.puck` is a library of source lists and shared ring definitions.
-The debug world's Go and Tour pages, Places ring and gallery icons live in
-[`../debug/controls.puck`](../debug/controls.puck), which refines this package.
-The garden and night field import the standard directly.
+The standard's rings and pages name only what the standard provides. The Moth's
+Respawn, Suit, layout and jetpack controls live in
+[`../debug/moth-controls.puck`](../debug/moth-controls.puck), which the debug world,
+the garden and the night field import in the standard's place; the debug world's
+Go and Tour pages, Places ring and gallery icons live in
+[`../debug/controls.puck`](../debug/controls.puck), which refines those.
 
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
@@ -37,10 +51,11 @@ templates inside `prototypes` or `placements`. `sceneryScatter` translates a
 table of positions, scales and yaws by an origin, with optional solid contact.
 The [debug meadow](../debug/meadow.md) is the worked placement and wind example.
 
-`camera.puck` is a library. `cameraFeel()` authors the shared input feel, the `camera-boom` response and the
-zoom bounds/step in `views.seatControl.boom`; `chaseCamera(rig, ...)` authors a seated body's whole chase camera
-(seat control, clearance mode, character fade, automatic first person, the boom and the rig) from the body's own
-offsets, with the chase-camera decision's values as its defaults. An avatar expands it in a document of its own: the
+`camera.puck` is a library. `cameraFeel()` authors the shared input feel (pointer, stick and gyro), the `camera-boom`
+response and the zoom bounds/step in `views.seatControl.boom`; `chaseCamera(rig, ...)` authors a seated body's whole
+chase camera (seat control, clearance mode with each treatment's rise ceiling and close target, the eye's radius and
+skin, character fade, automatic first person, the boom and the rig) from the body's own offsets, with the chase-camera
+decision's values as its defaults. An avatar expands it in a document of its own: the
 Moth's is [`moth-camera.puck`](../debug/avatars/moth-camera.puck). Mouse wheel changes the requested
 orbit distance; middle click resets distance and angles. The play wheel's hold
 pages bind `mouse.wheel` to `player.wheel.scroll`, replacing the inherited zoom

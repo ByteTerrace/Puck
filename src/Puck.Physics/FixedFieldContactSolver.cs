@@ -16,11 +16,12 @@ namespace Puck.Physics;
 /// are separate parameters because the two capabilities are separate: a provider that can answer a distance need not
 /// be able to march a sight line.</para>
 /// </remarks>
-/// <param name="field">The scalar field the solve measures against; its capabilities carry the bound that certifies
-/// it.</param>
+/// <param name="field">The scalar field the solve measures against; its capabilities propose its rays' steps.</param>
 /// <param name="query">The surface line-of-sight queries march.</param>
 /// <param name="sweep">The certified sweep that proves how far a moving body may travel before the endpoint solve
 /// runs, or <see langword="null"/> when the field holds no geometry for a body to cross.</param>
+/// <param name="bounds">Certified bounds on every answer of <paramref name="field"/> over a box, the one proof that a
+/// body is clear, or <see langword="null"/>, which proves none clear.</param>
 /// <param name="sweepBoundsQueryBudget">The most bounds queries one core sphere's certified sweep may spend, at least
 /// one.</param>
 /// <param name="sweepWork">The ledger the certified sweeps count their work into.</param>
@@ -40,6 +41,7 @@ public sealed class FixedFieldContactSolver(
     int maxIterations,
     bool gradientUp,
     ICertifiedSweepQuery? sweep,
+    IFieldBounds? bounds,
     int sweepBoundsQueryBudget,
     FixedContactSweepWork sweepWork
 ) : IContactField {
@@ -68,7 +70,7 @@ public sealed class FixedFieldContactSolver(
     private readonly FixedStaticCollider m_surface = FixedStaticCollider.FieldSurface(
         center: FixedVector3.Zero,
         field: new FixedColliderField(bounded: false, field: field,
-            gradientStep: ((gradientProbe > FixedQ4816.Zero) ? gradientProbe : FixedColliderField.DefaultGradientStep)),
+            gradientStep: ((gradientProbe > FixedQ4816.Zero) ? gradientProbe : FixedColliderField.DefaultGradientStep)) { Bounds = bounds },
         halfExtent: FixedVector3.Zero,
         rotation: FixedQuaternion.Identity
     );
@@ -313,13 +315,14 @@ public sealed class FixedFieldContactSolver(
     /// <inheritdoc/>
     /// <remarks>A contact pushes and may ground the body; an embedded volume is extracted along the direction the solve
     /// measured out of the solid, by its depth plus its reach, and never grounds it. One volume claims the extraction a
-    /// relaxation pass allows, so the volumes of one body never pull it apart. A volume embedded where the field measures
-    /// no way out stays where it is and marks the resolution unproved.</remarks>
+    /// relaxation pass allows, so the volumes of one body never pull it apart. A volume the solve leaves uncertain in the
+    /// last pass (<see cref="FixedFieldContact.Uncertain"/>: unproved, or embedded with no measured way out) marks the
+    /// resolution unproved.</remarks>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         var grounded = false;
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
-        var stuck = false;
+        var uncertain = false;
 
         for (var iteration = 0; (iteration < m_iterations); iteration++) {
             // A field authoring its own up samples it HERE, per iteration and at the body's current position: that is
@@ -333,6 +336,9 @@ public sealed class FixedFieldContactSolver(
             }
 
             var pushed = false;
+
+            // Only the last pass, at the pose the body keeps, says whether that pose is proved.
+            uncertain = false;
             var extracted = false;
 
             foreach (ref readonly var volume in volumes) {
@@ -344,7 +350,9 @@ public sealed class FixedFieldContactSolver(
                     volume: in volume
                 );
 
-                if (contact.Outcome == FixedFieldContactOutcome.Contact) {
+                uncertain |= contact.Uncertain;
+
+                if ((contact.Outcome == FixedFieldContactOutcome.Contact) && contact.Pushes) {
                     FixedContactPushMath.Commit(
                         grounded: ref grounded,
                         groundNormal: ref groundNormal,
@@ -360,9 +368,7 @@ public sealed class FixedFieldContactSolver(
                         velocity: ref velocity
                     );
                     pushed = true;
-                } else if (contact.Stuck) {
-                    stuck = true;
-                } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && !extracted) {
+                } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && contact.Pushes && !extracted) {
                     extracted = true;
                     position += (contact.Normal * contact.Penetration);
 
@@ -385,7 +391,7 @@ public sealed class FixedFieldContactSolver(
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal,
-            Unproved: stuck
+            Unproved: uncertain
         );
     }
     /// <inheritdoc/>

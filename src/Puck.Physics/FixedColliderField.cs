@@ -7,8 +7,8 @@ namespace Puck.Physics;
 /// in the collider's own frame (a point's offset from <see cref="FixedStaticCollider.Center"/>, turned back by
 /// <see cref="FixedStaticCollider.Rotation"/>), such as a relieved creation's own fixed-point program.</summary>
 /// <param name="field">The field, read in the collider's frame; negative inside. Its
-/// <see cref="FieldEvaluatorCapabilities.StepScale"/> and <see cref="FieldEvaluatorCapabilities.ValueError"/> are the
-/// certificate every clearance proof rests on.</param>
+/// <see cref="FieldEvaluatorCapabilities.StepScale"/> only proposes a ray's steps; every step is checked by the field's
+/// sign, and clearance rests on <see cref="FixedColliderField.Bounds"/> alone.</param>
 /// <param name="gradientStep">The tetrahedral tap offset, in metres, of the gradient taps that measure the field's
 /// direction; positive.</param>
 /// <param name="bounded">Whether <see cref="FixedStaticCollider.Extent"/> bounds the surface about the collider's
@@ -22,26 +22,20 @@ public sealed class FixedColliderField(IFieldEvaluator field, FixedQ4816 gradien
 
     /// <summary>Gets the field, read in the collider's frame.</summary>
     public IFieldEvaluator Field { get; } = (field ?? throw new ArgumentNullException(paramName: nameof(field)));
-    /// <summary>Gets the factor <c>s</c> in <c>[0, 1]</c> that makes <c>s·F</c> 1-Lipschitz, so <c>s·(F(p) − e)</c>
-    /// never exceeds the distance from <c>p</c> to the surface, <c>e</c> being <see cref="ValueError"/>; zero proves
-    /// nothing.</summary>
+    /// <summary>Gets the factor <c>s</c> in <c>[0, 1]</c> that scales a reading into a proposed ray step: the reciprocal
+    /// of the field's Lipschitz bound. A proposal only; a ray never takes a step its readings' signs do not check.</summary>
     public FixedQ4816 BoundScale { get; } = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: field.Capabilities.StepScale);
-    /// <summary>Gets the most, in field units, any answer of the field lies from the function its
-    /// <see cref="BoundScale"/> bounds.</summary>
-    public FixedQ4816 ValueError { get; } = FixedQ4816.Max(x: FixedQ4816.Zero, y: field.Capabilities.ValueError);
     /// <summary>Gets the gradient taps' half-span, in metres.</summary>
     public FixedQ4816 GradientStep { get; } = ((gradientStep > FixedQ4816.Zero)
         ? gradientStep
         : throw new ArgumentOutOfRangeException(paramName: nameof(gradientStep), message: "A field's gradient step must be positive."));
     /// <summary>Gets whether the collider's extent bounds the surface.</summary>
     public bool Bounded { get; } = bounded;
-    /// <summary>Gets a cheaper field that bounds the surface, read in the same frame, or <see langword="null"/>: the
-    /// surface lies where the envelope reads at most <see cref="EnvelopeGrowth"/>, so a point its certified scale proves
-    /// that much plus a body's reach outside that set is clear without reading <see cref="Field"/> (a relieved creation's
-    /// shapes without their relief, which lies within its amplitude).</summary>
-    public IFieldEvaluator? Envelope { get; init; }
-    /// <summary>Gets the envelope reading, in the envelope's own units, at or under which the surface may lie.</summary>
-    public FixedQ4816 EnvelopeGrowth { get; init; }
+    /// <summary>Gets certified bounds on every answer <see cref="Field"/> gives over a box, read in the same frame, or
+    /// <see langword="null"/>: the one proof of clearance. A box whose bounds stay above zero holds no point of the
+    /// field's solid, so a body inside it is clear; without bounds no body is proved clear, only in contact or
+    /// unproved.</summary>
+    public IFieldBounds? Bounds { get; init; }
     /// <summary>Gets the analytic colliders whose surfaces the field relieves, in world space at the collider's pose
     /// when it was compiled, which a diagnostic samples witnesses from before projecting them onto the field; empty when
     /// none are known.</summary>
@@ -49,10 +43,11 @@ public sealed class FixedColliderField(IFieldEvaluator field, FixedQ4816 gradien
 }
 /// <summary>How one certified field contact solve ended.</summary>
 public enum FixedFieldContactOutcome {
-    /// <summary>The field's certified bound proves every point of the body's core at least the body's reach from the
-    /// surface.</summary>
+    /// <summary>The field's certified box bounds prove every point within the body's reach of its core outside the
+    /// solid.</summary>
     Clear = 0,
-    /// <summary>A surface point the field brackets lies within the body's reach of its core, outside the solid.</summary>
+    /// <summary>A surface point the field brackets lies within the body's reach of its core, or within a bracket's width
+    /// past it (a body resting its skin outside, which is not pushed).</summary>
     Contact = 1,
     /// <summary>A point of the body's core reads inside the solid. The answer carries the field's measured direction out
     /// of it, or none where every reading the solve takes is symmetric: an embedded body the field gives no way out
@@ -73,25 +68,30 @@ public enum FixedFieldContactOutcome {
 /// surface point for a contact (never below the true distance), the negated depth of the deepest core point for an
 /// embedded core; zero otherwise.</param>
 public readonly record struct FixedFieldContact(FixedFieldContactOutcome Outcome, FixedVector3 Normal, FixedQ4816 Penetration, FixedQ4816 Distance) {
-    /// <summary>Gets whether the body is pushed: a contact, or an embedded core with a measured way out.</summary>
-    public bool Pushes => ((Outcome == FixedFieldContactOutcome.Contact) ||
-        ((Outcome == FixedFieldContactOutcome.Embedded) && (Normal != FixedVector3.Zero)));
+    /// <summary>Gets whether the body is pushed: a contact it penetrates, or an embedded core with a measured way out.</summary>
+    public bool Pushes => ((Penetration > FixedQ4816.Zero) && (Normal != FixedVector3.Zero) &&
+        (Outcome is FixedFieldContactOutcome.Contact or FixedFieldContactOutcome.Embedded));
     /// <summary>Gets whether the body is embedded with no measured way out.</summary>
     public bool Stuck => ((Outcome == FixedFieldContactOutcome.Embedded) && (Normal == FixedVector3.Zero));
+    /// <summary>Gets whether the solve proved neither clearance nor its contact: <see cref="FixedFieldContactOutcome.Unproved"/>
+    /// or <see cref="Stuck"/>. A caller that must not act on an unproved pose (a carry release, a step's landing) refuses
+    /// it.</summary>
+    public bool Uncertain => ((Outcome == FixedFieldContactOutcome.Unproved) || Stuck);
 }
 /// <summary>The one certified surface solve every field contact reads: relief colliders through
 /// <see cref="FixedStaticContactSolver"/> and the world-wide field through <see cref="FixedFieldContactSolver"/>.</summary>
 /// <remarks>
-/// <para>A field's value is not a distance, so the solve never reads it as one. Its certified bound
-/// (<see cref="FixedColliderField.BoundScale"/> less <see cref="FixedColliderField.ValueError"/>) proves a body clear,
-/// whole or one core piece at a time, each piece no longer than the body's radius. Where the bound cannot, a converged
-/// surface solve measures the distance: from the unproved core point the field reads least, a ray along the field's direction to a bracketed
-/// zero crossing, re-aimed along the surface's own direction there until the two agree, alternating with the core point
-/// nearest that surface point. A bracketed crossing is a surface point, so the measured distance never falls below the
-/// true one and a push never carries a body past the skin.</para>
+/// <para>A field's value is not a distance, so the solve never reads it as one. Clearance rests only on the field's
+/// certified box bounds (<see cref="FixedColliderField.Bounds"/>), which enclose every answer the field gives in a box:
+/// the whole core grown by the body's reach, then one core piece at a time, each piece no longer than the body's radius
+/// and spanning its own end points, so the pieces cover the core end to end. Where the bounds cannot prove a piece, a
+/// converged surface solve measures the distance: from the unproved core point the field reads least, a ray along the
+/// field's direction to a bracketed zero crossing, re-aimed along the surface's own direction there until the two
+/// agree, alternating with the core point nearest that surface point. A bracketed crossing is a surface point, so the
+/// measured distance never falls below the true one and a push never carries a body past the skin.</para>
 /// <para>An embedded core leaves through the surface it crosses: along the field's direction where the core crosses
 /// the surface, or at the deepest core point that measures one. A core whose every reading is symmetric measures no
-/// direction and is unproved, never clear, and never given a direction the field does not measure.</para>
+/// direction and is stuck, never clear, and never given a direction the field does not measure.</para>
 /// </remarks>
 public static class FixedFieldColliderContact {
     // The most core pieces a capsule's proof reads.
@@ -112,6 +112,9 @@ public static class FixedFieldColliderContact {
     // How far a projection searches for a surface no caller bounds, in metres.
     private static readonly FixedQ4816 OpenReach = FixedQ4816.FromInteger(value: 64L);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
+    // The raws a computed core point may lie from the exact point of the segment it stands for, past which a clearance box
+    // still holds it: one rounding of the axis product and one of the sum, per coordinate.
+    private static readonly FixedQ4816 PointSlack = FixedQ4816.FromRawBits(value: 2L);
 
     // One query's reads of a field in its collider's frame, counted, and the bracket width its crossings narrow to.
     private ref struct Sampler(FixedColliderField field, FixedQ4816 width) {
@@ -120,27 +123,30 @@ public static class FixedFieldColliderContact {
         public int Samples;
         public int Bounds;
 
-        // Whether the envelope proves a point at least the reach from the surface.
-        public bool EnvelopeClears(FixedVector3 local, FixedQ4816 reach) {
-            if (Field.Envelope is not { } envelope) {
+        // Whether the field's box bounds prove every point within the reach of the segment between two points outside the
+        // solid: the box spanning the two points, grown by the reach and by the rounding the points carry, reads above
+        // zero everywhere.
+        public bool Clears(FixedVector3 from, FixedVector3 to, FixedQ4816 reach) {
+            if (Field.Bounds is not { } bounds) {
                 return false;
             }
 
             Bounds++;
 
-            var capabilities = envelope.Capabilities;
+            var grow = (reach + PointSlack);
+            var spread = new FixedVector3(X: grow, Y: grow, Z: grow);
+            var lower = new FixedVector3(X: FixedQ4816.Min(x: from.X, y: to.X), Y: FixedQ4816.Min(x: from.Y, y: to.Y), Z: FixedQ4816.Min(x: from.Z, y: to.Z));
 
-            return (envelope.TryDistance(position: FixedPosition.FromLocal(local: local), distance: out var value, material: out _) &&
-                (((value - Field.EnvelopeGrowth) - capabilities.ValueError) * capabilities.StepScale) >= reach);
+            // A box the carrier cannot hold proves nothing.
+            return (FixedVector3.TrySubtract(difference: out var least, left: lower, right: spread) &&
+                FixedVector3.TryAdd(left: FixedVector3.Max(left: from, right: to), right: spread, sum: out var most) &&
+                bounds.TryDistanceBounds(distance: out var interval, lower: FixedPosition.FromLocal(local: least), upper: FixedPosition.FromLocal(local: most)) &&
+                !interval.IsUnbounded && (interval.Lower > FixedQ4816.Zero));
         }
         public bool TryValue(FixedVector3 local, out FixedQ4816 value) {
             Samples++;
             return Field.Field.TryDistance(position: FixedPosition.FromLocal(local: local), distance: out value, material: out _);
         }
-        // Whether the certified bound proves every point within the reach of a ball of the radius about a point that reads
-        // the value clear of the surface.
-        public readonly bool Certifies(FixedQ4816 value, FixedQ4816 radius, FixedQ4816 reach) =>
-            ((((value - Field.ValueError) * Field.BoundScale) - radius) >= reach);
         // The field's tetrahedral gradient: the four taps at h·(±1, ±1, ±1) with an even count of minus signs,
         // Σ kᵢ·F(p + h·kᵢ) / 4h, as a unit direction and its length; false where a tap does not answer or every tap reads
         // alike.
@@ -173,7 +179,7 @@ public static class FixedFieldColliderContact {
         }
         // Where the field first changes the sign it reads at the start, along start + direction·t for t in (0, limit]:
         // the far end of a bracket narrowed to the tolerance (or as far as its iterations reach), so the field reads the
-        // other sign there and a zero lies within the bracket. Each advance is at least the certified bound's clear step,
+        // other sign there and a zero lies within the bracket. Each advance is at least the reading scaled by the field's proposed step scale,
         // and a secant through the last two readings when that reaches farther; an overshoot only brackets a farther zero,
         // which is still a surface point.
         public bool TryCrossing(FixedVector3 start, FixedVector3 direction, FixedQ4816 value, FixedQ4816 guess, FixedQ4816 limit, out FixedQ4816 crossing) {
@@ -202,7 +208,7 @@ public static class FixedFieldColliderContact {
                     return false;
                 }
 
-                var clear = FixedQ4816.Max(x: Width, y: ((ahead - Field.ValueError) * Field.BoundScale));
+                var clear = FixedQ4816.Max(x: Width, y: (ahead * Field.BoundScale));
                 var next = (t + clear);
 
                 if (ahead < lowReading) {
@@ -345,27 +351,19 @@ public static class FixedFieldColliderContact {
     // fraction, and its reading.
     private record struct CoreSample(FixedQ4816 T, FixedQ4816 Half, FixedQ4816 Value);
 
-    // The solve over a core (a point when the axis is zero) of the radius, in the collider's frame. The bound first tries
-    // the whole core, then an odd count of pieces no longer than the radius (so the middle reading centres one), and the
-    // converged surface solve runs from the piece the bound cannot prove that reads least, and from a second dip along
-    // the core when the first finds no surface within the reach. Its piece tables are read only where written, so they
-    // skip the zero fill.
+    // The solve over a core (a point when the axis is zero) of the radius, in the collider's frame. The box bounds first
+    // try the whole core, then pieces no longer than the radius, each spanning its own computed end points from the core's
+    // lower end to its upper end, so together they cover it. The converged surface solve runs from the piece the bounds
+    // cannot prove that reads least at its centre, and from a second dip along the core when the first finds no surface
+    // within the reach. A proved piece reads as far. Its piece tables are read only where written, so they skip the zero
+    // fill.
     [SkipLocalsInit]
     private static FixedFieldContact SolveCore(ref Sampler sampler, FixedVector3 lower, FixedVector3 axis, FixedQ4816 radius, FixedQ4816 skin) {
         var reach = (radius + skin);
+        var upper = (lower + axis);
         var length = axis.Length;
-        var half = (length / Two);
-        var middle = (lower + (axis / Two));
 
-        if (sampler.EnvelopeClears(local: middle, reach: (reach + half))) {
-            return default;
-        }
-
-        if (!sampler.TryValue(local: middle, value: out var middleValue)) {
-            return Unproved;
-        }
-
-        if (sampler.Certifies(radius: half, reach: reach, value: middleValue)) {
+        if (sampler.Clears(from: lower, reach: reach, to: upper)) {
             return default;
         }
 
@@ -375,7 +373,6 @@ public static class FixedFieldColliderContact {
             count = (int)((radius > FixedQ4816.Zero)
                 ? Math.Clamp(value: ((length.Value + (radius.Value - 1L)) / radius.Value), min: 1L, max: MaximumCorePieces)
                 : MaximumCorePieces);
-            count |= 1;
         }
 
         Span<CoreSample> pieces = stackalloc CoreSample[MaximumCorePieces];
@@ -384,21 +381,26 @@ public static class FixedFieldColliderContact {
         var openCount = 0;
         var countFixed = FixedQ4816.FromInteger(value: count);
         var pieceHalf = (FixedQ4816.One / (countFixed + countFixed));
+        var from = lower;
 
         for (var piece = 0; (piece < count); piece++) {
+            var to = (((piece + 1) == count) ? upper : (lower + (axis * (FixedQ4816.FromInteger(value: (piece + 1L)) / countFixed))));
             var t = (FixedQ4816.FromInteger(value: ((2L * piece) + 1L)) * pieceHalf);
-            var value = middleValue;
 
-            if (((piece + piece + 1) != count) && !sampler.TryValue(local: (lower + (axis * t)), value: out value)) {
-                return Unproved;
-            }
+            proved[piece] = sampler.Clears(from: from, reach: reach, to: to);
 
-            pieces[piece] = new CoreSample(Half: pieceHalf, T: t, Value: value);
-            proved[piece] = sampler.Certifies(radius: (length * pieceHalf), reach: reach, value: value);
+            if (proved[piece]) {
+                pieces[piece] = new CoreSample(Half: pieceHalf, T: t, Value: FixedQ4816.MaxValue);
+            } else {
+                if (!sampler.TryValue(local: ((from + to) / Two), value: out var value)) {
+                    return Unproved;
+                }
 
-            if (!proved[piece]) {
+                pieces[piece] = new CoreSample(Half: pieceHalf, T: t, Value: value);
                 open[openCount++] = pieces[piece];
             }
+
+            from = to;
         }
 
         if (openCount == 0) {
@@ -504,7 +506,8 @@ public static class FixedFieldColliderContact {
             (value, point) = (nextValue, nextPoint);
         }
 
-        if (best >= reach) {
+        // A surface within a bracket's width past the reach is the one a body rests its skin outside: touched, not pushed.
+        if (best >= (reach + sampler.Width)) {
             return Unproved;
         }
 
@@ -513,7 +516,8 @@ public static class FixedFieldColliderContact {
             return Unproved;
         }
 
-        return new FixedFieldContact(Distance: best, Normal: away, Outcome: FixedFieldContactOutcome.Contact, Penetration: (reach - best));
+        return new FixedFieldContact(Distance: best, Normal: away, Outcome: FixedFieldContactOutcome.Contact,
+            Penetration: FixedQ4816.Max(x: FixedQ4816.Zero, y: (reach - best)));
     }
     // An embedded core leaves along the field's direction where the core crosses the surface, or else at the deepest
     // core reading that measures a direction, by the depth of its deepest reading along it plus its reach.
@@ -578,16 +582,12 @@ public static class FixedFieldColliderContact {
         var center = ToLocal(collider: in collider, world: worldCenter);
         var outer = (volume.HalfExtents.Length + skin);
 
-        if (sampler.EnvelopeClears(local: center, reach: outer)) {
+        if (sampler.Clears(from: center, reach: outer, to: center)) {
             return default;
         }
 
         if (!sampler.TryValue(local: center, value: out var value)) {
             return Unproved;
-        }
-
-        if (sampler.Certifies(radius: FixedQ4816.Zero, reach: outer, value: value)) {
-            return default;
         }
 
         FixedVector3 local;
@@ -609,9 +609,11 @@ public static class FixedFieldColliderContact {
             normal: normal, orientation: in orientation, position: position, volume: in volume));
         var penetration = ((support + skin) - distance);
 
-        return ((penetration > FixedQ4816.Zero)
+        // A volume resting within a bracket's width past its skin touches the surface it measured; one farther is unproved.
+        return ((penetration > -sampler.Width)
             ? new FixedFieldContact(Distance: distance, Normal: normal,
-                Outcome: ((distance < FixedQ4816.Zero) ? FixedFieldContactOutcome.Embedded : FixedFieldContactOutcome.Contact), Penetration: penetration)
+                Outcome: ((distance < FixedQ4816.Zero) ? FixedFieldContactOutcome.Embedded : FixedFieldContactOutcome.Contact),
+                Penetration: FixedQ4816.Max(x: FixedQ4816.Zero, y: penetration))
             : Unproved);
     }
 
@@ -642,7 +644,7 @@ public static class FixedFieldColliderContact {
             contact = (contact with { Normal = collider.Rotation.Rotate(vector: contact.Normal) });
         }
 
-        FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: ((contact.Outcome == FixedFieldContactOutcome.Unproved) || contact.Stuck));
+        FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: contact.Uncertain);
         return contact;
     }
     /// <summary>Returns the push that keeps a body volume the contact skin outside a field collider's surface: the
@@ -653,12 +655,14 @@ public static class FixedFieldColliderContact {
     /// <param name="volume">The body-local volume.</param>
     /// <param name="skin">The contact skin, in metres.</param>
     /// <param name="push">The push along the measured outward normal, when one is needed.</param>
+    /// <param name="uncertain">Whether the solve proved neither clearance nor its contact (<see cref="FixedFieldContact.Uncertain"/>).</param>
     /// <returns><see langword="true"/> when the solve proves a contact or measures the way out of an embedded volume.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="collider"/> carries no field.</exception>
-    public static bool TryPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push) {
+    public static bool TryPush(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 skin, out FixedContactPush push, out bool uncertain) {
         var contact = Solve(collider: in collider, orientation: in orientation, position: position, skin: skin, volume: in volume);
 
         push = (contact.Pushes ? new FixedContactPush(Normal: contact.Normal, Penetration: contact.Penetration) : default);
+        uncertain = contact.Uncertain;
         return contact.Pushes;
     }
     /// <summary>Measures a field collider's surface from a world point by the surface solve: the distance to the

@@ -114,8 +114,8 @@ recorded the result.
   scale from 0 to 1, where 0 is the accessibility off switch. Every diagnostic
   view bypasses it, collider and contact evidence included, and a bloom-only
   diagnostic view shows the scatter alone.
-- **The `Crt` screen's one-pixel brightness knee is not bloom** and is deleted;
-  the screen's other opted-in treatment stays.
+- **A screen material's one-pixel brightness knee is not bloom** and is deleted;
+  the material's other treatment terms stay.
 - **Its bar** is at most 0.3 ms of GPU on the RTX 4070 at 1280×900 high, with
   both backends matching, read from `world.gpu-timing` and `world.counters gpu`,
   and judged for flicker in presented bursts, never only in settled stills.
@@ -1124,7 +1124,7 @@ screen and mattes the window to the screen's picture; no separate 2D image
 stands in for it. Framed, the picture is source-exact: whole window pixels per
 source row, no CRT treatment, post or bezel on those pixels, and the matte's
 fill around it, so the window is indistinguishable from a desktop emulator.
-Easing out fades the room (and a CRT screen's glass and look) back in, which
+Easing out fades the room (and a screen material's treatment) back in, which
 is the reveal that the player was in the world all along. One per-view value,
 the screen fidelity the ease drives, turns the treatment and post off, and the
 root's own placement of the seat's view shows only the picture's part of it, so
@@ -1142,6 +1142,17 @@ its real size (the owner's ruling), the pitch the real one, so the glass is
 exactly the picture. A small device reads by how it is displayed, never by
 being enlarged: the debug world stands its handhelds on low plinths near the
 walkway with an angled name placard, the way a museum shows a small object.
+
+**A screen's look is an authored screen material, and its picture always fills
+the face.** The engine's screen shading carries one display treatment, the
+display's own pixel structure drawn over the picture (scanlines, subpixel
+stripes, a vignette, a glint and a soft rounded edge), whose every term a
+document's `screenMaterials` row authors and a screen row or creation face
+names by id; a screen naming none shows its picture untreated. A CRT is the
+standard package's `crt` material (`worlds/standard/skin.puck`), never an engine
+value. No material insets or warps the picture: a device's glass is exactly its
+picture, so a material is presentation alone and never moves the mapping a
+pointer hit takes, and a bezel is the device's geometry round the face.
 
 **A screen lit by external content keeps lighting the room live (the owner's
 ruling), and captures complete anyway.** A desktop or camera screen's glow

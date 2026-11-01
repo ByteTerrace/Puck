@@ -6,13 +6,15 @@ namespace Puck.World;
 
 /// <summary>How provider-neutral gamepad angular velocity projects into semantic camera look.</summary>
 /// <param name="Scale">The dimensionless multiplier applied after projection.</param>
-/// <param name="DeadZoneRaw">Independent X/Y/Z dead zones in radians per second. The threshold is removed from each
-/// surviving magnitude so response remains continuous at its edge.</param>
+/// <param name="DeadZoneRaw">Independent X/Y/Z dead zones in radians per second; absent is none. The threshold is
+/// removed from each surviving magnitude so response remains continuous at its edge.</param>
 /// <param name="InvertX">Whether the physical X angular-velocity axis is inverted before projection.</param>
 /// <param name="InvertY">Whether the physical Y angular-velocity axis is inverted before projection.</param>
 /// <param name="InvertZ">Whether the physical Z angular-velocity axis is inverted before projection.</param>
-/// <param name="YawRaw">The X/Y/Z projection weights producing semantic look-right angular velocity.</param>
-/// <param name="PitchRaw">The X/Y/Z projection weights producing semantic look-up angular velocity.</param>
+/// <param name="YawRaw">The X/Y/Z projection weights producing semantic look-right angular velocity; absent projects
+/// nothing.</param>
+/// <param name="PitchRaw">The X/Y/Z projection weights producing semantic look-up angular velocity; absent projects
+/// nothing.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSeatGyro(
     float Scale = 1f,
@@ -35,22 +37,21 @@ public sealed record WorldSeatGyro(
         );
     }
 
-    /// <summary>The default full-axis mapping: device pitch drives look pitch, while device yaw and roll both drive
-    /// look yaw. Authors and player profiles may freely remap, combine, or invert all three axes.</summary>
-    public static WorldSeatGyro Default { get; } = new();
-    /// <summary>Independent X/Y/Z dead zones in radians per second.</summary>
+    /// <summary>Gets the inert mapping, which projects no angular velocity into look. A gyro's feel is authored: the
+    /// standard package's camera feel maps it (<c>worlds/standard/camera.puck</c>), and authors and player profiles
+    /// remap, combine, or invert all three axes.</summary>
+    public static WorldSeatGyro None { get; } = new();
+    /// <summary>Gets the independent X/Y/Z dead zones in radians per second; zero where none is authored.</summary>
     [JsonIgnore]
-    public Vector3 DeadZone => (DeadZoneRaw ?? new Vector3(value: 0.02f));
-    /// <summary>The X/Y/Z projection weights producing semantic look-up angular velocity.</summary>
+    public Vector3 DeadZone => (DeadZoneRaw ?? Vector3.Zero);
+    /// <summary>Gets the X/Y/Z projection weights producing semantic look-up angular velocity; zero where none is
+    /// authored.</summary>
     [JsonIgnore]
-    public Vector3 Pitch => (PitchRaw ?? Vector3.UnitX);
-    /// <summary>The X/Y/Z projection weights producing semantic look-right angular velocity.</summary>
+    public Vector3 Pitch => (PitchRaw ?? Vector3.Zero);
+    /// <summary>Gets the X/Y/Z projection weights producing semantic look-right angular velocity; zero where none is
+    /// authored.</summary>
     [JsonIgnore]
-    public Vector3 Yaw => (YawRaw ?? new Vector3(
-        x: 0f,
-        y: -1f,
-        z: -1f
-    ));
+    public Vector3 Yaw => (YawRaw ?? Vector3.Zero);
 
     /// <summary>Projects provider-neutral angular velocity into semantic look-right/look-up radians per second,
     /// applying physical-axis dead zones and inversion before the authored full-axis projection.</summary>
@@ -110,7 +111,7 @@ public sealed record WorldSeatGyro(
 /// <param name="InvertYaw">Whether the final semantic yaw response (pointer, stick, and gyro) is inverted.</param>
 /// <param name="InvertPitch">Whether the final semantic pitch response (pointer, stick, and gyro) is inverted.</param>
 /// <param name="StickLookRate">The look stick's yaw/pitch rate in radians per second at full deflection.</param>
-/// <param name="GyroRaw">The optional full-axis gyro projection. Absent resolves to <see cref="WorldSeatGyro.Default"/>.</param>
+/// <param name="GyroRaw">The optional full-axis gyro projection. Absent resolves to <see cref="WorldSeatGyro.None"/>.</param>
 /// <param name="ClearanceMode">The player's clearance preference; Auto inherits the framing world's default.</param>
 /// <param name="AutoFirstPerson">The player's automatic pull-in choice; null inherits the author's default.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -124,7 +125,7 @@ public sealed record WorldSeatCameraFeel(
     WorldCameraClearanceChoice ClearanceMode = WorldCameraClearanceChoice.Auto,
     bool? AutoFirstPerson = null
 ) {
-    /// <summary>Gets the inert seat feel — zero pointer/stick response and the default gyro projection.</summary>
+    /// <summary>Gets the inert seat feel — zero pointer, stick and gyro response.</summary>
     public static WorldSeatCameraFeel Default { get; } = new(
         YawSensitivity: 0f,
         PitchSensitivity: 0f,
@@ -134,5 +135,5 @@ public sealed record WorldSeatCameraFeel(
     );
     /// <summary>Gets the resolved full-axis gyro projection.</summary>
     [JsonIgnore]
-    public WorldSeatGyro Gyro => (GyroRaw ?? WorldSeatGyro.Default);
+    public WorldSeatGyro Gyro => (GyroRaw ?? WorldSeatGyro.None);
 }

@@ -80,6 +80,7 @@ public sealed class CertifiedContactSweepLawTests {
         maxIterations: 4,
         query: evaluator,
         sweep: (noSweep ? null : (sweep ?? evaluator)),
+        bounds: evaluator,
         sweepBoundsQueryBudget: budget,
         sweepWork: work
     );
@@ -317,6 +318,7 @@ public sealed class CertifiedContactSweepLawTests {
             maxIterations: 4,
             query: new SdfFieldEvaluator(program: new SdfProgramBuilder().Build()),
             sweep: new CertifiedFieldSweep(field: solid),
+            bounds: solid,
             sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
             sweepWork: work
         );

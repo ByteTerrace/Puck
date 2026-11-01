@@ -36,8 +36,32 @@
           "$ref": "./common.schema.json#/$defs/WorldCameraClearanceChoice",
           "description": "The author\u0027s tight-space behavior, Fade or Cutaway; players may override it."
         },
-        "clearanceMaxElevation": {
-          "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians, within [0, \u03C0/2]. Fade never rises, so only cutaway reads it.",
+        "maxRise": {
+          "description": "The most the boom rises above the rig\u0027s own elevation, in radians, for each treatment.",
+          "type": "object",
+          "properties": {
+            "fade": {
+              "description": "The rise ceiling while the seat fades its body, in [0, \u03C0/2].",
+              "type": "number"
+            },
+            "cutaway": {
+              "description": "The rise ceiling while the seat cuts walls away, in [0, \u03C0/2].",
+              "type": "number"
+            }
+          },
+          "required": [
+            "fade",
+            "cutaway"
+          ],
+          "additionalProperties": false,
+          "title": "WorldCameraClearanceRise"
+        },
+        "eyeRadius": {
+          "description": "The full-size radius, in metres, of the sphere the chase eye keeps clear of geometry and, in cutaway, the body.",
+          "type": "number"
+        },
+        "surfaceSkin": {
+          "description": "The full-size nearest distance, in metres, the eased eye\u0027s centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.",
           "type": "number"
         },
         "follow": {
@@ -167,7 +191,9 @@
         "minPitch",
         "maxPitch",
         "clearanceMode",
-        "clearanceMaxElevation"
+        "maxRise",
+        "eyeRadius",
+        "surfaceSkin"
       ],
       "additionalProperties": false,
       "default": null,

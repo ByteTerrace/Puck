@@ -43,7 +43,7 @@ editor {
   }
   toggle {
     command: "player.build"
-    id: "editor.toggle"
+    id: "build"
     label: "Build"
     sources: toggleSources
   }
@@ -88,7 +88,7 @@ bindingOverlays [
             id: "build"
             label: "Build"
             entries [
-              { command: "player.build", id: "editor.toggle", label: "Play", sources: toggleSources }
+              { command: "player.build", id: "build", label: "Play", sources: toggleSources }
               {
                 command: "world.grid"
                 id: "editor.grid"

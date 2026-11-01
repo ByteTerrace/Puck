@@ -15,8 +15,8 @@ public sealed class SuperellipsoidContactLawTests {
         var body = new FixedBodyColliderVolume(Kind: kind, Center: FixedVector3.Zero, Endpoint: V(x: 0, y: 0.1, z: 0),
             HalfExtents: V(x: 0.001, y: 0.001, z: 0.001), Radius: Q(x: 0.001), Rotation: FixedQuaternion.Identity);
 
-        Assert.False(condition: seat.TryGetPush(V(x: 0.25, y: 0.045, z: 0.25), FixedQuaternion.Identity, body, FixedQ4816.Zero, out _));
-        Assert.True(condition: seat.TryGetPush(V(x: 0, y: 0.045, z: 0), FixedQuaternion.Identity, body, FixedQ4816.Zero, out var push));
+        Assert.False(condition: seat.TryGetPush(V(x: 0.25, y: 0.045, z: 0.25), FixedQuaternion.Identity, body, FixedQ4816.Zero, out _, out _));
+        Assert.True(condition: seat.TryGetPush(V(x: 0, y: 0.045, z: 0), FixedQuaternion.Identity, body, FixedQ4816.Zero, out var push, out _));
         Assert.InRange(((double)push.Penetration), 0.0008, 0.0012);
         Assert.Equal(FixedVector3.UnitY, push.Normal);
         Assert.False(condition: push.IsEdge);
