@@ -941,6 +941,16 @@ Still open from the companion build:
 Owner: delivery lane · medium · Next: the silo activation's long grain turn,
 then CI's steady state, the shader cache and the GC-hole retirement.
 
+- [high] `puck test --reproduce` fails on every debug-world fixture whose
+  `documentId` is not `debug` (granaries, reversi and others; noclip passes).
+  The error is `cannot capture '6~global4~self': Replay probe cannot capture
+  its start: a checkpoint requires the declared addon host and its restored
+  state`. Such a fixture opens a second instance that `WorldInstanceHost`
+  starts with no addon host (`WorldInstanceHost.cs:1305`), and the addon
+  checkpoint guard (`WorldPersistence.Checkpoint.cs:611`) refuses it. The cause
+  is the same as the silo review's M5 (`puck bench` builds a server the same
+  way), so it is fixed with M5. Every determinism check that lanes run depends
+  on it. (from: granary-live)
 - [medium] A world-silo activation of the debug world runs one synchronous
   Orleans grain turn of 10.3 to 12.9 s. Orleans warns
   (`WorkItemGroup[101215]`, "took elapsed time 0:00:10.343"), and the turn ends
