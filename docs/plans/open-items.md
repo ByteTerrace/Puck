@@ -32,10 +32,11 @@ fundamentals in flight; the rest follow by payoff. The owner deferred the
 silo's addon refusal ([delivery](#delivery-launcher-and-ci)), so deploys stay
 blocked until it is taken.
 
-1. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-   phase 1 has landed (one host loop, its review fixes in); next [the memo](simulation-thread.md)'s
-   phase 2 (the tick record on one thread), then the produce audit and the step
-   body on a worker. Read the windowed stops before and after phase 4.
+1. [Engine job system](#engine-job-system): trace the quiet machine's slow
+   frames, then the design memo (prioritised work under a frame budget, a
+   deterministic parallel tick, parallel view recording, background work
+   proportional to change), reviewed before any build; meanwhile the
+   [simulation thread](#simulation-tick-off-the-frame-thread)'s phases 2 and 3.
 2. [Cold bake under a minute](#cold-bake-under-a-minute): Direct3D 12 is at about
    132 s and Vulkan 227 s; next the crossing stage's `CloseSheets`, then
    `SdfMeshCollapse`, then the filed review remainders (byte-counted admission,
@@ -96,15 +97,6 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
-- Whether a tick's visible effect may arrive one frame later (about 16.7 ms
-  at 60 Hz) so the simulation step overlaps present on a worker, keeping every
-  client object on the frame thread; the lower-latency shape brings back the
-  cross-thread protocols its review found unsafe
-  ([simulation thread](simulation-thread.md#latency)).
-- Whether a cold bake pauses the irradiance preview (it re-traces about every
-  4 s on four workers, roughly 800 thread-seconds beside the bake's 1,670), so
-  the meshes land about a quarter sooner and the scene lights later
-  ([cold bake](#cold-bake-under-a-minute)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
@@ -1147,15 +1139,46 @@ store (AGENTS.md).
   bit `tap - 1`). Any edit moves the bake identity, so batch it with the next
   bake-kernel change. (from: perf-guidance)
 
+### Engine job system
+
+Owner: principal designs (design only), Codex Astra reviews the design before
+any build, specialist builds · high · Next: the design memo.
+
+The owner's direction: performance with quality means removing a cost at its
+cause, never trading latency or lighting quality for frame time. The engine
+runs its heavy work serially on one or two threads while most of the lead
+machine's cores idle: the frame thread runs the tick and then records every
+view, and the bake and the irradiance preview compete with each other and the
+frame for cores with no priority (frames run about 82 ms during a cold bake).
+One engine-wide job system answers all of it:
+- frame-critical work first, then the tick, then background bake and GI, each
+  under a budget that protects the frame;
+- a deterministic parallel tick: per-body advance, contact queries and rule
+  reads over fixed partitions, committed in a fixed order, so state is
+  bit-identical at any thread count, with no added latency, and headless
+  servers, the silo, lockstep and `--reproduce` runs get faster too;
+- parallel view recording (Direct3D 12 and Vulkan record command lists on many
+  threads), shrinking produce (6 to 11 ms) and the tick frame's view recording;
+- background work proportional to change: the cold bake rebaking only what an
+  edit touched (per-group content keys, the bake closure narrowed, one store
+  for both backends), and GI re-measuring only the probes that can see newly
+  landed geometry (`SdfMeshIrradiance` rebuilds its scene incrementally, but
+  its comment says each landed set is measured whole; confirm in the code first).
+
+Measure before building: trace which work makes the quiet machine's slow
+standing frames (p99 18.4 ms, worst 21.9 ms on Direct3D 12) slow, tick, GC or
+produce.
+
 ### Simulation tick off the frame thread
 
-Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: build [the simulation step off the frame thread](simulation-thread.md)
-by its phases: phase 1 delivered the shared host loop, shell, console operation,
-client clock, arrival interpolation and tick/shed diagnostics; next is phase 2
-(the tick record, still one thread), phase 3 (the produce path reads no
-server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
-(hardening). The owner queued the thread.
+Owner: specialist builds · high · Next: phase 2 (the tick record, still one
+thread) and phase 3 (the produce path reads no server state, proven by a
+rehearsal guard) of [the memo](simulation-thread.md); phase 1 delivered the
+shared host loop, shell, console operation, client clock, arrival
+interpolation and tick/shed diagnostics. Phase 4's pipelined worker, which
+costs a frame of latency, is withdrawn in favour of the
+[engine job system](#engine-job-system), and stays a fallback lever (the Steam
+Deck, for one) if parallel work cannot reach the bar.
 
 - Phase 1's windowed reading still misses the frame-rate bar: frame avg/p99
   69.47/205.25 ms standing and 25.46/207.07 ms walking, with `simulate` and the

@@ -566,6 +566,13 @@ hashes unchanged.
 
 ### Phase 4: the worker
 
+Withdrawn by the owner's direction: a pipelined worker costs a frame of
+latency, and performance comes with quality, so the cost is removed at its
+cause by the [engine job system](open-items.md#engine-job-system) (a
+deterministic parallel tick and parallel view recording) instead. This phase
+stays a fallback lever if parallel work cannot reach the frame-rate bar.
+
+
 The dedicated worker thread; dispatch after present, join after input, the
 frame never waiting; the drain skipped while in flight; the immediate join
 under one-tick-per-frame and unpaced; shutdown's bounded join and the

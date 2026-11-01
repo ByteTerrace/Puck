@@ -354,6 +354,12 @@ says to read the schema file of each `puck_operator` tool before its first call,
 to pass the `world` argument on every call, and to wait for a start with
 `puck_world_start_wait` `timeoutMs` 60000 or more, so a cold build costs few polls.
 
+The lead and Claude lanes drive Worlds through the `puck` MCP tools
+(`puck_world_start`, `puck_exec`, `puck_world_stop`) by default: they take the
+GPU lease for a windowed World, keep its lifetime with the session, and need
+no stdin script. A lead that ran every World through hand-written stdin
+scripts spent a session working around the isolation guard instead.
+
 The lead machine's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
 it afterwards.
