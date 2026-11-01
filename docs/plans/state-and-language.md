@@ -355,12 +355,13 @@ are shared across the source. Borders support derived ground sides and explicit
 pitched frames, including an authored minimum ownership deadband. Doors generate
 return arches from self-contained placement faces. Asset pins are checked during
 ordinary compilation and refreshed only by an explicit successful update.
-The forcing-world migration and shipped-world conversion work remains open.
+Reusable module integration in the debug world remains open; quarantined worlds
+are not migrated or revived.
 A composition is tested as one run: `schedule.instances` arms its sibling
 worlds and each is exported ([S8](#s8--tests-are-worlds)). Current
 syntax and constraints live in [authoring](../authoring/README.md#composing-neighbouring-worlds).
 
-**Delivers:** what [the pages](#the-forcing-world-drafted) require. `use`
+**Delivers:** the [debug-world workloads](#debug-world-authoring-workloads). `use`
 without an alias stamps a body where it stands and with one prefixes every
 name the body declares, recursively; `import` brings names into scope and
 instantiates nothing; `export alias.name` passes a control upward. A source
@@ -373,7 +374,8 @@ spatial relation: the destination and reference rows on each side and the
 return arch in the far world. A parameter of kind `Module` may state the
 exports it requires (`biome: Module exporting ascent`), and a `use` of a
 module that lacks one is refused by name at the `use`. `asset "path"` is a
-reference whose hash is pinned in a lock file. A diagnostic and a cost name the debug-world module instance and defining
+reference whose hash is pinned in a lock file. A diagnostic and a cost name the
+debug-world module instance and defining
 source span. The open integration work is reusable modules in the debug world
 and its standard package, with authored tests, source-attributed refusals, and
 independent state for repeated instances. Quarantined JSON shards are never
@@ -779,7 +781,7 @@ in order; the language work of S9 continues beside it.
 | 2 ✓ | Charge what is used: the provenance column gone, trait columns reserved only where declared, growth charged, no Cartesian relationship universe, `MoveCell` never materializing an absent column, ordered and evicting rows without whole-row shifts. |
 | 3 ✓ | One live store and one write door: journal-driven publication, one arena reader, grant-checked atomic batches for runtime writers, live disclosure, arena checkpoints, and responses, deals and contribution tenure as projections. |
 | 4 | Hash and checkpoint everything that steers the future, a running addon's continuation included. |
-| 5 | Rewind as a complete continuation bundle, extending the existing scoped capture and restore in `WorldScopedReplayRuntime`, the arena columns and key/generation state in `ArenaScopeSnapshot`, and checkpointed scoped replays and undo in `WorldPersistence.Checkpoint.cs`. |
+| 5 | Rewind as a complete continuation bundle, extending scoped capture and restore in `WorldScopedReplayRuntime`, the plain-row column image in `ArenaScopeSnapshot`, and checkpointed scoped replays and undo in `WorldPersistence.Checkpoint.cs`. Scoped capture currently refuses timed, vector, and pool rows; the complete bundle must include their continuation too. |
 | 6 | Entities as records in pools, with references, seats as entities and the chess pieces migrated. |
 | 7 | Edges as values, versioned facets and explicit rule order; key-name reclamation; rare traits as facets; one deterministic semantic allowance with measured reports, the reference-cycle model deleted. |
 
@@ -934,7 +936,8 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
   the `.puck` door refuses (PUCK117); and the export check does not look inside a
   deal's variant map.
 - Deferred as a block: Landlord, Wordguess, Match-3, Hexcolony, tower defense,
-  Ribbon. When the quarantined games return: Snake grows past six segments
+  Ribbon. When their missing capabilities are ported to debug-world exhibits:
+  Snake grows past six segments
   (`history(row, age)` takes an expression age, and an age outside the ring
   reads the empty value, per `HistoryAgeLawTests`, but
   [`snake.puck`](../../experimental/src/Puck.World/Assets/worlds/games/snake.puck)
