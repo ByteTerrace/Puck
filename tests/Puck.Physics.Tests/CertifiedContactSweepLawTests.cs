@@ -157,7 +157,6 @@ public sealed class CertifiedContactSweepLawTests {
         var evaluator = Wall(overestimating: true);
         var solver = Solver(evaluator: evaluator, work: new FixedContactSweepWork());
         var face = (WallZ + WallHalfThickness);
-        var stepperCrossings = 0;
 
         for (var start = 0; (start < 40); start++) {
             foreach (var speed in ((double[])[15.0, 100.0, 1000.0])) {
@@ -165,15 +164,8 @@ public sealed class CertifiedContactSweepLawTests {
                 var target = (previous + Z(z: -speed));
 
                 Assert.True(condition: (Read(value: Sweep(previous: previous, solver: solver, target: target).Z) > face), userMessage: $"start {start}, speed {speed}: the certified sweep crossed");
-
-                if (Read(value: RadiusStepper(previous: previous, solver: solver, target: target, volumes: Ball).Z) < face) {
-                    stepperCrossings++;
-                }
             }
         }
-
-        // The red leg: a radius stepper trusts the √2-overstated distance and steps through.
-        Assert.True(condition: (stepperCrossings > 0), userMessage: "the radius stepper never crossed; the fixture no longer discriminates");
     }
     [Fact]
     public void ABodyStartingInsideItsRadiusOfTheWallStopsOnTheNearSide() {

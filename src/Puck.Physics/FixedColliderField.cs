@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -15,6 +16,10 @@ namespace Puck.Physics;
 /// <exception cref="ArgumentNullException"><paramref name="field"/> is <see langword="null"/>.</exception>
 /// <exception cref="ArgumentOutOfRangeException"><paramref name="gradientStep"/> is not positive.</exception>
 public sealed class FixedColliderField(IFieldEvaluator field, FixedQ4816 gradientStep, bool bounded = true) {
+    /// <summary>The tap offset, in metres, a field measures its direction with when nothing finer is asked of it: a
+    /// thirty-second of a metre.</summary>
+    public static FixedQ4816 DefaultGradientStep { get; } = FixedQ4816.FromRawBits(value: (FixedQ4816.One.Value / 32L));
+
     /// <summary>Gets the field, read in the collider's frame.</summary>
     public IFieldEvaluator Field { get; } = (field ?? throw new ArgumentNullException(paramName: nameof(field)));
     /// <summary>Gets the factor <c>s</c> in <c>[0, 1]</c> that makes <c>s·F</c> 1-Lipschitz, so <c>s·(F(p) − e)</c>
@@ -49,32 +54,38 @@ public enum FixedFieldContactOutcome {
     Clear = 0,
     /// <summary>A surface point the field brackets lies within the body's reach of its core, outside the solid.</summary>
     Contact = 1,
-    /// <summary>A point of the body's core reads inside the solid, and the field measures a direction out of it.</summary>
+    /// <summary>A point of the body's core reads inside the solid. The answer carries the field's measured direction out
+    /// of it, or none where every reading the solve takes is symmetric: an embedded body the field gives no way out
+    /// of, which is neither clear nor pushed.</summary>
     Embedded = 2,
-    /// <summary>Neither: the bound cannot prove the body clear, and the solve found no surface within its reach (the
-    /// nearest it converged on lies farther), no direction out of an embedded core, or no answer from the field.</summary>
+    /// <summary>Neither proved clear nor in contact: the bound cannot prove the body clear, and the solve found no surface
+    /// within its reach (the nearest it converged on lies farther), or the field gave no answer.</summary>
     Unproved = 3,
 }
 /// <summary>One certified field contact solve's answer, in world space.</summary>
 /// <param name="Outcome">How the solve ended.</param>
 /// <param name="Normal">The unit outward normal the push runs along: from the surface point to the core point it is
-/// nearest for a contact, the field's measured direction out of the solid for an embedded core; zero otherwise.</param>
+/// nearest for a contact, the field's measured direction out of the solid for an embedded core; zero otherwise,
+/// including an embedded core the field measures no direction for.</param>
 /// <param name="Penetration">How far, in metres, the body moves along <paramref name="Normal"/> to stand its reach outside
 /// the surface; zero unless the body is pushed.</param>
 /// <param name="Distance">The measured distance, in metres, from the core to the surface: the distance to a bracketed
 /// surface point for a contact (never below the true distance), the negated depth of the deepest core point for an
 /// embedded core; zero otherwise.</param>
 public readonly record struct FixedFieldContact(FixedFieldContactOutcome Outcome, FixedVector3 Normal, FixedQ4816 Penetration, FixedQ4816 Distance) {
-    /// <summary>Gets whether the body is pushed.</summary>
-    public bool Pushes => (Outcome is FixedFieldContactOutcome.Contact or FixedFieldContactOutcome.Embedded);
+    /// <summary>Gets whether the body is pushed: a contact, or an embedded core with a measured way out.</summary>
+    public bool Pushes => ((Outcome == FixedFieldContactOutcome.Contact) ||
+        ((Outcome == FixedFieldContactOutcome.Embedded) && (Normal != FixedVector3.Zero)));
+    /// <summary>Gets whether the body is embedded with no measured way out.</summary>
+    public bool Stuck => ((Outcome == FixedFieldContactOutcome.Embedded) && (Normal == FixedVector3.Zero));
 }
 /// <summary>The one certified surface solve every field contact reads: relief colliders through
 /// <see cref="FixedStaticContactSolver"/> and the world-wide field through <see cref="FixedFieldContactSolver"/>.</summary>
 /// <remarks>
 /// <para>A field's value is not a distance, so the solve never reads it as one. Its certified bound
 /// (<see cref="FixedColliderField.BoundScale"/> less <see cref="FixedColliderField.ValueError"/>) proves a body clear,
-/// one core piece at a time, splitting the pieces it cannot prove. Where the bound cannot, a converged surface solve
-/// measures the distance: from the core point the field reads least, a ray along the field's direction to a bracketed
+/// whole or one core piece at a time, each piece no longer than the body's radius. Where the bound cannot, a converged
+/// surface solve measures the distance: from the unproved core point the field reads least, a ray along the field's direction to a bracketed
 /// zero crossing, re-aimed along the surface's own direction there until the two agree, alternating with the core point
 /// nearest that surface point. A bracketed crossing is a surface point, so the measured distance never falls below the
 /// true one and a push never carries a body past the skin.</para>
@@ -83,27 +94,29 @@ public readonly record struct FixedFieldContact(FixedFieldContactOutcome Outcome
 /// direction and is unproved, never clear, and never given a direction the field does not measure.</para>
 /// </remarks>
 public static class FixedFieldColliderContact {
-    // The core pieces a capsule's proof starts from, at most, and the field reads its subdivision may spend.
+    // The most core pieces a capsule's proof reads.
     private const int MaximumCorePieces = 15;
-    private const int MaximumCoreSamples = 40;
-    private const int CoreCapacity = (MaximumCorePieces + (2 * (MaximumCoreSamples + 1)));
     // The ray search's iteration ceilings: advancing to a sign change, then narrowing it.
     private const int AdvanceIterations = 16;
-    private const int BracketIterations = 16;
-    // The re-aiming rounds of one projection, and the core-to-surface alternations of one capsule.
-    private const int AimRounds = 3;
+    private const int BracketIterations = 48;
+    // The rays one projection casts (the first and one re-aimed), and the core-to-surface alternations of one capsule.
+    private const int AimRounds = 2;
     private const int PairRounds = 3;
-    // The width, in metres, of the bracket a surface point is accepted from: sixteen raws.
-    private static readonly FixedQ4816 Tolerance = FixedQ4816.FromRawBits(value: 16L);
-    // The cosine past which a re-aimed ray and the surface's direction at its crossing agree.
-    private static readonly FixedQ4816 Aligned = (FixedQ4816.One - FixedQ4816.FromRawBits(value: 64L));
+    // The width, in metres, of the bracket a contact's surface point is accepted from: 32 raws, under a millimetre. A
+    // measurement (a probe, a projection an attachment or a diagnostic reads) narrows its bracket to two raws.
+    private static readonly FixedQ4816 Tolerance = FixedQ4816.FromRawBits(value: 32L);
+    private static readonly FixedQ4816 MeasureTolerance = FixedQ4816.FromRawBits(value: 2L);
+    // The cosine past which a ray and the surface's direction at its crossing agree: about 3.6°, where the distance
+    // along the ray exceeds the perpendicular one by under 0.2%.
+    private static readonly FixedQ4816 Aligned = (FixedQ4816.One - FixedQ4816.FromRawBits(value: 128L));
     // How far a projection searches for a surface no caller bounds, in metres.
     private static readonly FixedQ4816 OpenReach = FixedQ4816.FromInteger(value: 64L);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
 
-    // One query's reads of a field in its collider's frame, counted.
-    private ref struct Sampler(FixedColliderField field) {
+    // One query's reads of a field in its collider's frame, counted, and the bracket width its crossings narrow to.
+    private ref struct Sampler(FixedColliderField field, FixedQ4816 width) {
         public readonly FixedColliderField Field = field;
+        public readonly FixedQ4816 Width = width;
         public int Samples;
         public int Bounds;
 
@@ -171,7 +184,7 @@ public static class FixedFieldColliderContact {
             var high = FixedQ4816.Zero;
             var highReading = FixedQ4816.Zero;
             var bracketed = false;
-            var t = FixedQ4816.Clamp(maximum: limit, minimum: FixedQ4816.Min(x: Tolerance, y: limit), value: guess);
+            var t = FixedQ4816.Clamp(maximum: limit, minimum: FixedQ4816.Min(x: Width, y: limit), value: guess);
 
             for (var iteration = 0; (iteration < AdvanceIterations); iteration++) {
                 if (!TryValue(local: (start + (direction * t)), value: out var reading)) {
@@ -189,7 +202,7 @@ public static class FixedFieldColliderContact {
                     return false;
                 }
 
-                var clear = FixedQ4816.Max(x: Tolerance, y: ((ahead - Field.ValueError) * Field.BoundScale));
+                var clear = FixedQ4816.Max(x: Width, y: ((ahead - Field.ValueError) * Field.BoundScale));
                 var next = (t + clear);
 
                 if (ahead < lowReading) {
@@ -204,16 +217,21 @@ public static class FixedFieldColliderContact {
                 return false;
             }
 
-            // Illinois regula falsi: the end kept twice in a row has its reading halved, so neither end stalls.
+            // Illinois regula falsi: the end kept twice in a row has its reading halved, so neither end stalls, and a
+            // step that did not halve the bracket is followed by a bisection, so the bracket at least halves every two.
             var kept = 0;
+            var halved = true;
 
-            for (var iteration = 0; ((iteration < BracketIterations) && ((high - low) > Tolerance)); iteration++) {
-                var quarter = FixedQ4816.Min(x: (Tolerance / Two), y: ((high - low) / FixedQ4816.FromInteger(value: 4L)));
-                var middle = FixedQ4816.Clamp(
-                    maximum: (high - quarter),
-                    minimum: (low + quarter),
-                    value: (low + (((high - low) * lowReading) / (lowReading - highReading)))
-                );
+            for (var iteration = 0; ((iteration < BracketIterations) && ((high - low) > Width)); iteration++) {
+                var width = (high - low);
+                var quarter = FixedQ4816.Min(x: (Width / Two), y: (width / FixedQ4816.FromInteger(value: 4L)));
+                var middle = (halved
+                    ? FixedQ4816.Clamp(
+                        maximum: (high - quarter),
+                        minimum: (low + quarter),
+                        value: (low + ((width * lowReading) / (lowReading - highReading)))
+                    )
+                    : (low + (width / Two)));
 
                 if (!TryValue(local: (start + (direction * middle)), value: out var reading)) {
                     return false;
@@ -230,6 +248,8 @@ public static class FixedFieldColliderContact {
                     highReading = ((kept > 0) ? (highReading / Two) : highReading);
                     kept = 1;
                 }
+
+                halved = ((high - low) <= (width / Two));
             }
 
             crossing = high;
@@ -325,7 +345,12 @@ public static class FixedFieldColliderContact {
     // fraction, and its reading.
     private record struct CoreSample(FixedQ4816 T, FixedQ4816 Half, FixedQ4816 Value);
 
-    // The solve over a core (a point when the axis is zero) of the radius, in the collider's frame.
+    // The solve over a core (a point when the axis is zero) of the radius, in the collider's frame. The bound first tries
+    // the whole core, then an odd count of pieces no longer than the radius (so the middle reading centres one), and the
+    // converged surface solve runs from the piece the bound cannot prove that reads least, and from a second dip along
+    // the core when the first finds no surface within the reach. Its piece tables are read only where written, so they
+    // skip the zero fill.
+    [SkipLocalsInit]
     private static FixedFieldContact SolveCore(ref Sampler sampler, FixedVector3 lower, FixedVector3 axis, FixedQ4816 radius, FixedQ4816 skin) {
         var reach = (radius + skin);
         var length = axis.Length;
@@ -344,8 +369,6 @@ public static class FixedFieldColliderContact {
             return default;
         }
 
-        // Prove the core one piece at a time: an odd count of pieces no longer than the radius, so the middle reading
-        // centres one, each split while the bound cannot prove it and its half is longer than a quarter of the radius.
         var count = 1;
 
         if (length > FixedQ4816.Zero) {
@@ -355,63 +378,34 @@ public static class FixedFieldColliderContact {
             count |= 1;
         }
 
-        // A split is taken only while fewer than MaximumCoreSamples reads are spent, and every read but the middle's
-        // follows a pop, so the pieces ever made number at most the initial ones plus two per split.
-        Span<CoreSample> pending = stackalloc CoreSample[CoreCapacity];
-        Span<CoreSample> unproved = stackalloc CoreSample[CoreCapacity];
-        var pendingCount = 0;
-        var unprovedCount = 0;
-        var spent = 0;
+        Span<CoreSample> pieces = stackalloc CoreSample[MaximumCorePieces];
+        Span<bool> proved = stackalloc bool[MaximumCorePieces];
+        Span<CoreSample> open = stackalloc CoreSample[MaximumCorePieces];
+        var openCount = 0;
         var countFixed = FixedQ4816.FromInteger(value: count);
         var pieceHalf = (FixedQ4816.One / (countFixed + countFixed));
-        var finest = FixedQ4816.Max(x: (radius / FixedQ4816.FromInteger(value: 4L)), y: Tolerance);
 
-        for (var piece = (count - 1); (piece >= 0); piece--) {
+        for (var piece = 0; (piece < count); piece++) {
             var t = (FixedQ4816.FromInteger(value: ((2L * piece) + 1L)) * pieceHalf);
+            var value = middleValue;
 
-            pending[pendingCount++] = new CoreSample(Half: pieceHalf, T: t, Value: (((piece + piece + 1) == count) ? middleValue : FixedQ4816.MaxValue));
+            if (((piece + piece + 1) != count) && !sampler.TryValue(local: (lower + (axis * t)), value: out value)) {
+                return Unproved;
+            }
+
+            pieces[piece] = new CoreSample(Half: pieceHalf, T: t, Value: value);
+            proved[piece] = sampler.Certifies(radius: (length * pieceHalf), reach: reach, value: value);
+
+            if (!proved[piece]) {
+                open[openCount++] = pieces[piece];
+            }
         }
 
-        while (pendingCount > 0) {
-            var sample = pending[--pendingCount];
-
-            if (sample.Value == FixedQ4816.MaxValue) {
-                if (!sampler.TryValue(local: (lower + (axis * sample.T)), value: out var value)) {
-                    return Unproved;
-                }
-
-                sample = (sample with { Value = value });
-                spent++;
-            }
-
-            var pieceLength = (length * sample.Half);
-
-            if (sampler.Certifies(radius: pieceLength, reach: reach, value: sample.Value)) {
-                continue;
-            }
-
-            if ((sample.Value <= FixedQ4816.Zero) || (pieceLength <= finest) || (spent >= MaximumCoreSamples)) {
-                unproved[unprovedCount++] = sample;
-                continue;
-            }
-
-            var quarter = (sample.Half / Two);
-
-            pending[pendingCount++] = new CoreSample(Half: quarter, T: (sample.T + quarter), Value: FixedQ4816.MaxValue);
-            pending[pendingCount++] = new CoreSample(Half: quarter, T: (sample.T - quarter), Value: FixedQ4816.MaxValue);
-        }
-
-        if (unprovedCount == 0) {
+        if (openCount == 0) {
             return default;
         }
 
-        var seed = unproved[0];
-
-        foreach (var sample in unproved[..unprovedCount]) {
-            if ((sample.Value < seed.Value) || ((sample.Value == seed.Value) && (sample.T < seed.T))) {
-                seed = sample;
-            }
-        }
+        var seed = Least(samples: open[..openCount]);
 
         // A seed piece at an end of the core: the end itself may read less.
         if ((length > FixedQ4816.Zero) && (seed.Value > FixedQ4816.Zero)) {
@@ -425,21 +419,65 @@ public static class FixedFieldColliderContact {
         }
 
         if (seed.Value <= FixedQ4816.Zero) {
-            return Embedded(sampler: ref sampler, axis: axis, lower: lower, reach: reach, samples: unproved[..unprovedCount], deepest: seed);
+            return Embedded(sampler: ref sampler, axis: axis, lower: lower, reach: reach, samples: pieces[..count], deepest: seed);
         }
 
-        // The converged surface solve: alternate the surface point nearest the core point with the core point nearest
-        // that surface point.
+        var contact = Pair(sampler: ref sampler, axis: axis, lower: lower, reach: reach, samples: pieces[..count], seed: seed);
+
+        if (contact.Outcome != FixedFieldContactOutcome.Unproved) {
+            return contact;
+        }
+
+        // Another place a surface may come within the reach: an open piece more than a radius along the core from the
+        // seed that reads less than both its neighbours, a second dip the seed's solve does not reach. The least of them
+        // is solved from too.
+        var other = seed;
+        var found = false;
+
+        for (var piece = 0; (piece < count); piece++) {
+            var candidate = pieces[piece];
+
+            if (
+                !proved[piece] &&
+                ((length * FixedQ4816.Abs(value: (candidate.T - seed.T))) > radius) &&
+                ((piece == 0) || (candidate.Value < pieces[piece - 1].Value)) &&
+                (((piece + 1) == count) || (candidate.Value < pieces[piece + 1].Value)) &&
+                (!found || (candidate.Value < other.Value))
+            ) {
+                (other, found) = (candidate, true);
+            }
+        }
+
+        return (found
+            ? Pair(sampler: ref sampler, axis: axis, lower: lower, reach: reach, samples: pieces[..count], seed: other)
+            : Unproved);
+    }
+    // The core sample that reads least, the first along the core among equals.
+    private static CoreSample Least(scoped ReadOnlySpan<CoreSample> samples) {
+        var least = samples[0];
+
+        foreach (var sample in samples) {
+            if ((sample.Value < least.Value) || ((sample.Value == least.Value) && (sample.T < least.T))) {
+                least = sample;
+            }
+        }
+
+        return least;
+    }
+    // The converged surface solve from a core sample outside the solid: alternate the surface point nearest the core
+    // point with the core point nearest that surface point. A contact when the least distance reached is within the
+    // reach; an embedded core when the alternation lands inside the solid; unproved otherwise.
+    private static FixedFieldContact Pair(ref Sampler sampler, FixedVector3 lower, FixedVector3 axis, FixedQ4816 reach, scoped ReadOnlySpan<CoreSample> samples, CoreSample seed) {
         var limit = ((reach + reach) + Tolerance);
-        var (at, value0) = (seed.T, seed.Value);
-        var point = (lower + (axis * at));
+        var value = seed.Value;
+        var point = (lower + (axis * seed.T));
         var best = FixedQ4816.MaxValue;
         var bestPoint = point;
         var bestSurface = point;
         var squared = FixedVector3.Dot(left: axis, right: axis);
 
         for (var round = 0; (round < PairRounds); round++) {
-            if (!sampler.TryProject(distance: out var distance, limit: limit, local: point, surface: out var surface, value: value0)) {
+            if (!sampler.TryProject(distance: out var distance, limit: limit, local: point, surface: out var surface, value: value)) {
                 break;
             }
 
@@ -459,11 +497,11 @@ public static class FixedFieldColliderContact {
             }
 
             if (nextValue <= FixedQ4816.Zero) {
-                return Embedded(sampler: ref sampler, axis: axis, lower: lower, reach: reach, samples: unproved[..unprovedCount],
+                return Embedded(sampler: ref sampler, axis: axis, lower: lower, reach: reach, samples: samples,
                     deepest: new CoreSample(Half: FixedQ4816.Zero, T: next, Value: nextValue));
             }
 
-            (at, value0, point) = (next, nextValue, nextPoint);
+            (value, point) = (nextValue, nextPoint);
         }
 
         if (best >= reach) {
@@ -532,7 +570,7 @@ public static class FixedFieldColliderContact {
 
         return (measured
             ? new FixedFieldContact(Distance: -depth, Normal: normal, Outcome: FixedFieldContactOutcome.Embedded, Penetration: (depth + reach))
-            : Unproved);
+            : Stuck);
     }
     // A box or ellipsoid: its centre's surface solve, with its support along the measured normal.
     private static FixedFieldContact SolveVolume(ref Sampler sampler, in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 skin) {
@@ -557,7 +595,7 @@ public static class FixedFieldColliderContact {
 
         if (value <= FixedQ4816.Zero) {
             if (!sampler.TryExit(depth: out var depth, local: center, normal: out local, value: value)) {
-                return Unproved;
+                return Stuck;
             }
 
             distance = -depth;
@@ -578,6 +616,8 @@ public static class FixedFieldColliderContact {
     }
 
     private static FixedFieldContact Unproved => new(Distance: FixedQ4816.Zero, Normal: FixedVector3.Zero, Outcome: FixedFieldContactOutcome.Unproved, Penetration: FixedQ4816.Zero);
+    // An embedded core the field measures no way out of.
+    private static FixedFieldContact Stuck => new(Distance: FixedQ4816.Zero, Normal: FixedVector3.Zero, Outcome: FixedFieldContactOutcome.Embedded, Penetration: FixedQ4816.Zero);
 
     /// <summary>Solves a body volume against a field collider's surface: whether the volume lies within the contact skin
     /// of it, and the push that stands it the skin outside.</summary>
@@ -589,7 +629,7 @@ public static class FixedFieldColliderContact {
     /// <returns>The solve's answer, its normal in world space.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="collider"/> carries no field.</exception>
     public static FixedFieldContact Solve(in FixedStaticCollider collider, FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 skin) {
-        var sampler = new Sampler(field: Field(collider: in collider));
+        var sampler = new Sampler(field: Field(collider: in collider), width: Tolerance);
         FixedFieldContact contact;
 
         if (volume.Kind is FixedBodyColliderKind.Box or FixedBodyColliderKind.Ellipsoid) {
@@ -602,7 +642,7 @@ public static class FixedFieldColliderContact {
             contact = (contact with { Normal = collider.Rotation.Rotate(vector: contact.Normal) });
         }
 
-        FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: (contact.Outcome == FixedFieldContactOutcome.Unproved));
+        FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: ((contact.Outcome == FixedFieldContactOutcome.Unproved) || contact.Stuck));
         return contact;
     }
     /// <summary>Returns the push that keeps a body volume the contact skin outside a field collider's surface: the
@@ -632,7 +672,7 @@ public static class FixedFieldColliderContact {
     /// brackets no surface within 64 m.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="collider"/> carries no field.</exception>
     public static bool TryMeasure(in FixedStaticCollider collider, FixedVector3 point, out FixedQ4816 distance, out FixedVector3 normal) {
-        var sampler = new Sampler(field: Field(collider: in collider));
+        var sampler = new Sampler(field: Field(collider: in collider), width: MeasureTolerance);
         var measured = Measure(distance: out distance, local: ToLocal(collider: in collider, world: point), normal: out var local,
             sampler: ref sampler, surface: out _);
 
@@ -649,7 +689,7 @@ public static class FixedFieldColliderContact {
     /// direction at the probe, or brackets no surface within 64 m.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="collider"/> carries no field.</exception>
     public static bool TryNearest(in FixedStaticCollider collider, FixedVector3 probe, out FixedVector3 point, out FixedVector3 normal) {
-        var sampler = new Sampler(field: Field(collider: in collider));
+        var sampler = new Sampler(field: Field(collider: in collider), width: MeasureTolerance);
         var measured = Measure(distance: out _, local: ToLocal(collider: in collider, world: probe), normal: out var local,
             sampler: ref sampler, surface: out var surface);
 

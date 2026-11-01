@@ -12,9 +12,8 @@ namespace Puck.World.Server;
 // union, in one scope), read by the evaluator the field provider uses. A collider follows the drawn solid
 // (docs/decisions/engine-design.md); its primitives' analytic colliders stand only as the diagnostic's witnesses.
 public sealed partial class WorldColliderSet {
-    // The gradient taps' half-span: a thirty-second of a metre, or a sixteenth of the relief's finest wavelength when that
-    // is shorter, and never under a 1024th of a metre.
-    private const float ReliefGradientStep = (1f / 32f);
+    // The gradient taps' half-span: the field's default, or a sixteenth of the relief's finest wavelength when that is
+    // shorter, and never under a 1024th of a metre.
     private const float ReliefGradientFloor = (1f / 1024f);
 
     /// <summary>Returns whether a creation's solid collides as a field: it carries relief the analytic primitives do not
@@ -47,20 +46,25 @@ public sealed partial class WorldColliderSet {
                     return;
                 }
 
-                if ((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero)) {
-                    colliders.Add(item: FixedStaticCollider.Sphere(center: copy.Center,
-                        radius: ((FixedQ4816.FromDouble(value: SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere).HalfExtents.X) * copy.UniformScale) + margin)));
-                } else {
-                    colliders.Add(item: PlacementFinite(copy: copy, margin: margin));
-                }
-
+                var witness = (((copy.Shape.Type == SdfSolidPrimitive.Sphere) && (copy.UniformScale > FixedQ4816.Zero))
+                    ? FixedStaticCollider.Sphere(center: copy.Center,
+                        radius: ((FixedQ4816.FromDouble(value: SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere).HalfExtents.X) * copy.UniformScale) + margin))
+                    : PlacementFinite(copy: copy, margin: margin));
                 FixedVector3 half;
 
-                if (copy.Shape.Type == SdfSolidPrimitive.Superellipsoid) {
-                    var least = FixedQ4816.Max(x: FixedQ4816.Epsilon,
-                        y: FixedQ4816.Min(x: copy.LocalHalfExtents.X, y: FixedQ4816.Min(x: copy.LocalHalfExtents.Y, y: copy.LocalHalfExtents.Z)));
+                colliders.Add(item: witness);
 
-                    half = ((copy.HalfExtents * (FixedQ4816.One + (reach / least))) + pad);
+                if (witness.Kind == FixedStaticColliderKind.Superellipsoid) {
+                    // The witness is the drawn superellipsoid itself, uninset; a convex solid's support along each world
+                    // axis is its exact world box.
+                    var least = FixedQ4816.Max(x: FixedQ4816.Epsilon, y: FixedQ4816.Min(x: witness.Extent.X, y: FixedQ4816.Min(x: witness.Extent.Y, y: witness.Extent.Z)));
+                    var grown = (witness with { Extent = (witness.Extent * (FixedQ4816.One + (reach / least))), Radius = FixedQ4816.Zero });
+
+                    half = (new FixedVector3(
+                        X: (grown.SupportPoint(direction: FixedVector3.UnitX).X - grown.Center.X),
+                        Y: (grown.SupportPoint(direction: FixedVector3.UnitY).Y - grown.Center.Y),
+                        Z: (grown.SupportPoint(direction: FixedVector3.UnitZ).Z - grown.Center.Z)
+                    ) + pad);
                 } else {
                     half = ((copy.HalfExtents + new FixedVector3(X: reach, Y: reach, Z: reach)) + pad);
                 }
@@ -110,7 +114,7 @@ public sealed partial class WorldColliderSet {
         }
 
         var wavelength = ((finest > 0f) ? (((float)transform.Scale) / finest) : float.PositiveInfinity);
-        var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ReliefGradientStep, val2: (wavelength / 16f)));
+        var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ((float)FixedColliderField.DefaultGradientStep), val2: (wavelength / 16f)));
 
         return new FixedColliderField(
             field: new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: true, transform: transform)),

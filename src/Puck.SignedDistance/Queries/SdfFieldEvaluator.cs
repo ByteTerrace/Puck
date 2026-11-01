@@ -73,8 +73,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // A scope's compiled candidate scale is a 2⁻³² fraction (CompileScopeScale).
     private const int ScopeScaleBits = 32;
     private const double ScopeScaleOne = 4294967296.0;
-    // The relative rounding the program's single-precision Lipschitz analysis may leave in its step scale.
-    private const double AnalysisSlack = (1.0 / 1048576.0);
     // The raws every answer may lie from the function the step scale bounds before any relief: each shape's and blend's
     // own rounding.
     private const long BaseValueErrorRaws = 16L;
@@ -143,7 +141,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         m_reading = reading;
         m_instructions = Compile(program: program, reading: reading);
-        m_stepScale = CertifiedStepScale(compiled: m_instructions, program: program);
+        m_stepScale = CertifiedStepScale(compiled: m_instructions, program: program, reading: reading);
         m_valueError = CertifiedValueError(compiled: m_instructions);
         m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
         var reaches = BuildShapeReaches(compiled: m_instructions, program: program);
@@ -469,7 +467,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                         paths: paths
                     )
                 : null),
-                ScopeScale: ((instruction.Op == SdfOp.PopField) ? CompileScopeScale(scale: instruction.Data1.Y) : 0L)
+                ScopeScale: (((instruction.Op == SdfOp.PopField) && !DefersScope(instruction: instruction, reading: reading))
+                    ? CompileScopeScale(scale: instruction.Data1.Y)
+                    : 0L)
             );
         }
 
@@ -488,18 +488,45 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return FixedQ4816.FromRawBits(value: ((long)((product >= 0) ? ((product + half) >> ScopeScaleBits) : -((-product + half) >> ScopeScaleBits))));
     }
-    // The certified step scale: the program's, floored past its float analysis's rounding, and divided by the factor
-    // any scope's compiled scale exceeds its baked one by (a scale raised to one tick).
-    private static FixedQ4816 CertifiedStepScale(SdfProgram program, CompiledInstruction[] compiled) {
-        var inflation = 1.0;
+    // Whether a scope's pop keeps its candidate unscaled. Read for contact, a scope composed back by hard union changes
+    // no zero set by its positive scale, so it keeps the full Q48.16 resolution of its own field, which a scale under the
+    // grid would erase, and the certified step scale carries the scale instead (CertifiedStepScale).
+    private static bool DefersScope(in SdfInstruction instruction, SdfFieldReading reading) =>
+        ((reading == SdfFieldReading.Contact) && (instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f));
+    // The certified step scale: the program's, divided by how much steeper the compiled field is than the one its
+    // analysis bounds, and floored onto the grid. A deferred scope's candidate is its scale's
+    // reciprocal steeper, a scope scale raised to one tick its compiled scale over its baked one, and a scope's content
+    // carries the factor its own deferred scopes left; every composition is at most as steep as its steepest operand
+    // times that factor, so the factors multiply down a nesting and take the greatest across siblings.
+    private static FixedQ4816 CertifiedStepScale(SdfProgram program, CompiledInstruction[] compiled, SdfFieldReading reading) {
+        Span<double> content = stackalloc double[SdfProgramBuilder.MaxFieldScopeDepth + 1];
+        var depth = 0;
+
+        content[0] = 1.0;
 
         for (var index = 0; (index < compiled.Length); index++) {
-            if (compiled[index].ScopeScale > 0L) {
-                inflation *= Math.Max(val1: 1.0, val2: (compiled[index].ScopeScale / (((double)program.Instructions[index].Data1.Y) * ScopeScaleOne)));
+            if (compiled[index].Op == SdfOp.PushField) {
+                content[++depth] = 1.0;
+                continue;
             }
+
+            if (compiled[index].Op != SdfOp.PopField) {
+                continue;
+            }
+
+            var baked = (double)program.Instructions[index].Data1.Y;
+            var factor = content[depth--];
+
+            if (DefersScope(instruction: program.Instructions[index], reading: reading)) {
+                factor /= baked;
+            } else if (compiled[index].ScopeScale > 0L) {
+                factor *= Math.Max(val1: 1.0, val2: (compiled[index].ScopeScale / (baked * ScopeScaleOne)));
+            }
+
+            content[depth] = Math.Max(val1: content[depth], val2: factor);
         }
 
-        return ConservativeStepScale(value: ((((double)program.StepScale) * (1.0 - AnalysisSlack)) / inflation));
+        return ConservativeStepScale(value: (((double)program.StepScale) / content[0]));
     }
     // The most an answer lies from the function the certified scale bounds, in field units: a few raws of every shape's
     // rounding, and each relief op's amplitude times its lattice blends' rounding, which the octave sum carries once per
@@ -1702,7 +1729,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         // table offset for this shape too.
         PathEdgeFixed[]? PathEdges = null,
         // Only for SdfOp.PopField: the scope's candidate scale (Data1.y, its 1/L) on a 2⁻³² grid, floored and never
-        // below one tick, so a scale under the Q48.16 grid still scales; zero for an unscaled scope.
+        // below one tick, so a scale under the Q48.16 grid still scales; zero for an unscaled scope and for one whose
+        // scale the certified step scale carries instead (DefersScope).
         long ScopeScale = 0L
     );
     // The compiled, fixed-point form of one SdfSweepCurve.

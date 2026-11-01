@@ -27,7 +27,8 @@ namespace Puck.Physics;
 /// <param name="contactSkin">The signed skin kept between a body and every surface.</param>
 /// <param name="groundedThreshold">The <c>cos(maxSlope)</c> a contact normal's up-alignment must clear to ground.</param>
 /// <param name="gradientProbe">The finite-difference step, in metres, the field's direction is measured with, by the
-/// solve and the up axis alike.</param>
+/// solve and the up axis alike; zero or less takes <see cref="FixedColliderField.DefaultGradientStep"/> for the solve and
+/// the field's own default for the up axis.</param>
 /// <param name="maxIterations">The relaxation iteration count; values below one resolve one pass.</param>
 /// <param name="gradientUp">Whether the up axis comes from the field gradient rather than world <c>+Y</c>.</param>
 public sealed class FixedFieldContactSolver(
@@ -66,7 +67,8 @@ public sealed class FixedFieldContactSolver(
     // The whole field as one unbounded field collider at the world origin: the frame every solve reads it in.
     private readonly FixedStaticCollider m_surface = FixedStaticCollider.FieldSurface(
         center: FixedVector3.Zero,
-        field: new FixedColliderField(bounded: false, field: field, gradientStep: gradientProbe),
+        field: new FixedColliderField(bounded: false, field: field,
+            gradientStep: ((gradientProbe > FixedQ4816.Zero) ? gradientProbe : FixedColliderField.DefaultGradientStep)),
         halfExtent: FixedVector3.Zero,
         rotation: FixedQuaternion.Identity
     );
@@ -311,11 +313,13 @@ public sealed class FixedFieldContactSolver(
     /// <inheritdoc/>
     /// <remarks>A contact pushes and may ground the body; an embedded volume is extracted along the direction the solve
     /// measured out of the solid, by its depth plus its reach, and never grounds it. One volume claims the extraction a
-    /// relaxation pass allows, so the volumes of one body never pull it apart.</remarks>
+    /// relaxation pass allows, so the volumes of one body never pull it apart. A volume embedded where the field measures
+    /// no way out stays where it is and marks the resolution unproved.</remarks>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         var grounded = false;
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
+        var stuck = false;
 
         for (var iteration = 0; (iteration < m_iterations); iteration++) {
             // A field authoring its own up samples it HERE, per iteration and at the body's current position: that is
@@ -356,6 +360,8 @@ public sealed class FixedFieldContactSolver(
                         velocity: ref velocity
                     );
                     pushed = true;
+                } else if (contact.Stuck) {
+                    stuck = true;
                 } else if ((contact.Outcome == FixedFieldContactOutcome.Embedded) && !extracted) {
                     extracted = true;
                     position += (contact.Normal * contact.Penetration);
@@ -378,7 +384,8 @@ public sealed class FixedFieldContactSolver(
         return new ContactResolution(
             GroundNormal: groundNormal,
             Grounded: grounded,
-            ObstructionNormal: lastNormal
+            ObstructionNormal: lastNormal,
+            Unproved: stuck
         );
     }
     /// <inheritdoc/>
