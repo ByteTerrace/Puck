@@ -45,7 +45,7 @@ public static class SdfMeshChunks {
         }
         if (bins.Count == 1) { return Merge(mesh: mesh, preserveFeatures: preserveFeatures); }
 
-        var chunks = new List<SdfMesh>(capacity: bins.Count);
+        var parts = new List<SdfMesh>(capacity: bins.Count);
 
         foreach (var bin in bins.Values) {
             var vertices = new Dictionary<uint, uint>();
@@ -70,17 +70,34 @@ public static class SdfMeshChunks {
                     triangles[((3 * at) + corner)] = local;
                 }
             }
-            var part = new SdfMesh(positions: points.ToArray(), indices: triangles, normals: normals.ToArray(), triangleMaterials: materials) { BakeCell = mesh.BakeCell };
-
-            chunks.Add(item: Merge(mesh: part, preserveFeatures: preserveFeatures));
+            parts.Add(item: new SdfMesh(positions: points.ToArray(), indices: triangles, normals: normals.ToArray(), triangleMaterials: materials) { BakeCell = mesh.BakeCell });
         }
+
+        // Each piece's open edges stay fixed, so the pieces merge and level independently, at once, each into its own
+        // place in the bins' order.
+        var chunks = new SdfMesh[parts.Count];
+
+        _ = Parallel.For(fromInclusive: 0, toExclusive: parts.Count, body: index => chunks[index] = Merge(mesh: parts[index], preserveFeatures: preserveFeatures));
+
         return Join(chunks: chunks);
     }
 
-    private static SdfMesh Merge(SdfMesh mesh, bool preserveFeatures) {
+    /// <summary>Merges a contour into its planar polygons (<see cref="SdfMeshPlanarMerge"/>) and, unless
+    /// <paramref name="levels"/> is false, collapses the merged mesh into its coarser levels (<see cref="SdfMeshCollapse"/>):
+    /// what every landed mesh, and each chunk of a chunked one, is made of.</summary>
+    /// <param name="mesh">The contour, with its actual bake cell.</param>
+    /// <param name="preserveFeatures">Whether coarser levels limit crease and material-edge error to the largest bake-cell
+    /// dimension divided by 8.</param>
+    /// <param name="levels">Whether the mesh takes coarser levels; glass, which its pass draws at level zero alone, does
+    /// not.</param>
+    /// <returns>The merged mesh, levelled or not.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static SdfMesh Merge(SdfMesh mesh, bool preserveFeatures, bool levels = true) {
+        ArgumentNullException.ThrowIfNull(argument: mesh);
+
         var merged = SdfMeshPlanarMerge.Merge(mesh: mesh);
 
-        return SdfMeshCollapse.Levels(mesh: merged, preserveFeatures: preserveFeatures);
+        return (levels ? SdfMeshCollapse.Levels(mesh: merged, preserveFeatures: preserveFeatures) : merged);
     }
 
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined
