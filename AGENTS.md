@@ -160,7 +160,14 @@ agent works in that mode by default, without asking:
     has checked before, if only as a refresher. Before a major area of work
     (the illumination round before further graphical work is the example), the
     lead runs a research round across the families, each with its own focus
-    and verified citations, then synthesizes it into the area's plan.
+    and verified citations, then synthesizes it into the area's plan. A
+    round is for decisions that shape much later work (how a pipeline works),
+    not every fix. Puck is free to learn and combine, not just copy other
+    engines (the owner's ruling): it is uniquely suited to explore what others
+    are limited by (signed distance fields as the source, derived products
+    identified from their inputs, behaviour as authored programs, change-
+    proportional work, portals and nested views), so every round's synthesis
+    weighs Puck-native combinations beside the borrowed techniques.
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
