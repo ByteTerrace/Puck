@@ -21,6 +21,39 @@
     ]
   },
   {
+    "Id": "sampling.bounded-budgeted-rejection",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BoundedRandomSampling",
+        "Name": "TrySampleRange"
+      },
+      {
+        "Type": "Puck.Maths.BoundedRandomSampling",
+        "Name": "TrySampleWide"
+      },
+      {
+        "Type": "Puck.Maths.BoundedRandomSampling",
+        "Name": "ExhaustedReason"
+      },
+      {
+        "Type": "Puck.Maths.IRawWordSource",
+        "Name": "TryNextWord"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Scripted raw words: a rejected word consumes the budget and the next accepted word maps; an exhausted budget and a refusing source both refuse; a full-width range is the raw word; a 73-bit bound draws three words per candidate, masks and rejects a candidate at or past the bound; a bound within one word takes the single-word path; a zero wide bound refuses.",
+        "Against": "Hand-computed Lemire products for the scripted words and the little-endian masked candidate for the wide bound.",
+        "Shared": "No Puck numeric kernel is used by the oracle.",
+        "Citation": "Rejection of the out-of-range candidates leaves every value in the bound equally likely.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "sampling.bit-mix-constants-invert",
     "Tier": "Default",
     "Members": [

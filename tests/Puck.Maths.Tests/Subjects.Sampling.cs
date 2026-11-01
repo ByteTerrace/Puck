@@ -20,6 +20,52 @@ internal static partial class Subjects {
         return null;
     }
 
+    private struct ScriptedWords(uint[] words) : IRawWordSource {
+        private int m_next;
+
+        public readonly int Position => m_next;
+
+        public bool TryNextWord(out uint word, out string reason) {
+            if (m_next >= words.Length) { word = 0; reason = "script ended"; return false; }
+            word = words[m_next++];
+            reason = string.Empty;
+            return true;
+        }
+    }
+
+    public static string? BoundedBudgetedRejection() {
+        // Bound 2147483649 has rejection threshold 2^31 - 1: word 0 (low product 0) is rejected, word 5 is accepted as 2.
+        var rejected = 0U;
+        var source = new ScriptedWords([rejected, rejected, 5U]);
+
+        if (!BoundedRandomSampling.TrySampleRange(maxAttempts: 4, maximum: 2147483648U, minimum: 0U, reason: out var reason, source: ref source, value: out var value, word: out var word, words: out var words) || (words != 3) || (word != 5U) || (value != 2U)) { return $"scripted rejection: {value}, {word}, {words}, '{reason}'"; }
+
+        source = new ScriptedWords([rejected, rejected, rejected]);
+        if (BoundedRandomSampling.TrySampleRange(maxAttempts: 2, maximum: 2147483648U, minimum: 0U, reason: out reason, source: ref source, value: out _, word: out _, words: out words) || (words != 2) || (reason != BoundedRandomSampling.ExhaustedReason)) { return $"budget exhaustion: {words}, '{reason}'"; }
+
+        source = new ScriptedWords([]);
+        if (BoundedRandomSampling.TrySampleRange(maxAttempts: 2, maximum: 7U, minimum: 0U, reason: out reason, source: ref source, value: out _, word: out _, words: out words) || (words != 0) || (reason != "script ended")) { return $"source refusal: {words}, '{reason}'"; }
+
+        source = new ScriptedWords([0x12345678U]);
+        if (!BoundedRandomSampling.TrySampleRange(maxAttempts: 1, maximum: uint.MaxValue, minimum: 0U, reason: out reason, source: ref source, value: out value, word: out _, words: out words) || (value != 0x12345678U) || (words != 1)) { return "full-width range is not the raw word"; }
+
+        // A 73-bit bound draws three words per candidate, masks to 73 bits, and rejects a candidate at or past the bound.
+        var bound = (UInt128.One << 72) + 5U;
+        source = new ScriptedWords([0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 1U, 2U, 1U]);
+        if (!BoundedRandomSampling.TrySampleWide(exclusiveHigh: bound, maxAttempts: 4, reason: out reason, source: ref source, value: out var wide, words: out words)) { return $"wide draw refused: '{reason}'"; }
+        // The first candidate (3 words, masked to 73 bits) is >= bound; the second is (1 << 64) | (2 << 32) | 1.
+        if ((words != 6) || (wide != ((UInt128.One << 64) | (((UInt128)2U) << 32) | 1U))) { return $"wide draw: {wide}, {words}"; }
+
+        source = new ScriptedWords([0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU]);
+        if (BoundedRandomSampling.TrySampleWide(exclusiveHigh: bound, maxAttempts: 2, reason: out reason, source: ref source, value: out _, words: out words) || (words != 6) || (reason != BoundedRandomSampling.ExhaustedReason)) { return $"wide exhaustion: {words}, '{reason}'"; }
+
+        source = new ScriptedWords([0xFFFFFFFFU]);
+        if (!BoundedRandomSampling.TrySampleWide(exclusiveHigh: 8U, maxAttempts: 2, reason: out reason, source: ref source, value: out wide, words: out words) || (wide != 7U) || (words != 1)) { return "narrow wide bound did not take the one-word path"; }
+
+        try { BoundedRandomSampling.TrySampleWide(exclusiveHigh: UInt128.Zero, maxAttempts: 1, reason: out _, source: ref source, value: out _, words: out _); return "zero wide bound was admitted"; } catch (ArgumentOutOfRangeException) { }
+        return null;
+    }
+
     // ---- sampling ----
 
     // A primitive degree-4 generator (t^4 + t + 1) and a non-primitive irreducible one (t^4 + t^3 + t^2 + t + 1), the
