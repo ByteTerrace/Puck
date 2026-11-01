@@ -312,6 +312,10 @@ packet), and re-read these stops on a quiet machine.
   reaching its bound, or the queue idle behind the back buffer) would. The
   Linux windows hold no display request (Wayland's idle inhibit, X11's
   screensaver suspend). (from: frame-time)
+- [low · unconfirmed] A windowed Direct3D 12 debug World started with
+  `--exit-after-seconds 840` and a stdin script ran about 25 minutes until it
+  was stopped by PID, through its whole cold bake. Find whether the auto-exit
+  counts wall time, ticks the bake starved, or nothing once stdin closes.
 - [low] `WorldGpuTiming` (`world.gpu-timing` and its `timeline`) has no CPU
   test over a fake runtime, so its lines rely on a live render root.
   (from: frame-time)
