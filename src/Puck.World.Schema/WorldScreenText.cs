@@ -28,6 +28,36 @@ public static class WorldScreenText {
 
         return true;
     }
+    /// <summary>Returns the state cells a text screen's lines read: every placeholder of every line that follows the
+    /// screen grammar, in line order; a line that does not reads nothing.</summary>
+    /// <param name="text">The text source.</param>
+    /// <returns>Each placeholder's line index, its token as authored and the binding it names.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    public static IEnumerable<(int Line, string Token, StateBinding Binding)> Placeholders(WorldScreenSource.Text text) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+
+        return Enumerate(lines: (text.Lines ?? []));
+
+        static IEnumerable<(int Line, string Token, StateBinding Binding)> Enumerate(IReadOnlyList<string> lines) {
+            for (var index = 0; (index < lines.Count); index++) {
+                if (
+                    (lines[index] is not { Length: > 0 } line) ||
+                    !TryParse(error: out _, line: line, segments: out var segments)
+                ) {
+                    continue;
+                }
+
+                foreach (var segment in segments) {
+                    if (
+                        segment.IsPlaceholder &&
+                        StateBinding.TryParse(binding: out var binding, token: segment.Text)
+                    ) {
+                        yield return (index, segment.Text, binding);
+                    }
+                }
+            }
+        }
+    }
     /// <summary>Returns the grid dimensions. Inferred columns fit the displayed width up to the cell budget;
     /// dynamic expansions beyond those columns are clipped by the baker. Literal text must fit at load.</summary>
     /// <param name="text">The text source.</param>
