@@ -109,6 +109,18 @@ public sealed class OffscreenHostPresentation {
             var composedTick = false;
 
             loop.Run(stoppingToken: stoppingToken, produce: iteration => {
+                // A host whose time is its tick count composes a frame only when one is owed: a tick just stepped, the
+                // previous frame holds its tick, or the simulation awaits a frame (a capture, a pending bake).
+                if (
+                    iteration.TickLocked &&
+                    iteration.HasSimulation &&
+                    (iteration.Steps == 0) &&
+                    !iteration.Holding &&
+                    !(m_simulation?.AwaitsFrame ?? false)
+                ) {
+                    return false;
+                }
+
                 var stepTicks = iteration.StepTicks;
 
                 if (iteration.Steps > 0) { composedTick = false; }
@@ -130,6 +142,7 @@ public sealed class OffscreenHostPresentation {
                         : deltaTicks),
                     Host: m_rootHostContext,
                     StepTicks: stepTicks,
+                    Tick: iteration.Tick,
                     TargetHeight: targetHeight,
                     TargetWidth: targetWidth
                 );
