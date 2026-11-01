@@ -201,16 +201,13 @@ longer than two tiles.
 
 ## Capacities
 
-**K1 — Two real limits, and the budget is a price.** The per-tick work budget
-and per-document memory bounds are what refuse a document. A count survives
-only when its doc comment names the bytes it sizes or the share of the budget
-it multiplies; a count that protects nothing is deleted. There is one per-tick
-budget, and it is priced: [costing](#costing)'s reference schedule replaces the
-heuristic work-unit count, so a ceiling's budget share is a share of reference
-cycles and `MaxWorkUnitsPerTick` survives as that schedule's calibrated
-per-step allowance rather than as a second, unpriced limit. Two currencies for
-one deadline would let a document pass one and fail the other, which is the
-surprise both limits exist to remove.
+**K1 — Two real limits, one semantic allowance.** Per-document memory bounds
+and one deterministic semantic work allowance refuse work for a reason an author
+can inspect. A count survives only when it names the storage it sizes or the
+allowance share it bounds. Admission, execution, search, and reports use that
+one allowance; a unit that cannot fit refuses atomically or resumes from a
+complete continuation at a defined boundary. Physical headroom is measured
+separately and never chooses authoritative prices from the executing host.
 
 **K2 — A buffer sized by a document is heap, grown once.** No `stackalloc` is
 sized by a topology's cell count, a token count, or an expression's length
@@ -227,27 +224,27 @@ three nested 64-word leases. A single small lease is about twice the cost, and
 leases of thousands of elements cost the same either way, because clearing
 them dominates.
 
-**K2a — The memory bound is the arena's storage, in bytes.** `ArenaLayout.Bytes`
-measures every column at its full width, the change stamps a settle keeps per
-position, the row and key indexes, the vector components, and the strings its
-reference columns point at, with a reference counted as eight bytes on every
-host so a document measures the same wherever it is admitted. A string is
-counted at the length ceiling its write doors hold it to: a provenance for
-every cell slot, a text for every slot of a text row. `StateArena.Bytes` adds
-the bounded visibility payload held by declaration and live state;
-`ArenaCapacity.MaxBytes` bounds that total. Layout overflow refuses before
-column allocation, and visibility admission checks construction, imports and
-writes. See [byte accounting](../reference/state/arena.md#byte-accounting).
-A count of cells
-cannot stand in for it: a cell slot costs about 250 bytes once every column a
-row may use is allocated, and lanes, draw masks and vectors are not cells. The
-undo record has its own ceiling (`ArenaCapacity.MaxJournalBytes`), which counts
-its entries, its snapshotted vector components, and the texts and other
-references it overwrote, since the record alone keeps those alive. It is read
-between effects: a write is never dropped or interrupted, because a member write spans
-several columns and a torn one would be read by whatever ran next, so the
-record may pass the ceiling by the writes of the one effect that crossed it
-before the firing is refused and rewound.
+The [engine job-system memo](../plans/open-items.md#engine-job-system) extends
+K2's single-owner scratch contract: fixed partitions independent of worker
+count, declared read epochs, partition-owned scratch and explicit borrowing
+and handoff, stable commit, allocation, key-minting and draw order, and snapshots
+only at publication boundaries. Residency, caches, and jobs reserve from one
+physical byte-accounting owner rather than adding competing budgets.
+
+**K2a — The memory bound is trait-admitted storage, in bytes.**
+`ArenaLayout.ColumnsOf` reserves optional columns only for declared traits:
+text, clocks and behavior, visibility and observation, draw cursors, phases,
+and row-shape links. There is no per-slot provenance column. Layout bytes count
+the columns actually admitted, indexes, vectors, and bounded reference payloads;
+`StateArena.Bytes` adds bounded declaration and live visibility payloads.
+Pair pools allocate `MaxLive` slots with explicit endpoints, rather than the
+Cartesian endpoint universe (`StateCatalog`). Layout overflow refuses before
+allocation, and construction, import, growth, and writes all enforce the byte
+bound. See [byte accounting](../reference/state/arena.md#byte-accounting).
+
+The journal has its own byte ceiling, including retained overwritten payloads.
+It is checked between effects: an effect completes its member writes, then a
+firing over the ceiling refuses and rewinds atomically.
 
 **K3 — A set of cells wider than a word lives in a board row.** An expression
 value stays one 64-bit word and the bit operators stay generic Int operators.
@@ -400,15 +397,12 @@ take one as a parameter. Claim and release are effects, whether the cause is
 a join or a rule, and the firing rule's gate is the authority. An unclaimed
 instance is absent, not empty.
 
-**Pool storage uses fixed identity slots.** Each generated domain and field row
-reserves its identity universe and marks live cells with presence bits. Claim,
-release, and rewind never shift another instance or rebuild row indexes. Pair
-identity capacity remains distinct from the live-count limit. Generic positional
-reads may encounter holes; snapshots return only live handles in slot order.
-Generation checks remain mandatory on every handle read, using direct slot
-addressing. Free-slot scans and dependent-pair cascades remain bounded work.
-The checkpoint codec refuses any version but its current one, so the
-compact-position undo format is never read.
+**Pool storage uses fixed identity slots.** Single pools reserve their declared
+slots; pair pools reserve `MaxLive` slots with explicit left and right endpoint
+columns. Endpoint-universe size validates possible relationships but does not
+size storage. Claim and release never shift another instance. Handles include
+generation, snapshots visit live slots in order, and free-slot scans and
+dependent-pair release remain bounded, charged work.
 
 **Pool generations are continuation state.** Releasing a slot advances its
 generation even while the slot is dead. The arena hash therefore includes the
@@ -448,9 +442,8 @@ world one can open, and the same test through both hosts is the parity check.
 C# keeps the engine laws; a shipped game's behavior is pinned in its own
 language.
 
-**Nine author-facing candidates are adopted into existing packages** and one
-deferred; [the table](../plans/state-rebuild.md#candidates-adopted-into-packages)
-says where each landed.
+Author-facing work belongs to the existing language packages. Their remaining
+cross-host and scenario gaps live in the [state plan's open items](../plans/state-and-language.md#open-items).
 
 ### The authoring consensus
 
@@ -597,17 +590,17 @@ defect was found; the weaknesses are structural and economic.
 
 ## Costing
 
-**A weighted semantic execution model over a portable ideal machine.** Price
-the compiled operation Puck performs, including its evaluator work, on a
-reference that is no named processor: platform names, compiler targets, and
-measured clocks belong in offline evidence, and production pricing carries
-semantic operations and abstract service rates. Directly pricing the host's
-JIT output or benchmark timings is excluded from authoritative pricing and
-kept as diagnostics; simulating an out-of-order processor is deferred as more
-machinery than the contract needs. The reference throughput, three billion
-cycles per second with half reserved for authored work, is product policy
-until a measurement argues otherwise, named as versioned constants and never
-disguised as measurements.
+The compiled semantic operations share one deterministic allowance. Compose
+setup, every check, firing, failed speculative work, rewind, search restart and
+cancellation at their actual execution boundaries. Search consumes an aggregate
+allowance with deterministic partition shares. Reserve a bounded unit before
+execution; if it cannot fit, refuse atomically or resume from a complete
+continuation. Unmodeled work and overflow remain explicit refusals.
+
+Reports identify contributors and measured storage; quiet-machine measurements
+show runtime headroom separately on the debug world. Reference-throughput
+constants and a calibrated reference-cycle admission model are removed. Host
+timing never changes simulation admission, ordering, or results.
 
 ## Games
 

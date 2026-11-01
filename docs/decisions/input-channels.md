@@ -701,8 +701,9 @@ is promoted to live status to demonstrate this work.
 | Board cancel binding to Moth `select` | New shared `cancel` declaration; rewrite the board binding and its rule operand, delete the Select coupling and ceiling comment. |
 
 The initial typed-storage step therefore has seven numeric axes and ten
-buttons in the debug world. Shared declarations move to one imported input
-document; the Moth, suit, noclip, and chess modules consume its names. The
+buttons in the debug world. The shared vocabulary belongs in an imported
+`worlds/standard/inputs.puck`, consumed by the Moth, suit, noclip, and chess
+modules. World-specific `suit` and `noclip` declarations stay in debug. The
 package's basis, garden, night field, and standalone test compositions must
 resolve that owner without redeclaring channels. Confirm and cancel are reusable
 semantic names even before modal packing lands.
@@ -829,76 +830,26 @@ exact timing, replay/checkpoint, overflow and cancellation checks and run with
 | Turn-based board | Shared direction axes, confirm/cancel, global leave | A seated press chooses once; entry press cannot choose a piece; locomotion and auto-actions release on entry and exit | Board dispatch differs even for a shared direction name. Dormant avatar actions use no live budget and cannot revive on leaving. |
 | Menu/UI-only | Seat/session actions without bodies or motion roles | Authors may keep navigation repeat between compatible panels; confirm releases by default and the opener is consumed | No avatar, physics, device, fixed seat count or particular positive rate is required. A rate-zero world uses administrative commands until gameplay steps start. |
 
-## Implementation steps
+## Implemented input model
 
-Each step is independently reviewable and leaves one current representation.
-The [open items](../plans/open-items.md#input-channels) carry completion status.
+C1 to C7 are implemented. The model has typed numeric and packed-button
+storage; relative displacement accumulated and consumed once; authoritative
+finite modes with compiled allocation; and an epoch barrier that releases by
+default and carries only admitted logical-id keep sets. Accepted source
+contributions, toggle state, event origins, and neutral rearming are
+continuation state, carried by checkpoint, hash, and replay.
 
-1. **Typed storage and shared semantics.** Replace sixteen uniform values with
-   32 numeric values and 64 packed buttons. Split masks and target-register
-   reach. Migrate every consumer and wire/checkpoint leaf together. Declare
-   shared debug inputs once, rename board pick to confirm, and restore cancel.
-   Keep all declared channels live in the single mapping at this stage.
-2. **Relative input.** Add the `Relative` shape and Q32.32 accessors in the
-   numeric bank, ordered host accumulation and authored units/sensitivity/bounds.
-   Show displacement conservation, single consumption, and no tick-rate
-   scaling; keep stick-rate behavior unchanged.
-3. **Authoritative modes and allocation.** Add finite selectors, composed tuples,
-   validation, compiled mappings, projected permissions and directed per-family
-   keep sets, with named invalid-continuity refusals and budget read-back. Wire
-   authoritative mode publication to headless and windowed bindings, and migrate
-   the debug form/flight/engagement modes. Show a named over-budget refusal and
-   a world whose declared vocabulary exceeds its live storage budget. Author the debug
-   migration table's movement and auto-action choices explicitly.
-4. **Switch barrier and continuity.** Implement epoch checking, release by
-   default, logical-id carry only for admitted keep sets, consumed transition
-   activations, cancellation and neutral rearming for released/rebound sources.
-   Keep held/toggle levels and continuation without a neutral tick or repeated
-   edge; admit bounded source provenance and tape/checkpoint accepted
-   contributions, toggle and rearm state. Cover reload/disconnect/routing resets
-   and checkpoint/hash continuity. Show
-   kept run/autorun, autofly starting flight without cancelling itself, cleared
-   autofly on flight exit, and neutral board/screen entry and exit. Steps 3 and 4
-   are delivered together if enabling modal slot reuse would otherwise expose
-   old input; there is no intermediate release where reusable slots lack the barrier.
-5. **Timed ingress and history.** Add ordered events, exact interval mapping,
-   lateness admission, calibration, bounded rings, overflow outcomes, and all
-   replay/checkpoint/hash fields. Show a press and release in one tick,
-   equal-time ordering, ring wrap, typed and pasted text arriving as ordered
-   `Text` events in a text-focus mode, and a mid-session replay restore. Extend C4's
-   held continuation with original event identity/time and cancellation outcomes.
-6. **Rule patterns and clocks.** Extend the existing operand/effect compiler
-   with edge iteration, matching, consumption, tick buffers, held predicates,
-   and event-time clock judgement. Show a motion input, simultaneous
-   presses, buffered action, and sub-millisecond boundary judgement at two
-   different valid simulation rates, plus a kept rhythm hold and fighting charge
-   spanning a mode switch with no fabricated edge, and a typed line judged for
-   words per minute and per-key accuracy. Add no genre-specific engine
-   opcode.
-7. **Read-back and cleanup.** Complete current-mode naming across tools and the
-   controller bar, remove superseded ordinal surfaces and stale docs, and
-   verify the genre table against executable examples. Each earlier step still
-   updates the read-backs and docs it directly changes; this step closes the
-   combined inspection and authoring experience.
+Timed ingress orders events into exact tick intervals with bounded history and
+explicit lateness and overflow outcomes. Rules match and consume those events,
+judge clocks at event time, and inspect current modes through shared read-back.
+A mode switch preserves a kept hold without inventing an edge, and neutral
+board or screen entry releases what the authored policy does not keep.
 
-Each step builds the projects it touches without warnings, regenerates affected
-schema, vocabulary and verb artifacts through the private candidate CLI, runs the
-focused tests for what it changed (the Transpiler, Cli.Worlds, Schema, Server and
-Client CPU suites where it reaches them), and shows its behavior by running the
-real World with `--devices none`, using the GPU/heavy-suite leases where needed.
-A scenario file is added only for an invariant that running cannot show
-([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). Checkpoint and hash
-continuity, a mid-session replay restore, and event-time judgement at two
-different simulation rates are such invariants: they stay scenarios, run with
-`puck test --reproduce`. The other demonstrations named above are shown by
-running and are not kept as scenarios. The integration lane
-builds the whole solution, runs the batch's sweep and, after landing, the full
-debug-world replay, following the
-[landing procedure](../../.claude/skills/orchestration/SKILL.md#land-in-batches).
-Re-record affected tapes through verbs. Measure steady-tick allocation and counts
-for held input, event bursts, and history matching. Runtime capacity, releases,
-replay identity, and exact fixed results deserve checks; internal array shapes do
-not become compatibility gates.
+Genre examples and their remaining observations live in the
+[genre check](#genre-check) and the
+[input packet](../plans/open-items.md#input-channels). Reusable channel names
+are authored in the standard package; game policy and sensitivity remain
+authored data, and no genre requires its own engine opcode.
 
 ## Existing foundations
 

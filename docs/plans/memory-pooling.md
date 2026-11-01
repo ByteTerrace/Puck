@@ -1,5 +1,13 @@
 # Owned memory for Puck's own host
 
+Memory ownership is the [engine job system](open-items.md#engine-job-system)'s:
+per-job and per-partition scratch ownership, borrowing and handoff, one physical
+byte-accounting owner, shared reuse, pressure and failure policy, and which
+storage moves to native memory through the existing allocator. This page holds
+the later work: the custom no-GC runtime port, with the reference material it
+needs (the existing mechanisms, the .NET and TigerBeetle lessons, the lifetime
+policy, the typed-array contract and the mimalloc integration).
+
 Puck's memory design starts with storage owned by a world, definition, job,
 resource, or host. Repeated work reuses that owner's storage. A shared buffer
 cache serves temporary storage that actually moves between owners; it is an
@@ -15,19 +23,20 @@ transferred, and released.
 
 ## Status and scope
 
-This is the reviewed engineering plan; its memory subsystem is not implemented
-or measured. The recommended architecture below is the selected implementation
-direction. Only the custom-host and no-GC direction is an owner ruling. Existing desktop
+Memory ownership for the desktop runtime is the job system's work and lands
+first, with the fundamentals (frame time, the bake, state storage). What this
+page owns is later: Puck's own runtime with no garbage collector, started only
+after the fundamentals. Its memory subsystem is not implemented or measured.
+Only the custom-host and no-GC direction is an owner ruling. Existing desktop
 CLR builds remain useful while Puck's own runtime is developed; they do not
 imply hosting stock .NET on BareMetal.
 
 The first milestone proves real allocation and reclamation on the custom
-runtime and gives an existing desktop consumer explicitly owned storage. It
-does not require the whole State library to compile on the custom runtime.
-Porting State's runtime-library dependencies, then World's, is separately
-scoped work. Pooling alone cannot port Tasks, exceptions, generic math,
-reflection, serialization, native dependencies, or arbitrary object graphs.
-No product capability is removed to make that work disappear.
+runtime. It does not require the whole State library to compile on the custom
+runtime. Porting State's runtime-library dependencies, then World's, is
+separately scoped work. Pooling alone cannot port Tasks, exceptions, generic
+math, reflection, serialization, native dependencies, or arbitrary object
+graphs. No product capability is removed to make that work disappear.
 
 The [BareMetal experiment](../../experimental/Puck.BareMetal/README.md) is
 read-only prior art. Its hosted Windows allocation glue uses mimalloc; its EFI
@@ -151,45 +160,6 @@ same pool. A required standard `ArrayPool<T>` library surface belongs above
 CoreLib and routes through the same reuse logic. Do not retain the archived
 CoreLib pool as a second algorithm.
 
-## Ownership and borrowing
-
-Keep authoritative ownership in an existing arena, scratch pool, job slot,
-mesh, or host service. Its private record holds allocation and capacity. Borrows
-are spans with logical length; they acquire no reference count or universal
-registry slot. The containing object and its metadata also need explicit
-lifetimes on the custom runtime. Buffer disposal does not reclaim that object.
-
-Transfer uses an explicit move/take that empties the source as it installs the
-destination under the resource's synchronization. Grow by allocate, initialize
-and copy, publish, then release old storage after old views end. Failure before
-publication releases only the candidate. Do not expose a freely copyable owning
-value as if C# enforced uniqueness. Internal storage values follow their
-containing owner's rules; a copy creates no new release obligation. Async
-results travel in their job/result owner, without a wrapper per temporary buffer.
-
-Use generation handles and counts where consumers finish independently and
-stale-handle detection matters, as with GPU images and meshes. Keep the table
-in that resource's lifecycle. A universal registry adds metadata, atomics, and
-indirection to retained storage without revoking an already returned span.
-Generation handles are valid only within their owning service's lifetime;
-access after that service is destroyed violates the contract. A per-rental
-registry does not remove this boundary or justify retaining old registries
-indefinitely to diagnose arbitrary stale copies.
-
-C# lifetime remains a programming contract. Ref structs restrict escape without
-preventing every copy, disposal-order error, or concurrent borrow/free.
-Generation checks work only while their table lives. End borrows before return,
-transfer, growth, reset, or disposal; join users before freeing owner/metadata.
-Debug poisoning and local state checks expose mistakes but do not prove lifetime
-safety. No tracing collector, universal automatic reference counting, finalizer
-recovery, or reachability scan is introduced.
-
-An object-graph scope works only when its whole lifetime is known. References
-into longer-lived immutable data are fine; longer-lived references back into
-the scope need a lease, transfer, or copy. Heap reset runs no cleanup: close native
-resources, registrations, callbacks, and GPU objects first. Routing arbitrary
-`new` through an ambient arena does not prevent async escape.
-
 ## Native buffers and typed arrays
 
 Share checked arithmetic, ownership transitions, cache policy, and counts where
@@ -228,99 +198,6 @@ need scopes or owners. Expected allocation failure has a nonallocating status
 path; early-return, refusal, and cancellation cleanup cannot depend on unsupported
 exception unwinding. Exception support is separate runtime work.
 
-## Shared reuse and thread lifecycle
-
-Begin with no hidden managed TLS cache. Owner-retained scratch already avoids
-shared traffic. The first shared cache serves variable temporary buffers with
-a short lock and aggregate byte limit. Partition only when contention evidence
-justifies it. CPU identity is a locality hint, never exclusive access.
-
-Each cache belongs to a service/domain and keys by representation, typed-array
-element type, capacity class, and alignment. Native classes use bytes; arrays
-retain correct element capacity. Use checked geometric growth where useful
-without imposing .NET's minimum bucket on every workload. Empty native views
-allocate nothing; empty arrays have an explicit runtime lifetime. Large supported
-requests bypass retention when it would displace useful storage. Unsupported
-sizes never wrap or truncate.
-
-Rent removes an idle entry under the lock and initializes outside it. A miss
-uses the captured provider within the operation's reservation. Return ends
-borrows, clears as required, then inserts under the limit or frees. Trim detaches
-idle entries under that same lock and frees outside it. Type-family metadata
-and slot arrays also have an aggregate allowance and teardown; unbounded empty
-families leak too. Optional insertion/metadata failure frees the returning
-buffer instead of failing completed work. A cache miss is not itself refusal.
-
-Cross-thread return needs no contact with the renting worker. An owner-retained
-workspace moves only without active borrowers. The scheduler releases an idle
-workspace after exclusive handoff; a parked thread alone does not prove
-continuations or native callbacks stopped using it. Until handed off, storage
-remains live/accounted, not promised as immediately reclaimable cache.
-
-### Preserving a useful TLS fast path
-
-If short array rentals still dominate, add a small worker cache above the same
-shared cache. Complete-array reuse saves work beyond raw-block reuse. An explicit
-worker context supplies locality without requiring managed `[ThreadStatic]`
-initially. Unattached threads use the shared path; pool instances never share
-an unqualified generic-static slot.
-
-For concurrently drainable slots, rent, return, and trim all atomically
-take/exchange idle entries. Whoever removes an entry owns it; a plain read
-followed by independent clearing/free is forbidden. Slot metadata lives until
-all participants leave. The actual runtime proves atomic pointer/reference
-operations and memory ordering. Return exchanges in a new entry and spills the
-removed one without creating two owners. Establish eligibility and an aggregate
-worker byte quota before publication; concurrent snapshots include transfers.
-
-This conditional optimization is outside the first slice. Measure final
-validation/accounting costs and schedule races before adopting it. Allocation
-progress has no global trim-epoch or wait-for-all-workers dependency. Attach
-establishes native allocator state. Detach stops operations, drains/hands off
-idle storage, unregisters metadata after readers leave, then tears down allocator
-thread state. Live rentals still return through their persistent provider/domain.
-Service shutdown stops admission, finishes jobs/cancellation callbacks, retires
-readers, joins workers, drains caches, then frees metadata and domains.
-
-## Capacity, pressure, and failure
-
-Account for physical allocations once by owner: payload, slack, headers,
-reference/object metadata, scratch, retirement, and cache contents. Allocator
-overhead/fragmentation need separate headroom. A cache limit says nothing about
-active work or the ability to satisfy a large aligned block.
-
-Reserve simultaneous peak work before admission: old/candidate definitions,
-allocate/copy overlap, exports, checkpoints, canceled jobs with callbacks still
-running, queued results, decoder workspace, uploads, and fence retirement.
-Concurrent jobs share one admission authority; each cannot reserve the same
-observed spare bytes. UMA CPU/device allocations share a physical budget.
-Discrete device memory and host/staging memory have separate constraints;
-virtual mappings are not automatically resident bytes.
-
-A reservation is an accounting claim, not physical commitment. Allocation-free
-execution requires actual prepared buffers/pages and sufficient simultaneous
-capacity. Incremental preparation retains rollback and explicit OOM. Desktop
-external processes, fragmentation, and commitment behavior can defeat spare-RAM
-estimates.
-
-Keep a reserve for reporting failure, cancellation, retirement, and progress,
-derived from those paths' needs. Defer new work before consuming it. A job must
-not hold partial resources while indefinitely waiting for another job needing
-the same exhausted resource. Acquire the complete operation reservation or
-release/reschedule the candidate without retaining what finishing work needs.
-
-Under pressure, detach shared idle entries, release current-owner idle workspace
-where safe, and request other idle workspaces for future admissions. Retry only
-a bounded number of times. Never wait for a worker while holding locks or memory
-it needs. Live/reserved bytes are not reclaimed until released. If allocation
-still fails, report host failure before publication.
-
-Choose cache limits from measured working sets/headroom. The draft's kilobyte
-constants and partition formula have no workload evidence and are not settings
-to inherit. Report live, reserved, cached, retirement, metadata, and allocator
-committed/reserved bytes separately. Pool release is distinct from mimalloc
-page retention and physical release.
-
 ## Mimalloc integration
 
 Retain mimalloc as the default raw allocator. The vendored
@@ -354,35 +231,6 @@ The hosted Windows TLS directory relies on its loader; it proves neither EFI
 kernel TLS nor managed thread-static lowering. Linux guest FS-base handling is
 another contract. Explicit engine worker contexts avoid optional managed TLS
 initially, but mimalloc still needs its selected native thread context.
-
-## Consumer migration
-
-Start at existing lifecycles, not by replacing every `new T[]`. `ArenaScratch`
-keeps nesting and zeroed logical spans, owns buffers/metadata, clears references
-when borrows end, and frees backing storage at teardown. Safe boundaries can
-surrender oversized idle buffers. Its zero-length path need not allocate.
-
-Migrate one reference-free State column/scratch path, then journals, indexes,
-undo, and reference storage. `Adopt(source)` must move/detach owned fields,
-invalidate old views, and retire replaced fields. Disposing the candidate after
-today's assignment would free adopted storage. Refused candidates also release
-storage. Snapshots/exported graphs need independent owners or retained leases.
-
-Maths' immutable aligned tables retain host lifetime. A runtime-specific helper
-preserves stable alignment without requiring a pinned CLR heap on the custom
-host. Numeric results/order remain unchanged. Temporary rentals are separate:
-prefer caller scratch for repeated kernels and shared reuse for occasional
-allocating entry points. Confirm owners with compiler-backed references before
-changing APIs.
-
-Background workspaces outlive builds and cancellation callbacks. Success
-transfers results; discard releases them. Extend `BackgroundBuild`, not another
-job runner. Tasks/continuations are later runtime dependencies. Mesh eviction
-drops only the cache claim; active residencies/uploads retain theirs, with
-backend retirement for GPU use. Weak caches in State/World schema move into
-their definition/catalog/resource. Permanent strong tables are not reclamation.
-Port collections/graphs for concrete consumers with known lifetimes rather than
-cloning the BCL in advance.
 
 ## Diagnostics and verification
 
@@ -427,26 +275,15 @@ portability.
 
 ## Delivery packages
 
-These packages sequence implementation with observable completion evidence;
-they introduce no new landing gates.
+Later work: the custom no-GC runtime port, explicitly after the fundamentals and
+the job system's memory work. These packages sequence implementation with
+observable completion evidence; they introduce no new landing gates.
 
 | Package | Owner and output | Dependency and closing evidence |
 |---|---|---|
-| M1: Real allocation boundary | Runtime/platform: minimal live system-module build, raw allocation/free/resize, native thread lifecycle, separately proven typed-array creation/release | No engine migration prerequisite. Own-runtime executable checks native spans, ordinary arrays, and failure cleanup. EFI/QEMU proves freestanding primitives/reuse; hosted success alone is not EFI proof. |
-| M2: Retained storage consumer | Memory/State: small Memory extraction, allocator contracts/callers, one numeric State column/scratch path, teardown/growth rollback | M1 boundary. Shared native-storage source runs on CLR/custom runtime; desktop State behavior and relayout ownership run through the existing consumer. This is not yet a custom-runtime State port. |
-| M3: Shared reuse and admission | Memory/Hosting: bounded cache for a variable-buffer consumer, operation reservation, cancellation/return/trim/shutdown, diagnostics | M2. Controlled failures/interleavings plus real-runtime reuse show release/metadata lifetime. Compare direct allocation/retained workspace; omit ineffective caching. Worker-local tiers require final-cost evidence. |
-
-The smallest convincing slice is M1 plus M2: the same owned native-buffer
-operations run on desktop and actual custom runtime, and an existing State
-consumer uses them on desktop. Exercise growth, refused candidates, transfer,
-and teardown without a universal registry or TLS trim protocol.
-
-Later integration is separate from completing that slice:
-
-| Package | Owner and output | Dependency and closing evidence |
-|---|---|---|
-| R1: State runtime closure | Runtime/State/Maths: required collections, generic numerics, strings, typed/reference storage, metadata lifetimes | M1/M2 and every framework feature reached. Actual State source runs mutation, nested scratch, relayout refusal/adoption, disposal on the custom runtime. No required feature deferred to R3 or second State kernel substituted. |
-| R2: Jobs and shared resources | Hosting/assets/machines/rendering: workspaces, meshes, codec/network/machine buffers, object scopes, upload retirement | M3 and each consumer's task/native/runtime features. Success/cancel/discard/eviction reclaim storage; desktop World and both backends remain sound. |
+| M1: Real allocation boundary | Runtime/platform: minimal live system-module build, raw allocation/free/resize, native thread lifecycle, separately proven typed-array creation/release | The job system's native-storage contract. Own-runtime executable checks native spans, ordinary arrays, and failure cleanup. EFI/QEMU proves freestanding primitives/reuse; hosted success alone is not EFI proof. |
+| R1: State runtime closure | Runtime/State/Maths: required collections, generic numerics, strings, typed/reference storage, metadata lifetimes | M1 and every framework feature reached. Actual State source runs mutation, nested scratch, relayout refusal/adoption, disposal on the custom runtime. No required feature deferred to R3 or second State kernel substituted. |
+| R2: Jobs and shared resources | Hosting/assets/machines/rendering: workspaces, meshes, codec/network/machine buffers, object scopes, upload retirement | The job system's shared reuse and admission, and each consumer's task/native/runtime features. Success/cancel/discard/eviction reclaim storage; desktop World and both backends remain sound. |
 | R3: Full-World lifetime closure | Runtime/World: remaining graphs, weak-cache owners, framework/native dependencies for a chosen workload | R1/R2 plus independent platform/GPU work. Actual custom-runtime load/edit/replace/unload cycles do not accumulate unreachable storage. Unsupported capabilities remain explicit work and never silently disappear. |
 
 ## Residual implementation probes

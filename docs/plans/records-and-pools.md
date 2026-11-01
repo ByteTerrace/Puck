@@ -12,11 +12,15 @@ A pool instance is identified by its pool, slot, and generation. Slots are chose
 in ascending free-slot order. Domain and field rows reserve one fixed position
 per identity slot, with presence bits marking live cells. Claim, release, and
 rewind never shift another instance or rebuild a pool row's key index. Pair rows
-already reserve their full identity universe; this layout adds no cell capacity.
+reserve `MaxLive` slots, with explicit left and right endpoint columns; the
+Cartesian endpoint universe validates declarations and never sizes storage
+(`StateCatalog`, `StateArena.Pools`).
 Finding a free slot still scans occupancy words up to the declared capacity;
 one trailing-zero instruction does not make a multiword search constant-time.
 
-Generations survive while slots are free. A generated, protected generation row
+Generated rows are the current representation that [S10](state-and-language.md#s10--the-state-review)
+replaces with entities as records in pools. Generations survive while slots are
+free. A generated, protected generation row
 contains every slot, including dead ones, and participates in ordinary arena
 journaling and hashing. Release advances the generation; exhaustion refuses
 atomically rather than wrapping. A stale instance reads absent and cannot write.
@@ -54,7 +58,10 @@ whole; it cannot introduce incomplete instances or smuggle generated rows throug
 ordinary state input. Export, reload, checkpoint, and arena replacement preserve it.
 
 Expansion has one owner and one declaration order. Every row consumer sees the
-same expanded rows, while serialization keeps the authored shape. Value-only
+same expanded rows, while serialization keeps the authored shape. S10's migration
+uses one caller map: field access, journals, disclosure, hashing, identity
+transfer, checkpoint, and rewind all move together to the pool representation.
+Value-only
 updates must not reuse stale expanded values from a shape-compatible catalog.
 Declaration hashes include pool capacity, record shape, defaults, and ownership.
 
@@ -89,9 +96,11 @@ relationship. These scans remain in the admitted work price.
 
 ## Pairs and ownership
 
-Pairs have a bounded identity universe determined by their endpoint capacities.
-Direction and self-pair policy are explicit. The identity universe and maximum
-live pair count must not be conflated. Endpoint lifetime changes invalidate pairs;
+Pairs have `MaxLive`-sized storage and explicit endpoint columns, independent
+of the Cartesian identity universe determined by endpoint capacities. Direction
+and self-pair policy are explicit. Pair handles carry their slot generation;
+endpoint handles are generation-checked before claim, and endpoint lifetime
+changes invalidate pairs before a replacement lifetime can inherit them;
 cascades are deterministic, bounded, atomic, and priced. Pair dependencies cannot
 form cycles. Pair lookup reads never mint names.
 

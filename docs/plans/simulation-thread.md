@@ -1,15 +1,27 @@
 # The simulation step off the frame thread
 
-Design memo for the [simulation tick off the frame thread](open-items.md#simulation-tick-off-the-frame-thread)
-packet, which the owner queued. It settles the shape from the code and hands
-specialist lanes a phased build. File and line citations name the sources as
-they stand before phase 1 at `8075db0d56`; a builder re-reads each before editing.
-The delivery notes below map the current seams after phase 1.
-This is the second revision: the first (one free-running simulation thread
-owning the pump, with a folding mailbox to the frame) had its one cross-family
-review, and [its findings](#review-resolution) changed the shape.
+This document is the design of the tick-to-produce handoff: what the frame
+reads from the server, the tick record that carries a tick's deliveries to the
+frame, the determinism and command rules that handoff keeps, and the duplicated
+mechanisms on that path. It is an input to the memo that designs the
+[engine job system](open-items.md#engine-job-system), which owns whether the
+tick and the views overlap and how. Phase 1 (one host loop) is delivered; phases
+2 and 3 (the record, and a produce path that reads no server state) are work.
+The pipelined worker thread this memo first proposed is withdrawn: it traded a
+frame of input latency for frame time, and the cost is removed at its cause
+instead, by the job system's scheduling and deterministic parallel tick. The
+worker-specific text that remains (dispatch and join, the late body, shutdown's
+bounded join) describes the handoff any overlap of tick and views would need,
+and applies only if the job-system memo adopts one.
 
-The goal is the [frame-rate bar](../decisions/rendering.md#the-frame-rate-bar):
+File and line citations name the sources as they stood before phase 1; a
+builder re-reads each before editing. The delivery notes below map the current
+seams after phase 1. The memo is the second revision: the first
+(one free-running simulation thread owning the pump, with a folding mailbox to
+the frame) had its one cross-family review, and [its findings](#review-resolution)
+changed the shape.
+
+The goal is the [frame-rate bar](../decisions/rendering.md):
 on the RTX 4070 every frame under 16.7 ms at the highest settings. Today a
 windowed iteration that carries a 30 Hz tick pays the tick (6 to 12 ms walking,
 2 to 4 standing) and the frame's produce (6 to 7 ms on Direct3D 12, 8 to 11 on
@@ -233,21 +245,12 @@ pins it today (`WorldFramePresenter.Convergence.cs:74`). `RenderTicks` becomes
 `ElapsedTicks + alpha * StepTicks`, rounded down. The arrival form is smooth
 where the accumulator form would jump by the body's latency at every join.
 
-### Latency
-
-A tick's visible effect lands one iteration later than today: dispatched after
-present, applied at the next join, drawn by that iteration's produce. At 60 Hz
-that is about one frame period more input-to-photon than today, and about
-8 ms more than a free-running simulation thread would give, which is the price
-of keeping every client object single-owner. The owner sees this trade under
-Needs you in the packet.
-
-Phase 1's arrival-form fraction already adds about half a step of presentation
-latency. In the inline host the arrival time is stamped inside the step and the
-frame is produced right after it, so the fraction is about 0 on every frame that
-steps, where the accumulator form averaged about 0.5. A 60 Hz world on a 60 Hz
-display presents poses about 8 ms later on average than before phase 1, before
-any of the thread's own latency.
+Phase 1's arrival-form fraction adds about half a step of presentation latency.
+In the inline host the arrival time is stamped inside the step and the frame is
+produced right after it, so the fraction is about 0 on every frame that steps,
+where the accumulator form averaged about 0.5. A 60 Hz world on a 60 Hz display
+presents poses about 8 ms later on average than before phase 1. A design that
+overlaps the tick with the views must not add to that.
 
 ### Barriers and the replay budget
 
@@ -419,7 +422,7 @@ The three hosted services only start it with their presentation adapter;
 `WindowHostPresentation` owns window input, rendering and display waits, and
 `OffscreenHostPresentation` owns offscreen rendering. All simulation still
 runs inline on the existing host pump thread; this phase starts no simulation
-thread, and phase 4 adds the pacing it needs.
+thread.
 
 `WorldSimulation` is the single shell over `WorldHostStep`, with its post-step
 supplied by composition. Frames and overlay facts read `WorldClient.Tick`;
@@ -450,8 +453,8 @@ host-lifetime counter of whole steps discarded when a catch-up burst spends
 its wall-time budget; holds and the runaway-frame clamp are distinct and are
 not counted as shed. `host.frames`, `world.rate` and `world.rate shed` report
 it. Resetting the frame sample window does not reset that counter. The join
-phase, late-step and skipped-drain metrics remain for the phases that introduce
-the tick record and worker.
+phase, late-step and skipped-drain metrics belong to a design that overlaps the
+tick with the views, if the job-system memo adopts one.
 
 Verification and windowed measurements are recorded in the delivery commits.
 The four focused debug sources are `controls-dash-tests.puck`,
@@ -527,17 +530,11 @@ dispatch and join and passing through otherwise; `MovedRows` copied (F02);
 and the echo tap's effects moved to the epilogue; the shell's tick budget and
 `NextDueTick` on the four hook owners (F14's second half); the loop
 dispatching and joining *inline* (an immediate join on the same thread).
-Also here, independent of threading: `CodeDerivedTable` ties each
-derivation to the generation it read, so a derivation that started under
-revision R never enters the table published for R+1 (F17): `Refresh` returns
-a generation object owning its own weak table, and `GetValue` inserts into
-that generation only.
 Files: a new `src/Puck.World.Client/WorldTickRecord.cs` (the sink, the record,
 `Replay`), `WorldBootComposition.cs`, `WorldAuthorityEndpoint.cs`,
 `WorldHostStep.cs`, `WorldServerStepShell.cs`, `WorldReplayTape.Drive.cs`,
 `WorldPostBuildWiring.cs` (the tap records), `WorldCaptureScheduler.cs`,
-`WorldTickScript.cs`, `WorldConsoleWaitGate.cs`, `WorldTestRun.cs`,
-`src/Puck.Abstractions/CodeDerivedTable.cs`, the loop.
+`WorldTickScript.cs`, `WorldConsoleWaitGate.cs`, `WorldTestRun.cs`, the loop.
 Finish: `puck test --reproduce` hashes unchanged (the record is a pure relay);
 lockstep stills byte-identical to phase 1 but for the known residue; a
 `world.at` line pinned inside what would have been a replay burst runs at its
@@ -545,8 +542,22 @@ tick (`[world.at] tick N ran`); a scheduled capture at a tick inside a replay
 fast-forward arms with `tick=N` in its `[still]` stamp; a `world.reload` of a
 document with a changed row shape, under a stdin script that edits a
 selection, keeps the editor's selection consistent (the tap's effects applied
-after the definition); a `CodeDerivedTable` test with a revision bump between
-derive and insert reads the fresh derivation.
+after the definition).
+
+The record waits on the job-system memo's decision whether the tick and the
+views overlap, so this phase is not started until the memo decides. The step
+below does not wait.
+
+### F17: `CodeDerivedTable` ties each derivation to its generation (runnable now)
+
+Independent of threading and of the record. `CodeDerivedTable` ties each
+derivation to the generation it read, so a derivation that started under
+revision R never enters the table published for R+1 (F17): `Refresh` returns
+a generation object owning its own weak table, and `GetValue` inserts into
+that generation only. File: `src/Puck.Abstractions/CodeDerivedTable.cs` and its
+callers.
+Finish: a `CodeDerivedTable` test with a revision bump between derive and
+insert reads the fresh derivation (the one check running cannot show).
 
 ### Phase 3: the produce path reads no server state
 
@@ -563,72 +574,6 @@ runs the sweep's tour, a cabinet engaged and reset, a `world.instance.stop`
 of a visible instance and a crossing into the garden and back with no guard
 throw; a release build's `host.frames` phases unchanged from phase 2;
 hashes unchanged.
-
-### Phase 4: the worker
-
-Withdrawn by the owner's direction: a pipelined worker costs a frame of
-latency, and performance comes with quality, so the cost is removed at its
-cause by the [engine job system](open-items.md#engine-job-system) (a
-deterministic parallel tick and parallel view recording) instead. This phase
-stays a fallback lever if parallel work cannot reach the frame-rate bar.
-
-
-The dedicated worker thread; dispatch after present, join after input, the
-frame never waiting; the drain skipped while in flight; the immediate join
-under one-tick-per-frame and unpaced; shutdown's bounded join and the
-fail-fast policy; the `Join` phase, `steps.late`, `drain.skipped`. Files:
-the loop, `LauncherHostLoop.cs`, `FixedStepPump.cs`, `WorldTickRecord.cs`,
-`HostFrameTimeline.cs`, `HostPacing.cs`.
-Finish: a windowed debug World (Direct3D 12, 1280x900, `world.quality high`,
-`world.lockstep off`) standing at the lobby and walking the gallery
-(`body.pose 30 - 22 90 - -`, `player.move 1 0` for 60 ticks) reads
-`host.frames` with: total frame p99 and max lower than phase 3's by at least
-the tick lane's p50; the `join` phase p99 under 2 ms; `steps.late` zero
-standing and under 1 % walking; the tick lane's p99 within 1 ms of a headless
-`host.frames` at the same stop. Then `world.lockstep on` and a `world.at`
-still matching the phase 1 still; `puck test --reproduce` unchanged; a stdin
-script with `world.wait`, `world.at`, `world.screenshot` and `quit` ending
-cleanly with `--exit-after-seconds`; the MCP `puck_exec` script path answering
-every line, a pinned capture included; a shutdown issued while a body is in
-flight and one while a capture holds, both exiting with the owed capture
-refused by name.
-
-### Phase 5: hardening
-
-A windowed Vulkan boot of the same stops (the owner's ruling on Vulkan);
-`host.frames` under a forced gen2 (`host.memory collect`) showing neither
-thread waiting on the other beyond the pause; cabinets engaged, removed,
-replaced and their instance stopped while visible on a screen; hot reload
-under `dotnet watch` with a body edit on the presenter and on a rule host; a
-crossing into the garden and back; a capture whose frame faults (a target
-that throws) refused and the World continuing; a replay drive fast-forwarding
-under `world.lockstep on` and off with a capture row inside the tape; a
-`world.reload` while the frame is mid-produce on a slow frame
-(`world.quality` forced high, large window). Each is a run that is read, not
-a test.
-
-### The riskiest phase, and what would end the approach
-
-Phase 3 carries the correctness risk: a server read on the produce path the
-audit missed. The rehearsal guard is built for exactly that, and it runs
-before any thread exists. Phase 4 carries the payoff risk: the join (record
-replay plus epilogue) is work moved onto the frame, and the one-step-per-
-dispatch rule couples the simulation's catch-up to the frame rate.
-
-The approach is abandoned if, after phase 4, either holds on the walking
-workload above: the total frame p99 did not fall by at least the tick lane's
-p50 (the overlap did not remove the tick from the frame), or the `join`
-phase's p99 exceeds 2 ms once the frame-time packet's delivery work is
-subtracted (the record's replay is itself a frame cost the split cannot
-hide). The tick lane's p99 against headless is the second reading, the gate
-cost on the worker, not the criterion. The measurements are the finish
-line's `host.frames`, phase 3 beside phase 4, on a quiet machine.
-
-If it is abandoned, the fallback is already in hand: phases 1 to 3 stand on
-their own (one loop, a pure-relay record, a produce path that reads no server
-state), the tick-cost lane keeps cutting the body, and the remaining frame
-work is the [frame time](open-items.md#frame-time-on-the-lead-machine)
-packet's.
 
 ## 8. What this cannot fix
 
@@ -649,8 +594,6 @@ Costs that stay on the frame thread, with the packet that owns each:
   moves off the frame but still bounds how far behind real time a slow
   machine runs, and under one step per dispatch a frame rate below the tick
   rate slows the World.
-- One iteration of added presentation latency for a tick's visible effect
-  (section 2).
 
 ## Review resolution
 
@@ -671,10 +614,10 @@ resolution was chosen; file and line are the citation that holds.
 | F09 high: two filtered drains race session state; the barrier does not see frame application | Holds (`TextCommandSource.cs:21-45,71-124`). | One drain, one arbiter, on the frame thread; a query after a mutation runs after the join that applied the mutation's tick, because the drain never runs while a body is in flight (decision 5). |
 | F10 high: capture arming is a cross-owner transaction | Holds (`WorldCaptureScheduler.cs:249-277,426-532`, arming the renderer from the step). | Arming, holding, publishing and serving all stay on the frame thread; `PublishTick` runs in the epilogue with the server at the completed tick; a hold is the frame thread declining to dispatch (section 2, Holds). |
 | F11 high: reload callbacks bypass the sink; saves read presentation in reverse | Holds (`WorldPostBuildWiring.cs:302-345`, `WorldSaveSnapshot.cs:21-35`). | The echo tap records each echo into the record and the epilogue runs the tap's body in order after the definition; `world.save` runs in the drain with no body in flight (section 1 table, section 4). |
-| F12 high: machine worker isolation does not protect frame-held video outputs or instance lifetimes | Holds (`WorldScreenBinder.Device.Sources.cs:27-42`, `WorldMachineHost.Instances.cs:50-61,996-1010`, `WorldInstanceHost.cs:1405-1419`). | The binder resolves its source table at the join; machine and instance disposals are deferred to the following join, after the binder re-resolved (section 1 table; phase 3 and phase 5 exercise removal, replacement and stop while visible). |
+| F12 high: machine worker isolation does not protect frame-held video outputs or instance lifetimes | Holds (`WorldScreenBinder.Device.Sources.cs:27-42`, `WorldMachineHost.Instances.cs:50-61,996-1010`, `WorldInstanceHost.cs:1405-1419`). | The binder resolves its source table at the join; machine and instance disposals are deferred to the following join, after the binder re-resolved (section 1 table; phase 3 exercises removal, replacement and stop while visible). |
 | F13 high: session mirrors are not coherent frame images; a swapped adjacency record can alias arrays | Holds for the mirror (`WorldSessionMirror.cs:533-594` in place; `WorldSessionSceneEmitter.cs:693-705` per property); half-holds for adjacency, whose `Pin` already copies through the gated `CopySnapshotTo` (`WorldAdjacencyFields.cs:676-693`). | The boot mirror is delivered at the join on the frame thread, so no write overlaps a frame's reads; adjacency's tick-side state becomes one immutable record swapped by reference. The remote mirror's socket-thread hazard is pre-existing and filed in the packet. |
 | F14 medium: one outer `TryStep` can advance many replay ticks | Holds (`WorldServerStepShell.cs:65-71`, `WorldReplayTape.Drive.cs:65-77`). | Phase 1 carries the pacing policy through the shell; phase 2 adds the tick budget from the hooks' `NextDueTick`, so a burst never steps past a pinned line, a wait release, a schedule step or a capture row. Check: phase 2's finish (`world.at` and a capture row inside a fast-forward). |
-| F15 medium: parking needs timeout, fault wakeup and a disposal rule | Holds for a parked pump. | No parking exists; shutdown joins the body with a bound, a faulted body rethrows at the join, a hung body fails the process fast rather than disposing under it (section 5). Check: phase 4's two shutdown runs. |
+| F15 medium: parking needs timeout, fault wakeup and a disposal rule | Holds for a parked pump. | No parking exists; shutdown joins the body with a bound, a faulted body rethrows at the join, a hung body fails the process fast rather than disposing under it (section 5). |
 | F16 medium: removing the outer drain breaks held and no-simulation loops | Holds (`FixedStepPump.cs:139-144,305-330`, `OffscreenTickHostedService.cs:222,252`). | Folded into phase 1: one drain operation at both scheduling points, with the capture-held and no-simulation runs as its check (section 6, item 3). |
 | F17 medium: `CodeDerivedTable` can retain a stale derivation under the new revision | Holds (`CodeDerivedTable.cs:30-41,66-73`): a derivation begun under R inserts after a `Clear` for R+1. | Pre-existing; fixed in phase 2 by a generation object owning its own table, with a test bumping the revision between derive and insert (the one check running cannot show). |
-| F18 medium: the finish lines can pass without a safe handoff or the frame-time goal | Holds. | Phase 4's finish reads total frame p99 and max, the `join` phase, `steps.late` and the tick lane; the abandonment criterion is the total-frame improvement and the join cost, not the tick lane alone; phase 3's rehearsal guard and phase 5's fault runs are the adversarial interleavings (section 7). |
+| F18 medium: the finish lines can pass without a safe handoff or the frame-time goal | Holds. | Phase 3's rehearsal guard is the adversarial interleaving check; the worker phase that carried the frame-time finish line is withdrawn, and the job-system memo's frame-time finish lines replace it (section 7). |

@@ -72,10 +72,12 @@ of scope here.
   installs, and a world screen hosts a Deck machine that mounts a raw `.nes`
   image from its `contentFolders`. A screen route names the input port its
   engaged seat drives (`route.port`), so the two controller ports route
-  explicitly. The debug world's device row runs the Deck on the two shipped
-  test cartridges, `colour-bars.nes` and `moving-sprite.nes`, which the forge's
-  `DeckProgram` assembles (`puck cartridges deck`). Ordered operations while
-  recording, replay receipts and the canary remain.
+  explicitly. The debug world's device row runs the Deck on two test
+  cartridges, `colour-bars.nes` and `moving-sprite.nes`. They are derived
+  products: the forge's `DeckProgram` assembles them on demand
+  (`puck cartridges deck`), so they are built when needed and not kept in git
+  (removing the committed copies is an engine work item). Ordered operations
+  while recording and replay receipts remain.
 - **Not started:** every other package below NTSC accuracy.
 
 ## What state of the art means here
@@ -359,16 +361,19 @@ attachment changes.
 
 ### 8. World cabinets
 
-**Owns:** engine and content-provider registration, multi-port routing, ordered
-operations, and replay receipts.
+**Owns:** engine and content-provider registration, multi-port routing, and
+ordered operations. The replay receipt is the cabinet module's boot-anchored
+reproduction ([machines and cartridges](machines-and-cartridges.md#the-cabinet-module),
+item 3), which the Deck consumes rather than designs.
 
 **Delivers:** the Deck in a World cabinet beside the bricks. In place: the
 engine and its extension, raw-image content from a machine's content folder,
-routes that name an input port, and the shipped test cartridges on the debug
-world's device row.
+routes that name an input port, and test cartridges built on demand from
+`DeckProgram` on the debug world's device row.
 
-**Check:** a real World canary running independent cabinets with input, audio,
-video, saves, and restoration. One existing World limit blocks full multiplayer
+**Check:** a debug-world run (`puck_world_start`, `puck_exec`,
+`puck_capture_frame`) with independent cabinets showing input, audio, video,
+saves, and restoration. One existing World limit blocks full multiplayer
 cabinet replay: provider operations, a cartridge swap among them, are refused
 while recording.
 
@@ -418,9 +423,9 @@ machine are in.
 - Common boards: MMC1 and MMC3 are in; UxROM, CNROM, AxROM, MMC6, bus
   conflicts, the public board test ROMs and the co-simulation remain. Then
   regional hardware, long-tail boards and expansion audio.
-- World cabinets: the engine, its extension, port-naming routes and two shipped
-  test cartridges are in; ordered operations while recording, replay receipts
-  and the canary remain.
+- World cabinets: the engine, its extension, port-naming routes and two test
+  cartridges built on demand are in; ordered operations while recording and the
+  replay receipt (the cabinet module's) remain.
 - The Famicom Disk System; peripherals.
 
 ---

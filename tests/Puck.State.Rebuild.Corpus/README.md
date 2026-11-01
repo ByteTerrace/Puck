@@ -46,7 +46,7 @@ only shrinks. Two sources are exempt today, both because they expand to a
 document whose decompiled form is longer than the parser's source limit:
 `moth-courtyard.puck` and `worlds/standard/cards.puck`.
 
-The plan this serves is [the state system rebuild](../../docs/plans/state-rebuild.md).
+The plan this serves is [state and the authoring language](../../docs/plans/state-and-language.md).
 
 ## Game claims
 

@@ -4,8 +4,10 @@ The owner's direction: the gallery and its surroundings sit in a relatively
 deep valley, under a sky with moons that carry portals and can be reached by
 flying up through the atmosphere into space. Codex and Antigravity reviewed the
 existing engine independently, reconciled their inventories against the code
-over three rounds, and converged on the plan below. Phases land in order; each
-ends with the check named in it.
+over three rounds, and converged on the plan below. Phases 2 onward wait for
+the [terrain pass](terrain-pass.md) and the
+[engine job system](open-items.md#engine-job-system). Each phase proves its
+work in the debug world; quarantined worlds stay quarantined.
 
 ## What exists, in part or whole
 
@@ -59,12 +61,16 @@ ends with the check named in it.
    arithmetic is widened. The 8192 m cap rises only after the precision work.
 4. **Residency.** Canonical bounded source tiles with shared borders and coarse
    exteriors, admitted and evicted across all views, planned against the
-   authored flight speed and braking; tile size is measured, not fixed.
+   authored flight speed and braking; tile size is measured, not fixed. This
+   consumes [residency step 7](../decisions/residency.md#order-of-work)'s source
+   tiles and the job system's scheduler.
 5. **Atmosphere, clouds and flight.** A body-frame spherical-shell atmosphere
    with surface occlusion, keeping local valley mist; bounded clouds before
    flying through them; exposure continuous into vacuum. Flight reuses the
    Moth's free flight unassisted (the owner's ruling); assisted cruise and
-   touchdown are a later pass.
+   touchdown are a later pass, authored as a standard ability template in
+   `worlds/standard/` that the Moth refines; the engine executes its motion
+   program generically.
 6. **Approach and handoff.** The ascent stays under the parent authority;
    the moon's far image and its detailed surface depict one surface with no
    duplicate silhouette; the frame handoff carries orientation, up, linear and
@@ -74,7 +80,9 @@ ends with the check named in it.
    approach, landing, portal, gallery, and the reverse by flight, including cold
    work and a delayed or refused transfer, at a steady 60 FPS on the RTX 4070 at
    the highest settings, both backends, edit-to-running under 30 s. More moons
-   and content follow it.
+   and content follow it. The debug world also proves the highest-quality
+   target of 60 FPS on RTX 2060 and 45 FPS (every frame under 22.2 ms) on
+   Steam Deck.
 
 ## Measured
 
@@ -95,7 +103,6 @@ naming what its still must show.
 | Rules | 735 rules, 2,783,787 of 4,000,000 work units a tick |
 | Cold bake, every group on the CPU (`puck mesh audit --cpu`) | 987 groups, 791 meshes, 476 M samples, 4.1 M refined cells, 13.09 M triangles (level 1 1.56 M, level 2 0.97 M), 0 discarded, 477 s |
 | Mesh audit over the same bake | 774 groups audited and 213 not (the CPU audit then read only unchunked groups); 53,965 open and 84 non-manifold edges summed over the audited groups |
-| C# edit to running | a doc-comment edit in `Puck.Physics`, under most of the World's projects, to a booted headless World through `puck_world_start`'s store build: 250 to 370 s on the loaded machine; hot reload, the bar's path, is the edit-to-run lane's measurement |
 
 Warm GPU bake work, mesh and source counts at the window, and the HLSL edit,
 are the window's to read: a headless World builds no renderer.
@@ -192,7 +199,8 @@ window; a heightfield is added only if that reading fails.
   and measures it before the second.
 - **Flight is the Moth's wings** for now; no craft, and no assistance in this
   wave. Assisted flight (horizon leveling, cruise) is a later pass, so phase 5
-  reuses the Moth's existing free flight as it is.
+  reuses the Moth's existing free flight as it is. The later assistance is a
+  standard ability template that the Moth refines.
 - **Landing is open,** anywhere a body can stand, as it is now.
 - **The valley as built falls short** (the owner, walking it): its walls read as
   soft white masses with metre-scale grain, without material, with clipped

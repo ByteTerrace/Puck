@@ -50,30 +50,34 @@ machine family, the NES and Famicom core, has its own page:
   has stepped; checkpoints still refuse pumped addon guests, applied screen
   operations, live coupled links and enabled rewind history; addon memory
   watches are keyed by screen; no reusable cabinet module exists; `Puck.World`
-  references both bricks and both forges directly; the cartridge document
+  references both bricks and the three forges directly; the cartridge document
   declares no procedure, typed region, or interrupt body, and every
   frame-shaped ceiling stands. Each package below names its part.
 
 ## The forcing artifact
 
-The cabinet module of [the forcing world](state-and-language.md#the-forcing-world):
-one parameterized module taking a placement, a facing, an engine, and a
-cartridge asset, declaring a machine and a screen whose source is that
-machine's video output named as a sibling, exporting the display as a read and
-a binding. The arcade uses it twice under two aliases: a left cabinet running a
-Humble brick and a right cabinet running an Advanced one, each with its own
-cartridge, engage route, and controls. The right cabinet's cartridge is the
-retail-scale one: procedures over typed regions, banked code, ROM-resident
-tables, and a real save. Placing the cabinet is one statement, and its three
-open UX details are settled by writing and playing it.
+The device row and cabinets of the debug world, the
+[forcing world](state-and-language.md#the-forcing-world) (`worlds/debug/devices.puck`
+and its stands): one parameterized cabinet module taking a placement, a facing,
+an engine, and a cartridge asset, declaring a machine and a screen whose source
+is that machine's video output named as a sibling, exporting the display as a
+read and a binding. The row uses it for each device the debug world shows (the
+Humble Gaming Brick, the Advanced Gaming Brick and the Humble Gaming Deck with
+its television), and a device placed twice under two aliases is the proof of
+independence: one cabinet running a Humble brick and one running an Advanced
+one, each with its own cartridge, engage route, and controls. The Advanced
+cabinet's cartridge is the retail-scale one: procedures over typed regions,
+banked code, ROM-resident tables, and a real save. Placing the cabinet is one
+statement, and its three open UX details are settled by writing and playing it.
 
-**Check:** the world boots and runs in `Puck.World`; the two aliased cabinets
-share no names, render slots, inputs, memory bindings, link groups, or machine
-state; a feed change on one preserves the other's execution; a passive monitor
-of either grants nothing; the retail cartridge's forged image, replayed from a
-recorded input script, produces identical machine-state hashes on repeated
-runs of each backend, and the two backends agree on normalized authored state
-at matched game-frame boundaries.
+**Check:** `puck_world_start` boots `worlds/debug` and a `puck_exec` read of
+`machine.state` shows every device running; two aliased cabinets share no names,
+render slots, inputs, memory bindings, link groups, or machine state; a feed
+change on one preserves the other's execution; a passive monitor of either
+grants nothing; the retail cartridge's forged image, replayed from a recorded
+input script, produces identical machine-state hashes on repeated runs of each
+backend, and the two backends agree on normalized authored state at matched
+game-frame boundaries.
 
 ## Packages
 
@@ -133,16 +137,19 @@ hardware observations, addon watches, the execution and content receipt,
    applied screen operation, a live coupled link and enabled rewind history until
    full restoration round-trips for them. Until the receipt exists and those
    round-trip, a tape can only arm before any cabinet has stepped, which is why
-   the quilt canaries arm at tick 0.
-4. **Cabinets are priced.** A colocated quilt runs every cabinet of every
-   instance it starts — fifteen emulators for the four corners and the island —
-   and the tick waits on their workers, so the headless quilt ticks at about a
-   ninth of its authored rate. A cabinet's emulation is a line of the tick's
-   budget (the ceilings-as-prices rule of
+   recorded tapes arm at tick 0.
+4. **Cabinets are priced, and the price is an input to the job-system memo.** A
+   world that hosts many instances runs every cabinet of every instance it
+   starts, and the tick waits on their workers; the debug world's three devices
+   are the sizing case. A cabinet's emulation is a line of the tick's budget
+   (the ceilings-as-prices rule of
    [C1](state-and-language.md#c1--ceilings-as-prices)): a document that cannot
-   afford its cabinets refuses at the door, and an instance nobody observes —
-   no seat, no viewer, no binding read this tick — parks its cabinets rather
-   than stepping them.
+   afford its cabinets refuses at the door. Machine stepping is scheduled work
+   under the [engine job system](open-items.md#engine-job-system), whose memo
+   decides how cabinets are stepped, parked and resumed. "Observed" there means
+   authoritative state only: a seat, a binding read this tick, or an engagement.
+   A viewer, a render or residency is never an observation, because who looks
+   must not change simulation state (the determinism rule).
 
 **Check:** two aliased cabinets with independent controls and state; a passive
 monitor grants no control; slot reuse cannot retarget a command; a coupled
@@ -209,8 +216,8 @@ core persistence carries a generic receipt. In place: the entry contract is
 `IMachineContentProvider`), `WorldMachineCatalog.From` builds each host's
 immutable catalog from the composed extensions, and `Puck.World.Machines`
 references no Gaming Brick core or forge and registers nothing from a module
-initializer. Open: `Puck.World.csproj` still references both bricks and both
-forges, `TuneMachineSource` uses the Humble brick and `ForgeCommandModule` the shared forge directly, the
+initializer. Open: `Puck.World.csproj` still references both bricks and the three
+forges (the Humble brick, Advanced brick and Humble Gaming Deck forges), `TuneMachineSource` uses the Humble brick and `ForgeCommandModule` the shared forge directly, the
 generic persistence receipt waits on the cabinet module's receipt, and the
 distribution without either brick. A distribution without either brick
 builds and runs camera, view, QR, text, and test-pattern screens and admits a
@@ -233,9 +240,11 @@ passes.
 **Owns:** the bundled HGB boot ROMs and AGB BIOS with their qualification, the
 immutable content-admission policy the machine host invokes.
 
-**Delivers:** the packaged images rebuilt independently (`puck firmware hgb`
-and `puck firmware agb` rebuild them, and `--verify` compares the bytes, which
-proves reproducible generation and not hardware compatibility); cold and fast
+**Delivers:** firmware split by origin: a hand-authored replacement image is
+source and its bytes stay committed beside their license, while an image
+generated from a program (`puck firmware hgb` and `puck firmware agb` build them)
+is a derived product, built on demand, removed from git, and never verified by a
+byte compare, so `--verify` is deleted; cold and fast
 handoff, IRQ and services, model transitions, graphics and audio exercised with
 independent expected values; HGB's boot-mapping and model-change guard kept;
 AGB service coverage including stateful sequences, sound, and MultiBoot (the
@@ -321,7 +330,11 @@ the committed source is logic, not payload.
 ### The content library
 
 **Owns:** `.puck` modules for text, camera-driven tilemap streaming, entity
-dispatch, battle math, and an audio driver, composed through `import`.
+dispatch, battle math, and an audio driver, composed through `import`. They live
+in the shared package `worlds/standard/` (beside `cards.puck`, the precedent for
+a reusable fragment every package imports), so any package imports them; the
+house cartridges that use them stay in the importing package's `cartridges/`
+folder.
 
 **Delivers:** the engines a retail game needs, authored as procedures over
 typed memory; nothing in it touches a forge project. One language item it
@@ -346,31 +359,10 @@ library on both machines under the determinism gate.
 
 ## Verification summary
 
-```bash
-dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
-```
-
-```bash
-dotnet test tests/Puck.World.Server.Tests -c Release
-dotnet test tests/Puck.World.Games.Tests -c Release
-dotnet test tests/Puck.World.Machines.Tests -c Release
-dotnet test tests/Puck.World.Client.Tests -c Release
-dotnet test tests/Puck.World.Presentation.Tests -c Release
-dotnet test tests/Puck.World.Silo.Tests -c Release
-dotnet test tests/Puck.World.Tests -c Release
-```
-
-```bash
-dotnet test tests/Puck.GamingBricks.Transpiler.Tests -c Release
-```
-
-```bash
-dotnet test tests/Puck.HumbleGamingBrick.Forge.Tests -c Release
-```
-
-```bash
-dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests -c Release
-```
+A change is read by running it: boot `worlds/debug` through the `puck` server's
+`puck_world_start` and read `machine.state` and the device screens with
+`puck_exec` and `puck_capture_frame`. The emulator batteries are the
+accuracy checks:
 
 ```bash
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts artifacts/hgb-post
@@ -378,6 +370,10 @@ dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts a
 
 ```bash
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
+```
+
+```bash
+puck sweep
 ```
 
 ## Open items
@@ -430,7 +426,7 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
      beyond documented contracts, since the retail-BIOS comparison ran only
      against a supplied image (a retail-BIOS control still runs inside several
      Advanced Tier A stages when `--bios` names one by hand).
-- Shorten the two emulator batteries the CPU suites run.
+- Low priority: shorten the two emulator batteries the CPU suites run.
   `Puck.HumbleGamingBrick.Tests` runs the Humble battery with an empty corpus
   cache (about 15 s of its 25 s) and `Puck.HumbleGamingDeck.Tests` runs the
   Deck's Tier A (its 28 s), each in a child process; each self-contained stage
@@ -445,12 +441,6 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   `bundled-firmware` (158 s), `queued-host-time-travel` (136 s),
   `boot-rom-handoff` (126 s) and `queued-host-memory-access` (112 s). Fewer
   emulated frames in those stages, with the same checks, is what shortens both.
-- Qualify sub-frame button timing if a future game profile needs it. The
-  generic machine debugger deliberately holds one world-tick input across the
-  native frames it spans; its repeated RAM traces compare the same checkpointed
-  rational clock phase. One `replay.verify` of a machine-debugger scenario that
-  hashes RAM every tick would confirm that queued-core peeks agree between live
-  play and replay.
 - `QueuedMachineWorker` frame-tracking locals are not reset on checkpoint
   restore or rewind, and `HgdMachine.Reset` keeps a latched bus write (read from
   the code in a pre-`main` review, not reproduced; confirm with a failing test

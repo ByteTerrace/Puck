@@ -30,7 +30,7 @@ other authority that embodies the traveller or holds its detached image is a
 | Incarnation `I` | The companion's mobility incarnation, carrying the title mark | `WorldEntityAddress` minted by home, `Titled` set for an inhabitant of a role placement |
 | Custody epoch `e` | The traveller's ownership epoch; every landing, the return home included, lands at `e + 1` | `WorldMobilityIdentity.Epoch`, advanced by the escrow's `Advance()` at each landing |
 | Hop key `K` | The source-scoped transfer key of the crossing that moves custody, allocated durably before it is sent | `WorldTransferKey`; the allocation is the escrow-once lane's durable `NextTransferId` |
-| Member id `m` | A request-local id the source assigns at enqueue; it never changes when the cohort is filtered; a companion's is its incarnation | New field on `WorldTransferReservationMember` and `WorldTransferCommitMember` |
+| Member id `m` | A request-local id the source assigns at enqueue; it never changes when the cohort is filtered; a companion's is its incarnation | `WorldTransferReservationMember.MemberId` and `WorldTransferCommitMember.MemberId` |
 | Custody ticket | `(home, I, K, e')`: "home recorded hop `K` moving `I` to its destination at epoch `e'`" | `WorldTransferCompanion.Ticket`, on the reservation and the commit member |
 
 The ticket is not a secret and is never trusted on its own. A destination verifies it with
@@ -48,9 +48,9 @@ mark is a different incarnation, of which home holds no title (`NotMyTitle`), so
 no custody and is refused on any return. Players and other untitled travellers cross as
 before.
 
-**Keys, leases and tombstones are the escrow-once lane's rules** (branch
-`worktree-agent-ab9e3866f29c631a2`, its crossing-log records `Allocation(Next)`,
-`Lease(Key, Floor)` and `Tombstone(Key)`, and the reservation's `SourceFloor`). For every
+**Keys, leases and tombstones use the existing crossing log**
+(`WorldCrossingRecord.cs`: `Allocation(Next)`, `Lease(Key, Floor)`, and
+`Tombstone(Key)`, with the reservation's `SourceFloor`). For every
 traveller: transfer ids are allocated durably before use (`Allocation` advances `Next`
 ahead of the first send, so a crash after a reservation and before the departure never
 reuses the id); a key is leased at most once at a destination (`Lease`, with the source's
@@ -100,23 +100,23 @@ between any two of them; the explorer crashes there. The reducer is total over a
 | Record | Authority | Written when | Engine form |
 |---|---|---|---|
 | `Minted(K, to, memberIds[, image])` | Source | Before the first message of a crossing; a shed image's later attempt names the departure it carries | `Allocation(Next, Mint(K, to, companions))`: the companions with their title authorities, from which the source's owed notices and its abandons derive |
-| `Hop(K, from, to, [(I, e, e+1)…])` | Home | It authorizes the hop of every companion it grants under one key; each entry is that title's own fact | New `WorldCrossingRecord.Hop` |
+| `Hop(K, from, to, [(I, e, e+1)…])` | Home | It authorizes the hop of every companion it grants under one key; each entry is that title's own fact | `WorldCrossingRecord.Hop` |
 | `Leased(K, from, members with slots)` | Destination | Before it answers `Reserved` | The escrow-once lane's `Lease(Key, Floor)` |
-| `Departure(K, to, members with tickets, slots and images, shed)` | Source | Before it sends the commit; a shed departure before any reservation | Existing `Departure`; `WorldLandedMemberCheckpoint` gains `Companion`, `Ticket`, `Image`, `Shed` |
-| `Arrival(K, from, members with slots, generations and epochs, readopted ids)` | Destination | Before it answers the commit | Existing `Arrival`; `WorldArrivalOutcome` gains `Readopted` and each companion's `follows` member id |
+| `Departure(K, to, members with tickets, slots and images, shed)` | Source | Before it sends the commit; a shed departure before any reservation | `Departure`; `WorldLandedMemberCheckpoint` carries `Companion`, `Ticket`, `Image`, `Shed` |
+| `Arrival(K, from, members with slots, generations and epochs, readopted ids)` | Destination | Before it answers the commit | `Arrival`; `WorldArrivalOutcome` carries `Readopted` and each companion's `follows` member id |
 | `Dead(K[, burned slots])` | Destination | Before it answers `Missing` or refuses a leased key; a commit that landed members and rolled them back names their slots, whose generations outlive the rollback | The escrow-once lane's `Tombstone(Key)`; the burned generations ride the arrival outcome |
 | `Settlement(K, landedIds, retiredIds)` | Source | Before it acknowledges, restores or retires; every member not landed or retired is restored | Existing `Settlement`, keyed per member |
-| `HopDone(K, I, arrived)` | Home | One companion's hop settles, or its settlement notice arrives before its hop (which then cancels the hop on arrival) | New `WorldCrossingRecord.HopDone` |
-| `HopAcked(K, I)` | Custodian | Home acknowledged one settlement notice | New |
-| `Retire(I, cause)` | Custodian | A step of its own after home answered `Stale` or `Released` for an embodied copy (two refused companions retire in two steps; the answer itself is volatile and is given again on the next contact) | New `WorldCrossingRecord.Retire` |
-| `Recall(I, e'')` | Home | The player or an authored window recalls | New `WorldCrossingRecord.Recall` |
+| `HopDone(K, I, arrived)` | Home | One companion's hop settles, or its settlement notice arrives before its hop (which then cancels the hop on arrival) | `WorldCrossingRecord.HopDone` |
+| `HopAcked(K, I)` | Custodian | Home acknowledged one settlement notice | `WorldCrossingRecord.HopAcked` |
+| `Retire(I, cause)` | Custodian | A step of its own after home answered `Stale` or `Released` for an embodied copy (two refused companions retire in two steps; the answer itself is volatile and is given again on the next contact) | `WorldCrossingRecord.Retire` |
+| `Recall(I, e'')` | Home | The player or an authored window recalls | `WorldCrossingRecord.Recall` |
 | `Noticed(I, recalled@e'' \| released)` | Home | The player has been told; every recall owes its own notice, named by its epoch | The HUD notice, recorded so the obligation survives a crash |
 | `Install(I)` | Home | A definition install removes the placement's role | The taped mutation; the reducer reads it |
-| `Stranded(I, v)`, `GraceElapsed(I, v)` | Custodian | The sweep finds no way home during the player's `v`th visit here; the window's tick passes | New records with the visit and the deadline tick |
+| `Stranded(I, v)`, `GraceElapsed(I, v)` | Custodian | The sweep finds no way home during the player's `v`th visit here; the window's tick passes | `WorldCrossingRecord.Stranded` and `GraceElapsed`, with the visit and deadline tick |
 | `Write(I)` | Custodian | The driver writes the companion's durable state | The register write, already taped as state |
 
 Replay: `WorldReplayEntry.Departure` and `Arrival` carry their records (the departure with
-tickets and images, the arrival outcome with `Readopted`, epochs and bindings); a new
+tickets and images, the arrival outcome with `Readopted`, epochs and bindings);
 `WorldReplayEntry.Custody` carries `Minted`, `Hop`, `HopDone`, `HopAcked`, `Recall`,
 `Noticed`, `Retire`, `Attempt`, `Stranded` and `GraceElapsed` with the crossing-log leaf;
 `WorldReplayEntry.Transfer`'s narration is replaced by the settlement record. The re-drive
@@ -500,10 +500,9 @@ dotnet build tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c
 dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release --no-build --explicit on --filter-trait Category=ModelCheck
 ```
 
-The build lane runs the model check at every step of section 9, and every change to this
-protocol (the model, the spec, or the engine code that implements a transition) runs it
-before landing; a protocol change is made in the model first and the model check is its
-evidence. It takes seven to seventeen minutes on the lead machine, by load, and a few hundred megabytes; the ordinary suite stays
+The build lane uses the model check to explore each protocol transition and
+its failure schedules. A protocol change is expressed in the model first; the
+check supplies evidence for that lane and is not a landing gate. It takes seven to seventeen minutes on the lead machine, by load, and a few hundred megabytes; the ordinary suite stays
 under a minute. Scopes combine fault classes
 (two companions with admission failure, partial landing, crash and loss in one scope; log
 failures with crashes on the onward route; repeated deadlines so a shed image fails more
@@ -535,8 +534,7 @@ the adversarial crossing laws separately exercise reaping and a partial onward
 remote-player crossing. It also does not cover two concurrent federation questions
 or sustained transient refusals through the engine's retry ceiling. The deferred
 moves and these exclusions are limits of the refinement claim, not successful
-checks of those behaviours. Persisted autonomous reservation principals use the
-checkpoint 28 / tape 12 shape; incoming federation actors still cannot claim `World`.
+checks of those behaviours. Incoming federation actors still cannot claim `World`.
 | Finding (spec review) | Trace |
 |---|---|
 | Destinations never verify home's hop authorization | `ADestinationVerifiesHomesHopAuthorization`, `AForgedReturnToHomeIsStale…` |
@@ -589,54 +587,18 @@ is the query).
 
 ## 9. Build plan
 
-The build lane follows this order; each step names the model trace that becomes its
-engine law (a law boots real `WorldServer` instances through the existing crossing
-fixtures, as `CrossingUncertaintyLawTests` and `TransferKeyOnceLawTests` do) and lands on
-its own, behind the escrow-once branch.
+Steps 1 to 5 are built: records and the reducer, member ids and tickets, hop
+authorization and verification, destination-word settlement, and return with
+re-adoption and the held slot. `WorldCrossingRecord.cs` holds allocation,
+lease, tombstone, departure, per-member settlement, hop, and hop-completion
+records; the protocol and refinement fixtures exercise those paths. Durable
+record kinds for later steps also exist; their presence does not complete the
+transitions below. `WritesAbroadComeHomeWithTheCompanion` still needs step 9's
+register writes.
 
-1. **Records and reducer.** Add the crossing-log kinds `Hop`, `HopDone`, `HopAcked`,
-   `Recall`, `Retire`, `Noticed`, `Stranded`, `GraceElapsed`; the `Companion`, `Ticket`,
-   `Image` and `Shed` fields on `WorldLandedMemberCheckpoint`; `Readopted` and the bindings
-   on `WorldArrivalOutcome`; the per-member `Settlement`; the home custody row and the
-   custodian's binding in `WorldAuthorityCheckpoint`; `WorldReplayEntry.Custody`; and one
-   reducer shared by checkpoint restore, log redo and the tape re-drive, with the
-   append-boundary rule (one record per authority operation) and suspension of an uncertain
-   landed record. Laws: `ACrashBetweenTheHopRecordAndTheDepartureRecoversTheTitle`,
-   `ACrashBetweenTheRecallAndItsNoticeStillNotifies`, `AnUncertainHopRecordIsNotServedBeforeRecovery`,
-   `TwoReleasedCompanionsRetireInSeparateSteps`, and a replay law that re-drives a recorded
-   crossing with companions and compares the reducer's custody row tick for tick.
-2. **Member ids, tickets and the reservation member.** `WorldTransferReservationMember`
-   and `WorldTransferCommitMember` gain the request-local id and `WorldTransferCompanion`
-   (role, `FollowsMember`, home, driver, ticket); per-member verdicts and slots on the
-   reply; landed member ids on `Committed` and `StatusReply`. Laws: `H2_H10_AdmissionAndBindingArePerMemberById`,
-   `TwoCompanionsSettlePerMemberAndPartialLandingRestoresTheOther`, `AFullCustodianRefusesTheSecondCompanion`,
-   `AStrangerFillsTheCapAndThePlayersOwnAdmissionIsRefused`, `AFailedLandingStillAdvancesTheSlotGeneration`
-   (a member refused at the landing, a rolled-back landing and a refused arrival record, each live and
-   re-driven from the tape).
-3. **Hop authorization and verification.** `HopRequest`/`HopAnswer` and `HopQuery`/`HopQueryReply`
-   on the federation `Transaction` lane; home's `Hop` record per key naming every granted
-   companion; the destination's verification at reservation and again at commit, landing
-   at the grant's epoch, each answer correlated with the phase that asked; home's own hops authorized
-   locally. Laws: `ADestinationVerifiesHomesHopAuthorization`,
-   `ACancelledAuthorizationDoesNotVerifyAForgedHop`, `ACommitLandsOnlyUnderTheGrantAsItStandsAtTheCommit`,
-   `ADelayedVerificationAnswerCannotAuthorizeARevokedHop`, `ADuplicatedReservationAnswerCannotSatisfyTheCommitRecheckAfterARelease`,
-   `Epochs_EveryLandingAdvancesByOneIncludingTheReturn`.
-4. **Settlement by the destination's word.** `CustodyQuery`/`CustodyReply` authenticated
-   as the incarnation's minting authority, answered from durable records and tombstoning a
-   key the destination leased and lost or never leased; `HopSettled` as a trigger; the
-   settlement-before-authorization marker; home's own hops settled from home's settlement.
-   Laws: `HomeResolvesAPendingHopByAnAuthorizedCustodyQuery`, `ASettlementNoticeThatOvertakesItsAuthorizationIsRemembered`,
-   `H9_TheSettlementPayloadNamesWhoLandedSoALateGrantMovesNoCustody`, `HomeHoldsTheSlotOfItsOwnDepartureInDoubt`.
-5. **Return, re-adoption and the held slot.** `VerifyReturn` as the one door; the held
-   slot claimed exactly and covering in-doubt departures (`IsHeld` read by the census,
-   `ReconcileInhabitCounts`, allocation and `PreferredOrLowestFree`); re-adoption after
-   durability; install precedence. Laws: `H1_TheTicketArrivesInTheCommitAndTheReturnLandsReadopted`,
-   `H3_TheReturnIsItsOwnOperationBoundByTheHomeRecord`, `H4_HomeNeverRefusesItsOwnReturnAndLandsItReadopted`,
-   `TheCensusNeverTakesAHeldSlotAndTheReturnLandsInIt`, `AnInstallWinsOverADepartureInDoubt`,
-   `InstallDuringAPartialLandingRetiresTheUnlandedCompanion`, `WritesAbroadComeHomeWithTheCompanion`,
-   `AReconnectAtHomeKeepsThePlacementBinding`. Built: `CompanionReturnLawTests` carries H1, H3, H4,
-   the held slot, install precedence over a departure in doubt and the placement binding at home;
-   `WritesAbroadComeHomeWithTheCompanion` waits for step 9's register writes.
+The remaining build work is steps 6 to 10, using the existing model and real
+authority fixtures as evidence:
+
 6. **Separation, stranding, shed and retire.** The drain's sweep; `Stranded` and
    `GraceElapsed` with authored windows; the shed as allocate-then-depart under the common
    allocator; fresh-key attempts; the `Retire` step on home's `Stale`/`Released`; the
@@ -661,8 +623,10 @@ its own, behind the escrow-once branch.
 10. **The debug world.** The faerie crosses into the night painting and the garden and
     comes home; the sweep's companion signals; the player's notices on the HUD.
 
-Each step ends with the model class green on the merged head and the step's laws green on
-real instances; the model is amended first whenever a step finds the protocol wanting.
+The lane uses the model and real-instance checks to examine each step, and
+amends the model first when a transition needs correction. These checks are
+the lane's tools, not preconditions for landing. The debug-world trip and its
+captures demonstrate the composed behavior.
 
 ## 10. Owner calls
 

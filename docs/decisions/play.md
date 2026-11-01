@@ -8,17 +8,14 @@ the MCP contracts by [`Puck.Mcp`](../../src/Puck.Mcp/README.md).
 
 ## The game
 
-**One World.** The reference game is one document, the island with its
-districts, superseding two earlier shapes. Nexus-as-island made a floating
-island the hub and boot default with no adjacencies, a single authority not
-stitched into the quilt; quilt-as-nexus fell to two facts:
-`WorldAdjacencyBands.ProjectionCapacity` times `WorldRigCatalog.Capacity`
-overruns `SdfProgramBuilder.MaxInstances` at the island's four vertical seams
-plus their derived corners, so the island could not compose a window, and the
-corner worlds' `up` boundaries sit at y = 2, so anything above a corner's
-ground transfers off it at once. The four ground corners and the island stay
-what they were, federation stress content, until the forcing world reimagines
-them.
+**The debug world is the proving ground.** The reference game was once one
+document, the island with its districts, and before that a quilt of ground
+corner authorities. Those worlds (the quilt, the island and the One World) are
+quarantined under `experimental/` and are pending no re-admission: the debug
+world is the benchmark that shows the features compose and run well on the
+target machines, and the inspiration authors draw on to build their own worlds.
+Each feature the quarantined worlds hold that the debug world lacks is ported
+into it, one place at a time, rather than revived in place.
 
 **A surface is one description.** An island built from separate
 descriptions (hand-placed creation piles, painted lattice heights, flat prop
@@ -28,19 +25,18 @@ ruled such a world unplayable. A solid is therefore rendered and collided from
 one declaration, and presentation-only decoration is a non-solid placement: a
 solid placement carrying a wallpaper fold refuses by name.
 
-**The standards are state.** `standard.puck`, the basis the quarantined
-worlds delta over, carries the shared values as state rows: a `transforms`
-text row (`identity`, `origin`, `unit`) and a `colors` text row, which
-documents reference as `state.<row>.<key>` instead of restating literals, so
-each standard value has one home. A world that authors no `theme` draws the
-engine's neutral one; the live worlds import the authored standard skin from
-`worlds/standard/skin.puck` beside their basis.
+**The standard is a package.** `worlds/standard/standard.puck` composes the
+authored skin, controls, camera and companion documents; an importing world
+refines their rows by id, overrides them, or replaces them. A world that
+authors no `theme` draws the engine's neutral one, and the live worlds import
+the standard skin from `worlds/standard/skin.puck`. Each shared value has one
+home in that package, referenced rather than restated.
 
-**Every world stands over a safety net.** The basis places one solid `Plane`
-(`groundPlane`) far below the playable space to catch anything that falls; it
-is never a level's own floor. Its single shape is both rendered and collided.
-The checkerboard over it (`groundTexture`, one wallpaper-folded tile) is a
-non-solid placement, so the plane stays the only collision truth.
+**Recovery is authored per world.** A body that leaves the playable space is
+stood back up by a rule the world authors: the valley's `fall-recovery` rule
+(`worlds/debug/valley.puck`) poses a body that falls under the recovery floor
+back on the sector it left. The engine supplies the pose operation, never a
+catch-all floor.
 
 **No world runs inside another.** Worlds link by federation; modules nest at
 compile time; a link (`border`, `door`) is one declaration generating both
@@ -51,10 +47,10 @@ rule. A desktop representation, an explicit field proxy, and a
 cartridge-compatible rendition are distinct products; shaders and meshes do
 not translate to handheld hardware by themselves.
 
-**Districts are modules** imported under an alias and exporting only their
-control rows. `granaries.puck` moves under the modules rather than
-disappearing; the frozen documents, the scenarios, and their canaries retire
-with a ledger naming each successor.
+**Places are modules** imported under an alias and exporting only their control
+rows. `granaries.puck` moves under the modules rather than disappearing; the
+quarantined documents, scenarios and canaries are deleted once the successor
+signal for each exists.
 
 **In-flight state at transfer:** drop and re-derive what the engine can
 recompute; carry what the player can perceive.
@@ -107,8 +103,10 @@ never means scanning every remembered individual.
 stays with addons rather than a second scripting language inside state.
 
 **The acceptance workload is a requirement, not a measurement:** a few
-thousand creatures densely packed on ground or in water at 60 FPS on desktop
-and Steam Deck, verified by actual world runs and rendered whole-frame cost.
+thousand creatures densely packed on ground or in water at 60 FPS on the
+RTX 2060 and RTX 4070 and 45 FPS on the Steam Deck (the [frame-rate
+bar](rendering.md)), every frame at the highest quality,
+verified by actual world runs and rendered whole-frame cost.
 
 **Five tracks, no sixth.** Track 5 aims at the reference game's design from
 the start, so its rule primitives land with the content that proves them; a
@@ -225,6 +223,84 @@ work and is never followed by an automatic retry.
 
 **Affordance reads stay advisory** until a game needs a revisioned snapshot at
 the owning seam.
+
+## The chase camera
+
+A third-person chase camera meets rooms narrower than its boom: a lift car, a
+switchback stairwell, a low soffit, an inside corner. The decision is how it
+trades four constraints: staying inside the room, keeping the avatar readable,
+preserving the look direction that drives movement, and avoiding jumps or
+looming motion that cause disorientation. The mechanism is the seat rig's
+clearance solver ([Chase eye clearance](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance));
+the rulings below set the standard template's values, which are `.puck` data in
+the standard package (`worlds/standard/camera.puck` and the avatar's `seatRig`),
+never engine constants. The owner's sitting tunes them.
+
+**Heading is never deflected.** Orbiting the camera away from a wall is
+eliminated: under camera-relative movement it bends the player's path and
+fights the look stick. Every mode shares one heading-preserving foundation: a
+sphere-cast pull-in along the boom (`EyeRadius` 0.3 m), a bounded rise over the
+head, and critically damped easing with an inward `SurfaceSkin` clamp. None of
+the three suffices alone when the room is narrower than the avatar's keep-out
+radius or a waist-aimed boom shortens to fill the screen with the avatar's back.
+
+**The default is target shift with a character fade** (`fade`). As geometry
+shortens the boom below a comfort knee the look target migrates from the waist
+toward head height, and as the eye nears the target the avatar's stamp fades
+from solid to hidden. It avoids the failures with the strongest evidence:
+forced yaw swings, exposing the void behind a thin wall, and losing the room
+ahead. **Target shift with a near-plane cut-away** (`cutaway`) keeps the avatar
+fully opaque and advances the near plane to the wall face on her side; it is one
+toggle away, for inspecting the avatar. Fixed camera volumes and occluder
+dithering are supplementary, not general: authored volumes cannot cover
+arbitrary authored geometry, and dithering handles thin occluders between eye
+and avatar, not a boom longer than the room.
+
+The owner confirmed the consensus of three independent reviews. Confidence is
+moderate to low that `fade` is also the most delightful, because no source
+compares player preference between fade and cut-away; the owner's side-by-side
+playtest in the lift and the stairwell settles it. The three-up `camera-compare`
+layout that makes that playtest a one-minute job is tracked in the
+[open items](../plans/open-items.md#work-packets).
+
+**First person is a state-driven view, never a collision response.** It is
+modeled on the Metroid Prime morph-ball transition: a deliberate state the
+player or world enters (a first-person toggle, an inspect or focus mode, flight,
+piloting, a size change) triggers an eased pull out of the head or into it along
+the view direction, over roughly half a second, with heading preserved. The
+avatar's stamp is hidden in that seat's view while the eye is inside the head
+shell, the HUD and controls follow the view, and in tight spaces authored camera
+volumes take over where a reactive boom would fight the walls. The automatic,
+collision-driven transition stays a supported option, not a discarded one:
+authorship, player choice and debug needs rule. An author sets which triggers a
+world allows and its default, the player may override them, and a debug toggle
+forces any mode. It is never the default chase mode, because uncommanded
+transitions between a 4.2 m boom and the eye cause optical looming and hide the
+avatar's feet at ledges. When automatic is chosen it carries hysteresis:
+
+- Entry dwell: collapse from the minimum third-person distance (0.6 m) into
+  the eye only after geometry has held the boom below 0.85 m for 0.20 s, or at
+  once when the room is under 0.25 m.
+- Exit hold: stay at the eye until the room behind the head exceeds 1.35 m for
+  0.15 s, then ease back out on `camera-boom` dynamics.
+- A modest field-of-view widening (0.96 rad to 1.12 rad vertical) pairs with the
+  blend, and the avatar's stamp hides inside 0.45 m.
+
+**The standard template's values.** Durable framing structure lives in the
+camera program (`views.seatRig`) and `views.seatControl`; portable player
+preference lives in `seatDefaults.seatCameraFeel` and echoes in
+`world.view.camera`.
+
+| Parameter | Where authored | `fade` (default) | `cutaway` | Purpose |
+|---|---|---|---|---|
+| `clearanceMode` | `views.seatControl`; player override in `seatCameraFeel` (`auto`, `fade`, `cutaway`, `firstPerson`) | `"fade"` | `"cutaway"` | How close obstructions are resolved; the player's `auto` inherits the world's mode. |
+| `distance` | `views.seatRig` `orbit` op | 4.2 m | 4.2 m | Unobstructed rest boom, scaled by `liveScale`. |
+| `pivotOffset` / `targetOffset` | `views.seatRig` `orbit` and `lookAt` ops | `[0, 1.0, 0]` | `[0, 1.0, 0]` | Rest look target at full boom length. |
+| `closeTargetOffset` | clearance / `lookAt` op | `[0, 1.74, 0]` (`[0, 1.54, 0]` pilot) | `[0, 1.55, 0]` (`[0, 1.40, 0]` pilot) | Target interpolated toward as the boom fraction falls from `closeTargetStartFraction` (0.6) to `closeTargetFullFraction` (0.2). |
+| `maxRise` (`LiftCeiling`) | `views.seatControl` or clearance op | 0.35 rad | 1.1 rad | Elevation added above the rest pitch when the keep-out blocks a level pull-in. |
+| `dynamics` | `views.seatRig` `dynamics` op (`camera-boom` row) | `f: 4, zeta: 1, r: 0`, `SurfaceSkin` 0.1 m | same | Critically damped ease on boom fraction, rise angle and target blend; wall contact clamps at once. |
+| `occluderTreatment` | `views.seatControl` / clearance op | `wallCollide` (hard sphere-cast, no cutaway) | `nearCutaway` (`Near` advances to the wall face, `NearMargin` 0.05 m) | How the walls between eye and avatar are treated. |
+| `characterFade` | `views.seatControl` / clearance op | start 1.25 m, end 0.45 m, `minimumBoom` 0.35 m | none (the eye never enters the keep-out) | Dither-fades the avatar's stamp as the eye nears the target. |
 
 ## Tabletop
 

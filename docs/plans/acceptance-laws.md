@@ -81,9 +81,10 @@ keyframe and the seek changes the history's fingerprint and sends the restore
 through the load door. So the in-place variants discard only the clock's own
 advance, and the load-door variants journal a write.
 
-The viewer is a sink, not a session: a seek refuses while a session is live,
-because session input and grants are not captured, so a session cannot witness
-it.
+The viewer is a sink. A keyframe carries session state, but a live session
+observes from another authority whose timeline the seek does not rewind
+(`WorldHistory.UncapturableLiveState`). That external observation is why a
+session cannot witness the seek.
 
 Four variants run the same steps:
 
@@ -496,7 +497,7 @@ reproduce:
 | A machine operation while recording | `MachineOperationStatus.Refused` |
 | A machine operation on a provider without operations | `MachineOperationStatus.Unsupported` |
 | An undo past the journal horizon | "undo refused: …" |
-| A checkpoint while addons, screen operations, coupled links or rewind history are live | the checkpoint's named refusal |
+| A checkpoint while unsupported addons, screen operations, or coupled links are live | the checkpoint's named refusal |
 | A fact on an anonymous seat | `WorldRuleEffectRefusal.IdentityUnbound` |
 | A player-scope HUD replace layer | `HudRefusal.SeatPanelReplaceRefused` |
 | A vector-cell effect kind | `RuleRefusal.VectorEffectNotAdmitted` |
@@ -703,26 +704,21 @@ a camera view the bind registered, and re-binds the row's own view when the row
 authors one (`WorldScreenBinder.TryShowRow`). Law 4 proves a retarget undone
 through it.
 
-## Order of work
-
-1. Implement laws 1 to 5 on the integration head. Each confirms its gap's fix
-   there. Law 4 lands with G7's return seam.
-2. Land G6's classification and law 6 together, the law enumerating the
-   classified set.
-
 ## Open items
 
-All six laws are written on the integration head, each proved red by
-withholding the behaviour it guards, and gaps G1 to G7 are fixed in code with
-laws of their own (G6 as `RefusalAttribute.Unsupported`). A line is deleted when
-its arrangement lands, never ticked.
+The observable invariants above have six laws and the G1 to G7 repairs
+(G6 as `RefusalAttribute.Unsupported`). The following arrangements remain
+uncovered; this is an inventory of scenarios rather than an implementation
+order. Checkpoints already capture scoped replays and retained undo, and restore
+both through `WorldPersistence.Checkpoint.cs`; rewind history is not a blanket
+checkpoint refusal.
 
 - Law 6: arrange `HudRefusal.SeatPanelReplaceRefused`, which refuses only
   through `identity.hud`, so the twins must join a seat's roster profile.
 - Law 6: arrange `AddonMutateRefusal.NotRequested`, which needs a guest addon
   whose manifest never requested `Mutate`.
-- Law 6: give codes and arrangements to the checkpoint refusals (addons, screen
-  operations, coupled links, rewind history).
+- Law 6: give codes and arrangements to the remaining checkpoint refusals
+  (unsupported addons, screen operations, and coupled links).
 - Law 6: give codes and arrangements to the closed rewind group's external
   transfer, the undeclared producer's, the rigid body's and the carrying
   traveller's transfers.
