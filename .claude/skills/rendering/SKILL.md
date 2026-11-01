@@ -769,6 +769,9 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   but does not set `SdfFrame.TickLocked`; it can capture before a background GI
   trace finishes. Pin the camera and tick in both legs and use lockstep's
   synchronous scene/refill/trace drain for the comparison.
+  Keep each code build's completed private mesh store for warm comparison
+  legs: sharing one directory does not share payloads across changed bake
+  identities, and silently turns the second leg into another cold bake.
   `world.rate pause` also stops tick waits: several timing reads separated by
   `world.wait` then repeat the same completed GPU window. Use separate control
   requests spaced in wall time when measuring a paused scene.

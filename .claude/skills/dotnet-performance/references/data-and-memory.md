@@ -219,8 +219,11 @@ An owner reserves its simultaneous peak before admission; unused promises are
 `reserved`, not allocated memory. A reservation that does not fit defers the
 bake and reports `[sdf.mesh-bake] deferred`. `host.memory budget 1`, followed by
 `host.memory budget auto`, exercises deferral and resumption. The
-low-budget check waits for that stderr line in wall time, never for a tick:
-a deferred lockstep bake holds its frame and therefore cannot satisfy a tick wait.
+low-budget check sets `world.lockstep off`, then waits for that stderr line in
+wall time, never for a tick: a deferred lockstep bake holds its frame and
+therefore cannot satisfy a tick wait. Restore the budget before waiting for
+bake settlement. A one-group uncached edit exercises this without another
+whole-world cold bake; keep the full cold bake for the allocation comparison.
 The mesh library's
 unused cache allowance and every residency's admitted bake groups draw from
 this account. The account reads physical availability as an observation and

@@ -131,7 +131,8 @@ any build, specialist builds · high · Next, in three stages: scheduling (no ne
 thread), then the garbage-collection cuts on today's runtime, then the design
 memo; phase 3 and F17 of [the tick-to-produce memo](simulation-thread.md) now,
 its phase 2 after the job-system memo. The memo is
-[engine-job-system.md](engine-job-system.md), awaiting its review.
+[engine-job-system.md](engine-job-system.md), reviewed with dispositions;
+M1 and M2a are built.
 
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
@@ -268,6 +269,54 @@ together. The work builds on today's runtime through `IAllocator`
 (`src/Puck.Platform/Memory/MimallocAllocator.cs:6`), the allocator every native
 move goes through. The custom no-GC runtime port stays later work, on the
 [memory-pooling page](memory-pooling.md), after the fundamentals.
+
+M1 and M2a are built (`mem-m1`, Release .NET 11, both shader targets).
+`MemoryAccount` owns admission and category totals; the library reserves its
+unused cache allowance and bake groups reserve their simultaneous peaks.
+Published mesh payloads, copied readbacks, lattice storage and point workspaces
+use the injected allocator. Managed contour roots and worker refinement indexes
+keep their existing owners; the allocation-review items above still apply.
+
+- Empty private-cache cold bakes, before/after: Direct3D 12 gen0 increments
+  683/481, Vulkan 711/536, from `host.memory` before and after settlement.
+  The saved `host.frames` binaries predate the inclusive-counter correction:
+  their printed 1360/949 and 1420/1145 totals double-count higher generations.
+  Frame windows differ, machines were loaded and moving bodies baked different
+  poses; these are observations, not a quiet speed or pause comparison against
+  the memo's 345. After `host.memory collect`, LOH fell from 2838 to 1475 MiB
+  on Direct3D 12 and 2945 to 1534 MiB on Vulkan.
+- The Direct3D cold bake read live 1,526,650,491 B, cached 819,879 B,
+  reserved 715,136 B and metadata 2212 B; collection left the same live bytes
+  with the other categories zero. Allocator commit/reservation, managed commit
+  and process private bytes are separate observations: payload totals are
+  already inside allocator commit, promises are not allocated, and process
+  private bytes also include driver heaps and unmigrated storage.
+- On an uncached desk edit in `worlds/debug`, `host.memory budget 1` emitted
+  `[sdf.mesh-bake] deferred ... group=-122 ... budget=1`; restoring `auto`
+  settled the bake and `quit` exited 0, with no worker failure or bake refusal.
+  A preceding whole-world cold attempt resumed but reached its 600 s wait
+  limit with 260 groups pending under machine pressure (0.2 GB free RAM).
+  The one-group check establishes resumption without that timing confound.
+- A desk extent edit rebuilt exactly one group (23 dispatches, 1,399,082
+  samples); GI built one geometry and retained the old 15,368-triangle one.
+  `host.memory collect` released 606,352 cached bytes and 536,229,256 reserved
+  bytes, leaving retirement and metadata zero too; the next collection held
+  live bytes at 1,424,482,976. The authored edit was restored after the run.
+- [medium] Exact-still oracle, owner: rendering integration. At the pinned
+  `debug.go desktop` camera and tick 12, with lockstep on and temporal resolve
+  off, before/after differs on 39 Direct3D pixels and 44 Vulkan pixels, maximum
+  channel delta 1 (1280×900). Repeating the unchanged pre-edit artifact differs
+  on 314/340 pixels, also maximum 1. With temporal resolve on, the earlier pair
+  differs on 516/642 pixels, maximum 1/18. Thus the exact-byte check remains
+  unmet; the cause of the unchanged-build residue is unconfirmed. Stabilize
+  repeat captures of one artifact before using this oracle on the native move.
+  Both backends booted and the captured stills were inspected; no bake worker
+  failure, refusal or device-loss line appeared. Capture and control artifacts
+  are `mem-m1-{before,after}-spatial-*` and `mem-m1-before-spatial-control-*`.
+- Four debug replay sources (`input-clock30`, `input-clock60`, `input-history`,
+  `controls-dash`), eight scenarios, pass `--reproduce --jobs 2`; all per-tick
+  reproduction files are byte-identical to their pre-edit copies, including
+  the rebuild after power loss. Evidence is under `.claude/scratch/mem-m1-*`.
 
 - Ownership and borrowing: authoritative ownership stays in an existing arena,
   scratch pool, job slot, mesh or host service, and its private record holds
