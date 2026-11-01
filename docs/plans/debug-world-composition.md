@@ -260,9 +260,20 @@ memo and the weather decision reach them.
   light runs through an authored cycle rather than one fixed sun. Lane C10 and
   the terrain pass's lighting-direction step take it.
 - **The Moth climbs:** an indoor rock-climbing wall near the lift is a
-  must-have. Climbing uses the standard's `crawlHold` on authored climbable
-  surfaces, so the wall climbs and ordinary walls (the Wonderland mouse-hole
-  wall among them) do not. It joins lane C2's hall work.
+  must-have, and it joins lane C2's hall work. Climbability scales from one
+  wall to a whole world, because the owner expects some worlds to be fully
+  climbable. It is authored policy resolved from contact, with precedence:
+  - a world default (the debug world: not climbable; a fully climbable world:
+    climbable);
+  - a material or surface class over the default (the debug world's
+    rock-wall material is climbable; a climbable world can opt out ice or
+    glass);
+  - a placement over its material.
+
+  The ability (reach, speed, stamina) stays in the standard's `crawlHold`,
+  which the Moth refines. The engine only resolves climbability at contact, at
+  the same per-contact cost whatever the world's default, so a fully climbable
+  world costs no more per contact than one wall does.
 
 [Plans](README.md) · [The valley, the moons and the flight between](valley-and-moons.md) ·
 [Port the experimental worlds' features](port-experimental.md)
