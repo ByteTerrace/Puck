@@ -16,15 +16,14 @@ public sealed class UnionField : IFieldEvaluator {
     }
 
     /// <inheritdoc/>
-    /// <remarks>The lesser of two fields is as Lipschitz as the steeper of them, so the union certifies the lesser step
-    /// scale and the greater value error.</remarks>
+    /// <remarks>The lesser of two fields is as Lipschitz as the steeper of them, so the union proposes the lesser step
+    /// scale.</remarks>
     public FieldEvaluatorCapabilities Capabilities {
         get {
             var (a, b) = (m_a.Capabilities, m_b.Capabilities);
 
             return new(
                 StepScale: FixedQ4816.Min(x: a.StepScale, y: b.StepScale),
-                ValueError: FixedQ4816.Max(x: a.ValueError, y: b.ValueError),
                 WarpFree: (a.WarpFree && b.WarpFree)
             );
         }

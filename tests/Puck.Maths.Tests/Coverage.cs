@@ -527,10 +527,6 @@ internal static class Coverage {
             Name: "StepScale",
             Type: typeof(FieldEvaluatorCapabilities)
         ), FieldSeamReason),
-        (new CoverRef(
-            Name: "ValueError",
-            Type: typeof(FieldEvaluatorCapabilities)
-        ), FieldSeamReason),
 
         // ---- the generic-draw dispatch contract ----
         // IDrawGenerator carries no body of its own: it exists so a generic caller (Puck.State.GeneratorEngine,

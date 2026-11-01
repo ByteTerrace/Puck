@@ -7,13 +7,11 @@ namespace Puck.Maths;
 /// <param name="WarpFree">Whether the wrapped representation is one the evaluator answers exactly everywhere. A
 /// provider that refuses an unsupported input at construction, rather than answering approximately, reports
 /// <see langword="true"/>.</param>
-/// <param name="StepScale">The certified factor <c>s</c> in <c>[0, 1]</c>, for the values this evaluator answers, that
-/// makes <c>s·F</c> 1-Lipschitz: the reciprocal of the field's Lipschitz bound, carried through every constant the
-/// evaluator compiled. <c>s·(F(p) − e)</c>, for <c>e</c> the <paramref name="ValueError"/>, never exceeds the distance
-/// from <c>p</c> to the field's zero set. Zero certifies nothing.</param>
-/// <param name="ValueError">The most, in field units, an answer lies from the function <paramref name="StepScale"/>
-/// bounds: the evaluator's own rounding. At least zero.</param>
-public readonly record struct FieldEvaluatorCapabilities(bool WarpFree, FixedQ4816 StepScale, FixedQ4816 ValueError);
+/// <param name="StepScale">The factor <c>s</c> in <c>[0, 1]</c> that turns a reading into a proposed step toward the
+/// field's zero set: the reciprocal of the field's Lipschitz bound, carried through every scale the evaluator compiled.
+/// A proposal only: the field's answers carry fixed-point rounding it does not bound, so a consumer proves clearance
+/// from <see cref="IFieldBounds"/> and checks every step it takes against the readings' signs.</param>
+public readonly record struct FieldEvaluatorCapabilities(bool WarpFree, FixedQ4816 StepScale);
 /// <summary>
 /// Deterministic, fixed-point access to a scalar field and its gradient.
 /// </summary>
