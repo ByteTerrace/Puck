@@ -869,6 +869,17 @@ review findings R4 to R8 are closed in it, each pinned in its stated case by
   contact over the job system's parallel partitions. An octave cut is only the
   drawn relief's own cut (the terrain pass's step 3), never a contact
   approximation.
+- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries:
+  about 98 % of field-contact time at the rim runs under it. Measure whether
+  each probe is needed before cutting the solve itself. (from: field-contact)
+- [low] Relieved instances are never culled from `WorldSolidField`'s program,
+  because `NoiseDisplace` has no reach certificate (`SdfFieldEvaluator.Cull.cs`,
+  `TryCertifyInstance`). (from: field-contact)
+- [low] The Moth creeps 0.04 m in x over 3,000 ticks standing at the rim, on
+  the code before and after the certified solve; the cause is unknown.
+  (from: field-contact)
+- The terrain pass's step 5 face check (58°) is not yet run on the certified
+  solve. (from: field-contact)
 
 ### Transfers, federation and server
 
@@ -2080,6 +2091,12 @@ The suite target (100 % line coverage plus the keep-list) and CI's `coverage` jo
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
 
+- After the job-system batch's merges, five server tests fail:
+  `HistoryRefusalLawTests`, `CellBurstLawTests`, `InhabitCountLawTests`,
+  `WorldExtensionLawTests`, and `AddonGuestLawTests` (a 30 s timeout). The
+  first four expect addon and history messages that the addon-checkpoint and
+  history work changed. They are triaged with the shards below. (from:
+  field-contact)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions
