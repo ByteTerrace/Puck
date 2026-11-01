@@ -367,6 +367,7 @@ public static class WorldRenderRoot {
             var delivered = context with {
                 ElapsedTicks = client.EngineTick,
                 StepTicks = stepTicks,
+                Tick = ((long)client.Tick),
                 AccumulatorTicks = ((ulong)(fraction * stepTicks)),
             };
 

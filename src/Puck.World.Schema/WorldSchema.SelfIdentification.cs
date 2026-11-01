@@ -47,25 +47,14 @@ public static partial class WorldSchema {
         }
     }
     private static string ResolveCommit() => (SourceRevision ?? "unknown");
-    // The project embeds the commit as its own resource (see Puck.World.Schema.csproj); no assembly carries it in its
-    // informational version, so a new commit recompiles this project alone.
-    private static string? ReadSourceRevision() {
-        using var stream = typeof(WorldSchema).Assembly.GetManifestResourceStream(name: "Puck.World.Schema.SourceRevision");
+    // The executable's runtime configuration carries the commit (Directory.Build.targets, PuckStampSourceRevision), not
+    // any compiled assembly, so a new commit recompiles nothing.
+    private static string? ReadSourceRevision() => ((AppContext.GetData(name: "Puck.SourceRevision") is string { Length: > 0 } revision)
+        ? revision
+        : null
+    );
 
-        if (stream is null) {
-            return null;
-        }
-
-        using var reader = new StreamReader(stream: stream);
-        var revision = reader.ReadToEnd().Trim();
-
-        return ((revision.Length == 0)
-            ? null
-            : revision
-        );
-    }
-
-    /// <summary>Gets the commit this build of the schema was made at, or <see langword="null"/> for a build outside a
-    /// git tree.</summary>
+    /// <summary>Gets the commit the running executable was built at, or <see langword="null"/> for a build outside a git
+    /// tree or a host whose runtime configuration does not carry one.</summary>
     public static string? SourceRevision { get; } = ReadSourceRevision();
 }

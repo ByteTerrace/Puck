@@ -242,6 +242,13 @@ that is about one frame period more input-to-photon than today, and about
 of keeping every client object single-owner. The owner sees this trade under
 Needs you in the packet.
 
+Phase 1's arrival-form fraction already adds about half a step of presentation
+latency. In the inline host the arrival time is stamped inside the step and the
+frame is produced right after it, so the fraction is about 0 on every frame that
+steps, where the accumulator form averaged about 0.5. A 60 Hz world on a 60 Hz
+display presents poses about 8 ms later on average than before phase 1, before
+any of the thread's own latency.
+
 ### Barriers and the replay budget
 
 A body steps one tick, except a replay drive, whose shell burst
@@ -411,8 +418,8 @@ input contributions, console scheduling, stepping, holds, deadlines and pacing.
 The three hosted services only start it with their presentation adapter;
 `WindowHostPresentation` owns window input, rendering and display waits, and
 `OffscreenHostPresentation` owns offscreen rendering. All simulation still
-runs inline on the existing host pump thread. `WallClockThreaded` names a
-reserved policy; this phase starts no simulation thread.
+runs inline on the existing host pump thread; this phase starts no simulation
+thread, and phase 4 adds the pacing it needs.
 
 `WorldSimulation` is the single shell over `WorldHostStep`, with its post-step
 supplied by composition. Frames and overlay facts read `WorldClient.Tick`;
