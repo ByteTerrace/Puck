@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization.Metadata;
 using Puck.State;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -14,8 +13,6 @@ public static partial class WorldDecompiler {
     // The keys a `pattern` declaration can carry are its construct's own description, `pattern` itself among them
     // because the emitter compiles the machine into the row while it lowers.
     private static readonly HashSet<string> PatternNodeKeys = WorldConstructs.NodeKeysOf(enclosing: null, keyword: "pattern");
-    private static readonly JsonTypeInfo<PatternNode> PatternNodeTypeInfo =
-        ((JsonTypeInfo<PatternNode>)WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(PatternNode)));
 
     private static bool TryReadPatternNode(JsonNode? node, out PatternNode? pattern) {
         pattern = null;
@@ -26,7 +23,7 @@ public static partial class WorldDecompiler {
 
         try {
             pattern = System.Text.Json.JsonSerializer.Deserialize(
-                jsonTypeInfo: PatternNodeTypeInfo,
+                jsonTypeInfo: WorldJsonContext.Default.PatternNode,
                 json: node.ToJsonString()
             );
         } catch (System.Text.Json.JsonException) {

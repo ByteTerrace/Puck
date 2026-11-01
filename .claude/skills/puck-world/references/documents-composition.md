@@ -262,6 +262,11 @@ append, `{"<key>": …, "$drop": true}` tombstones remove (a stale tombstone ref
 (unkeyed rows, no settled identity field of their own): adding one chord means restating that row's whole list.
 A present list is what replaces, empty included: `.puck` lowers a list only where its source writes one, so
 `placements { policy { … } }` leaves `rows` absent and keeps the rows beneath it, and `rows []` clears them.
+A rule's `effects` whose effects all carry `key` is such a keyed list too, so a document that restates a basis rule
+refuses when two of its effects write one key (`claim-expire`'s `boneHolder[0]` and `reporter[0]`, "the basis list
+carries it more than once"). Refine a document over a basis by expanding only the rows that change (the garden's
+`pondFlocks` in `worlds/debug/garden-crowd.puck`), never by expanding the whole template again. In `.puck`, a row
+drops with `placement "arrival" { $drop: true }`.
 `$drop`/`$replace` are compose-time vocabulary only; the basis-and-import graph is depth-capped
 (`WorldDocumentBasis.MaxChainDepth`, 8, shared across both edge types on any one resolution path) and cycles
 refuse by name.

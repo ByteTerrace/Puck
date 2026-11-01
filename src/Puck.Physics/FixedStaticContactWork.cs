@@ -18,7 +18,7 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public const string SourceName = "physics.contact";
 
     private readonly WorkCounterSet m_counts = new(
-        kinds: [Resolves, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples],
+        kinds: [Resolves, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved],
         name: SourceName
     );
 
@@ -40,6 +40,12 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     public static WorkKind FieldBounds { get; } = new(name: "physics.contact.field-bounds", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the field evaluations the field queries spend.</summary>
     public static WorkKind FieldSamples { get; } = new(name: "physics.contact.field-samples", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the field queries that read the field at least once: those the envelope did not
+    /// prove clear, whose samples <see cref="FieldSamples"/> counts.</summary>
+    public static WorkKind FieldReads { get; } = new(name: "physics.contact.field-reads", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the field queries that ended unproved: neither proved clear nor in contact, nor
+    /// projected onto the surface (<see cref="FixedFieldContactOutcome.Unproved"/>).</summary>
+    public static WorkKind FieldUnproved { get; } = new(name: "physics.contact.field-unproved", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger every analytic solve counts into. Declared after the kinds, which its counter set reads as
     /// it is created.</summary>
     public static FixedStaticContactWork Process { get; } = new();
@@ -69,10 +75,19 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// <summary>Counts one query against a field collider and the evaluations it spent.</summary>
     /// <param name="bounds">The envelope evaluations.</param>
     /// <param name="samples">The field evaluations.</param>
-    public void CountField(int bounds, int samples) {
+    /// <param name="unproved">Whether the query ended unproved.</param>
+    public void CountField(int bounds, int samples, bool unproved) {
         m_counts.Count(kind: FieldQueries);
         m_counts.Add(amount: bounds, kind: FieldBounds);
         m_counts.Add(amount: samples, kind: FieldSamples);
+
+        if (samples > 0) {
+            m_counts.Count(kind: FieldReads);
+        }
+
+        if (unproved) {
+            m_counts.Count(kind: FieldUnproved);
+        }
     }
     /// <summary>Reads the current total of one of this ledger's kinds.</summary>
     /// <param name="kind">One of this ledger's kinds.</param>

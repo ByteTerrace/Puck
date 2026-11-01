@@ -754,6 +754,17 @@ public static class CreationStampEmitter {
             );
         }
     }
+    /// <summary>Returns whether a shape reaches contact geometry: neither a detail shape, which never reaches the contact
+    /// compiler, so it neither carves nor pads a collider, nor a <see cref="SdfSolidPrimitive.Sweep"/>, which is no
+    /// closed solid a body can stand on (its field is exact enough to render, not a sound collider).</summary>
+    /// <param name="shape">The shape.</param>
+    /// <returns><see langword="true"/> when <see cref="EmitFixed"/> emits the shape.</returns>
+    public static bool EmitsContact(ShapeDocument shape) => ((shape.Detail != true) && (shape.Type != SdfSolidPrimitive.Sweep));
+    /// <summary>Returns whether a creation has any shape that reaches contact geometry, so its contact emission opens a
+    /// scope with something in it.</summary>
+    /// <param name="document">The creation.</param>
+    /// <returns><see langword="true"/> when <see cref="EmitFixed"/> emits at least one shape.</returns>
+    public static bool EmitsContact(CreationDocument document) => (document.Shapes ?? []).Any(predicate: shape => EmitsContact(shape: shape));
     /// <summary>Emits a creation's shape list under one materialized stamp transform, deriving every transform
     /// constant in deterministic fixed point before the SDF program's single-precision encoding boundary.</summary>
     /// <param name="builder">The target program builder.</param>
@@ -776,16 +787,7 @@ public static class CreationStampEmitter {
         var frame = StampFrame.Of(transform: transform);
 
         foreach (var shape in (document.Shapes ?? [])) {
-            // A detail shape never reaches this contact compiler at all, so it neither carves
-            // nor pads the collider it would otherwise emit.
-            if (shape.Detail == true) {
-                continue;
-            }
-
-            // A Sweep is not a closed solid a body can stand on (SdfSolidPrimitive.Sweep's remarks) — its field is
-            // "exact enough" for rendering, not a sound collider, so it contributes no contact geometry, exactly
-            // like a Detail shape.
-            if (shape.Type == SdfSolidPrimitive.Sweep) {
+            if (!EmitsContact(shape: shape)) {
                 continue;
             }
 
@@ -1537,16 +1539,8 @@ public static class CreationStampEmitter {
 
         for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
             var shape = shapes[shapeIndex];
-            // A detail shape never reaches this contact compiler at all, so it neither carves
-            // nor pads the collider it would otherwise emit.
-            if (shape.Detail == true) {
-                continue;
-            }
 
-            // A Sweep is not a closed solid a body can stand on (SdfSolidPrimitive.Sweep's remarks) — its field is
-            // "exact enough" for rendering, not a sound collider, so it contributes no contact geometry, exactly
-            // like a Detail shape.
-            if (shape.Type == SdfSolidPrimitive.Sweep) {
+            if (!EmitsContact(shape: shape)) {
                 continue;
             }
 

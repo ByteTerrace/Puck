@@ -126,6 +126,11 @@ brief:
   one-line reason: a batch the lead briefs entirely to one family is a
   lapse to correct, not a default;
 - the base commit, verified by the lead before the brief goes out;
+- the task's premise, checked in the code by the lead before the brief goes
+  out (rule 7). A packet's claim of what is missing or what causes a cost is
+  a lead to verify, not a fact. One lane was sent to add a source-generated
+  JSON context that already existed, because the packet said none did;
+
 - a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
   startup repository text while preserving current owner and system precedence.
 
@@ -182,6 +187,13 @@ head. "What the merge touched" includes what consumes it:
 - a change to a world document runs the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) and shows itself in the sweep;
 - a change to simulation state, maths or determinism also runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
+
+A merge is not finished until every line of the lane's Found section, and every
+Needs-you item it hands the lead, is routed. Each one is filed in its owning
+packet, sent to a running lane, or dismissed with a reason in the merge
+report. A finding read and left in the hand-back is lost: one about authors'
+worlds failing to boot on the standard sat unrouted until a side observer
+caught it.
 
 The sweep is the batch's proof: the whole debug world, every signal compared with
 the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).

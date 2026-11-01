@@ -721,10 +721,13 @@ public sealed partial class SdfFieldEvaluator {
     }
     private static FixedInterval PopFieldBounds(FixedInterval candidate, FixedInterval saved, in CompiledInstruction instruction) {
         var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
-        var candidateScale = instruction.Data1Y;
 
-        if (candidateScale > FixedQ4816.Zero) {
-            candidate *= Point(value: candidateScale);
+        if ((instruction.ScopeScale > 0L) && !candidate.IsUnbounded) {
+            // The point walk rounds each end's product to nearest; a raw past either end encloses it.
+            candidate = new FixedInterval(
+                lower: (ScaleScope(candidate: candidate.Lower, scale: instruction.ScopeScale) - FixedQ4816.Epsilon),
+                upper: (ScaleScope(candidate: candidate.Upper, scale: instruction.ScopeScale) + FixedQ4816.Epsilon)
+            );
         }
 
         if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {

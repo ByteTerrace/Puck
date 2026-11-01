@@ -54,11 +54,33 @@ Not ported again:
 
 ## Lanes, in order
 
-Order is value to the proving ground: lanes that exercise engine systems the
-debug world does not touch come first. A search of `worlds/` finds no
-`interactions`, `navigation`, `adjacencies`, `curves` track, `region(` trigger,
-medium or `Pull` hold, `field` lattice, flock program, authored HLSL package,
-row `visibility` audience, `embeds` row or identity fact.
+**The ports that force the fundamentals are the job system's forcing
+workloads (the owner's ruling).** Each lands just before the step it proves,
+so every optimization is measured on the load it exists for:
+- the meadow (lane 9) now, beside the bake and memory work;
+- the creature garden (lane 4) now, ahead of the parallel tick's body
+  advance (T2);
+- the second seat (lane 5) and authored passes (lane 1) ahead of parallel
+  view recording (R1);
+- the quilt (lane 2) with residency step 2;
+- water and fields (lane 3), the rules arcade (lane 7) and the combat yard's
+  pair primitive (lane 13) as the field, rule-VM and pair-rule workloads.
+
+The rest (lanes 6, 8, 10, 11, 12 and 14) is content, taken after the
+fundamentals ([job system](engine-job-system.md#6-build-order)).
+
+Where each port stands in the valley, which domain it forces and which seams it
+composes with its neighbours is the
+[composition plan](debug-world-composition.md); where that plan moves a port
+from the place named below (the traversal course east, the pool to the stream's
+end west of the spawn), the plan's placement governs.
+
+Within that, order is value to the proving ground: lanes that exercise engine
+systems the debug world does not touch come first. Beyond the garden's pond
+plot (lane 4: `interactions`, `navigation`, flocks, a `Pull` hold), a search of
+`worlds/` finds no `adjacencies`, `curves` track, `region(` trigger, medium,
+`field` lattice, authored HLSL package, row `visibility` audience, `embeds` row
+or identity fact.
 
 ### 1. Authored render passes
 
@@ -98,12 +120,49 @@ authority handoff) and identity facts carried across a crossing are built
 | A pool whose `field` lattice is a medium: swimming, buoyancy, depth rows read from regions | `modules/dive.puck` (`lattices field(name: "pool"...)`, `bond: Medium` holds, `dive-depth-*` rules); canaries `dive-medium`, `medium-submersion` | wire ([documents-motion](../../.claude/skills/puck-world/references/documents-motion.md)); standard: a swim hold row the Moth refines, as `abilities.puck` holds `dashAbility` | A courtyard pool; the first `field` lattice and `Medium` hold in the debug world, and the base the climate wing's wetness and puddles stand on | medium |
 | Flow across basins: a source topped up each step, boundary spill, a drawn whole-field pass | canaries `flow-conservation-live`, `lattice-draw-fill` | wire | The pool's inflow; proves reactions run live | small |
 
-### 4. Creature garden
+### 4. Creature garden — done
 
-The debug world has the wander producer (`worlds/debug/range.puck:112`) and one
-companion, and no flock, no navigation domain, no body-pair rules. The island's
-garden district holds the rest, as Puck programs the engine only schedules
-(`Puck.Physics.FixedFlockSteering`, the `ProduceFlockIntent`,
+Ported into the garden destination's pond plot ([garden.md](../../worlds/debug/garden.md),
+[pond.puck](../../worlds/debug/pond.puck)), all four rows wired: the hound pack
+flocks round its designated companion (the visitor, or the pack-mate it trusts
+most), the spiders stalk the visitor over the `plot` navigation domain and face
+her, the dragonflies flock over the pond, and the rumour rules run as the
+island wrote them, translated through `puck decompile`; a hedge beside the bone
+gives a hound something to stand behind, since on open ground every hound sees
+the holder and `rumor` never fires. The fish school in air
+inside the pond's walls on a full-lift hold until lane 3 gives the garden a
+water field. The crawl is the standard's `crawlHold`
+(`worlds/standard/abilities.puck`), which the spiders expand; the Moth can
+expand it for her walker as she does `dashAbility`, but does not yet (a feel
+decision for the owner). No engine code was needed.
+
+The body count is one parameter, `pondFlocks(creatures)`, and
+`worlds/debug/garden-crowd.puck` is the garden at 128 creatures, the parallel
+tick's forcing workload. `puck test --reproduce` passes on
+`worlds/debug/garden-tests.puck` (the pack and the bone, the rumour behind
+the hedge, the stalker, the crawl) and on the crowd's own scenario.
+
+The tick, headless and unpaced on the lead machine while other lanes held the
+CPU at 100 % (so read the ratios over the absolutes), over 900 ticks after a
+300-tick warmup, `host.frames` simulate avg / p50:
+
+| Creatures | 12 | 32 (the garden) | 128 | 256 | 512 |
+|---|---|---|---|---|---|
+| Tick, ms | 1.37 / 1.29 | 1.65 to 1.96 / 1.39 to 1.43 | 3.72 to 3.83 / 3.20 to 3.49 | 4.88 / 3.90 | 5.78 / 5.69 |
+
+At 128 creatures the tick is about 11 % of a 30 Hz period. By `dotnet-trace`
+sampled thread time over 30 s of the unpaced run (32 / 128 creatures), as a
+share of `WorldTick.StepCore`: body advance 89 / 80 % (motion programs 50 /
+33 %, of which contact sweeps 48 / 30 %; producers 13 / 17 %, of which flock
+steering 1.1 / 1.7 % and navigation 0.3 / 0.2 %), the event feed 2.7 / 9.0 %,
+snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 % (decisions 0.3 / 0.1 %), pair
+contacts 0.8 / 0.6 %, and no crossing scan (the scenarios drop the frames).
+Every body is a kit body and none is rigid, so the parallel tick's E1 (rigid
+advance) takes none of it; this workload is the case for partitioning kit
+bodies ([job system packet](open-items.md#engine-job-system)).
+
+The source was the island's garden district, Puck programs the engine only
+schedules (`Puck.Physics.FixedFlockSteering`, the `ProduceFlockIntent`,
 `SenseNearestInCone` and `FaceSensorTarget` motion operations).
 
 | Feature | Source | Support | Place and why | Size |
@@ -164,11 +223,88 @@ left the well and the snake field undrawn and read through the console.
 
 ### 9. Meadow and foliage
 
-| Feature | Source | Support | Place and why | Size |
-|---|---|---|---|---|
-| A wind meadow of 1,994 two-part blades in sixteen tiles, gusts phased by world position | `moth-courtyard.puck`, `moth-courtyard.md` (`meadow*` rows) | wire; "no distance LOD" is a possible gap in instanced animated creations, so measure the cold bake (a one-minute ruling) and frame time before naming one | Open ground near the spawn; the heaviest animated-geometry workload on offer | medium |
-| Trees, mossy rocks, banks and sand patches with noise relief (`landscapeExponent = 2.05`) | the same | wire; standard: a scatter template beside `worlds/standard/terrain.puck` | The same ground | medium |
-| Eight pose stations driving one avatar creation | the same (`stations` table) | wire | Folds into the studio's pose study; low priority | small |
+**Done:** [the debug meadow](../../worlds/debug/meadow.md), reached with
+`debug.go meadow`, centers the sixteen tiles and 1,994 two-part blades at
+`(119.5, 0, -55.3)`, east of the hero studio and about 72 m from its spawn.
+Six trees, seven mossy rocks, five banks, eight sand caps and thirteen tuft
+clusters use the standard's new `foliage.puck` library and table scatter.
+The debug module owns the placement tables. The eight pose stations are skipped.
+The prior art is `experimental/src/Puck.World/Assets/worlds/moth-courtyard.puck`
+and its adjacent `moth-courtyard.md`; neither was edited, built or run.
+
+The before/after measurements use one Release engine build, RTX 4070, the
+authored 1280×900 view and high quality, `--devices none`, and a GPU lease per
+leg. Each cold leg starts with its own empty cache; the shared store is left
+alone. Cold time is the main residency's `sdf.mesh-bake done seconds`, followed
+by successful `world.wait bakes 600` settlement of every residency. Builds,
+boot and post-bake GI settlement are outside that clock. Other lanes build
+during these runs: these are loaded-machine observations, not quiet speed claims.
+
+| Reading | Before | After |
+|---|---:|---:|
+| Direct3D 12 cold bake | 209.996 s | 306.639 s |
+| Vulkan cold bake | 321.246 s | 499.573 s |
+| Direct3D 12 standing, avg / p99 | 26.40 / 68.15 ms | 46.59 / 73.94 ms |
+| Direct3D 12 walking, avg / p99 | 23.77 / 61.81 ms | 55.21 / 82.89 ms |
+| Vulkan standing, avg / p99 | 23.50 / 48.18 ms | 63.11 / 102.76 ms |
+
+The Direct3D reads each cover 600 host iterations. Walking alternates
+`player.move 0.2 0` and `player.move -0.2 0` twenty times, 45 ticks per leg,
+through the patch. The Direct3D timing table uses matching 1,800-tick
+post-bake settling, a frame reset, then a 900-tick standing interval and the
+walking script. The matched baseline reuses the original package snapshot,
+the preserved measurement executable and its own completed cache (zero bake
+dispatches, 5.588 s loading); it does not rerun the changed integration code.
+The initial cold-leg Direct3D averages, after only 900 post-bake ticks, are
+23.49 ms standing and 24.38 ms walking. Vulkan's before window contains
+600 iterations after 900 post-bake ticks; its after contains 479 following
+the longer settling and reset. `world.cadence off` keeps both views rendering.
+`world.rates` keeps bodies, views, screens and far shadows on. Its 30/15 Hz
+periods are 33.3/66.7 ms; the after Direct3D longest screen/far-shadow intervals
+reach 77.0/76.2 ms, Vulkan 78.0/78.0 ms. These are frame overruns, not lower
+authored quality. Every cold bake misses the one-minute ruling and the frame
+observations miss the 16.7 ms bar.
+
+`host.memory`, immediately after the cold bake and before collection:
+
+| Backend | Working set, before → after | Private, before → after | Managed heap, before → after | Account live bytes, before → after |
+|---|---:|---:|---:|---:|
+| Direct3D 12 | 7,812 → 7,779 MiB | 14,807 → 15,032 MiB | 3,024 → 2,913 MiB | 1,526,790,926 → 1,746,075,254 B |
+| Vulkan | 7,365 → 7,536 MiB | 14,382 → 14,768 MiB | 2,923 → 3,000 MiB | 1,526,473,676 → 1,745,713,084 B |
+
+The live-account increase is about 209 MiB per backend. Working set and
+managed garbage depend on collection timing; private bytes include driver heaps.
+
+`world.budget`, `world.counters` and the cold bake plan show the work added:
+
+| Count | Before | After | Added |
+|---|---:|---:|---:|
+| Placement rows | 1,173 | 1,294 | 121 |
+| Field instances | 2,842 | 7,403 | 4,561 |
+| Dynamic transform slots | 990 | 4,994 | 4,004 |
+| Retained mesh draws | 3,363 | 7,578 | 4,215 |
+| Bake groups | 2,090 | 6,183 | 4,093 |
+| Unique cold bakes | 975 | 1,368 | 393 |
+| Groups sharing a bake | 1,115 | 4,815 | 3,700 |
+
+The blades share repeated geometry across tiles, rather than one bake for all
+blades: 144 varying stems and 144 tips account for 288 unique blade geometries;
+the other 105 new bakes are scenery. Each blade part keeps its own motion
+slot and draw. Direct3D's second sampled primary mesh-pass read rises from
+163 to 3,906 draws and from 1,080,414 to 5,547,060 vertices; the whole primary
+node reads 589 → 12,467 draws across its passes.
+The retained mesh region grows from 1,346,365,816 to 1,588,961,748 B.
+Cold field samples rise from 999,550,075 to 1,101,618,980 on Direct3D and from
+999,477,183 to 1,101,543,801 on Vulkan. Moving exhibit poses account for small
+backend differences; these counts are observations, not recorded expectations.
+
+Triangle LOD already exists. The named gap is that animated placements bypass
+body pose-rate holds and readings (`WorldCreationInstances.Pack.cs:247`,
+`WorldCreationInstances.Rates.cs:193`). The
+[Engine job system packet](open-items.md#engine-job-system) owns measuring
+and reducing that cost through the existing generic machinery. No engine code
+is added here. Direct3D and Vulkan settled captures are inspected; the new
+meadow contact scenarios and the two input-clock fixtures pass `--reproduce`.
 
 ### 10. Packages as worked examples
 

@@ -75,6 +75,22 @@ project file before changing code.
   the supported graph. Set `IsAotCompatible=false` only when the project file can
   document a structural blocker, such as reflection-based document
   serialization that a source-generated context cannot yet replace.
+- **Source generation removes reflection, not first-use JIT.** The world
+  document already rides one source-generated context (`WorldJsonSourceContext`
+  behind `WorldJsonContext`, `src/Puck.World.Schema/WorldDefinitionSerialization.cs`);
+  reach a graph type through its typed accessors or `WorldJsonContext.Default.For<T>()`,
+  never a second options object or a cast of `Options.GetTypeInfo`. Its
+  generated metadata still instantiates `System.Text.Json`'s generics
+  (`JsonPropertyInfoValues<T>`, `JsonPropertyInfo<T>`, `JsonConverter<T>`,
+  `EnumConverter<T>`) once per value type in the graph, and neither an IL build
+  nor a ReadyToRun publish outside the framework's version bubble precompiles
+  them: they are most of a boot's `System.Text.Json` JIT. Count them with
+  `DOTNET_JitStdOutFile` and `DOTNET_JitDisasmSummary=1` grouped by generic
+  definition, and read the total with `host.memory` (`jit methods`, `compile`).
+  The World configures this metadata on a background thread from its first line
+  (`WorldJsonContext.StartPreparing`), so it overlaps composition and
+  compilation; a first parse that arrives sooner waits in the serializer's
+  `ConfigureSynchronized` lock rather than configuring a second time.
 - **World publication uses ReadyToRun.** `Puck.World` restores the `win-x64` and
   `linux-x64` graphs and precompiles published assemblies; ordinary builds still
   produce IL. Compare the exact published artifact with `puck bench startup

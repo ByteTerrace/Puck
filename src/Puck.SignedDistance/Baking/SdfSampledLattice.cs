@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -251,9 +252,11 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// from the GPU interpreter in floats, so its surface is presentation data that may differ between devices; nothing in it
 /// reaches simulation state.</para>
 /// </summary>
-public sealed class SdfSampledLattice {
+public sealed class SdfSampledLattice : IDisposable {
     // A refinement that would measure more fine samples than this is not taken: the lattice contours at its own spacing.
-    private const int MaxFineSamples = 4_000_000;
+    /// <summary>The maximum measured fine samples of one lattice; also bounds its admission workspace.</summary>
+    public const int MaxFineSamples = 4_000_000;
+
     // The share of a step across a line, at the line's own slope, the field may change by toward either neighbour before
     // a pair on the line lies beside a solid rather than either side of a sheet (SheetsBetween): a sheet tilted 45
     // degrees from the line changes the field by 0.71 of a step across it and stays a sheet; a line over a plate's top
@@ -270,48 +273,55 @@ public sealed class SdfSampledLattice {
     private readonly int m_samplesX;
     private readonly int m_samplesY;
     private readonly int m_samplesZ;
-    private readonly float[] m_values;
-    private readonly int[] m_materials;
-    private readonly Vector3[] m_gradients;
+    private readonly ReadOnlyMemory<float> m_valueMemory;
+
+    private ReadOnlySpan<float> Values => m_valueMemory.Span;
+
+    private readonly ReadOnlyMemory<int> m_materialMemory;
+
+    private ReadOnlySpan<int> Materials => m_materialMemory.Span;
+
+    private readonly OwnedBuffer<Vector3> m_gradients;
 
     private int m_factor = 1;
-    private bool[] m_measured = [];
+
+    private readonly OwnedBuffer<bool> m_measured;
     // Per coarse cell, whether a sheet or gap thinner than a cell crosses an edge of it (Refine), the cells CloseSheets
     // closes sheets in.
-    private bool[] m_thin = [];
-    private bool[] m_refined = [];
+    private readonly OwnedBuffer<bool> m_thin;
+    private readonly OwnedBuffer<bool> m_refined;
     // Per coarse cell, the block of fine slots a measured cell holds (-1 for a cell not measured), and per block the slot
     // in m_fineValues of each of its (m_factor + 1)^3 fine samples, faces included (-1 at its coarse corners): FineSlot's
     // dense index of the measured fine samples.
-    private int[] m_cellBlocks = [];
-    private int[] m_blockSlots = [];
-    private int[] m_fineKeys = [];
-    private float[] m_fineValues = [];
-    private int[] m_fineMaterials = [];
-
+    private readonly OwnedBuffer<int> m_cellBlocks;
+    private readonly OwnedBuffer<int> m_blockSlots;
+    private readonly OwnedBuffer<int> m_fineKeys;
+    private readonly OwnedBuffer<float> m_fineValues;
+    private readonly OwnedBuffer<int> m_fineMaterials;
     private readonly Dictionary<int, Vector3> m_fineGradients = [];
+    private readonly OwnedBuffer<int> m_gradientKeys;
+    private readonly OwnedBuffer<long> m_crossingKeys;
 
-    private int[] m_gradientKeys = [];
-    private long[] m_crossingKeys = [];
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
 
     private readonly Dictionary<long, CrossingRoot> m_crossingRoots = [];
+    private readonly OwnedBuffer<long> m_pendingCrossings;
 
-    private long[] m_pendingCrossings = [];
     // The roots of m_pendingCrossings' edges, in its order.
     private CrossingRoot[] m_pendingRoots = [];
 
     // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
-
     // The measured fine samples a sheet thinner than the fine cell passed beside, and the value each reads (CloseSheets).
     // Per measured fine sample's slot, NaN for one CloseSheets left open; and how many it closed.
-    private float[] m_closedValues = [];
+    private readonly OwnedBuffer<float> m_closedValues;
+
     private int m_closedCount;
+
     // Per fine key, whether FineInside has read the sample's sign, and that sign: one bit each.
-    private ulong[] m_signKnown = [];
-    private ulong[] m_signInside = [];
+    private readonly OwnedBuffer<ulong> m_signKnown;
+    private readonly OwnedBuffer<ulong> m_signInside;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -321,13 +331,15 @@ public sealed class SdfSampledLattice {
     /// <param name="samplesZ">The samples along Z, at least two.</param>
     /// <param name="values">One field value per sample, X fastest: negative inside. The lattice keeps the array.</param>
     /// <param name="materials">One material per sample. The lattice keeps the array.</param>
+    /// <param name="allocator">Native workspace allocator, or null for offline managed storage.</param>
+    /// <param name="observer">The owning job's byte account, or null for unmetered offline work.</param>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">An axis has fewer than two samples, a spacing is not positive, or an array's
     /// length does not match the lattice.</exception>
-    public SdfSampledLattice(Vector3 origin, Vector3 cell, int samplesX, int samplesY, int samplesZ, float[] values, int[] materials) {
-        ArgumentNullException.ThrowIfNull(argument: values);
-        ArgumentNullException.ThrowIfNull(argument: materials);
+    public SdfSampledLattice(Vector3 origin, Vector3 cell, int samplesX, int samplesY, int samplesZ, ReadOnlyMemory<float> values, ReadOnlyMemory<int> materials, IAllocator? allocator = null, IAllocationObserver? observer = null) {
+
+
 
         if ((samplesX < 2) || (samplesY < 2) || (samplesZ < 2)) {
             throw new ArgumentException(message: "A lattice holds at least two samples along each axis.");
@@ -347,9 +359,38 @@ public sealed class SdfSampledLattice {
         m_samplesX = samplesX;
         m_samplesY = samplesY;
         m_samplesZ = samplesZ;
-        m_values = values;
-        m_materials = materials;
-        m_gradients = new Vector3[count];
+        m_valueMemory = values;
+        m_materialMemory = materials;
+        m_gradients = new OwnedBuffer<Vector3>(allocator: allocator, observer: observer);
+        m_closedValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
+        m_signKnown = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
+        m_cellBlocks = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_measured = new(allocator: allocator, observer: observer);
+        m_thin = new(allocator: allocator, observer: observer);
+        m_refined = new(allocator: allocator, observer: observer);
+        m_fineKeys = new(allocator: allocator, observer: observer);
+        m_gradientKeys = new(allocator: allocator, observer: observer);
+        m_crossingKeys = new(allocator: allocator, observer: observer);
+        m_pendingCrossings = new(allocator: allocator, observer: observer);
+        m_fineValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
+        m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_signInside = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
+        m_fineMaterials = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_gradients.Resize(count);
+    }
+
+    /// <summary>Releases the lattice's owned workspaces after its contour and point borrows end.</summary>
+    public void Dispose() {
+        m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_fineKeys.Dispose();
+        m_gradientKeys.Dispose(); m_crossingKeys.Dispose(); m_pendingCrossings.Dispose();
+        m_gradients.Dispose();
+        m_closedValues.Dispose();
+        m_signKnown.Dispose();
+        m_cellBlocks.Dispose();
+        m_fineValues.Dispose();
+        m_blockSlots.Dispose();
+        m_signInside.Dispose();
+        m_fineMaterials.Dispose();
     }
 
     /// <summary>Gets the fine cells along each axis of a coarse cell: one until <see cref="Refine"/> refines the
@@ -425,7 +466,7 @@ public sealed class SdfSampledLattice {
 
                     for (var step = Math.Max(val1: 0, val2: first); (step <= Math.Min(val1: last, val2: (samples[axis] - 1))); step++) {
                         p[axis] = step;
-                        run = (((m_values[Index(x: p[0], y: p[1], z: p[2])] < 0f) == inside) ? (run + 1) : 0);
+                        run = (((Values[Index(x: p[0], y: p[1], z: p[2])] < 0f) == inside) ? (run + 1) : 0);
                         if (run >= 2) {
                             return true;
                         }
@@ -470,7 +511,7 @@ public sealed class SdfSampledLattice {
                     float Beside(Span<int> q, int i) {
                         q[axis] = i;
 
-                        return m_values[Index(x: q[0], y: q[1], z: q[2])];
+                        return Values[Index(x: q[0], y: q[1], z: q[2])];
                     }
 
                     for (var i = Math.Max(val1: 1, val2: first); (i <= Math.Min(val1: last, val2: (n - 2))); i++) {
@@ -534,7 +575,7 @@ public sealed class SdfSampledLattice {
                     var mask = 0;
 
                     for (var offset = 0; (offset < 8); offset++) {
-                        if (m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) {
+                        if (Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) {
                             mask |= (1 << offset);
                         }
                     }
@@ -581,7 +622,7 @@ public sealed class SdfSampledLattice {
                             var nearest = float.PositiveInfinity;
 
                             for (var offset = 0; (offset < 8); offset++) {
-                                nearest = MathF.Min(x: nearest, y: MathF.Abs(x: m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
+                                nearest = MathF.Min(x: nearest, y: MathF.Abs(x: Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
                             }
                             if (nearest <= reach) {
                                 cellsOf.Add(item: CellIndex(x: x, y: y, z: z));
@@ -611,7 +652,7 @@ public sealed class SdfSampledLattice {
 
                         p[axis] = i;
 
-                        return m_values[Index(x: p[0], y: p[1], z: p[2])];
+                        return Values[Index(x: p[0], y: p[1], z: p[2])];
                     }
 
                     for (var i = 1; ((i + 1) < n); i++) {
@@ -874,14 +915,14 @@ public sealed class SdfSampledLattice {
         }
 
         m_factor = factor;
-        m_measured = measured;
-        m_thin = thin;
-        m_refined = refined;
+        m_measured.CopyFrom(source: measured);
+        m_thin.CopyFrom(source: thin);
+        m_refined.CopyFrom(source: refined);
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
-        m_fineKeys = [.. keys];
-        m_fineValues = new float[keys.Count];
-        m_fineMaterials = new int[keys.Count];
+        m_fineKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
+        m_fineValues.Resize(keys.Count);
+        m_fineMaterials.Resize(keys.Count);
         IndexFineSlots(slots: slots);
 
         var points = new Vector3[keys.Count];
@@ -1019,15 +1060,15 @@ public sealed class SdfSampledLattice {
     // The most the field changes per world unit between a coarse sample and any of its six neighbours: the scale of the
     // field there, which a step's change is measured against (PassesBetween).
     private float Slope(int x, int y, int z) {
-        var value = m_values[Index(x: x, y: y, z: z)];
+        var value = Values[Index(x: x, y: y, z: z)];
         var slope = 0f;
 
-        if (x > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - m_values[Index(x: (x - 1), y: y, z: z)])) / m_cell.X)); }
-        if ((x + 1) < m_samplesX) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - m_values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
-        if (y > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - m_values[Index(x: x, y: (y - 1), z: z)])) / m_cell.Y)); }
-        if ((y + 1) < m_samplesY) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - m_values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
-        if (z > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - m_values[Index(x: x, y: y, z: (z - 1))])) / m_cell.Z)); }
-        if ((z + 1) < m_samplesZ) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - m_values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
+        if (x > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: (x - 1), y: y, z: z)])) / m_cell.X)); }
+        if ((x + 1) < m_samplesX) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
+        if (y > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: (y - 1), z: z)])) / m_cell.Y)); }
+        if ((y + 1) < m_samplesY) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
+        if (z > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z - 1))])) / m_cell.Z)); }
+        if ((z + 1) < m_samplesZ) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
 
         return slope;
     }
@@ -1042,11 +1083,11 @@ public sealed class SdfSampledLattice {
         for (var z = 0; (z < m_samplesZ); z++) {
             for (var y = 0; (y < m_samplesY); y++) {
                 for (var x = 0; (x < m_samplesX); x++) {
-                    var value = m_values[Index(x: x, y: y, z: z)];
+                    var value = Values[Index(x: x, y: y, z: z)];
 
-                    if (((x + 1) < m_samplesX) && ((value < 0f) != (m_values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - m_values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
-                    if (((y + 1) < m_samplesY) && ((value < 0f) != (m_values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - m_values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
-                    if (((z + 1) < m_samplesZ) && ((value < 0f) != (m_values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - m_values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
+                    if (((x + 1) < m_samplesX) && ((value < 0f) != (Values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
+                    if (((y + 1) < m_samplesY) && ((value < 0f) != (Values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
+                    if (((z + 1) < m_samplesZ) && ((value < 0f) != (Values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
                 }
             }
         }
@@ -1068,8 +1109,8 @@ public sealed class SdfSampledLattice {
             m_fineValues[(first + index)] = values[index];
             m_fineMaterials[(first + index)] = materials[index];
         }
-        m_signKnown = [];
-        m_signInside = [];
+        m_signKnown.Resize(0);
+        m_signInside.Resize(0);
     }
 
     // An edge root stays bracketed by its original signs, and the search ends once the bracket is an 8,192th of the edge
@@ -1176,7 +1217,7 @@ public sealed class SdfSampledLattice {
     private void PrepareCrossings() {
         if (m_crossingsPrepared) { return; }
         CloseSheets();
-        m_crossingKeys = CrossingEdges();
+        m_crossingKeys.CopyFrom(source: CrossingEdges());
         m_crossingsPrepared = true;
     }
     private int EdgeEnd(int start, int axis, int length) {
@@ -1216,8 +1257,18 @@ public sealed class SdfSampledLattice {
             }
             m_rootsPrepared = true;
             // The first round's roots, in the order of their edges; each later round keeps those still searching.
-            m_pendingCrossings = [.. m_crossingKeys.Where(predicate: m_crossingRoots.ContainsKey)];
-            m_pendingRoots = [.. m_pendingCrossings.Select(selector: key => m_crossingRoots[key])];
+            var count = 0;
+
+            foreach (var key in m_crossingKeys) { if (m_crossingRoots.ContainsKey(key: key)) { count++; } }
+            m_pendingCrossings.Resize(count);
+            m_pendingRoots = new CrossingRoot[count];
+            var index = 0;
+
+            foreach (var key in m_crossingKeys) {
+                if (!m_crossingRoots.TryGetValue(key: key, value: out var root)) { continue; }
+                m_pendingCrossings[index] = key;
+                m_pendingRoots[index++] = root;
+            }
         }
 
         var kept = 0;
@@ -1228,7 +1279,7 @@ public sealed class SdfSampledLattice {
             m_pendingRoots[kept] = m_pendingRoots[index];
             kept++;
         }
-        Array.Resize(array: ref m_pendingCrossings, newSize: kept);
+        m_pendingCrossings.Resize(kept);
         Array.Resize(array: ref m_pendingRoots, newSize: kept);
 
         // Two trials a root, the root's first then its second.
@@ -1291,7 +1342,7 @@ public sealed class SdfSampledLattice {
                     var mask = 0;
 
                     for (var offset = 0; (offset < 8); offset++) {
-                        mask |= ((m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) ? (1 << offset) : 0);
+                        mask |= ((Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) ? (1 << offset) : 0);
                     }
                     if (refined || ((mask != 0) && (mask != 0xFF))) {
                         for (var offset = 0; (offset < 8); offset++) {
@@ -1329,7 +1380,7 @@ public sealed class SdfSampledLattice {
             }
         }
 
-        m_gradientKeys = [.. keys];
+        m_gradientKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
 
         var points = new Vector3[(keys.Count + m_crossingKeys.Length)];
         var fine = ContourCell;
@@ -1647,7 +1698,7 @@ public sealed class SdfSampledLattice {
                                 }
                                 if (Coarse(at: p)) {
                                     keys[at] = -1;
-                                    values[at] = m_values[Index(x: (p[0] / factor), y: (p[1] / factor), z: (p[2] / factor))];
+                                    values[at] = Values[Index(x: (p[0] / factor), y: (p[1] / factor), z: (p[2] / factor))];
                                 } else {
                                     var (cx, cy, cz, lx, ly, lz) = FineCell(x: p[0], y: p[1], z: p[2]);
                                     var slot = FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz);
@@ -1730,8 +1781,8 @@ public sealed class SdfSampledLattice {
         var slot = FineSlot(x: x, y: y, z: z);
 
         if (m_closedValues.Length != m_fineValues.Length) {
-            m_closedValues = new float[m_fineValues.Length];
-            Array.Fill(array: m_closedValues, value: float.NaN);
+            m_closedValues.Resize(m_fineValues.Length);
+            m_closedValues.GetSpan().Fill(value: float.NaN);
         }
         if (!float.IsNaN(f: m_closedValues[slot])) { return; }
         m_closedValues[slot] = value;
@@ -2095,9 +2146,9 @@ public sealed class SdfSampledLattice {
         var fineY = ((cellsY * factor) + 1);
         var blocks = 0;
 
-        m_cellBlocks = new int[m_measured.Length];
+        m_cellBlocks.Resize(m_measured.Length);
         foreach (var measured in m_measured) { blocks += (measured ? 1 : 0); }
-        m_blockSlots = new int[(((blocks * side) * side) * side)];
+        m_blockSlots.Resize((((blocks * side) * side) * side));
         blocks = 0;
         for (var cell = 0; (cell < m_measured.Length); cell++) {
             if (!m_measured[cell]) {
@@ -2181,7 +2232,7 @@ public sealed class SdfSampledLattice {
 
         // A coarse position: every place in the cell is 0 or the far face's m_factor.
         if (((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor))) {
-            return m_values[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
+            return Values[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
         }
 
         if (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) is var slot and >= 0) { return MeasuredValue(slot: slot); }
@@ -2195,7 +2246,7 @@ public sealed class SdfSampledLattice {
             var dz = (corner >> 2) & 1;
             var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
 
-            sum += (weight * m_values[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))]);
+            sum += (weight * Values[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))]);
         }
 
         return sum;
@@ -2205,13 +2256,13 @@ public sealed class SdfSampledLattice {
     // keeps a closed sample's.
     private bool FineInside(int x, int y, int z) => FineInside(key: (x + ((((m_samplesX - 1) * m_factor) + 1) * (y + ((((m_samplesY - 1) * m_factor) + 1) * z)))));
     private bool FineInside(int key) {
-        if (m_factor == 1) { return (m_values[key] < 0f); }
+        if (m_factor == 1) { return (Values[key] < 0f); }
         if (m_signKnown.Length == 0) {
             var count = ((((long)(((m_samplesX - 1) * m_factor) + 1)) * (((m_samplesY - 1) * m_factor) + 1)) * (((m_samplesZ - 1) * m_factor) + 1));
             var words = ((int)((count + 63L) >> 6));
 
-            m_signKnown = new ulong[words];
-            m_signInside = new ulong[words];
+            m_signKnown.Resize(words);
+            m_signInside.Resize(words);
         }
 
         var word = (key >> 6);
@@ -2270,7 +2321,7 @@ public sealed class SdfSampledLattice {
         var factor = m_factor;
 
         if (factor == 1) {
-            return m_materials[key];
+            return Materials[key];
         }
         var (fx, fy, fz) = FineCoordinates(key: key);
 
@@ -2278,7 +2329,7 @@ public sealed class SdfSampledLattice {
             return m_fineMaterials[slot];
         }
 
-        return m_materials[Index(
+        return Materials[Index(
             x: (((fx * 2) + factor) / (2 * factor)),
             y: (((fy * 2) + factor) / (2 * factor)),
             z: (((fz * 2) + factor) / (2 * factor))
@@ -2312,7 +2363,7 @@ public sealed class SdfSampledLattice {
 
         public bool Refined(int x, int y, int z) => owner.m_refined[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool Measured(int x, int y, int z) => owner.m_measured[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
-        public bool CoarseInside(int x, int y, int z) => (owner.m_values[owner.Index(x: x, y: y, z: z)] < 0f);
+        public bool CoarseInside(int x, int y, int z) => (owner.Values[owner.Index(x: x, y: y, z: z)] < 0f);
         public int Corner(int x, int y, int z) => (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
         public bool Inside(int corner) => owner.FineInside(key: corner);
         public double Value(int corner, int x, int y, int z) => owner.FineValue(x: x, y: y, z: z);

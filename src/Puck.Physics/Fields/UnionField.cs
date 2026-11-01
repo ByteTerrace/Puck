@@ -16,7 +16,19 @@ public sealed class UnionField : IFieldEvaluator {
     }
 
     /// <inheritdoc/>
-    public FieldEvaluatorCapabilities Capabilities => new(WarpFree: (m_a.Capabilities.WarpFree && m_b.Capabilities.WarpFree));
+    /// <remarks>The lesser of two fields is as Lipschitz as the steeper of them, so the union certifies the lesser step
+    /// scale and the greater value error.</remarks>
+    public FieldEvaluatorCapabilities Capabilities {
+        get {
+            var (a, b) = (m_a.Capabilities, m_b.Capabilities);
+
+            return new(
+                StepScale: FixedQ4816.Min(x: a.StepScale, y: b.StepScale),
+                ValueError: FixedQ4816.Max(x: a.ValueError, y: b.ValueError),
+                WarpFree: (a.WarpFree && b.WarpFree)
+            );
+        }
+    }
 
     private bool Nearer(FixedPosition position, out bool useB) {
         var hasA = m_a.TryDistance(

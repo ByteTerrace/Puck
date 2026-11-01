@@ -14,6 +14,8 @@ documentId: "garden"
 import "moth-controls"
 import "suit"
 import "size"
+// The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
+import "garden-pond"
 
 // The garden draws no HUD panels; controls.puck supplies its cursor.
 hud {

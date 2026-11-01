@@ -230,12 +230,16 @@ A third-person chase camera meets rooms narrower than its boom: a lift car, a
 switchback stairwell, a low soffit, an inside corner. The decision is how it
 trades four constraints: staying inside the room, keeping the avatar readable,
 preserving the look direction that drives movement, and avoiding jumps or
-looming motion that cause disorientation. The mechanism is the seat rig's
-clearance solver ([Chase eye clearance](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance));
-the rulings below set the standard template's values, which are `.puck` data in
-the standard package (`chaseCamera` in `worlds/standard/camera.puck`, which an
-avatar expands with its own body offsets), never engine constants. The owner's
-sitting tunes them.
+looming motion that cause disorientation. The owner's direction: feel is
+worked out in Puck expression. The engine's part is a mechanism, a `Clearance`
+camera-program operation
+([Chase eye clearance](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance)).
+It probes the room and offers wall cutaway and body fade, with every number an
+authored, bindable parameter. The modes below are authored cases of the
+standard template (`chaseCamera` in `worlds/standard/camera.puck`, which an
+avatar expands with its own body offsets), chosen by the player's preference
+row, and never engine modes or constants. The values below are the template's
+starting values, which any author tunes or replaces in `.puck`.
 
 **Heading is never deflected.** Orbiting the camera away from a wall is
 eliminated: under camera-relative movement it bends the player's path and

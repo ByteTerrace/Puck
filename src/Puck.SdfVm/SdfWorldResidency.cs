@@ -354,6 +354,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         m_disposed = true;
         m_deviceContext.TryWaitIdle();
+        MeshIrradiance.Dispose();
         m_tables?.Dispose();
         m_tables = null;
         ResetReady();
