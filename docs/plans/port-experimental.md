@@ -69,6 +69,12 @@ so every optimization is measured on the load it exists for:
 The rest (lanes 6, 8, 10, 11, 12 and 14) is content, taken after the
 fundamentals ([job system](engine-job-system.md#6-build-order)).
 
+Where each port stands in the valley, which domain it forces and which seams it
+composes with its neighbours is the
+[composition plan](debug-world-composition.md); where that plan moves a port
+from the place named below (the traversal course east, the pool to the stream's
+end west of the spawn), the plan's placement governs.
+
 Within that, order is value to the proving ground: lanes that exercise engine
 systems the debug world does not touch come first. A search of `worlds/` finds no
 `interactions`, `navigation`, `adjacencies`, `curves` track, `region(` trigger,
