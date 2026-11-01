@@ -187,9 +187,11 @@ with background work, which the Deck's four cores feel.
 
 Memory is the other budget: a background job admits its workspace and result
 storage from the one byte-accounting owner (section 4) before it runs, so the
-bake's `MaxAdmitted = 2 * Workers` (`SdfMeshPathBake.cs:597`), which bounds the
-meshing's working memory by group count, becomes a byte reservation instead.
-The account therefore lands before the pool (section 6).
+bake's former group-count bound became a byte reservation of each group's own
+peak (`SdfMeshPathBake.PeakOf`). Admission keeps the dependency-progress
+contract (F08): the first deferred job holds its place, and a job with nothing
+else of its owner admitted is admitted whatever the budget reads. The account
+therefore lands before the pool (section 6).
 
 ### The one handoff into the frame thread
 
@@ -575,10 +577,12 @@ allocator committed and reserved bytes separately through `host.memory`. Its
 physical reading is `HostMemory` (`HostMemory.cs:6-11`), which stays an
 observation, never a promise. A job's admission reserves its simultaneous peak
 before it runs; a reservation that cannot be met defers the job, never refuses
-it. The mesh library's `ByteBudget` (`SdfMeshLibrary.cs:26`, one sixteenth of
-available memory bounded to 16 to 512 MiB) and residency's machine byte budget
-([decision](../decisions/residency.md)) become reservations from this account,
-and the bake's `MaxAdmitted` (section 1) becomes one. The account is a ledger of
+it. The mesh library's `ByteBudget` (one twelfth of the account's budget
+bounded to 16 to 512 MiB) bounds the storage its retained meshes are charged,
+which the account counts as cached; an unused allowance is never reserved, so
+it never holds work back. The residency's machine byte budget
+([decision](../decisions/residency.md)) becomes a reservation from this account,
+and the bake's group admission (section 1) is one. The account is a ledger of
 reservations and readings, not a tracing collector, a reference count or a
 registry of buffers.
 
@@ -719,7 +723,7 @@ as `puck mesh audit` for bake defects.
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
 | **S1 Scheduling stage** (landed but for the rated views' and screens' phase spread) | Rated work off tick frames, unseen bodies held, rated packs spread, `host.frames` judging work time. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **M1 The memory account — built** | `MemoryAccount`, `host.memory` readings by category, the mesh library's cache allowance and residency bake peaks as reservations. | `host.memory` before and after a cold bake balances live, reserved and cached against the process; a bake under a budget lowered by `host.memory budget` defers (a `[sdf.mesh-bake] deferred` line) and never refuses or fails. Measurements and scope are in the [packet](open-items.md#memory-ownership). |
+| **M1 The memory account — built, check passed** | `MemoryAccount`, `host.memory` readings by category, residency bake peaks sized from each group's lattice and refinement as reservations, admission that paces and always progresses (F08), and the mesh library evicting by charged storage. | `host.memory` before and after a cold bake balances live, reserved and cached against the process; a bake under a budget lowered by `host.memory budget` defers (a `[sdf.mesh-bake] deferred` line) and never refuses or fails. Passed: a whole-world cold bake under `host.memory budget 2000000000` with `world.lockstep on`, on a machine with 0.4 to 1.4 GB free, deferred 493 times and settled with the same samples and triangles as an unbudgeted bake, and the lockstep World then stepped on. Measurements and scope are in the [packet](open-items.md#memory-ownership). |
 | **M2a Native movers 1 and 2 — built** | Published mesh payloads, readback copies, lattice storage and point workspaces on `IAllocator`; reference-bearing contour storage and worker-slot refinement indexes retain managed ownership. | Collections during a cold bake (`host.frames`) against 345; windowed stills at `debug.go desktop` before and after on both backends, compared as above; `host.memory collect` after `world.reload` of a one-group edit shows the replaced group's bytes released. The [packet](open-items.md#memory-ownership) records the measurements. |
 | **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted. | A cold bake with `host.frames` sampled through it against 96 / 183 ms, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T0 The worker-count harness** | `--workers N` on `Puck.World`; `puck test --workers 1,2,0` as full host runs compared across counts and against the recorded oracle; the focused `*-tests.puck` fixtures below. | `puck test --workers 1,2,0` on the four debug sources and the standard's test worlds passes with the serial code (a baseline for the T-steps). |
