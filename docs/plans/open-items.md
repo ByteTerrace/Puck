@@ -209,6 +209,42 @@ One engine-wide job system answers all of it:
     bounded retention reads 5,404 MiB versus the baseline's 6,222 MiB.
     Continue with owned storage, through `IAllocator` and `MimallocAllocator`
     where it goes native; a shared cross-thread pool belongs to the memo.
+- The allocation cuts' cross-family review. These are fixed in one batch after
+  the memo's M2a lands, because they touch the same bake files:
+  - [high] `FinalLattice.SetPoints` (`SdfMeshPathBake.cs:2072-2076`) now
+    converts points inside `lock (m_gate)` (`:1381`, `:1444`), the lock the
+    frame thread takes in `Dress` (`:342`), `TryTakeForFrame` (`:488`) and
+    `Stage` (`:622`). Before the cuts, that work ran before the lock. A
+    refinement round of up to 4M points stalls the frame while the lock holder
+    allocates, zeroes and converts, and the allocation can trigger a gen2
+    collection under the lock (estimated about 5 ms per million points). Fix:
+    build the converted buffer on the worker and swap it in under the lock.
+  - [medium] Decode buffers (`SdfMeshPathBake.cs:728-751`) keep up to tens of
+    MB per residency with no trim. They add a per-bake lock that serialises
+    workers' decoding, and they ignore the worker slot's scratch, so bake
+    storage has two owners.
+  - [medium] Static worker-slot refinement scratch
+    (`SdfMeshPathBake.Residency.cs:52`, `SdfSampledLattice.cs:908-913`) lives
+    for the whole process, up to about 96 MB, unreported. Its trim limit is a
+    guess rather than a measured working set. The large refinements that
+    dominate allocation still allocate, so the reuse helps only small ones.
+    It must be reported to M1's account.
+  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B runs
+    on a quiet machine, with GC events read from the trace. Retained large arrays
+    compacted by `ConserveMemory=5` are the likelier cause of the longer
+    suspension.
+  - [low] `SdfProgramBuilder.Clear` leaves `m_openInstanceBakesSeparately` and
+    `m_openInstanceBoundInSlotFrame` set after a thrown emission.
+  - [low] The reused frame builder keeps the last emission's objects alive into
+    gen2.
+  - [low] A cached rigid template matches only on the total material count, so
+    one avatar joining or leaving invalidates every template.
+  - [low] `WorldSeatBindings` checks overlay gates in three places, with two
+    change detectors for one fact.
+  - [low] `WorldSessionSceneEmitter` and `WorldAdjacencySceneEmitter` still
+    allocate the avatar material arrays.
+  - [low] `TemplateScratch` is a second cache of retained emissions beside
+    `WorldPlacementStamper`'s, which is duplication to converge.
 - Decide (the lead's call): whether the 30 and 15 Hz update tiers become a
   continuous rate.
 - [medium] Kit bodies' advance stays serial, so the parallel tick partitions
