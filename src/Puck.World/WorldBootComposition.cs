@@ -157,6 +157,7 @@ public static class WorldBootComposition {
     /// <returns>The same service collection, for chaining.</returns>
     public static IServiceCollection AddWorldAuthoritativeCore(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(argument: services);
+        Puck.Memory.PuckMemoryServiceRegistration.AddPuckAllocator(services);
 
         // The boot's own work counts, which every boot shape does before the first tick; a counters report reads
         // every registered work source.
