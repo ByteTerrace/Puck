@@ -32,19 +32,21 @@ fundamentals in flight; the rest follow by payoff. The owner deferred the
 silo's addon refusal ([delivery](#delivery-launcher-and-ci)), so deploys stay
 blocked until it is taken.
 
-1. [Engine job system](#engine-job-system): trace the quiet machine's slow
-   frames, then the design memo (prioritised work under a frame budget, a
-   deterministic parallel tick, parallel view recording, background work
-   proportional to change), reviewed before any build; meanwhile the
+1. [Engine job system](#engine-job-system): the slow frames are traced (a tick
+   and the 15 Hz rated burst on one frame; about 70 % of a tick and 36 % of
+   produce partition), so next the design memo (prioritised work under a
+   frame budget, a deterministic parallel tick, parallel view recording,
+   background work proportional to change), reviewed before any build;
+   meanwhile the
    [simulation thread](#simulation-tick-off-the-frame-thread)'s phases 2 and 3.
 2. [Cold bake under a minute](#cold-bake-under-a-minute): Direct3D 12 is at about
    132 s and Vulkan 227 s; next the crossing stage's `CloseSheets`, then
    `SdfMeshCollapse`, then the filed review remainders (byte-counted admission,
    the urgent answer queue).
-3. [Frame time on the lead machine](#frame-time-on-the-lead-machine): the tick's
-   latch, delivery and scope-hash waste is cut; next scene emission's 5.4 MB per
-   call (the gen0 source), then relief contact (about 18 % of a rim tick) and
-   rule evaluation's own gate and expression cost.
+3. [Frame time on the lead machine](#frame-time-on-the-lead-machine): keep the
+   15 Hz rated burst (unseen bodies' effector probes, rated views) off tick
+   frames and stop posing bodies no view sees; then scene emission's 5.4 MB per
+   call (the gen0 source), the mesh dress's per-group scans and the portal scan.
 4. [Refactoring campaign](#refactoring-campaign): the bake closure that reaches
    upload code, the two field-contact solvers (a deliberate correction with
    re-recorded hashes), the two GPU region growth paths, then the survey's
@@ -459,58 +461,101 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop, with
 
 ### Frame time on the lead machine
 
-Owner: simulation and host performance specialist · high · Next: take the 30 Hz
-tick off the frame-time budget (its cost first, by a thread-time trace of the
-rim's tick, then the [simulation tick](#simulation-tick-off-the-frame-thread)
-packet), and re-read these stops on a quiet machine.
+Owner: simulation and host performance specialist · high · Next: keep the 15 Hz
+rated presentation burst off tick frames and stop posing bodies no view can see
+(the first item below), then the [engine job system](#engine-job-system)'s
+parallel tick and view recording.
 
-- [high] Steady 60 FPS is not held: frames that carry a tick miss the vertical
-  blank. The 7 to 8 FPS readings were the display powered off (the
-  [hazard](../development/contributing.md#hardware-and-toolchain-cautions); the
-  window now holds a display request). With the compositor running, a windowed
-  Direct3D 12 World at 1280x900, highest settings (shadows high, temporal on,
-  native scale), `world.lockstep off`, reads p50 16.67 ms at every stop, and
-  over 20 ms in 34 of 585 iterations at the lobby (p99 25.0), 62 of 581 at level
-  1 (p99 25.9), 20 of 593 at the boardroom (p99 24.5), 32 of 589 at the cards
-  (p99 25.1) and 218 of 534 at the valley rim (avg 18.7, p99 28.9); the machine
-  carried other lanes' builds (50 to 75 % CPU). Each slow iteration is one
-  fixed step of 8 to 14 ms (about 12 ms at the rim) plus produce of 6 to 7 ms on
-  the frame thread. The GPU is not the limit: at P0 the lobby's frame is
-  `world` 8.0 ms, the session views about 2 ms together and `beacon-eye`
-  0.4 ms (`world.gpu-timing timeline`). Vulkan under the same load reads avg
-  17.5 ms at the lobby and 19.8 to 26.5 ms elsewhere, with produce 8 to 11 ms
-  against Direct3D 12's 6 to 7. (from: frame-time)
-  The tick-cost lane cut the tick at its two largest causes: a rule firing's
-  state transaction now validates and commits only what it wrote and
-  resynchronizes only the input owners of a body whose selection registers it
-  touched (it re-ran every owner's selection three times a firing), and a
-  convex contact query ends GJK once a support plane proves separation (a body
-  at the overlook spent about 22 support evaluations a query beside the
-  terrain masses). Headless, paired base and final builds back to back (machine
-  35 to 65 % CPU from other lanes), thread-time traces of about 450 ticks each:
-  lobby p50 6.1 to 5.6 ms, p99 10.1 to 10.3 ms; valley rim p50 13.2 to 6.0 ms,
-  p99 77.5 to 8.1 ms, the seat body's contact 35.7 % of the tick to 6.8 %. The
-  windowed reading of the five stops is in the tick-cost hand-back. (from:
-  tick-cost) The tick-cost-2 lane then cut, with simulation state
-  bit-identical: the rule latch's per-question name lookups (one state per rule
-  resolved once a tick), the sessions' disclosure filter recomposing rows the
-  snapshot already carries, the mirrors' clear-and-import of every replaced
-  row (now in place, cell by cell), the scoped replay refolding unchanged rows,
-  and a linear board-anchor scan per topology read. `puck bench world`,
-  alternating base and final twice (machine 87 to 100 % CPU from other lanes):
-  paced tick median 5.38 and 5.47 ms to 4.74 and 4.77 ms, a 13-cell guest
-  burst tick 5.78 and 5.47 to 4.90 and 4.97 ms; quiet-tick allocation stays
-  144 bytes and a gallery walk tick about 3 KB, so the tick is not what fills
-  gen0. In headless thread-time traces the disclosure filter fell from 7.8 % to
-  0.3 % of a lobby tick and the scope hash from 14.6 % to 5.1 % (10.9 % to
-  5.0 % at the rim); rule evaluation is still 32 to 40 % (gate and expression
-  evaluation, the remaining two latch lookups a binding) and body advance 30 to
-  37 % at the rim. Next by share: relief contact at the rim (the
-  [refactoring campaign](#refactoring-campaign)'s two field-contact solvers),
-  the scope's body continuation hash, and the session mirrors' per-snapshot
-  body pass. Timings on this machine stay noisy while other lanes build; the
-  counts (rule evaluations, skips and firings identical tick for tick) are the
-  stable evidence. (from: tick-cost-2)
+- [high] Steady 60 FPS is not held where a 30 Hz tick and the 15 Hz rated
+  presentation burst land on the same frame. Quiet lead machine (the World the
+  only load, 1.8 of 16 cores), RTX 4070, display at 60 Hz, windowed, highest
+  settings (shadows high, temporal on, native scale), bakes and GI settled,
+  `host.frames` over 600 iterations untraced:
+
+  | Reading | avg | p50 | p99 | max | over 16.7 | over 17.5 | over 20 | collections |
+  |---|---|---|---|---|---|---|---|---|
+  | Direct3D 12 lobby standing, first | 16.84 | 16.66 | 24.53 | 31.54 | 249 | 81 (over 18) | 48 | 4, 4.94 ms |
+  | Direct3D 12 lobby standing, second | 17.14 | 16.67 | 24.87 | 26.97 | 293 | | | 5, 5.03 ms |
+  | Direct3D 12 lobby walk (300 frames) | 16.66 | 16.66 | 17.99 | 18.49 | 110 | 5 | 0 | 3, 2.73 ms |
+  | Direct3D 12 rim standing | 16.66 | 16.66 | 17.89 | 22.22 | 244 | 7 | 2 | 5, 13.36 ms |
+  | Direct3D 12 rim walk (240 frames) | 16.66 | 16.66 | 18.32 | 19.87 | 93 | 4 | 0 | 3, 1.99 ms |
+  | Vulkan lobby standing | 16.66 | 16.56 | 18.50 | 19.51 | 234 | 72 | 0 | 6, 16.78 ms |
+  | Vulkan rim standing | 16.66 | 16.75 | 18.20 | 19.56 | 305 | 124 | 0 | 5, 10.65 ms |
+
+  The lobby is `debug.go desktop`, the rim `debug.go overlook`; the walks are
+  `player.move` a tick through `world.at` (from `debug.go gallery` at 5 m/s, and
+  along the overlook deck). What makes a slow frame slow, by thread-time traces
+  of the frame thread (`dotnet-trace` sampled thread time, 20 s standing and
+  9 to 12 s walking at each stop; every iteration split into its phases and
+  classed by whether it ticked and whether it carried the rated burst):
+  - **A tick and the rated burst on one frame.** At the lobby, 71 of the 86
+    iterations over 16.7 ms of work carried both: work 21 to 27 ms (simulate
+    6.4, produce 15.4) against 11.5 ms for a tick frame without the burst and
+    8.4 to 9.1 ms for the burst without a tick. The burst is every body the
+    rates lever holds at 15 Hz posing in full on one frame, every fourth
+    frame: at the lobby and the rim those are bodies 2 to 7, which no view can
+    see (0.0 px/m), yet each runs its drivers and its effectors' surface probes,
+    a CPU march and gradient of the field per foot (`WorldEffectorSolver.Probe`,
+    `WorldEffectorSolver.cs:281`, through `WorldCreationInstances.TryResolveTarget`,
+    `WorldCreationInstances.Effectors.cs:676`), 2.3 to 2.6 ms a burst; the views
+    and screens rated at 15 Hz record on the same frame (1.4 to 2.8 ms). A body
+    no view may see is rated 15 Hz, not held (`SdfUpdateRates.BodyHertz`,
+    `SdfUpdateRates.cs:82-84`; `WorldCreationInstances.Rates.cs:71-73`), and all
+    six accumulate the same held seconds, so they pack together
+    (`WorldCreationInstances.Pack.cs:228-270`). The tick runs every other frame
+    and the burst every fourth on the same 60 Hz grid, so whether they meet is a
+    phase that holds for seconds and flips when an iteration takes 0 or 2 steps:
+    a standing reading is either nearly clean (the rim: 13 such iterations in
+    1,309) or 6 to 7 % slow (the lobby). Decide whether a body no view can see
+    poses at all (it may still cast a shadow into a view), spread rated packs
+    over the frames of their period, and put rated presentation work on frames
+    without a tick.
+  - **A sustained overload at the chess demo's cycle boundary.** In the second
+    lobby reading, iterations 461 to 530 (about 1.2 s around
+    `[replay.scope: chess-demo RECORDED 3330 ticks]`) ran with no pacer wait:
+    simulate 9 to 10 ms instead of 6, and produce 13 to 17.7 ms even on
+    iterations without a tick. Each long iteration owes the next tick sooner, so
+    ticks fell on consecutive iterations (473 and 474, 513 and 514 at 24.96 and
+    26.20 ms). Not traced; trace it across the demo's restore.
+  - **Walking.** The rim walk's slow iterations (38 of 537 traced) are tick
+    frames with the session views' recording (19) or the burst (16); the seat
+    camera's clearance march against the relief
+    (`WorldCameraClearance.March` under `WorldSeatViewState.Clear`) takes 1.7 ms
+    on them against 0.4 ms elsewhere.
+  - **Collections** are 1 to 6 a reading at 0.4 to 4.7 ms each (a gen0 3.7 ms,
+    a gen1 4.7 ms); one pushed a rim frame to 20.84 ms. Not the cause of the
+    slow frames.
+  - **Not the GPU, present or pacing waits.** `begin` (the wait for the previous
+    frame's GPU work) reads 0.00 on every slow iteration; the GPU's frame is
+    about 10 to 11 ms (`world.gpu-timing timeline`: `world` 8.1 to 9.0 ms, views
+    3.3 and resolve 3.5 of it at the lobby, the session views about 1.5 ms,
+    `beacon-eye` 0.3); `present` is 0.1 to 0.4 ms.
+  - **Most "over 16.7 ms" iterations are on time.** `host.frames` counts an
+    interval over the budget (`HostFrameTimeline.cs:250`), and the budget is
+    16.6667 ms, so a vsync-paced iteration of 16.67 to 16.75 ms counts: at the
+    rim 244 are over 16.7 ms and 7 over 17.5. The Direct3D 12 swap chain holds
+    one presented frame queued (`DirectXSurfaceCompositor.cs:51-58`), so a lone
+    iteration of up to about 30 ms still shows on its refresh, and the next one
+    starts at once and catches up; a refresh repeats only when consecutive
+    iterations overrun together, as at the chess boundary. Vulkan's present-wait
+    pacing (`VulkanSurfacePresenter.cs:98-113`) alternates intervals of about
+    18.5 and 14.8 ms around the 16.66 mean with 4 to 9 ms of work and 9 to 14 ms
+    of wait, so its 72 to 124 iterations over 17.5 ms are pacing jitter, not
+    missed refreshes. Count work over the budget (as `Scan` does, `:168`) or
+    intervals past one and a half periods. Vulkan's produce (avg 5.4 to 6.2,
+    p99 10.1 to 11.1 ms) now matches Direct3D 12's.
+  (from: slow-frames)
+- [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
+  one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
+  (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
+  (`SdfMeshPathBake.cs:375-388`): 0.6 to 1.2 ms a frame at the lobby and the
+  rim, `Enumerable.Contains` alone 0.45 to 0.62 ms. Index the frame's instances
+  by slot once and redress only the moved groups. (from: slow-frames)
+- [medium] The portal crossing scan visits every population slot for every
+  portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
+  pair (`WorldInstanceHost.Adjacency.cs:294-434`): 1.1 to 1.2 ms, 16 to 19 % of
+  a tick standing still. A body-major loop with a bounds test before the
+  occupancy write cuts it. (from: slow-frames)
 - [low] A body resting at the overlook pays two ground snaps a tick (ten
   sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
   support whenever the body is grounded, and `ResolveProgramContacts`'s own
@@ -1165,9 +1210,57 @@ One engine-wide job system answers all of it:
   landed geometry (`SdfMeshIrradiance` rebuilds its scene incrementally, but
   its comment says each landed set is measured whole; confirm in the code first).
 
-Measure before building: trace which work makes the quiet machine's slow
-standing frames (p99 18.4 ms, worst 21.9 ms on Direct3D 12) slow, tick, GC or
-produce.
+Measured on the quiet lead machine (RTX 4070, Direct3D 12, bakes and GI
+settled; the attribution is in [frame time](#frame-time-on-the-lead-machine)):
+a slow frame is a 30 Hz tick (about 6.3 ms) on the same frame as the 15 Hz
+rated presentation burst (about 2.4 ms of CPU effector probes plus the rated
+views' recording), never the GPU
+(`begin` 0.00 on every slow frame) and rarely a collection. What the job
+system can take, from `dotnet-trace` thread-time samples of the frame thread
+(20 s standing at the lobby and at the rim, 600 ticks each):
+- **The tick is mostly program execution over entities.** Per tick (lobby /
+  rim): 6.26 / 6.77 ms, of which running authored programs (the rule VM, the
+  motion programs and their solvers, machine stepping) is 3.5 / 4.3 ms (56 /
+  63 %) and the engine's own crossing scan and snapshot the rest. Motion
+  programs and their contact solvers, per body: 1.68 / 2.55 ms (27 / 38 %): `WorldPopulation.AdvanceSimulated`
+  (`WorldPopulation.Step.cs:820`), `AdvanceSeats` (`:687`) and `StageProducer`
+  (`:550`) into `WorldBody.Advance` (`WorldBody.Step.cs:41`), the motion-program
+  interpreter `ExecuteProgram` (`:704`) and producer `ExecuteProducer` (`:286`),
+  the sweeps through `WorldColliderSet.ResolveSweep` (`WorldColliderSet.cs:1062`)
+  and `WorldSolidField.ResolveSweep` (`WorldSolidField.cs:333`), and the step's
+  `CaptureMotion` (`WorldBody.SweepRefusal.cs:71`, 0.4 to 0.5 ms a tick alone).
+  The rule VM, `RuleEvaluator.Evaluate` (`RuleEvaluator.cs:310`): 1.77 / 1.66 ms
+  (28 / 25 %), of which gate and binding expression reads (`GateOpen`, `:621`;
+  `RuleExpressions.Run`) are about 0.7 ms, firings into the transaction
+  (`FireEffects`, `RuleEvaluator.Effects.cs:29`) about 0.3 ms and latch
+  scheduling (dictionary lookups, `RuleLatch.EndSweep`, key walks) the rest.
+  The portal crossing scan, per seat and face
+  (`WorldInstanceHost.Adjacency.cs:294-434`): 1.17 / 1.11 ms (19 / 16 %). Snapshot emission (`WorldTick.EmitSnapshot`,
+  `WorldTick.Step.cs:244`): 0.80 / 0.60 ms (13 / 9 %). Machine stepping on the
+  frame thread (`WorldMachineHost.Advance`): 0.04 to 0.06 ms (1 %).
+- **Partitionable share of a tick: about 70 %.** Body advance, the portal scan
+  (each seat's winner is its own), the rule VM's reads against the tick's
+  frozen arena and the snapshot's rows all run over fixed partitions with an
+  ordered commit: about 4.35 ms lobby (69 %), 4.9 ms rim (72 %). Serial: firing
+  commits and latch scheduling (about 1.0 ms), the scoped replay's hash
+  (`WorldScopedReplayRuntime`, 0.4 ms, 6 to 7 %), the event feed, addons and
+  the host step shell (about 0.5 ms), and pairwise rigid contacts
+  (`WorldPopulation.ResolveDynamicContacts`, `WorldPopulation.Resolve.cs:803`,
+  0.03 to 0.06 ms). At eight workers that is about 2.5 ms a tick.
+- **Produce: about 36 % is per-view recording.** Per iteration (lobby / rim):
+  produce 6.5 / 5.5 ms; each render-graph node's own command list
+  (`ShaderPipelineRenderNode.RenderFrame`, `ShaderPipelineRenderNode.cs:1727`;
+  `RecordPasses`, `ShaderPipelineRenderNode.Work.cs:81`; `SubmitCounted`, `:159`)
+  2.39 / 1.91 ms (37 / 35 %), and 5.3 ms of a slow frame's 14.8. The shared
+  residency preparation before it (`SdfWorldPasses.BeginFrame`: transforms,
+  mesh dress, table pack, irradiance and exposure staging) is 3.38 / 2.89 ms
+  (52 %), of which the per-body pose pack (`WorldCreationInstances.PackTransforms`,
+  effectors included) is 0.89 / 0.78 ms and partitions by registration; graph
+  preparation and scheduling are about 0.5 ms.
+- **Schedule as well as spread.** The slow frames come from two periodic loads
+  meeting on one frame (the tick every other frame, the rated burst every
+  fourth), so a scheduler that places rated presentation work on frames that
+  carry no tick removes them before any parallelism. (from: slow-frames)
 
 ### Simulation tick off the frame thread
 
@@ -1250,8 +1343,11 @@ Deck, for one) if parallel work cannot reach the bar.
     `Present` blocks 18-26 ms: the GPU reads 76 % busy there (the floor and
     ceiling paintings each draw the world); measure its GPU time per view
     (`world.counters gpu`) and cap the painting views' resolution or recursion.
-- Young collections: a gen0 pause is 10-12 ms with 4 MB promoted (2.6 ms marking
-  through cards, about 7.7 ms planning and compacting). Server GC with four heaps
+- Young collections: on a loaded machine a gen0 paused 10-12 ms with 4 MB
+  promoted (2.6 ms marking through cards, about 7.7 ms planning and compacting);
+  on the quiet lead machine with bakes settled a gen0 pauses about 3.7 ms and a
+  gen1 4.7 ms, 1 to 6 collections in 600 frames
+  ([frame time](#frame-time-on-the-lead-machine)). Server GC with four heaps
   collected rarely but paused 27 ms, so it was not kept; fewer young objects
   referenced from old containers (the server's `StateCell`, `WorldStateRow`,
   `UpsertStateRow` and their strings, the state journal) is what shortens it.
