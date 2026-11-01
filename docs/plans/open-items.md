@@ -580,6 +580,13 @@ packet), and re-read these stops on a quiet machine.
   (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
   conflict on each of 64 reads; pad the row to 65 words. It runs one group only
   when the environment refreshes. (from: perf-guidance)
+- [low · unmeasured] The views filter tile is 11 words wide, so an 8x4-lane
+  warp reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` at
+  `(lane.y + y) * 11 + lane.x + x` puts rows 0 and 3 on the same banks 1 to 7,
+  a 2-way groupshared bank conflict on 32 `uint` reads a pixel
+  (`sdf-views-stage.hlsli:13-15,77-82`). Read GPU Trace's shared-memory bank
+  conflicts for views, then try a row stride that clears it. (from:
+  perf-guidance-fixes)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
