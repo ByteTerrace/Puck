@@ -627,7 +627,11 @@ until a cross-family consensus round made it retract them. Treat its citations,
 figures and quotes as leads for a Claude or Codex lane to open and verify.
 Never take them as sources, and never let them carry a verdict alone. A
 research round therefore always runs a consensus step in which other families
-check its citations.
+check its citations. The same holds for its reading of Puck's own code: in the
+culling round it cited six shader and C# names that do not exist, a constant
+absent from the file it named, and wrong level-of-detail facts, and built a
+ranked technique on a problem Puck does not have. A Claude or Codex reader
+checks each `file:line` it gives before the plan uses it.
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
