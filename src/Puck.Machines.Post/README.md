@@ -22,8 +22,13 @@ signatures, parameters, return values, and exceptions.
 | `PostBattery<TContext>` | Runs an ordered `IPostStage<TContext>` list, isolating each stage's exceptions as `Infra`, into a `PostReport`: every `IsConcurrent` stage at once, then the rest (throughput and allocation measurements) alone on a quiet process; output keeps list order. |
 | `PostProgressGuard` | The battery's hang guard; see [The hang guard](#the-hang-guard). |
 | `PostReport` | The folded per-stage results, exit code, and rendered table for one battery run. |
-| `HashDivergenceReport` | Snapshot-hashes two machines and, on a mismatch, prints the component/offset localization and hex windows—the loop and `DescribeDivergence` stay per-brick. |
-| `CommandLineArguments` | `Value(args, name)` looks up a flag's following value; `TryValidateValues` rejects missing values for a known set of flags. |
+| `HashDivergenceReport` | Drives both machines to one absolute cumulative cycle target, snapshot-hashes them, and prints component/offset localization and hex windows on the first mismatch. Each battery supplies stepping, perturbation and descriptions. |
+| `MachineStageTable` | Binds the common core and queued-host stages to each battery's factories and budgets; registries select entries in their existing report order. |
+| `MachineBenchmark` | Measures fleets, burst catch-up and lifecycle operations through typed machine adapters; row-local determinism labels feed an aggregate final verdict. |
+| `MachineFleetStepper` | Schedules homogeneous and mixed fleets with shared, paired or independent input streams; typed timing policies retain per-machine windows only where measured. |
+| `CpuTestMemory` / `SstComparison` | Own flat instruction-test RAM, seeded-address tracking, bus traces and CPU-independent RAM/pin comparisons. CPU adapters retain their stepping, register checks and report wording. |
+| `PostCommandLine` | Parses each battery's declared value options and switches through System.CommandLine. |
+| `CommandLineArguments` | Diagnostic lookup and validation over the same parser. |
 | `CorpusManifest` | Resolves explicit corpus paths or the pinned cache; `Load(path, cacheRoot)` sets the cache used for both fetch and resolution. The runners expose `--corpus-cache`. |
 | `CoreEmbeddingProbe` | Checks synchronous core input, video, audio, state replay and lookahead without host infrastructure. |
 
@@ -34,6 +39,19 @@ directory, so CI's deterministic compiler source paths do not affect corpus
 selection, and a runner built in one checkout and run from
 another acts on the one it was run from. A runner with neither directory inside
 a checkout throws `DirectoryNotFoundException`.
+
+## Command-line grammar
+
+Option names are case-insensitive; values retain their exact spelling, including
+empty strings and literal quotes. A value option binds its following raw token
+independently of other options, and the first occurrence supplies its value.
+Repeated options and option-looking values therefore retain the diagnostic
+surface's grammar. A declared required value rejects blanks and tokens beginning
+with `--`, using the battery's existing error text. Switches are present only
+when explicitly supplied. Unrecognized tokens and attached `--name=value`
+arguments are ignored. `PostCommandLine` binds that grammar losslessly before
+System.CommandLine parses the declared options; diagnostic helpers use the same
+parser without a second argument scanner.
 
 ## Individually pinned corpus files
 

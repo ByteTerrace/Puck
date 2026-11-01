@@ -203,9 +203,12 @@ so CPU suites cover the self-contained stages (and the cores they check). The
 - Read the
   [`Puck.Machines.Post` README](../../../src/Puck.Machines.Post/README.md)
   first when a change touches stage or verdict semantics rather than one
-  brick's own context — the shared battery scaffold both Post projects close
+  brick's own context — the shared battery scaffold all three Post projects close
   over: `PostBattery<TContext>`, `IPostStage<TContext>`, `PostVerdict`,
-  `PostTier`, `HashDivergenceReport`, `CorpusManifest`, `CoreEmbeddingProbe`.
+  `PostTier`, `MachineStageTable`, `HashDivergenceReport`, `MachineBenchmark`,
+  `CpuTestMemory`, `SstComparison`, `PostCommandLine`, `CorpusManifest`,
+  `CoreEmbeddingProbe`. Bind shared stages and benchmarks there; keep CPU
+  registers, stepping, embedding checks and report wording in the owning battery.
 - Read the
   [Humble Post README](../../../src/Puck.HumbleGamingBrick.Post/README.md) for
   tiers, the corpus suites and their per-case result rules, BESS, `--dump-snapshot`,
