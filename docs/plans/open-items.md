@@ -27,9 +27,9 @@ Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
 The owner's direction: fundamentals first, known or found along the way
-(AGENTS.md), with vigilance against duplication. The first seven items are the
+(AGENTS.md), with vigilance against duplication. The first six items are the
 highs: the three stages of the engine job system, the bake, the companion
-custody build, certified field contact and the silo's addon hosting. The debug
+custody build and certified field contact. The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
@@ -56,8 +56,8 @@ experimental worlds have that it lacks is ported into it
    to 10.
 6. [Certified field contact](#certified-field-contact) [high]: one surface solve
    for both contact solvers, R4 to R8 closed in it, re-recorded hashes.
-7. [Delivery](#delivery-launcher-and-ci) [high]: a silo that mounts addon guests
-   and checkpoints their state, so the debug world deploys again.
+7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
+   and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
    authored screen material, the chase-camera template, inputs, skies and
    quality in the standard, the editor's bindings and feel authored.
@@ -840,21 +840,15 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · high (silo), low · Next: a silo that mounts addon guests
-and checkpoints their state, then CI's steady state, the shader cache and the
+Owner: delivery lane · low · Next: CI's steady state, the shader cache and the
 GC-hole retirement.
 
-- [high] The production silo cannot run the world it deploys: every addon row in
-  `worlds/debug` is enabled (companion, fuzzer, guide, kinematics-scope,
-  machine-debugger, traversal, watchdog), and the silo refuses a world naming an
-  enabled addon (`WorldNoAddonHost.TryPrepare`,
-  `src/Puck.World.Silo/WorldSiloHost.cs:1262`; `server.AttachAddons(runtime: new
-  WorldNoAddonHost())`, `WorldSiloHost.ActivationWiring.cs:35`), so `puck azure
-  test-world-container` fails with `Pinned row '…/debug' did not activate and
-  checkpoint` and Release Azure's deploys are blocked. The fix at the cause is a
-  silo that mounts addon guests (`Puck.World.Addons` is already referenced) and
-  checkpoints their state, which today refuses capture. (from: the main landing's
-  CI triage)
+- [low] Extend addon checkpoints to table/reference and segment-drop state.
+  Capture currently refuses these resources by name
+  (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
+  `src/Puck.Scripting/AddonInstance.Checkpoint.cs:35`); the debug world's seven
+  guests use supported numeric globals and linear memory. The [runtime contract](../../src/Puck.World.Addons/README.md#durable-guest-state)
+  owns the supported inventory. (owner: delivery; from: silo-addons)
 - [low] The official tree (`puck official build --worlds worlds/debug`) ships
   the composed debug world with its imports inlined, so the browser boots, but
   its `sources` and `documents` stop at the package: none of `worlds/standard`'s
