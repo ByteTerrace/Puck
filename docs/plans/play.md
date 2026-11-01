@@ -14,12 +14,8 @@ the reasoning behind every decision is in
 
 ## Implementation status
 
-- **Landed:** seamless crossing, the four ground corner authorities and the
-  island, and the `four-corners-sharded`, `seamless-adjacency`,
-  `seamless-four-corners-circuit`, and `quilt-nw-gap-edge-carry` canaries;
-  per-body scale, decision commitment and rising-edge interruption, flock
-  profiles and affinities, per-cell provenance, the `puck canary` manifest
-  runner, `WorldEntityAddress`, kit speed envelopes; the local group, role-aware
+- **Landed:** seamless crossing; per-body scale, decision commitment and rising-edge interruption, flock
+  profiles and affinities, per-cell provenance, `WorldEntityAddress`, kit speed envelopes; the local group, role-aware
   grant, transfer, and external-operation foundation; the MCP host extension,
   the Operator profile's `puck_worlds`, `puck_exec`, `puck_capture_frame` and
   `puck_state_vector_write` tools over local stdio, remote HTTP with OAuth and
@@ -30,48 +26,63 @@ the reasoning behind every decision is in
   ([`WorldAgentBridge`](../../src/Puck.World.AgentBridge/README.md),
   [`Puck.World.AgentHarness`](../../src/Puck.World.AgentHarness/README.md));
   the audio core (the mixer, the voice synth, `MusicClock`, `MusicDirector`,
-  `VoiceBabbler` and their playback wiring, the diegetic tune instrument) with
-  the `voice-babble`, `music-conditional-layer-and-embellishment` and
-  `instrument-clock-source` canaries; the parlor package (physical chess with a
-  `search` opponent, which is the debug world's chess table, and Chinese checkers,
-  Hearts and Lineup under `experimental/worlds/parlor`);
-  every tabletop primitive and the shipped `games/` fragments.
-- **Not started:** the One World re-authoring, the content and federation
-  waves, namespace normalization, the frames document, the neighbour tape, the
-  seat's view state, the finder's units A to C and its slices, the Participant
+  `VoiceBabbler` and their playback wiring, the diegetic tune instrument); the
+  parlor package (physical chess with a `search` opponent, which is the debug
+  world's chess table, and Chinese checkers, Hearts and Lineup under
+  `experimental/worlds/parlor`); every tabletop primitive and the shipped
+  `games/` fragments.
+- **Quarantined:** the four ground corner authorities, the island, and the
+  canaries that prove them and the audio core
+  (`four-corners-sharded`, `seamless-adjacency`,
+  `seamless-four-corners-circuit`, `quilt-nw-gap-edge-carry`, `voice-babble`,
+  `music-conditional-layer-and-embellishment`, `instrument-clock-source`) sit
+  under `experimental/tests/Puck.World.Canaries/` and
+  [`experimental/worlds`](../../experimental/README.md). They are not
+  re-admitted. The debug world is the proving ground, and the features these
+  worlds hold that it lacks are ported into it by the
+  [porting packet](open-items.md#work-packets), not revived in place.
+- **Not started:** the content and federation
+  waves, namespace normalization, the frames document, the neighbour tape,
+  the finder's units A to C and its slices, the Participant
   profile and the document, recording and rule-cost tools of MCP's local surface,
   the remote surface's parity job and approved device handles, composed play's
   chess outcomes and two-table compositions, the audio remainder, and the
   few-thousand-creature acceptance workload. One security claim is open rather
   than unverified: nothing yet witnesses that a binding cannot escalate its
   destination beyond what its grant allows, so the claim is treated as false
-  until a canary shows it.
+  until a signal shows it.
 
 ## The forcing artifact
 
-The quilt, [the forcing world](state-and-language.md#the-forcing-world)
-shipped as a product by [runtime and delivery](runtime-and-delivery.md), is
+The debug world, the proving ground and
+[forcing world](state-and-language.md#the-forcing-world) that
+[runtime and delivery](runtime-and-delivery.md) ships as the product, is
 played: by a group the finder assembled from several source authorities, in a
-world dense with creatures, with an agent authoring one district through MCP
-while the humans walk through it. The party crosses corner boundaries and the
-island's seams, plays the arcade cabinets and the parlour's boards, and leaves
-with a replay tape; a few thousand creatures are densely packed on the ground
-and in the dive district's water at 60 FPS on desktop and Steam Deck, with
+place dense with creatures, with an agent authoring one place through MCP
+while the humans walk through it. The party crosses the debug world's place
+boundaries and seams, plays its cabinets and its chess, go and card tables, and
+leaves with a replay tape; a few thousand creatures are densely packed on the
+ground and in water at the three frame-rate bars (60 FPS on the RTX 2060, 60 on
+the RTX 4070, 45 on the Steam Deck, every frame at the highest quality), with
 per-body scale consistent across every seam; two friends and compatible
 strangers accept their roles and activity, enter from different source
 authorities, lose a member, reconnect, backfill, and finish together; a
 Participant-profile agent plays with nothing but perception and actuation, and
-an Operator-profile session edits a district live and captures the composed
+an Operator-profile session edits a place live and captures the composed
 frame that proves the edit arrived.
 
-**Check:** `Puck.World` boots the one world with no bracketed stderr line;
-`world.imports` names every district under its alias and `body.pose
-spawn:<district>` stands a seat in each; a `puck canary` proof runs group
+The quilt, the island and the One World are not the forcing artifact and are
+not re-admitted. What they prove that the debug world cannot yet show is ported
+into the debug world first.
+
+**Check:** `puck_world_start` boots `worlds/debug` and reads no bracketed
+stderr line; `puck_exec` lines read `world.imports` and stand a seat in each
+place with `body.pose spawn:<place>`; a `puck sweep` signal runs group
 authority, recipient consent, and qualified membership across two
-authenticated authorities with both streams drained and a red leg for every
+authenticated authorities with both streams drained and a control for every
 claim; the acceptance playthrough runs end to end through real authenticated
-processes and reports rendered whole-frame cost at the creature workload; the
-Participant agent completes the run without reaching exec, files, the
+processes and reports rendered whole-frame cost at the creature workload on each
+bar; the Participant agent completes the run without reaching exec, files, the
 framebuffer, or the tape by any tool name or profile argument; the Operator's
 captured PNG returns from `FrameCaptureRequest.Completion`.
 
@@ -79,48 +90,58 @@ captured PNG returns from `FrameCaptureRequest.Completion`.
 
 ### The playthrough substrate remainder
 
-**Owns:** the state section's row ownership, the `chance` level's hidden
-operands, the four-corners canaries' ring.
+**Owns:** the state section's row ownership and the `chance` level's hidden
+operands.
 
-**Delivers:** the catalog walk per operand read goes and the idle tick lands
-under four milliseconds; the `chance` level's hidden operands; the multi-authority four-corners canaries re-recorded at the shards'
-2.75× ring.
+**Delivers:** the catalog walk per operand read goes; the `chance` level's
+hidden operands. The idle tick's cost is the [engine job
+system](open-items.md#engine-job-system)'s to cut (a quiet tick is scheduling,
+not a target here), and the quarantined four-corners canaries are not
+re-recorded.
 
-**Check:** `puck landing`; the idle-tick measurement, carried by the landing
-commit message.
+**Check:** the `chance` operands' discriminating cases through `puck_exec` on
+the debug world.
 
 ### The population
 
-**Owns:** the frames document shape and its envelopes, `puck canary`'s
-manifest tree and the `four-corners-sharded` scripts, neighbour-field
-derivation and the per-tick neighbour tape, ghost records.
+Waits for the [engine job system](open-items.md#engine-job-system) memo; its
+workload (a few thousand creatures at the three bars) is a sizing input to that
+memo's partitions and budgets, and the population is built against what the memo
+decides, not ahead of it.
+
+**Owns:** the frames document shape and its envelopes, the debug world's
+federation signals (the successors of the quarantined `four-corners-sharded`
+scripts), neighbour-field derivation and the per-tick neighbour tape, ghost
+records.
 
 **Delivers, in this order:**
 
-1. **The canary widening** (first, because the frames proof is a canary):
-   `four-corners-sharded` exercises vertical and island handoffs, cross-host
-   body contact, autonomous travellers, retained dual-stick control, and derived
-   diagonal peers; and the binding-destination escalation witness, one
-   real-path refusal-with-control canary in which a non-privileged principal
-   authoring a binding whose destination is an administrative verb refuses
-   while the same mutation naming an ordinary verb applies. Three behaviors
-   have no live canary yet, and the widening adds one for each:
+1. **The signal widening** (first, because the frames proof is a signal on the
+   debug world): the quarantined `four-corners-sharded` canary
+   (`experimental/tests/Puck.World.Canaries/`) is the specification, not a
+   suite to revive. Its vertical and island handoffs, cross-host body contact,
+   autonomous travellers, retained dual-stick control, and derived diagonal
+   peers are rewritten as `puck sweep` signals over the debug world's places
+   and its federation links; and the binding-destination escalation witness,
+   one real-path refusal-with-control signal in which a non-privileged
+   principal authoring a binding whose destination is an administrative verb
+   refuses while the same mutation naming an ordinary verb applies. Three
+   behaviors have no live signal yet, and the widening adds one for each:
    - A compiled WASM addon guest acquires a handle, submits an
      `UpsertHudPanel` and then a chained `UpsertHudElement` through a
      verb-masked grant, `world.hud` reflects both, and `replay.record` refuses
      to arm once the guest has pumped.
    - Region-conditioned music: a conditional layer and a region-entry
-     embellishment fire as a driven body crosses an island region, locally
-     and over `--connect`. The island binds no music today
-     (the deleted orphan `nexus-ambient.music.json` authored region conditions
-     that no world references), and
-     `music-conditional-layer-and-embellishment` proves the mechanism only on
-     a minimal fixture's seat-join edge.
+     embellishment fire as a driven body crosses a region of the debug world,
+     locally and over `--connect`. The debug world binds no region music today,
+     and the quarantined `music-conditional-layer-and-embellishment` canary
+     proves the mechanism only on a minimal fixture's seat-join edge.
    - A frame capture shows that moving a body or crossing a seam changes the
-     composed frame, locally and over `--connect`. `seamless-adjacency` proves
-     the seam crossing and `front-door` the studio-arrival gate, both at the
-     console level without a capture. `portal-walk` and `portal-walk-connect`
-     capture a portal crossing's frame, locally and over `--connect`.
+     composed frame, locally and over `--connect`. The quarantined
+     `seamless-adjacency` canary proves the seam crossing and `front-door` the
+     arrival gate, both at the console level without a capture; the quarantined
+     `portal-walk` and `portal-walk-connect` capture a portal crossing's frame,
+     locally and over `--connect`.
 2. **Frames, as the envelope ratification:** one document shape (root frame,
    sibling frames, body-parented frames on demand) whose envelope takes an
    angular-speed bound, a minimum feature size or aspect-ratio bound, and a
@@ -138,8 +159,9 @@ derivation and the per-tick neighbour tape, ghost records.
    `WorldSnapshot` carrying per-entity scale so the remote side of the
    adjacency sweep is scale-consistent.
 
-**Check:** each proof's positive and discriminating legs under `puck canary`;
-a real world run at the acceptance workload with rendered whole-frame cost;
+**Check:** each proof's positive and discriminating legs as `puck sweep`
+signals; a debug-world run at the acceptance workload with rendered
+whole-frame cost on each bar;
 the falsifiers do not fire (density-dependent unbounded perception work, slot
 reuse inheriting another creature's memories, duplicate hearsay increasing
 corroboration, checkpoint divergence, incompatible followers borrowing a
@@ -147,52 +169,62 @@ narrow route, split and replan bursts breaking the frame budget).
 
 ### The seat
 
-**Owns:** the seat-lifetime view state, input preference, the feel sitting,
-the touch-triggered win slice, navigation and equip facets, the `body:n`
-lowering, entity-addressable rules and elemental interactions.
+**Owns:** the standard chase-camera template, input preference, the feel
+sitting, the touch-triggered win slice, navigation and equip facets, the
+`body:n` lowering, entity-addressable rules and elemental interactions.
 
-**Delivers:** one seat-lifetime view state (world-owned camera structure,
-profile-owned input preference, standard dual-stick movement and look, one
-logical basis shared by intent composition, local rendering, traveler
-rendering, cursor capture, and read-back; no slot-global orbit, binding-side
-feel cache, renderer-local orbit cache, or mixed schema survives), then the
-owner feel sitting, then the touch-triggered win slice, then navigation and
-equip; authored local `body:n` lowers to `WorldEntityAddress` at compile or
-install time; entity-addressable rules and elemental interactions land with
-the reference-game content that proves them, after re-verifying that the
-property vocabulary, rules, interactions, and the arena district's combat
-rules survive the schema drift that once refused the combat document.
+**Delivers:** the seat delivers the standard chase-camera template: the
+rulings and parameter values in
+[the chase camera](../decisions/play.md#the-chase-camera), authored as `.puck`
+data in `worlds/standard/` (world-owned camera structure, profile-owned input
+preference, standard dual-stick movement and look, one logical basis shared by
+intent composition, local rendering, traveler rendering, cursor capture, and
+read-back), which the owner's feel sitting tunes; then the touch-triggered win
+slice, then navigation and equip; authored local `body:n` lowers to
+`WorldEntityAddress` at compile or install time; entity-addressable rules and
+elemental interactions land with the debug-world content that proves them,
+after re-verifying that the property vocabulary, rules, interactions, and the
+arena district's combat rules survive the schema drift that once refused the
+combat document.
 
-**Check:** the feel sitting, carried by the landing commit message; `puck canary`
-for the view-state and win-slice proofs; the content proofs from the game
-itself.
+**Check:** the feel sitting, carried by the landing commit message;
+`puck sweep` signals for the camera template and the win slice; the content
+proofs from the debug world itself.
 
 ### The content wave
 
+Dormant until the fundamentals land (the [engine job
+system](open-items.md#engine-job-system) and the packets ranked before it) and
+until the porting packet's inventory names what the debug world lacks.
+
 **Owns:** the studio prologue's acts, the arena crawl's spawners and bosses,
 the arcade hearth's seam content, the retail basis deltas that pin a boot seat
-and district behind a fact, and the One World re-authoring: the island on the
-one-description rule (rendered and collided from one description), the plaza
-with the granary court, the arcade, and the market hall; the proving ground
-and the garden as districts; the pool as the dive district, a track as the
-kart district, a course as the jump district, the studio canvas behind the
-fourth arch; two local seats in a split layout; a spawn point and a navigation
-domain per district; `captures` rows for parity; districts as modules under
-an alias exporting only their control rows. The primitives the island refuses
-without: a placement whose instances are dealt from a keyed row (one instance
-per cell, keyed by the cell, laid out by the row's `distribution` region, a
-variant chosen by a second row, following the row live), an observation field
-landing on a row of any cell kind, a placement's `respond` reading an ordinary
-cell, an inhabit facet whose count is a state cell, identity-carried facts, and
-a `machine` screen booting a `puck.cartridge.v1` document.
+and district behind a fact, and the debug world's growth into the reference
+game's places: the quarantined island's one-description terrain (rendered and
+collided from one description), the plaza with the granary court, the arcade,
+and the market hall; the garden as a place; the pool as the dive place, a
+track as the kart place, a course as the jump place, the studio canvas behind
+the fourth arch; two local seats in a split layout; a spawn point and a
+navigation domain per place; `captures` rows for parity; places as modules
+under an alias exporting only their control rows. The primitives those places
+refuse without: a placement whose instances are dealt from a keyed row (one
+instance per cell, keyed by the cell, laid out by the row's `distribution`
+region, a variant chosen by a second row, following the row live), an
+observation field landing on a row of any cell kind, a placement's `respond`
+reading an ordinary cell, an inhabit facet whose count is a state cell,
+identity-carried facts, and a `machine` screen booting a `puck.cartridge.v1`
+document.
 
-**Delivers:** the island authored on those primitives; `granaries.puck`
-moved under the modules rather than deleted; the frozen documents, the
-scenarios, and their canaries retired with a ledger naming each successor. After [S6](state-and-language.md#s6--modules-and-the-forcing-world)
-lands, the island and its districts move onto the same modules.
+**Delivers:** each feature the experimental worlds hold and the debug world
+lacks, ported into the debug world on those primitives (the porting packet owns
+the inventory, each feature's experimental source and the debug-world place it
+belongs); `granaries.puck` moved under the modules rather than deleted; the
+quarantined documents, scenarios and canaries deleted once their successor
+signal exists. After [S6](state-and-language.md#s6--modules-and-the-forcing-world)
+lands, the places move onto the same modules.
 
-**Check:** the forcing artifact's boot check; every retired canary re-recorded
-against the one world or deleted with a named successor.
+**Check:** the forcing artifact's boot check on the debug world; every ported
+feature runs as a `puck sweep` signal or a `puck_world_start` capture.
 
 ### Wave 4 — `Puck.Audio`
 
@@ -217,7 +249,7 @@ this package adds, each with its own proof:
   resolved world position instead of listener-placed;
 - a region crossing proven end to end: the `music.transition` cue fires from a
   driven body's crossing, locally and over `--connect` (the population
-  package's canary widening adds the region-conditioned music canary);
+  package's signal widening adds the region-conditioned music signal);
 - the mux determinism check (`experimental/scripts/recording/mux-check.cs`) and
   the audio-device failure paths (`experimental/scripts/world/audio-device.cs`
   and `audio-mix.cs`) as law tests or `puck` verbs.
@@ -236,9 +268,11 @@ under `docs/verification/manual`.
 
 **Delivers:** each once, over the settled tree, after the splits.
 
-**Check:** `puck landing`; a signed release manifest verified by the launcher.
+**Check:** a signed release manifest verified by the launcher.
 
 ### The federation wave, and the remainder
+
+Dormant until the fundamentals land.
 
 **Owns:** provenance signing for carried state, the bilateral attestation rows
 a duel or wager is, a profile world attached at a shard's seam, the silo-hosted
@@ -300,6 +334,8 @@ elsewhere.
 
 ### The finder's foundation
 
+Dormant until the fundamentals land.
+
 **Owns:** durable operation identity through ingress, application, the
 serialized persistence queue, receipt lookup, and typed completion; a
 session table at the authenticated doors, over the in-process session principal;
@@ -330,12 +366,14 @@ chosen.
 **Check:** the existing membership, role, mutation-outcome, authority-store,
 retirement, silo-lifecycle, and checkpoint-codec laws as regressions with the
 consent, session, durable-result, and roster-survival cases added; the
-real-process canary for group authority, recipient consent, reload survival,
+real-process `puck sweep` signal for group authority, recipient consent, reload survival,
 and qualified membership across two authenticated authorities, with dropped
 replies and a takeover while the old writer keeps running; every denial with a
 successful control and an actor distinct from the target.
 
 ### Parties and matching
+
+Dormant until the fundamentals land.
 
 **Owns:** `WorldGroupCommandModule`, the in-world finder panel, the authored
 activity schema (pinned destination and policy revision, size, composition
@@ -371,6 +409,8 @@ and asymmetric combinations, stale snapshots, and competing proposals; bounded
 progress under load.
 
 ### Admission and release
+
+Dormant until the fundamentals land.
 
 **Owns:** target-issued assignment generation and roster admission across
 source authorities through the resolver, federation codec, transfer escrow and
@@ -410,6 +450,9 @@ time, reconnect recovery time, queue age, tick impact, and storage operations
 per group recorded.
 
 ### MCP — the local surface
+
+Dormant until the fundamentals land; the Operator surface in place keeps
+working.
 
 **Owns:** the Operator profile's tools and attachment (`puck mcp --profile
 operator`, `OperatorMcpServer`), the Participant composition over
@@ -468,6 +511,8 @@ checked by the `McpAdversarialTests` and `RemoteMcp*Tests` suites in
 
 ### MCP — the remote surface
 
+Dormant until the fundamentals land.
+
 **Owns:** the parity runner as an isolated job and approved device handles
 with revocation; live Entra consent, DNS and ACME, first-party and external
 sign-in, deployment; Participant authority bindings and durable delegated
@@ -503,7 +548,8 @@ a live tenant today; the Azure suite runs against scripted services.
 ### Composed play
 
 **Owns:** the chess source's board `enforcement` and result verdicts
-(`worlds/debug/chess.puck`), a reusable rules fragment for it, and the
+(`worlds/debug/chess.puck`), the reusable chess rules fragment, which moves to
+a shared package under `worlds/` that the debug world imports, and the
 composed-game acceptance check.
 
 **Delivers:** the shipped chess source already has an authored `search` job as
@@ -520,21 +566,23 @@ then poker with two participant identities in the same roles. A capacity
 failure here needs accurate work pricing or a general correction, never a
 game-specific bypass.
 
-**Check:** the shipped `games/` fragments and the parlor package boot and
-their law suites pass; the three compositions run in one world.
+**Check:** the debug world boots through `puck_world_start` with the shared
+chess package and the parlor package; their `*-tests.puck` scenarios reproduce;
+the three compositions run in one world, read through `puck_exec`.
 
 ## Sequencing
 
 | Step | Packages, in parallel | Why here |
 |---|---|---|
-| 1 — today | The finder's foundation; MCP's local surface; the population's canary widening | None reads the rebuilt state vocabulary. |
-| 2 — after the rebuild lands | The playthrough substrate remainder; the population's frames, tape, and ghosts; composed play | These rewrite or author the rows the rebuild is rewriting. |
-| 3 | The content wave and the One World re-authoring; the seat; parties and matching | The content wave needs districts; the seat opens with the view state so feel stays the gate. |
-| 4 | The federation wave; admission and release; MCP's remote surface; the gated ladder from its first row | Destination admission across sources needs the federation wave's attestation. |
-| 5 | The federation remainder; the audio remainder; the forcing artifact end to end | The remainder's rows are what a played world asks for. |
+| 1 — the fundamentals | The [engine job system](open-items.md#engine-job-system) and the packets ranked before it (frame time, the bake, state storage) | The population's workload and every consumer below are sized by what these decide. |
+| 2 — the finder and MCP surfaces | The finder's foundation; MCP's local surface; the population's signal widening | None reads the rebuilt state vocabulary. |
+| 3 — after the rebuild lands | The playthrough substrate remainder; the population's frames, tape, and ghosts; composed play | These rewrite or author the rows the rebuild is rewriting. |
+| 4 | The content wave (the porting packet's features); the seat; parties and matching | The content wave needs places; the seat opens with the chase-camera template so feel stays the gate. |
+| 5 | The federation wave; admission and release; MCP's remote surface; the gated ladder from its first row | Destination admission across sources needs the federation wave's attestation. |
+| 6 | The federation remainder; the audio remainder; the forcing artifact end to end | The remainder's rows are what a played world asks for. |
 | Last | Housekeeping | Once, over the settled tree. |
 
-Deferred until the forcing world plays, and re-asked at step 5: how another
+Deferred until the forcing world plays, and re-asked at step 6: how another
 identity's world attaches to the hub; the pre-allocation embodiment subject;
 multi-world replay tape ownership; ephemeral terminal policy; federated group
 proof through issuer-qualified group ids; the admission-policy
@@ -546,34 +594,17 @@ beyond the provisional targets.
 
 ## Verification summary
 
-```bash
-dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
-```
+A change is read by running it. Boot `worlds/debug` with the `puck` server's
+`puck_world_start` (headless needs no grant; `windowed: true` is a granted GPU
+leg), read and mutate it with `puck_exec`, and capture a frame with
+`puck_capture_frame`.
 
 ```bash
-puck canary
-```
-
-```bash
-puck landing --against origin/main --base <the commit the branch was authored from>
+puck sweep
 ```
 
 ```bash
 puck parity
-```
-
-```bash
-dotnet test tests/Puck.World.Server.Tests -c Release
-dotnet test tests/Puck.World.Games.Tests -c Release
-dotnet test tests/Puck.World.Machines.Tests -c Release
-dotnet test tests/Puck.World.Client.Tests -c Release
-dotnet test tests/Puck.World.Presentation.Tests -c Release
-dotnet test tests/Puck.World.Silo.Tests -c Release
-dotnet test tests/Puck.World.Tests -c Release
-```
-
-```bash
-dotnet test tests/Puck.World.Schema.Tests -c Release
 ```
 
 ```bash
@@ -585,14 +616,15 @@ puck docs links
 What the programme still owes. A line is deleted when its work lands, never
 ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
 
-- [The finder's foundation](#the-finders-foundation) (startable today).
-- [MCP's local surface](#mcp--the-local-surface) (startable today).
-- [The population](#the-population): the canary widening (startable today);
-  frames; the neighbour tape and ghosts.
+- [The finder's foundation](#the-finders-foundation) and
+  [MCP's local surface](#mcp--the-local-surface): dormant until the
+  fundamentals land.
+- [The population](#the-population): waits for the job-system memo; the signal
+  widening, frames, the neighbour tape and ghosts.
 - [The playthrough substrate remainder](#the-playthrough-substrate-remainder);
   [composed play](#composed-play).
-- [The content wave](#the-content-wave) and the One World re-authoring;
-  [the seat](#the-seat); [parties and matching](#parties-and-matching).
+- [The content wave](#the-content-wave) and the porting of the experimental
+  worlds' missing features; [the seat](#the-seat); [parties and matching](#parties-and-matching).
 - [The federation wave](#the-federation-wave-and-the-remainder);
   [admission and release](#admission-and-release);
   [MCP's remote surface](#mcp--the-remote-surface); the gated ladder.

@@ -21,7 +21,7 @@ seams after phase 1. The memo is the second revision: the first
 the frame) had its one cross-family review, and [its findings](#review-resolution)
 changed the shape.
 
-The goal is the [frame-rate bar](../decisions/rendering.md#the-frame-rate-bar):
+The goal is the [frame-rate bar](../decisions/rendering.md):
 on the RTX 4070 every frame under 16.7 ms at the highest settings. Today a
 windowed iteration that carries a 30 Hz tick pays the tick (6 to 12 ms walking,
 2 to 4 standing) and the frame's produce (6 to 7 ms on Direct3D 12, 8 to 11 on
