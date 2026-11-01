@@ -3,6 +3,30 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed partial class ConsoleDisclosureLawTests {
+    [Fact]
+    public void OmitSlotReadbackCannotDistinguishAHiddenCellFromAnEmptySlot() {
+        WorldDefinition Document(bool hidden) => Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                Name: CellName.Parse("slot"), Kind: CellKind.Int, Domain: StateDomain.Slot.Instance,
+                Visibility: new StateVisibility(Readers: ["seat1"], Hidden: HiddenCells.Omit),
+                Cells: hidden ? [Cell(StateRow.SlotKey.Value, Sealed)] : [])])
+        };
+        using var hidden = new DisclosureHost(Document(true));
+        using var missing = new DisclosureHost(Document(false));
+        foreach (var command in new[] { "world.state", "world.state slot", "world.state slot $value", "world.row state slot", "world.observe seat2" }) {
+            Assert.Equal(missing.Seat(slot: 1, line: command), hidden.Seat(slot: 1, line: command));
+        }
+    }
+    [Fact]
+    public void SerializationDoesNotEraseAnInvalidSlotCellPolicyBeforeValidation() {
+        var document = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(Name: CellName.Parse("private"), Kind: CellKind.Int,
+                Cells: [Cell(StateRow.SlotKey.Value, Sealed, new StateVisibility(Readers: ["seat1"]))])])
+        };
+        var bytes = WorldDefinitionSerialization.Serialize(document);
+        var refusal = Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(bytes));
+        Assert.Contains("slot visibility belongs on the row", refusal.Message, StringComparison.Ordinal);
+    }
     private static PatternRow DisclosurePattern() => new(Name: CellName.Parse("all"), Kind: CellKind.Int,
         Symbols: [new PatternSymbol(Name: CellName.Parse("value"), Min: long.MinValue, Max: long.MaxValue)],
         Pattern: new PatternNode.Star(Item: new PatternNode.Symbol(Name: "value")));
