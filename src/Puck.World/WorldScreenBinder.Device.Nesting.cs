@@ -260,6 +260,8 @@ public sealed partial class WorldScreenBinder {
         /// <inheritdoc/>
         public SdfScreenFace FaceOf(int screen) => WorldScreenBinder.FaceOf(row: feed.Nested?.RowOf(screen: screen));
         /// <inheritdoc/>
+        public SdfScreenTreatment TreatmentOf(int screen) => WorldScreenBinder.TreatmentOf(material: feed.Nested?.MaterialOf(screen: screen));
+        /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) => (((feed.Nested is { } screens) && screens.Mappings.TryGet(
             mapping: out var mapping,
             screen: screen
@@ -286,6 +288,8 @@ public sealed partial class WorldScreenBinder {
         public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: binder.m_routedScreens.GetValueOrDefault(key: scene)?.RowOf(screen: screen));
         /// <inheritdoc/>
         public SdfScreenFace FaceOf(int screen) => WorldScreenBinder.FaceOf(row: binder.m_routedScreens.GetValueOrDefault(key: scene)?.RowOf(screen: screen));
+        /// <inheritdoc/>
+        public SdfScreenTreatment TreatmentOf(int screen) => WorldScreenBinder.TreatmentOf(material: binder.m_routedScreens.GetValueOrDefault(key: scene)?.MaterialOf(screen: screen));
         /// <inheritdoc/>
         public SourceMapping? MappingOf(int screen) {
             if (

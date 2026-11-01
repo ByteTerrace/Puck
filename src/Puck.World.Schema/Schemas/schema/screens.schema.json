@@ -297,13 +297,12 @@
         "title": "WorldScreenCarry"
       },
       "material": {
-        "description": "How the face presents its picture (WorldScreenMaterial): Plain, the default, shows it as its source made it, filling the face; Crt draws it through a cathode-ray tube\u0027s glass, and a pointer hit maps through that glass\u0027s bezel. Refused on a window, which is an opening rather than a display. Omitted from the wire when Plain.",
-        "enum": [
-          "Plain",
-          "Crt"
+        "description": "The id of the screen material (WorldScreenMaterial, the document\u0027s screenMaterials) the face draws its picture through, or null for none: the picture as its source made it, filling the face. Refused on a window, which is an opening rather than a display. Omitted from the wire when null.",
+        "type": [
+          "string",
+          "null"
         ],
-        "default": "Plain",
-        "title": "WorldScreenMaterial"
+        "default": null
       }
     },
     "required": [

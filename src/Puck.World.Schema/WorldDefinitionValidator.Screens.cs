@@ -236,8 +236,12 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{opPath}.closeTargetFullFraction must be less than closeTargetStartFraction.");
                     }
                     if (lookAt.CloseTargetOffset is { } closeTarget) {
-                        if (!VectorFunctions.IsFinite(vector: closeTarget)) {
-                            errors.Add(item: $"{opPath}.closeTargetOffset must contain finite coordinates.");
+                        if (
+                            (closeTarget.Fade is null) || (closeTarget.Cutaway is null) ||
+                            !VectorFunctions.IsFinite(vector: closeTarget.Fade) ||
+                            !VectorFunctions.IsFinite(vector: closeTarget.Cutaway)
+                        ) {
+                            errors.Add(item: $"{opPath}.closeTargetOffset must name a fade and a cutaway target with finite coordinates.");
                         }
                         if (lookAt.Subject is null) {
                             errors.Add(item: $"{opPath}.closeTargetOffset requires a subject.");
@@ -810,6 +814,45 @@ public static partial class WorldDefinitionValidator {
 
     // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
     // real duplication risk (a magazine entry could otherwise name an undeclared camera).
+    // The screen materials: unique ids, and every term in its range.
+    private static void ValidateScreenMaterials(IReadOnlyList<WorldScreenMaterial> materials, List<string> errors) {
+        var ids = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < materials.Count); index++) {
+            var material = materials[index];
+            var path = $"screenMaterials[{index}]";
+
+            if (material is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            _ = RequireUniqueName(value: material.Id, seen: ids, path: path, field: "id", errors: errors);
+            RequireUnitInterval(value: material.Scanlines, name: $"{path}.scanlines", errors: errors);
+            RequireUnitInterval(value: material.SubpixelStripes, name: $"{path}.subpixelStripes", errors: errors);
+            RequireUnitInterval(value: material.Vignette, name: $"{path}.vignette", errors: errors);
+            RequireUnitInterval(value: material.Glint, name: $"{path}.glint", errors: errors);
+            RequirePositive(value: material.GlintPower, name: $"{path}.glintPower", errors: errors);
+            RequireRange(value: material.CornerRadius, min: 0f, max: 0.5f, maxExclusive: true, name: $"{path}.cornerRadius", errors: errors);
+            RequireRange(value: material.EdgeSoftness, min: 0f, max: 0.5f, maxExclusive: true, name: $"{path}.edgeSoftness", errors: errors);
+        }
+    }
+    // A screen's or face's material names a declared screen material, and never on a window: a window is an opening onto
+    // another place, not a display.
+    private static void ValidateScreenMaterialName(WorldDefinition definition, string? material, WorldScreenSource? source, string path, List<string> errors) {
+        if (material is null) {
+            return;
+        }
+
+        if (definition.ScreenMaterialOf(id: material) is null) {
+            errors.Add(item: $"{path} '{material}' names no declared screen material (screenMaterials).");
+        }
+
+        if (source is WorldScreenSource.Session { Projection: WorldScreenProjection.Window }) {
+            errors.Add(item: $"{path} '{material}' is refused on a window: a window is an opening, not a display.");
+        }
+    }
     private static void ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors, ICollection<string>? deferred) {
         var cameras = scope.Cameras;
         var destinationNames = scope.DestinationNames;
@@ -916,7 +959,14 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.ClearanceMode) || (control.ClearanceMode == WorldCameraClearanceChoice.Auto)) {
             errors.Add(item: $"{path}.clearanceMode must be Fade or Cutaway.");
         }
-        RequireRange(value: control.ClearanceMaxElevation, min: 0f, max: (MathF.PI / 2f), name: $"{path}.clearanceMaxElevation", errors: errors);
+        if (control.MaxRise is not { } maxRise) {
+            errors.Add(item: $"{path}.maxRise is required.");
+        } else {
+            RequireRange(value: maxRise.Fade, min: 0f, max: (MathF.PI / 2f), name: $"{path}.maxRise.fade", errors: errors);
+            RequireRange(value: maxRise.Cutaway, min: 0f, max: (MathF.PI / 2f), name: $"{path}.maxRise.cutaway", errors: errors);
+        }
+        RequirePositive(value: control.EyeRadius, name: $"{path}.eyeRadius", errors: errors);
+        RequirePositive(value: control.SurfaceSkin, name: $"{path}.surfaceSkin", errors: errors);
         if (control.AutoFirstPerson is { } automatic) {
             RequirePositive(value: automatic.EntryDistance, name: $"{path}.autoFirstPerson.entryDistance", errors: errors);
             RequirePositive(value: automatic.ExitDistance, name: $"{path}.autoFirstPerson.exitDistance", errors: errors);

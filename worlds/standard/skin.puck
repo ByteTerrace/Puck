@@ -129,3 +129,22 @@ theme {
     }
   }
 }
+
+// The standard's screen materials, which a screen row or a creation face names by id (`material: "crt"`). A material is
+// the display's own pixel structure drawn over its picture, which always fills the face: a device's glass is exactly its
+// picture, and any bezel is geometry the device authors around the face. A seat that frames the screen fades the whole
+// treatment out, so the framed picture is source-exact. A world refines a row by id or adds its own.
+screenMaterials [
+  // A cathode-ray tube: subtle scanlines, one a source row, faint red, green and blue stripes across each source column,
+  // near-square corners and a crisp edge.
+  {
+    id: "crt"
+    scanlines: 0.06
+    subpixelStripes: 0.05
+    vignette: 0
+    glint: 0
+    glintPower: 3
+    cornerRadius: 0.004
+    edgeSoftness: 0.004
+  }
+]

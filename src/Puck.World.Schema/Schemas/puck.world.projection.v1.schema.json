@@ -11503,13 +11503,12 @@
             "title": "WorldScreenCarry"
           },
           "material": {
-            "description": "How the face presents its picture (WorldScreenMaterial): Plain, the default, shows it as its source made it, filling the face; Crt draws it through a cathode-ray tube\u0027s glass, and a pointer hit maps through that glass\u0027s bezel. Refused on a window, which is an opening rather than a display. Omitted from the wire when Plain.",
-            "enum": [
-              "Plain",
-              "Crt"
+            "description": "The id of the screen material (WorldScreenMaterial, the document\u0027s screenMaterials) the face draws its picture through, or null for none: the picture as its source made it, filling the face. Refused on a window, which is an opening rather than a display. Omitted from the wire when null.",
+            "type": [
+              "string",
+              "null"
             ],
-            "default": "Plain",
-            "title": "WorldScreenMaterial"
+            "default": null
           }
         },
         "required": [
@@ -11830,24 +11829,58 @@
                           "default": 6
                         },
                         "closeTargetOffset": {
-                          "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
-                          "default": null,
-                          "title": "DocumentVector3",
-                          "anyOf": [
-                            {
-                              "type": "array",
-                              "items": {
-                                "type": "number"
-                              },
-                              "minItems": 3,
-                              "maxItems": 3
+                          "description": "The target offsets approached as collision shortens a seat\u0027s boom, one per clearance treatment, in the axes of TargetOffset; absent keeps the rest target.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "fade": {
+                              "description": "The close target while the seat fades its body.",
+                              "title": "DocumentVector3",
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                }
+                              ]
                             },
-                            {
-                              "type": "string",
-                              "minLength": 1,
-                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "cutaway": {
+                              "description": "The close target while the seat cuts walls away.",
+                              "title": "DocumentVector3",
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                }
+                              ]
                             }
-                          ]
+                          },
+                          "required": [
+                            "fade",
+                            "cutaway"
+                          ],
+                          "additionalProperties": false,
+                          "default": null,
+                          "title": "WorldCameraCloseTarget"
                         },
                         "closeTargetStartFraction": {
                           "description": "The boom fraction below which target migration begins.",
@@ -14402,7 +14435,7 @@
               "type": "number"
             },
             "gyro": {
-              "description": "The optional full-axis gyro projection. Absent resolves to Default.",
+              "description": "The optional full-axis gyro projection. Absent resolves to None.",
               "type": [
                 "object",
                 "null"
@@ -14414,7 +14447,7 @@
                   "default": 1
                 },
                 "deadZone": {
-                  "description": "Independent X/Y/Z dead zones in radians per second.",
+                  "description": "Gets the independent X/Y/Z dead zones in radians per second; zero where none is authored.",
                   "default": null,
                   "type": "array",
                   "items": {
@@ -14439,7 +14472,7 @@
                   "default": false
                 },
                 "yaw": {
-                  "description": "The X/Y/Z projection weights producing semantic look-right angular velocity.",
+                  "description": "Gets the X/Y/Z projection weights producing semantic look-right angular velocity; zero where none is authored.",
                   "default": null,
                   "type": "array",
                   "items": {
@@ -14449,7 +14482,7 @@
                   "maxItems": 3
                 },
                 "pitch": {
-                  "description": "The X/Y/Z projection weights producing semantic look-up angular velocity.",
+                  "description": "Gets the X/Y/Z projection weights producing semantic look-up angular velocity; zero where none is authored.",
                   "default": null,
                   "type": "array",
                   "items": {
@@ -25248,13 +25281,12 @@
                   "title": "GpuSamplerFilter"
                 },
                 "material": {
-                  "description": "How the face\u0027s screen presents its picture, as a screen row\u0027s Material does: Plain, the default, or Crt. Refused on a window. Omitted from the wire when Plain.",
-                  "enum": [
-                    "Plain",
-                    "Crt"
+                  "description": "The id of the screen material the face\u0027s screen draws its picture through, as a screen row\u0027s Material does, or null for none. Refused on a window. Omitted from the wire when null.",
+                  "type": [
+                    "string",
+                    "null"
                   ],
-                  "default": "Plain",
-                  "title": "WorldScreenMaterial"
+                  "default": null
                 }
               },
               "required": [
@@ -26936,8 +26968,32 @@
               ],
               "title": "WorldCameraClearanceChoice"
             },
-            "clearanceMaxElevation": {
-              "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians, within [0, \u03C0/2]. Fade never rises, so only cutaway reads it.",
+            "maxRise": {
+              "description": "The most the boom rises above the rig\u0027s own elevation, in radians, for each treatment.",
+              "type": "object",
+              "properties": {
+                "fade": {
+                  "description": "The rise ceiling while the seat fades its body, in [0, \u03C0/2].",
+                  "type": "number"
+                },
+                "cutaway": {
+                  "description": "The rise ceiling while the seat cuts walls away, in [0, \u03C0/2].",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "fade",
+                "cutaway"
+              ],
+              "additionalProperties": false,
+              "title": "WorldCameraClearanceRise"
+            },
+            "eyeRadius": {
+              "description": "The full-size radius, in metres, of the sphere the chase eye keeps clear of geometry and, in cutaway, the body.",
+              "type": "number"
+            },
+            "surfaceSkin": {
+              "description": "The full-size nearest distance, in metres, the eased eye\u0027s centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.",
               "type": "number"
             },
             "follow": {
@@ -27067,7 +27123,9 @@
             "minPitch",
             "maxPitch",
             "clearanceMode",
-            "clearanceMaxElevation"
+            "maxRise",
+            "eyeRadius",
+            "surfaceSkin"
           ],
           "additionalProperties": false,
           "default": null,

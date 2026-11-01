@@ -78,9 +78,9 @@ internal sealed partial class ScreenCommandModule {
                 ? $" display:fill={(screen.Route.Display?.Fill ?? WorldScreenDisplay.DefaultFill)}"
                 : ""
             );
-            // The material a display opts into; a plain screen names none.
-            var materialText = ((screen.Material == WorldScreenMaterial.Crt)
-                ? " material:crt"
+            // The screen material a display draws through; a plain screen names none.
+            var materialText = ((screen.Material is { } material)
+                ? $" material:{material}"
                 : ""
             );
             // How a local pad's sticks drive the pointer over the framed window.

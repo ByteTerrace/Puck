@@ -6,13 +6,16 @@
 // `../debug/avatars/moth-camera.puck`):
 //
 //   import "../../standard/camera"
-//   chaseCamera(rig: "my-camera", pivotOffset: [0, 0.9, 0], closeTargetOffset: [0, 1.5, 0], eyePoint: [0, 1.6, 0.2])
+//   chaseCamera(rig: "my-camera", pivotOffset: [0, 0.9, 0], fadeCloseTarget: [0, 1.5, 0], cutawayCloseTarget: [0, 1.35, 0], eyePoint: [0, 1.6, 0.2])
 //
 // The defaults are the standard template's values from the chase-camera decision (docs/decisions/play.md, "The chase
 // camera"): fade with the waist-to-head target shift, a 4.2 m boom at 0.3 rad, automatic first person off. Distances
 // are full-size metres, angles radians. Cutaway is one argument away (`clearanceMode: "Cutaway"`), and a player
-// switches between the two live (`player.camera.clearance`); `maxRise` is the ceiling only cutaway rises to, since fade
-// keeps the boom on its requested heading and pitch.
+// switches between the two live (`player.camera.clearance`). Each treatment has its own rise ceiling above the rig's
+// elevation (`fadeMaxRise`, `cutawayMaxRise`) and its own close target (`fadeCloseTarget`, `cutawayCloseTarget`): the
+// boom rises only when no level pull-in keeps the eye out past the fade's minimum boom, or past the body in cutaway.
+// `eyeRadius` is the sphere the eye keeps clear of geometry (and the body, in cutaway), and `surfaceSkin` the nearest the
+// eased eye's centre comes to geometry along the boom.
 
 // The interactive boom's zoom: the nearest and farthest requested distance and the distance one input unit moves.
 let cameraBoom = { minimum: 1.5, maximum: 12, step: 0.6 }
@@ -30,6 +33,14 @@ template cameraResponse() {
       pitchSensitivity: 0.001
       stickLookRate: 3.5
       yawSensitivity: 0.001
+      // A pad's gyro: its pitch drives look pitch, and its yaw and roll both drive look yaw, past a 0.02 rad/s dead
+      // zone on each axis.
+      gyro {
+        scale: 1
+        deadZone [0.02, 0.02, 0.02]
+        yaw [0, -1, -1]
+        pitch [1, 0, 0]
+      }
     }
   }
 
@@ -49,14 +60,17 @@ template cameraFeel() {
   }
 }
 
-// A seated body's chase camera. `pivotOffset` is the rest look target at full boom length, `closeTargetOffset` the
-// target the look migrates to as geometry shortens the boom from `closeTargetStart` to `closeTargetFull` of its length,
+// A seated body's chase camera. `pivotOffset` is the rest look target at full boom length, `fadeCloseTarget` and
+// `cutawayCloseTarget` the targets the look migrates to, under each treatment, as geometry shortens the boom from
+// `closeTargetStart` to `closeTargetFull` of its length,
 // and `eyePoint` the first-person eye, each in the body's frame. The fade dissolves the body from `fadeStart` to `fadeEnd`
 // metres of boom and keeps at least `minimumBoom` where the room allows it; first person hides the body inside
 // `hideRadius` and eases in over `transitionSeconds`. Automatic first person, when enabled, enters after the room behind
 // the head stays under `autoEntryDistance` for `autoEntrySeconds` and leaves once it stays over `autoExitDistance` for
 // `autoExitSeconds`.
-template chaseCamera(rig, pivotOffset = [0, 1, 0], closeTargetOffset = [0, 1.74, 0], eyePoint = [0, 1.75, 0.22], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearanceMode = "Fade", maxRise = 1.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
+template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0], cutawayCloseTarget = [0, 1.55, 0], eyePoint = [
+  0, 1.75, 0.22
+], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearanceMode = "Fade", fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
   cameraResponse()
 
   views {
@@ -68,7 +82,12 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], closeTargetOffset = [0, 1.74,
         endDistance: fadeEnd
         minimumBoom: minimumBoom
       }
-      clearanceMaxElevation: maxRise
+      maxRise {
+        fade: fadeMaxRise
+        cutaway: cutawayMaxRise
+      }
+      eyeRadius: eyeRadius
+      surfaceSkin: surfaceSkin
       autoFirstPerson {
         enabled: autoFirstPerson
         entryDistance: autoEntryDistance
@@ -92,7 +111,7 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], closeTargetOffset = [0, 1.74,
           subject: reference(),
           targetOffset: pivotOffset,
           worldAxes: true,
-          closeTargetOffset: closeTargetOffset,
+          closeTargetOffset: { fade: fadeCloseTarget, cutaway: cutawayCloseTarget },
           closeTargetStartFraction: closeTargetStart,
           closeTargetFullFraction: closeTargetFull
         )

@@ -27,8 +27,8 @@ namespace Puck.World;
 /// unaffected: the face still opens, it just shows nothing.</param>
 /// <param name="Filter">How the face's screen samples its source: the placement's face row's
 /// <see cref="WorldPlacementFace.Filter"/>, or <see cref="GpuSamplerFilter.Nearest"/> when no row overrides the face.</param>
-/// <param name="Material">How the face's screen presents its picture: the placement's face row's
-/// <see cref="WorldPlacementFace.Material"/>, or <see cref="WorldScreenMaterial.Plain"/> when no row overrides the face.</param>
+/// <param name="Material">The screen material the face's screen draws its picture through: the placement's face row's
+/// <see cref="WorldPlacementFace.Material"/>, or <see langword="null"/> when no row overrides the face.</param>
 public readonly record struct WorldFaceRow(
     string PlacementId,
     string FaceName,
@@ -40,7 +40,7 @@ public readonly record struct WorldFaceRow(
     int ScreenIndex,
     bool SlotStarved,
     GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
-    WorldScreenMaterial Material = WorldScreenMaterial.Plain
+    string? Material = null
 );
 /// <summary>
 /// The one derivation of a document's placement faces — <c>(placements x declared creation faces)</c> walked once,
@@ -202,7 +202,7 @@ public sealed class WorldFaceCatalog {
                     ),
                     Aperture: WorldFaceApertures.For(primitive: shape?.Type),
                     Filter: (faceOverride?.Filter ?? GpuSamplerFilter.Nearest),
-                    Material: (faceOverride?.Material ?? WorldScreenMaterial.Plain),
+                    Material: faceOverride?.Material,
                     Source: source,
                     ScreenIndex: seated,
                     SlotStarved: starved
