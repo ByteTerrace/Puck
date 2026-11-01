@@ -1730,6 +1730,18 @@ them verbatim repeats) under-use the language:
 
 ### Lighting and GI
 
+- [high · unconfirmed] A sun that moves every frame freezes indirect light.
+  Each direction change starts a new lighting generation
+  (`SdfMeshIrradiance.cs:759-779`), and a trace batch landing after a
+  generation change is discarded (`:1067`), so GI sticks at the last sun that
+  held still. The debug world's sun is static (`worlds/debug/hall.puck:1413`),
+  so nothing has exercised it; the owner's authored day cycle will. Confirm
+  with a run that binds the key light to a clock, then fix it with the
+  illumination research's plan. (from: research-claude)
+- The probe trace casts two ray sets from one origin: 128 for radiance
+  (`SdfMeshIrradiance.cs:1245`) and 144 for depth (`SdfMeshProbeDepth.cs:19`).
+  This is duplication to converge into one hit buffer. (from: research-claude)
+
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
 arrives (shading-side, now); the exposure meter is the
@@ -2121,6 +2133,14 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unconfirmed] The bake's output may differ by backend. One after-run
+  read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
+  999,550,075 and 38,652,955 on Direct3D 12, but those runs straddled the
+  meadow's merge. The meadow lane read 1,101,618,980 (Direct3D 12) against
+  1,101,543,801 (Vulkan) on one tree. Compare both backends' counts on one
+  tree; a bake whose geometry depends on the backend is a defect. (from:
+  mem-fixes, meadow)
+
 Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: Vulkan's
 crossing frame (52.5 ms of produce) and the pixel-pass gap at locked clocks.
 
@@ -2232,6 +2252,9 @@ The suite target (100 % line coverage plus the keep-list) and CI's `coverage` jo
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
 
+- Four `Puck.SdfVm.Tests` laws fail on the integration head with or without
+  the memory fixes: store repeated load, skinned settle, cubic lattice and
+  static union copy. The settle-cap law fails intermittently. (from: mem-fixes)
 - After the job-system batch's merges, five server tests fail:
   `HistoryRefusalLawTests`, `CellBurstLawTests`, `InhabitCountLawTests`,
   `WorldExtensionLawTests`, and `AddonGuestLawTests` (a 30 s timeout). The
