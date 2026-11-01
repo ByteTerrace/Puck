@@ -1,85 +1,54 @@
 using Puck.Assets.Documents;
-using Puck.Testing;
+using Puck.Commands;
 using Xunit;
 
 namespace Puck.World.Games.Tests;
 
-/// <summary>CONTRACT UNDER TEST: the <c>editor</c> section changes nothing a world does until a builder uses it. Every
-/// shipped world boots with the section absent, resolving to <see cref="WorldEditorDefaults.Default"/> (the grid hidden,
-/// snapping off); every shipped world with the default authored still validates and writes the same bytes it reads
-/// back; and an invalid value is refused by its document path.</summary>
-public sealed class WorldEditorSectionLawTests : IDisposable {
-    private readonly TemporaryDirectory m_staging = new();
+/// <summary>CONTRACT UNDER TEST: an invalid <c>editor</c> value is refused by its document path, and a valid section
+/// passes.</summary>
+public sealed class WorldEditorSectionLawTests {
+    private static readonly WorldEditorDefaults Valid = new(
+        Bar: WorldBindingBarAuthoring.Absent,
+        Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
+        Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new DocumentVector3(x: 1f, y: 1f, z: 1f), PlaneY: 0f, Visible: false),
+        ReadOnlyLabel: "read-only",
+        Snap: new WorldEditorSnap(AngleStepDegrees: 15f, Enabled: false, ObjectPatchRadius: 2.5f, Surface: true),
+        Toggle: new BindingPageEntryDefinition(Command: "player.build", Id: "editor.toggle", Sources: ["keyboard.f2"])
+    );
 
-    public static TheoryData<string> Shipped() => [.. WorldDocumentCorpus.ShippedDocuments().Order(comparer: StringComparer.Ordinal)];
-
-    private static List<string> Errors(WorldDefinition definition) {
+    private static List<string> Errors(WorldEditorDefaults editor) {
         var errors = new List<string>();
 
         _ = WorldDefinitionValidator.TryValidateLocally(
             compilation: out _,
-            definition: definition,
+            definition: (Fixtures.BuildDocument() with { EditorRaw = editor }),
             errors: errors
         );
 
         return errors;
     }
 
-    public void Dispose() => m_staging.Dispose();
-    [MemberData(nameof(Shipped))]
-    [Theory]
-    public void EveryShippedWorldBuildsFromTheDefaultAndRoundTripsItAuthored(string relativePath) {
-        if (!WorldDocumentCorpus.TryBoot(
-            path: RepositoryPaths.Resolve(relativePath: relativePath),
-            reason: out _,
-            stagingDirectory: Directory.CreateDirectory(path: m_staging.PathOf(name: Guid.NewGuid().ToString(format: "N"))).FullName,
-            worlds: out var worlds
-        )) {
-            return;
-        }
-
-        foreach (var (source, definition) in worlds) {
-            Assert.True(condition: (definition.EditorRaw is null), userMessage: $"{source} authors an editor section");
-            Assert.Same(expected: WorldEditorDefaults.Default, actual: definition.Editor);
-            Assert.False(condition: definition.Editor.ResolvedGrid.Visible);
-            Assert.False(condition: definition.Editor.ResolvedSnap.Enabled);
-
-            var authored = (definition with {
-                EditorRaw = new WorldEditorDefaults(
-                    Camera: new WorldEditorCamera(),
-                    Grid: new WorldEditorGrid(),
-                    Snap: new WorldEditorSnap()
-                ),
-            });
-            var written = WorldDefinitionSerialization.Serialize(definition: authored);
-            var read = WorldDefinitionSerialization.Deserialize(
-                documentDirectory: authored.DocumentDirectory,
-                utf8Json: written
-            );
-
-            Assert.Equal(expected: authored.EditorRaw, actual: read.EditorRaw);
-            Assert.Equal(expected: written, actual: WorldDefinitionSerialization.Serialize(definition: read));
-        }
-    }
     [Fact]
     public void AnInvalidEditorValueIsRefusedByItsPath() {
-        var definition = Fixtures.BuildDocument();
-
         Assert.DoesNotContain(
-            collection: Errors(definition: (definition with { EditorRaw = new WorldEditorDefaults(Grid: new WorldEditorGrid(Pitch: new DocumentVector3(x: 1f, y: 1f, z: 1f))) })),
+            collection: Errors(editor: Valid),
             filter: static error => error.StartsWith(comparisonType: StringComparison.Ordinal, value: "editor.")
         );
         Assert.Contains(
-            collection: Errors(definition: (definition with { EditorRaw = new WorldEditorDefaults(Grid: new WorldEditorGrid(Pitch: new DocumentVector3(x: 0.5f, y: 0f, z: 0.5f))) })),
+            collection: Errors(editor: (Valid with { Grid = (Valid.Grid with { Pitch = new DocumentVector3(x: 0.5f, y: 0f, z: 0.5f) }) })),
             filter: static error => error.StartsWith(comparisonType: StringComparison.Ordinal, value: "editor.grid.pitch[1]")
         );
         Assert.Contains(
-            collection: Errors(definition: (definition with { EditorRaw = new WorldEditorDefaults(Snap: new WorldEditorSnap(AngleStepDegrees: 0f)) })),
+            collection: Errors(editor: (Valid with { Snap = (Valid.Snap with { AngleStepDegrees = 0f }) })),
             filter: static error => error.StartsWith(comparisonType: StringComparison.Ordinal, value: "editor.snap.angleStepDegrees")
         );
         Assert.Contains(
-            collection: Errors(definition: (definition with { EditorRaw = new WorldEditorDefaults(Camera: new WorldEditorCamera(MaxDistance: 0.25f, MinDistance: 0.5f)) })),
+            collection: Errors(editor: (Valid with { Camera = (Valid.Camera with { MaxDistance = 0.25f }) })),
             filter: static error => error.StartsWith(comparisonType: StringComparison.Ordinal, value: "editor.camera.minDistance")
+        );
+        Assert.Contains(
+            collection: Errors(editor: (Valid with { Toggle = (Valid.Toggle with { Id = null }) })),
+            filter: static error => error.StartsWith(comparisonType: StringComparison.Ordinal, value: "editor.toggle")
         );
     }
 }

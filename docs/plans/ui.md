@@ -31,7 +31,10 @@ with no `theme` draws the engine's neutral one (`WorldThemeSection.Default`), so
 its console, toasts, bar, wheel and cursor stay usable, and the debug world and
 the garden draw their on-screen controls through the authored standard
 (`worlds/standard/skin.puck` and `worlds/standard/controls.puck`), with debug-only
-pages in `worlds/debug/controls.puck`. The
+pages in `worlds/debug/controls.puck`. The standard also authors the shared
+input vocabulary, the sky and quality presets, the chase-camera template and the
+editor's build page, bar and feel (`inputs`, `skies`, `quality`, `camera` and
+`editor` beside them). The
 [open items](open-items.md#author-leaks-to-the-standard) hold the packet that
 finishes it. A line is deleted when its step lands, never ticked.
 

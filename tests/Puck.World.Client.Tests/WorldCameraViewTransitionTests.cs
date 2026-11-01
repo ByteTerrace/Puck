@@ -6,7 +6,7 @@ namespace Puck.World.Client.Tests;
 
 public sealed class WorldCameraViewTransitionTests {
     private static readonly SdfCameraFirstPerson Destination = new(new Vector3(0f, 1.75f, 0.22f), false, 0.5f, 0.45f);
-    private static readonly WorldCameraAutoFirstPerson Automatic = new();
+    private static readonly WorldCameraAutoFirstPerson Automatic = new(Enabled: false, EntryDistance: 0.85f, EntrySeconds: 0.2f, ExitDistance: 1.35f, ExitSeconds: 0.15f);
 
     [Fact]
     public void ManualMoveIsContinuousReversibleAndKeepsTheSightline() {
@@ -84,10 +84,10 @@ public sealed class WorldCameraViewTransitionTests {
     public void AutomaticPreferenceIsSeatLocalAndPortablePreferenceBeatsAuthor() {
         var seat = new WorldSeatViewState();
         var other = new WorldSeatViewState();
-        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f);
+        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, WorldCameraClearanceChoice.Cutaway, 1.1f);
         var feel = WorldSeatCameraFeel.Default;
         Assert.False(seat.AutomaticFirstPerson(control, feel));
-        control = control with { AutoFirstPerson = new WorldCameraAutoFirstPerson(Enabled: true) };
+        control = control with { AutoFirstPerson = Automatic with { Enabled = true } };
         Assert.True(seat.AutomaticFirstPerson(control, feel));
         feel = feel with { AutoFirstPerson = false };
         Assert.False(seat.AutomaticFirstPerson(control, feel));
@@ -108,12 +108,12 @@ public sealed class WorldCameraViewTransitionTests {
         var orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.7f);
         var subject = new WorldChaseBody(null, root, orientation, scale);
         var head = (root + Vector3.Transform(Destination.EyePoint * scale, orientation));
-        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f);
+        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, WorldCameraClearanceChoice.Cutaway, 1.1f);
         seat.SetView(true);
         var target = (root + (Vector3.UnitY * scale));
         var eye = (target + (Vector3.UnitZ * 4.2f * scale));
         var near = seat.Clear(true, null, ref eye, ref target, subject, Vector3.UnitY,
-            SdfCameraDynamics.None, 0.5f, control: control, scale: scale, firstPerson: Destination);
+            SdfCameraDynamics.None, 0.5f, choice: WorldCameraClearanceChoice.Cutaway, control: control, scale: scale, firstPerson: Destination);
         Assert.InRange(Vector3.Distance(head, eye), 0f, 0.00001f);
         Assert.Equal(-Vector3.UnitZ, Vector3.Normalize(target - eye));
         Assert.Equal(0f, near);

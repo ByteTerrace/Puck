@@ -1,4 +1,4 @@
-import "inputs"
+import "../standard/inputs"
 import "shapes"
 import "solitaire"
 import "../standard/cards"

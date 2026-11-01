@@ -385,13 +385,15 @@ admitted, and a token matching no authored layout simply never matches; and
 `editor` publishes `play|build`, the one built-in family a seat flips itself
 (`player.build [seat]`, or `player.mode editor build|play`; reset to `play` when
 the seat is vacated). The engine composes a build layer beneath every world
-that binds anything (`WorldEditorBindings.Layer`, prepended in
-`WorldSeatBindings.BaseLayers`): the `player.build` toggle merged into the
-resting page of every group the world binds, the `build` group with the build
-page (grid, snap, place, nudge, turn), and the `{editor, build, build}` context
-row. A world that authors its own `build` group keeps it; a world that binds a
-build key keeps its own meaning, since world layers compose over the engine's.
-The World guide's *Build mode* section lists the page. Besides the built-in
+that binds anything and authors an `editor` section (`WorldEditorBindings.Layer`,
+prepended in `WorldSeatBindings.BaseLayers`): the section's authored `toggle`
+entry merged into the resting page of every group the world binds. The build
+page itself (grid, snap, place, nudge, turn, history) and its
+`{editor, build, build}` context row are the standard's `editor` binding overlay
+(`worlds/standard/editor.puck`), and a building seat whose bar places no bank
+for that page shows the section's `bar`. A world that binds a toggle source
+keeps its own meaning, since world layers compose over the engine's. The World
+guide's *Build mode* section lists the page. Besides the built-in
 families, a family may be a
 `state:<row>` family (`WorldStateBindingContext`) reading the routed world's
 scalar/keyed state; or an AUTHORED `seatModes` family (`WorldSeatModeFamily`,

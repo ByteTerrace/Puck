@@ -6,15 +6,20 @@ namespace Puck.World.Client.Tests;
 
 /// <summary>
 /// THE LAW: a seat's editor state reads through to the document and folds back into it. A value no verb moved is the
-/// document's; <see cref="WorldEditorSeats.Fold"/> hands back the authored section itself while seat 1 moved nothing,
-/// and the section with exactly seat 1's moved values once it has, into an absent section too; a vacated seat forgets
-/// what it moved. The engine's build layer rides every group's resting page with the toggle, adds the build group and
-/// its context row, and stands aside for a world that binds nothing.
+/// document's; <see cref="WorldEditorSeats.Fold"/> hands back the authored section itself while seat 1 moved nothing or
+/// the document authors none, and the section with exactly seat 1's moved values once it has; a vacated seat forgets
+/// what it moved. The build layer rides every group's resting page with the world's authored toggle, and stands aside
+/// for a world that binds nothing or authors no toggle.
 /// </summary>
 public sealed class WorldEditorSeatsLawTests {
+    private static readonly BindingPageEntryDefinition Toggle = new(Command: WorldEditorBindings.ToggleCommand, Id: "editor.toggle", Sources: ["keyboard.f2"]);
     private static readonly WorldEditorDefaults Authored = new(
-        Grid: new WorldEditorGrid(Pitch: new Vector3(value: 2f), Visible: false),
-        Snap: new WorldEditorSnap(AngleStepDegrees: 30f)
+        Bar: WorldBindingBarAuthoring.Absent,
+        Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
+        Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: 2f), PlaneY: 0f, Visible: false),
+        ReadOnlyLabel: "read-only",
+        Snap: new WorldEditorSnap(AngleStepDegrees: 30f, Enabled: false, ObjectPatchRadius: 2.5f, Surface: true),
+        Toggle: Toggle
     );
 
     [Fact]
@@ -23,7 +28,7 @@ public sealed class WorldEditorSeatsLawTests {
 
         Assert.Same(actual: seats.Fold(authored: Authored), expected: Authored);
         Assert.Null(@object: seats.Fold(authored: null));
-        Assert.Equal(actual: seats.GridOf(document: Authored, slot: 0), expected: Authored.ResolvedGrid);
+        Assert.Equal(actual: seats.GridOf(document: Authored, slot: 0), expected: Authored.Grid);
 
         // A second seat's moves have no document home and never fold.
         seats.SetGridVisible(slot: 1, visible: true);
@@ -38,16 +43,13 @@ public sealed class WorldEditorSeatsLawTests {
 
         var folded = seats.Fold(authored: Authored)!;
 
-        Assert.True(condition: folded.ResolvedGrid.Visible);
-        Assert.Equal(actual: folded.ResolvedGrid.ResolvedPitch, expected: new Vector3(value: 2f));
-        Assert.Equal(actual: folded.ResolvedSnap.AngleStepDegrees, expected: 45f);
-        Assert.Equal(actual: folded.ResolvedCamera, expected: Authored.ResolvedCamera);
+        Assert.True(condition: folded.Grid.Visible);
+        Assert.Equal(actual: folded.Grid.Pitch.Value, expected: new Vector3(value: 2f));
+        Assert.Equal(actual: folded.Snap.AngleStepDegrees, expected: 45f);
+        Assert.Equal(actual: folded.Camera, expected: Authored.Camera);
 
-        // An absent section takes the moved values over the defaults.
-        var fromAbsent = seats.Fold(authored: null)!;
-
-        Assert.True(condition: fromAbsent.ResolvedGrid.Visible);
-        Assert.Equal(actual: fromAbsent.ResolvedGrid.ResolvedPitch, expected: WorldEditorDefaults.Default.ResolvedGrid.ResolvedPitch);
+        // A document that authors no section has nothing to fold into.
+        Assert.Null(@object: seats.Fold(authored: null));
 
         // A vacated seat forgets what it moved.
         seats.Reset(slot: 0);
@@ -55,8 +57,6 @@ public sealed class WorldEditorSeatsLawTests {
     }
     [Fact]
     public void TheBuildLayerRidesEveryRestingPageAndStandsAsideForAnUnboundWorld() {
-        Assert.Null(@object: WorldEditorBindings.Layer(worldLayers: [null]));
-
         var world = new BindingProfileDocument(
             Chords: [new BindingChordDefinition(
                 Chord: [],
@@ -66,36 +66,15 @@ public sealed class WorldEditorSeatsLawTests {
             Modifiers: [],
             Version: BindingProfileDocument.CurrentVersion
         );
-        var layer = WorldEditorBindings.Layer(worldLayers: [world])!;
 
-        Assert.Collection(
-            collection: layer.Chords,
-            elementInspectors: [
-                play => {
-                    Assert.Equal(actual: play.Group.Value, expected: "play");
-                    Assert.Equal(actual: play.Page!.Id, expected: "walk");
-                    Assert.Equal(actual: Assert.Single(collection: play.Page.Entries).Command, expected: WorldEditorBindings.ToggleCommand);
-                },
-                build => {
-                    Assert.Equal(actual: build.Group.Value, expected: WorldEditorBindings.BuildGroup);
-                    Assert.Same(actual: build.Page, expected: WorldEditorBindings.BuildPageDefinition);
-                },
-            ]
-        );
-        Assert.Equal(
-            actual: Assert.Single(collection: layer.Contexts!),
-            expected: new BindingContextDefinition(Family: WorldContextFamilies.Editor, Group: WorldEditorBindings.BuildGroup, State: WorldContextFamilies.EditorBuild)
-        );
-    }
-    [Fact]
-    public void TheBuildBarShowsEveryBuildControl() {
-        var sources = WorldEditorBindings.BuildPageDefinition.Entries.SelectMany(selector: static entry => (entry.Sources ?? [])).ToHashSet(comparer: StringComparer.Ordinal);
-        var bar = WorldEditorBindings.Bar;
-        var placed = bar.LayoutNamed(name: null).Compile();
+        Assert.Null(@object: WorldEditorBindings.Layer(toggle: Toggle, worldLayers: [null]));
+        Assert.Null(@object: WorldEditorBindings.Layer(toggle: null, worldLayers: [world]));
 
-        Assert.Equal(actual: bar.SlotSet.ToHashSet(comparer: StringComparer.Ordinal), expected: sources);
-        Assert.True(condition: (bar.SlotSet.Count <= WorldBindingBarCapacity.MaxSlots));
-        Assert.Equal(actual: Assert.Single(collection: bar.Banks).PageId, expected: WorldEditorBindings.BuildPage);
-        Assert.NotNull(@object: placed);
+        var layer = WorldEditorBindings.Layer(toggle: Toggle, worldLayers: [world])!;
+        var play = Assert.Single(collection: layer.Chords);
+
+        Assert.Equal(actual: play.Group.Value, expected: "play");
+        Assert.Equal(actual: play.Page!.Id, expected: "walk");
+        Assert.Same(actual: Assert.Single(collection: play.Page.Entries), expected: Toggle);
     }
 }

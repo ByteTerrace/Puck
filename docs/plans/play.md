@@ -176,7 +176,10 @@ sitting, the touch-triggered win slice, navigation and equip facets, the
 **Delivers:** the seat delivers the standard chase-camera template: the
 rulings and parameter values in
 [the chase camera](../decisions/play.md#the-chase-camera), authored as `.puck`
-data in `worlds/standard/` (world-owned camera structure, profile-owned input
+data in `worlds/standard/` (the `chaseCamera` template in `camera.puck` exists
+and the Moth expands it; the sitting tunes its values and the per-mode values
+the [open items](open-items.md#author-leaks-to-the-standard) name; world-owned
+camera structure, profile-owned input
 preference, standard dual-stick movement and look, one logical basis shared by
 intent composition, local rendering, traveler rendering, cursor capture, and
 read-back), which the owner's feel sitting tunes; then the touch-triggered win
@@ -548,9 +551,9 @@ a live tenant today; the Azure suite runs against scripted services.
 ### Composed play
 
 **Owns:** the chess source's board `enforcement` and result verdicts
-(`worlds/debug/chess.puck`), the reusable chess rules fragment, which moves to
-a shared package under `worlds/` that the debug world imports, and the
-composed-game acceptance check.
+(`worlds/debug/chess.puck`), the reusable chess rules library
+(`worlds/games/chess.puck`, whose fixed row names a second instance in one world
+still needs prefixed), and the composed-game acceptance check.
 
 **Delivers:** the shipped chess source already has an authored `search` job as
 its CPU opponent, a board verdict that checks a settled physical arrangement

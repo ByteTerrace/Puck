@@ -9,17 +9,32 @@ Import the package from a sibling world:
 import "../standard/standard"
 ```
 
-`standard.puck` composes `skin.puck`, `controls.puck` and `camera.puck`. It names no schema, so it is a
-fragment that refines the importer's rows (the Moth basis's `bare` overlay among them) and not a world that boots on
-its own. The controls document
+`standard.puck` composes `inputs.puck`, `quality.puck`, `skin.puck`, `controls.puck`, `editor.puck` and
+`companions.puck`, and expands `camera.puck`'s `cameraFeel()`. It names no schema, so it is a fragment that refines
+the importer's rows (the Moth basis's `bare` overlay among them) and not a world that boots on its own.
+
+`inputs.puck` declares the shared semantic channels (`forward`, `strafe`, `turn`, the face axes, `jump`, `run`,
+`flight`, `rise`, `dash`, `interact`, `start`, `select`, `confirm`, `cancel`) the controls and the games bind; a world
+declares its own actions beside them (the debug world's `suit` and `noclip`). `quality.puck` authors the
+`world.quality low|medium|high` presets; until initial development is done every machine runs `high`. `skies.puck` is
+a library of sky and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`, `clearDayAir`,
+`overcastAir`) a world expands inside its `render.sky` and `render.atmosphere` blocks.
+
+`editor.puck` authors build mode: the `editor` section (the grid, snapping, editor-camera feel, the build toggle every
+resting page carries, the read-only label and the build bar) and the `editor` binding overlay, whose context row
+selects its build page while a seat builds. A world without the section has no build controls, and the editor verbs
+refuse by name. The controls document
 authors the cursor, icon and badge tables, binding bar, shared pages and play
 wheel. `pad-kit.puck` is a library of source lists and shared ring definitions.
 The debug world's Go and Tour pages, Places ring and gallery icons live in
 [`../debug/controls.puck`](../debug/controls.puck), which refines this package.
 The garden and night field import the standard directly.
 
-`camera.puck` authors the shared input feel, the `camera-boom` response and the
-zoom bounds/step in `views.seatControl.boom`. Mouse wheel changes the requested
+`camera.puck` is a library. `cameraFeel()` authors the shared input feel, the `camera-boom` response and the
+zoom bounds/step in `views.seatControl.boom`; `chaseCamera(rig, ...)` authors a seated body's whole chase camera
+(seat control, clearance mode, character fade, automatic first person, the boom and the rig) from the body's own
+offsets, with the chase-camera decision's values as its defaults. An avatar expands it in a document of its own: the
+Moth's is [`moth-camera.puck`](../debug/avatars/moth-camera.puck). Mouse wheel changes the requested
 orbit distance; middle click resets distance and angles. The play wheel's hold
 pages bind `mouse.wheel` to `player.wheel.scroll`, replacing the inherited zoom
 source by source, so scrolling steps the open wheel's ring and leaves the boom

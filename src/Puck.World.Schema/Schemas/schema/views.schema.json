@@ -32,6 +32,14 @@
           "description": "The maximum live pitch offset in radians.",
           "type": "number"
         },
+        "clearanceMode": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraClearanceChoice",
+          "description": "The author\u0027s tight-space behavior, Fade or Cutaway; players may override it."
+        },
+        "clearanceMaxElevation": {
+          "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians, within [0, \u03C0/2]. Fade never rises, so only cutaway reads it.",
+          "type": "number"
+        },
         "follow": {
           "description": "The follow camera: with no look input the camera yaw eases in behind the body\u0027s heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World \u2014 a body-relative yaw already rides the body.",
           "type": [
@@ -56,13 +64,8 @@
           "default": null,
           "title": "WorldSeatFollow"
         },
-        "clearanceMode": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraClearanceChoice",
-          "description": "The author\u0027s tight-space behavior; players may override it.",
-          "default": "Cutaway"
-        },
         "characterFade": {
-          "description": "The full-size fade distances; absent uses the standard distances.",
+          "description": "The full-size fade distances; absent, fade never dissolves the body and holds no minimum boom.",
           "type": [
             "object",
             "null"
@@ -70,31 +73,28 @@
           "properties": {
             "startDistance": {
               "description": "The boom distance at which the body starts dissolving.",
-              "type": "number",
-              "default": 1.25
+              "type": "number"
             },
             "endDistance": {
               "description": "The distance at which the body is completely hidden.",
-              "type": "number",
-              "default": 0.45
+              "type": "number"
             },
             "minimumBoom": {
               "description": "The preferred shortest boom; a nearer wall takes precedence.",
-              "type": "number",
-              "default": 0.35
+              "type": "number"
             }
           },
+          "required": [
+            "startDistance",
+            "endDistance",
+            "minimumBoom"
+          ],
           "additionalProperties": false,
           "default": null,
           "title": "WorldCameraCharacterFade"
         },
-        "clearanceMaxElevation": {
-          "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians.",
-          "type": "number",
-          "default": 1.1
-        },
         "autoFirstPerson": {
-          "description": "The optional automatic pull-in policy; absent is off with standard hysteresis.",
+          "description": "The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a player or session asks.",
           "type": [
             "object",
             "null"
@@ -102,30 +102,32 @@
           "properties": {
             "enabled": {
               "description": "Whether automatic pull-in is the author\u0027s default.",
-              "type": "boolean",
-              "default": false
+              "type": "boolean"
             },
             "entryDistance": {
               "description": "Maximum constrained room for entry.",
-              "type": "number",
-              "default": 0.85
+              "type": "number"
             },
             "entrySeconds": {
               "description": "Continuous constrained time before entry.",
-              "type": "number",
-              "default": 0.2
+              "type": "number"
             },
             "exitDistance": {
               "description": "Minimum open room for exit, greater than entry.",
-              "type": "number",
-              "default": 1.35
+              "type": "number"
             },
             "exitSeconds": {
               "description": "Continuous clear time before exit.",
-              "type": "number",
-              "default": 0.15
+              "type": "number"
             }
           },
+          "required": [
+            "enabled",
+            "entryDistance",
+            "entrySeconds",
+            "exitDistance",
+            "exitSeconds"
+          ],
           "additionalProperties": false,
           "default": null,
           "title": "WorldCameraAutoFirstPerson"
@@ -163,7 +165,9 @@
       "required": [
         "yawReference",
         "minPitch",
-        "maxPitch"
+        "maxPitch",
+        "clearanceMode",
+        "clearanceMaxElevation"
       ],
       "additionalProperties": false,
       "default": null,

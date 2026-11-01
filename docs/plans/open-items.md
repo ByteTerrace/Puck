@@ -59,8 +59,7 @@ experimental worlds have that it lacks is ported into it
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
-   authored screen material, the chase-camera template, inputs, skies and
-   quality in the standard, the editor's bindings and feel authored.
+   authored screen material and the standard pad kit's debug sectors.
 9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the inventory lane first.
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
@@ -1001,10 +1000,8 @@ then CI's steady state, the shader cache and the GC-hole retirement.
 ### Author leaks to the standard
 
 Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
-when it is found (AGENTS.md) · Next: the CRT as an authored screen material, the
-chase-camera template in `worlds/standard/camera.puck` with the C# design
-defaults removed, `inputs`, `skies` and `quality` moved to the standard, and the
-editor's bindings and feel authored; then the overlay text advance and the
+when it is found (AGENTS.md) · Next: the CRT as an authored screen material and
+the standard pad kit's debug sectors; then the overlay text advance and the
 helper templates. The engine's neutral default theme
 (`WorldThemeSection.Default`; no phosphor role in `WorldTheme`) and a warp that
 applies only to `WorldScreenMaterial.Crt` are in; [UI step 1](ui.md) is this
@@ -1025,46 +1022,25 @@ a design built into C# or living only in the debug world.
   generic screen-material mechanism (a warp and a shader lane an authored material
   names) with the CRT authored in `worlds/standard/skin.puck`; delete the enum
   value and the constant. A CRT's bezel is geometry authored outside the face.
-- Chase-camera design in C# and the Moth. `WorldViews.cs:177-179`
-  (`ClearanceMode = Cutaway`, `ClearanceMaxElevation = 1.1f`) and `:192-193`
-  (`0.85/0.2/1.35/0.15`), `WorldCameraClearanceChoice.cs:17` (`1.25/0.45/0.35`)
-  and `src/Puck.World.Client/WorldCameraClearance.cs:45` (`LiftCeiling = 1.1f`),
-  with Moth prose at `:28, 45, 315, 473`, put a camera feel in the engine, while
-  `worlds/debug/avatars/moth.puck:8118-8139` authors the policy and
-  `worlds/standard/camera.puck:1-28` holds only boom and zoom. Fix: a chase-camera
-  template in `camera.puck` (seat control, clearance, fade, automatic first person,
-  the rig parameterised by body offsets) that the Moth calls; the C# fields become
-  required or neutral with the numbers removed and the prose made generic. Also
-  drop the derived `fovOp`, `lookAtOp` and `orbitOp` from the authored schema
-  (`moth.puck:8158-8174`, `src/Puck.World.Schema/WorldCameraProgram.cs:213`). The
-  template's values are the camera decision's parameter table (the feel sittings
-  tune them; see [dual-stick play](#dual-stick-play-and-the-moths-motion)).
-- The shared input vocabulary lives in the debug world.
-  `worlds/debug/inputs.puck:1-4` declares it, while `worlds/standard/controls.puck:720`
-  binds `forward` and `rise` without a declaration. Fix: move the shared channels
-  to `worlds/standard/inputs.puck`, import it from `standard.puck` (which imports
-  only skin, controls, camera and companions), and keep `suit` and `noclip` in
-  debug.
-- Sky presets live in the debug world (`worlds/debug/skies.puck:1-3`, "every
-  shipped world can draw from"; `clearDay`, `overcast`, `starryNight`,
-  `polarNight` and their air). Fix: `worlds/standard/skies.puck`, with the terrain
-  pass's haze presets beside it.
-- Quality presets live in the debug world, with a comment against the ruling
-  (`worlds/debug/quality.puck:1-8`: "every shipped world shares"; "`low` is the
-  floor tier a player, or a Steam Deck, drops to"; "The standard world imports
-  this table", which is false). Fix: move the table to the standard, import it,
-  and reword the comment to the ruling (every machine runs `high` until initial
-  development is done).
-- Editor bindings and feel in C#: the bars, pages and keys
-  (`src/Puck.World.Client/WorldEditorBindings.cs:53-110`) and the grid 0.5,
-  snap 15°, orbit, pan, zoom and fly rates and the pitch and distance limits
-  (`src/Puck.World.Schema/WorldEditorDefaults.cs:25-69`). Fix:
-  `worlds/standard/editor.puck` authors them ([editor E1 and E8](editor.md#open-items));
-  the engine keeps the mechanism with required fields.
-- The chess rules fragment in `worlds/debug/chess.puck` is reused by two tables
-  but lives only in debug. Fix: a shared package (the standard or a games package)
-  that the debug table imports, as `worlds/standard/cards.puck` already does for
-  cards.
+- The standard pad kit carries debug-world sectors: the play wheel's Act ring
+  binds `body.press suit` (the debug world's suit channel, `suit.puck`) and
+  `body.pose spawn:stage` (`worlds/standard/pad-kit.puck:44-57`,
+  `controls.puck:567`), and its View
+  ring and the View page name the Moth's inspection layouts (`flight-stage`,
+  `face`, `desktop`; `pad-kit.puck:59-70`, `controls.puck:714, 733`). Fix: the
+  standard's rings and pages name only what the standard authors; the debug
+  refinement (`worlds/debug/controls.puck`) adds its sectors by id.
+- The chase-camera decision's table gives `fade` a 0.35 rad `maxRise` and
+  cutaway its own close target (`[0, 1.55, 0]`), but the solver reads one
+  `clearanceMaxElevation` for cutaway only (fade never rises,
+  `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
+  `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
+  ceiling (1.1) and the fade close target. Decided (the lead's call): the
+  table is the owner's camera decision and the solver is the mechanism, so the
+  mechanism grows to match. `maxRise` and the close target become per-mode
+  authored values: fade rises up to its own `maxRise` and each mode has its
+  own close target. `chaseCamera` then authors the table's values, and the
+  feel sittings tune them.
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1085,8 +1061,6 @@ maths first because the others build on it:
 - rotation and transform maths: turns about each axis in degrees, axis-angle,
   composition, and mirroring a position or rotation;
 - a mirrored-pair template emitting both sides of a part from one definition;
-- skies and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`
-  and their air), now in `worlds/debug/skies.puck`;
 - a toggle ability beside `dashAbility` (`suitToggle` and `noclipToggle` are
   one rule shape);
 - a tabletop kit: grid board, cell placement and piece prototypes, which chess,
@@ -1096,7 +1070,8 @@ maths first because the others build on it:
 - the pad slot list and a mirrored bar-table template in `pad-kit`.
 
 Debug-world-only content stays in `worlds/debug/`: exhibit plinths, section
-signs, places, tours, the alchemy elements and the games' rules.
+signs, places, tours, the alchemy elements and the game tables; a game's rules
+that another table could reuse are a library in `worlds/games/` (`chess.puck`).
 
 ### Port the experimental worlds' missing features
 

@@ -38,8 +38,9 @@ portal demo and its inspection verbs. It boots on the Moth's seat chase
 camera: the first authored `views` layout is what a boot shows, and the Moth's
 is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
 `view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
-authors the body, its motion programs, its camera (`seatControl`,
-`seatRig "moth-camera"`); the standard's `camera.puck` supplies shared feel and boom limits. A new rule or feature for
+authors the body and its motion programs, and expands the standard's
+`chaseCamera` template with her body offsets for its camera (`avatars/moth-camera.puck`,
+rig `moth-camera`). A new rule or feature for
 the live world goes in `debug.puck` (or a scratch `.puck` world booted with
 `--world`). Every other world (the island
 `puck.world.json`, its districts, the games) and their canary, parity and
@@ -747,7 +748,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
   and a lift.
 - Input has independent budgets of 32 numeric axes and 64 packed buttons. The
-  debug modules import one vocabulary in `worlds/debug/inputs.puck`; chess uses
+  standard's `worlds/standard/inputs.puck` declares the shared vocabulary (the
+  debug world adds `suit` and `noclip` in `suit.puck` and `noclip.puck`); chess uses
   shared `confirm` and `cancel`, independently of machine `select`. Resolve
   names through `WorldChannelTable`: a declaration index is not a storage
   address. Target-register reach has its own mask and budget. Relative input

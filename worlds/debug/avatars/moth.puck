@@ -1,9 +1,9 @@
 schema: "puck.world.definition.v1"
-import "../inputs"
-import "../quality"
+import "../../standard/inputs"
+import "../../standard/quality"
 import "moth-head"
 import "moth-dash"
-import "../../standard/camera"
+import "moth-camera"
 
 // Her real head, about 0.26 m from crown to chin, sits recessed in the unchanged hood with dark lining round it.
 let headScale = 0.7
@@ -574,20 +574,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 3.12, -45.4])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-rear"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -45.4]))
@@ -602,20 +588,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 1.4229, -46.1029])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-rear-low"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.4229, -46.1029]))
@@ -630,20 +602,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 5.4025, -47.0584])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-top"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 5.4025, -47.0584]))
@@ -658,20 +616,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 0.8375, -47.0584])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-below"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 0.8375, -47.0584]))
@@ -686,20 +630,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [45.6, 3.12, -47.8])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-side-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 3.12, -47.8]))
@@ -714,20 +644,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [50.4, 3.12, -47.8])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-side-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 3.12, -47.8]))
@@ -742,20 +658,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 3.12, -50.2])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-front"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -50.2]))
@@ -770,20 +672,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [49.4901, 2.4988, -46.0241])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 3.12, -47.8])
-        worldAxes: false
-      }
       name: "pods-rear-three-quarter"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [49.4901, 2.4988, -46.0241]))
@@ -800,20 +688,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 2.4885, -50.4])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-front"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -50.4]))
@@ -828,20 +702,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [46.3029, 2.4885, -49.6971])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-front-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -49.6971]))
@@ -856,20 +716,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [45.6, 2.4885, -48])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 2.4885, -48]))
@@ -884,20 +730,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [46.3029, 2.4885, -46.3029])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-back-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -46.3029]))
@@ -912,20 +744,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 2.4885, -45.6])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-back"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -45.6]))
@@ -940,20 +758,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [49.6971, 2.4885, -46.3029])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-back-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -46.3029]))
@@ -968,20 +772,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [50.4, 2.4885, -48])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 2.4885, -48]))
@@ -996,20 +786,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [49.6971, 2.4885, -49.6971])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 1.42, -48])
-        worldAxes: false
-      }
       name: "shoulders-front-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -49.6971]))
@@ -1026,20 +802,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 1.05, -50])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-front"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.05, -50]))
@@ -1054,20 +816,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [46.5858, 1.05, -49.4142])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-front-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [46.5858, 1.05, -49.4142]))
@@ -1082,20 +830,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [46, 1.05, -48])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [46, 1.05, -48]))
@@ -1110,20 +844,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [46.5858, 1.05, -46.5858])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-back-left"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [46.5858, 1.05, -46.5858]))
@@ -1138,20 +858,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [48, 1.05, -46])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-back"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.05, -46]))
@@ -1166,20 +872,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [49.4142, 1.05, -46.5858])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-back-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [49.4142, 1.05, -46.5858]))
@@ -1194,20 +886,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [50, 1.05, -48])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [50, 1.05, -48]))
@@ -1222,20 +900,6 @@ cameras [
     renderHeight: 450
     renderWidth: 320
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [49.4142, 1.05, -49.4142])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.62
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [48, 0.36, -48])
-        worldAxes: false
-      }
       name: "legs-front-right"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [49.4142, 1.05, -49.4142]))
@@ -1250,20 +914,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0, 1.5, -5.3])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.65
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.13, 0])
-        worldAxes: false
-      }
       name: "front"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0, 1.5, -5.3]))
@@ -1278,20 +928,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [2.9, 2, -4.8])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.65
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.13, 0])
-        worldAxes: false
-      }
       name: "three-quarter"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [2.9, 2, -4.8]))
@@ -1306,20 +942,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [-2.7, 2, 4.6])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.65
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.15, 0])
-        worldAxes: false
-      }
       name: "rear"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [-2.7, 2, 4.6]))
@@ -1334,20 +956,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [4, 4.3, -6.5])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.65
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 2.8, 0])
-        worldAxes: false
-      }
       name: "flight-stage"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [4, 4.3, -6.5]))
@@ -1362,20 +970,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0.9, 2, -2.05])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.54
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.84, 0])
-        worldAxes: false
-      }
       name: "head"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0.9, 2, -2.05]))
@@ -1390,20 +984,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0, 1.9, -1.7])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.5
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.86, 0])
-        worldAxes: false
-      }
       name: "face"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0, 1.9, -1.7]))
@@ -1418,20 +998,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [1.5, 1.9, -0.9])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.5
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.86, 0])
-        worldAxes: false
-      }
       name: "face-side"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [1.5, 1.9, -0.9]))
@@ -1446,20 +1012,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [1.4, 1.75, -1.5])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.55
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0.35, 1.4, 0])
-        worldAxes: false
-      }
       name: "shoulder"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [1.4, 1.75, -1.5]))
@@ -1474,20 +1026,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [-0.8, 1.9, 2.2])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.75
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 1.2, 0])
-        worldAxes: false
-      }
       name: "back-close"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [-0.8, 1.9, 2.2]))
@@ -1502,20 +1040,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0.42, 2.9, -0.35])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.55
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0.42, 1.42, 0])
-        worldAxes: false
-      }
       name: "shoulder-top"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0.42, 2.9, -0.35]))
@@ -1530,20 +1054,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0.9, 0.55, -1.7])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.6
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 0.35, 0])
-        worldAxes: false
-      }
       name: "boots"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0.9, 0.55, -1.7]))
@@ -1558,20 +1068,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0.75, 0.95, -0.95])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.42
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0.05, 0.7, 0])
-        worldAxes: false
-      }
       name: "knee"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0.75, 0.95, -0.95]))
@@ -1586,20 +1082,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [1.9, 0.45, -0.4])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.55
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0.2, 0.35, 0])
-        worldAxes: false
-      }
       name: "boots-side"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [1.9, 0.45, -0.4]))
@@ -1614,20 +1096,6 @@ cameras [
     renderHeight: 900
     renderWidth: 1280
     rig {
-      anchorOp {
-        opcode: "anchor"
-        subject: worldPoint(point: [0.7, 0.6, 1.8])
-      }
-      fovOp {
-        fieldOfViewRadians: 0.6
-        opcode: "fov"
-      }
-      lookAtOp {
-        focusDistance: 6
-        opcode: "lookAt"
-        subject: worldPoint(point: [0, 0.35, 0])
-        worldAxes: false
-      }
       name: "boots-rear"
       operations [
         anchor(opcode: "anchor", subject: worldPoint(point: [0.7, 0.6, 1.8]))
@@ -8113,66 +7581,6 @@ views {
     ]
     transitionRenderScale: 1
     transitionSeconds: 0
-  }
-
-  // A dual-stick third-person action camera: the left stick moves and strafes relative to the camera, the right stick
-  // turns the camera and the body with it, and the right-stick press recenters it behind the body.
-  seatControl {
-    clearanceMode: Fade
-    characterFade {
-      startDistance: 1.25
-      endDistance: 0.45
-      minimumBoom: 0.35
-    }
-    clearanceMaxElevation: 1.1
-    autoFirstPerson {
-      enabled: false
-      entryDistance: 0.85
-      entrySeconds: 0.2
-      exitDistance: 1.35
-      exitSeconds: 0.15
-    }
-    maxPitch: 1.2
-    minPitch: -0.5
-    yawReference: "World"
-  }
-
-  seatRig "moth-camera" {
-    version: "puck.camera.program.v1"
-    operations [
-      orbit(distance: 4.2, opcode: "orbit", pitch: 0.3, pivotOffset: [0, 1, 0], yaw: 0)
-      lookAt(
-        focusDistance: 4.2,
-        opcode: "lookAt",
-        subject: reference(),
-        targetOffset: [0, 1, 0],
-        worldAxes: true,
-        closeTargetOffset: [0, 1.74, 0],
-        closeTargetStartFraction: 0.6,
-        closeTargetFullFraction: 0.2
-      )
-      fieldOfView(fieldOfViewRadians: 0.96, opcode: "fov")
-      dynamics(row: `camera-boom`)
-      firstPerson(eyePoint: [0, 1.75, 0.22], active: 0, transitionSeconds: 0.5, hideRadius: 0.45)
-    ]
-    fovOp {
-      fieldOfViewRadians: 0.96
-      opcode: "fov"
-    }
-    lookAtOp {
-      focusDistance: 4.2
-      opcode: "lookAt"
-      subject: reference()
-      targetOffset [0, 1, 0]
-      worldAxes: true
-    }
-    orbitOp {
-      distance: 4.2
-      opcode: "orbit"
-      pitch: 0.3
-      pivotOffset [0, 1, 0]
-      yaw: 0
-    }
   }
 }
 

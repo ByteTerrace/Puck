@@ -1,4 +1,6 @@
-// Shared semantic input vocabulary. Modules consume names; each action is declared here once.
+// The standard semantic input vocabulary. Modules consume names; each shared action is declared here once, and the
+// standard's controls bind them. A world declares its own actions beside these in its own documents (the debug
+// world's suit and noclip channels are its suit.puck's and noclip.puck's).
 schema: "puck.world.definition.v1"
 
 channels [
@@ -51,7 +53,7 @@ channels [
     name: "flight"
     shape: Binary
   }
-  // Held, it multiplies her speed (the kits' `speed.held`).
+  // Held, it multiplies the body's speed (the kits' `speed.held`).
   {
     composition: true
     name: "run"
@@ -63,33 +65,23 @@ channels [
     role: MoveUp
     shape: Bipolar
   }
-  // The pad's start button, which the Moth herself ignores: an engaged machine reads it as its own start.
+  // The pad's start button, which an avatar may ignore: an engaged machine reads it as its own start.
   {
     composition: true
     name: "start"
     shape: Binary
   }
-  // The pad's select button, which the Moth herself ignores: an engaged machine reads it as its own select.
+  // The pad's select button, which an avatar may ignore: an engaged machine reads it as its own select.
   {
     composition: true
     name: "select"
     shape: Binary
   }
-  // The context button, which the Moth herself ignores: beside an engageable screen naming it as its engage channel,
-  // a press engages that screen and the next press leaves it.
+  // The context button: beside an engageable screen naming it as its engage channel, a press engages that screen and
+  // the next press leaves it.
   {
     composition: true
     name: "interact"
-    shape: Binary
-  }
-  {
-    composition: true
-    name: "suit"
-    shape: Binary
-  }
-  {
-    composition: true
-    name: "noclip"
     shape: Binary
   }
   {
