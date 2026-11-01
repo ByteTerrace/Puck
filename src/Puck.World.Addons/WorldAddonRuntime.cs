@@ -42,7 +42,7 @@ namespace Puck.World.Addons;
 /// <para>Single-threaded on the host tick, like every simulation type here. Per-tick state is preallocated at mount:
 /// the batch, pending, answer, and contribution buffers are fixed arrays with counts, so a tick allocates nothing.</para>
 /// </remarks>
-public sealed partial class WorldAddonRuntime : IWorldAddonHost {
+public sealed partial class WorldAddonRuntime : IWorldAddonHost, IWorldAddonCheckpointHost {
     // The ActBody sentinel for "this act resolved no body" — a stale handle, or a slot naming something other than a
     // body. Such an act was already answered when it was folded and takes no part in the second pass.
     private const int NoBody = -1;

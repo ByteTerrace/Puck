@@ -164,6 +164,11 @@ public sealed partial class WorldInputRuntime {
     public bool IsController(Principal principal, Principal actor, int body) => (m_owners.TryGetValue(key: principal, value: out var owner) &&
         (owner.Controller is { } controller) && (controller.Actor == actor) && (owner.Body == body) &&
         (owner.Generation == m_host.Population.Generation(index: body)) && m_host.GrantTable.IsLiveSession(principal: principal));
+
+    // Synthetic producer sessions have no socket observer by design. Their owner and origin are checkpointed
+    // input state, and the producer's own detach/replacement path retires them.
+    internal bool OwnsControllerSession(Principal principal) => (m_owners.TryGetValue(key: principal, value: out var owner) && (owner.Controller is not null));
+
     /// <summary>Finishes one pure snapshot producer's interval. An omitted target contributes neutral through the
     /// same event admission, so stopping a snapshot stream releases its holds rather than leaving them in history.</summary>
     public void CompleteSnapshots(Principal actor, string source, ulong tick) {

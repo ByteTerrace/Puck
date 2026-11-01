@@ -22,7 +22,7 @@ namespace Puck.Scripting;
 /// in place: output cells only ever cross when a <c>puck_on_tick</c> return announces them, and
 /// <see cref="Tick"/> refuses to run unadmitted.</para>
 /// </remarks>
-public sealed class AddonInstance : IDisposable {
+public sealed partial class AddonInstance : IDisposable {
     private readonly AddonChannelBinding[] m_channelBindings;
     private readonly IAddonChannelResolver? m_channelResolver;
     private readonly AddonChannelDescriptor[] m_channels;
@@ -74,6 +74,8 @@ public sealed class AddonInstance : IDisposable {
         m_memories = moduleInfo.Memories;
         m_module = moduleInfo.Module;
         m_name = descriptor.Name;
+        m_checkpointGlobals = moduleInfo.CheckpointGlobals;
+        m_checkpointRefusal = moduleInfo.CheckpointRefusal;
 
         Instantiate();
     }
@@ -210,15 +212,17 @@ public sealed class AddonInstance : IDisposable {
         try {
             store = new Store(engine: m_engine.Engine);
 
-            store.SetLimits(memorySize: AddonModuleLimits.MemoryBytes,
-                tableElements: AddonModuleLimits.TableElements, instances: 1,
-                memories: AddonModuleLimits.Memories, tables: AddonModuleLimits.Tables);
+            store.SetLimits(instances: 1,
+                memories: AddonModuleLimits.Memories, memorySize: AddonModuleLimits.MemoryBytes,
+                tableElements: AddonModuleLimits.TableElements, tables: AddonModuleLimits.Tables);
             store.Fuel = ((ulong)m_fuelPerTick);
 
             var instance = new Instance(
                 store: store,
                 module: m_module
             );
+
+            m_instance = instance;
 
             if (!TryHandshake(
                 instance: instance,
@@ -710,13 +714,14 @@ public sealed class AddonInstance : IDisposable {
     /// <returns>Whether the operation may execute.</returns>
     public bool TryChargeHostFuel(ulong cost, out ulong spent) {
         var remaining = m_store!.Fuel;
-        spent = Math.Min(remaining, cost);
-        m_store.Fuel = remaining - spent;
+
+        spent = Math.Min(val1: remaining, val2: cost);
+        m_store.Fuel = (remaining - spent);
         if (remaining < cost) {
-            SetFault(AddonFaultKind.OutOfFuel, "OutOfFuel during host query");
+            SetFault(kind: AddonFaultKind.OutOfFuel, reason: "OutOfFuel during host query");
             return false;
         }
-        return m_state == AddonState.Enabled;
+        return (m_state == AddonState.Enabled);
     }
     /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
     /// memory into <paramref name="destination"/>, immediately — no live span is ever handed back, so nothing
@@ -784,13 +789,13 @@ public sealed class AddonInstance : IDisposable {
     /// <param name="error">Refusal reason, or empty on success.</param>
     /// <returns>Whether the entire result was written.</returns>
     public bool TryWriteMemory(long pointer, ReadOnlySpan<byte> source, out string error) {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (pointer < 0 || pointer > uint.MaxValue || m_memory is not { } memory ||
-            pointer + source.Length > memory.GetLength()) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if ((pointer < 0) || (pointer > uint.MaxValue) || (m_memory is not { } memory) ||
+            ((pointer + source.Length) > memory.GetLength())) {
             error = "bulk result range is outside guest memory";
             return false;
         }
-        source.CopyTo(memory.GetSpan((int)pointer, source.Length));
+        source.CopyTo(destination: memory.GetSpan(address: ((int)pointer), length: source.Length));
         error = "";
         return true;
     }

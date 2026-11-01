@@ -58,7 +58,7 @@ public sealed class WasmModuleLoader {
     }
 
     // A compiled module beside the memories its binary declares, cached together under the bytes' content hash.
-    private sealed record CompiledModule(Module Module, IReadOnlyList<WasmMemoryDeclaration> Memories);
+    private sealed record CompiledModule(Module Module, IReadOnlyList<WasmMemoryDeclaration> Memories, string[] Globals, string? CheckpointRefusal);
 
     // Reads the binary's declarations before Wasmtime sees it, so a malformed memory section is refused here by name
     // and a memory past the store's ceiling is known without instantiating anything. WAT text is converted to its
@@ -101,10 +101,14 @@ public sealed class WasmModuleLoader {
             throw new InvalidDataException(message: $"The addon module {name} exceeds the table limit: at most {AddonModuleLimits.Tables} table of {AddonModuleLimits.TableElements} elements, exported or not.");
         }
 
+        var checkpointBinary = declarations.WithCheckpointExports(globals: out var globals, module: binary, refusal: out var checkpointRefusal);
+
         return new CompiledModule(
+            Globals: globals,
+            CheckpointRefusal: checkpointRefusal,
             Memories: declarations.Memories,
             Module: Module.FromBytes(
-                bytes: binary,
+                bytes: checkpointBinary,
                 engine: m_engine.Engine,
                 name: name
             )
@@ -189,6 +193,6 @@ public sealed class WasmModuleLoader {
             Memories: compiled.Memories,
             Module: compiled.Module,
             Path: fullPath
-        );
+        ) { CheckpointGlobals = compiled.Globals, CheckpointRefusal = compiled.CheckpointRefusal };
     }
 }

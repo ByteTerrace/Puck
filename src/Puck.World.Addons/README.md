@@ -32,6 +32,47 @@ providers through `WorldCapabilityRequests.Contains`. Service calls belong at
 the [external-operation boundary](../Puck.World.Server/Extensions.md), where
 replay consumes recorded contributions without running the provider.
 
+## Durable guest state
+
+Both World and the silo mount through `WorldAddonRuntime.TryCreate`. The silo
+owns each activation's runtime and disposes it when the row retires; its replay
+factory uses the same runtime.
+
+`IWorldAddonCheckpointHost` captures an opaque addon section in the ordinary
+`WorldAuthorityCheckpoint`. It includes every guest's full grown linear memory,
+numeric globals (including private globals), remaining fuel and sticky fault,
+plus next-tick answers, disclosure projections, event-gap and watch baselines,
+bound cell names/generations, debugger machine snapshots with their named machine
+incarnations, and cost counters. A snapshot keeps its identity even while its
+machine has no display consumer; a replaced incarnation still refuses it.
+Resolved arena addresses and text-decode caches are derived again. Restoration
+prepares fresh guests under their source pins before replacing the mounted set;
+it preserves the authority's restored input controllers. A server reconstructed
+before host composition retains the image until addon attachment and refuses
+to step or capture while it is pending.
+Local synthetic input sessions have no socket observer by design; startup ends
+only unobserved sessions without a local controller owner, preserving these
+producers' checkpointed histories.
+
+The loader adds host-only global exports to the compiled binary, preserving
+the source pin, global indices and executable instructions. No guest-specific
+save program is required. Capture refuses modules with tables, element sections,
+data-count sections (which can carry segment-drop state), reference globals or
+no live store. Those resources cannot yet be reconstructed by this serializer;
+none is silently omitted. The debug world's seven guests use supported state.
+An explicit replay recording still restarts guests at its arm boundary; an
+ordinary checkpoint preserves their current state.
+
+The binary transform follows the [Core specification's section and export
+encoding](https://webassembly.github.io/spec/core/binary/modules.html), checked
+against [WABT's independent binary reader](https://github.com/WebAssembly/wabt/blob/main/src/binary-reader.cc).
+[Wasmtime's global API](https://bytecodealliance.github.io/wasmtime-dotnet/api/Wasmtime.Global.html)
+provides numeric values after export; it is an implementation API, not the
+format specification. The references agree on export indices and section
+framing. Segment lifetime remains separate from memory bytes, as the
+[Core execution specification](https://webassembly.github.io/spec/core/exec/modules.html)
+describes; the current serializer therefore refuses that unsupported state.
+
 ## Mounting: a prepare/commit transaction
 
 A `WorldAddonRow` in the world document's `addons` section is a data-only

@@ -78,8 +78,9 @@ public sealed class ReplayAddonRestartLawTests {
         Assert.True(condition: fixture.Server.Input.TryAdmit(session, batch, out inputReason), userMessage: inputReason);
         for (var tick = 0; (tick < 4); tick++) { fixture.Step(); }
         Assert.True(condition: (Assert.Single(collection: runtime.DescribeCost()).LastTickFuelConsumed > firstFuel));
-        // An ordinary checkpoint still cannot claim to hold the guest's private memory.
-        Assert.False(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out _, out _));
+        // An ordinary checkpoint preserves private memory; an operator recording still explicitly restarts guests.
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var captureReason), userMessage: captureReason);
+        Assert.NotEmpty(collection: checkpoint!.Addons!);
         Assert.True(condition: tape.TryBeginRecording(name: "late-addon", refusal: out var refusal), userMessage: refusal);
         Assert.False(condition: runtime.AnyEverPumped);
         Assert.Equal(0UL, Assert.Single(collection: runtime.DescribeCost()).TotalFuelConsumed);
