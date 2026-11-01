@@ -51,7 +51,7 @@ public sealed class HostLoopControlLawTests {
                 Source.Enqueue(line: "quit");
             }
             // An unfinished frame holds the completed tick in the real offscreen adapter.
-            return default;
+            return new RootFrame(Surface: default, Render: FrameRender.Waiting(reason: "the capture's pipeline is still building"));
         }
     }
 
