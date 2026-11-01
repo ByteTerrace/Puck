@@ -131,7 +131,7 @@ public sealed partial class SdfMeshPathBake {
             return false;
         }
 
-        group.Mesh = old.Mesh;
+        group.Mesh = old.Mesh?.Acquire();
         _ = Begin(group: group);
 
         return true;

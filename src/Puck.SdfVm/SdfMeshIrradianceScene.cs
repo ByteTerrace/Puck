@@ -14,7 +14,47 @@ namespace Puck.SdfVm;
 /// reaches a distance unblocked. Presentation only: the tracing is single-precision and nothing it answers reaches
 /// simulation state.
 /// </summary>
-public sealed partial class SdfMeshIrradianceScene {
+public sealed partial class SdfMeshIrradianceScene : IDisposable {
+    private int m_claimCount = 1;
+
+    private readonly SdfMeshClaims m_meshClaims;
+    private readonly SdfMeshClaims m_cachedMeshClaims;
+
+    /// <summary>Acquires a scene claim before an independently completing reader starts.</summary>
+    public SdfMeshIrradianceScene Acquire() {
+        var count = Volatile.Read(location: ref m_claimCount);
+
+        while (true) {
+            ObjectDisposedException.ThrowIf(condition: (count <= 0), instance: this);
+            var observed = Interlocked.CompareExchange(comparand: count, location1: ref m_claimCount, value: (count + 1));
+
+            if (observed == count) { return this; }
+            count = observed;
+        }
+    }
+    /// <summary>Releases one scene claim; the last reader releases the scene's mesh claims.</summary>
+    public void Dispose() {
+        var count = Interlocked.Decrement(location: ref m_claimCount);
+
+        if (count == 0) { m_meshClaims.Dispose(); m_cachedMeshClaims.Dispose(); } else if (count < 0) { throw new InvalidOperationException(message: "A scene claim was released twice."); }
+    }
+
+    internal SdfMeshIrradianceScene WithoutRetained() => ((m_retained.Count == 0) ? Acquire() : new(source: this));
+
+    private SdfMeshIrradianceScene(SdfMeshIrradianceScene source) {
+        m_instances = source.m_instances;
+        m_entries = source.m_entries;
+        m_nodes = source.m_nodes;
+        m_geometries = source.m_geometries;
+        m_retained = [];
+        TriangleCount = source.TriangleCount;
+        GeometriesBuilt = source.GeometriesBuilt;
+        TrianglesBuilt = source.TrianglesBuilt;
+        Materials = source.Materials;
+        m_meshClaims = source.m_meshClaims.Clone();
+        m_cachedMeshClaims = new([], cached: true);
+    }
+
     /// <summary>The most triangles of geometry no draw of a scene uses that the scene keeps for a later scene built from
     /// it, the most recently drawn first: a responding placement toggled back takes its earlier geometry again.</summary>
     public const long RetainedTriangles = 8_000_000L;
@@ -57,16 +97,18 @@ public sealed partial class SdfMeshIrradianceScene {
 
         public Vector3 Low;
         public Vector3 High;
+
         private int m_firstAndCount;
 
         // A leaf's first primitive, or an inner node's first child (its second follows it).
         public readonly int First => (m_firstAndCount >> CountBits);
         // A leaf's primitive count; zero for an inner node.
-        public readonly int Count => (m_firstAndCount & ((1 << CountBits) - 1));
+        public readonly int Count => m_firstAndCount & ((1 << CountBits) - 1);
+
         // The most primitives a leaf can hold.
         public const int MaxCount = ((1 << CountBits) - 1);
 
-        public void Link(int first, int count) => m_firstAndCount = ((first << CountBits) | count);
+        public void Link(int first, int count) => m_firstAndCount = (first << CountBits) | count;
     }
 
     /// <summary>Builds the scene of a frame's static mesh draws: every draw that is not dynamic.</summary>
@@ -88,7 +130,7 @@ public sealed partial class SdfMeshIrradianceScene {
             var key = GeometryKey.Of(mesh: draw.Mesh);
 
             if (geometries.ContainsKey(key: key)) { continue; }
-            if ((previous is not null) && previous.TryFind(key: key, geometry: out var held)) {
+            if ((previous is not null) && previous.TryFind(geometry: out var held, key: key)) {
                 geometries.Add(key: key, value: held);
                 continue;
             }
@@ -118,7 +160,7 @@ public sealed partial class SdfMeshIrradianceScene {
             if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(mesh: draw.Mesh)], instance: out var instance)) {
                 instances.Add(item: instance);
                 if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
-                    AddMaterials(materials: materials, draw: in draw);
+                    AddMaterials(draw: in draw, materials: materials);
                 }
             }
         }
@@ -128,12 +170,14 @@ public sealed partial class SdfMeshIrradianceScene {
 
         return new SdfMeshIrradianceScene(
             geometries: geometries,
+            draws: draws,
             geometriesBuilt: pending.Count,
             instances: instances,
             retained: Retain(geometries: geometries, previous: previous),
             trianglesBuilt: trianglesBuilt
         ) { Materials = order };
     }
+
     /// <summary>Gets the program material ids the scene's triangles carry, in increasing order: the materials a ray that
     /// meets the scene reads, and the only ones whose values its bounce light depends on.</summary>
     public int[] Materials { get; private init; } = [];
@@ -155,13 +199,14 @@ public sealed partial class SdfMeshIrradianceScene {
             _ = materials.Add(item: (draw.Material + ((int)material)));
         }
     }
+
     /// <summary>Returns whether a draw belongs to the static scene: one neither dynamic nor glass. Glass neither blocks
     /// nor bounces the probes' rays: light reaches what lies behind it untinted.</summary>
     /// <param name="draw">The draw.</param>
     /// <returns><see langword="true"/> for a static, opaque mesh draw.</returns>
     public static bool IsStatic(in SdfMeshDraw draw) => (!draw.IsDynamic && !draw.Glass);
 
-    private SdfMeshIrradianceScene(Dictionary<GeometryKey, Geometry> geometries, List<Instance> instances, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
+    private SdfMeshIrradianceScene(Dictionary<GeometryKey, Geometry> geometries, IReadOnlyList<SdfMeshDraw> draws, List<Instance> instances, List<KeyValuePair<GeometryKey, Geometry>> retained, int geometriesBuilt, long trianglesBuilt) {
         var entries = new List<Entry>();
         var lows = new List<Vector3>();
         var highs = new List<Vector3>();
@@ -204,7 +249,10 @@ public sealed partial class SdfMeshIrradianceScene {
         GeometriesBuilt = geometriesBuilt;
         TriangleCount = triangles;
         TrianglesBuilt = trianglesBuilt;
-        TrianglesRetained = retained.Sum(selector: static entry => (long)entry.Value.Count);
+        TrianglesRetained = retained.Sum(selector: static entry => ((long)entry.Value.Count));
+        m_meshClaims = new SdfMeshClaims(meshes: draws.Where(predicate: static draw => IsStatic(draw: draw)).Select(selector: static draw => draw.Mesh)
+            .Concat(second: geometries.Values.Select(selector: static geometry => geometry.Mesh)));
+        m_cachedMeshClaims = new(retained.Select(selector: static entry => entry.Value.Mesh), cached: true);
     }
 
     private bool TryFind(GeometryKey key, out Geometry geometry) {
@@ -245,7 +293,7 @@ public sealed partial class SdfMeshIrradianceScene {
     /// <param name="material">The hit triangle's program material.</param>
     /// <returns><see langword="true"/> when the ray meets a triangle.</returns>
     public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material) =>
-        Intersect(origin, direction, maximum, out distance, out normal, out material, out _);
+        Intersect(bakeHalfDiagonal: out _, direction: direction, distance: out distance, material: out material, maximum: maximum, normal: out normal, origin: origin);
     /// <summary>Finds the nearest retained triangle and the uncertainty of its own contour lattice.</summary>
     /// <param name="origin">World-space ray origin.</param>
     /// <param name="direction">Unit ray direction.</param>
@@ -342,9 +390,9 @@ public sealed partial class SdfMeshIrradianceScene {
         var near = Vector3.Min(value1: t0, value2: t1);
         var far = Vector3.Max(value1: t0, value2: t1);
 
-        entry = MathF.Max(MathF.Max(near.X, near.Y), MathF.Max(near.Z, 0f));
+        entry = MathF.Max(x: MathF.Max(x: near.X, y: near.Y), y: MathF.Max(x: near.Z, y: 0f));
 
-        var exit = MathF.Min(MathF.Min(far.X, far.Y), MathF.Min(far.Z, maximum));
+        var exit = MathF.Min(x: MathF.Min(x: far.X, y: far.Y), y: MathF.Min(x: far.Z, y: maximum));
 
         return (entry <= exit);
     }
@@ -353,7 +401,6 @@ public sealed partial class SdfMeshIrradianceScene {
     private interface ILeaves {
         bool Visit(int first, int count, ref float distance);
     }
-
     // The top level's leaves: a braid subtree of a draw's geometry each, walked by the ray in the geometry's frame. A ray
     // carried through an affine transform keeps its parameter, so distances compare across draws.
     private struct DrawLeaves(Entry[] entries, Instance[] instances, Vector3 origin, Vector3 direction, Vector3 inverse, bool any) : ILeaves {
@@ -378,7 +425,6 @@ public sealed partial class SdfMeshIrradianceScene {
             return false;
         }
     }
-
     // A geometry's leaves: its triangles, Möller-Trumbore and two-sided, since a probe inside geometry must see the back
     // faces it would otherwise leak through.
     private struct TriangleLeaves(Geometry geometry, Vector3 origin, Vector3 direction, bool any) : ILeaves {
@@ -402,6 +448,7 @@ public sealed partial class SdfMeshIrradianceScene {
 
             return false;
         }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private readonly bool HitTriangle(Vector3 v0, Vector3 e1, Vector3 e2, float maximum, out float distance) {
             distance = 0f;
@@ -409,7 +456,7 @@ public sealed partial class SdfMeshIrradianceScene {
             var p = Vector3.Cross(vector1: Direction, vector2: e2);
             var determinant = Vector3.Dot(vector1: e1, vector2: p);
 
-            if (MathF.Abs(determinant) < 1.0e-12f) { return false; }
+            if (MathF.Abs(x: determinant) < 1.0e-12f) { return false; }
 
             var inverse = (1f / determinant);
             var s = (Origin - v0);
@@ -426,7 +473,6 @@ public sealed partial class SdfMeshIrradianceScene {
             return ((distance > 1.0e-4f) && (distance < maximum));
         }
     }
-
     // A geometry's identity: its mesh's position and index buffers. A mesh renumbered into another program's materials
     // (SdfMeshLibrary) shares both, so its draws take the same geometry and read their own triangle materials.
     private readonly record struct GeometryKey(ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices) {
@@ -457,7 +503,6 @@ public sealed partial class SdfMeshIrradianceScene {
 
     // A top-level primitive: one braid subtree (its root node) of one draw's geometry.
     private readonly record struct Entry(int Instance, int Node);
-
     // One draw: its geometry, its transform and the transform's inverse (world to the mesh's frame), the matrix that
     // carries a normal of the mesh's frame to world space with the winding the transform gives it, its program material
     // base and its mesh's triangle materials.
@@ -490,7 +535,7 @@ public sealed partial class SdfMeshIrradianceScene {
                 ObjectToWorld = matrix,
                 TriangleMaterials = draw.Mesh.TriangleMaterials,
                 WorldToObject = inverse,
-                BakeHalfDiagonal = 0.5f * Vector3.TransformNormal(draw.Mesh.BakeCell, matrix).Length(),
+                BakeHalfDiagonal = (0.5f * Vector3.TransformNormal(draw.Mesh.BakeCell, matrix).Length()),
             };
             return true;
         }
@@ -508,32 +553,31 @@ public sealed partial class SdfMeshIrradianceScene {
         public int MaterialOf(int triangle) =>
             (Material + (TriangleMaterials.IsEmpty ? 0 : (int)TriangleMaterials.Span[Geometry.Triangles[triangle]]));
     }
-
     // One geometry's triangles in its mesh's frame, in leaf order under its own hierarchy: the mesh triangle each leaf
     // position holds, read through the mesh's own positions and indices rather than a copy of them, and the hierarchy's
     // braid subtrees: the widest nodes at most BraidTriangles wide, which together hold every leaf position once. A
     // triangle whose box is loose about it (a long thin one a merged polygon leaves, SdfMeshPlanarMerge) holds several
     // leaf positions, each bounded by a piece of it, so a ray tests it only where it passes near.
     private sealed class Geometry {
-        public required ReadOnlyMemory<Vector3> Positions { get; init; }
-        public required ReadOnlyMemory<uint> Indices { get; init; }
-        public required int[] Triangles { get; init; }
-        public required Node[] Nodes { get; init; }
         public required int[] Braids { get; init; }
         public int Count => (Indices.Length / 3);
+        public required ReadOnlyMemory<uint> Indices { get; init; }
+        public required SdfMesh Mesh { get; init; }
+        public required Node[] Nodes { get; init; }
+        public required ReadOnlyMemory<Vector3> Positions { get; init; }
+        public required int[] Triangles { get; init; }
 
         // The leaf position's triangle as its first corner and its two edges from it, the terms the ray test reads.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Corner(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, int triangle, out Vector3 v0, out Vector3 e1, out Vector3 e2) {
             var first = (3 * triangle);
 
-            v0 = positions[(int)indices[first]];
-            e1 = (positions[(int)indices[(first + 1)]] - v0);
-            e2 = (positions[(int)indices[(first + 2)]] - v0);
+            v0 = positions[((int)indices[first])];
+            e1 = (positions[((int)indices[(first + 1)])] - v0);
+            e2 = (positions[((int)indices[(first + 2)])] - v0);
         }
         public void Corner(int index, out Vector3 v0, out Vector3 e1, out Vector3 e2) =>
             Corner(e1: out e1, e2: out e2, indices: Indices.Span, positions: Positions.Span, triangle: Triangles[index], v0: out v0);
-
         public static Geometry Build(SdfMesh mesh) {
             var count = mesh.TriangleCount;
             var chunks = (((count + ParallelPrimitives) - 1) / ParallelPrimitives);
@@ -546,7 +590,7 @@ public sealed partial class SdfMeshIrradianceScene {
                 var own = new Pieces(capacity: (end - start));
 
                 for (var index = start; (index < end); index++) {
-                    own.Add(a: positions[(int)indices[(3 * index)]], b: positions[(int)indices[((3 * index) + 1)]], c: positions[(int)indices[((3 * index) + 2)]], depth: 0, triangle: index);
+                    own.Add(a: positions[((int)indices[(3 * index)])], b: positions[((int)indices[((3 * index) + 1)])], c: positions[((int)indices[((3 * index) + 2)])], depth: 0, triangle: index);
                 }
                 pieces[(start / ParallelPrimitives)] = own;
             });
@@ -569,8 +613,9 @@ public sealed partial class SdfMeshIrradianceScene {
                 triangles[index] = owners[order[index]];
             }
 
-            return new Geometry { Braids = braids, Indices = mesh.Indices, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles };
+            return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles };
         }
+
         private static void Chunked(int count, Action<int, int> body) {
             if (count < ParallelPrimitives) {
                 body(arg1: 0, arg2: count);
@@ -633,13 +678,12 @@ public sealed partial class SdfMeshIrradianceScene {
             }
         }
     }
-
     // A binned surface-area hierarchy over primitive bounds, its wide ranges' children built in parallel. Its nodes
     // are written into chunks allocated as the build reaches them, since the bound a range can need (2n - 1 nodes)
     // is several times what a build of leaves several primitives wide uses; the result is copied out at its size.
     private sealed class Hierarchy {
-        private const int ChunkShift = 16;
         private const int ChunkMask = ((1 << ChunkShift) - 1);
+        private const int ChunkShift = 16;
 
         private readonly Vector3[] m_lows;
         private readonly Vector3[] m_highs;
@@ -650,6 +694,7 @@ public sealed partial class SdfMeshIrradianceScene {
         private readonly int m_leaf;
         private readonly int m_braid;
         private readonly List<int> m_braids = [];
+
         private int m_nodeCount = 1;
 
         private Hierarchy(Vector3[] lows, Vector3[] highs, int leaf, int braid) {
@@ -680,6 +725,7 @@ public sealed partial class SdfMeshIrradianceScene {
             hierarchy.m_braids.Sort();
             return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids]);
         }
+
         // A node's storage, its chunk allocated by the first build task to reach it; the last chunk is as long as the
         // bound needs, so a small hierarchy allocates no more than it could use.
         private ref Node At(int node) {
@@ -696,7 +742,7 @@ public sealed partial class SdfMeshIrradianceScene {
                 }
             }
 
-            return ref chunk[(node & ChunkMask)];
+            return ref chunk[node & ChunkMask];
         }
         private Node[] CopyNodes() {
             var nodes = new Node[m_nodeCount];
@@ -707,7 +753,6 @@ public sealed partial class SdfMeshIrradianceScene {
 
             return nodes;
         }
-
         // Builds a node over a range of the order; wide says its parent, if any, is wider than the braid width.
         private void BuildNode(int node, int first, int count, bool wide) {
             if (wide && (count <= m_braid)) {
@@ -739,7 +784,7 @@ public sealed partial class SdfMeshIrradianceScene {
             }
 
             var mid = Split(centroidHigh: centroidHigh, centroidLow: centroidLow, count: count, first: first);
-            var child = Interlocked.Add(location1: ref m_nodeCount, value: 2) - 2;
+            var child = (Interlocked.Add(location1: ref m_nodeCount, value: 2) - 2);
 
             built.Link(count: 0, first: child);
             var wider = (count > m_braid);
@@ -761,9 +806,9 @@ public sealed partial class SdfMeshIrradianceScene {
         // split when the bins cannot separate them.
         private int Split(int first, int count, Vector3 centroidLow, Vector3 centroidHigh) {
             var extent = (centroidHigh - centroidLow);
-            var axis = ((extent.X >= extent.Y) && (extent.X >= extent.Z)) ? 0 : ((extent.Y >= extent.Z) ? 1 : 2);
-            var axisLow = Component(value: centroidLow, axis: axis);
-            var axisExtent = Component(value: extent, axis: axis);
+            var axis = (((extent.X >= extent.Y) && (extent.X >= extent.Z)) ? 0 : ((extent.Y >= extent.Z) ? 1 : 2));
+            var axisLow = Component(axis: axis, value: centroidLow);
+            var axisExtent = Component(axis: axis, value: extent);
             var mid = (first + (count / 2));
 
             if (axisExtent <= 0f) { return mid; }
@@ -808,7 +853,7 @@ public sealed partial class SdfMeshIrradianceScene {
                 }
                 if ((leftCount == 0) || (rightCount == 0)) { continue; }
 
-                var cost = ((leftCount * Area(low: leftLow, high: leftHigh)) + (rightCount * Area(low: rightLow, high: rightHigh)));
+                var cost = ((leftCount * Area(high: leftHigh, low: leftLow)) + (rightCount * Area(high: rightHigh, low: rightLow)));
 
                 if (cost < bestCost) {
                     bestCost = cost;
@@ -832,11 +877,11 @@ public sealed partial class SdfMeshIrradianceScene {
             return (((left > first) && (left < (first + count))) ? left : mid);
         }
         private static int BinOf(float value, float low, float extent) =>
-            Math.Clamp(value: (int)(((value - low) / extent) * Bins), min: 0, max: (Bins - 1));
+            Math.Clamp(max: (Bins - 1), min: 0, value: ((int)(((value - low) / extent) * Bins)));
         private static float Area(Vector3 low, Vector3 high) {
             var d = Vector3.Max(value1: (high - low), value2: Vector3.Zero);
 
-            return ((d.X * d.Y) + (d.Y * d.Z) + (d.Z * d.X));
+            return (((d.X * d.Y) + (d.Y * d.Z)) + (d.Z * d.X));
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float Component(Vector3 value, int axis) => ((axis == 0) ? value.X : ((axis == 1) ? value.Y : value.Z));

@@ -17,14 +17,15 @@ public sealed partial class MimallocAllocator : IAllocator, IAllocatorStatistics
     /// <inheritdoc/>
     public unsafe (long Committed, long Reserved) ReadStatistics() {
         // v3's process-wide JSON avoids pinning the versioned mi_stats_t ABI. The returned block belongs to mimalloc.
-        var json = mi_stats_get_json(0, null);
+        var json = mi_stats_get_json(buffer: null, size: 0);
+
         if (json is null) { return default; }
         try {
-            using var document = JsonDocument.Parse(Marshal.PtrToStringUTF8((nint)json)!);
-            return (document.RootElement.GetProperty("committed").GetProperty("current").GetInt64(), document.RootElement.GetProperty("reserved").GetProperty("current").GetInt64());
-        } finally { mi_free(json); }
-    }
+            using var document = JsonDocument.Parse(Marshal.PtrToStringUTF8(ptr: ((nint)json))!);
 
+            return (document.RootElement.GetProperty(propertyName: "committed").GetProperty(propertyName: "current").GetInt64(), document.RootElement.GetProperty(propertyName: "reserved").GetProperty(propertyName: "current").GetInt64());
+        } finally { mi_free(p: json); }
+    }
     /// <inheritdoc/>
     public void Collect() => mi_collect(force: true);
 

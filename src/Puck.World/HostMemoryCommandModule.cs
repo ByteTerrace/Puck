@@ -18,7 +18,6 @@ namespace Puck.World;
 internal sealed class HostMemoryCommandModule(IAllocator allocator) : ICommandModule {
     private static string Mebibytes(long bytes) =>
         (bytes / (1L << 20)).ToString(provider: CultureInfo.InvariantCulture);
-
     // One line: the process, then the managed heap as the last collection left it, in MiB.
     private string Describe() {
         using var process = Process.GetCurrentProcess();
@@ -33,7 +32,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator) : ICommandMo
 
         var heap = string.Join(separator: ' ', value: parts);
         var account = MemoryAccount.Shared.Read();
-        var native = (allocator as IAllocatorStatistics)?.ReadStatistics() ?? default;
+        var native = ((allocator as IAllocatorStatistics)?.ReadStatistics() ?? default);
         var accounting = string.Create(CultureInfo.InvariantCulture, $" | account bytes live={account.Live} reserved={account.Reserved} cached={account.Cached} retirement={account.Retirement} metadata={account.Metadata} budget={account.Budget} headroom={account.Headroom} allocator-committed={native.Committed} allocator-reserved={native.Reserved} managed-committed={info.TotalCommittedBytes} process-private={process.PrivateMemorySize64}");
 
         return string.Create(
@@ -47,12 +46,12 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator) : ICommandMo
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: "Reads the host process's memory: host.memory echoes the working set, its peak and the private bytes, then the managed heap the last garbage collection left (size, committed, fragmented, and gen0, gen1, gen2, the large and pinned object heaps), in MiB, with the collection counts. host.memory collect first runs a full blocking collection that compacts the large object heap, so the heap read is what is still reachable.",
+            description: "Reads process working set/private bytes and managed heap generations in MiB, then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes. Reservations are future admission promises, not allocated bytes. host.memory collect trims cache claims, compacts the LOH and asks the native allocator to collect; active consumers retain their storage. host.memory budget <bytes|auto> lowers the background admission budget or restores the machine-derived budget; existing owners keep their allocations and new bakes defer until they fit.",
             handler: (_, args) => {
-                if (args.Count == 2 && args.Is(0, "budget")) {
-                    if (args.Is(1, "auto")) { MemoryAccount.Shared.SetBudget(null); return new CommandResult(Output: Describe()); }
+                if ((args.Count == 2) && args.Is(index: 0, value: "budget")) {
+                    if (args.Is(index: 1, value: "auto")) { MemoryAccount.Shared.SetBudget(bytes: null); return new CommandResult(Output: Describe()); }
                     if (long.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out var budget)) {
-                        MemoryAccount.Shared.SetBudget(budget);
+                        MemoryAccount.Shared.SetBudget(bytes: budget);
                         return new CommandResult(Output: Describe());
                     }
                 }

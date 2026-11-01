@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
+using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
 
@@ -224,7 +226,9 @@ public sealed partial class SdfMeshPathBake {
 
     private readonly Lock m_gate = new();
     private readonly List<Group> m_groups = [];
+    private readonly List<Group> m_retiredGroups = [];
 
+    private SdfMeshClaims? m_drawClaims;
     // How many of the first groups Pending found done; every write of a group lowers it to that group's index (Replace).
     private int m_doneThrough;
 
@@ -411,6 +415,11 @@ public sealed partial class SdfMeshPathBake {
                     draws: m_draws
                 );
                 m_slotClips = frame.SlotClips;
+                var claims = new SdfMeshClaims(meshes: m_draws.Select(selector: static draw => draw.Mesh));
+                var previousClaims = m_drawClaims;
+
+                m_drawClaims = claims;
+                previousClaims?.Dispose();
                 m_drawnCopies = frame.MeshInstances.ToArray();
                 m_frameDraws = frame.MeshDraws;
                 m_frameDrawsRevision = frame.MeshDrawsRevision;
@@ -558,10 +567,16 @@ public sealed partial class SdfMeshPathBake {
                     // lattice holds more than a share.
                     if ((lattices.Count > 0) && ((taps + next.Taps) > m_frameBudget)) { stop = 1; break; }
                     // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
-                    // so only MaxAdmitted do at once: the rest keep their small refining lattices until one lands.
+                    // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
                     // A first slab a frame returned unanswered keeps the admission it took.
                     if ((next.Slab == 0) && !group.Admitted) {
-                        if (admitted >= MaxAdmitted) { continue; }
+                        var peak = checked(((((long)group.Final!.Lattice.Samples) * 96) + (((long)SdfSampledLattice.MaxFineSamples) * 96)));
+
+                        if (!group.Memory.TryReserve(peak: peak)) {
+                            if (!group.DeferredReported) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={Residency} group={group.Selector} peak={peak} budget={Library.Account.Read().Budget}"); group.DeferredReported = true; }
+                            continue;
+                        }
+                        group.DeferredReported = false;
                         group.Admitted = true;
                         admitted++;
                     }
@@ -599,16 +614,15 @@ public sealed partial class SdfMeshPathBake {
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
 
     private long m_frameTaken = -1;
-
     // The groups past their refining lattices, from the first slab of the final lattice until they land, that bake at
     // once: enough to keep every worker busy, few enough that the meshing's working memory stays a few groups' worth.
-    private static int MaxAdmitted => (2 * Workers);
 
     private int m_frameBudget = FrameTaps;
 
     private SdfMeshBakeBatch? m_frameBatch;
+    private OwnedBuffer<Vector4>? m_pointTableStorage;
 
-    private Vector4[] m_pointTable = [];
+    private OwnedBuffer<Vector4> PointTable => m_pointTableStorage ??= new(allocator: Library.Allocator, observer: m_workspaceMemory);
 
     /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and writes its points
     /// into the tables' point table, which the bake kernel reads.</summary>
@@ -624,9 +638,9 @@ public sealed partial class SdfMeshPathBake {
         }
 
         if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return; }
-        if (m_pointTable.Length < batch.TableEntries) { m_pointTable = new Vector4[Math.Max(val1: batch.TableEntries, val2: SdfWorldPackage.MeshBakeMaxSamples)]; }
-        if (batch.WritePoints(table: m_pointTable)) {
-            tables.WriteMeshBakePoints(points: m_pointTable.AsSpan(length: batch.TableEntries, start: 0));
+        if (PointTable.Length < batch.TableEntries) { PointTable.Resize(Math.Max(val1: batch.TableEntries, val2: SdfWorldPackage.MeshBakeMaxSamples)); }
+        if (batch.WritePoints(table: PointTable.GetSpan())) {
+            tables.WriteMeshBakePoints(points: PointTable.GetSpan()[..batch.TableEntries]);
         }
     }
     /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
@@ -688,16 +702,16 @@ public sealed partial class SdfMeshPathBake {
             // A group's lattice is read and answered off the caller's thread, ahead of every other queued stage; the group
             // stays in flight until then, so the bake takes no lattice of it before its answer lands.
             if (batch.Tickets[index] is Group group) {
-                var copy = ArrayPool<byte>.Shared.Rent(minimumLength: bytes);
+                var copy = new OwnedBuffer<byte>(allocator: Library.Allocator, observer: m_workspaceMemory);
 
-                slice.CopyTo(destination: copy);
-                Schedule(group: group, urgent: true, work: _ => {
+                copy.CopyFrom(source: slice);
+                if (!Schedule(group: group, urgent: true, work: _ => {
                     try {
-                        Answer(group: group, request: in lattice, samples: copy.AsSpan(length: bytes, start: 0));
+                        Answer(group: group, request: in lattice, samples: copy.GetSpan());
                     } finally {
-                        ArrayPool<byte>.Shared.Return(array: copy);
+                        copy.Dispose();
                     }
-                });
+                })) { copy.Dispose(); }
                 continue;
             }
             Complete(request: in lattice, samples: slice, ticket: batch.Tickets[index]);
@@ -726,10 +740,12 @@ public sealed partial class SdfMeshPathBake {
     // One answer at a time borrows this bake's decoded buffers. The queued continuation owns its final lattice,
     // never these spans; no borrower survives Answer or a buffer's next growth.
     private readonly Lock m_answerGate = new();
-    private float[] m_answerValues = [];
-    private float[] m_answerGradients = [];
-    private int[] m_answerMaterials = [];
-    private int[] m_answerSlots = [];
+    private readonly MemoryAccount.Owner m_workspaceMemory = MemoryAccount.Shared.CreateOwner("mesh-bake-readback");
+
+    private OwnedBuffer<float>? m_answerValues;
+    private OwnedBuffer<float>? m_answerGradients;
+    private OwnedBuffer<int>? m_answerMaterials;
+    private OwnedBuffer<int>? m_answerSlots;
 
     private void Answer(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<byte> samples) {
         lock (m_answerGate) { AnswerBorrowed(group: group, request: in request, samples: samples); }
@@ -738,17 +754,21 @@ public sealed partial class SdfMeshPathBake {
         var answered = Stopwatch.GetTimestamp();
         var count = request.Samples;
 
-        if (m_answerValues.Length < count) { Array.Resize(array: ref m_answerValues, newSize: count); }
-        if (m_answerMaterials.Length < count) { Array.Resize(array: ref m_answerMaterials, newSize: count); }
-        if (request.Gradients && (m_answerGradients.Length < (3 * count))) { Array.Resize(array: ref m_answerGradients, newSize: (3 * count)); }
-        var values = m_answerValues.AsSpan(length: count, start: 0);
-        var materials = m_answerMaterials.AsSpan(length: count, start: 0);
-        var gradients = (request.Gradients ? m_answerGradients.AsSpan(length: (3 * count), start: 0) : default);
+        m_answerValues ??= new(allocator: Library.Allocator, observer: m_workspaceMemory);
+        m_answerMaterials ??= new(allocator: Library.Allocator, observer: m_workspaceMemory);
+        m_answerGradients ??= new(allocator: Library.Allocator, observer: m_workspaceMemory);
+        m_answerSlots ??= new(allocator: Library.Allocator, observer: m_workspaceMemory);
+        m_answerValues.Resize(count);
+        m_answerMaterials.Resize(count);
+        if (request.Gradients) { m_answerGradients.Resize((3 * count)); }
+        var values = m_answerValues.GetSpan();
+        var materials = m_answerMaterials.GetSpan();
+        var gradients = (request.Gradients ? m_answerGradients.GetSpan() : default);
         // A points lattice without gradients answers each point's winning slot where a gradient would lie.
         var hasSlots = (!request.Gradients && !request.Points.IsEmpty);
 
-        if (hasSlots && (m_answerSlots.Length < count)) { Array.Resize(array: ref m_answerSlots, newSize: count); }
-        var slots = (hasSlots ? m_answerSlots.AsSpan(length: count, start: 0) : default);
+        if (hasSlots) { m_answerSlots.Resize(count); }
+        var slots = (hasSlots ? m_answerSlots.GetSpan() : default);
 
         for (var index = 0; (index < count); index++) {
             var record = samples.Slice(start: ((index * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
@@ -853,7 +873,7 @@ public sealed partial class SdfMeshPathBake {
         var identity = Identity.Value;
 
         foreach (var group in groups) {
-            _ = Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out _);
+            if (Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var warmed)) { warmed.Release(); }
         }
 
         lock (m_gate) {
@@ -976,7 +996,7 @@ public sealed partial class SdfMeshPathBake {
             }
 
             if ((old is not null) && (old.Mesh is not null) && (old.Dynamic == group.Dynamic)) {
-                group.Mesh = old.Mesh;
+                group.Mesh = old.Mesh.Acquire();
                 group.DrawnPosition = old.DrawnPosition;
                 group.DrawnOrientation = old.DrawnOrientation;
                 group.DrawnScale = old.DrawnScale;
@@ -998,7 +1018,7 @@ public sealed partial class SdfMeshPathBake {
 
         // A previous group this program does not keep is retired: its queued work is dropped (TakeWork).
         foreach (var old in previous.Values) {
-            if (!planned.Contains(item: old)) { old.Retired = true; }
+            if (!planned.Contains(item: old)) { m_retiredGroups.Add(item: old); old.Retired = true; }
         }
         foreach (var group in m_groups) {
             if (group.Done || (group.Leader is not { } waited) || planned.Contains(item: waited)) { continue; }
@@ -1078,6 +1098,7 @@ public sealed partial class SdfMeshPathBake {
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
     // store refuses its entry; true when it loads.
     private bool Begin(Group group) {
+        group.Allocator = Library.Allocator;
         group.TakeDemandBox();
         // The coarse lattice is a cube about the bounding box's center, so its cells are cubes.
         var center = ((group.Low + group.High) * 0.5f);
@@ -1206,12 +1227,12 @@ public sealed partial class SdfMeshPathBake {
         var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
 
         if (!(group.Detail > 0f) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
-            return new FinalLattice(lattice: lattice);
+            return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory);
         }
 
         var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
 
-        return new FinalLattice(lattice: lattice) {
+        return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
             Factor = Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / group.Detail))), min: 2, max: MaxDetailRefinement),
             Regions = [new SdfLatticeRegion(High: high, Low: low)],
         };
@@ -1267,7 +1288,7 @@ public sealed partial class SdfMeshPathBake {
 
         var lattice = new SdfMeshBakeRequest(Cell: spacing, Dims: dims, Gradients: false, Origin: group.Low, Selector: group.Selector) { FrameSlot = (group.Dynamic ? group.Slot : -1), Instances = group.Instances };
 
-        return new FinalLattice(lattice: lattice) {
+        return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
             Factor = ((regions.Count > 0) ? Math.Clamp(value: ((int)MathF.Ceiling(x: (coarse / target))), min: 2, max: (float.IsFinite(f: detailed) ? MaxDetailRefinement : MaxRefinement)) : 0),
             Regions = [.. regions],
         };
@@ -1294,8 +1315,8 @@ public sealed partial class SdfMeshPathBake {
         var final = group.Final!;
         var start = (request.Slab * (request.Dims.X * request.Dims.Y));
 
-        values.CopyTo(destination: final.Values.AsSpan(start: start));
-        materials.CopyTo(destination: final.Materials.AsSpan(start: start));
+        values.CopyTo(destination: final.Values[start..]);
+        materials.CopyTo(destination: final.Materials[start..]);
         final.Planes += request.Dims.Z;
         if (final.Planes < final.Lattice.Dims.Z) {
             group.Next = SlabOf(group: group);
@@ -1315,7 +1336,7 @@ public sealed partial class SdfMeshPathBake {
         if (!(inside && outside) && !SheetBetween(lattice: final.Lattice, values: final.Values)) {
             group.Outcome = "no crossed cell in the final lattice";
             Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
-            group.Final = null;
+            group.Final?.Dispose(); group.Final = null;
             group.Next = null;
             group.Done = true;
             group.Mesh = null;
@@ -1338,13 +1359,15 @@ public sealed partial class SdfMeshPathBake {
             var lattice = final.Lattice;
 
             final.Sampled = new SdfSampledLattice(
+                allocator: group.Allocator,
+                observer: group.Memory,
                 cell: lattice.Cell,
-                materials: final.Materials,
+                materials: final.MaterialMemory,
                 origin: lattice.Origin,
                 samplesX: lattice.Dims.X,
                 samplesY: lattice.Dims.Y,
                 samplesZ: lattice.Dims.Z,
-                values: final.Values
+                values: final.ValueMemory
             );
 
             var factor = ((final.Factor > 0)
@@ -1371,7 +1394,7 @@ public sealed partial class SdfMeshPathBake {
                 if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); }
                 group.Outcome = ((refusal is null) ? "no crossed cell in the final lattice" : "lattice refused");
                 if (refusal is null) { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
-                group.Final = null;
+                group.Final?.Dispose(); group.Final = null;
                 group.Next = null;
                 group.Done = true;
                 group.Mesh = null;
@@ -1420,7 +1443,6 @@ public sealed partial class SdfMeshPathBake {
             return;
         }
 
-        group.Final = null;
         Schedule(group: group, work: _ => Contour(group: group, lattice: sampled));
     }
     // Locates zeroes along the lattice edges before measuring their tangent planes. An off-edge normal projection of a
@@ -1450,6 +1472,11 @@ public sealed partial class SdfMeshPathBake {
     // Contours a group's final lattice, then queues the first round of points its materials are sampled at
     // (SdfMeshMaterialCut).
     private void Contour(Group group, SdfSampledLattice lattice) {
+        // The running stage takes the final lattice from the group. Before any crease/material request is published,
+        // Final must be empty so the answer dispatcher selects that next stage. A queued stage stays group-owned.
+        using var final = group.Final;
+
+        group.Final = null;
         group.DiagnosticCell = lattice.ContourCell;
         SdfContour? contour = null;
         var started = Stopwatch.GetTimestamp();
@@ -1487,7 +1514,7 @@ public sealed partial class SdfMeshPathBake {
             group.Projection = new ContourProjection(contour: contour);
             group.CreaseSpacing = lattice.ContourCell;
             group.CreaseSlope = lattice.SurfaceSlope();
-            group.Points = new Vector4[creases.Count];
+            group.Points.Resize(creases.Count);
             for (var index = 0; (index < creases.Count); index++) {
                 var vertex = creases[index];
 
@@ -1504,7 +1531,7 @@ public sealed partial class SdfMeshPathBake {
         return new SdfMeshBakeRequest(Cell: group.CreaseSpacing, Dims: (count, 1, 1), Gradients: true, Origin: Vector3.Zero, Selector: group.Selector) {
             FrameSlot = (group.Dynamic ? group.Slot : -1),
             Instances = group.Instances,
-            Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
+            Points = group.Points.Memory.Slice(group.PointsAnswered, count),
         };
     }
     // Answers a chunk of a group's field check with the field's value and gradient at each vertex no crossing pins to the
@@ -1563,7 +1590,7 @@ public sealed partial class SdfMeshPathBake {
 
         group.Creases = null;
         group.Projection = null;
-        group.Points = null;
+        group.Points.Resize(0);
         group.Next = null;
         group.Contouring = true;
         Schedule(group: group, work: _ => Split(group: group));
@@ -1585,8 +1612,8 @@ public sealed partial class SdfMeshPathBake {
             if (!m_groups.Contains(item: group)) { return; }
             group.Contour = contour;
             group.Cut = cut;
-            group.Points = points;
-            group.PointMaterials = new int[group.Points.Length];
+            group.Points.CopyFrom(source: points);
+            group.PointMaterials.Resize(group.Points.Length);
             group.PointsAnswered = 0;
             group.Next = PointChunk(group: group);
         }
@@ -1598,13 +1625,13 @@ public sealed partial class SdfMeshPathBake {
         return new SdfMeshBakeRequest(Cell: Vector3.One, Dims: (count, 1, 1), Gradients: false, Origin: Vector3.Zero, Selector: group.Selector) {
             FrameSlot = (group.Dynamic ? group.Slot : -1),
             Instances = group.Instances,
-            Points = group.Points.AsMemory(length: count, start: group.PointsAnswered),
+            Points = group.Points.Memory.Slice(group.PointsAnswered, count),
         };
     }
     // Answers a chunk of a group's material points; once a round's every point is answered, its material cut takes them
     // on the thread pool (Advance).
     private void AnswerPoints(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<int> materials) {
-        materials[..request.Samples].CopyTo(destination: group.PointMaterials.AsSpan(start: group.PointsAnswered));
+        materials[..request.Samples].CopyTo(destination: group.PointMaterials.GetSpan()[group.PointsAnswered..]);
         group.PointsAnswered += request.Samples;
         if (group.PointsAnswered < group.Points!.Length) {
             group.Next = PointChunk(group: group);
@@ -1620,7 +1647,7 @@ public sealed partial class SdfMeshPathBake {
         var cut = group.Cut!;
         var started = Stopwatch.GetTimestamp();
 
-        cut.Answer(materials: group.PointMaterials);
+        cut.Answer(materials: group.PointMaterials.GetSpan());
 
         var points = cut.Points();
 
@@ -1634,8 +1661,8 @@ public sealed partial class SdfMeshPathBake {
         lock (m_gate) {
             group.Contouring = false;
             if (!m_groups.Contains(item: group)) { return; }
-            group.Points = points;
-            group.PointMaterials = new int[points.Length];
+            group.Points.CopyFrom(source: points);
+            group.PointMaterials.Resize(points.Length);
             group.PointsAnswered = 0;
             group.Next = PointChunk(group: group);
         }
@@ -1669,8 +1696,8 @@ public sealed partial class SdfMeshPathBake {
                 }
                 group.Contouring = false;
                 group.Skin = mesh;
-                group.Points = points;
-                group.PointMaterials = new int[points.Length];
+                group.Points.CopyFrom(source: points);
+                group.PointMaterials.Resize(points.Length);
                 group.PointsAnswered = 0;
                 group.Next = PointChunk(group: group);
                 return;
@@ -1720,7 +1747,7 @@ public sealed partial class SdfMeshPathBake {
             merged = (contoured - mesh.TriangleCount);
             Account(detail: $"triangles={contoured} kept={mesh.TriangleCount}", group: group, since: started, stage: BakeStage.Land);
             started = Stopwatch.GetTimestamp();
-            Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
+            mesh = Library.Store(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: mesh);
             Account(since: started, stage: BakeStage.Store);
         }
 
@@ -1731,8 +1758,8 @@ public sealed partial class SdfMeshPathBake {
             Draw(group: group, mesh: mesh);
             group.Outcome = ((mesh is null) ? "mesh refused" : null);
             group.Skin = null;
-            group.Points = null;
-            group.PointMaterials = [];
+            group.Points.Resize(0);
+            group.PointMaterials.Resize(0);
             Finish();
         }
     }
@@ -1764,9 +1791,11 @@ public sealed partial class SdfMeshPathBake {
     // one lands, so the count of drawn meshes alone does not move: the draws are marked stale so Dress lists the new one.
     private void Draw(Group group, SdfMesh? mesh) {
         group.Mesh = mesh;
+        if (group.Replaces is { } replaced) { m_retiredGroups.Add(item: replaced); replaced.Retired = true; group.Replaces = null; }
         group.ResidentAt = 0;
         m_allResident = false;
         m_drawnMeshes = -1;
+        _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
     // Records the bake's wall time once its last group finishes, and reports it.
     private void Finish() {
@@ -1936,9 +1965,28 @@ public sealed partial class SdfMeshPathBake {
         // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
         public SdfMesh? Skin { get; set; }
         public bool Contouring { get; set; }
-        public bool Done { get; set; }
-        public bool InFlight { get; set; }
-        public SdfMesh? Mesh { get; set; }
+
+        private bool m_done;
+        private bool m_inFlight;
+
+        public IAllocator? Allocator { get; set; }
+        public bool Done { get => m_done; set { m_done = value; if (value) { Memory.ReleaseReservation(); } TryRelease(); } }
+        public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); } }
+
+        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner("mesh-bake-group");
+
+        private SdfMesh? m_mesh;
+
+        public SdfMesh? Mesh {
+            get => m_mesh;
+            set {
+                var old = m_mesh;
+
+                m_mesh = (Retired ? null : value);
+                if (Retired) { value?.Release(); }
+                old?.Release();
+            }
+        }
         public SdfMeshBakeRequest? Next { get; set; }
         public int Refinements { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
@@ -1955,11 +2003,14 @@ public sealed partial class SdfMeshPathBake {
 
         public float CreaseSlope { get; set; } = 1f;
 
-        public Vector4[]? Points { get; set; }
+        private OwnedBuffer<Vector4>? m_points;
 
-        public int[] PointMaterials { get; set; } = [];
+        public OwnedBuffer<Vector4> Points => m_points ??= new(allocator: Allocator, observer: Memory);
+
+        private OwnedBuffer<int>? m_pointMaterials;
 
         public Vector3 DrawnPosition { get; set; }
+        public OwnedBuffer<int> PointMaterials => m_pointMaterials ??= new(allocator: Allocator, observer: Memory);
         public int PointsAnswered { get; set; }
 
         public Quaternion DrawnOrientation { get; set; } = Quaternion.Identity;
@@ -1974,13 +2025,56 @@ public sealed partial class SdfMeshPathBake {
         public SdfMeshBakeRequest? Deferred { get; set; }
         // Whether the mesh came from the library or its store rather than a bake of this group.
         public bool Stored { get; set; }
-        // Whether the group has taken the first slab of its final lattice (MaxAdmitted).
+        // Whether the group has reserved its final lattice and result peak.
         public bool Admitted { get; set; }
+        public bool DeferredReported { get; set; }
         // Whether the bake no longer plans the group (a later program replaced it, or its residency was released): the
         // pool drops its queued work. Written under the bake's gate, read under the pool's.
-        public bool Retired { get => Volatile.Read(location: ref m_retired); set => Volatile.Write(location: ref m_retired, value: value); }
+        public bool Retired {
+            get => Volatile.Read(location: ref m_retired);
+            set { Volatile.Write(location: ref m_retired, value: value); if (value) { Memory.Classify(category: MemoryCategory.Retirement); } TryRelease(); }
+        }
 
         private bool m_retired;
+
+        private readonly object m_lifecycle = new();
+
+        private int m_jobs;
+        private bool m_workspaceReleased;
+        private bool m_released;
+
+        public bool Released => Volatile.Read(location: ref m_released);
+
+        public bool QueueWork() {
+            lock (m_lifecycle) { if (Retired) { return false; } m_jobs++; return true; }
+        }
+        public void EndWork() {
+            lock (m_lifecycle) { m_jobs--; Monitor.PulseAll(obj: m_lifecycle); TryRelease(); }
+        }
+        public void WaitForWork() {
+            lock (m_lifecycle) { while (m_jobs != 0) { Monitor.Wait(obj: m_lifecycle); } }
+        }
+
+        private void TryRelease() {
+            lock (m_lifecycle) {
+                if ((m_jobs != 0) || InFlight) { return; }
+                if ((Done || Retired) && !m_workspaceReleased) {
+                    m_workspaceReleased = true;
+                    Final?.Dispose(); Final = null;
+                    m_points?.Dispose();
+                    m_pointMaterials?.Dispose();
+                    Contour = null; Cut = null; Skin = null; Creases = null; Projection = null;
+                    Next = null; Deferred = null;
+                    Memory.Dispose();
+                }
+                if (Retired && !m_released) {
+                    m_released = true;
+                    m_mesh?.Release(); m_mesh = null;
+                    Replaces?.RetireReplaced();
+                }
+            }
+        }
+        private void RetireReplaced() { Retired = true; }
 
         // The group of the same bake baking this group's geometry, whose mesh this one takes when it finishes, or null.
         public Group? Leader { get; set; }
@@ -2049,31 +2143,34 @@ public sealed partial class SdfMeshPathBake {
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from
     // them and the stage of points it is answering: refinement's fine samples, bracketed edge roots, then the samples
     // its contour reads a gradient at.
-    private sealed class FinalLattice(SdfMeshBakeRequest lattice) {
+    private sealed class FinalLattice(SdfMeshBakeRequest lattice, IAllocator? allocator, MemoryAccount.Owner owner) : IDisposable {
         public SdfMeshBakeRequest Lattice { get; } = lattice;
 
-        // Allocated by the first slab's answer, which only an admitted group takes (MaxAdmitted), so a group waiting for
+        // Allocated by the first slab's answer, which only a byte-admitted group takes, so a group waiting for
         // admission holds its lattice's description alone.
-        public float[] Values => (m_values ??= new float[Lattice.Samples]);
-        public int[] Materials => (m_materials ??= new int[Lattice.Samples]);
+        public Span<float> Values { get { m_values.Resize(Lattice.Samples); return m_values.GetSpan(); } }
+        public ReadOnlyMemory<int> MaterialMemory { get { _ = Materials; return m_materials.Memory; } }
+        public Span<int> Materials { get { m_materials.Resize(Lattice.Samples); return m_materials.GetSpan(); } }
+        public ReadOnlyMemory<float> ValueMemory { get { _ = Values; return m_values.Memory; } }
 
-        private float[]? m_values;
-        private int[]? m_materials;
+        private readonly OwnedBuffer<float> m_values = new(allocator: allocator, observer: owner);
+        private readonly OwnedBuffer<int> m_materials = new(allocator: allocator, observer: owner);
 
         public int Planes { get; set; }
         public SdfSampledLattice? Sampled { get; set; }
         public FinalStage Stage { get; set; }
 
         // All chunks of a round finish before the next round writes or grows this owned storage.
-        private Vector4[] m_points = [];
+        private readonly OwnedBuffer<Vector4> m_points = new(allocator: allocator, observer: owner);
 
         public ReadOnlyMemory<Vector4> Points { get; private set; }
 
         public void SetPoints(ReadOnlySpan<Vector3> points) {
-            if (m_points.Length < points.Length) { Array.Resize(array: ref m_points, newSize: points.Length); }
+            m_points.Resize(points.Length);
             for (var index = 0; (index < points.Length); index++) { m_points[index] = new Vector4(value: points[index], w: 1f); }
-            Points = m_points.AsMemory(0, points.Length);
+            Points = m_points.Memory;
         }
+        public void Dispose() { Sampled?.Dispose(); m_values.Dispose(); m_materials.Dispose(); m_points.Dispose(); }
 
         public int Answered { get; set; }
         // A union's refinement: the fine cells a coarse cell splits into (zero for the FineCell rule) and the members'

@@ -18,6 +18,15 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena = new();
 
+    private SdfMeshClaims? m_meshClaims;
+    private bool m_meshTrimListening;
+
+    private void TrimMeshSources() {
+        if (m_disposed) { return; }
+        m_meshArena.TrimUnused();
+        m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
+    }
+
     // Whether the arena has written its meshes into the region.
     private bool m_meshSectionWritten;
     // The draw list last planned and its revision, and whether its draws are all staged: a list whose meshes' words are
@@ -29,7 +38,6 @@ public sealed partial class SdfWorldTables {
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
     private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<SdfMeshDraw> m_meshLanded = [];
-
     // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
     // owed mesh): what StageChangedDraws compares a list against.
     private SdfMeshDraw[] m_stagedDraws = [];
@@ -64,7 +72,6 @@ public sealed partial class SdfWorldTables {
 
     private readonly List<(int Word, SdfMesh Mesh)> m_meshOrder = [];
     private bool m_meshOrderStale = true;
-
     // The zeros a flush stages into words no placed mesh holds.
     private static readonly uint[] ZeroWords = new uint[(1 << 16)];
 
@@ -113,7 +120,7 @@ public sealed partial class SdfWorldTables {
     public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
 
     // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
-    internal ReadOnlySpan<SdfMeshDraw> MeshDraws => m_stagedDraws.AsSpan(start: 0, length: m_stagedCount);
+    internal ReadOnlySpan<SdfMeshDraw> MeshDraws => m_stagedDraws.AsSpan(length: m_stagedCount, start: 0);
     // The world box of each staged draw, by its index in MeshDraws, or null for a draw no host box bounds
     // (SdfMeshBox.TryOf), which every pass draws.
     internal ReadOnlySpan<SdfMeshBox?> MeshDrawBoxes => m_meshDrawBoxes.AsSpan(length: ((int)m_meshDrawCount), start: 0);
@@ -121,6 +128,17 @@ public sealed partial class SdfWorldTables {
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
+        if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimMeshSources; m_meshTrimListening = true; }
+        if (ReferenceEquals(objA: draws, objB: m_meshSource) && (revision == m_meshSourceRevision)) { StageMeshRegionCore(draws: draws, revision: revision); return; }
+        var candidate = new SdfMeshClaims(meshes: draws.Select(selector: static draw => draw.Mesh));
+
+        try { StageMeshRegionCore(draws: draws, revision: revision); } catch { candidate.Dispose(); throw; }
+        var previous = m_meshClaims;
+
+        m_meshClaims = candidate;
+        previous?.Dispose();
+    }
+    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (
             !ReferenceEquals(
                 objA: draws,
@@ -315,12 +333,13 @@ public sealed partial class SdfWorldTables {
         var rightClip = right.ClipPlane;
 
         return (
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(in leftMatrix)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(in rightMatrix))) &&
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(in leftRotation)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(in rightRotation))) &&
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(in leftShift)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(in rightShift))) &&
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(in leftClip)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(in rightClip)))
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in leftMatrix)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in rightMatrix))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in leftRotation)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in rightRotation))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in leftShift)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in rightShift))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in leftClip)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in rightClip)))
         );
     }
+
     /// <summary>Gets or sets the demand points the mesh region lands owed meshes by (<see cref="SdfMeshDemand"/>): the
     /// draws they see largest first, a draw no host box bounds (a skinned body) before any, and the list's order among
     /// equals; <see langword="null"/>, or one with no point, lands them in the list's order. Read on the frame's
@@ -329,7 +348,6 @@ public sealed partial class SdfWorldTables {
 
     // The draws naming owed meshes by priority, reused frame to frame.
     private readonly List<(float Priority, int Index)> m_owedOrder = [];
-
     // Higher priority first, then the list's order.
     private static readonly Comparison<(float Priority, int Index)> ByPriority = static (left, right) =>
         ((right.Priority.CompareTo(value: left.Priority) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index));
@@ -346,9 +364,9 @@ public sealed partial class SdfWorldTables {
             var draw = draws[index];
 
             if (!m_meshesOwed.Contains(item: draw.Mesh)) { continue; }
-            m_owedOrder.Add(item: ((demand is null)
+            m_owedOrder.Add(item: (((demand is null)
                 ? 0f
-                : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity), index));
+                : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
         }
         CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparison: ByPriority);
 
@@ -410,7 +428,6 @@ public sealed partial class SdfWorldTables {
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
     public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(item: mesh));
-
     /// <summary>Describes the mesh region's landing: the bytes it holds and the latest list uses, the mesh bytes written
     /// into it, the bytes it still owes, the frames and seconds it spent owing them, and the words a frame lands at most.
     /// Safe to read from any thread, the counts being a frame's.</summary>
@@ -423,6 +440,7 @@ public sealed partial class SdfWorldTables {
 
         return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s landing-words-per-frame={MeshLandingWords}");
     }
+
     // One placed mesh's words, from its first vertex word, in the mesh scratch.
     private Span<uint> MeshWordsOf(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
