@@ -137,8 +137,10 @@ public static class FixedFieldColliderContact {
             var spread = new FixedVector3(X: grow, Y: grow, Z: grow);
             var lower = new FixedVector3(X: FixedQ4816.Min(x: from.X, y: to.X), Y: FixedQ4816.Min(x: from.Y, y: to.Y), Z: FixedQ4816.Min(x: from.Z, y: to.Z));
 
-            return (bounds.TryDistanceBounds(distance: out var interval, lower: FixedPosition.FromLocal(local: (lower - spread)),
-                    upper: FixedPosition.FromLocal(local: (FixedVector3.Max(left: from, right: to) + spread))) &&
+            // A box the carrier cannot hold proves nothing.
+            return (FixedVector3.TrySubtract(difference: out var least, left: lower, right: spread) &&
+                FixedVector3.TryAdd(left: FixedVector3.Max(left: from, right: to), right: spread, sum: out var most) &&
+                bounds.TryDistanceBounds(distance: out var interval, lower: FixedPosition.FromLocal(local: least), upper: FixedPosition.FromLocal(local: most)) &&
                 !interval.IsUnbounded && (interval.Lower > FixedQ4816.Zero));
         }
         public bool TryValue(FixedVector3 local, out FixedQ4816 value) {

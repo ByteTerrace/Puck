@@ -54,8 +54,9 @@ experimental worlds have that it lacks is ported into it
    `CloseSheets` and the collapse.
 5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
    to 10.
-6. [Certified field contact](#certified-field-contact) [high]: a clearance
-   certificate that tightens near the skin, then box and ellipsoid bodies.
+6. [Certified field contact](#certified-field-contact) [high]: a relief
+   enclosure tight enough to prove clearance near the rock, then box and
+   ellipsoid bodies.
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
@@ -822,53 +823,51 @@ store (AGENTS.md), and work proportional to change.
 ### Certified field contact
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · high · Next:
-the certificate near the skin, then box and ellipsoid bodies. The terrain pass's
+a relief enclosure tight enough to prove clearance near the rock (the noise's
+gradient in closed form), then box and ellipsoid bodies. The terrain pass's
 step 5 is this packet ([terrain pass](terrain-pass.md#order-of-work)).
 
 Relief colliders and the field provider read one certified surface solve
-(`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`);
-review findings R4 to R8 are closed in it, each pinned in its stated case by
-`CertifiedFieldContactLawTests`. Remaining:
+(`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`).
+Review findings R4 to R8 and the second review's five soundness findings are
+closed in it, each pinned in its stated case by `CertifiedFieldContactLawTests`:
+clearance rests only on the evaluator's box bounds, the core's pieces cover it end
+to end, a union scope's scale is kept wherever a later operator reads its
+magnitude, an unproved or stuck volume reaches both contact paths' resolutions,
+and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. Remaining:
 
-- **[high] Clearance near the skin is unproved, not certified.** The value bound
-  (`Sampler.Certifies`, `FixedColliderField.cs:142`) proves a body clear only at
-  about `L` times its reach, so a body resting between its reach and that ends
-  `Unproved` when the converged solve finds the nearest surface beyond the reach
-  (about 23 of 71 field reads a tick at the valley rim; `physics.contact.field-unproved`).
-  Nothing is pushed then, and a thin feature the local solve misses is not
-  excluded. Close it with a certificate that tightens near the surface: the
-  noise's gradient in closed form beside its value with a curvature bound
-  (a second-order Taylor bound), or interval mean-value bounds in the evaluator's
-  box walk, whose `NoiseDisplace` rule is still `±amplitude`
-  (`SdfFieldEvaluator.RenderBounds.cs:126`).
+- **[high] Clearance near relief is unproved, not certified.** The box bounds
+  (`Sampler.Clears`, `FixedColliderField.cs:129`) charge a noise relief its whole
+  reach (`SdfFieldEvaluator.NoiseReach`, `SdfFieldEvaluator.RenderBounds.cs:139`),
+  so nothing within the amplitude (4 m in the valley) of the unrelieved shapes is
+  ever proved clear. A body touching the surface it measured is a contact without
+  a push, but one whose nearest found surface lies past its reach is `Unproved`,
+  which the carry release, the step-up and the ground snap refuse. The cure is a
+  tighter enclosure of the relief: the noise's gradient in closed form beside its
+  value, with a curvature bound or interval mean-value bounds in the box walk.
 - **[medium] Box and ellipsoid bodies solve from their centre**
-  (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:576`): the
+  (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:580`): the
   support along the measured normal, not the volume's own nearest point. Cover
   the volume with core spheres as the certified sweep does
-  (`FixedFieldContactSolver.WalkCores`, `FixedFieldContactSolver.cs:207`).
+  (`FixedFieldContactSolver.WalkCores`, `FixedFieldContactSolver.cs:209`).
 - **[medium] Relief bounds for non-exact primitives** (`WorldColliderSet.PrimitiveColliders`,
   `src/Puck.World.Server/WorldColliderSet.Relief.cs:30`): a superellipsoid grows
   by its gauge and every blend's growth is charged, but a primitive whose field
   reads under its distance (the cone family) grows only by the reach. Take each
   shape's gain from the evaluator's reach certificates.
-- **[medium] The evaluator's value error is an estimate**
-  (`SdfFieldEvaluator.CertifiedValueError`, `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:534`):
-  16 raws plus 32 raws and one per octave for each metre of relief amplitude. Pin
-  the fixed-point fBm's rounding against an exact oracle in a Maths law, and
-  derive the shapes' share from the reach certificates.
-- **[medium] The 58° face and the rim's creep are unmeasured against the step's
-  bar.** A Moth standing 3,000 ticks at `body.pose 0 386 470` moves 0.04 m in x on
-  both the old and the new solve; find what drives it.
+- **[medium] The noise reach's rounding allowance is argued, not pinned**
+  (`NoiseReach`): a raw per rounded product and four raws per octave for the
+  quintic fade's overshoot. Pin the fixed-point fBm's extreme against an exact
+  oracle in a Maths law.
 - Cost at the valley rim (headless, unpaced, 500 bodies; `dotnet-trace`
   sampled thread time under `FixedStepPump.Step`): relief contact was 14.6 % of
-  a tick on the old first-order collider and is 13.6 % on the certified solve,
-  at about 71 field reads a tick and 18.5 samples a read (940 samples a tick
-  before, 1,317 after). The certified solve alone cost 29 % until
-  `SignedFixedPointArithmetic.Lerp` gained its narrow lane and value noise its
-  per-cell corner cache. Further cuts: the closed-form gradient above, and
-  contact over the job system's parallel partitions. An octave cut is only the
-  drawn relief's own cut (the terrain pass's step 3), never a contact
-  approximation.
+  a tick on the old first-order collider, 13.6 % on the first certified solve,
+  and is 18.9 % now that clearance rests on box bounds (about 670 box reads a
+  tick, against the envelope's one point read a query). It reads the field 71
+  times a tick at 17.5 samples a read. Further cuts: the closed-form gradient
+  above, a cached box walk, and contact over the job system's parallel
+  partitions. An octave cut is only the drawn relief's own cut (the terrain
+  pass's step 3), never a contact approximation.
 - `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries:
   about 98 % of field-contact time at the rim runs under it. Measure whether
   each probe is needed before cutting the solve itself. (from: field-contact)
