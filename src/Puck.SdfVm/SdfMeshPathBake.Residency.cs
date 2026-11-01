@@ -84,6 +84,25 @@ public sealed partial class SdfMeshPathBake {
     private long m_flyingGroups;
     private long m_workingGroups;
 
+    // How long the frame thread waited to take the bake's gate (Dress, TryTakeForFrame and Stage) since the bake
+    // started: the longest wait, their sum, and the waits past a millisecond. A worker that holds the gate through
+    // array-sized work shows here as frame time.
+    private long m_frameGateWaitMax;
+    private long m_frameGateWaitTotal;
+    private long m_frameGateWaitsSlow;
+
+    // Takes the gate on the frame thread, counting the wait.
+    private Lock.Scope EnterFrameGate() {
+        var started = Stopwatch.GetTimestamp();
+        var scope = m_gate.EnterScope();
+        var waited = (Stopwatch.GetTimestamp() - started);
+
+        m_frameGateWaitTotal += waited;
+        m_frameGateWaitMax = Math.Max(val1: m_frameGateWaitMax, val2: waited);
+        m_frameGateWaitsSlow += ((waited > (Stopwatch.Frequency / 1000)) ? 1 : 0);
+        return scope;
+    }
+
     // Adds the time since a timestamp to a stage's account.
     private void Account(BakeStage stage, long since, Group? group = null, string? detail = null) {
         var ticks = (Stopwatch.GetTimestamp() - since);
@@ -104,6 +123,7 @@ public sealed partial class SdfMeshPathBake {
         Array.Clear(array: m_kindSamples);
         m_bakeFrames = m_idleFrames = m_shareTaps = m_stopShare = m_stopSamples = m_stopBatch = m_stopDrained = 0;
         m_waitingGroups = m_flyingGroups = m_workingGroups = 0;
+        m_frameGateWaitMax = m_frameGateWaitTotal = m_frameGateWaitsSlow = 0;
     }
     // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
     private string DescribeAccounts() {
@@ -112,7 +132,7 @@ public sealed partial class SdfMeshPathBake {
 
         var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{m_kindSamples[kind]}")));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}] frame-gate=[max:{((m_frameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((m_frameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{m_frameGateWaitsSlow}]");
     }
     // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
     // priorities stand as they were and the plan's order decides.

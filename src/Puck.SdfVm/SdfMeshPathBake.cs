@@ -343,7 +343,7 @@ public sealed partial class SdfMeshPathBake {
     public SdfFrame Dress(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        lock (m_gate) {
+        using (EnterFrameGate()) {
             if (!ReferenceEquals(objA: frame.Program, objB: m_program)) {
                 Restart(frame: frame);
             }
@@ -494,7 +494,7 @@ public sealed partial class SdfMeshPathBake {
     /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/>.</param>
     /// <returns><see langword="true"/> when the frame dispatches a lattice.</returns>
     public bool TryTakeForFrame(long frame, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch) {
-        lock (m_gate) {
+        using (EnterFrameGate()) {
             if (m_frameTaken != frame) {
                 m_frameTaken = frame;
                 // A batch no bake pass recorded, as while the view's graph rebuilds, answers nothing.
@@ -633,7 +633,7 @@ public sealed partial class SdfMeshPathBake {
     public void Stage(long frame, double frameSeconds, SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
 
-        lock (m_gate) {
+        using (EnterFrameGate()) {
             if (m_frameTaken != frame) { m_frameBudget = FrameBudget(frameSeconds: frameSeconds); }
         }
 
