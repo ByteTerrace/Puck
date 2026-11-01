@@ -30,7 +30,7 @@ public sealed class SphereBoxContactLawTests {
 
         Assert.Equal(actual: hit, expected: expected);
         Assert.Equal(expected, FixedStaticCollider.AxisAlignedBox(center: FixedVector3.Zero, halfExtents: Box.HalfExtents)
-            .TryGetPush(position, FixedQuaternion.Identity, Sphere, FixedQ4816.Zero, out var push));
+            .TryGetPush(position, FixedQuaternion.Identity, Sphere, FixedQ4816.Zero, out var push, out _));
         Assert.Equal(correction, (push.Normal * push.Penetration));
         if (expected) {
             var expectedDistance = Math.Sqrt(d: ((Math.Pow(x: Math.Max(val1: (x - 0.5), val2: 0), y: 2) +
@@ -52,7 +52,7 @@ public sealed class SphereBoxContactLawTests {
             FixedVector3.Zero, FixedQuaternion.Identity, boxes, 0, out var correction));
         Assert.Equal(Vector(x: 0.5, y: 0, z: 0), correction);
         Assert.True(condition: FixedStaticCollider.Sphere(center: position, radius: Sphere.Radius).TryGetPush(
-            FixedVector3.Zero, FixedQuaternion.Identity, Box, FixedQ4816.Zero, out var push));
+            FixedVector3.Zero, FixedQuaternion.Identity, Box, FixedQ4816.Zero, out var push, out _));
         Assert.Equal(-correction, (push.Normal * push.Penetration));
     }
     [Fact]

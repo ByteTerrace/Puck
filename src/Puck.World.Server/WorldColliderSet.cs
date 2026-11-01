@@ -938,7 +938,7 @@ public sealed partial class WorldColliderSet : IContactField {
                 continue;
             }
             foreach (ref readonly var volume in volumes) {
-                if (!collider.TryGetPush(orientation: in orientation, position: position, push: out var push,
+                if (!collider.TryGetPush(orientation: in orientation, position: position, push: out var push, uncertain: out _,
                     skin: skin, volume: in volume) ||
                     (FixedVector3.Dot(left: push.Normal, right: up) < m_solver.GroundedThreshold) ||
                     (found && (push.Penetration <= bestDepth))) {

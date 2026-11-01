@@ -320,16 +320,32 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
     /// <param name="volume">The body-local convex volume.</param>
     /// <param name="skin">The requested separation skin.</param>
     /// <param name="push">The contact push when overlap or skin intrusion exists.</param>
+    /// <param name="uncertain">Whether the query proved neither clearance nor its contact: only a field collider's
+    /// certified solve can leave a volume unproved (<see cref="FixedFieldContact.Uncertain"/>).</param>
     /// <returns><see langword="true"/> when a push is required.</returns>
     public bool TryGetPush(
         FixedVector3 position,
         in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume,
         FixedQ4816 skin,
+        out FixedContactPush push,
+        out bool uncertain
+    ) {
+        if (Kind == FixedStaticColliderKind.Field) {
+            return FixedFieldColliderContact.TryPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin,
+                uncertain: out uncertain, volume: in volume);
+        }
+
+        uncertain = false;
+        return TryGetAnalyticPush(orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume);
+    }
+    private bool TryGetAnalyticPush(
+        FixedVector3 position,
+        in FixedQuaternion orientation,
+        in FixedBodyColliderVolume volume,
+        FixedQ4816 skin,
         out FixedContactPush push
-    ) => ((Kind == FixedStaticColliderKind.Field)
-        ? FixedFieldColliderContact.TryPush(collider: in this, orientation: in orientation, position: position, push: out push, skin: skin, volume: in volume)
-        : ((volume.Kind == FixedBodyColliderKind.Ellipsoid) && (Kind != FixedStaticColliderKind.HalfSpace))
+    ) => (((volume.Kind == FixedBodyColliderKind.Ellipsoid) && (Kind != FixedStaticColliderKind.HalfSpace))
         ? FixedConvexContact.TryPush(collider: in this, orientation: in orientation, position: position,
             push: out push, skin: skin, volume: in volume)
         : Kind switch {

@@ -121,6 +121,14 @@ public sealed class WorldSolidField : IContactField {
             latticeBounds = ((latticeBounds is null) ? solid : new FieldBoundsUnion(a: latticeBounds, b: solid));
         }
         var sweepBounds = (evaluator.HasShape ? new SdfBoundsCache(field: evaluator) : null);
+        // One certified box reading of the contact field's solids, the program's and the lattice's: the sweep proves its
+        // steps with it and the endpoint solve proves bodies clear with it.
+        var contactBounds = (sweepBounds, latticeBounds) switch {
+            ( { } bounds, null) => (IFieldBounds?)bounds,
+            ( { } bounds, { } solid) => new FieldBoundsUnion(a: bounds, b: solid),
+            (null, { } solid) => solid,
+            (null, null) => null,
+        };
 
         m_contactField = ((latticeSolid is null)
             ? m_field
@@ -137,16 +145,9 @@ public sealed class WorldSolidField : IContactField {
             groundedThreshold: tuning.GroundedThreshold,
             maxIterations: tuning.MaxIterations,
             query: m_query,
-            sweep: (sweepBounds, latticeBounds) switch {
-                ( { } bounds, null) => new CertifiedFieldSweep(field: bounds),
-                ( { } bounds, { } solid) => new CertifiedFieldSweep(field: new FieldBoundsUnion(
-                    a: bounds,
-                    b: solid
-                )),
-                (null, { } solid) => new CertifiedFieldSweep(field: solid),
-                // No geometry for a body to cross: the endpoint solve finds nothing either.
-                (null, null) => null,
-            },
+            // No geometry for a body to cross: the endpoint solve finds nothing either.
+            sweep: ((contactBounds is null) ? null : new CertifiedFieldSweep(field: contactBounds)),
+            bounds: contactBounds,
             sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
             sweepWork: FixedContactSweepWork.Process
         );

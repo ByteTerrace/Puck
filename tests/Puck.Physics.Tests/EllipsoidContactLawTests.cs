@@ -41,15 +41,15 @@ public sealed class EllipsoidContactLawTests {
         ];
 
         foreach (var surface in surfaces) {
-            Assert.True(condition: surface.TryGetPush(V(x: 0, y: 0.009, z: 0), identity, Lens, FixedQ4816.Zero, out var push), userMessage: surface.Kind.ToString());
+            Assert.True(condition: surface.TryGetPush(V(x: 0, y: 0.009, z: 0), identity, Lens, FixedQ4816.Zero, out var push, out _), userMessage: surface.Kind.ToString());
             Assert.InRange(((double)push.Penetration), 0.0008, 0.0012);
             Assert.True(condition: (push.Normal.Y > Q(value: 0.99)));
-            Assert.False(condition: surface.TryGetPush(V(x: 0, y: 0.011, z: 0), identity, Lens, FixedQ4816.Zero, out _), userMessage: surface.Kind.ToString());
+            Assert.False(condition: surface.TryGetPush(V(x: 0, y: 0.011, z: 0), identity, Lens, FixedQ4816.Zero, out _, out _), userMessage: surface.Kind.ToString());
         }
 
         var sphere = FixedStaticCollider.Sphere(center: V(x: 0.034, y: 0.009, z: 0), radius: Q(value: 0.001));
 
-        Assert.False(condition: sphere.TryGetPush(FixedVector3.Zero, identity, Lens, FixedQ4816.Zero, out _));
+        Assert.False(condition: sphere.TryGetPush(FixedVector3.Zero, identity, Lens, FixedQ4816.Zero, out _, out _));
     }
     [Fact]
     public void LensPairsResolveShallowOverlapAndRejectDiagonalBoxOverlap() {
