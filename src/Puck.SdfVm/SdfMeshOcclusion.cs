@@ -74,7 +74,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[3] = glass ? 1u : 0u;
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
-        EnsureBuffers(draws: count);
+        EnsureBuffers(draws: count, depth: occlude);
         m_candidates[slot]!.Write(data: words);
     }
     // Writes the occlusion's members of the mesh interface into a mesh set: the frame slot's candidates, the visible set,
@@ -84,7 +84,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         tables.WriteMeshBuffer(bound: ref bound[(first + 1)], buffer: m_visible!, member: SdfKernelInterfaces.MeshOcclusionVisibleWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 2)], buffer: m_draws!, member: SdfKernelInterfaces.MeshOcclusionDrawsWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 3)], buffer: m_counts!, member: SdfKernelInterfaces.MeshOcclusionCountsWritten, set: set);
-        tables.WriteMeshBuffer(bound: ref bound[(first + 4)], buffer: m_depth!, member: SdfKernelInterfaces.MeshOcclusionDepthWritten, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 4)], buffer: m_depth ?? tables.DummyBuffer, member: SdfKernelInterfaces.MeshOcclusionDepthWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 5)], buffer: tables.DummyBuffer, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
         tables.WriteMeshTarget(bound: ref boundTarget, set: set, view: target);
     }
@@ -240,7 +240,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     }
     // Grows the buffers to the frame's draws and render extent. History is copied; the new tail starts empty, so its
     // first opaque occlusion frame tests every new candidate in the second phase.
-    private void EnsureBuffers(uint draws) {
+    private void EnsureBuffers(uint draws, bool depth) {
         var capacity = Math.Max(val1: draws, val2: 1u);
         var candidateBytes = (ulong)(HeaderWords * sizeof(uint));
 
@@ -281,6 +281,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
         );
 
+        if (!depth) { return; }
         var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint));
 
         if ((m_depth is null) || (m_depth.SizeBytes < depthBytes)) {

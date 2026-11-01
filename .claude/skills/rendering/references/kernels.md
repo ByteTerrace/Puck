@@ -268,7 +268,8 @@ fixed multi-draw and single-slot fallback offsets without a driver. First
 instance is zero in every path. Selection dispatches use bounded two-dimensional
 groups so the draw capacity does not depend on the API's single-axis limit.
 The DrawIndex shader requires both device feature `shaderDrawParameters` and
-SPIR-V capability `DrawParameters` (4427) in `VulkanShaderCapabilities.Enabled`.
+SPIR-V capability [DrawParameters](https://github.khronos.org/SPIRV-Registry/extensions/KHR/SPV_KHR_shader_draw_parameters.html)
+(4427) in `VulkanShaderCapabilities.Enabled`.
 Enabling the device feature alone still refuses the module before a pipeline
 can be created.
 
