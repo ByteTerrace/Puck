@@ -1041,8 +1041,12 @@ a design built into C# or living only in the debug world.
   `clearanceMaxElevation` for cutaway only (fade never rises,
   `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
   `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
-  ceiling (1.1) and the fade close target. Decide whether close target and
-  rise become per-mode values, and correct the table or the solver.
+  ceiling (1.1) and the fade close target. Decided (the lead's call): the
+  table is the owner's camera decision and the solver is the mechanism, so the
+  mechanism grows to match. `maxRise` and the close target become per-mode
+  authored values: fade rises up to its own `maxRise` and each mode has its
+  own close target. `chaseCamera` then authors the table's values, and the
+  feel sittings tune them.
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
