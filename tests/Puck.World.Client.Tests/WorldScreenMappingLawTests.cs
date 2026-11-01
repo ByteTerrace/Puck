@@ -63,11 +63,11 @@ public sealed class WorldScreenMappingLawTests {
         ),
         Source: source,
         Up: new DocumentVector3(value: Vector3.Transform(value: Vector3.UnitY, rotation: Pose)),
-        Material: WorldScreenMaterial.Crt
+        Material: "crt"
     );
     // A ray along the face's inward normal onto the centre of source pixel (x, y), through the CRT glass's bezel inset.
     private static SourceRay RayAt(double x, double y) {
-        var glass = ((SourceWarpInverse.Affine)WorldScreenMappings.CrtGlass.Inverse!);
+        var glass = new SourceWarpInverse.Affine(M11: 1f, M12: 0f, M13: 0f, M21: 0f, M22: 1f, M23: 0f);
         var u = ((((x + 0.5) / Width) - glass.M13) / glass.M11);
         var v = ((((y + 0.5) / Height) - glass.M23) / glass.M22);
         var right = Vector3.Transform(value: Vector3.UnitX, rotation: Pose);
@@ -137,7 +137,7 @@ public sealed class WorldScreenMappingLawTests {
         );
         Assert.Equal(
             actual: (mapping.SourceWidth, mapping.SourceHeight, mapping.Destination, mapping.Warp?.Pass),
-            expected: (Width, Height, SourceDestination.Simulation, WorldScreenMappings.GlassPass)
+            expected: (Width, Height, SourceDestination.Simulation, (string?)null)
         );
 
         (int X, int Y)[] pixels = [(0, 0), ((Width - 1), (Height - 1)), (37, 101), (122, 9)];
@@ -229,7 +229,7 @@ public sealed class WorldScreenMappingLawTests {
         );
         Assert.EndsWith(
             actualString: set.Describe(screen: 0),
-            expectedEndString: $"source {Width}x{Height} crop 0,0 {Width}x{Height} layout Identity fit Stretch warp {WorldScreenMappings.GlassPass} inverse destination Simulation"
+            expectedEndString: $"source {Width}x{Height} crop 0,0 {Width}x{Height} layout Identity fit Stretch destination Simulation"
         );
         Assert.Equal(
             actual: new[] { 2, 4, 6, 9 }.Select(selector: screen => set.Describe(screen: screen)),

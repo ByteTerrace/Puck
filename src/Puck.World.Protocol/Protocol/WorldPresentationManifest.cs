@@ -301,31 +301,40 @@ public sealed class WorldPresentationManifest {
                 }
             }
         }
-        foreach (var chord in bindings.Chords) {
-            // A page's own id keys the icon a plate wears when its control opens that page (BindingPageView.Openers).
-            builder.AddCell(
-                key: chord?.Page?.Id,
-                rowReference: bar.IconRow
-            );
+        // A building seat swaps its bar for the editor's (WorldBindingBarControl), so the editor bar's cells are read too.
+        AddBar(bar: bar);
 
-            foreach (var entry in (chord?.Page?.Entries ?? [])) {
-                if (entry is not null) {
-                    builder.AddCell(
-                        key: BindingPageEntryDefinition.KeyOf(entry: entry),
-                        rowReference: bar.IconRow
-                    );
-                }
-            }
+        if ((definition.EditorRaw?.Bar is { } editorBar) && !ReferenceEquals(objA: editorBar, objB: bar)) {
+            AddBar(bar: editorBar);
         }
 
-        builder.Add(
-            binding: StateBinding.Parse(token: bar.LayoutCell),
-            conversion: WorldStateConversion.Number
-        );
-        builder.Add(
-            binding: StateBinding.Parse(token: bar.ModelCell),
-            conversion: WorldStateConversion.Number
-        );
+        void AddBar(WorldBindingBarAuthoring bar) {
+            foreach (var chord in bindings.Chords) {
+                // A page's own id keys the icon a plate wears when its control opens that page (BindingPageView.Openers).
+                builder.AddCell(
+                    key: chord?.Page?.Id,
+                    rowReference: bar.IconRow
+                );
+
+                foreach (var entry in (chord?.Page?.Entries ?? [])) {
+                    if (entry is not null) {
+                        builder.AddCell(
+                            key: BindingPageEntryDefinition.KeyOf(entry: entry),
+                            rowReference: bar.IconRow
+                        );
+                    }
+                }
+            }
+
+            builder.Add(
+                binding: StateBinding.Parse(token: bar.LayoutCell),
+                conversion: WorldStateConversion.Number
+            );
+            builder.Add(
+                binding: StateBinding.Parse(token: bar.ModelCell),
+                conversion: WorldStateConversion.Number
+            );
+        }
 
         foreach (var element in (hud?.Elements ?? [])) {
             if (element is not null) {

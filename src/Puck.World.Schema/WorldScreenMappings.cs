@@ -3,37 +3,12 @@ using Puck.Commands;
 namespace Puck.World;
 
 /// <summary>Publishes a <see cref="WorldScreen"/> row as the <see cref="SourceMapping"/> a hit on its face maps through:
-/// the row's face frame as a surface placement and the whole source stretched upright, filling the face, except on a
-/// screen whose <see cref="WorldScreen.Material"/> is <see cref="WorldScreenMaterial.Crt"/>, whose tube's bezel is a warp
-/// pass whose inverse is exact. A window (a <see cref="WorldScreenSource.Session"/> with
+/// the row's face frame as a surface placement and the whole source stretched upright, filling the face, whatever screen
+/// material (<see cref="WorldScreen.Material"/>) draws it: a device's glass is exactly its picture. A window (a <see cref="WorldScreenSource.Session"/> with
 /// <see cref="WorldScreenProjection.Window"/>) is an opening, not a display: its image is fitted to the face's aperture.
 /// Built from document data alone, so a <c>Simulation</c> screen maps a pointer ray to the same source pixel on every run,
 /// and the screen shading draws the row from the same mapping.</summary>
 public static class WorldScreenMappings {
-    /// <summary>The name of the screen glass pass: the SDF view pass's screen shading, which draws every screen from its
-    /// mapping.</summary>
-    public const string GlassPass = "sdf.screen-glass";
-
-    /// <summary>Gets the CRT material's warp: an inset that shows the whole image inside a bezel three hundredths of the
-    /// face wide on every side. It is the one statement of the bezel: the screen shading draws it from each CRT screen's
-    /// mapping (<see cref="SourceMapping.Draw"/>), and a hit maps through its inverse.</summary>
-    public static SourceWarp CrtGlass { get; } = new(
-        Inverse: SourceWarpInverse.Affine.Inset(border: 0.03f),
-        Pass: GlassPass
-    );
-
-    /// <summary>Returns the warp a screen row's face draws its picture through: <see cref="CrtGlass"/> for a CRT, and
-    /// none for every other screen, whose picture fills its face.</summary>
-    /// <param name="screen">The screen row.</param>
-    /// <returns>The warp, or <see langword="null"/> for none.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
-    public static SourceWarp? WarpOf(WorldScreen screen) {
-        ArgumentNullException.ThrowIfNull(argument: screen);
-
-        return ((screen.Material == WorldScreenMaterial.Crt)
-            ? CrtGlass
-            : null);
-    }
     /// <summary>Creates the mapping for a screen row showing a source.</summary>
     /// <param name="screen">The screen row.</param>
     /// <param name="source">The source the row shows.</param>
@@ -62,8 +37,7 @@ public static class WorldScreenMappings {
             ),
             Source: source,
             SourceHeight: sourceHeight,
-            SourceWidth: sourceWidth,
-            Warp: WarpOf(screen: screen)
+            SourceWidth: sourceWidth
         );
     }
     /// <summary>Creates the mapping the simulation maps a seat's pointer ray through: the row's mapping against a

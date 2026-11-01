@@ -173,6 +173,11 @@ public sealed class WorldNestedScreens<TChild> where TChild : class {
         return name;
     }
 
+    /// <summary>Finds the screen material a screen's row names in the presented world's definition.</summary>
+    /// <param name="screen">The screen's index.</param>
+    /// <returns>The material, or <see langword="null"/> when the row names none or no reconciled row has that
+    /// index.</returns>
+    public WorldScreenMaterial? MaterialOf(int screen) => m_definition()?.ScreenMaterialOf(id: RowOf(screen: screen)?.Material);
     /// <summary>Finds the row of a screen.</summary>
     /// <param name="screen">The screen's index.</param>
     /// <returns>The row, or <see langword="null"/> when no reconciled row has that index.</returns>

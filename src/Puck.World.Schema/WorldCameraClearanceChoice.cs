@@ -1,3 +1,5 @@
+using Puck.Assets.Documents;
+
 namespace Puck.World;
 
 /// <summary>How a seat's chase view handles a room that cannot fit its boom and body.</summary>

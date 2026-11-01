@@ -455,6 +455,7 @@ public static class WorldBootComposition {
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
                 probeKernels: sp.GetRequiredService<IProbeKernelHostService>(),
                 cameras: definition.Cameras,
+                screenMaterials: definition.ScreenMaterials,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldCreationInstances>(),
                 // Seat-relative and ranked camera anchors resolve per seat through the perception anchor and the

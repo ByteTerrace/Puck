@@ -479,10 +479,10 @@ public sealed record WorldScreenCarry(string Look, string Pose, string Shape, [p
 /// <param name="Carry">The body that carries the screen's picture while it holds the device (see
 /// <see cref="WorldScreenCarry"/>), or <see langword="null"/> for a screen that stays where it is authored. Omitted from
 /// the wire when null.</param>
-/// <param name="Material">How the face presents its picture (<see cref="WorldScreenMaterial"/>): <c>Plain</c>, the
-/// default, shows it as its source made it, filling the face; <c>Crt</c> draws it through a cathode-ray tube's glass, and
-/// a pointer hit maps through that glass's bezel. Refused on a window, which is an opening rather than a display. Omitted
-/// from the wire when <c>Plain</c>.</param>
+/// <param name="Material">The id of the screen material (<see cref="WorldScreenMaterial"/>, the document's
+/// <c>screenMaterials</c>) the face draws its picture through, or <see langword="null"/> for none: the picture as its
+/// source made it, filling the face. Refused on a window, which is an opening rather than a display. Omitted from the wire
+/// when null.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -499,14 +499,52 @@ public sealed record WorldScreen(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Luminance = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldScreenMaterial Material = WorldScreenMaterial.Plain
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Material = null
 );
-/// <summary>How a display's face presents its picture. A display is plain unless it opts into a material.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldScreenMaterial>))]
-public enum WorldScreenMaterial : byte {
-    /// <summary>The picture as its source made it, filling the face edge to edge.</summary>
-    Plain,
-    /// <summary>A cathode-ray tube's glass: the picture inset in a bezel three hundredths of the face wide on every side,
-    /// with faint scanlines, an aperture grille and a bright-pixel bloom, which a seat framing the screen fades out.</summary>
-    Crt,
+/// <summary>
+/// An authored screen material: how a display's face draws its picture through the screen shading's display treatment,
+/// a row of the document's <c>screenMaterials</c> that screens and creation faces name by <see cref="Id"/>. The
+/// treatment models a display's own pixel structure over the picture, which always fills the face: a darkening between
+/// source rows, coloured stripes across each source column, a radial vignette, a glint at grazing angles, and the face's
+/// rounded, softened edge. Every term is the author's (the standard package authors a cathode-ray tube,
+/// <c>worlds/standard/skin.puck</c>); zero turns a term off, and a view's screen fidelity fades the whole treatment out
+/// as a seat frames the screen. Presentation only: a material never moves the mapping a pointer hit takes.
+/// </summary>
+/// <param name="Id">The id screens and faces name the material by; unique among the document's materials.</param>
+/// <param name="Scanlines">How dark the gap between source rows draws, in [0, 1]: one source row a cosine period.</param>
+/// <param name="SubpixelStripes">How strong the red, green and blue stripes across each source column draw, in [0, 1].</param>
+/// <param name="Vignette">How much the face darkens toward its corners, in [0, 1].</param>
+/// <param name="Glint">How bright the glass's rim glint at grazing view angles adds, in [0, 1].</param>
+/// <param name="GlintPower">How tightly the glint hugs grazing angles: the exponent of one minus the view cosine, positive.</param>
+/// <param name="CornerRadius">The face's corner rounding, as a fraction of the face, in [0, 0.5).</param>
+/// <param name="EdgeSoftness">The width over which the face's edge fades to black, as a fraction of the face, in [0, 0.5).</param>
+public sealed record WorldScreenMaterial(
+    string Id,
+    float Scanlines = 0f,
+    float SubpixelStripes = 0f,
+    float Vignette = 0f,
+    float Glint = 0f,
+    float GlintPower = 1f,
+    float CornerRadius = 0f,
+    float EdgeSoftness = 0f
+) {
+    /// <summary>Returns the material a screen or face names among a document's materials.</summary>
+    /// <param name="materials">The document's materials.</param>
+    /// <param name="id">The material's id, or <see langword="null"/> for none.</param>
+    /// <returns>The named material, or <see langword="null"/> when <paramref name="id"/> is null or names none.</returns>
+    public static WorldScreenMaterial? Find(IReadOnlyList<WorldScreenMaterial> materials, string? id) {
+        ArgumentNullException.ThrowIfNull(argument: materials);
+
+        if (id is null) {
+            return null;
+        }
+
+        foreach (var material in materials) {
+            if (string.Equals(a: material?.Id, b: id, comparisonType: StringComparison.Ordinal)) {
+                return material;
+            }
+        }
+
+        return null;
+    }
 }

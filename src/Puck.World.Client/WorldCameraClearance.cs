@@ -35,18 +35,13 @@ public enum WorldCameraClearanceMode {
 /// <para>The arm holds its state across frames as a fraction of the authored boom and a rise above the rig's own
 /// elevation, never as a length, and both ease toward each frame's answer on the rig's own boom dynamics: a pull-in
 /// and a rise are smoothed rather than cut, and the arm eases back out to the authored boom once the obstruction
-/// clears. Two limits hold on the eased value every frame: the eye's centre never comes within
-/// <see cref="SurfaceSkin"/> of geometry along the boom, except where cutaway's body clearance wins; in cutaway the
-/// eye never comes within <see cref="EyeRadius"/> of the body. Distances scale with the live body.
+/// clears. Two limits hold on the eased value every frame: the eye's centre never comes within the authored surface
+/// skin (<see cref="WorldSeatViewControl.SurfaceSkin"/>) of geometry along the boom, except where cutaway's body
+/// clearance wins; in cutaway the eye never comes within the authored eye radius
+/// (<see cref="WorldSeatViewControl.EyeRadius"/>) of the body. Distances scale with the live body.
 /// Presentation-only: nothing here feeds movement.</para>
 /// </summary>
 public sealed class WorldCameraClearance {
-    /// <summary>The full-size radius of the sphere the eye keeps clear of geometry and, in cutaway, the body.</summary>
-    public const float EyeRadius = 0.3f;
-    /// <summary>The full-size nearest distance the eased eye's centre comes to geometry along the boom: a sudden
-    /// obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.</summary>
-    public const float SurfaceSkin = 0.1f;
-
     // A crowded boom's rise is scanned in this many even steps up to the ceiling, then bisected this many times between
     // the last blocked step and the first clear one, so the rise follows the obstruction by a fine angle rather than
     // jumping a whole step.
@@ -98,9 +93,16 @@ public sealed class WorldCameraClearance {
     public Vector3 Target { get; private set; }
 
     /// <summary>Measures room behind an authored eye independently of the currently placed camera.</summary>
-    public static float AvailableRoom(SdfFieldEvaluator? field, Vector3 head, Vector3 backward, float length, float scale) =>
+    /// <param name="field">The static geometry, or <see langword="null"/> for none, which leaves the whole length.</param>
+    /// <param name="head">The eye the room is measured from, in world units.</param>
+    /// <param name="backward">The unit direction the room is measured along.</param>
+    /// <param name="length">The longest room reported, in world units.</param>
+    /// <param name="scale">The body's live scale, applied to <paramref name="eyeRadius"/>.</param>
+    /// <param name="eyeRadius">The full-size radius of the sphere swept, in metres.</param>
+    /// <returns>The room, in world units, at most <paramref name="length"/>.</returns>
+    public static float AvailableRoom(SdfFieldEvaluator? field, Vector3 head, Vector3 backward, float length, float scale, float eyeRadius) =>
         ((field is null) ? length : Clear(field, false, head, backward, length,
-            FixedQ4816.FromDouble(EyeRadius * scale), scale));
+            FixedQ4816.FromDouble(eyeRadius * scale), scale));
 
     /// <summary>Publishes the seat's first-person transition through the same view-local fade and read-back.</summary>
     public void ApplyView(WorldCameraViewTransition transition, Vector3 head, Vector3 forward, float hideRadius) {
@@ -214,7 +216,8 @@ public sealed class WorldCameraClearance {
         private readonly Vector3 m_target;
         private readonly bool m_targetObstructed;
 
-        public Probe(SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, float? fadeKeepOut = null) {
+        public Probe(SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, float eyeRadius, float? fadeKeepOut = null) {
+            EyeRadius = eyeRadius;
             m_fadeKeepOut = fadeKeepOut;
             m_field = field;
             m_subject = subject;
@@ -224,6 +227,8 @@ public sealed class WorldCameraClearance {
             Scale = scale;
         }
 
+        // The eye's radius at the body's live scale, in world units.
+        public float EyeRadius { get; }
         public float Length { get; }
         public float Scale { get; }
 
@@ -231,7 +236,7 @@ public sealed class WorldCameraClearance {
         public float KeepOut(Vector3 direction) => m_fadeKeepOut ?? m_subject.Exit(
             direction: direction,
             origin: m_target,
-            radius: (EyeRadius * Scale)
+            radius: EyeRadius
         );
         // How far out geometry lets an eye of the given radius stand.
         public float Room(Vector3 direction, FixedQ4816 radius) => ((m_field is null)
@@ -252,7 +257,7 @@ public sealed class WorldCameraClearance {
     private static bool Fits(in Probe probe, Vector3 direction, out float room) {
         room = probe.Room(
             direction: direction,
-            radius: FixedQ4816.FromDouble(value: (EyeRadius * probe.Scale))
+            radius: FixedQ4816.FromDouble(value: probe.EyeRadius)
         );
 
         return (room >= probe.KeepOut(direction: direction));
@@ -345,14 +350,13 @@ public sealed class WorldCameraClearance {
     /// <param name="targetShift">The program's close-target displacements, already in the seat's axes and live scale; the
     /// solver migrates toward <paramref name="choice"/>'s.</param>
     /// <param name="choice">The resolved author/player clearance choice.</param>
-    /// <param name="characterFade">The authored full-size fading distances, or <see langword="null"/> for a fade that
-    /// never dissolves the body and holds no minimum boom.</param>
+    /// <param name="control">The world's seat-camera control: the eye radius, the surface skin, each treatment's rise
+    /// ceiling and the character fade.</param>
     /// <param name="scale">The body's live scale, applied to fading distances.</param>
-    /// <param name="maxRise">The treatment's rise ceiling above the rig's own elevation, in radians; the boom never
-    /// rises past <see cref="MaximumElevation"/> whatever it says.</param>
     public Vector3 Resolve(SdfFieldEvaluator? field, Vector3 desiredEye, Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
-        WorldCameraClearanceChoice choice, float maxRise, SdfCameraTargetShift targetShift = default,
-        WorldCameraCharacterFade? characterFade = null, float scale = 1f) {
+        WorldCameraClearanceChoice choice, WorldSeatViewControl control, SdfCameraTargetShift targetShift = default, float scale = 1f) {
+        ArgumentNullException.ThrowIfNull(argument: control);
+
         var offset = (desiredEye - target);
         var length = offset.Length();
 
@@ -373,12 +377,14 @@ public sealed class WorldCameraClearance {
 
         var direction = (offset / length);
         var cutaway = (choice == WorldCameraClearanceChoice.Cutaway);
+        var characterFade = control.CharacterFade;
         var closeOffset = targetShift.Offset.Of(cutaway: cutaway);
         // Measure compression at the authored pivot, independently of the shifted target. Feeding the migrated
         // target back into this measurement would pump the framing under lintels and overhead stair slabs.
         scale = ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : 1f);
-        var restProbe = new Probe(field: field, length: length, scale: scale, subject: in subject, target: target, targetObstructed: false);
-        var fraction = ((closeOffset == Vector3.Zero) ? 1f : (restProbe.Room(direction: direction, radius: FixedQ4816.FromDouble(value: (EyeRadius * scale))) / length));
+        var eyeRadius = (control.EyeRadius * scale);
+        var restProbe = new Probe(eyeRadius: eyeRadius, field: field, length: length, scale: scale, subject: in subject, target: target, targetObstructed: false);
+        var fraction = ((closeOffset == Vector3.Zero) ? 1f : (restProbe.Room(direction: direction, radius: FixedQ4816.FromDouble(value: eyeRadius)) / length));
         var shiftWeight = ((targetShift.StartFraction > targetShift.FullFraction)
             ? Math.Clamp(((targetShift.StartFraction - fraction) / (targetShift.StartFraction - targetShift.FullFraction)), 0f, 1f)
             : 0f);
@@ -405,7 +411,9 @@ public sealed class WorldCameraClearance {
             min: -1f,
             value: lift
         ));
-        // A boom already straight up, or at the highest elevation, has no rise left to take.
+        // The treatment's ceiling, less what a boom already straight up, or at the highest elevation, has no room for.
+        var maxRise = control.MaxRise.Of(choice: choice);
+
         maxRise = ((levelLength > MinimumBoom)
             ? Math.Clamp(
                 max: MathF.Max(x: 0f, y: (MaximumElevation - elevation)),
@@ -426,10 +434,11 @@ public sealed class WorldCameraClearance {
             length: length,
             subject: in subject,
             target: target,
+            eyeRadius: eyeRadius,
             fadeKeepOut: (cutaway ? null : ((characterFade?.MinimumBoom ?? 0f) * scale)),
             targetObstructed: (cutaway && (field is not null) && field.Overlap(
                 center: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: target)),
-                radius: FixedQ4816.FromDouble(value: (EyeRadius * scale))
+                radius: FixedQ4816.FromDouble(value: eyeRadius)
             ))
         );
         var (mode, goalRise, goalLength) = Goal(crowds: cutaway, direction: direction, elevation: elevation, level: level, maxRise: maxRise, probe: in probe, up: upAxis);
@@ -466,7 +475,7 @@ public sealed class WorldCameraClearance {
             ) * length),
             y: probe.Room(
                 direction: presented,
-                radius: FixedQ4816.FromDouble(value: (SurfaceSkin * scale))
+                radius: FixedQ4816.FromDouble(value: (control.SurfaceSkin * scale))
             )
         );
         var placed = MathF.Max(

@@ -146,6 +146,8 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     // The world's placeable-camera rows — booted from the definition and REPLACED by ReconcileCameras when a camera
     // mutation delivers, so a runtime screen.source <index> view (and every later resolve) reads the LIVE rows.
     private IReadOnlyList<WorldCamera> m_cameras;
+    // The screen materials the rows ReconcileScreens last applied name.
+    private IReadOnlyList<WorldScreenMaterial> m_screenMaterials;
     private bool m_disposed;
     private long? m_renderAdapterLuid;
     // What every view's engine is built with, stashed by ConfigureViews once the render envelope is known, so a runtime
@@ -225,8 +227,9 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// which an HDR capture's room glow is measured against.</param>
     /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
     /// transitions.</param>
+    /// <param name="screenMaterials">The boot definition's screen materials, which the screens name; absent is none.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldCreationInstances stamps, WorldPerceptionAnchor perception, Func<IOverlayPredicateEvaluator> facts, WorldSpeechClock speech, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits, IReadOnlyList<WorldScreenMaterial>? screenMaterials = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
         m_domains = domains;
@@ -253,6 +256,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         m_windowCapture = windowCapture;
         m_probeKernelHosts = probeKernels;
         m_cameras = cameras;
+        m_screenMaterials = (screenMaterials ?? []);
         m_anchors = anchors;
         m_stamps = stamps;
         m_perception = perception;
@@ -537,10 +541,14 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// Not migrated onto <c>Puck.World.Client.KeyedReconciler</c> — the removal, source-change, and boot-index
     /// re-declaration passes interleave lifetime rules the generic shape cannot express.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
-    public void ReconcileScreens(IReadOnlyList<WorldScreen> screens) {
+    /// <param name="materials">The live definition's screen materials, which the screens name.</param>
+    public void ReconcileScreens(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldScreenMaterial> materials) {
         if (m_disposed) {
             return;
         }
+
+        ArgumentNullException.ThrowIfNull(argument: materials);
+        m_screenMaterials = materials;
 
         // Removal pass FIRST: collect every slot whose index vanished from the incoming set (never mutating m_slots mid
         // -enumeration), then disengage + dispose + drop each. The incoming screen list is tiny, so the containment

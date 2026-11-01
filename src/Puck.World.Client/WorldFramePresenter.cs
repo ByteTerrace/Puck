@@ -560,7 +560,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             first: m_client.Definition.Cameras,
             second: facets.Cameras
         ));
-        m_binder.ReconcileScreens(screens: Concat(
+        m_binder.ReconcileScreens(materials: m_client.Definition.ScreenMaterials, screens: Concat(
             first: m_client.Definition.Screens,
             second: facets.Faces
         ));

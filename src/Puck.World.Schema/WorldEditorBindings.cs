@@ -1,6 +1,6 @@
 using Puck.Commands;
 
-namespace Puck.World.Client;
+namespace Puck.World;
 
 /// <summary>The build-mode binding mechanism: the world's authored build toggle (<see cref="WorldEditorDefaults.Toggle"/>)
 /// composed beneath the resting page of every group the world's binding layers declare, so a seat reaches build mode
