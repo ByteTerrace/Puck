@@ -235,6 +235,15 @@ contracts are gaps to implement in Puck's host or resolve in the engine, rather
 than reasons to introduce a stock .NET host. This direction does not establish
 that the current experiment can run the current engine.
 
+**On a hosted OS, Puck plays nice with the host (the owner's ruling).** On
+Windows and Linux, Puck builds on the host's primitives (threads and their
+priorities, waits and timers, virtual memory, I/O, drivers) to meet its
+correctness and performance goals. It does not replace those primitives or
+compete with them: it never spins in place of a wait, and never takes cores or
+global timer resolution from other programs. The engine's scheduler and
+memory account are layers over those primitives. Only the bare-metal host
+supplies its own.
+
 **The bare-metal host has no garbage collector, by design (the owner's
 ruling).** Porting Puck does not add one. Engine allocations need explicit
 owners and lifetimes, with storage reclaimed or reused when those lifetimes

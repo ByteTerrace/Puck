@@ -225,15 +225,20 @@ public sealed partial class WorldCreationInstances {
 
                 // A body's pose holds between its rated packs, except on the frame its slots change owner or the whole
                 // table is owed (WorldCreationInstances.Rates).
-                if (
+                var mayHold = (
                     (live.BodyIndex is not null) &&
                     packedBefore &&
                     !moved.Everything &&
                     !m_owners.Reseats(owner: index) &&
                     // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
-                    (transforms[rootSlot].Scale == placementScale) &&
-                    HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: (ReachOf(live: live) * placementScale))
-                ) {
+                    (transforms[rootSlot].Scale == placementScale)
+                );
+
+                if (!mayHold) {
+                    ForgetPhase(live: live);
+                }
+
+                if (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: (ReachOf(live: live) * placementScale))) {
                     CarryPose(
                         deltaSeconds: deltaSeconds,
                         live: live,
@@ -247,9 +252,18 @@ public sealed partial class WorldCreationInstances {
                     live.RateOwed = true;
                     m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
                 } else {
+                    // A pose held while nothing could show it resumes as a continuity cut: its followers, plants and
+                    // drivers relatch where the body is now, as after a teleport, rather than advancing over every
+                    // second it held.
+                    var unseen = (live.RateSlowest == SdfUpdateRateTiers.HeldHertz);
+
+                    if (unseen) {
+                        live.RootEpoch = -1;
+                    }
+
                     PackRegistration(
                         client: client,
-                        deltaSeconds: (live.RateSeconds + deltaSeconds),
+                        deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
                         live: live,
                         parkPosition: parkPosition,
                         placementScale: placementScale,

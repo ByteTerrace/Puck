@@ -34,11 +34,10 @@ world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
-1. [Engine job system](#engine-job-system), scheduling [high]: keep the 15 Hz
-   rated burst off tick frames, hold the bodies no view can see (decide whether
-   they pose at all), spread rated packs over their period, and judge work time,
-   not the vsync-paced interval, against `host.frames`' budget. No new thread;
-   this alone removes the traced slow frames.
+1. [Engine job system](#engine-job-system), scheduling [high]: the rated burst
+   is off tick frames and unseen bodies hold; what remains is spreading the
+   rated views' and screens' phases and the tick frame's own tick-bound view
+   recording, which a tick plus produce still pushes past 16.7 ms.
 2. [Engine job system](#engine-job-system), the garbage-collection cuts on
    today's runtime [high]: remaining bake readback copies and fine-sample
    indexes, and steady irradiance blocks and dressed-pick snapshots; measured
@@ -155,30 +154,30 @@ One engine-wide job system answers all of it:
   landed geometry (`SdfMeshIrradiance` rebuilds its scene incrementally, but
   its comment says each landed set is measured whole; confirm in the code first).
 
-- **Schedule as well as spread** [high]. The slow frames come from two periodic
-  loads meeting on one frame (the tick every other frame, the rated burst every
-  fourth), so a scheduler that places rated presentation work on frames that
-  carry no tick removes them before any parallelism: keep the 15 Hz rated burst
-  off tick frames, hold the bodies no view can see (decide whether they pose at
-  all; a shadow caster may), spread rated packs over the frames of their period
-  (`SdfUpdateRates.cs:82-84`, `WorldCreationInstances.Rates.cs:71-73`,
-  `WorldCreationInstances.Pack.cs:228-270`) and record the rated views on frames
-  without a tick. The unseen bodies' effector probes are a float CPU march of
-  the field per foot (`WorldEffectorSolver.Probe`,
-  `src/Puck.World.Client/WorldEffectorSolver.cs:281`). (from: slow-frames)
-- [medium] `host.frames` counts vsync-paced 16.7x ms intervals as over budget
-  (`src/Puck.Launcher/HostFrameTimeline.cs:250`): judge the work time against
-  the budget with the paced wait excluded, as `Scan` does (`:168`), or count
-  intervals past one and a half periods. The scheduling lane also owns
-  `Describe`'s collection total (`:239`): it adds three inclusive generation
-  counters and counts an upper-generation collection more than once. Use the
-  gen0 increment for the actual count; retain gen1/gen2 as its breakdown.
-- Check the effector solver against the "Puck code over engine code" ruling: it
-  is a generic motion primitive only if every per-rig decision (which effectors,
-  reach, standoff, when a foot seeks) is authored rig data. If it encodes
-  behaviour that a motion program should express, that is a leak to fix with the
-  scheduling change (author the behaviour; the solver stays the executor), not a
-  C# default to keep.
+- **Schedule as well as spread**, what remains [high]. Rated work keeps off the
+  frames that run a step: `PresentationRate.Holds` (the one floor every lever
+  decides through) updates early on a frame without a step when the next frame
+  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`).
+  A body neither a view nor a shadow cascade may show holds
+  (`SdfUpdateRateTiers.HeldHertz`; the caster test is the renderer's own
+  `SdfMeshCull`) and resumes as a continuity cut, and bodies taking a tier
+  together alternate their phase by half its period. Open: the rated views and
+  screens (eight machine sources and a session at 15 Hz in the lobby) still
+  share one phase, since the render graph's history keeps none to stagger; a
+  tick frame's own work (a 6 to 9 ms tick plus the tick-bound session views'
+  recording, produce 12 to 16 ms) is what still crosses 16.7 ms, which parallel
+  recording and the parallel tick take. A held body shows its held pose for the
+  one frame the rate views lag behind a camera cut. (from: slow-frames)
+- The effector solver passes the "Puck code over engine code" check: which
+  effectors, chain, tip, target kind, reach, standoff, direction, gate, plant
+  window, replant and weight are authored `CreationEffectorDocument` data, and
+  `WorldEffectorSolver` executes them. Two decisions are still engine
+  constants: an effector's ease in and out uses the drivers' default blend
+  (`WorldGaitDrivers.WeightBlend`, `CreationAnimation.WeightSeconds`) with no
+  authored time of its own, and `ProbeBackoff` is 5 cm whatever the body's scale
+  (`WorldEffectorSolver.cs:28`). The surface probe also runs while the
+  effector's gate is shut and its weight at rest
+  (`WorldCreationInstances.Effectors.cs:82-93`).
 - [high] Remaining managed allocation churn, measured by `gc-cuts` on the
   Release .NET 11 debug World, before any custom runtime:
   - `puck bench world`'s `WorldSceneEmitter.Emit` window (builder construction
@@ -187,10 +186,10 @@ One engine-wide job system answers all of it:
     composition owns its builder and avatar scratch. Residual emission includes
     pick material labels (`WorldPickMap.cs:64`) and shape-specific materials.
   - Direct3D standing (300 ticks) and walking (290 ticks) gen0 increments from
-    `host.memory` fall from 4/4 to 1/1 (`host.frames` prints 5/4 before because
-    of its inclusive-counter sum above); pauses are 18.85/26.19 ms before and
-    18.41/12.12 ms after. The 23 s steady trace tail falls from 499.4 to
-    169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
+    `host.memory` fall from 4/4 to 1/1 (`host.frames` printed 5/4 before while
+    it summed the inclusive generation counters); pauses are 18.85/26.19 ms
+    before and 18.41/12.12 ms after. The 23 s steady trace tail falls from 499.4
+    to 169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
     (`SdfMeshIrradiance.cs:1010`), dressed-pick arrays, 32.0 MiB
     (`SdfDressedPickMap.cs:24-25`), and dressed motion identities, 9.1 MiB
     (`SdfMeshPathBake.cs:389`). Zero steady gen0 is not yet reached.
@@ -245,8 +244,11 @@ One engine-wide job system answers all of it:
     allocate the avatar material arrays.
   - [low] `TemplateScratch` is a second cache of retained emissions beside
     `WorldPlacementStamper`'s, which is duplication to converge.
-- Decide (the lead's call): whether the 30 and 15 Hz update tiers become a
-  continuous rate.
+- Decided: the 30 and 15 Hz tiers stay tiers. On a fixed grid a floor's period
+  is whole refreshes (`PresentationRate.GridSteps`), and with a 30 Hz tick on a
+  60 Hz display only every other refresh is free of a step, so the useful
+  periods are two and four refreshes, which the tiers already are; a continuous
+  rate would be quantized back to them and adds no placement freedom.
 - [medium] Kit bodies' advance stays serial, so the parallel tick partitions
   only the snapshot, the crossing scan and the rigid bodies, which is less than
   the measured 70 %. A kit body's advance is one arena transaction on the one
@@ -490,21 +492,37 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
     about 10 to 11 ms (`world.gpu-timing timeline`: `world` 8.1 to 9.0 ms, views
     3.3 and resolve 3.5 of it at the lobby, the session views about 1.5 ms,
     `beacon-eye` 0.3); `present` is 0.1 to 0.4 ms.
-  - **Most "over 16.7 ms" iterations are on time.** `host.frames` counts an
-    interval over the budget (`HostFrameTimeline.cs:250`), and the budget is
-    16.6667 ms, so a vsync-paced iteration of 16.67 to 16.75 ms counts: at the
-    rim 244 are over 16.7 ms and 7 over 17.5. The Direct3D 12 swap chain holds
-    one presented frame queued (`DirectXSurfaceCompositor.cs:51-58`), so a lone
-    iteration of up to about 30 ms still shows on its refresh, and the next one
+  - **Most "over 16.7 ms" iterations in the table are on time.** It counts
+    intervals, and with a 16.6667 ms budget a vsync-paced iteration of 16.67 to
+    16.75 ms counted: at the rim 244 are over 16.7 ms and 7 over 17.5.
+    `host.frames` now counts work (the interval less the pacer's wait), as
+    `Scan` does. The Direct3D 12 swap chain holds one presented frame queued
+    (`DirectXSurfaceCompositor.cs:51-58`), so a lone iteration of up to about 30 ms still shows on its refresh, and the next one
     starts at once and catches up; a refresh repeats only when consecutive
     iterations overrun together, as at the chess boundary. Vulkan's present-wait
     pacing (`VulkanSurfacePresenter.cs:98-113`) alternates intervals of about
     18.5 and 14.8 ms around the 16.66 mean with 4 to 9 ms of work and 9 to 14 ms
     of wait, so its 72 to 124 iterations over 17.5 ms are pacing jitter, not
-    missed refreshes. Count work over the budget (as `Scan` does, `:168`) or
-    intervals past one and a half periods. Vulkan's produce (avg 5.4 to 6.2,
-    p99 10.1 to 11.1 ms) now matches Direct3D 12's.
+    missed refreshes. Vulkan's produce (avg 5.4 to 6.2, p99 10.1 to 11.1 ms)
+    now matches Direct3D 12's.
   (from: slow-frames)
+- The scheduling stage, read back to back before (A) and after (B) on a machine
+  other lanes loaded (ticks 6.6 to 8.8 ms against the quiet 6.3), `host.frames`
+  counting work; "with a step" is produce on the iterations that ran one;
+  PresentMon present-to-present (display tracking needs elevation):
+
+  | Reading | p99 | max | work over 16.7 | produce with a step p99 | PresentMon p99 / max |
+  |---|---|---|---|---|---|
+  | Direct3D 12 lobby standing, A | 24.08 | 28.26 | 94 of 600 | 14.96 | 34.5 / 44.4 |
+  | Direct3D 12 lobby standing, B | 21.19 | 22.79 | 93 of 600 | 12.59 | 30.7 / 35.7 |
+  | Direct3D 12 gallery walk, A | 39.76 | 57.86 | 136 of 273 | 31.03 | 39.7 / 57.8 |
+  | Direct3D 12 gallery walk, B | 26.11 | 30.54 | 72 of 315 | 16.29 | 32.1 / 36.9 |
+  | Vulkan lobby standing, B with the collection cuts | 18.11 | 19.32 | 4 of 600 | 9.93 | 43.2 / 57.5 |
+
+  The standing iterations still over 16.7 ms are tick frames: a 7 to 9 ms tick
+  plus 12 to 13.6 ms of produce, the tick-bound views (above). Present-to-present
+  on Direct3D 12 is bimodal (8 to 12 and 20 to 24 ms) because the present call
+  lands at the end of each iteration's work, not because a refresh repeats.
 
 #### Other frame-time findings
 
@@ -920,9 +938,20 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · low · Next: CI's steady state, the shader cache and the
-GC-hole retirement.
+Owner: delivery lane · medium · Next: the silo activation's long grain turn,
+then CI's steady state, the shader cache and the GC-hole retirement.
 
+- [medium] A world-silo activation of the debug world runs one synchronous
+  Orleans grain turn of 10.3 to 12.9 s. Orleans warns
+  (`WorkItemGroup[101215]`, "took elapsed time 0:00:10.343"), and the turn ends
+  as the seven addon guests finish mounting. This was measured by
+  `puck azure test-world-container` on a locally built `puck/world-silo` image,
+  where both boots otherwise pass. Nothing else runs on that activation
+  meanwhile, and Orleans' default call timeout is 30 s. Find what the turn spends
+  its time on (document composition, wasm compilation of the guests, the
+  checkpoint) and move it off the turn: precompiled or cached guest modules, and
+  the composition as background work the activation awaits. Never block
+  the scheduler thread.
 - [low] Extend addon checkpoints to table/reference and segment-drop state.
   Capture currently refuses these resources by name
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
