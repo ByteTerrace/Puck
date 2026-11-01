@@ -70,9 +70,9 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   about an estimate (the linear one, then the secant through the last round's
   pair), so a root the estimate all but hits closes the bracket that round, and
   cuts the bracket in thirds once the thirdings it still needs fill its
-  remaining rounds; it ends once the bracket is a 4,096th of the edge wide (the
-  root, its middle, within an 8,192th), in at most ten rounds. The
-  `ACrossingLandsWithinAnEightThousandthOfItsEdgeInAFewRounds` law holds the
+  remaining rounds; it ends once the bracket is an 8,192th of the edge wide (the
+  root, its middle, within a 16,384th), in at most eleven rounds. The
+  `ACrossingLandsWithinASixteenThousandthOfItsEdgeInAFewRounds` law holds the
   bound and the cost. Each round is a readback round trip of the group, and
   only `MaxAdmitted` groups hold a final lattice, so a group's rounds bound its
   latency: a search must not trade fewer samples for more rounds than its worst
@@ -577,7 +577,7 @@ laws exercise that boundary.
   lattices in slabs, material and gradient, fine and material points in
   chunks). One dispatch holds up to `SdfWorldPackage.MeshBakeBatch` lattices
   (240: their rows fill the bake pass block to the portable 16 KiB uniform
-  limit) and `MeshBakeMaxSamples` (2^20) samples; the kernel finds a sample's
+  limit) and `MeshBakeMaxSamples` (2^21, 32,768 groups of 64, under the 65,535 a dispatch axis allows) samples; the kernel finds a sample's
   lattice by binary search over their first samples. A dispatch sized to the
   frame's CPU rather than the GPU leaves the GPU idle and hundreds of groups a
   frame waiting for one; `world.gpu-timing` reads the bake pass's cost. Gradients
