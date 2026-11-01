@@ -27,9 +27,9 @@ scheduled tests because restoring its timeline would also rewind the schedule.
 Checkpoint continuation includes the last sampled attached-solid transforms: carrier
 poses can move after collision sampling, and resampling during restore can wake a
 sleeping island a tick early. Restore scoped replay images after compiling their
-final bindings. An addon restart cancels its old input controllers, so capture the
-recording's start after that commit, with a preflight capture before committing.
-An independent test/history capture records that restart as an ordered tape entry.
+final bindings. Recording captures live addon memory and host continuations through
+the ordinary authority checkpoint; arming never restarts guests or retires input
+controllers. Restore stages all guest images before adopting any authority state.
 A replay-start restore (`WorldPersistence.RestoreReplayStart`) replaces session allocators and awake/sleeping work sets
 with their captured timeline; live checkpoint loads retain retired session epochs
 so an ended principal cannot be minted again.
@@ -224,7 +224,7 @@ covers cursors, text, unsupported continuations and relocation after unrelated r
   The fourteenth is `replay.record`'s
   `StartNotCheckpointable`: the world has stepped, so the tape would start from a
   checkpoint of the live state, and that state is one no checkpoint captures (a
-  guest whose pinned restart refuses, a stepped machine whose runtime has no
+  guest whose incomplete tick was interrupted, a stepped machine whose runtime has no
   checkpoint capability, a live coupled link or rewind history, an engagement in
   flight, an edit not yet applied); the refusal names the guest, machine or link.
   `ScreenOpContentMismatch`
@@ -567,11 +567,10 @@ and fed the recorded ticks, with local seat input masked at the loopback.
   the boot image. Later it starts from a checkpoint taken at the arm, which
   holds what the session reached: poses, cells, grants, latches, the live
   sessions, the screen slots and links, the machine cores and the binding memo
-  (above). Mounted guests restart from their pinned modules, staged before
-  capture and committed only after it succeeds, so MCP can arm after boot
-  without claiming to checkpoint guest memory. A refused arm preserves the
-  running guests. A state no checkpoint captures refuses by name with
-  `StartNotCheckpointable`: a guest whose pinned restart refuses, a stepped machine
+  (above), plus the live guest memory and retained pinned module sources. MCP can
+  arm after boot without changing guests or held input. A state no checkpoint
+  captures refuses by name with `StartNotCheckpointable`: an interrupted guest's
+  incomplete tick, a stepped machine
   without checkpoint support, a coupled link or rewind history, an engagement
   in flight, or an edit not yet applied. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`
@@ -751,12 +750,11 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   player set differs from the tape's seat set (a seat cannot be respawned
   through the session door — `player.join`/`player.leave` to match first),
   or when an engagement is in flight. Mounted addons are no obstacle: the
-  forced load below prepares every guest fresh
-  (`WorldDocument.ReinstantiateAddonsOnNextRebuild`, which hands the addon
-  host `current: null`), so each starts from its module's initial state as the
-  recording's own did, and a drive in the session that recorded the tape
-  reproduces its guests tick for tick. Stepped machines and applied screen ops are no
-  obstacle: the forced load keeps an unchanged machine row's runtime running
+  checkpoint restore below stages fresh stores and restores their captured
+  memory and host continuations. A boot-image tape constructs its full shadow
+  with the ordinary addon factory before capture. A drive in the recording
+  session therefore reproduces its guests tick for tick. Stepped machines and applied screen ops are no
+  obstacle: the shared replay-start restore keeps an unchanged machine row's runtime running
   (and re-creates a changed one from its content), and the checkpoint restore
   below installs the tape's core images, screen slots and links over it, each
   runtime behind the steps it already accepted; a live coupled link refuses
@@ -767,16 +765,14 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   tape that lands arrivals refuses too: driving it would embody travelers no
   source released, so `replay.verify` lands them again offline instead.
   The ownership check and reset hold the same authority gate, preventing a
-  network reservation between them. Then the boot image is installed through the
-  server's own doors: a forced `world.load` of the embedded definition
-  (`EnqueueRebuild` + `DrainAdministrative`, synchronous — solids, machines
-  reconcile, addon plan, document grants, journal clear, base replace; the
-  `[world.definition: world.load applied …]` line is the evidence, and the
-  boot document's path is the file origin so relative machine content keeps
-  resolving), then the tape's start checkpoint, or, for a boot-image tape, the
+  network reservation between them. `WorldPersistence.RestoreReplayStart`, shared
+  with probes, prepares the complete guest image before changing geometry,
+  machines or the definition, then commits it through the authority checkpoint.
+  It uses the tape's asset directory and captured base origin. The source is the
+  tape's start checkpoint, or, for a boot-image tape, the
   complete authority checkpoint a fresh server reaches after
   `SeatRecordedSeats` joins the recorded seats on their pinned rates.
-  `WorldServer.RestoreCheckpoint` resets clocks, decisions, rule latches,
+  The checkpoint resets clocks, decisions, rule latches,
   fields, grants, sessions, held input, events, screen slots, machine cores
   and population together; the sessions it restores have no observer, and
   `EndUnobservedSessions` ends them when the drive ends (a live screen that

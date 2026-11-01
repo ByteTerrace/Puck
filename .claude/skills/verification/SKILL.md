@@ -257,6 +257,8 @@ because it looks in the default `bin` and `obj` directories.
   has rejected it with `error: 1, total: 0` in the observed run; exact text
   and exit status vary by version. Build with the flag,
   then run `dotnet test <project> --no-build`.
+  `dotnet run` forwards `-nodeReuse:false` to the application, which can reject it.
+  Build separately with that flag, then use `dotnet run --no-build`.
 - Do not edit the source tree while a canary, parity or test run reads it.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
 - MSBuild rebuilds by file time. A file copied back over a mutant keeps its

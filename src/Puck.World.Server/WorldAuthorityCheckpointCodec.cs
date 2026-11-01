@@ -24,7 +24,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     public const int MaxCollectionCount = 1_000_000;
 
     private const int MaxHashChars = 128;
-    private const int MaxSectionBytes = ((64 * 1024) * 1024);
+
+    /// <summary>The shared admission bound for an ordinary checkpoint section.</summary>
+    public const int MaxSectionBytes = ((64 * 1024) * 1024);
+
     // Version 5 bounded the complete body, including the server section and every other section, to MaxSectionBytes.
     // Version 6 adds at most one arena's MaxBytes-charged key ledger: its two bytes per UTF-16 code unit plus four
     // framing bytes per name fit inside the table's more conservative 96 + 2*length charge. Doubling the old bounds
@@ -36,7 +39,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
     /// changes, and never reuse an earlier value.</summary>
-    public const ushort SupportedVersion = 30;
+    public const ushort SupportedVersion = 31;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -48,21 +51,23 @@ public static partial class WorldAuthorityCheckpointCodec {
         var body = new WireWriter();
 
         body.WriteString(value: WorldDefinitionFileSource.ComputeContentHash(content: checkpoint.Server.DefinitionJson));
-        body.WriteBlock(value: EncodeServer(section: checkpoint.Server));
-        body.WriteBlock(value: EncodePopulation(section: checkpoint.Population));
-        body.WriteBlock(value: EncodeGrants(section: checkpoint.Grants));
-        body.WriteBlock(value: EncodeEscrow(section: checkpoint.Escrow));
-        body.WriteBlock(value: EncodeInputHold(section: checkpoint.InputHold));
-        body.WriteBlock(value: EncodeEventFeed(section: checkpoint.EventFeed));
-        body.WriteBlock(value: EncodeOwnedWorlds(section: checkpoint.OwnedWorlds));
-        body.WriteBlock(value: EncodeHostRow(section: checkpoint.HostRow));
-        body.WriteBlock(value: EncodeFields(section: checkpoint.Fields));
-        body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty)));
-        body.WriteBlock(value: EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)));
-        body.WriteBlock(value: EncodeMachines(section: (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty)));
-        body.WriteBlock(value: (checkpoint.Addons ?? []));
+        WriteSection(body, EncodeServer(section: checkpoint.Server), MaxServerSectionBytes);
+        WriteSection(body, EncodePopulation(section: checkpoint.Population), MaxSectionBytes);
+        WriteSection(body, EncodeGrants(section: checkpoint.Grants), MaxSectionBytes);
+        WriteSection(body, EncodeEscrow(section: checkpoint.Escrow), MaxSectionBytes);
+        WriteSection(body, EncodeInputHold(section: checkpoint.InputHold), MaxSectionBytes);
+        WriteSection(body, EncodeEventFeed(section: checkpoint.EventFeed), MaxSectionBytes);
+        WriteSection(body, EncodeOwnedWorlds(section: checkpoint.OwnedWorlds), MaxSectionBytes);
+        WriteSection(body, EncodeHostRow(section: checkpoint.HostRow), MaxSectionBytes);
+        WriteSection(body, EncodeFields(section: checkpoint.Fields), MaxSectionBytes);
+        WriteSection(body, EncodeSearch(section: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty)), MaxSectionBytes);
+        WriteSection(body, EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)), MaxSectionBytes);
+        WriteSection(body, EncodeMachines(section: (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty)), MaxSectionBytes);
+        WriteSection(body, (checkpoint.Addons ?? []), MaxSectionBytes);
 
         var bodyBytes = body.ToArray();
+
+        if (bodyBytes.Length > MaxCheckpointBodyBytes) { throw new InvalidDataException(message: "Authority checkpoint exceeds the body byte limit."); }
         var writer = new WireWriter();
 
         writer.WriteUInt32(value: Magic);
@@ -79,6 +84,12 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
+
+    private static void WriteSection(WireWriter writer, byte[] bytes, int limit) {
+        if (bytes.Length > limit) { throw new InvalidDataException(message: "Authority checkpoint exceeds a section byte limit."); }
+        writer.WriteBlock(value: bytes);
+    }
+
     /// <summary>Decodes a full checkpoint.</summary>
     /// <param name="bytes">The encoded blob.</param>
     /// <param name="checkpoint">The decoded checkpoint on success.</param>

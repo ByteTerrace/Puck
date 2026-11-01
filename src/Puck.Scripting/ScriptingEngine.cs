@@ -11,11 +11,21 @@ namespace Puck.Scripting;
 /// </summary>
 public sealed class ScriptingEngine : IDisposable {
     private readonly Engine m_engine;
+    private readonly Timer m_epochTimer;
+    private readonly Lock m_epochGate = new();
+
+    private bool m_disposed;
+
+    /// <summary>Each guest call gets at most ten host timer epochs (approximately 100 ms) in addition to fuel.</summary>
+    public const ulong CallDeadlineEpochs = 10;
 
     /// <summary>Initializes the engine from the pinned deterministic options.</summary>
     /// <param name="options">The pinned configuration values, typically <see cref="ScriptingEngineOptions.Deterministic"/>.</param>
     public ScriptingEngine(ScriptingEngineOptions options) {
         m_engine = new Engine(config: BuildConfig(options: options));
+        m_epochTimer = new Timer(_ => {
+            lock (m_epochGate) { if (!m_disposed) { m_engine.IncrementEpoch(); } }
+        }, null, TimeSpan.FromMilliseconds(milliseconds: 10), TimeSpan.FromMilliseconds(milliseconds: 10));
     }
 
     /// <summary>Gets the shared configured engine addon modules compile and instantiate against.</summary>
@@ -26,6 +36,7 @@ public sealed class ScriptingEngine : IDisposable {
     private static Config BuildConfig(ScriptingEngineOptions options) {
         return WasmtimeSignals.WithoutSignalHandlers(config: new Config())
             .WithFuelConsumption(enable: true)
+            .WithEpochInterruption(enable: true)
             .WithWasmThreads(enable: false)
             .WithMultiMemory(enable: false)
             .WithMemory64(enable: false)
@@ -44,6 +55,11 @@ public sealed class ScriptingEngine : IDisposable {
 
     /// <summary>Disposes the underlying engine and its native resources.</summary>
     public void Dispose() {
-        m_engine.Dispose();
+        lock (m_epochGate) {
+            if (m_disposed) { return; }
+            m_disposed = true;
+            m_epochTimer.Dispose();
+            m_engine.Dispose();
+        }
     }
 }

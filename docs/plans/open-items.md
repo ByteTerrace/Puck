@@ -1012,34 +1012,31 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · medium · Next: the silo activation's long grain turn,
+Owner: delivery lane · medium · Next: the silo's cold activation,
 then CI's steady state, the shader cache and the GC-hole retirement.
 
-- [high] `puck test --reproduce` fails on every debug-world fixture whose
-  `documentId` is not `debug` (granaries, reversi and others; noclip passes).
-  The error is `cannot capture '6~global4~self': Replay probe cannot capture
-  its start: a checkpoint requires the declared addon host and its restored
-  state`. Such a fixture opens a second instance that `WorldInstanceHost`
-  starts with no addon host (`WorldInstanceHost.cs:1305`), and the addon
-  checkpoint guard (`WorldPersistence.Checkpoint.cs:611`) refuses it. The cause
-  is the same as the silo review's M5 (`puck bench` builds a server the same
-  way), so it is fixed with M5. Every determinism check that lanes run depends
-  on it. (from: granary-live)
-- [medium] A world-silo activation of the debug world runs one synchronous
-  Orleans grain turn of 10.3 to 12.9 s. Orleans warns
-  (`WorkItemGroup[101215]`, "took elapsed time 0:00:10.343"), and the turn ends
-  as the seven addon guests finish mounting. This was measured by
-  `puck azure test-world-container` on a locally built `puck/world-silo` image,
-  where both boots otherwise pass. Nothing else runs on that activation
-  meanwhile, and Orleans' default call timeout is 30 s. Find what the turn spends
-  its time on (document composition, wasm compilation of the guests, the
-  checkpoint) and move it off the turn: precompiled or cached guest modules, and
-  the composition as background work the activation awaits. Never block
-  the scheduler thread.
+- [medium] Cold debug-world silo activation still spends most of its time before
+  checkpoint decode. Construction leaves the Orleans scheduler explicitly
+  (`src/Puck.World.Silo/WorldSiloHost.cs:1196`); both container boots now pass
+  without long-turn warnings. Before the standard-authoring merge, per-step timers
+  (`WorldSiloHost.cs:1202`) measured a portable fresh boot at 10.865 s:
+  storage/definition admission 8.866 s,
+  checkpoint decode 0.001 s, authority construction 1.876 s, addon wiring 0.122 s.
+  A new-process recovery took 14.851 s (10.267 / 1.165 / 3.209 / 0.210 s).
+  Rebuilding with the authored-standard content gave 15.260 / 12.807 s for fresh
+  and new-process recovery; both passed health and authenticated QUIC again.
+  The storage phase includes root-qualified definition admission
+  (`src/Puck.World.Server/WorldAuthorityBlobStore.cs:1065`); it is not an I/O-only
+  measurement. A framework-dependent ReadyToRun experiment took 13.797 / 18.009 s
+  for fresh/recovery boots; its no-build publish took 144.5 s. It is not enabled.
+  These were contended runs (73–100% CPU, 1.3–2.7 GB free RAM), so they establish
+  neither a speedup nor the review's inferred ten seconds of JIT. Profile that
+  admission phase and compare cold/warm activations in one process in the lead's
+  quiet window before choosing a publish or cache change. (from: silo-fixes)
 - [low] Extend addon checkpoints to table/reference and segment-drop state.
-  Capture currently refuses these resources by name
+  Mounting currently refuses these resources by name
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
-  `src/Puck.Scripting/AddonInstance.Checkpoint.cs:35`); the debug world's seven
+  `src/Puck.World.Addons/WorldAddonRuntime.Lifecycle.cs:621`); the debug world's seven
   guests use supported numeric globals and linear memory. The [runtime contract](../../src/Puck.World.Addons/README.md#durable-guest-state)
   owns the supported inventory. (owner: delivery; from: silo-addons)
 - [low] The official tree (`puck official build --worlds worlds/debug`) ships

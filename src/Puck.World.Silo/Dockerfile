@@ -18,16 +18,16 @@ ENV XDG_DATA_HOME=/root/.local/share
 # The cache is mounted read-write at the build's default cache directory: what the build compiles beside the restored
 # entries is discarded with this step and reaches no layer.
 RUN --mount=type=bind,from=shader-cache,target=/root/.local/share/Puck/shaders,rw \
-    dotnet restore src/Puck.World.Silo --locked-mode \
-    && dotnet publish src/Puck.World.Silo -c Release --no-restore -o /app \
-    && dotnet publish src/Puck.Cli -c Release -o /puck-cli \
+    dotnet restore src/Puck.World.Silo --locked-mode -nodeReuse:false \
+    && dotnet publish src/Puck.World.Silo -c Release --no-restore -o /app -nodeReuse:false \
+    && dotnet publish src/Puck.Cli -c Release -o /puck-cli -nodeReuse:false \
     && dotnet /puck-cli/Puck.Cli.dll world prepare worlds/debug --output /app/worlds \
-    && dotnet publish src/Puck.World.Azure -c Release -o /app/worlds/extensions/Puck.World.Azure \
-    && dotnet publish src/Puck.HumbleGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.HumbleGamingBrick.Forge \
-    && dotnet publish src/Puck.AdvancedGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.AdvancedGamingBrick.Forge \
-    && dotnet publish src/Puck.HumbleGamingDeck.Forge -c Release -o /app/worlds/extensions/Puck.HumbleGamingDeck.Forge \
-    && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp \
-    && dotnet publish src/Puck.Mcp.Azure -c Release -o /app/worlds/extensions/Puck.Mcp.Azure
+    && dotnet publish src/Puck.World.Azure -c Release -o /app/worlds/extensions/Puck.World.Azure -nodeReuse:false \
+    && dotnet publish src/Puck.HumbleGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.HumbleGamingBrick.Forge -nodeReuse:false \
+    && dotnet publish src/Puck.AdvancedGamingBrick.Forge -c Release --no-restore -o /app/worlds/extensions/Puck.AdvancedGamingBrick.Forge -nodeReuse:false \
+    && dotnet publish src/Puck.HumbleGamingDeck.Forge -c Release -o /app/worlds/extensions/Puck.HumbleGamingDeck.Forge -nodeReuse:false \
+    && dotnet publish src/Puck.Mcp -c Release --no-restore -o /app/worlds/extensions/Puck.Mcp -nodeReuse:false \
+    && dotnet publish src/Puck.Mcp.Azure -c Release -o /app/worlds/extensions/Puck.Mcp.Azure -nodeReuse:false
 
 # The official Caddy image through Google's Docker Hub mirror: ECR Public's anonymous data limit also rejects
 # shared CI runners with HTTP 429. The index digest pins the exact build, including when the tag is rebuilt.

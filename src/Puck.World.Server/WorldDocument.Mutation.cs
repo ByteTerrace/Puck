@@ -15,10 +15,11 @@ public sealed partial class WorldDocument {
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
     /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
     /// <returns>Whether the mutation applied.</returns>
-    internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
+    /// <param name="derived">Whether a guest produced this mutation, so only a checkpoint retains its effects.</param>
+    internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered, bool derived = false) {
         if (IsStateCommand(mutation: mutation)) {
-            return TryApplyStateCommand(connectionId: connectionId, correlationId: correlationId, engineTick: engineTick,
-            mutation: mutation, preMetered: preMetered, tick: tick);
+            return TryApplyStateCommand(connectionId: connectionId, correlationId: correlationId, derived: derived,
+            engineTick: engineTick, mutation: mutation, preMetered: preMetered, tick: tick);
         }
         var current = Host.MaterializeArena();
 
@@ -64,7 +65,8 @@ public sealed partial class WorldDocument {
         InstallPrepared(
             connectionId: connectionId,
             correlationId: correlationId,
-            prepared: prepared
+            prepared: prepared,
+            derived: derived
         );
 
         return true;
@@ -343,7 +345,8 @@ public sealed partial class WorldDocument {
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
     /// <param name="record">Whether to journal and echo here; a coalesced cell run records each original act.</param>
-    internal void InstallPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, bool record = true) {
+    /// <param name="derived">Whether the mutation is guest output excluded from the external-edit recovery tail.</param>
+    internal void InstallPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, bool record = true, bool derived = false) {
         var mutation = prepared.Mutation;
         var candidate = prepared.Candidate;
         var engineTick = prepared.EngineTick;
@@ -415,20 +418,21 @@ public sealed partial class WorldDocument {
             prepared.Dispose();
         }
 
-        if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, mutation: mutation, prepared: prepared); }
+        if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, derived: derived, mutation: mutation, prepared: prepared); }
     }
 
-    private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation) =>
+    private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation, bool derived) =>
         RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
-            correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan);
+            correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan, derived: derived);
     private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,
-        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null) {
+        CellName? evictedKey = null, IWorldAddonPreparedPlan? addonPlan = null, IWorldMachinePreparedPlan? machinePlan = null, bool derived = false) {
         m_journal.Add(item: new WorldJournalEntry(
             EngineTick: engineTick,
             Mutation: mutation,
             Tick: tick
         ));
-        Host.MutationJournalTap?.Invoke(tick, engineTick, mutation);
+        // Guest decisions belong to the checkpoint's tick, not the external-edit recovery tail.
+        if (!derived) { Host.MutationJournalTap?.Invoke(tick, engineTick, mutation); }
         foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(mutation: mutation); }
 
         if (addonPlan is not null) {

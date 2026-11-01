@@ -123,22 +123,21 @@ public sealed class WasmModuleLoader {
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty, or whitespace.</exception>
     /// <exception cref="FileNotFoundException">No module exists at <paramref name="path"/>.</exception>
     /// <exception cref="InvalidDataException">The module is empty, or its binary is malformed in a section the host reads
-    /// before compiling (its imports, memories, tables or exports), exceeds a source/binary/table limit, or the
-    /// process-wide concurrent module-load capacity is occupied. A capacity refusal may be retried.</exception>
+    /// before compiling (its imports, memories, tables or exports), or exceeds a source/binary/table limit.
+    /// Concurrent loads wait for the process-wide compilation semaphore.</exception>
     /// <exception cref="AddonModuleLoadException">The source hash or declared memory resources are refused before compilation.</exception>
     /// <exception cref="Wasmtime.WasmtimeException">The bytes are not valid wasm/WAT.</exception>
-    public ScriptingModuleInfo Load(string path, string? expectedHash = null) {
-        if (!CompilationSlots.Wait(millisecondsTimeout: 0)) {
-            throw new InvalidDataException(message: $"Addon compilation capacity is full ({AddonModuleLimits.ConcurrentCompilations} concurrent loads); retry after a load completes.");
-        }
+    /// <param name="source">Pinned checkpoint bytes, or null to read from the configured asset source.</param>
+    public ScriptingModuleInfo Load(string path, string? expectedHash = null, ReadOnlyMemory<byte>? source = null) {
+        CompilationSlots.Wait();
         try {
-            return LoadAdmitted(expectedHash: expectedHash, path: path);
+            return LoadAdmitted(expectedHash: expectedHash, path: path, source: source);
         } finally {
             CompilationSlots.Release();
         }
     }
 
-    private ScriptingModuleInfo LoadAdmitted(string path, string? expectedHash) {
+    private ScriptingModuleInfo LoadAdmitted(string path, string? expectedHash, ReadOnlyMemory<byte>? source) {
         if (string.IsNullOrWhiteSpace(value: path)) {
             throw new ArgumentException(
                 message: "Addon module path must be provided.",
@@ -148,14 +147,14 @@ public sealed class WasmModuleLoader {
 
         var fullPath = Path.GetFullPath(path: path);
 
-        if (!m_assetSource.Exists(path: fullPath)) {
+        if ((source is null) && !m_assetSource.Exists(path: fullPath)) {
             throw new FileNotFoundException(
                 fileName: fullPath,
                 message: $"The addon module file was not found: {fullPath}"
             );
         }
 
-        var content = m_assetSource.Read(maximumBytes: AddonModuleLimits.SourceBytes, path: fullPath);
+        var content = (source ?? m_assetSource.Read(maximumBytes: AddonModuleLimits.SourceBytes, path: fullPath));
         var byteLength = content.Length;
 
         // Also check the return value, so an incorrect custom source cannot pass oversized bytes to native code.
@@ -193,6 +192,6 @@ public sealed class WasmModuleLoader {
             Memories: compiled.Memories,
             Module: compiled.Module,
             Path: fullPath
-        ) { CheckpointGlobals = compiled.Globals, CheckpointRefusal = compiled.CheckpointRefusal };
+        ) { CheckpointGlobals = compiled.Globals, CheckpointRefusal = compiled.CheckpointRefusal, Source = content };
     }
 }
