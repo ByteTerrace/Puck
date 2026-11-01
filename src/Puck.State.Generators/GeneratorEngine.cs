@@ -343,24 +343,28 @@ public static partial class GeneratorEngine {
         advances = 0;
         switch (generator.Source) {
             case GeneratorSource.UniformRange: {
-                    var span = unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value));
+                    var words = new DrawGeneratorWords<TGenerator>(generator: rng);
+                    var drawn = BoundedRandomSampling.TrySampleRange(
+                        maxAttempts: GeneratorCapacity.MaxBoundedAttempts,
+                        maximum: unchecked((uint)(generator.RangeMax!.Value - generator.RangeMin!.Value)),
+                        minimum: 0U,
+                        reason: out reason,
+                        source: ref words,
+                        value: out var offset,
+                        word: out _,
+                        words: out var consumed
+                    );
 
-                    for (var attempt = 0; (attempt < GeneratorCapacity.MaxBoundedAttempts); attempt++) {
-                        var word = rng.NextUInt32();
-
-                        advances++;
-                        if ((span == uint.MaxValue) || BoundedRandomSampling.TryMap(exclusiveHigh: (span + 1U), value: out word, word: word)) {
-                            value = (generator.RangeMin.Value + word);
-                            reason = string.Empty;
-                            return true;
-                        }
-                    }
-                    value = 0;
-                    reason = "bounded draw exhausted its raw-word work budget";
-                    return false;
+                    rng = words.Generator;
+                    advances = consumed;
+                    value = (drawn
+                        ? (generator.RangeMin.Value + offset)
+                        : 0L
+                    );
+                    return drawn;
                 }
             case GeneratorSource.WeightedNumeric: {
-                    advances = 2;
+                    advances = WeightedSampler.AdvancesPerDraw;
                     var picked = DrawEntry(
                         mask: ref mask,
                         mode: generator.Mode,
@@ -384,7 +388,7 @@ public static partial class GeneratorEngine {
 
                 return true;
             case GeneratorSource.SymmetryOrbit: {
-                    advances = 2;
+                    advances = WeightedSampler.AdvancesPerDraw;
                     var compiled = Compiled(generator: generator);
                     var picked = DrawEntry(
                         mask: ref mask,
@@ -455,7 +459,7 @@ public static partial class GeneratorEngine {
                 return false;
             }
 
-            if (samples > ((long.MaxValue - cursor) - 2)) {
+            if (samples > ((long.MaxValue - cursor) - WeightedSampler.AdvancesPerDraw)) {
                 result = default;
                 reason = "draw cursor would overflow";
                 return false;
@@ -476,7 +480,7 @@ public static partial class GeneratorEngine {
                 return false;
             }
 
-            samples += 2;
+            samples += WeightedSampler.AdvancesPerDraw;
 
             if (generator.Mode != GeneratorMode.WithReplacement) {
                 working[ordinal] = mask;
