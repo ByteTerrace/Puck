@@ -44,11 +44,12 @@ public static partial class LockFiles {
     }
 
     /// <summary>The restore <see cref="Record"/> runs: unlocked, so a lock file that no longer matches its project is
-    /// re-resolved and rewritten; with <paramref name="update"/>, every floating version is re-evaluated as well.</summary>
+    /// re-resolved and rewritten. Force restore past NuGet's no-op cache so changed reference/runtime graphs are read;
+    /// with <paramref name="update"/>, every floating version is re-evaluated as well.</summary>
     /// <param name="update">Whether to take the newest packages every floating range admits.</param>
     /// <returns>The <c>dotnet</c> arguments.</returns>
     public static IReadOnlyList<string> RecordArguments(bool update) => [
-        "restore", Solution, "-p:RestoreLockedMode=false", .. (update ? (string[])["--force-evaluate"] : []), CliOptions.NoNodeReuse, "-nologo", "-v", "q",
+        "restore", Solution, "-p:RestoreLockedMode=false", .. (update ? (string[])["--force-evaluate"] : ["--force"]), CliOptions.NoNodeReuse, "-nologo", "-v", "q",
     ];
     /// <summary>Every project <see cref="Solution"/> lists, as full paths.</summary>
     /// <param name="repositoryRoot">The checkout.</param>
