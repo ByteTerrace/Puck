@@ -734,10 +734,48 @@ as `puck mesh audit` for bake defects.
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path** | `Choose` on the GPU through `SdfMeshOcclusion`'s counted indirect draws, every pass kind, hysteresis kept. Owned by the rendering plan; ordered here because R1 exposes it. | The 160,000-draw scene's produce time; stills compared as above with the CPU `Choose` build at the lobby, the rim and inside the gallery (where hysteresis holds levels). |
+| **R2 GPU culling in the indirect path — built; hardware checks open** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Owned by the rendering plan. | Initial Direct3D 12 produce: lobby CPU 39.40–40.21 / GPU 41.65 ms; meadow CPU 55.95–59.86 / GPU 52.25 ms. These loaded-machine observations do not establish a causal speedup. [R2 observations](#r2-observations) records counts, pass costs and the outstanding Vulkan, image and validation checks. |
 | **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
+
+### R2 observations
+
+The November 1 lane runs use the real debug package on the RTX 4070 at
+1280×900, highest quality, native render scale, temporal accumulation and AO
+on. Bakes settled before these readings. CPU `Choose` runs 2 and 3 establish
+the before range; GPU run 1 uses the merged memory work and the new selection
+path. Shared-machine load, differing code outside R2 and unpinned ticks limit
+attribution. The 60 FPS bar remains unmet; quality was not reduced.
+
+| Direct3D 12 place | CPU produce avg, ms | GPU produce avg, ms | CPU world draws, all passes | GPU world draws, all passes |
+|---|---:|---:|---:|---:|
+| Lobby (`desktop`) | 39.40–40.21 | 41.65 | 5,648–5,649 | 5,649 |
+| Rim (`overlook`) | 22.39–49.71 | 20.16 | 465–466 | 465 |
+| Gallery interior | 35.11–40.90 | 30.49 | 6,650–6,659 | 6,659 |
+| Meadow | 55.95–59.86 | 52.25 | 11,933–11,974 | 11,854 |
+
+Root-pass GPU timestamps, 32 samples per reading (near shadow / far shadow /
+opaque / glass, ms): lobby CPU `0.468–0.480 / 1.172–1.206 / 0.493–0.528 /
+0.012`, GPU `0.516 / 1.097 / 0.655 / 0.183`; meadow CPU `0.620–2.116 /
+0.777–2.196 / 1.339–3.863 / 0.015–0.017`, GPU `0.477 / 0.623 / 1.097 /
+0.182`. Selection and scanning empty indirect slots cost GPU work, especially
+for the two glass draws among 7,578 retained draws; removed CPU work is not
+free GPU work. The meadow's 4,215 blade draws share 288 geometries (14.6
+draws/geometry); sparse instance mapping and per-geometry/per-level ranges
+remain with the rendering owner in the [packet](open-items.md#engine-job-system).
+
+The normal still comparison measures mean absolute RGB differences per 64×64
+region against two CPU runs. It flags 26 lobby regions, none at the rim, 240
+in the gallery and three at the meadow. Inspection shows broad lighting and
+shadow variation, including nearly black interiors in one unchanged CPU run;
+no geometry mismatch has been identified. This is not an image-equivalence
+verdict. Tick-pinned comparisons are pending. The initial cold/incomplete
+baseline legs and the stopped Direct3D 12 validation attempt support no pass
+claim. Vulkan measurements and both final validation legs remain open behind
+the shared GPU lease. Release builds for both backends pass; input allocation
+(two fixtures) and granaries (five) pass `--reproduce` after the integration
+merge. Scratch transcripts and images carry the `r2-cull-` prefix.
 
 ### What becomes of the tick-to-produce memo's phases
 

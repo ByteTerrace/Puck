@@ -693,6 +693,8 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   preserve planted roots, continuous world-phased gusts and independent tip
   flutter. R2 moves raster culling and existing triangle detail into
   `frame/sdf-mesh-selection.hlsli`, through the same counted indirect path.
+  Its timings and outstanding hardware checks are in the memo's
+  [R2 observations](engine-job-system.md#r2-observations).
   Draw count is the other cost:
   4,215 draws for 288 unique blade geometries, one draw per blade part. The
   cause fix is one draw per shared geometry with its instances, through the
