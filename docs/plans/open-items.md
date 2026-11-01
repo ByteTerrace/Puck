@@ -2591,6 +2591,22 @@ movement-facing scheme returns.
   the room-first `fade` hides her, the design working as built).
 - The tight-space camera course's three-up `camera-compare` layout and a live
   mode toggle on the Debug page remain to author (`camera-course.puck`).
+- [high] Solid copies of an unscoped flat-crown tree (the standard's
+  `flatCrownTree` without its relief noise: a trunk, three yawed Capsule
+  branches and six flat `SmoothUnion` Superellipsoid crowns) made the chase
+  camera's clearance read an obstruction with nothing near: at the stage
+  `world.view.camera` read `boom=2.144/4.2 clearance=shortened`, and at
+  (0, 0, 150), (-150, 0, 0) and (60, 0, -100) the eye sat on the target. With
+  the lawn's solids off it read `clearance=open` at 4.012; bisecting by kind
+  with `world.reload` left the flat crowns (oak and boulder solids alone kept
+  it open or nearly so), and straightening their branches or thickening their
+  crowns live did not clear it. The clearance sphere-casts the presentation
+  field of every solid placement (`WorldCameraClearance.cs:186`, built at
+  `WorldFramePresenter.cs:480-511`), so one creation's field poisons the
+  camera valley-wide. The lawn keeps the trees in one scope with a 2.5 cm
+  relief; find why the unscoped creation's field answers a hit far from it
+  (a sphere cast through the fixed-point evaluator with smooth unions joining
+  the global accumulator is the first suspect). (from: c1-groundcover)
 
 ### Temporal shimmer and cadence flicker
 
