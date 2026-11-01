@@ -151,6 +151,13 @@ agent works in that mode by default, without asking:
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world
     prepare` and the Azure release build from its package, `worlds/debug`.
+  - The debug world is THE proving ground (the owner's ruling): the benchmark
+    that shows Puck's features compose and run well on the target machines,
+    and the inspiration authors draw on to build their own worlds easily.
+    Every plan proves itself there, never on a world in `experimental/`.
+    Features the experimental worlds (the quilt, the island) have that the
+    debug world lacks are ported into it, not re-admitted as worlds of their
+    own.
 - The gates, ledgers and red-leg proofs described in this file and the skills
   were written by agents, not ordered by the owner. They are tools to use when
   they pay for themselves, never preconditions for landing. An engine change's
