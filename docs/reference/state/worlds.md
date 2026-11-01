@@ -498,6 +498,11 @@ drive derives a tape through the live mutation door; later drives restore only
 its starting rows and bodies, feed the recorded inputs through the same doors,
 and compare every resulting scope hash. State rows include their storage
 continuation, and bodies include the population continuation codec's state.
+Growing a selected keyed row does not invalidate its starting image: restoration
+reinstalls the captured reservation through the full snapshot relayout path,
+including an empty row captured with no explicit capacity. Unrelated rows keep
+their live reservations and contents. A refused restore ends the drive; it never
+leaves an active recording or replay waiting indefinitely.
 Compiled row write sets and body-effect targets also select rule and interaction
 edge latches and the progress of groups writing those rows or bodies; restoring
 a table leaves other rules' continuations live. Body ownership includes nested

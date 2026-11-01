@@ -51,18 +51,8 @@ public sealed partial class StateArena {
     /// <summary>Restores into a separately prepared arena. The caller adopts it only after validation succeeds.</summary>
     public void RestoreSnapshot(ArenaSnapshot snapshot) {
         if ((Journal.Scopes != 0) || (snapshot.Capacities.Length != m_layout.RowCount)) { throw new InvalidOperationException(message: "The checkpoint's arena shape differs from its declarations."); }
-        var layout = m_layout;
-        for (var row = 0; row < snapshot.Capacities.Length; row++) {
-            var capacity = snapshot.Capacities[row];
-            if (capacity == layout[row].CellCapacity) { continue; }
-            if ((capacity < 0) || (capacity > m_rows[row].CellCeiling) || !layout.HasColumn(row: row, column: ArenaColumn.CellCapacity)) {
-                throw new InvalidOperationException(message: "The checkpoint carries an inadmissible reservation.");
-            }
-            layout = layout.WithCellCapacity(rowOrdinal: row, capacity: capacity);
-        }
-        if (!AdmitReservation(next: layout, additionalBytes: 0L, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
-        InstallReservation(next: layout);
-        if (!TryRestoreKeys(names: snapshot.Keys, reason: out reason) || snapshot.Keys.Length != m_keys.Count) { throw new InvalidOperationException(message: reason); }
+        InstallReservation(next: SnapshotLayout(capacities: snapshot.Capacities));
+        if (!TryRestoreKeys(names: snapshot.Keys, reason: out var reason) || snapshot.Keys.Length != m_keys.Count) { throw new InvalidOperationException(message: reason); }
         foreach (var column in ArenaColumns.All) {
             if (column is ArenaColumn.CellCapacity or ArenaColumn.Vector) { continue; }
             for (var index = 0; index < m_layout.Size(column: column); index++) {
@@ -115,6 +105,24 @@ public sealed partial class StateArena {
             if (!TryValidateLoad(rows: ExportRows(includePoolRows: true), reason: out reason) || !TryValidateRelations(out reason)) { throw new InvalidOperationException(message: reason); }
         } finally { m_poolMutationDepth--; }
         Array.Fill(m_deliveryRows, true);
+    }
+
+    // Full and scoped snapshots restore reservations through the same admitted relayout mechanism. A scope
+    // replaces only its reservations; other rows keep their current capacity and contents.
+    private ArenaLayout SnapshotLayout(IReadOnlyList<int> capacities, IReadOnlyList<int>? rows = null) {
+        var layout = m_layout;
+        for (var index = 0; index < capacities.Count; index++) {
+            var row = rows is null ? index : rows[index];
+            if ((uint)row >= (uint)layout.RowCount) { throw new InvalidOperationException("The snapshot names an undeclared row."); }
+            var capacity = capacities[index];
+            if (capacity == layout[row].CellCapacity) { continue; }
+            if ((capacity < 0) || (capacity > m_rows[row].CellCeiling) || !layout.HasColumn(row: row, column: ArenaColumn.CellCapacity)) {
+                throw new InvalidOperationException(message: "The snapshot carries an inadmissible reservation.");
+            }
+            layout = layout.WithCellCapacity(rowOrdinal: row, capacity: capacity);
+        }
+        if (!AdmitReservation(next: layout, additionalBytes: 0L, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
+        return layout;
     }
 
     private void RequireSnapshotPosition(ArenaColumn column, int index) {

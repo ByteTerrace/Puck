@@ -581,6 +581,9 @@ defect was found; the weaknesses are structural and economic.
   latches and progress, draws and an explicit clock policy. Firing scopes stay
   for speculation, gameplay undo is rebuilt on that bundle, document-edit undo
   stays distinct, and `world.history` stays the editor's time travel.
+  Scoped row reservations rewind through the full snapshot relayout mechanism;
+  growth after capture is reversible, including a zero-capacity keyed row.
+  Refusal leaves no active drive or partial first recording behind.
 - **Entities are records in pools**: the one entity noun, with a reference cell
   kind persisting pool, slot and generation, `forEach` over a pool, in-place
   reloads, and native integer-indexed storage instead of string-keyed
