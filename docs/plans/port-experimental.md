@@ -54,8 +54,23 @@ Not ported again:
 
 ## Lanes, in order
 
-Order is value to the proving ground: lanes that exercise engine systems the
-debug world does not touch come first. A search of `worlds/` finds no
+**The ports that force the fundamentals are the job system's forcing
+workloads (the owner's ruling).** Each lands just before the step it proves,
+so every optimization is measured on the load it exists for:
+- the meadow (lane 9) now, beside the bake and memory work;
+- the creature garden (lane 4) now, ahead of the parallel tick's body
+  advance (T2);
+- the second seat (lane 5) and authored passes (lane 1) ahead of parallel
+  view recording (R1);
+- the quilt (lane 2) with residency step 2;
+- water and fields (lane 3), the rules arcade (lane 7) and the combat yard's
+  pair primitive (lane 13) as the field, rule-VM and pair-rule workloads.
+
+The rest (lanes 6, 8, 10, 11, 12 and 14) is content, taken after the
+fundamentals ([job system](engine-job-system.md#6-build-order)).
+
+Within that, order is value to the proving ground: lanes that exercise engine
+systems the debug world does not touch come first. A search of `worlds/` finds no
 `interactions`, `navigation`, `adjacencies`, `curves` track, `region(` trigger,
 medium or `Pull` hold, `field` lattice, flock program, authored HLSL package,
 row `visibility` audience, `embeds` row or identity fact.

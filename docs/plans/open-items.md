@@ -61,7 +61,10 @@ experimental worlds have that it lacks is ported into it
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
    authored screen material and the standard pad kit's debug sectors.
 9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
-   the inventory lane first.
+   the meadow and the creature garden now, as the bake's and the parallel
+   tick's forcing workloads; the second seat, the authored passes and the
+   quilt each ahead of the job-system step they prove (the owner's ruling,
+   [order](port-experimental.md#lanes-in-order)).
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     a source-generated JSON context for `WorldDefinition` (15,786 of a
     ReadyToRun boot's remaining JIT methods), then a reboot for an edit outside
