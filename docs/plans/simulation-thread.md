@@ -26,7 +26,7 @@ on the RTX 4070 every frame under 16.7 ms at the highest settings. Today a
 windowed iteration that carries a 30 Hz tick pays the tick (6 to 12 ms walking,
 2 to 4 standing) and the frame's produce (6 to 7 ms on Direct3D 12, 8 to 11 on
 Vulkan) on one thread, so one iteration in two or three misses the blank
-([frame time](open-items.md#frame-time-on-the-lead-machine)).
+([frame time](open-items.md#engine-job-system)).
 
 ## Decisions
 
@@ -580,7 +580,7 @@ hashes unchanged.
 Costs that stay on the frame thread, with the packet that owns each:
 
 - Produce: 6 to 7 ms on Direct3D 12, 8 to 11 ms on Vulkan
-  ([frame time](open-items.md#frame-time-on-the-lead-machine)).
+  ([frame time](open-items.md#engine-job-system)).
 - View recording on tick frames (`ShaderPipelineRenderNode.RenderFrame`
   2.8 ms against 0.9 between), now on the join's frame rather than the
   step's; owned by frame time and the look call on rendering portal and

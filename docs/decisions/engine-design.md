@@ -224,8 +224,10 @@ fixtures moved (canaries, parity, determinism, the counters workloads other
 than the debug world's, the qualification profile and the world baselines)
 keep their verbs and wait, unrun, until the owner calls for qualification; the
 [open items](../plans/open-items.md#quarantined-gates) record what each covered.
-A quarantined world returns by being rewritten or re-admitted under the gate,
-never by building it in place.
+A quarantined world does not return (the owner's ruling): what it has that the
+debug world lacks is ported into the debug world
+([the port packet](../plans/open-items.md#port-the-experimental-worlds-missing-features)),
+never built in place.
 
 ## The debug world is the engine's instrument
 

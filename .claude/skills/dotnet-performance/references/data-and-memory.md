@@ -60,7 +60,7 @@ survivors and with old-to-young references, not with the garbage.
 - **Measured here.** A gen0 pause on the lead machine is 10 to 12 ms with
   4 MB promoted: 2.6 ms marking through cards and about 7.7 ms planning and
   compacting. Server GC with four heaps collected rarely but paused 27 ms, so it
-  was not kept ([simulation tick packet](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+  was not kept ([simulation tick packet](../../../../docs/plans/open-items.md#engine-job-system)).
 - **Write fewer young references into old containers.** A long-lived
   dictionary, list or row table that takes a new object every tick marks a card
   and promotes that object. The irradiance cache held a record class per probe
@@ -243,21 +243,21 @@ Each is a rule above that Puck breaks today; the packet holds the work.
 
 - **Young objects in old containers.** The server's `StateCell`,
   `WorldStateRow`, `UpsertStateRow` and their strings and the state journal set
-  the gen0 pause ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+  the gen0 pause ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **A cold bake allocates.** 126 collections paused 572 ms over 600 frames of a
   Direct3D 12 cold bake, and 95 paused 3.2 s on Vulkan
-  ([cold bake](../../../../docs/plans/open-items.md#cold-bake-under-a-minute),
-  [parity](../../../../docs/plans/open-items.md#cross-backend-parity-and-gpu-robustness)).
+  ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change),
+  [parity](../../../../docs/plans/open-items.md#vulkan-regressions-and-gpu-robustness)).
 - **A glass resize allocates;** about 22 resizes on a painting approach end in a
-  12 ms gen2 ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+  12 ms gen2 ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **Eager cold capture.** `WorldBody.CaptureMotion` zero-fills and fills the
   refusal snapshot on every rigid advance
-  ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+  ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **Linear scans per body.** `WorldBodyStateReads.TryResolveSlot` searches the
   declared state by name ([`WorldBodyStateReads.cs:43`](../../../../src/Puck.World.Schema/WorldBodyStateReads.cs))
   for every body on a one-body register change, and
   `SdfMeshPathBake.IrradiancePending` walks every group each frame once the bake
-  has settled ([frame time](../../../../docs/plans/open-items.md#frame-time-on-the-lead-machine)).
+  has settled ([frame time](../../../../docs/plans/open-items.md#engine-job-system)).
 
 ## Sources
 

@@ -244,7 +244,7 @@ should fill whole waves.
   `SDF_VISIBILITY_GROUP_EDGE`), a whole number of waves on both vendors.
 - The bake spends a fixed share of each frame (`SdfMeshPathBake.FrameTaps`,
   150,000 field evaluations a 60 Hz frame); a cold debug-world bake is 50,854
-  dispatches ([cold bake](../../../../docs/plans/open-items.md#cold-bake-under-a-minute)).
+  dispatches ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
 
 Sources: [MS-DISPATCH] (65,535 groups a dimension) and [VK-LIMITS]
 (`maxComputeWorkGroupCount`, per device); [AMD-RDNA] (group sizes a multiple of
@@ -299,13 +299,13 @@ batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
   program region waits for the device to go idle
   ([rendering plan](../../../../docs/plans/rendering.md#open-items),
   [hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
-- **Views record on tick frames** ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+- **Views record on tick frames** ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way
   conflict** and **the bake's `SdfBakeTaps`,**
   indexed by the `[loop]` counter, the shape the local-array rule forbids,
   whose local memory no capture has read
-  ([frame time](../../../../docs/plans/open-items.md#frame-time-on-the-lead-machine),
-  [cold bake](../../../../docs/plans/open-items.md#cold-bake-under-a-minute)).
+  ([frame time](../../../../docs/plans/open-items.md#engine-job-system),
+  [cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
 - **No in-process statistics.** `VK_KHR_pipeline_executable_properties` is
   enabled and its entry points bound, but no pipeline asks to capture statistics
   and nothing reads them ([debug tools](../../../../docs/plans/open-items.md#debug-tools)).

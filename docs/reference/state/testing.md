@@ -168,7 +168,7 @@ and that the pixels agree within the per-tile thresholds in the world's
 contract. The state-hash verdict is the part that concerns the state system:
 simulation state must never depend on the GPU backend. The check needs both
 backends. See the [`puck parity` reference](../cli.md#puck-paritycross-backend-parity-over-the-authored-parity-world) and the
-[parity world](../../../tests/Puck.Parity/README.md).
+[parity world](../../../experimental/tests/Puck.Parity/README.md).
 
 ## Replay the cost evidence
 

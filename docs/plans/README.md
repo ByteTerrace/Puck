@@ -21,7 +21,7 @@ This directory holds the work that remains to be scheduled. Current architecture
 
 ## How to read a plan
 
-Each programme is one page and opens with an implementation status. A status is evidence about the code it was written against; recheck the code before scheduling work from it. Each programme names a forcing artifact, a build that proves several plans at once, and the debug world is where every forcing artifact and check runs. The One World and the quilt return only by the owner's re-admission; what they have that the debug world lacks is ported into it ([the port packet](open-items.md#port-the-experimental-worlds-missing-features)).
+Each programme is one page and opens with an implementation status. A status is evidence about the code it was written against; recheck the code before scheduling work from it. Each programme names a forcing artifact, a build that proves several plans at once, and the debug world is where every forcing artifact and check runs. The quilt, the island and the One World stay quarantined in `experimental/` and are not re-admitted; what they have that the debug world lacks is ported into it ([the port packet](open-items.md#port-the-experimental-worlds-missing-features)).
 
 ## [State and language](state-and-language.md)
 

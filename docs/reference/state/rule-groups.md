@@ -356,7 +356,7 @@ Only the columns a rule can write are reserved: a cell's value and presence,
 member keys, trait clocks, cursors, and a knowledge row's observations. A
 cell's provenance, behavior and audience arrive only through an import, so no
 turn reserves them. If a write does reach one inside a turn, that turn becomes
-unrewindable. With this sizing, each [rulepush](../../../worlds/rulepush/README.md)
+unrewindable. With this sizing, each [rulepush](../../../experimental/worlds/rulepush/README.md)
 level keeps 32 turns of its board, its tokens and its derived tables. Rows without an authored capacity still reserve room for many
 cells ([Byte accounting](arena.md#byte-accounting) explains what each row
 reserves), so author a `capacity` on the rows a turn owns.

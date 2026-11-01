@@ -40,7 +40,7 @@ the reasoning behind every decision is in
   [`experimental/worlds`](../../experimental/README.md). They are not
   re-admitted. The debug world is the proving ground, and the features these
   worlds hold that it lacks are ported into it by the
-  [porting packet](open-items.md#work-packets), not revived in place.
+  [porting packet](open-items.md#port-the-experimental-worlds-missing-features), not revived in place.
 - **Not started:** the content and federation
   waves, namespace normalization, the frames document, the neighbour tape,
   the finder's units A to C and its slices, the Participant

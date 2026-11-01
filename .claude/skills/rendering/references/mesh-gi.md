@@ -264,7 +264,7 @@ no visible probe. Keep the authored exposure bounds and world headroom intact.
 A cold Vulkan boot shows a near-black shaft with no meter until the static draws
 are ready and the three-sweep GI completes; capture only after that, and
 compare Vulkan with Direct3D on the same source state with all geometry settled
-([open items](../../../../docs/plans/open-items.md#cross-backend-parity-and-gpu-robustness)
+([open items](../../../../docs/plans/open-items.md#vulkan-regressions-and-gpu-robustness)
 records the remaining shaft difference).
 
 The probe trace runs on the CPU and costs about the same on both backends. To

@@ -214,8 +214,8 @@ The controller bar along the bottom edge has five pages of twelve plates,
 reached by holding the triggers (or Z and X on the keyboard); the page's name
 sits under the bar and the row above it lights what is held. The Go and Tour
 pages hold this world's places and gallery, so a pad reaches them without the
-console ([`pad.puck`](pad.puck); the bar, the other three pages and the play
-wheel are [`controls.puck`](controls.puck), and the key layout is
+console ([`controls.puck`](controls.puck); the bar, the other three pages and the play
+wheel are the standard's [`controls.puck`](../standard/controls.puck), and the key layout is
 [`pad-kit.puck`](pad-kit.puck)):
 
 | Hold | Page | What the twelve plates do |
