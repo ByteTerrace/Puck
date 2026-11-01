@@ -3,7 +3,7 @@ using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Cli.Architecture;
 
 namespace Puck.Cli.Affected;

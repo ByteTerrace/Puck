@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick.Interfaces;
 
@@ -258,7 +259,7 @@ public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
                 : []),
             ];
 
-            File.WriteAllBytes(
+            AtomicFile.WriteAllBytes(
                 path: savePath,
                 bytes: [.. parts[0], .. parts[1]]
             );

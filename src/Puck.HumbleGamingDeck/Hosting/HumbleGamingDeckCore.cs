@@ -1,5 +1,5 @@
 using System.Globalization;
-using Puck.Assets;
+using Puck.Abstractions;
 
 namespace Puck.HumbleGamingDeck;
 

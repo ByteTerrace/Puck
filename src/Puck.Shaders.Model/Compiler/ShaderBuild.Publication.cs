@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using Puck.Assets;
 using Puck.Abstractions;
 
 namespace Puck.Shaders;
@@ -10,6 +10,8 @@ public sealed partial class ShaderBuild {
     public const string SidecarExtension = ".hash";
 
     private const int Attempts = 20;
+
+    private static readonly TimeSpan LockBudget = TimeSpan.FromMinutes(minutes: 5);
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lock> PublicationGates = new(comparer: PuckPaths.Comparer);
 
@@ -40,59 +42,32 @@ public sealed partial class ShaderBuild {
         }
     }
     private FileStream OpenLock() {
-        var directory = Path.GetDirectoryName(path: m_lockFile);
+        var clock = Stopwatch.StartNew();
 
-        if (!string.IsNullOrEmpty(value: directory)) {
-            Directory.CreateDirectory(path: directory);
-        }
-
-        var deadline = (DateTime.UtcNow + TimeSpan.FromMinutes(minutes: 5));
-        var waited = false;
-
-        while (true) {
-            try {
-                return new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: m_lockFile, share: FileShare.None);
-            } catch (IOException) when ((DateTime.UtcNow < deadline)) {
-                if (!waited) {
-                    Log(line: $"Waiting for another build's shader publication to finish ('{m_lockFile}').");
-                    waited = true;
-                }
-                Thread.Sleep(millisecondsTimeout: 50);
-            }
-        }
+        return (FileLock.Acquire(
+            expired: () => (clock.Elapsed >= LockBudget),
+            path: m_lockFile,
+            waiting: () => Log(line: $"Waiting for another build's shader publication to finish ('{m_lockFile}').")
+        ) ?? throw new IOException(message: $"Another build's shader publication did not finish within {LockBudget.TotalMinutes:0} minutes ('{m_lockFile}')."));
     }
     // Publishes one pair under the held lock: the old sidecar goes first, the bytecode moves into place whole, and the new
     // sidecar, the commit record, moves in last. A file another process holds (a reader outside the build, an antivirus
     // scan of a file just written) is retried.
     private static void Publish(ShaderBuildOutput output, ShaderOutputPlan plan, byte[] bytecode) {
         var sidecarPath = SidecarOf(output: output);
-        var token = Guid.NewGuid().ToString(format: "N");
-        var temporary = $"{output.OutputPath}.{token}.tmp";
-        var temporarySidecar = $"{sidecarPath}.{token}.tmp";
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: output.OutputPath)!);
-        try {
-            File.WriteAllBytes(bytes: bytecode, path: temporary);
-            File.WriteAllText(contents: SidecarOf(bytecode: bytecode, plan: plan), path: temporarySidecar);
-            Retry(operation: () => File.Delete(path: sidecarPath));
-            Retry(operation: () => File.Move(destFileName: output.OutputPath, overwrite: true, sourceFileName: temporary));
-            Retry(operation: () => File.Move(destFileName: sidecarPath, overwrite: true, sourceFileName: temporarySidecar));
-        } finally {
-            File.Delete(path: temporary);
-            File.Delete(path: temporarySidecar);
-        }
+        WithRetry(operation: () => File.Delete(path: sidecarPath));
+        WithRetry(operation: () => AtomicFile.WriteAllBytes(bytes: bytecode, path: output.OutputPath));
+        WithRetry(operation: () => AtomicFile.WriteAllText(contents: SidecarOf(bytecode: bytecode, plan: plan), path: sidecarPath));
     }
-    private static void Retry(Action operation) {
-        for (var attempt = 1; ; attempt++) {
-            try {
-                operation();
-
-                return;
-            } catch (Exception exception) when (((exception is IOException or UnauthorizedAccessException) && (attempt < Attempts))) {
-                Thread.Sleep(millisecondsTimeout: (50 * attempt));
-            }
-        }
-    }
+    private static void WithRetry(Action operation) =>
+        Abstractions.Retry.Run(
+            action: operation,
+            attempts: Attempts,
+            backoff: static attempt => TimeSpan.FromMilliseconds(value: (50 * attempt)),
+            retryable: Abstractions.Retry.IsFileSystemRefusal
+        );
     // Removes bytecode the build wrote whose stage source is gone, and refuses any other bytecode with no source. A
     // bytecode file is a build output exactly when its sidecar records its current bytes; such a file and its sidecar are
     // removed, one line each. Bytecode with no sidecar, or with bytes its sidecar does not record, was not written by the

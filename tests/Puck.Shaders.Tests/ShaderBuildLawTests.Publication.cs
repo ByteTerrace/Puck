@@ -34,24 +34,18 @@ public sealed partial class ShaderBuildLawTests {
 
         await secondRunner.Started.Task.WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 30), cancellationToken: TestContext.Current.CancellationToken);
         using var oldSidecar = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: sidecar, share: FileShare.Read);
-        FileStream? stagedSidecar = null;
 
         try {
+            // A's publication starts by removing the old commit record, which the held handle refuses; A retries while
+            // holding the publication lock.
             firstRunner.Finish.SetResult();
-            TestLiveness.Until(reason: () => "Publisher A did not stage its commit record.", step: () => {
-                var path = Directory.EnumerateFiles(path: Path.GetDirectoryName(path: sidecar)!, searchPattern: (Path.GetFileName(path: sidecar) + ".*.tmp")).SingleOrDefault();
-
-                if (path is null) { return false; }
-                try { stagedSidecar = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.Read); return true; } catch (IOException) { return false; }
-            });
-            oldSidecar.Dispose();
-            TestLiveness.Until(reason: () => "Publisher A did not remove the old commit record.", step: () => !File.Exists(path: sidecar));
+            _ = await Task.WhenAny(task1: first, task2: Task.Delay(millisecondsDelay: 300, cancellationToken: TestContext.Current.CancellationToken));
+            Assert.False(condition: first.IsCompleted, userMessage: "Publisher A completed while the old commit record was held open.");
             secondRunner.Finish.SetResult();
             await secondRunner.Finished.Task.WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 30), cancellationToken: TestContext.Current.CancellationToken);
             _ = await Task.WhenAny(task1: second, task2: Task.Delay(millisecondsDelay: 300, cancellationToken: TestContext.Current.CancellationToken));
-            Assert.False(condition: second.IsCompleted, userMessage: "Publisher B completed while A's transaction held an unpublished sidecar.");
+            Assert.False(condition: second.IsCompleted, userMessage: "Publisher B completed while A's transaction held the old commit record.");
         } finally {
-            stagedSidecar?.Dispose();
             oldSidecar.Dispose();
             firstRunner.Finish.TrySetResult();
             secondRunner.Finish.TrySetResult();
