@@ -340,8 +340,12 @@ so never derive a runtime path from one.
 Compile it without executing its operational code:
 
 ```sh
-dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release -nodeReuse:false
+MSBUILDDISABLENODEREUSE=1 dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
 ```
+
+A file-based app takes no MSBuild switch: `-nodeReuse:false` makes the SDK
+read the `.cs` file as a project file and fail (MSB4025), so node reuse is
+turned off through the environment instead.
 
 Use `puck format --file-list files.json` from the repository root, with a JSON array
 of paths relative to the working directory, such as `["src/Puck.Azure.Resources/bootstrap.cs"]`. The CLI converts a
@@ -434,9 +438,10 @@ What the C# loop costs:
 - **Warm build nodes.** `dotnet build` and `dotnet run` leave their MSBuild
   nodes running for the next build (node reuse is on by default), which then
   starts with every node's tasks loaded, jitted and compiled. A cold build
-  starts every node afresh and pays that in each: a no-op build of
-  `src/Puck.World` took 32 to 48 s cold and 8 to 9 s warm on the reference
-  machine, under 60 to 90% load from other work. Idle nodes exit after a while,
+  starts every node afresh and pays that in each: a cold no-op build of
+  `src/Puck.World` (60 projects, every `CoreCompile` skipped, no file copied)
+  took 14.3 s on the reference machine under load from other lanes, and a warm
+  one 8 to 9 s. Idle nodes exit after a while,
   so the first build after a long pause is cold. The `-nodeReuse:false` every
   agent build and restore passes ([verification](../../.claude/skills/verification/SKILL.md))
   keeps shared agent machines free of lingering nodes and makes every agent
@@ -448,10 +453,27 @@ What the C# loop costs:
   reference assembly, so no dependent recompiles: a body edit in `Puck.SdfVm`
   compiles `Puck.SdfVm` alone. The rest of the build is MSBuild's check of the
   other projects the World reaches, 64 in all with the world compiler's.
-- **One inline task.** Every build operation the tree implements in its own
-  code (the architecture gates, the shader build, the Direct3D 11 kernels, the
-  stale package sweep) is one inline task (`build/PuckBuildTasks.targets`), so
-  a cold node compiles it once rather than once per operation.
+- **One build task, compiled once.** Every build operation the tree implements
+  in its own code (the architecture gates, the shader build, the Direct3D 11
+  kernels) is one task (`build/PuckBuildTasks.cs`), which
+  `build/PuckBuildTasks.targets` compiles once per version of the source into
+  `build/obj/build-tasks/` and every node loads. An inline
+  (`RoslynCodeTaskFactory`) task would compile in every node of every build,
+  a cold compiler process each time: 16 compiles of about 2.6 s in a cold
+  no-op build of `src/Puck.World`, which took 34 s that way.
+- **No commit in a compiled assembly.** The commit an executable is built at
+  (`WorldSchema.SourceRevision`) rides its `runtimeconfig.json` as the
+  AppContext value `Puck.SourceRevision` (`PuckStampSourceRevision` in
+  `Directory.Build.targets`), so a commit rewrites that file and compiles
+  nothing. Compiled into `Puck.World.Schema`, it cost a 15 s compile of that
+  project after every commit, which every `Puck.World.*` project waits for.
+- **Boot JIT.** A headless boot of the debug world to `world.status`
+  JIT-compiles about 43,900 methods from the IL build and 24,200 from a
+  ReadyToRun publish ([the recipe](../../src/Puck.World/README.md)); 15,800 of
+  those left are `System.Text.Json` generic instantiations over the document
+  model, which no precompiler outside the framework reaches. Local builds stay
+  IL: ReadyToRun would add a precompile to every edited project's build and
+  leaves the largest JIT cost in place.
 - **No rebake.** The World keeps its baked meshes between runs (`SdfMeshStore`,
   in the `meshes` device cache), keyed by geometry and by the bake's own code
   (the methods it reaches, `SdfMeshBakeClosure`) and kernels, which read their

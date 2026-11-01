@@ -9,8 +9,7 @@ namespace Puck.World.Client;
 /// <summary>The narrow slice of the composition root's audio director a frame source drives every produced frame —
 /// reconcile against the delivered definition, resolve a speaker's live gizmo pose, bind the machine-audio source
 /// resolver, and publish this frame's mixed snapshot. Declared here so a Client-side type can hold the director
-/// without naming the root's concrete type, the same shape <see cref="IWorldScreenPresenter"/> and
-/// <see cref="IWorldSimulationClock"/> already carry for the frame source's other root-held dependencies. Extends
+/// without naming the root's concrete type, as <see cref="IWorldScreenPresenter"/> does for screen presentation. Extends
 /// <see cref="IWorldAudioCueSink"/> rather than re-declaring <c>SubmitCue</c> — a frame source's need is that seam's
 /// need plus these four.</summary>
 public interface IWorldAudioFrameFeed : IWorldAudioCueSink {

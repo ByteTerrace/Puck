@@ -3773,10 +3773,10 @@ outside every project directory, such as `tests/Shared/*.cs`, needs no project
 for whitespace and the syntactic passes; the semantic passes format it in the
 compilation of a project that compiles it, looked for among the run's projects
 and the projects one directory below its nearest ancestor that has any. One no
-project compiles also uses a disposable project; an MSBuild inline task (a
-`RoslynCodeTaskFactory` source under `build/`) compiles there against the SDK's
-own MSBuild Framework, Utilities.Core and Tasks.Core assemblies, with no implicit
-usings or repository analyzers, as the task factory compiles it. A disposable
+project compiles also uses a disposable project; an MSBuild task source under
+`build/` (`build/PuckBuildTasks.cs`) compiles there against the SDK's own
+MSBuild Framework, Utilities.Core and Tasks.Core assemblies, with no implicit
+usings or repository analyzers, as `build/PuckBuildTasks.targets` compiles it. A disposable
 project that does not build skips its one
 source, named, and the rest of the run still reports. A semantic phase that
 cannot analyze an owning project fails rather than reporting unchecked source as

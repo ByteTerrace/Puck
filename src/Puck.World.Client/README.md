@@ -380,8 +380,7 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
 
 - `IWorldAudioLever.cs`—the narrow write (`SetMasterVolume`) onto the root
   `WorldAudioDirector` that `WorldSessionLeverSink` holds instead of the
-  concrete type, the same root-implements-a-Client-interface shape
-  `IWorldSimulationClock`/`IWorldScreenPresenter` use.
+  concrete type, the same interface boundary `IWorldScreenPresenter` uses.
 - `IWorldAudioCueSink.cs`—the narrow write (`SubmitCue`) `WorldSceneEmitter`
   fires world-event cues through.
 - `IWorldAudioFrameFeed.cs`—the narrow read/write `WorldFramePresenter` drives

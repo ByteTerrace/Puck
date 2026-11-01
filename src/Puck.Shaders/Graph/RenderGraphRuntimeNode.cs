@@ -114,8 +114,9 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
 
         m_presentedTicks += context.FrameDeltaTicks;
 
+        var rendered = (context with { PresentedTicks = m_presentedTicks });
         var surface = Runtime.ProduceFrame(
-            context: in context,
+            context: in rendered,
             frame: new RenderGraphFrame(
                 DisplayHeight: m_displayHeight,
                 DisplayHertz: context.DisplayHertz,
@@ -124,9 +125,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                 Index: m_frame++,
                 Named: Named,
                 Roots: m_roots,
-                Tick: ((context.StepTicks == 0UL)
-                    ? 0L
-                    : ((long)(context.ElapsedTicks / context.StepTicks)))
+                Tick: context.Tick
             ) {
                 FrameTicks = context.FrameDeltaTicks,
                 GridHertz = context.GridHertz,
@@ -137,6 +136,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
         if (Runtime.Render.IsRendered) { FrameProduced?.Invoke(); }
 
         return new RootFrame(
+            Context: rendered,
             Render: Runtime.Render,
             Surface: surface
         );

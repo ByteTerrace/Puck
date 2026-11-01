@@ -69,7 +69,10 @@ When you are the delegate:
 - Give every scratch file and directory you create a name carrying your lane
   (`<worktree>/.claude/scratch/<lane>-*`). Claude may auto-remove a worktree
   containing only ignored files, including scratch: output that must survive
-  belongs in the lead checkout or another authorized location outside it.
+  belongs in the lead checkout or another authorized location outside it. A
+  read-only brief (a review, an audit) makes no commit, so its worktree is
+  removed when it ends: the brief names a findings path outside the worktree,
+  and the lead never relies on the hand-back alone.
 - Never write the lead's scratch checklists or ledger; `docs/plans/open-items.md` and the plans are repository documents, and you update them for what you deliver.
 - Before reporting, merge the integration branch's current tip into your branch
   and re-run your checks, except on a read-only brief or after a stop order.

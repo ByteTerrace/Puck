@@ -258,7 +258,7 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         }
         if (world.Interaction is { } interaction) {
             applied = EvaluateInteraction(
-                bindings: latch.Bindings(name: rule.Name),
+                bindings: latch.Rule(name: rule.Name),
                 interaction: interaction,
                 latch: latch,
                 rule: world,

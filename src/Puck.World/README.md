@@ -151,7 +151,8 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-af
 For repeated launches, publish once for the target desktop and run that artifact:
 
 ```powershell
-dotnet publish src/Puck.World -c Release -r win-x64 --self-contained false -o artifacts/world
+dotnet restore src/Puck.World
+dotnet publish src/Puck.World -c Release -r win-x64 --self-contained false --no-restore -o artifacts/world
 dotnet artifacts/world/Puck.World.dll --world worlds/debug
 ```
 
@@ -159,9 +160,17 @@ Use `linux-x64` for a Linux desktop. World publishes with
 [ReadyToRun](https://learn.microsoft.com/en-us/dotnet/core/deploying/ready-to-run)
 precompilation to reduce first-use JIT work. This makes publishing slower and
 assemblies larger; ordinary `dotnet build` and `dotnet run` still use IL.
-`-p:PublishReadyToRun=false` opts out for a comparison. Restore prepares both
-desktop runtime graphs and the compiler pack, so a later publish can use
-`--no-restore`. CI publishes the already-built portable assemblies with
+`-p:PublishReadyToRun=false` opts out for a comparison. The plain restore
+prepares both desktop runtime graphs and the compiler pack in World's own
+restore, so the publish passes `--no-restore`. A publish that restores with
+`-r` fails with NU1004 in every library: `-r` reaches each project's restore,
+and the libraries' lock files carry no runtime identifier. That failed restore
+also leaves the libraries' assets files broken, so run the plain restore again
+after one. On the debug world headless, a ReadyToRun publish JIT-compiles about
+24,200 methods to `world.status` where the IL build compiles about 43,900;
+22,400 of those left are generic instantiations the precompiler cannot reach
+outside the framework, 15,800 of them `System.Text.Json`'s metadata for the
+document model. CI publishes the already-built portable assemblies with
 `AppendRuntimeIdentifierToOutputPath=false` and `--no-build`; the project
 regenerates the runtime-specific dependency manifest in the publish directory.
 Precompilation does not rebuild C# sources or replace the portable build's
@@ -420,7 +429,7 @@ it and never builds a swap chain against it—see
 session screens render as in the windowed shape, through the views
 `WorldScreenBinder.ConfigureViews` sets up. `WorldBootComposition.AddWorldOffscreenPresentation` and
 `Puck.Launcher.OffscreenTickHostedService` are the seams; the server steps
-exactly like `host.presentation: none` (`HeadlessWorldSimulation`). The
+exactly like `host.presentation: none` (`WorldSimulation`). The
 offscreen host's time is its tick count, never the wall clock: it steps one
 tick per rendered frame, so a slow frame delays the next tick instead of
 letting the simulation catch up several ticks in one iteration. Until the
@@ -1084,10 +1093,9 @@ Facts a script needs:
   `Puck.Launcher.AddLauncherHeadlessTerminal` plus, on Windows, a standalone
   `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
   never composed together.
-- `WorldSimulation.cs` / `HeadlessWorldSimulation.cs`—the two boot shapes'
-  `IFixedStepSimulation`s, each a thin holder of one `WorldHostStep`. Windowed
-  contributes a post-step (seat-binding sync and seat-context publish);
-  headless contributes none—no `WorldClient`, no screens.
+- `WorldSimulation.cs`—the one `IFixedStepSimulation` shell over `WorldHostStep`.
+  Composition supplies a post-step: windowed synchronizes seat bindings and
+  publishes seat context; headless and offscreen update logical wheel state.
 - `WorldHostStep.cs`—the one fixed step every boot shape runs, in one order:
   decide whether boot is due, submit its seats' intents, drain the host's
   pending transfers, step boot through
@@ -1096,10 +1104,10 @@ Facts a script needs:
   gate's and capture scheduler's `PublishTick`—or, while boot is paused,
   drain an administrative mutation and release a stalled `world.wait`; step
   every other instance; run the shell's post-step; finish the seat intents.
-  It counts the host work a `world.wait` is clocked by and is the
-  `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
-  (not in this project) owns the accumulator both boot shapes' hosted services
-  drive it through.
+  It counts the host work a `world.wait` is clocked by. The frame reads
+  `WorldClient.Tick` and `EngineTick` from delivered snapshots, with the same
+  arrival-time interpolation as session views. `Puck.Launcher.HostLoop` drives
+  the one `FixedStepPump` for every boot shape and for windowed lockstep.
 - `WorldInstanceHost.cs` / `WorldInstance.cs` (in `Puck.World.Server`)—the
   process's running world instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own

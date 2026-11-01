@@ -45,4 +45,7 @@ public readonly record struct FrameRender(FrameCompletion Completion, string? Re
 /// <param name="Surface">The surface the host presents, valid until the root's next frame; empty when the root has
 /// nothing to present.</param>
 /// <param name="Render">Whether the surface shows the frame the host asked for, and why not.</param>
-public readonly record struct RootFrame(Surface Surface, FrameRender Render);
+/// <param name="Context">The context the root actually rendered with; <see langword="null"/> for a root that has none to
+/// report, which rendered with the host's. The host paces a capture on it, so the host and the graph hold one render
+/// clock (the World's root renders on the delivered snapshot's clock, not the host's).</param>
+public readonly record struct RootFrame(Surface Surface, FrameRender Render, FrameContext? Context = null);

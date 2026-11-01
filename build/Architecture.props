@@ -3,9 +3,9 @@
     <!--
         THE ARCHITECTURE LEDGER — the policy the gate enforces, and the only place it is written.
 
-        This is an MSBuild file rather than JSON for a measured reason: the gate runs as a
-        RoslynCodeTaskFactory inline task, and that host cannot resolve System.Text.Json (verified — the
-        compile fails with CS0234 on System.Text.Json) while it resolves System.Xml.Linq fine. Expressing the
+        This is an MSBuild file rather than JSON for a measured reason: the gate's task compiles against the
+        classic framework facades (build/PuckBuildTasks.targets), which cannot resolve System.Text.Json (the
+        compile fails with CS0234 on System.Text.Json) while they resolve System.Xml.Linq fine. Expressing the
         policy as MSBuild items means the ledger needs NO parser at all on the gate's side: MSBuild evaluates
         it and hands the task typed items. It also buys what JSON cannot hold — the reasoning below lives in
         comments beside the rule it justifies instead of in invented "why" string fields.

@@ -164,7 +164,7 @@ public sealed class FrameCaptureController : IDisposable {
     /// <summary>Captures the supplied root surface when the armed session's engine-time cadence is due. The method is
     /// intended for the launcher render thread immediately after root production and before presentation.</summary>
     /// <param name="surface">The exact root surface produced for this frame.</param>
-    /// <param name="context">The same frame context supplied to the root node.</param>
+    /// <param name="context">The frame context the root rendered with (<see cref="RootFrame.Context"/>).</param>
     /// <param name="readback">The active presenter's optional GPU-surface readback capability.</param>
     public void Capture(Surface surface, in FrameContext context, IPresentSurfaceReadback? readback) {
         lock (m_sync) {

@@ -151,7 +151,7 @@ public static class CompareCommand {
                 if (keptCache is null) {
                     ConfinedDirectory.RemoveTree(path: cache);
                 }
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
                 Console.Error.WriteLine(value: $"{Verb}: could not remove the comparison's shader cache {cache}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
             }
         }

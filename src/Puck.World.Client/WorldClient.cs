@@ -133,6 +133,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <summary>The latest snapshot's engine tick — what a <c>StateAdvance</c> row's live value is computed at;
     /// never derived from <see cref="Tick"/> at a simulation rate.</summary>
     public ulong EngineTick => m_engineTick;
+
+    private long m_arrivalTimestamp;
+
+    /// <summary>The last delivered snapshot's step width, in engine ticks.</summary>
+    public ulong StepTicks { get; private set; }
+    /// <summary>The presentation fraction since the last snapshot arrived, shared with session views.</summary>
+    public float InterpolationAlpha => WorldSessionMirror.ResolveInterpolationAlpha(
+        stepSeconds: ((float)FixedTickConversion.ToSeconds(ticks: StepTicks)), arrivalTimestamp: m_arrivalTimestamp);
     /// <summary>Gets the state mirror every presentation binding of this client reads through, refreshed at each
     /// state delivery and each tick, and resolved to row ordinals at each definition delivery.</summary>
     public WorldStateMirror StateMirror => m_stateMirror;
@@ -1022,6 +1030,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         m_serverRevision = snapshot.Revision;
         m_tick = snapshot.Tick;
         m_engineTick = snapshot.EngineTick;
+        StepTicks = snapshot.StepTicks;
+        m_arrivalTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
         m_authority = snapshot.Authority;
         if (m_pendingStateInstall) {
             m_pendingStateInstall = false;
@@ -1066,7 +1076,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
         return false;
     }
-
     // Records the version a document was delivered at. A different activation is a different world: the state mirror
     // begins a new lifetime, so what a presentation kept about the previous world's values does not carry over.
     private void BeginVersion(WorldDocumentVersion version) {

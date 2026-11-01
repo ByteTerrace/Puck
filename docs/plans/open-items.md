@@ -47,8 +47,9 @@ blocked until it is taken.
 4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
    carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
-   lobby and the rim, so take the next ranked costs (rule evaluation, snapshot
-   delivery, the scoped replay hash) and re-read the stops windowed.
+   lobby and the rim and its latch, delivery and scope-hash waste is cut, so
+   re-read the stops windowed, then take relief contact and rule evaluation's
+   own gate and expression cost.
 5. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
@@ -81,8 +82,8 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    [the memo](simulation-thread.md)'s phases, one host loop first, then the
-    tick record and the step body on a worker.
+    [the memo](simulation-thread.md)'s phase 2, the tick record on one thread,
+    then the produce audit and the step body on a worker.
 
 ## Owner decisions
 
@@ -147,7 +148,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Two field-contact solvers: relief contact's `FixedColliderField` measures
   distance as value over gradient length; `FixedFieldContactSolver` and the field
   provider (`WorldSolidField`) still read the value as the distance, hover on
-  relieved scopes and spend up to 1,033 samples a capsule. Make them one.
+  relieved scopes and spend up to 1,033 samples a capsule. Make them one. At the
+  valley rim, relief contact (`FixedFieldColliderContact.TryPush`,
+  `src/Puck.Physics/FixedColliderField.cs:49`) is about 18 % of a headless
+  tick; merging moves contact results, so it lands as a deliberate correction
+  with re-recorded hashes, not inside a pure performance lane.
 - Two ways to grow a GPU region: `SdfWorldTables.EnsureProgramCapacity` waits
   for the device to idle and rebuilds the program region whole, beside
   `GpuRegion.Grow`, which grows under every residency policy.
@@ -159,14 +164,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`
   deletes the browser's in-memory mount, where the confined removal refuses by
   design, and keeps its delete.
-- The host loop's duplicates, converged by
-  [the simulation thread](simulation-thread.md#6-duplicated-mechanisms-on-this-path)'s
-  phase 1: three host loops (`LauncherWindowHostedService.cs:395-720`,
-  `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`,
-  with the windowed lockstep branch a fourth copy), two step shells
-  (`WorldSimulation.cs:16`, `HeadlessWorldSimulation.cs:17`), two console
-  drains per windowed iteration, three simulation clocks the frame reads and
-  two interpolation fractions.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` (presentation) and the boot endpoint's
   `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121`); and three per-sink
@@ -201,18 +198,18 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
    cannot replace it; whether the two contention tests should share one
    definition is open.
-2. The document binding walk (M, specialist). `WorldPresentationManifest`
-   (`Puck.World.Protocol/Protocol/WorldPresentationManifest.cs:55-70`,
-   `345-418`, its `Builder` from 420) and `WorldKeyedValues`
-   (`Puck.World.Schema/WorldKeyedValues.cs:47-56`, `128-190`, its `Walk` from
-   192) each carry a reflective walk of the document model with its own
-   `Surfaces`, `ComputeReaching`, `Reaches`, `Walked`, `IsWalked`, `MembersOf`
-   and text-screen placeholder handling, to find the state a document reads.
-   Their surface lists differ: the keyed-values walk handles
-   `BindableDirection`, `BindableVector2` and `BindableVector3`, the manifest
-   does not `[medium, unconfirmed]`: check whether a state-bound vector is ever
-   registered with the mirror. Survivor: one walker in `Puck.World.Schema`
-   (which the protocol references) taking a per-consumer visitor.
+2. A third document walk (S, implementer): `WorldStateDocumentValues`
+   (`Puck.World.Schema/WorldStateDocumentValues.cs`) walks the document model
+   for `IDocumentStateValue` holders with its own traversal and member cache,
+   beside `WorldDocumentWalker` (`Puck.World.Schema/WorldDocumentWalker.cs`),
+   which the presentation manifest and keyed values now share. Its contract
+   differs (it fills or flattens values); make it a visitor of the one walker.
+   Three Schema laws fail independently of the walker change and look stale
+   after box rounding was admitted:
+   `MirroredSolidFieldDeterminismLawTests.AnisotropicBoxScaleBakesIntoMetricShapeDimensions`,
+   `AuthoredShapeAdmissionLawTests.RoundingOnAnUnadmittedPrimitiveIsRefusedByName(Box)`
+   and `BoxChamferEmitsAChamferedRectangleShapeUnderThePlainBoxFillet`; update
+   or delete them with the next change there.
 3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`
@@ -523,13 +520,27 @@ packet), and re-read these stops on a quiet machine.
   35 to 65 % CPU from other lanes), thread-time traces of about 450 ticks each:
   lobby p50 6.1 to 5.6 ms, p99 10.1 to 10.3 ms; valley rim p50 13.2 to 6.0 ms,
   p99 77.5 to 8.1 ms, the seat body's contact 35.7 % of the tick to 6.8 %. The
-  windowed reading of the five stops is in the tick-cost hand-back. What the
-  trace ranks next, as shares of a lobby tick: rule evaluation itself (gates
-  10 %, binding latches and their dictionaries) 44 %, `WorldTick.EmitSnapshot`
-  17 % (session snapshot delivery, 12 %, and its disclosure filter), the scoped
-  replay hash (`WorldScopedReplayRuntime.Hash`) 10 %, and
-  `WorldBody.CaptureIntegrationResidue` 8 %, which zero-fills a buffer on every
-  body's advance. (from: tick-cost)
+  windowed reading of the five stops is in the tick-cost hand-back. (from:
+  tick-cost) The tick-cost-2 lane then cut, with simulation state
+  bit-identical: the rule latch's per-question name lookups (one state per rule
+  resolved once a tick), the sessions' disclosure filter recomposing rows the
+  snapshot already carries, the mirrors' clear-and-import of every replaced
+  row (now in place, cell by cell), the scoped replay refolding unchanged rows,
+  and a linear board-anchor scan per topology read. `puck bench world`,
+  alternating base and final twice (machine 87 to 100 % CPU from other lanes):
+  paced tick median 5.38 and 5.47 ms to 4.74 and 4.77 ms, a 13-cell guest
+  burst tick 5.78 and 5.47 to 4.90 and 4.97 ms; quiet-tick allocation stays
+  144 bytes and a gallery walk tick about 3 KB, so the tick is not what fills
+  gen0. In headless thread-time traces the disclosure filter fell from 7.8 % to
+  0.3 % of a lobby tick and the scope hash from 14.6 % to 5.1 % (10.9 % to
+  5.0 % at the rim); rule evaluation is still 32 to 40 % (gate and expression
+  evaluation, the remaining two latch lookups a binding) and body advance 30 to
+  37 % at the rim. Next by share: relief contact at the rim (the
+  [refactoring campaign](#refactoring-campaign)'s two field-contact solvers),
+  the scope's body continuation hash, and the session mirrors' per-snapshot
+  body pass. Timings on this machine stay noisy while other lanes build; the
+  counts (rule evaluations, skips and firings identical tick for tick) are the
+  stable evidence. (from: tick-cost-2)
 - [low] A body resting at the overlook pays two ground snaps a tick (ten
   sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
   support whenever the body is grounded, and `ResolveProgramContacts`'s own
@@ -569,6 +580,13 @@ packet), and re-read these stops on a quiet machine.
   (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
   conflict on each of 64 reads; pad the row to 65 words. It runs one group only
   when the environment refreshes. (from: perf-guidance)
+- [low · unmeasured] The views filter tile is 11 words wide, so an 8x4-lane
+  warp reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` at
+  `(lane.y + y) * 11 + lane.x + x` puts rows 0 and 3 on the same banks 1 to 7,
+  a 2-way groupshared bank conflict on 32 `uint` reads a pixel
+  (`sdf-views-stage.hlsli:13-15,77-82`). Read GPU Trace's shared-memory bank
+  conflicts for views, then try a row stride that clears it. (from:
+  perf-guidance-fixes)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
@@ -789,7 +807,12 @@ Next: make the per-tick authority hash incremental (measured below).
   invisible, so land it with a law that compares the incremental digest against
   a full recompute over the same states, tick by tick, in `--reproduce`.
   Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
-  (from: quiet-measure)
+  (from: quiet-measure) A live scope's per-tick hash
+  (`WorldScopedReplayRuntime.Hash`) now refolds its rows only when the arena,
+  its layout or one of the rows' versions moved, which leaves its value
+  unchanged; its body continuations (`AppendContinuationHash`, about as costly
+  as the rows were) and rule latches still fold whole every tick, for want of a
+  body continuation version. (from: tick-cost-2)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
@@ -960,22 +983,37 @@ timed on a quiet machine.
   light-stage constant edit settles through `world.shaders.reload` in 11.8 s, a
   headless boot reaches `world.status` in 4.6-4.8 s, and the `dotnet run` loop
   after a Client edit took 30.5-42.4 s at 100 % load, 22 s of it the build.
-  Known costs left: a cold build pays 20 to 35 s of MSBuild node startup over a
-  warm one; a warm SdfVm body edit spends about 3 s evaluating the World's
-  projects and 5 to 6 s checking the projects below the edit; the boot's
-  largest piece is `System.Text.Json` configuring the `WorldDefinition` metadata,
-  mostly JIT ([contributing](../development/contributing.md#edit-to-running)).
+  With cold nodes (`-nodeReuse:false`) under load from other lanes, a no-op
+  build of `src/Puck.World` now takes 14.3 s (60 projects, every `CoreCompile`
+  skipped, no copy) and a build after a commit and a Client body edit 20.2 s
+  (one `CoreCompile`, Client's 3.4 s; 6 files copied). What is left of a cold
+  build is per-node startup: the first project a fresh node builds spends 1.5
+  to 3.8 s of self time in the SDK's own targets. A warm SdfVm body edit spent
+  about 3 s evaluating the World's projects and 5 to 6 s checking the projects
+  below the edit; re-measure it warm. The project-reference closure's
+  `GetCopyToOutputDirectoryItems` walk sums 15 to 39 s of yielded wall over the
+  60 projects; read whether `MSBuildCopyContentTransitively` can be turned off
+  without losing content the World ships.
 - Prepare machine content once per input: every boot compiles the debug world's
   `.puck` cartridges again (`CartridgeSource.Prepare` through
   `HgbCartridgeCompiler`, about 4 % of a headless boot), though the image is a
   pure function of the source, its imports and the compiler. Key a cache by the
-  inputs the compile read, as `WorldCompileCache` keys a world compile.
-- Measure a ReadyToRun boot. JIT and type loading are about 35 % of a headless
-  boot's main thread; the World README's publish recipe
-  (`dotnet publish src/Puck.World -c Release -r win-x64 …`) fails its locked
-  restore (NU1004: the `-r` reaches every library, whose lock files carry no
-  runtime identifier). Fix the recipe, then decide whether projects outside the
-  edit loop build ReadyToRun locally.
+  inputs the compile read, as `WorldCompileCache` keys a world compile. Measured
+  in a scratch app calling `IMachineContentProvider.Prepare` on the loaded lead
+  machine: the boot's `tetromino.cgb.puck` costs 108 ms cold and 100 ms warm,
+  `pip.agb.puck` 12 ms and 8 ms; all nine debug cartridges 547 ms cold, 304 ms
+  warm. Deferred by the build-time lane for that cost (about 0.1 to 0.3 s a
+  boot) against a cache that needs `ModuleResolver.ImportModules` to report the
+  files it read and the compiler's module identity.
+- Source-generate the document model's JSON metadata. A headless boot to
+  `world.status` JIT-compiles 43,941 methods from the IL build and 24,248 from
+  a ReadyToRun publish; of those 24,248, 22,401 are generic instantiations and
+  15,786 are `System.Text.Json`'s, built by reflection over the
+  `WorldDefinition` graph, which no precompiler outside the framework reaches.
+  A `JsonSerializerContext` over that graph removes them from both builds
+  (the `dotnet-performance` skill's source-generation rule). Local builds stay
+  IL until then: ReadyToRun leaves this cost in place and adds a precompile to
+  every edited project's build.
 - The boot's first guide write cost about 27-30 ms of simulate in a rendering
   World; `WorldCodeWarmer` took the first endless-fall crossing from 20-24 ms to
   8-10 ms and the watchdog's first write from 30-37 ms to 12-19 ms. Recheck the
@@ -1130,10 +1168,19 @@ store (AGENTS.md).
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
 Next: build [the simulation step off the frame thread](simulation-thread.md)
-by its phases: phase 1 (one host loop, no thread) is in flight; then phase 2
+by its phases: phase 1 delivered the shared host loop, shell, console operation,
+client clock, arrival interpolation and tick/shed diagnostics; next is phase 2
 (the tick record, still one thread), phase 3 (the produce path reads no
 server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
 (hardening). The owner queued the thread.
+
+- Phase 1's windowed reading still misses the frame-rate bar: frame avg/p99
+  69.47/205.25 ms standing and 25.46/207.07 ms walking, with `simulate` and the
+  tick lane intact. This was not a paired quiet comparison, and mesh GI was
+  still active; attribution is unconfirmed. The
+  [delivery evidence](simulation-thread.md#phase-1-one-host-loop-no-thread-delivered)
+  records the workload and tick/shed readings for the frame-time lane and the
+  later worker comparison.
 
 - Owner decision owed: the design costs one iteration of presentation
   latency for a tick's visible effect (about one frame period at 60 Hz, and
@@ -1141,7 +1188,6 @@ server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
   keeping every client object on one thread
   ([latency](simulation-thread.md#latency)). Under one step per dispatch a
   World whose tick rate exceeds the display's refresh steps inline, as today.
-- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
 - Decided in [the simulation step off the frame thread](simulation-thread.md#decisions),
   after the memo's one cross-family review (its findings and each one's
   resolution are the memo's [review resolution](simulation-thread.md#review-resolution)):

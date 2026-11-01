@@ -3,7 +3,8 @@
 Design memo for the [simulation tick off the frame thread](open-items.md#simulation-tick-off-the-frame-thread)
 packet, which the owner queued. It settles the shape from the code and hands
 specialist lanes a phased build. File and line citations name the sources as
-they stand when the packet is taken; a builder re-reads each before editing.
+they stand before phase 1 at `8075db0d56`; a builder re-reads each before editing.
+The delivery notes below map the current seams after phase 1.
 This is the second revision: the first (one free-running simulation thread
 owning the pump, with a folding mailbox to the frame) had its one cross-family
 review, and [its findings](#review-resolution) changed the shape.
@@ -241,6 +242,13 @@ that is about one frame period more input-to-photon than today, and about
 of keeping every client object single-owner. The owner sees this trade under
 Needs you in the packet.
 
+Phase 1's arrival-form fraction already adds about half a step of presentation
+latency. In the inline host the arrival time is stamped inside the step and the
+frame is produced right after it, so the fraction is about 0 on every frame that
+steps, where the accumulator form averaged about 0.5. A 60 Hz world on a 60 Hz
+display presents poses about 8 ms later on average than before phase 1, before
+any of the thread's own latency.
+
 ### Barriers and the replay budget
 
 A body steps one tick, except a replay drive, whose shell burst
@@ -403,7 +411,97 @@ what to run; test requirements are lifted (AGENTS.md), so each phase is
 verified by building and running what it touched, plus the one check that
 would catch its main risk.
 
-### Phase 1: one host loop, no thread (in flight)
+### Phase 1: one host loop, no thread (delivered)
+
+**Delivered by `sim-phase1`.** `Puck.Launcher.HostLoop` owns the iteration,
+input contributions, console scheduling, stepping, holds, deadlines and pacing.
+The three hosted services only start it with their presentation adapter;
+`WindowHostPresentation` owns window input, rendering and display waits, and
+`OffscreenHostPresentation` owns offscreen rendering. All simulation still
+runs inline on the existing host pump thread; this phase starts no simulation
+thread, and phase 4 adds the pacing it needs.
+
+`WorldSimulation` is the single shell over `WorldHostStep`, with its post-step
+supplied by composition. Frames and overlay facts read `WorldClient.Tick`;
+`WorldRenderRoot` fills the graph's `FrameContext` from the client's delivered
+engine time, step width and arrival fraction. The client, session views and
+pinned adjacency views all use `WorldSessionMirror.ResolveInterpolationAlpha`.
+Lockstep and settled captures pin that fraction to one.
+
+Two corrections to the proposed convergence are part of delivery:
+
+- F16: `HostConsoleDrain.Collect` is the shared operation. The pump's
+  `BeginIteration` runs it even without a due tick or during a held frame;
+  the first step reuses that drain and subsequent catch-up steps drain before
+  each snapshot. A host with no pump calls the same operation each iteration.
+  Ready immediate commands, including quit, recovery and presentation controls,
+  can progress during a capture hold. Simulation submissions wait for a tick;
+  session waits and read-after-write barriers continue to preserve each
+  session's FIFO, so a blocked session does not acquire an out-of-order quit.
+- F14: window composition registers the live `HostPacing` owned by
+  `PresentPacingControl`. `world.lockstep` retargets that same object, which
+  `WorldHostStep` and `WorldInstanceHost` pass to `WorldServerStepShell`.
+  Replay fast-forward therefore runs one authority tick per outer step under
+  runtime lockstep, instead of retaining an independent wall-clock policy.
+
+`HostFrameTimeline` retains the frame's `simulate` phase and adds an independent
+per-step cost ring (count, avg, p50, p99, max). `steps.shed` is an atomic,
+host-lifetime counter of whole steps discarded when a catch-up burst spends
+its wall-time budget; holds and the runaway-frame clamp are distinct and are
+not counted as shed. `host.frames`, `world.rate` and `world.rate shed` report
+it. Resetting the frame sample window does not reset that counter. The join
+phase, late-step and skipped-drain metrics remain for the phases that introduce
+the tick record and worker.
+
+Verification and windowed measurements are recorded in the delivery commits.
+The four focused debug sources are `controls-dash-tests.puck`,
+`input-clock30-tests.puck`, `relative-input-tests.puck` and `noclip-tests.puck`:
+nine scenarios reproduce, with byte-identical authority hash sequences and
+canonical state exports before and after. The standard package has no
+`*-tests.puck` source. A headless stdin script lands movement at ticks 10 and
+30 and reads tick 31 hash `d8484552ca622a93`, then tick 32 hash
+`b30470686bd27afd`, before and after.
+
+The merged-head headless sweep returned 0: 19 clean signals, no red or
+unmeasured signals, and the same two collider/contact coverage ambers as the
+earlier run. The focused launcher checks cover a real offscreen adapter
+holding tick 1 on an unrenderable frame, a render host without a simulation,
+between-step input/console ordering and device recovery. A live replay fork
+publishes one authority tick with lockstep on, then publishes the remaining
+three in order with it off; every driven tick matches the recording.
+
+The granted Direct3D windowed run completed under the GPU lease, with devices
+disabled and bakes settled before sampling. Standing: 58 iterations, frame
+avg/p99/max **69.47/205.25/205.25 ms**, simulate avg/p99
+**45.03/168.53 ms**, tick avg/p50/p99/max **45.93/11.05/168.52/168.52 ms**.
+Walking for exactly 60 ticks (movement armed at 144, stopped at 204): 94
+iterations, frame avg/p99/max **25.46/207.07/207.07 ms**, simulate avg/p99
+**10.26/189.91 ms**, tick avg/p50/p99/max **13.73/10.37/171.57/171.57 ms**.
+Both reports retained `simulate`, the tick lane and `steps.shed`;
+`world.rate` and `world.rate shed` read the same final **325** shed steps.
+During a capture hold, `world.state.hash` and `host.frames` answered at tick
+225 before the capture settled; its still stamp reported `tick=225`,
+`shown=225`, state hash `f99b7a4e8581f128`. The World quit normally.
+
+The frame-rate bar is **not met** by this observation. It was not a paired,
+quiet before/after measurement, and the main mesh-GI job completed only later
+in the run; neither an improvement nor a regression is established. The raw
+stdin scripts, exports, replay hashes, sweep report, windowed log and still
+are kept under the lane's `.claude/scratch/sim-phase1-*` paths. The one GPU
+leg did not include a pre-phase still or a Vulkan boot; pixel parity remains
+unconfirmed. The later phases retain their paired-still and frame-budget
+finish lines.
+
+The sweep and windowed observation above were recorded at `02e6bd3cde`.
+The final integration merge includes `lead/fundamentals` at `5ce882b902`,
+including its later mesh-bake changes. On that combined head, Release builds
+of World and CLI passed with zero warnings/errors and the rebuilt private CLI
+reproduced `input-clock30-tests.puck`; both its authority-hash sequence and
+canonical export still match the pre-phase artifact byte for byte. The GPU
+leg was not repeated after that later rendering merge. The integration lead
+owns the current-tip windowed qualification and the cross-family code review.
+
+Original scope and finish:
 
 Converge duplicates 1 to 5; keep one drain operation at both scheduling
 points (F16); carry one pacing policy through `WorldServerStepShell` and the

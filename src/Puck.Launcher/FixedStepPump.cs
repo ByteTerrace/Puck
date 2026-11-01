@@ -47,7 +47,9 @@ public sealed class FixedStepPump {
     private readonly CommandRegistry m_registry;
     private readonly IFixedStepSimulation m_simulation;
     private readonly IInputClock? m_wallClock;
+    private readonly HostFrameTimeline? m_timeline;
 
+    private bool m_iterationDrained;
     private ulong m_accumulatorTicks;
     private ulong m_completedStepCount;
     private ulong m_elapsedTicks;
@@ -71,9 +73,10 @@ public sealed class FixedStepPump {
     /// <param name="wallClock">The wall clock, in engine ticks, a catch-up burst of <see cref="Advance"/> is bounded
     /// by: once a burst has spent one step's period of wall time, the whole steps still due are discarded.
     /// <see langword="null"/> bounds a burst by simulated time alone.</param>
+    /// <param name="timeline">The host's tick-cost and shed-step recorder, or null for an unobserved pump.</param>
     /// <exception cref="ArgumentNullException"><paramref name="simulation"/>, <paramref name="inputRouter"/> or
     /// <paramref name="registry"/> is <see langword="null"/>.</exception>
-    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true, IInputClock? wallClock = null) {
+    public FixedStepPump(IFixedStepSimulation simulation, InputRouter inputRouter, CommandRegistry registry, ulong captureOriginTicks, Action? beforeStep = null, Func<bool>? mayStep = null, bool holdsClock = true, IInputClock? wallClock = null, HostFrameTimeline? timeline = null) {
         ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: inputRouter);
         ArgumentNullException.ThrowIfNull(argument: registry);
@@ -85,6 +88,7 @@ public sealed class FixedStepPump {
         m_holdsClock = holdsClock;
         m_mayStep = mayStep;
         m_wallClock = wallClock;
+        m_timeline = timeline;
         CaptureOriginTicks = captureOriginTicks;
 
         // The console text door's OWN sink — bound to the Console principal when the router built it (InputRouter's
@@ -92,8 +96,7 @@ public sealed class FixedStepPump {
         m_registry.RouteSimulationTo(sink: m_inputRouter.ConsoleTextSink);
     }
 
-    /// <summary>The sub-step remainder held since the last whole step — the render-side interpolation alpha's
-    /// numerator (<c>Puck.Hosting.FrameContext.AccumulatorTicks</c>).</summary>
+    /// <summary>The sub-step remainder held since the last whole step, used only for scheduling due steps.</summary>
     public ulong AccumulatorTicks => m_accumulatorTicks;
     /// <summary>The input clock's tick origin newly captured input is measured against — rebased by every host
     /// interval the pump does not step (a runaway wall-clock delta <see cref="Advance"/> clamps, steps it discards,
@@ -104,6 +107,12 @@ public sealed class FixedStepPump {
     /// <summary>The exact engine time this pump has advanced the simulation by.</summary>
     public ulong ElapsedTicks => m_elapsedTicks;
 
+    /// <summary>Drains the iteration's console even when no step is due. The first step reuses this drain; later
+    /// steps in a catch-up burst still drain before each input snapshot.</summary>
+    public void BeginIteration() {
+        m_beforeStep?.Invoke();
+        m_iterationDrained = true;
+    }
     /// <summary>Creates the pump every launcher host loop drives: it drains the console before every step, holds the
     /// first step until piped standard input no longer can hold it, stops stepping once <c>quit</c> has run, and bounds
     /// a catch-up burst by the wall time <paramref name="inputClock"/> reads.</summary>
@@ -118,6 +127,7 @@ public sealed class FixedStepPump {
     /// <param name="inputBacklog">The standard-input backlog the first step is held on.</param>
     /// <param name="holdsClock">Whether the pump holds its clock for owed frames, as windowed and offscreen hosts
     /// do.</param>
+    /// <param name="timeline">The host's tick-cost and shed-step recorder, or null for an unobserved pump.</param>
     /// <returns>The pump, or <see langword="null"/> when no simulation is registered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="inputClock"/>,
     /// <paramref name="textSource"/>, <paramref name="output"/>, <paramref name="terminal"/>, or
@@ -128,7 +138,7 @@ public sealed class FixedStepPump {
     /// of that point has run, however the writer chunked the pipe. The release is sampled before the drain: the reader
     /// releases only after queuing every line it read, so a release seen before the drain is a release whose lines the
     /// drain takes. Once one step has run, the gate never holds again.</remarks>
-    public static FixedStepPump? CreateHosted(IFixedStepSimulation? simulation, InputRouter? inputRouter, CommandRegistry registry, IInputClock inputClock, TextCommandSource textSource, BufferedConsoleOutput output, TerminalControl terminal, StandardInputBacklog inputBacklog, bool holdsClock) {
+    public static FixedStepPump? CreateHosted(IFixedStepSimulation? simulation, InputRouter? inputRouter, CommandRegistry registry, IInputClock inputClock, TextCommandSource textSource, BufferedConsoleOutput output, TerminalControl terminal, StandardInputBacklog inputBacklog, bool holdsClock, HostFrameTimeline? timeline = null) {
         ArgumentNullException.ThrowIfNull(argument: registry);
         ArgumentNullException.ThrowIfNull(argument: inputClock);
         ArgumentNullException.ThrowIfNull(argument: textSource);
@@ -149,8 +159,7 @@ public sealed class FixedStepPump {
         return new FixedStepPump(
             beforeStep: () => {
                 inputReleased = !inputBacklog.IsHolding;
-                textSource.Collect();
-                output.Flush();
+                HostConsoleDrain.Collect(output: output, source: textSource);
             },
             captureOriginTicks: inputClock.NowTicks,
             holdsClock: holdsClock,
@@ -162,7 +171,8 @@ public sealed class FixedStepPump {
             },
             registry: registry,
             simulation: simulation,
-            wallClock: inputClock
+            wallClock: inputClock,
+            timeline: timeline
         );
     }
     /// <summary>Consumes one sampled wall-clock delta: clamps a runaway frame to <paramref name="maxFrameTicks"/>
@@ -252,6 +262,8 @@ public sealed class FixedStepPump {
             ) {
                 var shedTicks = ((m_accumulatorTicks / stepTicks) * stepTicks);
 
+                m_timeline?.NoteShed(steps: (shedTicks / stepTicks));
+
                 CaptureOriginTicks += shedTicks;
                 m_accumulatorTicks -= shedTicks;
 
@@ -314,7 +326,7 @@ public sealed class FixedStepPump {
     // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's
     // simulation withholds it, spending withheldTicks of host time.
     private StepGate Gate(uint ratePerSecond, ulong withheldTicks) {
-        m_beforeStep?.Invoke();
+        if (m_iterationDrained) { m_iterationDrained = false; } else { m_beforeStep?.Invoke(); }
 
         if (m_simulation.RatePerSecond != ratePerSecond) {
             return StepGate.RateChanged;
@@ -330,6 +342,7 @@ public sealed class FixedStepPump {
     }
     // Snapshots, applies and steps one tick.
     private void Step(ulong stepTicks) {
+        var started = (m_timeline?.Time.GetTimestamp() ?? 0L);
         var tick = m_completedStepCount;
 
         m_completedStepCount++;
@@ -357,5 +370,6 @@ public sealed class FixedStepPump {
             commands: in commands,
             context: in fixedStep
         );
+        if (m_timeline is { } timeline) { timeline.NoteTick(ticks: (timeline.Time.GetTimestamp() - started)); }
     }
 }

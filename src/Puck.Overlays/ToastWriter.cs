@@ -121,7 +121,8 @@ public sealed class ToastWriter {
     /// height is zero (or the unpublished <see cref="OverlayThemeValues.Zero"/>) shows no toast; every echo still
     /// reaches stderr and the console panel.</summary>
     /// <param name="builder">The frame builder.</param>
-    /// <param name="renderTicks">The frame's continuous content clock (<c>FrameContext.RenderTicks</c>).</param>
+    /// <param name="renderTicks">The frame's presented time (<c>FrameContext.PresentedTicks</c>), which never moves back and
+    /// keeps moving while the simulation is paused.</param>
     public void Emit(OverlayFrameBuilder builder, ulong renderTicks) {
         ArgumentNullException.ThrowIfNull(argument: builder);
 

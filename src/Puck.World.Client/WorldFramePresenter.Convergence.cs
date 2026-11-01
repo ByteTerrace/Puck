@@ -98,7 +98,7 @@ public sealed partial class WorldFramePresenter {
 
             // The camera views film this frame, with the transforms and route choices its dress reads.
             m_binder.PresentFrame(
-                authoritativeTick: m_simulation.Tick,
+                authoritativeTick: m_client.Tick,
                 transforms: m_transforms
             );
             PlaceComposedFrame();
@@ -114,12 +114,12 @@ public sealed partial class WorldFramePresenter {
 
     // The seconds of simulation completed since the previous captured frame, at the world's rate.
     private float TickedSeconds() {
-        var tick = m_simulation.Tick;
+        var tick = m_client.Tick;
         var advanced = ((tick > m_capturedTick) ? (tick - m_capturedTick) : 0UL);
 
         m_capturedTick = tick;
 
-        return (advanced / (float)Math.Max(val1: 1, val2: m_client.Definition.SimulationRateHz));
+        return (advanced / ((float)Math.Max(val1: 1, val2: m_client.Definition.SimulationRateHz)));
     }
 
     /// <inheritdoc/>

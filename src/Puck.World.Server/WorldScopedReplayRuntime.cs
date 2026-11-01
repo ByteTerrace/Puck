@@ -63,16 +63,57 @@ public sealed partial class WorldScopedReplayRuntime {
     /// External callers submit it through their recorded transport door.</summary>
     public WorldMutation CreateRequest(int request, Principal principal) =>
         new WorldMutation.UpsertStateCell(principal, m_source.Control, "request", request, WorldDocumentWriteKind.Set);
-    /// <summary>Reads the scope's own live values, independent of unrelated arena keys and bodies.</summary>
+    /// <summary>Reads the scope's own live values, independent of unrelated arena keys and bodies. The read takes the
+    /// server's authority gate, which the cached fold of the rows is shared under.</summary>
     public ulong Hash() {
+        lock (m_server.AuthorityGate) {
+            var hash = RowsHash();
+
+            hash.Add(value: WorldReplaySnapshot.HashState(m_server.Population, m_bodies));
+            m_server.Population.AppendContinuationHash(bodies: m_bodies, hash: ref hash);
+            AppendRuleHash(hash: ref hash);
+            return hash.Value;
+        }
+    }
+
+    // The fold of the scope's rows, refolded only when one of them may have changed: the arena or its layout was
+    // replaced (a reservation moves capacities without a version), or a row's version moved. Every column write
+    // that changes a value moves its row's version, so an unchanged version set folds the same bytes. An open arena
+    // transaction journals writes without moving versions until its outermost commit, and a rewind restores bytes
+    // without moving them, so inside one the rows are folded afresh and the cache is neither read nor updated.
+    private Fnv1aHash RowsHash() {
+        var arena = m_server.Arena;
+
+        if (arena.Journal.Scopes != 0) {
+            var live = Fnv1aHash.Create();
+
+            foreach (var row in m_orderedRows) { arena.AddRowTo(hash: ref live, rowOrdinal: row); }
+            return live;
+        }
+
+        var versions = (m_rowVersions ??= new ulong[m_orderedRows.Length]);
+        var current = (ReferenceEquals(objA: m_rowsArena, objB: arena) && ReferenceEquals(objA: m_rowsLayout, objB: arena.Layout));
+
+        for (var index = 0; (index < m_orderedRows.Length); index++) {
+            var version = arena.RowVersion(rowOrdinal: m_orderedRows[index]);
+
+            current &= (versions[index] == version);
+            versions[index] = version;
+        }
+        if (current) { return m_rowsHash; }
         var hash = Fnv1aHash.Create();
 
-        foreach (var row in m_orderedRows) { m_server.Arena.AddRowTo(hash: ref hash, rowOrdinal: row); }
-        hash.Add(value: WorldReplaySnapshot.HashState(m_server.Population, m_bodies));
-        m_server.Population.AppendContinuationHash(bodies: m_bodies, hash: ref hash);
-        AppendRuleHash(hash: ref hash);
-        return hash.Value;
+        foreach (var row in m_orderedRows) { arena.AddRowTo(hash: ref hash, rowOrdinal: row); }
+        m_rowsHash = hash;
+        m_rowsArena = arena;
+        m_rowsLayout = arena.Layout;
+        return hash;
     }
+
+    private ulong[]? m_rowVersions;
+    private Fnv1aHash m_rowsHash;
+    private StateArena? m_rowsArena;
+    private object? m_rowsLayout;
 
     private void Capture() {
         var start = m_server.Arena.CaptureScope(rows: m_rows);

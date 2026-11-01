@@ -6001,7 +6001,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      and `sceneTime` pass values, `SdfFrameBlock`'s `elapsed × rate`
      integration, the wall-clock time the media read, the volumes clause of
      `ForcesRender` (the volume table joins the view's signature), the host sky
-     clock `WorldRoutedScene` took, `IWorldSimulationClock.ElapsedTicks` and
+     clock `WorldRoutedScene` took (the removed simulation-clock interface is
+     already gone after simulation-thread phase 1) and
      the sky's private lattice noise.
    - Done when: `PresentedTickLawTests` hold phases exact past 2^32 ticks and
      across a period's end and an integral continuous where it wraps and where
