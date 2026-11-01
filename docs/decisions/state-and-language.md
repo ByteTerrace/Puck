@@ -561,7 +561,9 @@ defect was found; the weaknesses are structural and economic.
   disclosure. A bound address never caches authorization.
 - **Readback answers from the reader's projection.** Query existence, candidate
   counts and row summaries carry only disclosed cells. `Omit` hides counts too;
-  authoritative arena sizes and hashes are operator diagnostics.
+  authoritative arena sizes and hashes are operator diagnostics. Pattern
+  readback uses that same projection for its word and attribute dependencies,
+  rather than refusing based on the presence of withheld cells.
 - **Appearance chosen by state is a projection,** never a document edit:
   placement responses and deals derive from state, and only colliders whose
   geometry changes are updated.

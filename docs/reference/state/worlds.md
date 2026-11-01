@@ -476,7 +476,8 @@ document. A seat's own console, a bound input, an addon or a peer reads through
 its visibility: `world.state`, `world.row state`, `world.tabletop` and
 `world.hud.template` show only the cells the caller may read, and a direct read of
 a withheld cell is refused by name, the same way whether the cell is withheld or
-absent. `world.match` refuses a row anything is withheld from. The evaluation
+absent. `world.match` walks the caller's disclosed rows and dependencies through
+the same pattern evaluator; its answer cannot reveal omitted membership. The evaluation
 diagnostics (`world.rule.trace`, `world.rule.failures`, `world.search`,
 `world.decisions`, `world.responses`, `world.rules`, `world.verdicts`) print values
 the rules computed, so they answer the console alone. The local HUD is not filtered:

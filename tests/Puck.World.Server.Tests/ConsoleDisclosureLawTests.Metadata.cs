@@ -3,6 +3,59 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed partial class ConsoleDisclosureLawTests {
+    private static PatternRow DisclosurePattern() => new(Name: CellName.Parse("all"), Kind: CellKind.Int,
+        Symbols: [new PatternSymbol(Name: CellName.Parse("value"), Min: long.MinValue, Max: long.MaxValue)],
+        Pattern: new PatternNode.Star(Item: new PatternNode.Symbol(Name: "value")));
+    [Fact]
+    public void PatternAttributeReadsUseOnlyDisclosedCells() {
+        WorldDefinition Document(bool hidden) => Fixtures.BuildDocument() with {
+            PatternsRaw = [DisclosurePattern()],
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(Name: CellName.Parse("cards"), Kind: CellKind.Int, Capacity: 2,
+                    Cells: [Cell("a", 1), Cell("b", 1)]),
+                new WorldStateRow(Name: CellName.Parse("hand"), Kind: CellKind.Bool,
+                    Domain: new StateDomain.KeysOf(CellName.Parse("cards"), Ordered: true),
+                    Cells: [new StateCell(Key: CellName.Parse("a"), Value: CellValue.Bool(true)),
+                        new StateCell(Key: CellName.Parse("b"), Value: CellValue.Bool(true))]),
+                new WorldStateRow(Name: CellName.Parse("rank"), Kind: CellKind.Int,
+                    Domain: new StateDomain.KeysOf(CellName.Parse("cards")),
+                    Visibility: new StateVisibility(Readers: ["seat1", "seat2"], Hidden: HiddenCells.Omit),
+                    Cells: [Cell("a", 1), .. (hidden ? new[] { Cell("b", Sealed, new StateVisibility(Readers: ["seat1"])) } : Array.Empty<StateCell>())])
+            ])
+        };
+        using var hidden = new DisclosureHost(Document(true));
+        using var missing = new DisclosureHost(Document(false));
+        var answer = hidden.Seat(slot: 1, line: "world.match all hand rank");
+        Assert.Equal(missing.Seat(slot: 1, line: "world.match all hand rank"), answer);
+        Assert.False(Leaks(answer.Output));
+        Assert.True(Leaks(hidden.Seat(slot: 0, line: "world.match all hand rank").Output));
+        Assert.True(Leaks(hidden.Console("world.match all hand rank").Output));
+    }
+    [Fact]
+    public void PatternReadbackCannotProbeOmittedMembershipEvenWithAMissingPattern() {
+        WorldDefinition MatchDocument(int count) {
+            var document = MetadataDocument(count);
+            var row = document.AuthoredState[0];
+            return document with {
+                StateRaw = document.StateRaw! with { World = [row with {
+                    Kind = CellKind.Int, Space = null,
+                    Cells = row.Cells!.Select(cell => cell with { Value = CellValue.Int(1) }).ToArray()
+                }] },
+                PatternsRaw = [DisclosurePattern()]
+            };
+        }
+        using var zero = new DisclosureHost(MatchDocument(0));
+        using var one = new DisclosureHost(MatchDocument(1));
+        using var two = new DisclosureHost(MatchDocument(2));
+        foreach (var command in new[] { "world.match all vectors", "world.match missing vectors" }) {
+            var answer = zero.Seat(slot: 1, line: command);
+            Assert.Equal(answer, one.Seat(slot: 1, line: command));
+            Assert.Equal(answer, two.Seat(slot: 1, line: command));
+        }
+        Assert.Contains("word[1]", one.Seat(slot: 1, line: "world.match all vectors").Output, StringComparison.Ordinal);
+        Assert.Contains("word[2]", one.Seat(slot: 0, line: "world.match all vectors").Output, StringComparison.Ordinal);
+        Assert.Contains("word[2]", one.Console("world.match all vectors").Output, StringComparison.Ordinal);
+    }
     [Fact]
     public void SummariesDoNotExposePrivateGeneratedPoolStorage() {
         var document = MetadataDocument(0);

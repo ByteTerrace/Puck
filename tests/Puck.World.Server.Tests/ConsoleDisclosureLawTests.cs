@@ -179,15 +179,14 @@ public sealed partial class ConsoleDisclosureLawTests {
         Assert.Contains(actualString: host.Seat(line: "world.tabletop", slot: 1).Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "occupancy=(empty)");
     }
     [Fact]
-    public void APatternWalkOverAWithheldRowIsRefused() {
-        using var host = new DisclosureHost(definition: Document());
+    public void APatternWalkOverAWithheldRowReadsOnlyTheProjection() {
+        using var host = new DisclosureHost(definition: Document() with { PatternsRaw = [DisclosurePattern()] });
 
-        Assert.Equal(
-            actual: host.Seat(line: "world.match fullRow vault", slot: 1).Output,
-            expected: "[world.match: 'vault' is not disclosed to seat2 — its visibility withholds it]"
-        );
-        Assert.DoesNotContain(actualString: host.Seat(line: "world.match fullRow vault", slot: 0).Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "not disclosed");
-        Assert.DoesNotContain(actualString: host.Console(line: "world.match fullRow vault").Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "not disclosed");
+        var restricted = host.Seat(line: "world.match all vault", slot: 1).Output;
+        Assert.False(Leaks(restricted));
+        Assert.Contains("word[0]", restricted, StringComparison.Ordinal);
+        Assert.Contains("word[1]", host.Seat(line: "world.match all vault", slot: 0).Output, StringComparison.Ordinal);
+        Assert.Contains("word[1]", host.Console(line: "world.match all vault").Output, StringComparison.Ordinal);
     }
     [Fact]
     public void ASeatObservesOnlyItselfAndTheOperatorObservesAnyone() {
