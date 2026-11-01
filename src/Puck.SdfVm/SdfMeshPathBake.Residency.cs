@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Baking;
 
 namespace Puck.SdfVm;
 
@@ -13,6 +14,7 @@ public sealed partial class SdfMeshPathBake {
 
     // The latest dressed frame's dynamic transforms, which carry a dynamic group's demand box into world space.
     private IReadOnlyList<DynamicTransform> m_demandTransforms = [];
+
     // When the latest bake that baked or loaded a group started (a Stopwatch timestamp; zero before one).
     private long m_bakeStarted;
     // The store loads the latest bake queued and finished, and when its first began and last ended.
@@ -31,12 +33,23 @@ public sealed partial class SdfMeshPathBake {
     // order they arrived; and the workers taking them, at most Workers at once. One pool serves every residency's bake,
     // so residencies baking together share the processors rather than each taking all of them.
     private static readonly Lock WorkGate = new();
-    private static readonly List<(Group Group, Action Work)> WorkQueue = [];
-    private static readonly Queue<Action> AnswerQueue = new();
+    private static readonly List<(Group Group, Action<SdfSampledLattice.RefinementScratch> Work)> WorkQueue = [];
+    private static readonly Queue<Action<SdfSampledLattice.RefinementScratch>> AnswerQueue = new();
+
     private static int RunningWorkers;
 
     // The workers that run at once: one a processor.
     private static int Workers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
+
+    // Slots, not threads, own scratch. A slot is handed to exactly one running task under WorkGate, and keeps its
+    // workspace when the GPU briefly leaves the CPU queue empty. Nothing is rented from or returned to another slot.
+    private sealed class WorkerSlot {
+        public bool Running;
+
+        public readonly SdfSampledLattice.RefinementScratch Scratch = new();
+    }
+
+    private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
 
     // The bake's CPU stages, whose summed thread time the done line reports (Account).
     private enum BakeStage {
@@ -49,12 +62,14 @@ public sealed partial class SdfMeshPathBake {
         Land,
         Store,
     }
+
     // Stopwatch ticks each stage spent, summed over the threads that ran it.
     private readonly long[] m_stageTicks = new long[8];
     // The samples answered by the lattices of each kind: coarse and refining grids, final slabs, the final lattice's fine
     // samples, crossing rounds and gradients, the field check's vertices, material points and skin points.
     private readonly long[] m_kindSamples = new long[8];
     private static readonly string[] KindNames = ["refine", "slab", "fine", "crossing", "gradient", "crease", "material", "skin"];
+
     // The frames that took lattices while a group still owed one, those that took none, the field evaluations their
     // shares allowed, and what ended each frame's batch: its share, the dispatch's samples, the batch's lattices, or no
     // group owing a lattice. The groups waiting on a dispatch, in flight and on the workers, summed over those frames.
@@ -73,14 +88,16 @@ public sealed partial class SdfMeshPathBake {
     private void Account(BakeStage stage, long since, Group? group = null, string? detail = null) {
         var ticks = (Stopwatch.GetTimestamp() - since);
 
-        _ = Interlocked.Add(location1: ref m_stageTicks[(int)stage], value: ticks);
+        _ = Interlocked.Add(location1: ref m_stageTicks[((int)stage)], value: ticks);
         // A stage that holds one group's worker for seconds names the group, so the bake's long poles can be found.
         if ((group is not null) && (ticks > (SlowStageSeconds * Stopwatch.Frequency))) {
-            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={Residency} group={group.Selector} {(group.Dynamic ? "dynamic" : $"instances={group.Instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / (double)Stopwatch.Frequency):0.00} {detail}"));
+            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={Residency} group={group.Selector} {(group.Dynamic ? "dynamic" : $"instances={group.Instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / ((double)Stopwatch.Frequency)):0.00} {detail}"));
         }
     }
+
     // The thread seconds past which one group's stage is reported (Account).
     private const double SlowStageSeconds = 2.0;
+
     // Clears the frame and stage accounts for a new bake.
     private void ClearAccounts() {
         Array.Clear(array: m_stageTicks);
@@ -90,14 +107,13 @@ public sealed partial class SdfMeshPathBake {
     }
     // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
     private string DescribeAccounts() {
-        var stages = string.Join(separator: ",", values: Enum.GetValues<BakeStage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref m_stageTicks[(int)stage]) / (double)Stopwatch.Frequency):0.0}")));
+        var stages = string.Join(separator: ",", values: Enum.GetValues<BakeStage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref m_stageTicks[((int)stage)]) / ((double)Stopwatch.Frequency)):0.0}")));
         var frames = Math.Max(val1: 1L, val2: m_bakeFrames);
 
         var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{m_kindSamples[kind]}")));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / (double)m_shareTaps) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / (double)frames):0.0},flying:{(m_flyingGroups / (double)frames):0.0},working:{(m_workingGroups / (double)frames):0.0}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}]");
     }
-
     // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
     // priorities stand as they were and the plan's order decides.
     private void Prioritize() {
@@ -131,7 +147,7 @@ public sealed partial class SdfMeshPathBake {
             // Renumbering the mesh for the follower's materials copies arrays as large as the mesh, so it runs on the
             // workers, outside the gate the frame takes.
             group.Contouring = true;
-            Schedule(group: group, work: () => TakeFollowed(group: group));
+            Schedule(group: group, work: _ => TakeFollowed(group: group));
         }
     }
     // Takes the mesh a follower's leader landed, renumbered for the follower's materials; a follower whose mesh the library
@@ -155,19 +171,27 @@ public sealed partial class SdfMeshPathBake {
     // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
     // order it came, and starts a worker for it if one is free. Work that takes the bake's gate waits while a caller
     // holds it, as a restart does.
-    private static void Schedule(Group group, Action work, bool urgent = false) {
+    private static void Schedule(Group group, Action<SdfSampledLattice.RefinementScratch> work, bool urgent = false) {
         lock (WorkGate) {
             if (urgent) {
                 AnswerQueue.Enqueue(item: work);
             } else {
                 WorkQueue.Add(item: (group, work));
             }
-            while ((RunningWorkers < Workers) && (RunningWorkers < (WorkQueue.Count + AnswerQueue.Count))) {
-                RunningWorkers++;
-                _ = Task.Run(action: Work);
-            }
+            StartWorkers();
         }
     }
+    // Called only with WorkGate held. The task's finally returns ownership of the slot after its last borrower ends.
+    private static void StartWorkers() {
+        foreach (var slot in WorkerSlots) {
+            if (RunningWorkers >= (WorkQueue.Count + AnswerQueue.Count)) { break; }
+            if (slot.Running) { continue; }
+            slot.Running = true;
+            RunningWorkers++;
+            _ = Task.Run(action: () => Work(slot: slot));
+        }
+    }
+
     /// <summary>Retires every group of the bake, for a residency released: their queued work is dropped before it runs,
     /// so a stage running for one queues no further stage.</summary>
     public void Retire() {
@@ -175,30 +199,29 @@ public sealed partial class SdfMeshPathBake {
             foreach (var group in m_groups) { group.Retired = true; }
         }
     }
+
     // A worker: runs the queued work, answers first, then the highest priority, until none is queued.
-    private static void Work() {
+    private static void Work(WorkerSlot slot) {
         try {
             while (TakeWork() is { } work) {
                 // A stage that throws leaves its group unfinished; the line names the fault rather than a silent stall.
                 try {
-                    work();
-                } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                    work(slot.Scratch);
+                } catch (Exception exception) when ((exception is not OutOfMemoryException)) {
                     Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
                 }
             }
         } finally {
             lock (WorkGate) {
                 RunningWorkers--;
-                if (((WorkQueue.Count + AnswerQueue.Count) > 0) && (RunningWorkers < Workers)) {
-                    RunningWorkers++;
-                    _ = Task.Run(action: Work);
-                }
+                slot.Running = false;
+                StartWorkers();
             }
         }
     }
     // Takes the earliest queued answer, else the queued work whose group has the highest priority, the earliest queued
     // among equals, or null when none is queued. A group's priority is read as the frame thread last left it.
-    private static Action? TakeWork() {
+    private static Action<SdfSampledLattice.RefinementScratch>? TakeWork() {
         lock (WorkGate) {
             if (AnswerQueue.TryDequeue(result: out var answer)) { return answer; }
 
@@ -218,7 +241,6 @@ public sealed partial class SdfMeshPathBake {
             return work;
         }
     }
-
     // A group's demand box in world space: a dynamic group's carried out of its slot's frame by the slot's transform, as
     // the world-axis box about the turned one.
     private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
@@ -281,7 +303,6 @@ public sealed partial class SdfMeshPathBake {
             m_allResident = all;
         }
     }
-
     /// <summary>Describes the latest bake's residency: its groups, when they landed (finished) and became resident (their
     /// words in the mesh region) counted from its start, those near the first demand point (the primary seat's eye)
     /// apart, with when half and nine tenths of those had landed and which landed last, its store loads, the time its
@@ -295,7 +316,7 @@ public sealed partial class SdfMeshPathBake {
             var groups = m_groups.Count;
             int landed = 0, resident = 0, near = 0, nearLanded = 0, nearResident = 0;
             long lastLanded = 0, lastResident = 0, nearLastLanded = 0, nearLastResident = 0;
-            long vertexBytes = 0;
+            var vertexBytes = 0L;
             Span<long> levelBytes = stackalloc long[3];
             Span<long> levelTriangles = stackalloc long[3];
             var nearStamps = new List<long>();
@@ -330,7 +351,7 @@ public sealed partial class SdfMeshPathBake {
                 foreach (var piece in ((mesh.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[mesh] : mesh.Chunks)) {
                     var perTriangle = ((3 + (piece.TriangleMaterials.IsEmpty ? 0 : 1)) * sizeof(uint));
 
-                    vertexBytes += (((long)piece.Positions.Length) * SdfMeshRecord.VertexWords * sizeof(uint));
+                    vertexBytes += ((((long)piece.Positions.Length) * SdfMeshRecord.VertexWords) * sizeof(uint));
                     levelTriangles[0] += piece.TriangleCount;
                     levelBytes[0] += (((long)piece.TriangleCount) * perTriangle);
                     for (var level = 0; ((level < piece.Levels.Count) && (level < 2)); level++) {
@@ -342,22 +363,22 @@ public sealed partial class SdfMeshPathBake {
 
             string Since(long stamp, bool complete) => (!complete
                 ? "pending"
-                : ((start == 0) ? "-" : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Math.Max(val1: 0d, val2: Stopwatch.GetElapsedTime(startingTimestamp: start, endingTimestamp: stamp).TotalSeconds):0.000}s")));
+                : ((start == 0) ? "-" : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Math.Max(val1: 0d, val2: Stopwatch.GetElapsedTime(endingTimestamp: stamp, startingTimestamp: start).TotalSeconds):0.000}s")));
 
             var line = new StringBuilder();
-            var loadSpan = (((m_loadFirst != 0) && (m_loadLast != 0)) ? Stopwatch.GetElapsedTime(startingTimestamp: m_loadFirst, endingTimestamp: m_loadLast).TotalSeconds : 0d);
+            var loadSpan = (((m_loadFirst != 0) && (m_loadLast != 0)) ? Stopwatch.GetElapsedTime(endingTimestamp: m_loadLast, startingTimestamp: m_loadFirst).TotalSeconds : 0d);
 
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(stamp: lastLanded, complete: (landed == groups))} all-resident={Since(stamp: lastResident, complete: (resident == groups))}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(complete: (landed == groups), stamp: lastLanded)} all-resident={Since(complete: (resident == groups), stamp: lastResident)}");
             // When half and nine tenths of the near groups had landed, and which landed last.
             nearStamps.Sort();
             string Share(float share) {
-                var count = (int)MathF.Ceiling(x: (share * near));
+                var count = ((int)MathF.Ceiling(x: (share * near)));
 
-                return Since(complete: ((count > 0) && (count <= nearStamps.Count)), stamp: ((count > 0) && (count <= nearStamps.Count)) ? nearStamps[(count - 1)] : 0);
+                return Since(complete: ((count > 0) && (count <= nearStamps.Count)), stamp: (((count > 0) && (count <= nearStamps.Count)) ? nearStamps[(count - 1)] : 0));
             }
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-radius={radius:0.##}m near={near} near-landed={nearLanded} near-resident={nearResident} near-half-at={Share(share: 0.5f)} near-ninety-at={Share(share: 0.9f)} near-landed-at={Since(stamp: nearLastLanded, complete: (nearLanded == near))} near-resident-at={Since(stamp: nearLastResident, complete: (nearResident == near))}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-radius={radius:0.##}m near={near} near-landed={nearLanded} near-resident={nearResident} near-half-at={Share(share: 0.5f)} near-ninety-at={Share(share: 0.9f)} near-landed-at={Since(complete: (nearLanded == near), stamp: nearLastLanded)} near-resident-at={Since(complete: (nearResident == near), stamp: nearLastResident)}");
             if (lastNear is not null) {
-                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : (lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static")}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" near-last={lastNear.Selector}{(lastNear.Dynamic ? "/dynamic" : ((lastNear.Instances > 1) ? $"/union{lastNear.Instances}" : "/static"))}/{(lastNear.Mesh?.TriangleCount ?? 0)}tri");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" bake-age={((start == 0) ? 0d : Stopwatch.GetElapsedTime(startingTimestamp: start).TotalSeconds):0.000}s loads={m_loadsDone}/{m_loadsQueued} load-span={loadSpan:0.000}s plan-ms={m_planMilliseconds:0.0} restart-ms={m_restartMilliseconds:0.0}");
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" vertex-bytes={vertexBytes} level0={levelTriangles[0]}tri/{levelBytes[0]}B level1={levelTriangles[1]}tri/{levelBytes[1]}B level2={levelTriangles[2]}tri/{levelBytes[2]}B");
