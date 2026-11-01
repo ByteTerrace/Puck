@@ -125,7 +125,7 @@ public static class ArenaDraws {
 
         return TryWrite(
             arena: arena,
-            cursor: (cursor + result.Samples),
+            cursor: (cursor + result.Advances),
             masks: GeneratorEngine.MasksAfter(
                 fired: result.Masks,
                 generator: generator,

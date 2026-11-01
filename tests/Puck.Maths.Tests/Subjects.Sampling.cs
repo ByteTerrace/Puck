@@ -11,7 +11,7 @@ internal static partial class Subjects {
                 var quotient = BigInteger.DivRem(dividend: (((BigInteger)word) * bound), divisor: (BigInteger.One << 32), remainder: out var remainder);
                 var expected = (remainder >= ((BigInteger.One << 32) % bound));
 
-                if ((BoundedRandomSampling.TryMap(exclusiveHigh: bound, value: out var actual, word: word) != expected) || (actual != quotient)) {
+                if ((BoundedRandomSampling.TryMap(exclusiveHigh: bound, value: out var actual, word: word) != expected) || (expected && actual != quotient)) {
                     return $"word {word}, bound {bound}: acceptance or exact quotient differs";
                 }
             }

@@ -35825,7 +35825,7 @@
                               "title": "StateTransformPushRay"
                             },
                             {
-                              "description": "Reorders a row\u0027s cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site\u0027s cursor advances by exactly that and a replay reproduces the permutation.",
+                              "description": "Reorders a row\u0027s cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells make n - 1 unbiased bounded selections. The cursor counts every raw word, including rejections, so reopening it reproduces the permutation.",
                               "properties": {
                                 "$type": {
                                   "const": "shuffle"
