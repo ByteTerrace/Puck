@@ -1193,7 +1193,17 @@ a design built into C# or living only in the debug world.
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
   `worlds/standard/abilities.puck` as the precedent.
-- [low] The chase camera's tight-space preference is one world-wide row
+- [medium, next wave's clearance-2 lane] The clearance-op review (Codex):
+  a blend falls back to whichever endpoint authors clearance regardless of
+  weight (`src/Puck.SdfVm/Views/SdfCameraProgram.cs:536`); bound fade and
+  target-migration bands skip the ordering checks literals get
+  (`WorldDefinitionValidator.Screens.cs:156,160`); bound `eyeRadius` and
+  `surfaceSkin` fall back to zero (`WorldCameraRigCompiler.cs:349-350`);
+  `closeTargetOffset` is not bindable (`WorldCameraProgram.cs:152`); a selected
+  case's zoom and pitch limits follow the default case
+  (`WorldCameraPrograms.cs:100`, `WorldSeatViewState.cs:52,120`). Full text:
+  the review's findings, kept by the lead. (from: clearance-astra)
+- [medium, was low; lost behaviour] The chase camera's tight-space preference is one world-wide row
   (`cameraClearance`, `worlds/standard/camera.puck`), so every seat in a world
   shares it, and it no longer travels with a joined identity. A per-seat
   preference needs a camera program's `state.<row>.$body` binding to resolve
