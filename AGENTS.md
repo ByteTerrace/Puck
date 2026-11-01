@@ -37,6 +37,16 @@ agent works in that mode by default, without asking:
   author imports, overrides by id, or replaces. Debug-world-only content (its
   places, tours, exhibits) stays in `worlds/debug/`. Building a design into
   engine code, or only into the debug world, builds it twice.
+- Puck code over engine code (the owner's ruling). Behaviour is written as
+  Puck programs that authors build and own: camera programs, physics and
+  motion programs, the state system's rules, board games, emulated machines
+  and cartridges. The engine's C# is the machinery that compiles, runs,
+  schedules and costs those programs (the VMs, the solvers, the residency),
+  never a per-feature implementation of what a program could express. A
+  performance plan accelerates the programs' execution generically (a
+  parallel tick runs authored rules and motion programs in parallel; it does
+  not hand-write a feature in C# to make it fast), and a C# default for
+  something an author programs is a second implementation.
 - Puck is independent work (the owner's ruling). For an external protocol,
   format or device, consult several independent sources as second opinions
   (vendor documentation, kernel drivers, community reverse engineering, other
