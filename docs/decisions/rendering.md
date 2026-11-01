@@ -74,9 +74,11 @@ the lead settled the points where they differed.
 - **Machine budgets are bytes.** Mesh residency, the geometry cache and brick
   pools are sized from the machine and evicted by size and age, never cleared
   wholesale and never refused on a miss.
-- **Performance is read, not ledgered.** The bars are the RTX 4070's steady
-  60 FPS at the highest settings and, later, the Steam Deck's 45 FPS floor,
-  read on a quiet machine from frame time and the GPU counters.
+- **Performance is read, not ledgered.** At the highest quality the RTX 2060
+  and RTX 4070 hold 60 FPS, every frame under 16.7 ms, and the Steam Deck holds
+  45 FPS, every frame under 22.2 ms. Read the worst frame on a quiet machine,
+  with GPU counts beside it. A lower tier, a coarser snap or a frame of latency
+  is never the fix for a missed bar.
 
 ## Bloom is a camera's scatter, applied once before tonemapping
 
@@ -331,16 +333,21 @@ luminance whose default is a clear day's sky (10,000 nits) beside the default
 sun does.
 
 **A camera exposure maps the luminance to the display, before the tonemap.**
-`render.exposure` is manual (an `EV100`) or automatic: a reflected-light meter
-reads the irradiance volume's luminance about each view's camera, weighted
-toward where it looks, and eases toward that reading less a compensation,
-within authored bounds, over presentation time. When no visible lattice probe
-answers, the same tracer measures radiance at the camera itself. This measures
-an enclosure smaller than a lattice cell without importing light from another
-room or changing the irradiance volume. If even that measurement is unavailable,
-the view holds its previous exposure; the authored EV initializes a view before
-its first reading. `world.exposure` names the measurement source, and reports
-no meter reading while holding. The eye adapts across a scene
+`render.exposure` is manual (an `EV100`) or automatic. The chosen automatic
+meter reads the log-average of each view's HDR output with a highlight clamp,
+so dynamic meshes and anchored lights contribute to its exposure. Adaptation
+eases toward that reading less compensation, within authored bounds, over
+presentation time. The image meter is open work in
+[Lighting and GI](../plans/open-items.md#lighting-and-gi); the current automatic
+meter still reads the irradiance volume about the camera.
+
+The probe meter remains for local adaptation and the enclosure case. When no
+visible lattice probe answers, the tracer measures radiance at the camera
+itself. This measures an enclosure smaller than a lattice cell without
+importing light from another room or changing the volume. An unavailable
+measurement holds the previous exposure; the authored EV initializes a view
+before its first reading. `world.exposure` names the measurement source and
+reports no meter reading while holding. The eye adapts across a scene
 where a camera cannot, so an automatic exposure also adapts locally by an
 authored share (`render.exposure.local`): the views stage moves each surface's
 exposure from the view's toward the one its own illumination (the lights'
@@ -404,11 +411,10 @@ lobe's width made painted stairs and placards read as chrome.
 
 **Considered, and set aside.** Scene-referred values left as stylized weights
 with a global gain, since no gain makes a 150-nit screen and a 100,000-lux sun
-read in one frame; exposure from a GPU histogram of the lit image, which needs a
-reduction and a readback the irradiance volume already answers on the CPU; a
-cutoff radius authored per light, which would make the range a look decision
-for every light rather than one derived threshold; a cube or dual-paraboloid
-shadow map per positional light, six raster passes of the world a light a frame
+read in one frame; a cutoff radius authored per light, which would make the
+range a look decision for every light rather than one derived threshold; a
+cube or dual-paraboloid shadow map per positional light, six raster passes of
+the world a light a frame
 where the hall holds 68 of them, for a sharper shadow than the rooms need; and
 a window published unexposed for the viewer to expose, under which a sunlit
 world seen from a dim room blows to white.
@@ -428,16 +434,13 @@ same wrong image. Frame counts derive from pinned logical steps and reset
 semantics, not the scheduler's cadence. Float presentation pixels are never
 claimed as simulation-state determinism.
 
-**Performance is judged by counted work, with timing read beside it.** Code,
-disassembly, and counts of the work a pass records decide performance
-questions, and only counts set a ceiling or gate a change. Wall-clock and GPU
-timing (`world.gpu-timing`, `world.fps`, `puck bench`) are evidence beside
-those counts, never alone: a timing shows where frame time goes and reads the
-frame-rate bar, and a count shows what work moved. Load moves a timing, so one
-runs on a quiet machine, with no build, test or other GPU work beside it. No
-counter report, canary or law reads a timing; dynamic resolution's
-load signal and the editor's per-pass readout
-([E9](../plans/editor.md#e9--cost-per-object-and-gpu-pass-timing)) are its
+**Performance is judged by the worst frame, with counted work beside it.**
+Quiet-machine timing reads the frame-rate bar; code, disassembly and live work
+counts explain where its cost comes from and what a change moves. Read
+`host.frames` and `world.gpu-timing` with no build, test or other GPU work
+beside the debug world. Counts are diagnostic evidence, never a substitute
+for that timing. Dynamic resolution's load signal and the editor's per-pass
+readout ([E9](../plans/editor.md#e9--cost-per-object-and-gpu-pass-timing)) are its
 runtime readers. Work counts extend one shared read
 contract: a completed sample carries identity, labels, pass states, and counts
 together, there is no parallel pipeline-only counting interface, and no label
@@ -462,34 +465,25 @@ strengths](engine-design.md#each-machine-runs-to-its-own-strengths)), never by
 dropping below the highest quality. An average hides the
 hitch a player feels, so a periodic stall (a camera enumeration, a live
 mutation's apply, a pipeline compile) misses the bar even when the mean is
-fast, and a lower tier is never the fix for a missed bar. Counted work still
-decides each change; the bar itself is read by timing the worst frame on a
-quiet machine.
+fast. A lower tier, a coarser shadow snap, reduced contact detail or a frame
+of latency is never the fix for a missed bar. Counted work explains a change;
+the bar itself is read by timing the worst frame on a quiet machine.
 
 **Worlds are mostly static, and sculpting happens in the editor.** Most of a
 world's geometry never changes while it is played, and editor mode is where a
 creation's field is sculpted. The cost of evaluating an authored field therefore
 belongs to the moment it changes, not to every frame: a played world renders a
 representation baked from its static geometry, which can ship with the compiled
-world, and a sculpt edit rebakes only what it touches. The field interpreter
-serves the editor's live preview and the frames before a bake lands. Dynamic
-bodies bake per rigid part, since their parts move without changing shape.
+world as an optional cache, and a sculpt edit rebakes only what it touches.
+The field interpreter serves the bake and CPU queries; the frame draws meshes
+already available while replacement geometry bakes. Dynamic bodies bake per
+rigid part, since their parts move without changing shape.
 
-**P14 and P15 are judged by counted work.** Each of their passes'
-deterministic counters, dispatches, march steps, texels written and bytes
-uploaded, is counted over one pinned workload, `puck counters`' world with its
-camera and views, at the floor tier and the RTX 2060's 1920x1080; other
-content is free to cost more. The counters count upload bytes per pass
-(`gpu.uploads.host-visible`), the SDF upload's brick writes and fillers under
-passes of their own, and the kernels count their own march steps and texels
-written (`gpu.march.steps`, `gpu.texels.written`), because a march's steps are
-decided inside the shader's data-dependent loop. A change that moves a count is
-measured before and after it on the same device with `puck counters compare`,
-and the change states why the count moved, so a cost increase is always a
-stated decision; wall-clock and GPU timing never judge one. Nothing records the
-counts in the repository. The floor device is where a missed budget first
-shows, so its counts bound the programme's rendering cost before any timing is
-taken.
+**Counted work is diagnostic evidence.** Read dispatches, vertices, texels,
+uploaded bytes and bake evaluations beside quiet-machine worst-frame timing
+on the debug world at `high`. Nothing records those counts in the repository,
+and no floor-tier ledger or march-step gate exists. A count identifies work
+to remove at its cause; it never grants a frame over the machine's bar.
 
 **Attachment ownership belongs to the pipeline plan.** A backend executes a
 plan it does not own. Outputs are versioned, each version has one writer, and
@@ -523,20 +517,16 @@ checked before candidate allocation, counting still-live old and retired
 allocations; the installed graph is never released to satisfy admission. The
 numerical release limits are the owner's decision.
 
-**The release profile is the packaged candidate that ships the forcing
+**The release profile is the packaged candidate that ships the debug
 world**, the same candidate every other programme's release evidence names;
 its thresholds are measured against it, never inferred from one run. The
 foundation releases independently of hybrid work when its gates pass.
 
-**A qualification workload is named for the world it boots, and every pipeline
-canary is a functional check.** Until the forcing world is authored, the
-stability matrix boots the flagship world, so its workload is `flagship`.
-Keeping the forcing world's name on it was rejected, because a reader would
-take a cell's verdict as evidence about a world the cell never ran. The
-functional set holds every `pipeline-*` canary, `pipeline-geometry` and
-`pipeline-echo` included, plus `interface-echo` and `no-device-compile`, and a law fails when a
-`pipeline-*` canary is missing from it, so a canary that lands cannot sit
-outside qualification unnoticed.
+**The debug world is the live qualification world.** `worlds/debug` shows the
+features composing on both backends while the canaries under
+`experimental/tests/Puck.World.Canaries` are quarantined. A workload names the
+world it actually boots, and its observations establish only that world's
+behaviour under the exercised conditions.
 
 **Hardware- and environment-only checks run once, at the programme's close.**
 A check that needs a particular device, driver state, operating system or
@@ -546,8 +536,9 @@ and they run together when the programme ends, on the code it finally ships.
 They are P1a's windowed boot on a machine with no GPU driver; P1b's
 qualification on the reference GPUs, the RTX 4070 and the AMD devices, and its
 driver-removal exercise; the recorded camera run of P12b-4; the recorded Windows
-editor click of P13b-4; P10's floor-tier parity leg; P15's recorded Steam Deck run; and P16's checks on an
-HDR display. For the GPU checks each change runs, whether the two backends
+editor click of P13b-4; P10's hardware observations at `high`; P15's Steam Deck
+run at the highest quality and its 45 FPS bar; and P16's checks on an HDR
+display. For the GPU checks each change runs, whether the two backends
 agree is judged in one final review pass rather than change by change.
 
 **Device-local memory is counted by role, not by memory type.** Images,
@@ -563,22 +554,6 @@ unified-memory devices included.
 "everything is an SDF" with "all environments are SDFs"; meshes, continuous
 fields, and baked distant content may each fit a scene, and no broad shadow or
 ambient-occlusion speedup is assumed without a scene and fidelity comparison.
-
-**P6's five representation experiments are in the programme's scope.** They
-are a per-placement choice between the field, a bake and a mesh, decided by
-counted cost; shadows and ambient occlusion on meshes; capsule or ellipsoid
-proxies on a character's bones for approximate shadows and ambient occlusion
-that never silently become the contact surface; glossy reflections marched
-through the field, one bounce; and short-range soft global illumination
-gathered from the field. Each is scoped on its own and becomes a default only
-once it shows a useful scene, its fidelity limits and its measured cost. The
-reflection and global illumination experiments start after P14-5 puts the SDF
-passes on their declared interfaces and stay off the critical path; each lands
-with a counted-cost report and a quality-tier switch that turns it off, so the
-floor tier never pays for it. The other representations
-[P6](../plans/rendering.md#p6--representation-experiments) names, such as
-destructible fields, mesh import and skinning, stay out until a scene shows
-the need.
 
 ## How worlds reach the GPU
 
@@ -813,11 +788,11 @@ manifest and the mirror are functions of the document alone, and two documents
 differing only in tier compile identical manifests, identical mirrors, and
 identical state hashes. A tier is named from the one quality vocabulary,
 `QualityTiers` (`low`, `medium`, `high`), which also keys a world's
-`world.quality` presets, rather than from a second one. The package
-format closes with the `default` variant alone, and tiers arrive with bound
-rows in P10, which owns the tier a pipeline names. Building tier variants into
-the package format first was rejected, because nothing would select them and no
-check could tell a correct variant from a wrong one.
+`world.quality` presets, rather than from a second one. Packages carry variants
+behind that shared interface, and a pipeline's selected tier chooses its
+variant alongside its bound rows. The `default` variant supplies a package's
+default implementation. Tier selection changes presentation alone; it cannot
+reduce the highest-quality qualification requirement.
 
 **The offscreen host's time is its tick count.** Its frames are its only
 output, so it steps one tick per rendered frame, never several ticks in one
@@ -859,8 +834,8 @@ along with the simulation. A capture carries it as its region tick, and
 `puck parity`'s tick verdict holds it to the armed tick, ordered before the
 pixel verdict, so a skewed capture fails as a skew. `puck parity` pins one
 reference tier, `high`, and its `bound` station's pixels depend on a bound row
-the world's own rules move. A second leg at the floor tier, `low`, on floor
-hardware is a deferred hardware check.
+the world's own rules move. Deferred hardware observations also run at `high`
+and meet that machine's worst-frame bar.
 
 ## The frame graph and nesting
 
@@ -1038,46 +1013,78 @@ These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination),
 the global illumination slices of P6.
 
 **Indirect light is an irradiance volume traced on the CPU against the baked
-meshes.** The frame walks no field, and worlds are mostly static, so their bounce lighting belongs at edit
-time rather than in the frame. One volume of probes per residency follows the
-first view's camera; the thread pool traces it against a bounding volume
-hierarchy of the static mesh draws, and views read the eight probes about a
-shaded point. A still world traces each cell once per lighting, and every view
-of the world reads the same volume.
+meshes.** The frame walks no field, and worlds are mostly static, so bounce
+lighting is cached rather than retraced per pixel. Each residency shares one
+three-level nested volume (`SdfMeshIrradianceProbe.Levels == 3`) among its views.
+The finest window uses the tier's spacing and dimensions; the two coarser
+32×12×32 windows use 8 m and 32 m cells. The CPU traces a hierarchy of static
+mesh draws; views and later bounce sweeps gather the eight probes around a
+receiver through the same visibility rule. Moving bodies receive this light
+and cast none into the static volume.
+
+Each toroidal window reuses cell-keyed slots and publishes only once all its
+slots are measured. Its centre encloses the residency's view cameras when
+they fit within the window's middle, otherwise it follows the first camera.
+Full demand-point windowing, scene scope and a byte-bounded probe cache are
+open work in [residency step 2](../plans/open-items.md#residency-and-streaming).
+A still cell reuses its measurement until the lighting or geometry changes.
 [The handbook](../rendering/sdf/handbook/lighting-and-shading.md#the-mesh-paths-irradiance-volume)
 owns its layout, costs and limits.
 
-**Visibility is measured in each receiver direction.** Each probe holds an
-octahedral first-hit depth map (mean distance and mean-squared distance).
-The gather bilinearly samples those moments in the receiver's direction and
-uses a one-sided Chebyshev visibility weight. A finite blocker affects its
-angular footprint, rather than extending a first-hit plane as an infinite
-half-space. Plane separation, its neighbour veto and suspect share are deleted.
-The same rule lives in the CPU bounce gather and views shader; the
-[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) owns its
-sampling, packing and cross-language details.
+**Background work belongs to the engine job system.** Its budgeted jobs make
+GI proportional to change: newly landed geometry re-measures only probes
+whose measurements it can affect. This is the
+[job-system and GI scheduling work](../plans/open-items.md#engine-job-system),
+rather than a second executor. The current implementation in
+[`SdfMeshIrradiance`](../../src/Puck.SdfVm/SdfMeshIrradiance.cs) builds scenes
+and traces batches on the thread pool, reuses unchanged geometry hierarchies,
+and retains old probe data until replacements publish. A static-scene change
+currently invalidates the whole probe generation; selective retracing remains
+part of that work.
 
-Weight is trilinear share times positive normal cosine squared times depth
-visibility. The continuous hemisphere term excludes probes behind a surface,
-without switching the whole gather between front and back sets. A fixed
-5 cm normal bias stays inside thin walls. The boundary lookup clamps to its
-probes, but visibility tests the actual biased receiver; no answering probe
-means no measured light, never invented sky. Depth moments are sampled support,
-not proof against geometry below their angular resolution.
+**Visibility is measured as local first-hit surfaces.** Each probe holds a
+12×12 octahedral surface map. One bounded closest-hit ray per texel stores an
+FP16 distance and a packed surface normal; a negative distance marks a miss
+and its measured reach. Neighbouring samples fit a cached normal-gradient
+curvature per texel. Four reflected angular taps reconstruct local surface
+patches and test the receiver against them, with a smooth surface-gap and
+coverage fade. A finite blocker affects its sampled angular footprint rather
+than extending an infinite plane through the scene.
 
-Relocation supplies coverage and conditions the depth map: move an embedded or
-too-near centre to a clear quarter-cell candidate, preferring fewer close hits
-among nearby candidates and charging for displacement. Retain that openness
-score with depth visibility: it keeps origins clear of surfaces. A nearest-clear-only
-experiment did not eliminate grazing marks, but still had neighbour filtering,
-so it does not isolate placement as their cause.
-Depth moments, cubes and light masks use that same relocated origin. The volume
-publishes only each probe's own measured cubes. Neighbour cube
-filtering is deleted: visibility between probe origins through a doorway does
-not establish another probe's sky visibility at this receiver. The depth rays
-also measure sky with cosine and solid-angle weights, avoiding that borrowing.
-Moving bodies receive this presentation light and cast none into the static
-volume. The exposure meter keeps its exact camera-to-probe scene tests.
+[`SdfMeshProbeDepth`](../../src/Puck.SdfVm/SdfMeshProbeDepth.cs) and the views
+shader's `sdfMeshProbeDepthVisibility` share that rule. Gather weight is the
+trilinear share times a smooth distance fade from probes behind the receiver
+to probes half a cell ahead of its surface, times depth visibility. The fade
+uses the receiver normal and the relocated probe position. A fixed 5 cm normal
+bias stays independent of cell spacing. The lookup clamps to boundary probes,
+but visibility tests the actual biased receiver. Outside a window the facing
+fade eases to one over the first cell, so normals turned away from the window
+can still receive its measured light.
+
+**Coarser levels supply reach without overriding fine visibility.** A receiver
+uses the finest published window containing it within its boundary probes,
+or the coarsest published level beyond all windows. A coarser level never
+answers inside a finer window: its wider angular footprint could miss a thin
+wall the fine level measures. If the selected level's bounded gather has no
+support, the same probes extrapolate past measured reach: a measured surface
+still blocks, while a missed ray no longer invents a far blocker. This read
+reports `measured=0` and supplies no traced positional-light visibility. It
+estimates unmeasured light rather than painting every far surface black.
+
+**Relocation takes the nearest clear candidate.** An embedded or too-near
+centre first tries an exit from the nearest surface, then quarter-cell grid
+candidates in increasing distance order within half a cell on each axis. Each candidate
+must clear nearby geometry and a 32-ray short-range back-face check before
+its full radiance measurement is accepted. There is no openness score. The
+surface map, sky and radiance cubes, and light masks use that same origin.
+Only each probe's own measured cubes publish; neighbouring cubes are not
+borrowed through a doorway. Sky visibility comes from the full-reach radiance
+rays with their cosine weights, not from the bounded surface-map rays. The
+exposure meter keeps its exact camera-to-probe scene tests.
+
+The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
+owns packing, sampling and the CPU/shader sync contract. Surface samples have
+finite angular resolution and do not certify geometry below it.
 
 `world.probe` marks changing or unpublished reads unsettled and names the
 published and replacement windows. Lighting comparisons use settled bakes and
