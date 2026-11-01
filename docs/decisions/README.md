@@ -34,9 +34,10 @@ contracts belong in the subsystem guides; proposed changes belong in
 - [UI](ui.md): one retained tree as presentation, per-seat roots, a neutral
   design language with looks layered on top, and mods' UI in a presentation
   entry.
-- [Rendering](rendering.md): fixtures before features, attachment ownership,
-  the hybrid resolve, the persistence boundary, distribution, P6's experiments
-  in scope, hardware- and environment-only checks run once at the programme's
+- [Rendering](rendering.md): the baked-mesh pipeline, counted work as evidence
+  beside quiet-machine worst-frame timing, attachment ownership, the hybrid
+  resolve, the persistence boundary, distribution, hardware- and
+  environment-only checks run once at the programme's
   close, [limits that price the mesh pipeline](rendering.md#limits-price-the-mesh-pipeline-not-the-interpreter),
   [bloom as a camera's scatter](rendering.md#bloom-is-a-cameras-scatter-applied-once-before-tonemapping),
   and
@@ -47,10 +48,11 @@ contracts belong in the subsystem guides; proposed changes belong in
   and [the frame graph and nesting](rendering.md#the-frame-graph-and-nesting):
   the graph as a document, views as graph instances, sources by transport and
   content class, hit-to-source mapping, temporal reconstruction, HDR output,
-  and assets derived from SDFs; and
-  [global illumination](rendering.md#global-illumination): a world-space cache
-  traced through the field and shared by every view of a world, guaranteeing no
-  light through sealed geometry and conserved energy, and bounding the rest.
+  and baked assets derived from SDFs; and
+  [global illumination](rendering.md#global-illumination): a three-level
+  irradiance volume traced on the CPU against baked meshes, shared by the
+  residency's views, with sampled first-hit surface visibility and nearest-clear
+  probe relocation.
 - [Worlds and federation](../architecture/worlds.md): authority, admission,
   transfers, and the relationships between worlds.
 
