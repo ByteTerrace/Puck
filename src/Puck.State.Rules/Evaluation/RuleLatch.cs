@@ -22,9 +22,8 @@ public readonly record struct LatchKey(int Left, int Right, long LeftGeneration 
 }
 /// <summary>One rule family's edge latch — per rule name and per binding, whether the gate held at the last
 /// evaluation — kept outside the compiled array because a rule's own effect recompiles it. A bound entry not touched
-/// between <see cref="BeginSweep"/> and <see cref="EndSweep(Dictionary{LatchKey, bool})"/> is closed: that is how a
-/// pair that left range, or a carrier that despawned, re-arms and is forgotten. The latch is simulation state: it
-/// hashes and checkpoints.</summary>
+/// between <see cref="BeginSweep"/> and <see cref="EndSweep"/> is closed: that is how a pair that left range, or a
+/// carrier that despawned, re-arms and is forgotten. The latch is simulation state: it hashes and checkpoints.</summary>
 public sealed class RuleLatch {
     /// <summary>One binding's memoized value and the row versions it was computed against.</summary>
     public sealed class BindingMemo {
@@ -38,22 +37,51 @@ public sealed class RuleLatch {
         public ulong[] Versions { get; set; } = [];
     }
 
-    private sealed class GateVersionEntry {
-        public object? Owner { get; set; }
-        public ulong[] Versions { get; set; } = [];
+    /// <summary>One rule name's share of the latch: its edge bits, which are simulation state, and the scheduler's
+    /// per-binding caches beside them, which are not and are never hashed, flattened or restored. An evaluator
+    /// resolves it once per rule and tick, so evaluating a binding costs one lookup into each table.</summary>
+    public sealed class RuleState {
+        internal RuleState() { }
+
+        /// <summary>Gets whether the gate held at the last evaluation, per binding: the hashed and checkpointed half.</summary>
+        public Dictionary<LatchKey, bool> Held { get; } = [];
+
+        internal readonly Dictionary<LatchKey, BindingSchedule> Scheduling = [];
+
+        // The binding of a rule evaluated once per tick, kept out of the table it would be the only entry of.
+        internal BindingSchedule? Once;
+
+        // The evaluator and compiled rule the read schedules below were derived for: a schedule is a function of
+        // both, so either changing derives them again.
+        internal object? ScheduleEvaluator;
+        internal object? ScheduleRule;
+        internal RuleSchedule? Schedule;
+        internal RuleSchedule[] LocalSchedules = [];
+
+        internal BindingSchedule Binding(LatchKey binding) {
+            if (binding.Equals(other: LatchKey.None)) {
+                return (Once ??= new BindingSchedule());
+            }
+
+            ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Scheduling, exists: out _, key: binding);
+
+            return (entry ??= new BindingSchedule());
+        }
     }
 
-    private readonly Dictionary<string, Dictionary<LatchKey, bool>> m_byRule = new(comparer: StringComparer.Ordinal);
-    // The scheduler's own caches, keyed the same way as m_byRule. Neither is simulation state — a verdict never
-    // depends on them, only on whether re-deriving it can be skipped — so neither is hashed, flattened or restored.
-    private readonly Dictionary<string, Dictionary<LatchKey, GateVersionEntry>> m_gateVersions = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<string, Dictionary<LatchKey, BindingMemo?[]>> m_bindingMemos = new(comparer: StringComparer.Ordinal);
-    // The sweep each binding was last touched in. Opening a sweep advances the counter instead of emptying a set, so
-    // an open costs nothing however many bindings earlier sweeps touched; an entry leaves with the binding a sweep
-    // closes, so the table holds at most the bindings some rule still carries.
-    private readonly Dictionary<LatchKey, ulong> m_touched = [];
+    // The scheduler's caches for one binding: the sweep that last touched it, the row versions its gate observed when
+    // it last closed under GateOwner's schedule, and its memoized local values.
+    internal sealed class BindingSchedule {
+        public ulong Touched;
+        public object? GateOwner;
+        public ulong[] GateVersions = [];
+        public BindingMemo?[]? Memos;
+    }
 
-    private ulong m_sweep;
+    private readonly Dictionary<string, RuleState> m_byRule = new(comparer: StringComparer.Ordinal);
+
+    // Starts above zero, the sweep a fresh or reset binding schedule reads as last touched in, so it reads untouched.
+    private ulong m_sweep = 1UL;
 
     private readonly List<HashEntry> m_hashScratch = [];
 
@@ -62,23 +90,11 @@ public sealed class RuleLatch {
         get {
             var count = 0;
 
-            foreach (var bindings in m_byRule.Values) {
-                count += bindings.Count;
+            foreach (var state in m_byRule.Values) {
+                count += state.Held.Count;
             }
 
             return count;
-        }
-    }
-
-    private static void PruneRuleNames<TValue>(Dictionary<string, TValue> dictionary, HashSet<string> live) {
-        if (dictionary.Count == 0) {
-            return;
-        }
-
-        foreach (var name in dictionary.Keys) {
-            if (!live.Contains(item: name)) {
-                _ = dictionary.Remove(key: name);
-            }
         }
     }
 
@@ -100,7 +116,7 @@ public sealed class RuleLatch {
 
             if (!m_byRule.TryGetValue(
                 key: rule.Name,
-                value: out var bindings
+                value: out var state
             )) {
                 hash.Add(value: 0U);
 
@@ -108,7 +124,7 @@ public sealed class RuleLatch {
             }
 
             m_hashScratch.Clear();
-            foreach (var (binding, held) in bindings) {
+            foreach (var (binding, held) in state.Held) {
                 m_hashScratch.Add(item: new HashEntry(
                     Binding: binding,
                     Held: held,
@@ -156,50 +172,20 @@ public sealed class RuleLatch {
     );
 
     private readonly record struct HashEntry(LatchKey Binding, bool Held, ulong Left);
-    /// <summary>Opens a sweep over one rule's bindings; entries the sweep does not <see cref="Touch"/> are closed by
-    /// <see cref="EndSweep(Dictionary{LatchKey, bool})"/>.</summary>
+    /// <summary>Opens a sweep over one rule's bindings; entries the sweep does not touch are closed by
+    /// <see cref="EndSweep"/>.</summary>
     public void BeginSweep() => m_sweep++;
-    /// <summary>Returns one rule's per-ordinal binding memo array, sized to <paramref name="count"/>. A stale array
-    /// — a recompile changed the binding count — is replaced, discarding its cached values.</summary>
+    /// <summary>Returns one rule's state, minting it on first use.</summary>
     /// <param name="name">The rule's name.</param>
-    /// <param name="binding">The binding this evaluation runs under.</param>
-    /// <param name="count">The rule's current binding count.</param>
-    /// <returns>The memo array.</returns>
-    public BindingMemo?[] BindingMemos(string name, LatchKey binding, int count) {
-        ref var byBinding = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: m_bindingMemos,
-            exists: out _,
-            key: name
-        );
-
-        byBinding ??= [];
-
-        ref var memos = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: byBinding,
-            exists: out _,
-            key: binding
-        );
-
-        if (
-            (memos is null) ||
-            (memos.Length != count)
-        ) {
-            memos = new BindingMemo?[count];
-        }
-
-        return memos;
-    }
-    /// <summary>Returns one rule's bindings, minting the dictionary on first use.</summary>
-    /// <param name="name">The rule's name.</param>
-    /// <returns>The bindings.</returns>
-    public Dictionary<LatchKey, bool> Bindings(string name) {
-        ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(
+    /// <returns>The state.</returns>
+    public RuleState Rule(string name) {
+        ref var state = ref CollectionsMarshal.GetValueRefOrAddDefault(
             dictionary: m_byRule,
             exists: out _,
             key: name
         );
 
-        return (bindings ??= []);
+        return (state ??= new RuleState());
     }
     /// <summary>Forgets every bound entry and every cached verdict while keeping the storage each rule has grown,
     /// so a caller that judges many positions from a clean latch allocates nothing per position.</summary>
@@ -207,83 +193,66 @@ public sealed class RuleLatch {
     /// rule's emptied storage is still enumerated by name, so a latch that is hashed or checkpointed uses
     /// <see cref="Clear"/>.</remarks>
     public void Reset() {
-        foreach (var bindings in m_byRule.Values) {
-            bindings.Clear();
-        }
-        foreach (var memos in m_bindingMemos.Values) {
-            foreach (var slots in memos.Values) {
-                Array.Clear(array: slots);
+        foreach (var state in m_byRule.Values) {
+            state.Held.Clear();
+            Forget(schedule: state.Once);
+            foreach (var schedule in state.Scheduling.Values) {
+                Forget(schedule: schedule);
             }
         }
 
-        m_gateVersions.Clear();
-        m_touched.Clear();
+        static void Forget(BindingSchedule? schedule) {
+            if (schedule is null) {
+                return;
+            }
+            schedule.Touched = 0UL;
+            schedule.GateOwner = null;
+            if (schedule.Memos is { } memos) {
+                Array.Clear(array: memos);
+            }
+        }
     }
     /// <summary>Forgets every entry, including the scheduler's own caches.</summary>
-    public void Clear() {
-        m_bindingMemos.Clear();
-        m_byRule.Clear();
-        m_gateVersions.Clear();
-        m_touched.Clear();
-    }
+    public void Clear() => m_byRule.Clear();
     /// <summary>Forgets scheduler observations while preserving every edge-held binding.</summary>
     /// <remarks>Use this when the backing arena is replaced by an equivalent layout whose row-version counters
     /// begin again. The held bits describe rule semantics and survive; cached versions and lexical values belong
     /// to the retired arena.</remarks>
     public void InvalidateScheduler() {
-        foreach (var bindings in m_gateVersions.Values) {
-            foreach (var entry in bindings.Values) {
-                entry.Owner = null;
+        foreach (var state in m_byRule.Values) {
+            Invalidate(schedule: state.Once);
+            foreach (var schedule in state.Scheduling.Values) {
+                Invalidate(schedule: schedule);
             }
         }
-        foreach (var bindings in m_bindingMemos.Values) {
-            foreach (var slots in bindings.Values) {
-                foreach (var memo in slots) {
-                    if (memo is not null) {
-                        memo.Owner = null;
-                    }
+
+        static void Invalidate(BindingSchedule? schedule) {
+            if (schedule is null) {
+                return;
+            }
+            schedule.GateOwner = null;
+            foreach (var memo in (schedule.Memos ?? [])) {
+                if (memo is not null) {
+                    memo.Owner = null;
                 }
             }
         }
     }
-    /// <summary>Closes the sweep: every binding not touched since <see cref="BeginSweep"/> is removed.</summary>
-    /// <param name="bindings">The swept rule's bindings.</param>
-    public void EndSweep(Dictionary<LatchKey, bool> bindings) {
-        ArgumentNullException.ThrowIfNull(argument: bindings);
+    /// <summary>Closes the sweep: every binding of the rule not touched since <see cref="BeginSweep"/> is removed,
+    /// with the scheduler's caches for it.</summary>
+    /// <param name="state">The swept rule's state.</param>
+    public void EndSweep(RuleState state) {
+        ArgumentNullException.ThrowIfNull(argument: state);
 
         // Dictionary.Remove does not invalidate an in-flight enumerator.
-        foreach (var pair in bindings) {
-            if (!Touched(binding: pair.Key)) {
-                _ = bindings.Remove(key: pair.Key);
-                _ = m_touched.Remove(key: pair.Key);
+        foreach (var pair in state.Held) {
+            if (!Touched(state: state, binding: pair.Key)) {
+                _ = state.Held.Remove(key: pair.Key);
             }
         }
-    }
-    /// <summary>Closes the sweep like <see cref="EndSweep(Dictionary{LatchKey, bool})"/>, and also drops the named
-    /// rule's scheduler caches for every binding the sweep did not touch.</summary>
-    /// <param name="name">The swept rule's name.</param>
-    /// <param name="bindings">The swept rule's bindings.</param>
-    public void EndSweep(string name, Dictionary<LatchKey, bool> bindings) {
-        EndSweep(bindings: bindings);
-
-        if (m_gateVersions.TryGetValue(
-            key: name,
-            value: out var versions
-        )) {
-            foreach (var entry in versions) {
-                if (!Touched(binding: entry.Key)) {
-                    _ = versions.Remove(key: entry.Key);
-                }
-            }
-        }
-        if (m_bindingMemos.TryGetValue(
-            key: name,
-            value: out var memos
-        )) {
-            foreach (var entry in memos) {
-                if (!Touched(binding: entry.Key)) {
-                    _ = memos.Remove(key: entry.Key);
-                }
+        foreach (var pair in state.Scheduling) {
+            if (pair.Value.Touched != m_sweep) {
+                _ = state.Scheduling.Remove(key: pair.Key);
             }
         }
     }
@@ -295,44 +264,24 @@ public sealed class RuleLatch {
     public void Flatten(List<(string Rule, LatchKey Binding, bool Held)> into) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        foreach (var (name, bindings) in m_byRule) {
-            foreach (var (binding, held) in bindings) {
+        foreach (var (name, state) in m_byRule) {
+            foreach (var (binding, held) in state.Held) {
                 into.Add(item: (name, binding, held));
             }
         }
     }
-    /// <summary>Returns the row versions a rule's binding observed the last time its gate closed under the same
-    /// schedule instance, or <see langword="null"/> when never recorded or when the recorded entry's owner no longer
-    /// matches.</summary>
-    /// <param name="name">The rule's name.</param>
-    /// <param name="binding">The binding.</param>
-    /// <param name="owner">The schedule instance the caller will compare the versions against.</param>
-    /// <returns>The versions, or <see langword="null"/>.</returns>
-    public ulong[]? GateVersions(string name, LatchKey binding, object owner) => ((m_gateVersions.TryGetValue(
-        key: name,
-        value: out var bindings
-    ) && bindings.TryGetValue(
-        key: binding,
-        value: out var entry
-    ) && ReferenceEquals(
-        objA: entry.Owner,
-        objB: owner
-    ))
-        ? entry.Versions
-        : null
-    );
     /// <summary>Returns whether the gate held at the last evaluation of any binding of the rule.</summary>
     /// <param name="name">The rule's name.</param>
     /// <returns><see langword="true"/> when some binding held.</returns>
     public bool Held(string name) {
         if (!m_byRule.TryGetValue(
             key: name,
-            value: out var bindings
+            value: out var state
         )) {
             return false;
         }
 
-        foreach (var held in bindings.Values) {
+        foreach (var held in state.Held.Values) {
             if (held) {
                 return true;
             }
@@ -360,15 +309,6 @@ public sealed class RuleLatch {
                 _ = m_byRule.Remove(key: name);
             }
         }
-
-        PruneRuleNames(
-            dictionary: m_bindingMemos,
-            live: live
-        );
-        PruneRuleNames(
-            dictionary: m_gateVersions,
-            live: live
-        );
     }
     /// <summary>Restores one flattened entry.</summary>
     /// <param name="name">The rule's name.</param>
@@ -377,36 +317,20 @@ public sealed class RuleLatch {
     public void Restore(string name, LatchKey binding, bool held) {
         ArgumentNullException.ThrowIfNull(argument: name);
 
-        Bindings(name: name)[binding] = held;
-    }
-    /// <summary>Records the row versions a rule's binding observed when its gate closed, against the schedule
-    /// instance that computed them.</summary>
-    /// <param name="name">The rule's name.</param>
-    /// <param name="binding">The binding.</param>
-    /// <param name="owner">The schedule instance the versions were captured against.</param>
-    /// <param name="versions">The versions.</param>
-    public void SetGateVersions(string name, LatchKey binding, object owner, ulong[] versions) {
-        ref var bindings = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: m_gateVersions,
-            exists: out _,
-            key: name
-        );
-        ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: (bindings ??= []),
-            exists: out _,
-            key: binding
-        );
-
-        entry ??= new GateVersionEntry();
-        entry.Owner = owner;
-        entry.Versions = versions;
+        Rule(name: name).Held[binding] = held;
     }
     /// <summary>Marks a binding as evaluated in the open sweep.</summary>
+    /// <param name="state">The rule's state.</param>
     /// <param name="binding">The binding.</param>
-    public void Touch(LatchKey binding) => m_touched[binding] = m_sweep;
+    public void Touch(RuleState state, LatchKey binding) {
+        ArgumentNullException.ThrowIfNull(argument: state);
 
-    private bool Touched(LatchKey binding) => (m_touched.TryGetValue(
-        key: binding,
-        value: out var sweep
-    ) && (sweep == m_sweep));
+        state.Binding(binding: binding).Touched = m_sweep;
+    }
+
+    internal void Touch(BindingSchedule schedule) => schedule.Touched = m_sweep;
+
+    private bool Touched(RuleState state, LatchKey binding) => (binding.Equals(other: LatchKey.None)
+        ? (state.Once?.Touched == m_sweep)
+        : (state.Scheduling.TryGetValue(key: binding, value: out var schedule) && (schedule.Touched == m_sweep)));
 }

@@ -1,9 +1,8 @@
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using Puck.Testing;
-using Xunit;
 
-namespace Puck.Assets.Tests;
+namespace Puck.Abstractions.Tests;
 
 // AtomicFile is the one temp-then-rename writer. A write either lands whole or leaves the directory as it found it:
 // the destination keeps its old bytes and no temporary file survives the failure.

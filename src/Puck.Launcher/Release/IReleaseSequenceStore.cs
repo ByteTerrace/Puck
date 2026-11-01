@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Attestation;
 using System.Globalization;
@@ -93,15 +94,6 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
     private readonly string m_filePath = Path.GetFullPath(path: filePath);
     private readonly Lock m_gate = new();
 
-    private FileStream? TryAcquireLease() {
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: m_filePath)!);
-        try {
-            return new FileStream(path: m_filePath + ".lock", mode: FileMode.OpenOrCreate, access: FileAccess.ReadWrite, share: FileShare.None);
-        } catch (IOException) {
-            return null;
-        }
-    }
-
     private Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> ReadMarks() {
         var marks = new Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)>();
 
@@ -173,7 +165,7 @@ public sealed class FileReleaseSequenceStore(string filePath) : IReleaseSequence
             Dictionary<(string Domain, string Subject), (long EpochStart, ulong Sequence, ContentPin? ManifestPin)> marks;
 
             // Keep the lease file in place: deleting it could give two processes locks on different inodes.
-            using var lease = TryAcquireLease();
+            using var lease = FileLock.TryAcquire(path: (m_filePath + ".lock"));
             if (lease is null) { return false; }
 
             try {

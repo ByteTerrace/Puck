@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Puck.Abstractions;
 using Puck.Confinement;
 
 namespace Puck.Cli;
@@ -269,9 +270,8 @@ public sealed class CliLease : IDisposable {
             var next = (Directory.EnumerateFiles(path: rotation).Where(predicate: file => (Path.GetExtension(path: file) != ".tmp")).Select(selector: Served).DefaultIfEmpty().Max() + 1);
             var path = LanePath(lane: lane, rotation: rotation);
 
-            // Written aside and moved over, so a waiter reading the serial never sees it half written.
-            File.WriteAllText(path: (path + ".tmp"), contents: next.ToString(provider: CultureInfo.InvariantCulture));
-            File.Move(destFileName: path, overwrite: true, sourceFileName: (path + ".tmp"));
+            // Replaced whole, so a waiter reading the serial never sees it half written.
+            AtomicFile.WriteAllText(path: path, contents: next.ToString(provider: CultureInfo.InvariantCulture));
         } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private static void Leave(string? ticket) {
@@ -307,12 +307,8 @@ public sealed class CliLease : IDisposable {
     }
 
     private static CliLease? TryAcquire(string directory, string holder, string lane, TimeProvider clock) {
-        FileStream gate;
-
-        try {
-            // Keep the guard inode: unlinking it lets two processes lock different files at the same path.
-            gate = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: (directory + ".guard"), share: FileShare.None);
-        } catch (IOException exception) when (((exception.HResult & 0xffff) is 11 or 32 or 33)) {
+        // Keep the guard inode: unlinking it lets two processes lock different files at the same path.
+        if (FileLock.TryAcquire(path: (directory + ".guard")) is not { } gate) {
             return null;
         }
         try {
@@ -324,7 +320,7 @@ public sealed class CliLease : IDisposable {
                 Serve(lane: lane, rotation: (directory + ".rotation"));
                 return new CliLease(directory: directory, gate: gate);
             } catch {
-                try { ConfinedDirectory.RemoveTree(path: directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
+                try { ConfinedDirectory.RemoveTree(path: directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
                 throw;
             }
         } catch {
@@ -349,6 +345,6 @@ public sealed class CliLease : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        try { ConfinedDirectory.RemoveTree(path: m_directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { } finally { m_gate.Dispose(); }
+        try { ConfinedDirectory.RemoveTree(path: m_directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { } finally { m_gate.Dispose(); }
     }
 }

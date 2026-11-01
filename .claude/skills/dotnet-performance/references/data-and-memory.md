@@ -74,9 +74,11 @@ survivors and with old-to-young references, not with the garbage.
   finalization-queue promotions in every gen0 until it read frames through the
   raw ABI.
 - **Arrays of 85,000 bytes or more go to the LOH**, which only a gen2 collects.
-  Measuring the render envelope by building a whole program per lights change
-  churned a sampled 61.9 GB of LOH (`SdfInstruction[]`, packed `uint[]`) until
-  it measured by emission into reused storage. The World sets
+  `WorldRenderEnvelope.TryFit` measured each responding placement a light
+  switch flips (eight a `lights.all`) by building a whole `SdfProgram` from
+  empty, which churned a sampled 61.9 GB of LOH in 45 s over two Off/On pairs
+  (`SdfInstruction[]` 35.7 GB, packed `uint[]` 18.3 GB) until it measured by
+  emission into reused storage (3.3 GB). The World sets
   `System.GC.ConserveMemory` to 5 ([`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj))
   because it frees large arrays in bursts.
 
@@ -104,8 +106,8 @@ the order it reads them, and what it never reads lives elsewhere.
   ([`SdfMesh.cs:139-152`](../../../../src/Puck.SdfVm/SdfMesh.cs)), so the trace
   reads positions and indices alone and never copies them (a copy of the debug
   world's meshes is about 1.1 GB).
-- **Keep cold state off the hot path.** A step captures a 45-field
-  `WorldBodyIntegrationResidue` plus transfer state for every body every step
+- **Keep cold state off the hot path.** A step captures a 46-field
+  [`WorldBodyIntegrationResidue`](../../../../src/Puck.World.Server/WorldBodyIntegrationResidue.cs) (`:83`) plus transfer state for every body every step
   ([`WorldBody.SweepRefusal.cs:71-84`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)),
   read only when a sweep is refused; that capture is 7 to 8 % of a rigid body's
   advance (open below).
@@ -122,9 +124,15 @@ by value, captured into a snapshot or copied out of a collection repeats it.
 
 - **Measured here.** `SdfMeshIrradiance.TraceProbe` copied its probe record once
   per neighbour bit (up to 26 a probe): 171 of 289 MiB sampled on a cold walk
-  until it filled its fields and built one record. The previous mesh table now
-  copies changed draws as one range instead of one 64-byte copy per moving draw,
-  657 ms to 13 ms per 20 s of sampled produce.
+  until it filled its fields and built one record.
+- **Fewer, larger commands is the same rule on the GPU's recorder.** The
+  previous mesh table's history copy records a device-side `CopyBuffer` per
+  changed range ([`SdfWorldTables.Motion.cs:157-180`](../../../../src/Puck.SdfVm/SdfWorldTables.Motion.cs)),
+  not a span copy on the CPU. It holds whole draw records at the mesh region's
+  stride, so the changed draws record one command per run instead of one
+  64-byte command per moving draw (about 128 a frame): 657 ms to 13 ms per 20 s
+  of sampled produce. The GPU's own coalescing is a separate rule
+  ([gpu-cost](../../rendering/references/gpu-cost.md#coalesce-memory-access)).
 - **Read in place.** Pass a large struct by `in` or `ref readonly`, keep it
   `readonly` so the compiler makes no defensive copy, and iterate with
   `ref readonly var x = ref array[i]` as the scene walk does (`:307`).
@@ -142,9 +150,10 @@ The runtime zeroes every new array and, without `[SkipLocalsInit]`, every
 nothing.
 
 - **Done right.** `WireArgs.Tail` marks itself `[SkipLocalsInit]` because its
-  scratch is written before it is read ([`WireArgs.cs:97`](../../../../src/Puck.Commands/WireArgs.cs));
-  `BatchInverseKernel` sizes its `stackalloc` to the batch, not the threshold,
-  because the assembly zeroes what it reserves
+  scratch is written before it is read ([`WireArgs.cs:97`](../../../../src/Puck.Commands/WireArgs.cs)).
+  Both it (`:114`) and `BatchInverseKernel` size their `stackalloc` to the
+  request, not the threshold; `BatchInverseKernel`'s assembly has no
+  `SkipLocalsInit`, so the sizing also keeps it from zeroing the unused part
   ([`BatchInverseKernel.cs:68`](../../../../src/Puck.Maths/FiniteFields/BatchInverseKernel.cs)).
 - **Budget the stack.** A `stackalloc` takes a constant cap or a length checked
   against a threshold, with an `ArrayPool` or heap fallback above it

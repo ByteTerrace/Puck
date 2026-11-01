@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Confinement;

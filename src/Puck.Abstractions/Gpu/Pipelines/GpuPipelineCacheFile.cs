@@ -159,35 +159,14 @@ public sealed class GpuPipelineCacheFile {
             oldChar: '\\'
         );
     private bool Save(string path, ReadOnlySpan<byte> data) {
-        var temporary = $"{path}.{Environment.ProcessId}-{Guid.NewGuid():N}.tmp";
-
         try {
-            Directory.CreateDirectory(path: System.IO.Path.GetDirectoryName(path: path)!);
-
-            using (var stream = new FileStream(
-                access: FileAccess.Write,
-                mode: FileMode.CreateNew,
-                path: temporary,
-                share: FileShare.None
-            )) {
-                stream.Write(buffer: data);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(
-                destFileName: path,
-                overwrite: true,
-                sourceFileName: temporary
+            AtomicFile.WriteAllBytes(
+                bytes: data,
+                path: path
             );
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            try {
-                File.Delete(path: temporary);
-            } catch (Exception cleanup) when ((cleanup is IOException or UnauthorizedAccessException)) {
-                // The temporary name is unique to this write; a leftover is never read.
-            }
-
             Console.Error.WriteLine(value: $"[pipeline-cache] not written {path}: {exception.Message}");
 
             return false;

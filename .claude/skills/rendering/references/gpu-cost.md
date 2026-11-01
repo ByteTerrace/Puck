@@ -30,15 +30,17 @@ supports both APIs ([NV-SHPROF]). Launch the World under the dotnet host, never
   --args "src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices none --backend directx"
   --start-after-hotkey --limit-to-frames 3 --set-gpu-clocks base
   --architecture Ada --metric-set-name "Throughput Metrics" --real-time-shader-profiler
-  --output-dir <worktree>/.claude/scratch/<lane>-gputrace
+  --auto-export --output-dir <worktree>/.claude/scratch/<lane>-gputrace
 ```
 
 Every flag above is in `ngfx --help-all` of the installed 2026.2 (the RTX 4070
 is `Ada`; its metric sets are `Async Compute Triage`, `Throughput Metrics` and
-`Top-Level Triage`). Unverified here: which Ada metric set carries the
-real-time shader profiler (the UI marks compatible sets with a flame), and
-whether the report writes without the UI open. Press F11 once the bake and GI
-have settled. In the report:
+`Top-Level Triage`; `--auto-export` exports the metrics data after the trace).
+Unverified here: which Ada metric set carries the real-time shader profiler
+(the UI marks compatible sets with a flame), whether the export holds the
+Shader Pipelines table, and whether the report writes without the UI open; open
+the capture in `ngfx-ui` when the table is missing. Press F11 once the bake and
+GI have settled. In the report:
 
 - **Shader Pipelines table:** `# Reg` is registers per thread and `# Warp` the
   maximum theoretical warp occupancy, its tooltip naming the limiting resource
@@ -68,10 +70,34 @@ set; the low 32 bits are the bytes). A capture read this way found views at 128
 registers and 176 bytes of local memory before the local-array fix.
 
 **Turn registers into occupancy.** An Ada SM holds 64K 32-bit registers and at
-most 48 warps of 32 threads ([NV-ADA], [NV-CCAP]): warps ≤ 65,536 ÷ (32 ×
-registers). 128 registers allow 16 warps (33 %), 168 allow 12 (25 %); GPU
-Trace's reading of views at 168 registers on Direct3D 12 and 24 % warp
-occupancy is this arithmetic.
+most 48 warps of 32 threads ([NV-ADA], [NV-CCAP]). Registers are handed out per
+warp in units of 256 (8 a thread, [NV-CCAP]), and the SM's four schedulers each
+own a 16,384-register slice and an equal share of the warps, so the resident
+warps are a step function of the register count, not 65,536 ÷ (32 × registers):
+
+```text
+warps ≤ min(48, 4 × ⌊16,384 ÷ roundUp(32 × registers, 256)⌋)
+```
+
+| Registers a thread | Warps | Occupancy |
+|---|---|---|
+| ≤ 40 | 48 | 100 % |
+| 41 to 48 | 40 | 83 % |
+| 49 to 56 | 36 | 75 % |
+| 57 to 64 | 32 | 67 % |
+| 65 to 72 | 28 | 58 % |
+| 73 to 80 | 24 | 50 % |
+| 81 to 96 | 20 | 42 % |
+| 97 to 128 | 16 | 33 % |
+| 129 to 168 | 12 | 25 % |
+| 169 to 255 | 8 | 17 % |
+
+Cutting registers helps only when the count crosses a row's lower edge: 140 and
+168 both leave 12 warps, and 108 and 128 both leave 16. A block size that does
+not divide the warps rounds them down further. The table is derived from the
+unit and the split, so confirm a kernel against GPU Trace's `# Warp`. Views at
+168 registers on Direct3D 12 allows 12 warps (25 %); GPU Trace's 24 % is the
+achieved `SM Warp Occupancy`, not the limit.
 
 ## Registers set occupancy; occupancy is not speed
 
@@ -102,8 +128,11 @@ also thrash the caches ([AMD-OCC]).
 A dynamically indexed local array can live in per-thread local memory, which is
 device memory behind the caches, as register spills are ([NV-BP], [AMD-OCC]).
 The [SKILL](../SKILL.md#editing-kernels) owns the rule; read "Local Memory
-Size" to confirm it. The RTX 4070 read views at 176 bytes and the sky at 144
-until every such loop unrolled to a constant index, then 0.
+Size" to confirm it. On Vulkan, RenderDoc's executable statistics read views at
+176 bytes (the material's paint stops and weathering stages, the volume ramp)
+and the sky at 144 (its upper-run summaries and the star spectrum table) on the
+RTX 4070, until every such loop unrolled to a constant index, then 0. No
+Direct3D 12 reading of local memory is recorded.
 
 ## Keep a wave on one path
 
@@ -151,7 +180,13 @@ different words of one bank serialize.
 - **Done right.** The views filter tile stores each field in its own array
   (`float4` positions, `uint` shadows, `uint` normals,
   [`sdf-views-stage.hlsli:13-15`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)),
-  read at unit stride.
+  so no array is a struct of fields a lane reads one of.
+- **Not conflict-free.** The tile is 11 words wide and an 8×8 group's warp is
+  eight lanes by four rows, so a `uint` read at `(lane.y + y) * 11 + lane.x + x`
+  puts row 0 (words 1 to 7) and row 3 (words 33 to 39) on the same banks: a
+  2-way conflict on `sdfViewsFilterShadows` and `sdfViewsFilterNormals`, 32 reads
+  a pixel (`:77-82`). The `float4` array reads a quarter-warp at a time, one tile
+  row of eight consecutive entries. Unmeasured.
 - **Wrong today.** The sky environment reduction stores `[28][64]` floats and
   then has each of 28 lanes read its row at the same column
   ([`sdf-sky-environment-reduce.comp.hlsl:13,49`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-sky-environment-reduce.comp.hlsl)):
@@ -265,7 +300,8 @@ batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
   ([rendering plan](../../../../docs/plans/rendering.md#open-items),
   [hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
 - **Views record on tick frames** ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
-- **The sky reduction's bank conflict** and **the bake's `SdfBakeTaps`,**
+- **The sky reduction's bank conflict,** **the views filter tile's 2-way
+  conflict** and **the bake's `SdfBakeTaps`,**
   indexed by the `[loop]` counter, the shape the local-array rule forbids,
   whose local memory no capture has read
   ([frame time](../../../../docs/plans/open-items.md#frame-time-on-the-lead-machine),

@@ -153,8 +153,8 @@ laws exercise that boundary.
   whatever its size; one under a pixel ranks after. Ranking by projected size
   instead let far terrain and shells outrank the lobby's small parts, and the
   occupied area landed no sooner than in plan order. `TryTakeForFrame` takes
-  lattices, the work queue (`Schedule`, one worker a processor) runs store
-  loads and every CPU stage of the bake, and `SdfWorldTables.WriteOwedMeshes`
+  lattices, the work queue (`Schedule`) runs store loads, lattice answers and
+  every CPU stage of the bake, and `SdfWorldTables.WriteOwedMeshes`
   writes owed mesh words in that order, the plan's or the list's order among
   equals and a draw no host box bounds first. With no demand point (the CPU
   laws, `puck mesh audit --cpu`) the plan's order stands. Order never changes
@@ -162,6 +162,22 @@ laws exercise that boundary.
   resident from the bake's start, near the primary seat's eye and everywhere,
   with the store's reads, the region's landing, program build times and the
   probe cache's bytes.
+- **The bake's CPU work is one process-wide pool.** `SdfMeshPathBake.Schedule`
+  queues every residency's work on one pool of a worker a processor: the
+  lattice answers (decoding a readback and narrowing a group) first, in arrival
+  order, then the stages by group priority. A pool per residency oversubscribes
+  the processors three times over on the debug world, and workers below normal
+  priority lose them to the irradiance trace and the machines (526 s against
+  215 s cold). The frame thread only copies a batch's readback; it never
+  decodes one. Only
+  `MaxAdmitted` groups (twice the workers) hold a final lattice at once
+  (admitted at its first slab): unadmitted groups keep refining their small
+  coarse lattices, and the meshing's working memory stays a few dozen groups'
+  worth instead of every group's, whose collections pause for seconds.
+- **One geometry bakes once a bake.** A group whose sealed geometry another
+  group of the same restart already bakes or loads waits on it
+  (`Group.Leader`, `Follow`) and takes the library's mesh, renumbered, when the
+  leader lands; the debug world plans 1,115 of its 2,090 groups that way.
 - **Large static unions draw in chunks.** `SdfMeshChunks` partitions the finished contour's triangles by their
   centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
@@ -513,14 +529,32 @@ laws exercise that boundary.
   (`WorldStateSettlement.SettleResponses`), so the debug world's raised blinds
   never reach the first plan; look for another tick-one change (a rule, a deal)
   when the line comes back.
-- **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` bounds the
-  field evaluations a 60 Hz frame's bake dispatch makes (a gradient sample
-  counts five), and a longer frame takes a share for each whole 60 Hz frame it
-  spans, up to eight (`FrameBudget`); every lattice is chunked to fit one share
-  (final lattices in slabs, material and gradient, fine and material points in
-  chunks). Gradients are measured only at the samples `SdfDualContouring` reads
-  a normal at (`SdfSampledLattice.GradientPoints`): a cell's normal reads its
-  own eight corners, so no other sample needs one.
+- **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` (a
+  million) bounds the field evaluations a 60 Hz frame's bake dispatch makes (a
+  gradient sample counts five), about a millisecond of the lead machine's GPU,
+  and a longer frame takes a share for each whole 60 Hz frame it spans, up to
+  eight (`FrameBudget`); every lattice is chunked to fit one share (final
+  lattices in slabs, material and gradient, fine and material points in
+  chunks). One dispatch holds up to `SdfWorldPackage.MeshBakeBatch` lattices
+  (240: their rows fill the bake pass block to the portable 16 KiB uniform
+  limit) and `MeshBakeMaxSamples` (2^20) samples; the kernel finds a sample's
+  lattice by binary search over their first samples. A dispatch sized to the
+  frame's CPU rather than the GPU leaves the GPU idle and hundreds of groups a
+  frame waiting for one; `world.gpu-timing` reads the bake pass's cost. Gradients
+  are measured only at the samples
+  `SdfDualContouring` reads a normal at (`SdfSampledLattice.GradientPoints`): a
+  cell's normal reads its own eight corners, so no other sample needs one.
+- **A mesh never depends on how its lattices are cut.** A slab keeps its final
+  lattice's origin and names its first plane in the lattice's mode word, so its
+  samples lie at `origin + (x, y, slab + z) * cell` exactly as the whole
+  lattice's would; a slab origin offset by `slab * cell` moves samples by an ulp
+  and changes meshes whenever the share changes. `UnionFinal`'s plane limit is
+  its own constant (`UnionPlaneSamples`), not the share. Check a change to the
+  bake's chunking, scheduling or CPU speed with `puck mesh audit --cpu --group
+  <shapes>`: its done line's samples, triangles, vertices and level counts must
+  not move. Stages that hold a worker past two seconds log
+  `[sdf.mesh-bake] slow … stage=…` with the group and its lattice, and the done
+  line's `kinds=` and `cpu=` split samples by stage and thread seconds by stage.
 
 ## The library and the store
 

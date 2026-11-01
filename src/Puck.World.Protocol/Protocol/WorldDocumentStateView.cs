@@ -253,7 +253,7 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
     }
     /// <summary>Applies one snapshot's cell writes (<see cref="WorldSnapshot.FieldCells"/>): a field write to the cells
     /// a field row is read from, and a document row's cells (a write naming a row) to the arena the view reads every
-    /// other row from, clocks included. It names each row a write moved, so the owner refreshes the mirror slots bound
+    /// other row from, clocks included. A row replacement rewrites only the cells it changes. It names each row a write moved, so the owner refreshes the mirror slots bound
     /// to it (<see cref="WorldStateMirror.RefreshRows"/>) or notes them for its next refresh. A write naming a field or
     /// a cell the delivered lattice does not hold is ignored. It allocates nothing unless the delivered lattice changed
     /// shape, which starts every field's cells at zero until the next full snapshot writes them.</summary>
@@ -272,10 +272,23 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         Span<bool> valueChanged = stackalloc bool[StateCapacity.MaxRows];
         var count = 0;
 
-        foreach (var delta in deltas) {
+        for (var index = 0; (index < deltas.Length); index++) {
+            var delta = deltas[index];
+
             if (delta.Row >= 0) {
                 if (((uint)delta.Row) >= ((uint)m_arena.Rows.Count)) { continue; }
-                if (delta.Cell < 0) { m_arena.BeginProjectionRow(rowOrdinal: delta.Row, count: checked((int)delta.Raw)); } else { m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image); }
+                if (delta.Cell >= 0) {
+                    m_arena.ImportProjectionCell(rowOrdinal: delta.Row, position: delta.Cell, image: delta.Image);
+                } else {
+                    var replaced = 0;
+
+                    while (((index + 1 + replaced) < deltas.Length) && (deltas[(index + 1 + replaced)].Row == delta.Row) && (deltas[(index + 1 + replaced)].Cell >= 0)) { replaced++; }
+                    if (!ReplaceRow(header: delta, cells: deltas.Slice(start: (index + 1), length: replaced))) {
+                        index += replaced;
+                        continue;
+                    }
+                    index += replaced;
+                }
                 if (!valueChanged[delta.Row]) { moved[count++] = delta.Row; valueChanged[delta.Row] = true; }
                 continue;
             }
@@ -309,6 +322,31 @@ public sealed class WorldDocumentStateView(Func<WorldDefinition> definition) : I
         }
 
         return count;
+    }
+    // Applies one row replacement: in place, position by position, when the row already holds the replacement's
+    // keys in order, so an unchanged cell costs a comparison; otherwise by clearing the row and importing every cell.
+    // Returns whether the row's stored cells changed.
+    private bool ReplaceRow(in FieldCellDelta header, ReadOnlySpan<FieldCellDelta> cells) {
+        var count = checked((int)header.Raw);
+
+        if ((cells.Length == count) && m_arena.HoldsProjectionShape(rowOrdinal: header.Row, count: count)) {
+            var changed = false;
+            var position = 0;
+
+            while ((position < count) && (cells[position].Cell == position) &&
+                m_arena.TryRefreshProjectionCell(rowOrdinal: header.Row, position: position, image: cells[position].Image, moved: out var cellMoved)) {
+                changed |= cellMoved;
+                position++;
+            }
+            if (position == count) {
+                return changed;
+            }
+        }
+        m_arena.BeginProjectionRow(rowOrdinal: header.Row, count: count);
+        foreach (var cell in cells) {
+            m_arena.ImportProjectionCell(rowOrdinal: header.Row, position: cell.Cell, image: cell.Image);
+        }
+        return true;
     }
     /// <summary>Applies one snapshot entry's action-state register file (<see cref="EntitySnapshot.State"/>) to the
     /// values its body's <see cref="WorldBodyStateReads.RowPrefix"/> rows read, noting each slot a value moved until

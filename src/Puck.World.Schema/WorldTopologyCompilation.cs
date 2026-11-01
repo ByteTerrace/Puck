@@ -14,25 +14,24 @@ public static class WorldTopologyCompilation {
         public CompiledTopology? Compiled;
     }
 
+    // Each placement list's board anchors by topology name. Rows are replaced wholesale, never mutated in place, so a
+    // list instance's anchors never change and are indexed once rather than scanned on every topology read.
+    private static readonly ConditionalWeakTable<IReadOnlyList<WorldPlacement>, Dictionary<string, WorldPlacement>> Anchors = new();
+
     // Every real placement carries at most one board facet naming this topology (validated: WorldDefinitionValidator.
     // Board.cs refuses a second placement claiming the same topology) — the first match is the only one there can be.
-    private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) {
-        var placements = definition.Placements;
+    private static WorldPlacement? FindAnchor(WorldDefinition definition, string topologyName) =>
+        Anchors.GetValue(key: definition.Placements, createValueCallback: static placements => {
+            var anchors = new Dictionary<string, WorldPlacement>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; (index < placements.Count); index++) {
-            var placement = placements[index];
-
-            if (string.Equals(
-                a: placement.Board?.Topology,
-                b: topologyName,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return placement;
+            for (var index = 0; (index < placements.Count); index++) {
+                if (placements[index].Board?.Topology is { } topology) {
+                    _ = anchors.TryAdd(key: topology, value: placements[index]);
+                }
             }
-        }
 
-        return null;
-    }
+            return anchors;
+        }).GetValueOrDefault(key: topologyName);
 
     /// <summary>Finds and compiles a discrete topology by name, anchored: a Grid topology a placement's <c>board</c>
     /// facet names (<see cref="WorldPlacementBoard.Topology"/>) takes its world origin from that placement's own

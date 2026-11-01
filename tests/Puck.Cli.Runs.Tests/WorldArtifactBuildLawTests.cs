@@ -623,11 +623,33 @@ public sealed class WorldArtifactBuildLawTests {
         }
 
         Assert.False(condition: Directory.Exists(path: agedBuilding));
-        Assert.False(condition: File.Exists(path: agedLock));
+        // A build lock is never deleted, however old: a builder may be opening it, and deleting it would let two
+        // builders lock different files at one path.
+        Assert.True(condition: File.Exists(path: agedLock));
         Assert.False(condition: File.Exists(path: agedLease));
         Assert.True(condition: Directory.Exists(path: freshBuilding));
         Assert.True(condition: File.Exists(path: freshLock));
         Assert.True(condition: File.Exists(path: heldLock));
+    }
+    [Fact]
+    public void AnOrphanSidecarThatCannotBeOpenedNeverFailsTheTakeThatPrunedBesideIt() {
+        using var checkout = new Checkout();
+        var store = checkout.Store;
+        var builder = new CountingBuilder();
+
+        using (Resolve(builder: builder, checkout: checkout, store: store)) { }
+        var orphan = Path.Combine(path1: store.Root, path2: "orphan.used");
+
+        File.WriteAllText(contents: string.Empty, path: orphan);
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddHours(value: -7), path: orphan);
+        File.SetAttributes(path: orphan, fileAttributes: FileAttributes.ReadOnly);
+        try {
+            using var again = Resolve(builder: builder, checkout: checkout, store: store);
+
+            Assert.Equal(actual: builder.Builds, expected: 1);
+        } finally {
+            File.SetAttributes(path: orphan, fileAttributes: FileAttributes.Normal);
+        }
     }
     [Fact]
     public void TheRepositoryKeyIsStableAcrossResolutions() {

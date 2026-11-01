@@ -47,8 +47,9 @@ blocked until it is taken.
 4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
    carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
-   lobby and the rim, so take the next ranked costs (rule evaluation, snapshot
-   delivery, the scoped replay hash) and re-read the stops windowed.
+   lobby and the rim and its latch, delivery and scope-hash waste is cut, so
+   re-read the stops windowed, then take relief contact and rule evaluation's
+   own gate and expression cost.
 5. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
@@ -81,8 +82,8 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    [the memo](simulation-thread.md)'s phases, one host loop first, then the
-    tick record and the step body on a worker.
+    [the memo](simulation-thread.md)'s phase 2, the tick record on one thread,
+    then the produce audit and the step body on a worker.
 
 ## Owner decisions
 
@@ -96,6 +97,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   client object on the frame thread; the lower-latency shape brings back the
   cross-thread protocols its review found unsafe
   ([simulation thread](simulation-thread.md#latency)).
+- Whether a cold bake pauses the irradiance preview (it re-traces about every
+  4 s on four workers, roughly 800 thread-seconds beside the bake's 1,670), so
+  the meshes land about a quarter sooner and the scene lights later
+  ([cold bake](#cold-bake-under-a-minute)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
@@ -143,7 +148,11 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Two field-contact solvers: relief contact's `FixedColliderField` measures
   distance as value over gradient length; `FixedFieldContactSolver` and the field
   provider (`WorldSolidField`) still read the value as the distance, hover on
-  relieved scopes and spend up to 1,033 samples a capsule. Make them one.
+  relieved scopes and spend up to 1,033 samples a capsule. Make them one. At the
+  valley rim, relief contact (`FixedFieldColliderContact.TryPush`,
+  `src/Puck.Physics/FixedColliderField.cs:49`) is about 18 % of a headless
+  tick; merging moves contact results, so it lands as a deliberate correction
+  with re-recorded hashes, not inside a pure performance lane.
 - Two ways to grow a GPU region: `SdfWorldTables.EnsureProgramCapacity` waits
   for the device to idle and rebuilds the program region whole, beside
   `GpuRegion.Grow`, which grows under every residency policy.
@@ -155,14 +164,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`
   deletes the browser's in-memory mount, where the confined removal refuses by
   design, and keeps its delete.
-- The host loop's duplicates, converged by
-  [the simulation thread](simulation-thread.md#6-duplicated-mechanisms-on-this-path)'s
-  phase 1: three host loops (`LauncherWindowHostedService.cs:395-720`,
-  `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`,
-  with the windowed lockstep branch a fourth copy), two step shells
-  (`WorldSimulation.cs:16`, `HeadlessWorldSimulation.cs:17`), two console
-  drains per windowed iteration, three simulation clocks the frame reads and
-  two interpolation fractions.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` (presentation) and the boot endpoint's
   `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121`); and three per-sink
@@ -175,33 +176,28 @@ The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
 velocity and correctness first; paths are under `src/`). `puck scan --only
 clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
 mostly short emulator `TransferState` bodies); the duplicates that matter are
-second implementations of one mechanism under other names:
+second implementations of one mechanism under other names (group 1, the
+file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
+`FileLock` and `Retry`; its remainder is filed here):
 
-1. File-system primitives (M, implementer). One survivor each: `AtomicFile`
-   (`Puck.Assets/AtomicFile.cs`) for writes, moved down to `Puck.Abstractions`
-   so its lowest caller reaches it; one exclusive file lock beside it; one retry.
-   - `[medium]` Six exclusive lock files, each with its own idea of contention:
-     `CliLease.TryAcquire` (`Puck.Cli.Core/CliLease.cs:308`, HResult low word
-     11/32/33), `ShaderBuild.AcquireLock` (`Puck.Shaders.Model/Compiler/ShaderBuild.Publication.cs:30`,
-     any `IOException` until a deadline), `ShaderPackager.LockPackageAsync`
-     (`Puck.Shaders/Packaging/ShaderPackager.Store.cs:182`, the precise test:
-     sharing violation or the platform's `EWOULDBLOCK` only), `WorldArtifactStore.TryOpen`/`Acquire`
-     (`Puck.Cli.Harness/WorldArtifactStore.cs:65`, any `IOException` or
-     `UnauthorizedAccessException`), `LawProofTree.TryAcquire` and `Prune`
-     (`Puck.Cli.Laws/LawProofTree.cs:55`), `FileReleaseSequenceStore.TryAcquireLease`
-     (`Puck.Launcher/Release/IReleaseSequenceStore.cs:96`). Every one but the
-     packager's treats a missing directory or a full disk as another holder and
-     waits out its deadline. Survivor: the packager's contention test, with a
-     try-once, a deadline and a cancellable wait.
-   - Hand-rolled temp-and-rename writes beside `AtomicFile`:
-     `GpuPipelineCacheFile.Save` (`Puck.Abstractions/Gpu/Pipelines/GpuPipelineCacheFile.cs:161`),
-     `ShaderBuild.Publish` (`ShaderBuild.Publication.cs:67`, with its own
-     `Retry` at 85 beside `CliRetry`), `CountersPipelineCache.Copy`
-     (`Puck.Cli.Runs/Counters/CountersPipelineCache.cs:41`),
-     `ShaderDeclarations` (`Puck.SdfVm.Model/ShaderDeclarations.cs:163`), and
-     `CliLease.Serve` (`CliLease.cs:265`), whose fixed `<path>.tmp` name two
-     writers share `[low]`. None keeps the mapped-file `File.Replace` fallback
-     `AtomicFile` has for Windows.
+1. File-system primitives, remainder (S, implementer). Temp-and-rename writes
+   `AtomicFile` cannot serve yet `[low]`: `ShaderCompiler.Entries.cs:49` publishes
+   a cache entry only if the name is absent (`File.Move` with no overwrite) and
+   wants an `AtomicFile` write that refuses to replace; `Puck.Launcher.Stub/StubHealth.cs:88`
+   and `StubInstall.cs:132` write beside the destination and rename, in a project
+   that references only `Puck.Confinement` and `Puck.Maths`; and
+   `Puck.Storage/DirectoryObjectBlobStoreBackend.cs:189` stages through a
+   confined directory handle. A lock file `FileLock` opens can be pending delete
+   on Windows when a stale-lock sweep (`WorldArtifactStore.PruneLocked`) removes
+   it as `AcquireBuild` opens it; the open then throws `UnauthorizedAccessException`
+   instead of waiting `[low]`. A seventh lock, `ConfinedDirectory.TryAcquireLock`/`AcquireLock`
+   (`Puck.Confinement/ConfinedDirectory.cs:173`, `188`), opens its file relative to
+   a directory handle without following links, with its own contention test
+   (`ConfinedDirectory.Windows.cs:213`, `ConfinedDirectory.Linux.cs:137`, which also
+   counts Windows lock violation 33). It sits in a BCL-only leaf below
+   `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
+   cannot replace it; whether the two contention tests should share one
+   definition is open.
 3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`
@@ -317,6 +313,76 @@ Duplicates the survey left to the lanes that own their areas:
   closure, so it lands with that lane's closure change.
 - Simulation thread: its host-loop duplicates are filed above; this survey
   found none beyond them.
+
+An independent audit (Antigravity) confirmed every group above as one
+mechanism implemented twice, with corrections a lane taking the group checks
+first:
+- Group 1: three of the five non-packager lock sites already refuse a missing
+  directory rather than waiting (`CliLease.TryAcquire` filters HResult 11, 32
+  and 33 at `Puck.Cli.Core/CliLease.cs:316`), so the `[medium]` overstates
+  them; a seventh lock lives in `Puck.Confinement` (`InstallRegistration.cs:134`).
+- Group 2: the vector-binding bug is not one: `BindableDirection`,
+  `BindableVector2` and `BindableVector3` bind no state row by design
+  (`Puck.World.Schema/BindableValue.cs:339`, `391`, `444`).
+- Group 3: `GpuRangeAllocator` and `GpuMemoryRanges` share first-fit and
+  neighbour coalescing; unify that core (array-backed, `ulong`, aligned) and
+  keep each caller's own bookkeeping.
+- Groups 5b, 6b, 7a, 8a and 8b hold for most named sites; the exceptions are
+  structural: `WorldTestBatch` and `OperatorWorlds` cannot reference
+  `Puck.Cli.Harness`, each `.Post` keeps its core-specific `EmbeddingStage`,
+  `WorldTabletopFrame.Footprint` stays a class for its `ConditionalWeakTable`,
+  and `PuckParser.ParseHexColor` (`Puck.Transpiler/Parsing/PuckParser.cs:1357`)
+  accepts `#RGB` and `#RGBA` that `HexColor.TryParse`
+  (`Puck.World.Authoring/Authoring/HexColor.cs:107`) refuses `[medium]`.
+
+The audit's blind scan found more, ranked by payoff (the lead confirmed the
+benchmark and AV1 items in the code; the rest are unconfirmed):
+1. Machine cores and hosts (M): `HumbleGamingBrickCore.RestoreState` and
+   `FlushSave` (`Puck.HumbleGamingBrick/Hosting/HumbleGamingBrickCore.cs:120`,
+   `245`), `AdvancedGamingBrickCore` (`:114`) and `HumbleGamingDeckCore`
+   (`:122`) each carry the save and restore lifecycle, and `MachineHost`,
+   `AdvancedMachineHost` and `DeckMachineHost` each forward
+   `IMachineMemoryPeek` and pin `DefaultMaximumPendingSteps = 8` beside
+   `QueuedMachineHost` (`Puck.Machines/QueuedMachineHost.cs:11`). Restoring a
+   GB/GBC checkpoint whose snapshot has `ExternalRamDirty == false` after an
+   earlier flush leaves the un-rewound save on disk `[medium]`; HGB writes saves
+   with `File.WriteAllBytes`, not `AtomicFile` `[low]`.
+2. `WorldCompileCache.ComputeCompilerIdentity` and `Trim`
+   (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
+   `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
+   `CompiledWorld.ComputeEngineBuild` and `CacheRetention.EnforceOnWrite`,
+   skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
+   write (S) `[low]`.
+3. The machine benchmark harness, written twice
+   (`Puck.AdvancedGamingBrick.Post/BenchDiagnostic.cs`,
+   `Puck.HumbleGamingBrick.Post/BenchDiagnostic.cs`, M); HGB's `determinismHeld`
+   accumulates across rows (`:678-681`), so every row after a broken one prints
+   `<< DETERMINISM BROKEN` `[low]` (confirmed).
+4. Camera plane validation and L8/BGRA packing:
+   `Win32FaceAuthenticationPixelGraph`
+   (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
+   `CameraFramePacking` (`Puck.Platform/CameraFramePacking.cs:15`); the first
+   throws on a bottom-up (negative stride) frame (S) `[low]`.
+5. AV1 OBU framing: `Av1Bitstream.TryReadObu`
+   (`Puck.Platform.Windows/Recording/Av1Bitstream.cs:273`) beside
+   `Av1TemporalDelimiterFilter.Strip`
+   (`Puck.Recording/Session/Av1TemporalDelimiterFilter.cs:30`); the first omits
+   the forbidden-bit check the second makes (S) `[low]` (confirmed).
+6. Latest-value seqlock publication: `PublishBuffer<T>`
+   (`Puck.Hosting/PublishBuffer.cs:12`) beside `ProbeReadingRing`
+   (`Puck.Platform/Probes/ProbeReadingRing.cs:12`) (S).
+7. Controller HID feature-report framing, IMU timestamp delta and rumble
+   deadline across `SteamController`, `SteamControllerTriton` and
+   `DualSenseController` (`Puck.Input/Devices/`), and `GamepadDevice` beside
+   `XInputGamepadConnection` (S).
+8. `BindableDirectionJsonConverter` beside `BindableVector3JsonConverter`
+   (`Puck.World.Schema/BindableValue.cs:627-788`) (S).
+9. SingleStepTests bus-trace and RAM harnesses: `Sm83SstHarness` and
+   `Sm83SstBus` (`Puck.HumbleGamingBrick.Post/`) beside `Nes6502SstHarness` and
+   `CpuTestMemory` (`Puck.HumbleGamingDeck.Post/`) (S).
+10. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
+    (`:122`) and `engineBoot.ts` (`:83`) under
+    `Puck.Dashboard/src/portal/src/native/` (S).
 
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
@@ -442,13 +508,27 @@ packet), and re-read these stops on a quiet machine.
   35 to 65 % CPU from other lanes), thread-time traces of about 450 ticks each:
   lobby p50 6.1 to 5.6 ms, p99 10.1 to 10.3 ms; valley rim p50 13.2 to 6.0 ms,
   p99 77.5 to 8.1 ms, the seat body's contact 35.7 % of the tick to 6.8 %. The
-  windowed reading of the five stops is in the tick-cost hand-back. What the
-  trace ranks next, as shares of a lobby tick: rule evaluation itself (gates
-  10 %, binding latches and their dictionaries) 44 %, `WorldTick.EmitSnapshot`
-  17 % (session snapshot delivery, 12 %, and its disclosure filter), the scoped
-  replay hash (`WorldScopedReplayRuntime.Hash`) 10 %, and
-  `WorldBody.CaptureIntegrationResidue` 8 %, which zero-fills a buffer on every
-  body's advance. (from: tick-cost)
+  windowed reading of the five stops is in the tick-cost hand-back. (from:
+  tick-cost) The tick-cost-2 lane then cut, with simulation state
+  bit-identical: the rule latch's per-question name lookups (one state per rule
+  resolved once a tick), the sessions' disclosure filter recomposing rows the
+  snapshot already carries, the mirrors' clear-and-import of every replaced
+  row (now in place, cell by cell), the scoped replay refolding unchanged rows,
+  and a linear board-anchor scan per topology read. `puck bench world`,
+  alternating base and final twice (machine 87 to 100 % CPU from other lanes):
+  paced tick median 5.38 and 5.47 ms to 4.74 and 4.77 ms, a 13-cell guest
+  burst tick 5.78 and 5.47 to 4.90 and 4.97 ms; quiet-tick allocation stays
+  144 bytes and a gallery walk tick about 3 KB, so the tick is not what fills
+  gen0. In headless thread-time traces the disclosure filter fell from 7.8 % to
+  0.3 % of a lobby tick and the scope hash from 14.6 % to 5.1 % (10.9 % to
+  5.0 % at the rim); rule evaluation is still 32 to 40 % (gate and expression
+  evaluation, the remaining two latch lookups a binding) and body advance 30 to
+  37 % at the rim. Next by share: relief contact at the rim (the
+  [refactoring campaign](#refactoring-campaign)'s two field-contact solvers),
+  the scope's body continuation hash, and the session mirrors' per-snapshot
+  body pass. Timings on this machine stay noisy while other lanes build; the
+  counts (rule evaluations, skips and firings identical tick for tick) are the
+  stable evidence. (from: tick-cost-2)
 - [low] A body resting at the overlook pays two ground snaps a tick (ten
   sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
   support whenever the body is grounded, and `ResolveProgramContacts`'s own
@@ -488,6 +568,13 @@ packet), and re-read these stops on a quiet machine.
   (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
   conflict on each of 64 reads; pad the row to 65 words. It runs one group only
   when the environment refreshes. (from: perf-guidance)
+- [low · unmeasured] The views filter tile is 11 words wide, so an 8x4-lane
+  warp reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` at
+  `(lane.y + y) * 11 + lane.x + x` puts rows 0 and 3 on the same banks 1 to 7,
+  a 2-way groupshared bank conflict on 32 `uint` reads a pixel
+  (`sdf-views-stage.hlsli:13-15,77-82`). Read GPU Trace's shared-memory bank
+  conflicts for views, then try a row stride that clears it. (from:
+  perf-guidance-fixes)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
@@ -708,7 +795,12 @@ Next: make the per-tick authority hash incremental (measured below).
   invisible, so land it with a law that compares the incremental digest against
   a full recompute over the same states, tick by tick, in `--reproduce`.
   Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
-  (from: quiet-measure)
+  (from: quiet-measure) A live scope's per-tick hash
+  (`WorldScopedReplayRuntime.Hash`) now refolds its rows only when the arena,
+  its layout or one of the rows' versions moved, which leaves its value
+  unchanged; its body continuations (`AppendContinuationHash`, about as costly
+  as the rows were) and rule latches still fold whole every tick, for want of a
+  body continuation version. (from: tick-cost-2)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
@@ -966,17 +1058,44 @@ windowed checks, then the three developer exhibits.
 
 ### Cold bake under a minute
 
-Owner: specialist (rendering) · high · Next: profile where a cold bake's time
-goes, then cut it to the owner's bar: one minute at most per backend from an
-empty store (AGENTS.md).
+Owner: specialist (rendering) · high · Next: cut the bake's CPU meshing about
+fourfold (collapse, sheet closing, contouring), largest first, to the owner's
+bar: one minute at most per backend from an empty store (AGENTS.md).
 
-- Measured when the owner set the bar (lead machine, RTX 4070, windowed,
-  `--devices none`): Direct3D 12's `world` residency baked 2,090 groups in
-  384.4 s (50,854 dispatches, 1.20 billion samples, 1.64 billion taps, 38.6
-  million triangles); Vulkan had 187 groups pending after 420 s. Every frame
-  during the bake read over 16.7 ms (`host.frames` avg 67 ms, p99 100 ms,
-  126 collections pausing 572 ms over 600 frames), so the bake also starves the
-  frame.
+- Measured on the lead machine (RTX 4070, windowed, `--devices none`, an empty
+  `--cache-dir`, `world.gpu-timing on`): Direct3D 12's `world` residency baked
+  its 2,090 groups in 446 s before the cuts below (384 s when the owner set the
+  bar) and in 215 to 226 s after them (two runs, every stored mesh byte for byte
+  alike); the near groups' ninety percent landed at 73 to 79 s (126 s before). Vulkan baked them in 305.3 s, its near groups' ninety
+  percent at 105.6 s (187 groups still pending at 420 s before), its frames
+  slower than Direct3D 12's (produce 127 ms against 65 ms during the bake), so
+  fewer dispatches answered a second. The GPU is no longer the limit:
+  the bake pass ran 0.2 ms a frame before, and with the larger dispatches the
+  frame had a lattice to dispatch in all but 271 of 2,343 frames.
+- The bake is CPU-bound: the shared pool's workers stay saturated. Thread
+  seconds by stage in the 215 s run: crossings 680 (`SdfSampledLattice.CloseSheets`
+  and the crossing rounds), land 510, contour 250, prepare 95, store 54, answer
+  48. Land is `SdfMeshCollapse` on single-instance static groups of 200,000 to
+  520,000 triangles, 20 to 44 s each on one thread, the bake's long pole; chunked
+  unions already level their chunks in parallel. The `[sdf.mesh-bake] slow`
+  lines name each long stage's group.
+- Next cuts, measured, largest first: chunk large single-instance statics as
+  unions are (`SdfMeshChunks`), so their collapse runs in parallel and their
+  draws cull and pick levels per chunk; make `SdfMeshCollapse`'s passes cheaper;
+  answer `CloseSheets`' and `Refine`'s `Thickens` line scans from a sign bitset of
+  the fine lattice instead of a `FineValue` a step; speed
+  `SdfDualContouring.ExtractRefined`'s corner masks the same way; replace the
+  thirteen bisection rounds a crossing takes (364 million of 1.09 billion
+  samples, and thirteen readback round trips a group) with a bracketed secant
+  search to the same 4,096th of an edge.
+- The irradiance volume's preview trace ran for 201 to 222 s of the bake on its
+  four background workers (about 800 thread seconds beside the bake's 1,670),
+  rebuilding from the landed meshes every four seconds
+  (`SdfMeshIrradiance.PendingSceneInterval`). Pausing or deprioritising it
+  while a cold bake lands is the owner's call: the scene would light later.
+- Every frame during the bake still reads over 16.7 ms (avg 111 ms, p99 716 ms,
+  301 collections pausing 2.9 s over 503 frames) with a worker a processor at
+  normal priority; it eases as the CPU meshing above shrinks.
 - Each backend keeps its own store; a mesh is the same bytes on both when the
   kernels agree, so a shared store would halve the cold cost of using both.
 - The rebakes nobody needed are the [refactoring campaign](#refactoring-campaign)'s
@@ -994,10 +1113,19 @@ empty store (AGENTS.md).
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
 Next: build [the simulation step off the frame thread](simulation-thread.md)
-by its phases: phase 1 (one host loop, no thread) is in flight; then phase 2
+by its phases: phase 1 delivered the shared host loop, shell, console operation,
+client clock, arrival interpolation and tick/shed diagnostics; next is phase 2
 (the tick record, still one thread), phase 3 (the produce path reads no
 server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
 (hardening). The owner queued the thread.
+
+- Phase 1's windowed reading still misses the frame-rate bar: frame avg/p99
+  69.47/205.25 ms standing and 25.46/207.07 ms walking, with `simulate` and the
+  tick lane intact. This was not a paired quiet comparison, and mesh GI was
+  still active; attribution is unconfirmed. The
+  [delivery evidence](simulation-thread.md#phase-1-one-host-loop-no-thread-delivered)
+  records the workload and tick/shed readings for the frame-time lane and the
+  later worker comparison.
 
 - Owner decision owed: the design costs one iteration of presentation
   latency for a tick's visible effect (about one frame period at 60 Hz, and
@@ -1005,7 +1133,6 @@ server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
   keeping every client object on one thread
   ([latency](simulation-thread.md#latency)). Under one step per dispatch a
   World whose tick rate exceeds the display's refresh steps inline, as today.
-- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
 - Decided in [the simulation step off the frame thread](simulation-thread.md#decisions),
   after the memo's one cross-family review (its findings and each one's
   resolution are the memo's [review resolution](simulation-thread.md#review-resolution)):

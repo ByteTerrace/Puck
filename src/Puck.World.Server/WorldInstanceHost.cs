@@ -67,6 +67,8 @@ namespace Puck.World;
 /// the fixed-step thread is the only caller, and the verbs that mutate the registry route <c>Simulation</c> so they
 /// apply on it at a tick boundary.</para></remarks>
 public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwarder {
+    private readonly HostPacing m_pacing;
+
     // How many times one crossing may be re-queued after a retryable (capacity) refusal before the refusal is
     // treated as terminal. A work ceiling, not an authored feel parameter: an unbounded retry is a per-tick
     // reservation attempt against a destination that has already said no.
@@ -557,6 +559,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             reason: out _
         );
     }
+
     // Whether a queued transfer lands in the instance running under this name.
     private bool HasQueuedArrival(string name) {
         foreach (var transfer in m_pendingTransfers) {
@@ -609,6 +612,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         return authority;
     }
+
     /// <summary>Resolves the world definition local seat <paramref name="slot"/> currently presents from, per its
     /// live <c>WorldSeatAuthorityRouter</c> route — the one structure source every drag-time/read-back
     /// consumer reads through, so seats never derive "which document currently frames me" two
@@ -623,7 +627,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Scans the boot instance's document for portal faces (a <see cref="WorldPlacementFace"/> carrying a
     /// <see cref="WorldPlacementPortal"/> facet) against its own active local seats, and enqueues a transfer for each
     /// edge — a seat whose body was outside the face's enterable volume last scan and is inside it now (see
-    /// <see cref="WorldInstance.PortalOccupancy"/>). Called from <c>WorldSimulation</c>/<c>HeadlessWorldSimulation</c>
+    /// <see cref="WorldInstance.PortalOccupancy"/>). Called from <c>WorldSimulation</c>
     /// immediately after boot's own <c>Server.Step</c> this master call (only when boot actually stepped — a caller
     /// that skipped the step because boot is paused/rate-0 must skip this call too, exactly like every other
     /// non-stepped instance is simply never scanned inside <see cref="StepInstances"/>), so this reads
@@ -661,8 +665,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// the boot world's own authored rate (falling back to <c>Puck.Launcher.LauncherHostLoop.DefaultUpdateRate</c>
     /// only while this returns <see langword="false"/>, so the window keeps rendering and the console keeps
     /// answering), so boot's own crossing is trivial by the time this is asked — the same pause/rate-0 rule as every
-    /// other instance, expressed without a redundant accumulator field. The caller (<c>WorldSimulation</c>/
-    /// <c>HeadlessWorldSimulation</c>) is expected to call <see cref="Server.WorldServer.DrainAdministrative"/> on
+    /// other instance, expressed without a redundant accumulator field. The caller (<c>WorldHostStep</c>)
+    /// calls <see cref="Server.WorldServer.DrainAdministrative"/> on
     /// the boot server when this returns <see langword="false"/>, mirroring every other stopped/paused instance's
     /// own administrative drain.</summary>
     /// <remarks><b>The width-match gate.</b> <c>Puck.Launcher.FixedStepPump.Advance</c>
@@ -806,7 +810,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     _ = WorldServerStepShell.Step(
                         // An instance steps on its own accumulator, banking the boot pump's delta at its own rate, so
                         // its time is elapsed engine time whatever the boot world's host steps per frame.
-                        pacing: HostPacing.WallClock,
+                        pacing: m_pacing,
                         context: in context,
                         publishTick: instance.PublishTick,
                         server: instance.Server,
@@ -1373,7 +1377,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         if (m_instances.TryGetValue(key: name, value: out var stopping)) {
-            _ = m_custodyPeers.TryRemove(item: new KeyValuePair<string, IWorldCustodyPeer>(stopping.Server.AuthorityIdentity, stopping.Server));
+            _ = m_custodyPeers.TryRemove(item: new KeyValuePair<string, IWorldCustodyPeer>(key: stopping.Server.AuthorityIdentity, value: stopping.Server));
         }
         _ = m_instances.Remove(key: name);
         _ = m_deferredReaps.Remove(item: name);
@@ -1465,7 +1469,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// publishes its claim without the route gate, and is not reported. A route observed on the wrapper inside the
     /// callback reaches no seat until the claim stands. Null in every production composition; a verification harness
     /// passes it to place an observed route before, during or after the claim.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null) {
+    /// <param name="pacing">The live host pacing policy shared by every instance's replay stepper. A non-launcher
+    /// host defaults to inline wall-clock pacing.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null) {
+        m_pacing = (pacing ?? HostPacing.WallClockInline);
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentNullException.ThrowIfNull(argument: stateRoot);

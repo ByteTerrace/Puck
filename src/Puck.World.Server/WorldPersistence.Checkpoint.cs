@@ -454,7 +454,7 @@ public sealed partial class WorldPersistence {
         var keys = Host.Arena.Keys;
 
         if (rules is null) { latch.Clear(); } else {
-            foreach (var rule in rules) { latch.Bindings(name: rule).Clear(); }
+            foreach (var rule in rules) { latch.Rule(name: rule).Held.Clear(); }
             latch.InvalidateScheduler();
         }
         foreach (var entry in entries) {

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Abstractions;
 
 namespace Puck.Cli;
 
@@ -28,8 +29,9 @@ public sealed record WorldArtifact(string Path, string Key, bool Reused, FileStr
 /// When a run takes a build it prunes the store to the <see cref="KeepCount"/> most recently used entries
 /// (<see cref="Puck.Abstractions.CacheRetention"/>). An entry a
 /// run still holds a lease on is kept whatever its age, since opening its lease exclusively fails. A build or pruning
-/// directory left behind by a killed run, and a lock or lease file whose build no longer exists, is deleted once it is
-/// older than six hours.
+/// directory left behind by a killed run, and a lease or used file whose build no longer exists, is deleted once it is
+/// older than six hours. A <c>&lt;key&gt;.build.lock</c> is never deleted, since removing a lock file a builder holds
+/// lets a second builder lock a new file at the same path.
 /// </para>
 /// </summary>
 /// <param name="root">The store directory; created on first use.</param>
@@ -43,7 +45,9 @@ public sealed class WorldArtifactStore(string root) {
 
     private static readonly TimeSpan AbandonedAge = TimeSpan.FromHours(value: 6);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(value: 50);
-    private static readonly string[] SidecarSuffixes = [".build.lock", ".lease", ".used"];
+    // The build lock is deliberately absent: builders take it without the store lock, so deleting it would let a
+    // second builder lock a new file while the first still holds the old one (see FileLock).
+    private static readonly string[] SidecarSuffixes = [".lease", ".used"];
 
     /// <summary>Gets the store directory.</summary>
     public string Root { get; } = Path.GetFullPath(path: root);
@@ -62,38 +66,13 @@ public sealed class WorldArtifactStore(string root) {
             path1: Root,
             path2: $"{key}{suffix}"
         );
-    private static FileStream? TryOpen(string path, FileShare share) {
-        try {
-            // Read access with a shared mode is what .NET turns into a shared advisory lock on Unix; an exclusive
-            // open there takes the exclusive lock, and on Windows the share mode itself does the same work.
-            return new FileStream(
-                access: ((share == FileShare.None)
-                    ? FileAccess.ReadWrite
-                    : FileAccess.Read),
-                mode: FileMode.OpenOrCreate,
-                path: path,
-                share: share
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return null;
-        }
-    }
     // Waits for an exclusive handle until the deadline; null when the deadline passed first.
-    private static FileStream? Acquire(string path, Stopwatch clock, TimeSpan budget) {
-        while (true) {
-            if (TryOpen(
-                path: path,
-                share: FileShare.None
-            ) is { } handle) {
-                return handle;
-            }
-            if (clock.Elapsed >= budget) {
-                return null;
-            }
-
-            Thread.Sleep(timeout: PollInterval);
-        }
-    }
+    private static FileStream? Acquire(string path, Stopwatch clock, TimeSpan budget, Action? waiting = null) =>
+        FileLock.Acquire(
+            expired: () => (clock.Elapsed >= budget),
+            path: path,
+            waiting: waiting
+        );
 
     /// <summary>Waits for the exclusive right to build <paramref name="key"/>.</summary>
     /// <param name="key">The key to build.</param>
@@ -111,21 +90,20 @@ public sealed class WorldArtifactStore(string root) {
             key: key,
             suffix: ".build.lock"
         );
-        var first = TryOpen(
-            path: path,
-            share: FileShare.None
-        );
-
-        waited = (first is null);
-        if (waited) {
-            waiting?.Invoke();
-        }
-
-        return (first ?? Acquire(
+        var contended = false;
+        var held = Acquire(
             budget: budget,
             clock: clock,
-            path: path
-        ));
+            path: path,
+            waiting: () => {
+                contended = true;
+                waiting?.Invoke();
+            }
+        );
+
+        waited = contended;
+
+        return held;
     }
     /// <summary>A fresh, empty directory beside the entries to build <paramref name="key"/> into.</summary>
     /// <param name="key">The key being built.</param>
@@ -201,18 +179,15 @@ public sealed class WorldArtifactStore(string root) {
         } else {
             // A scanner can hold a just-written file open for a moment, and Windows refuses to rename a directory
             // while any file inside it is open.
-            for (var attempt = 1; ; attempt++) {
-                try {
-                    Directory.Move(
-                        destDirName: entry,
-                        sourceDirName: staging
-                    );
-
-                    break;
-                } catch (Exception exception) when (((exception is IOException or UnauthorizedAccessException) && (attempt < MoveAttempts))) {
-                    Thread.Sleep(timeout: PollInterval);
-                }
-            }
+            Retry.Run(
+                action: () => Directory.Move(
+                    destDirName: entry,
+                    sourceDirName: staging
+                ),
+                attempts: MoveAttempts,
+                backoff: static _ => PollInterval,
+                retryable: Retry.IsFileSystemRefusal
+            );
         }
 
         return TakeLocked(
@@ -232,26 +207,29 @@ public sealed class WorldArtifactStore(string root) {
             return null;
         }
 
-        var lease = TryOpen(
-            path: Sibling(
-                key: key,
-                suffix: ".lease"
-            ),
-            share: FileShare.ReadWrite
-        );
+        var lease = FileLock.TryAcquireShared(path: Sibling(
+            key: key,
+            suffix: ".lease"
+        ));
 
         if (lease is null) {
             return null;
         }
 
-        File.WriteAllText(
-            contents: DateTime.UtcNow.ToString(format: "O"),
-            path: Sibling(
-                key: key,
-                suffix: ".used"
-            )
-        );
-        PruneLocked(keep: key);
+        try {
+            File.WriteAllText(
+                contents: DateTime.UtcNow.ToString(format: "O"),
+                path: Sibling(
+                    key: key,
+                    suffix: ".used"
+                )
+            );
+            PruneLocked(keep: key);
+        } catch {
+            // The artifact owns the lease only once it is returned.
+            lease.Dispose();
+            throw;
+        }
 
         return new WorldArtifact(
             Key: key,
@@ -307,10 +285,7 @@ public sealed class WorldArtifactStore(string root) {
                 suffix: ".lease"
             );
 
-            using (var lease = TryOpen(
-                path: leasePath,
-                share: FileShare.None
-            )) {
+            using (var lease = TryAcquireOptional(path: leasePath)) {
                 if (lease is null) {
                     continue;
                 }
@@ -341,8 +316,9 @@ public sealed class WorldArtifactStore(string root) {
             TryDeleteFile(path: leasePath);
         }
 
-        // A lock or lease whose build no longer exists (pruned, or a build that failed) is left for the same six hours
-        // as an abandoned directory, and deleted only when no run holds it open.
+        // A lease or used marker whose build no longer exists (pruned, or a build that failed) is left for the same six
+        // hours as an abandoned directory, and deleted only when no run holds it open. Taking and pruning both run under
+        // the store lock, so no run can take the build whose lease is deleted here.
         foreach (var file in Directory.EnumerateFiles(path: Root)) {
             var name = Path.GetFileName(path: file);
             var suffix = SidecarSuffixes.FirstOrDefault(predicate: suffix => name.EndsWith(
@@ -358,16 +334,22 @@ public sealed class WorldArtifactStore(string root) {
                 continue;
             }
 
-            using (var held = TryOpen(
-                path: file,
-                share: FileShare.None
-            )) {
+            using (var held = TryAcquireOptional(path: file)) {
                 if (held is null) {
                     continue;
                 }
             }
 
             TryDeleteFile(path: file);
+        }
+    }
+    // Pruning is optional: a candidate another run holds, or one this run may not open (a read-only or unreadable
+    // sidecar), is skipped and retried by a later run, and never fails the take that pruned beside it.
+    private static FileStream? TryAcquireOptional(string path) {
+        try {
+            return FileLock.TryAcquire(path: path);
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            return null;
         }
     }
     private static void TryDeleteFile(string path) {

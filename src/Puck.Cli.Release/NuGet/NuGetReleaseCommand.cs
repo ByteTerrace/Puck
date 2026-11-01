@@ -178,7 +178,7 @@ internal static class NuGetReleaseCommand {
             Console.WriteLine(value: "The batch does not publish the CLI; no pin to prepare.");
             return 0;
         }
-        await CliRetry.RetryAsync(
+        await Puck.Abstractions.Retry.RetryAsync(
             action: () => PinAsync(version: version),
             attempts: PinAttempts,
             delay: TimeSpan.FromSeconds(seconds: 10),

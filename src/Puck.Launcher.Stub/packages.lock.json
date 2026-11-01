@@ -2,7 +2,7 @@
   "version": 1,
   "dependencies": {
     "net11.0": {
-      "puck.confinement": {
+      "ByteTerrace.Puck.Confinement": {
         "type": "Project"
       }
     }

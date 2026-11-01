@@ -1,94 +1,21 @@
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.World.Addons;
-using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>The world's fixed-step shell composing the client and server halves over the loopback. Launcher owns time
-/// and snapshots; this type only consumes one exact tick at a time: <see cref="WorldHostStep"/> runs the one step
-/// sequence (the client's seats submit their device intents, the authoritative <see cref="WorldServer"/> steps — the
-/// mounted addon guests at its three pinned points → buffered protocol traffic → every body, INCLUDING every booted
-/// screen machine (<c>Server.WorldMachineHost.Advance</c>) → the tick's snapshot, delivered to the client
-/// synchronously — then every other instance), and this shell's post-step syncs the seats' bindings and publishes
-/// their context before the seat intents finish.</summary>
-internal sealed class WorldSimulation(WorldServer server, WorldClient client, WorldAddonRuntime addons, WorldSeatBindings seatBindings, WorldSeatAuthorityRouter seatRouter, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldPerceptionAnchor anchor, WorldInstanceHost instances, WorldViewComposer composer, WorldServiceExtensions extensions, WorldSourceWatch sourceWatch, HostPacing pacing) : IFixedStepSimulation, IWorldSimulationClock {
-    private readonly WorldServer m_server = server;
-    private readonly WorldClient m_client = client;
-    private readonly WorldSeatBindings m_seatBindings = seatBindings;
-    private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
-    private readonly WorldPerceptionAnchor m_anchor = anchor;
-    private readonly WorldViewComposer m_composer = composer;
-    private readonly WorldHostStep m_step = new(
-        captureScheduler: captureScheduler,
-        extensions: extensions,
-        instances: instances,
-        pacing: pacing,
-        peerHost: peerHost,
-        replayTape: replayTape,
-        scheduleRunner: scheduleRunner,
-        seatRouter: seatRouter,
-        server: server,
-        sourceWatch: sourceWatch,
-        tickScript: tickScript,
-        waitGate: waitGate
-    );
-
-    /// <summary>The mounted addon runtime this shell holds — never called from here: the addon principals tick INSIDE
-    /// <see cref="WorldServer.Step"/>, at its own three pinned points. It is a CONSTRUCTOR DEPENDENCY so that DI
-    /// materializes it, because constructing it is what mounts every guest and attaches it to the server (see
-    /// <see cref="WorldAddonRuntime.Create"/>) — dropping the parameter would leave the singleton unresolved and the
-    /// world silently addon-less.</summary>
-    public WorldAddonRuntime Addons { get; } = addons;
-
-    private Action? m_afterInstances;
+/// <summary>The one fixed-step shell for every boot shape. The composition supplies its post-step.</summary>
+internal sealed class WorldSimulation(WorldHostStep step, Action afterInstances) : IFixedStepSimulation {
+    /// <inheritdoc/>
+    public bool AwaitsFrame => step.AwaitsFrame;
 
     /// <inheritdoc/>
-    public bool AwaitsFrame => m_step.AwaitsFrame;
+    public bool HoldsClock(ulong withheldTicks) => step.HoldsClock(withheldTicks: withheldTicks);
+    /// <inheritdoc/>
+    public void SettleOwedFrames() => step.SettleOwedFrames();
 
     /// <inheritdoc/>
-    public bool HoldsClock(ulong withheldTicks) => m_step.HoldsClock(withheldTicks: withheldTicks);
-    /// <inheritdoc/>
-    public void SettleOwedFrames() => m_step.SettleOwedFrames();
+    public uint RatePerSecond => step.RatePerSecond;
 
     /// <inheritdoc/>
-    public ulong ElapsedTicks => m_step.ElapsedTicks;
-    /// <inheritdoc/>
-    public uint RatePerSecond => m_step.RatePerSecond;
-    /// <inheritdoc/>
-    public ulong Tick => m_step.Tick;
-
-    // Reflect any applied world-binding-overlay mutation into the per-seat resolvers, then publish the seats'
-    // context-family states and the perception anchor so a state change this tick applied (an engage, a possession,
-    // a roster move) flips the context-derived binding group and swaps the seat's perceived body the same tick.
-    // Each seat's binding vocabulary and state-backed control contexts resolve from its complete authority route,
-    // never uniformly from boot. Cheap on an ordinary tick: SyncSeat compares the delivered state, overlay, and
-    // channel-list references before doing any work.
-    private void PublishSeats() {
-        for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
-            m_seatBindings.SyncRoute(
-                client: m_client,
-                routes: m_seatRouter,
-                slot: slot
-            );
-            // The held-channel fold reads ordinals the bindings lowered through the seat's routed table.
-            m_client.Roster.Seat(slot: slot)?.Channels = m_seatBindings.Channels(slot: slot);
-        }
-
-        WorldSeatContextSync.Publish(
-            seatBindings: m_seatBindings,
-            roster: m_client.Roster,
-            grants: m_server.Grants,
-            anchor: m_anchor,
-            activeLayout: m_composer.ActiveLayoutName,
-            screens: m_server.Definition.Screens
-        );
-    }
-
-    /// <inheritdoc/>
-    public void Step(in FixedStepContext context, in CommandSnapshot commands) => m_step.Step(
-        context: in context,
-        afterInstances: (m_afterInstances ??= PublishSeats)
-    );
+    public void Step(in FixedStepContext context, in CommandSnapshot commands) => step.Step(afterInstances: afterInstances, context: in context);
 }

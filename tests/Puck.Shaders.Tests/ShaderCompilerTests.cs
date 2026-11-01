@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Hosting;
 using Puck.Testing;
 
