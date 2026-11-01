@@ -19,16 +19,16 @@ state that never reaches the simulation. The controls are console verbs, levers,
 overlay drawing and views, and every control a builder reaches for is bindable
 to a key or a button.
 
-The forcing artifact is a district of
-[the forcing world](state-and-language.md#the-forcing-world) laid out, lit and
+The forcing artifact is a place in the debug world laid out, lit and
 debugged in build mode without typing a coordinate: every placement put down,
 lined up and duplicated by pointer and grid, a dark corner diagnosed with
 `world.explain` and fixed, the slowest object found with `world.cost`, and the
-session saved back into the district's `.puck` source.
+session saved back into the place's `.puck` source. Highest-quality frame targets are 60 FPS on the RTX
+2060 and RTX 4070, and 45 FPS (every frame under 22.2 ms) on Steam Deck.
 
 ## Implementation status
 
-E1 is in place: every seat can enter build mode (`player.build`, the built-in
+E1's mechanisms are in place; its authored standard bindings and feel remain open: every seat can enter build mode (`player.build`, the built-in
 `editor` context family), draw its own grid on the ground it works on, and put
 down, nudge and turn placements by whole grid and angle steps from bound keys
 (`world.grid`, `world.snap`, `world.place`, `world.nudge`, `world.turn`). The
@@ -176,17 +176,19 @@ typed numbers and the grid the kernels can already draw is never switched on.
    and `build`, flipped with `player.mode editor build` and bound to one
    key or button. In `build` the seat's movement input drives the editor rather
    than the body, through the same context-family machinery layouts use
-   (`WorldContextFamilies`), and the build binding group ships as a default
-   layer shown on the binding bar, so a builder can see what every button does.
+   (`WorldContextFamilies`). The build bindings, pages, keys, and binding-bar
+   layout are authored in a new `worlds/standard/editor.puck`, imported by the
+   debug world, so authors can override or replace the design by id.
    A seat whose principal lacks `Mutate` on the section it points at still
    enters build mode and sees a read-only badge; its edits are refused by
    name, as they are from the console.
-2. **The `editor` section.** A document section with a `Default` that keeps
-   every current world unchanged: grid hidden, snapping off, a world pitch, an
-   angle step, surface snapping, the object-grid patch radius, and the editor
-   camera's feel values that [E8](#e8--editor-camera) reads. It is validated by
-   name, swept across every shipped world, regenerated with `puck schema`, and
-   folded back by `world.save` when a live verb has moved one of its values.
+2. **The `editor` section.** Grid pitch and visibility, angle step, surface
+   snapping, patch radius, and camera feel are required authored values in
+   `worlds/standard/editor.puck`. The engine validates and executes mode
+   switching, commands, layout, selection, snapping, and camera operations.
+   Moving the same constants to a schema fallback does not complete this work.
+   `world.save` folds a live override back into its authored source.
+
 3. **The grid overlay.** The presenter computes a `GridOverlayState` per seat
    from that seat's snap state (the policy `GridOverlayFactory` had: the world
    grid whenever the grid is visible, the object grid when a reference is
@@ -572,44 +574,30 @@ the seat last put down or moved, so it is `selection=none` on a fresh seat;
 
 ### E6 — Why is this dark or invisible
 
-**Problem:** when something does not show up or looks wrong, a builder cannot
-ask the engine why, and refusals name rows rather than places.
+The renderer-backed explain pick already exists: `WorldInspectionCommandModule.Explain`
+requests the pointer's rendered pixel through `WorldExplainPick`, retains that
+exact result and view, and settles completion or cancellation. E6 extends this
+path with placement visibility and light, shadow, probe, and material
+contributions from the renderer. Every answer names the authored field that
+changes it. A contribution the captured renderer data cannot establish says
+`unavailable` and why; there is no separate CPU lighting implementation.
 
-**Delivers:**
+The same diagnostics path absorbs Debug tools' findings, pins, `goto`, and
+`annotate`. `world.problems` gathers spatial refusals and source warnings,
+selects and frames findings through E2/E8, and retains pins and annotations
+through one overlay writer. Consolidate `MarkerWriter` and `AnnotationWriter`
+rather than adding a third path. `world.goto <placement>` selects and frames
+the target with the editor camera.
 
-1. **`world.explain [<placement>]`** (the pointer's placement by default) walks
-   one placement's path to the screen and names the first thing that hides it:
-   absent from the document, withheld by the reader's disclosure, refused by
-   stamp capacity or the render envelope (quoting the refusal), drawn as a bake
-   with the mesh hidden, a zero or degenerate scale, an instance bound shorter
-   than its geometry's reach, beyond the far distance, buried inside another
-   solid, or subtracted away. For a placement that is drawn it names what
-   lights the surface under the pointer: each light's term at the hit point
-   computed on the CPU, whether a shadow ray toward the key light hits
-   something (and which placement), the sky and ambient level at the current
-   time of day, screen lights in range, emission, and a near-black albedo. Each
-   line names the document field that changes the answer.
-2. **Problems at their location.** `world.problems` gathers every current
-   diagnostic that belongs to a place: refusals naming a placement
-   (`world.refusals`), stamp and envelope refusals, instances with unmaskable
-   influence, and lint warnings from the world's `.puck` source mapped to their
-   placements. In build mode each problem draws a marker chip at its position
-   (`MarkerWriter`). `world.problems next` (bindable) selects the next problem
-   and, once [E8](#e8--editor-camera) lands, frames it.
-3. **`world.goto <placement>`** selects a placement and frames it with the
-   editor camera.
+**Touches:** `Puck.World`'s inspection commands and picker, `Puck.World.Client`
+and `Puck.SdfVm`'s renderer diagnostics, and `Puck.Overlays`.
 
-**Touches:** `Puck.World.Client` (the stamper's and envelope's refusals, the
-presenter's lighting inputs), `Puck.SignedDistance` (CPU shadow rays over the
-static field), `src/Puck.World`, `Puck.Overlays` (markers).
+**Check:** use planted dark, occluded, missing, and refused placements in the
+debug world; compare each answer with its captured pixel on both backends.
+Exercise unavailable data and cancellation, and show findings, pins, goto, and
+annotations through the same overlay path.
 
-**Check:** `WorldExplainLawTests`, one planted defect per reason (stamp
-capacity, far distance, an occluder between the surface and the key light, black
-albedo, zero scale), each with a red leg that removes the defect and sees the
-line disappear; `WorldProblemsLawTests` (a refused placement is listed at its
-position).
-
-**Depends on:** E2; E8 for framing.
+**Depends on:** E2; E8 for framing; the overlay-writer consolidation.
 
 ### E7 — Gizmos and pointer dragging
 
@@ -659,8 +647,10 @@ camera program vocabulary (`orbit`, `clampPitch`, `dynamics`, `fieldOfView`)
 with `WorldCameraRigCompiler`, over a world anchor the editor moves. It is a
 view override, never a simulated body, so flying through a shared world moves
 nothing anyone else sees. Its feel values (orbit, pan, zoom and fly rates, the
-pitch clamp, the distance range) are `editor` section fields whose defaults are
-the values `SdfDebugController` used. Leaving build mode blends back to the
+pitch clamp, the distance range) and bindings are authored in
+`worlds/standard/editor.puck`, imported by debug and overridden by id. The
+engine executes generic camera operations; schema fallback constants do not
+complete the standard design. Leaving build mode blends back to the
 seat's own rig through a `ViewTransition`. `world.camera orbit|fly|frame|pivot|reset`
 is bindable, and `world.view.camera` echoes the editor pose.
 
@@ -842,32 +832,29 @@ unrelated heading and tail. The laws fail when the source rewrite is bypassed.
 
 ### E12 — The shape gallery as a world
 
-**Problem:** the engine has no shape-inspection tool (one subject under the
-microscope, every primitive side by side, the scoped and flat field-op
-contrast). The takeover scene that held one bypassed the document, rendered
-through the deleted per-pixel interpreter, and is deleted; it is prior art in
-git history (`src/Puck.SdfVm/Debug`).
+The gallery already lives in `worlds/debug/shapes.puck`: primitives, lifts,
+composition, blends, domain operations, motion, form, and surface exhibits,
+with plaques, spawn points, and authored gallery commands. Extend that gallery
+rather than creating a separate tool world. `WorldViewCommandModule.Isolate`
+already implements `view.isolate [toggle] <prototype> <shape-name>... | off`
+for named shapes in a prototype.
 
-**Delivers:** a shipped tool world, `sdf-gallery.puck`, beside the other tool
-worlds in `worlds/debug/tools/`, with a companion `.md` as
-`shader-compare.puck` has. It is browsed with build mode, selection, the debug
-views, the editor camera and `world.explain`, and `world.isolate on|off` stamps
-only the selection, in presentation, in place of the takeover's single subject.
-Each exhibit the deleted takeover offered becomes a gallery row: every shape and
-lift, the domain ops, each blend family as a pair, the scoped and flat contrast,
-a dense carve cluster for E13, and its tour's exhibits, each with an authored
-camera and its plaque as a text screen or HUD panel, stepped through
-`view.override camera`.
+The remaining gaps are placement-selection isolation through E2, the slice's
+clipped far field on Direct3D 12 and its Vulkan check, a sampled slice drawn
+in place, and the primitives whose non-uniform scale still yields a distance
+bound or an uncertified gain. The detailed cases stay in [open items](#open-items).
+The dense carve exhibit follows E13. No pixel kernel walks the field to draw
+the slice.
 
-**Touches:** `worlds/debug/tools`, `Puck.World.Client` (the isolate filter),
-the rendering handbook pages that describe the debug scene.
+**Touches:** `worlds/debug/shapes.puck`, the existing view-isolation path, and
+the editor's selection and camera mechanisms.
 
-**Check:** each row demonstrated in the gallery world. The gallery source passes `ShippedSourceLintLawTests`; an
-isolate law holds that the frame emits only the selection's instances (red leg:
-an empty selection emits the whole world, not nothing); the gallery boots and
-captures each exhibit offscreen.
+**Check:** tour the existing gallery and capture each added case on both
+backends; placement-selection isolation shows only the selected placements
+and handles an empty selection explicitly.
 
-**Depends on:** E1, E2, E4, E8 and E13.
+**Depends on:** E2 for placement isolation; E4 and E8 for inspection; E13 for
+the carve exhibit.
 
 ### E13 — Carving and the brick bake
 
@@ -878,23 +865,24 @@ bake built to make dense carving cheap has nothing to bake.
 dab, in a section or a placement facet the package settles against the
 existing vocabulary first. `world.carve [<radius>]` carves at the pointer's hit
 (bindable; held, it paints with a spacing of half the radius), and
-`world.carve erase` removes the dabs under the pointer; a stroke is one batch.
+`world.carve erase` removes the dabs under the pointer; a stroke is one authored edit submitted as one atomic batch, so one undo
+reverts the entire stroke.
 The static solid field includes the carves, so collision follows them, and
 each carve extends past every point a body can reach (the phantom-surface
-caution in the rendering skill). Presentation settles, bakes, swaps and
-invalidates the carves' bins against the world residency's brick pool (a
-planner of its own; the deleted debug scene's is prior art in git history) as
+caution in the rendering skill). Presentation settles, bakes, swaps, and
+invalidates the carves' bins through the shared field/bake invalidation path
+and the engine job system, with residency supplying demand and priority, as
 [the handbook](../rendering/sdf/handbook/bricks-and-baking.md#settle-bake-swap-and-invalidate)
 describes. `world.budget` prices carves and bricks, `world.cost` names a
 placement's carves, and `world.carves` echoes the carve count and the baked and
 analytic bins.
 
 **Touches:** `Puck.World.Schema`, `Puck.World.Server` (the static field),
-`Puck.World.Client` (`WorldFramePresenter`, the planner's host),
+`Puck.World.Client` (`WorldFramePresenter`, the shared invalidation consumer),
 `Puck.SdfVm` (`SdfWorldTables.BrickBake.cs`).
 
 **Check:** a collision law that a point inside a carve reads outside the solid
-field; planner laws over the fake device (a bin with enough settled carves
+field; shared invalidation checks over the fake device (a bin with enough settled carves
 requests one bake and emits one brick after `Ready`, a new carve in a baked
 bin re-emits it analytic in the same rebuild; red leg: a bin below the
 threshold never bakes). Canary `carve-bake`: a carved region's capture agrees
@@ -904,7 +892,8 @@ has none (a height field's host-baked brick is held by
 `SdfWorldTablesUploadLawTests.AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady`).
 
 **Depends on:** E1 and E2 for the pointer's surface hit, E3 for one step per
-stroke.
+stroke, and the shared field/bake invalidation and
+[engine job system](open-items.md#engine-job-system) for scheduled bake work.
 
 ### E14 — Scrub the recorded past
 
@@ -976,15 +965,12 @@ principal, exactly as the same line from the console would be.
 once; a gesture over several rows is one batch. Undo and redo therefore move in
 the steps a builder remembers.
 
-**Tunables are document fields, debug levers are not.** Grid pitch, angle
-step, snap defaults and camera feel are `editor` section fields whose default is
-today's behavior; a live verb overrides them per seat and `world.save` folds
-the result back. Debug views, shading levers and timing are session levers that
-are never saved.
-
-**Build mode is built in.** Every world can be built in without authoring
-anything, so `editor` is a built-in mode family beside `layout`, with its
-bindings in a default layer.
+**The standard authors editor design.** Bars, pages, keys, grid and snap values,
+and camera feel live in `worlds/standard/editor.puck`, imported by debug. A
+live verb overrides them per seat and `world.save` folds the result back into
+source. Debug views, shading levers, and timing are session levers. The engine
+provides mode switching, commands, layout, selection, snapping, and camera ops;
+a schema fallback with the same design constants leaves the authoring work open.
 
 **Every drawn instance has its own identity.** P13 supplies the SDF source as
 the winning instance's ordinal plus one and the mesh source as its draw
@@ -1044,8 +1030,12 @@ holds, so no capability is lost on the way.
 - Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring.
 
 What the plan still owes. A line is deleted when its work lands, never ticked;
-the [open items](open-items.md#next) rank the work packets drawn from it. E1,
-E5, E9, E10 and E14's recording and scrubbing are in.
+the [open items](open-items.md#next) rank the work packets drawn from it. E1's
+mechanisms, E5, E9, E10, and E14's recording and scrubbing are in.
+
+- [E1](#e1--build-mode-the-grid-and-snapping): move bars, pages, keys, grid, snap,
+  and feel into the standard editor source imported by debug; schema defaults
+  with the same constants leave this open.
 
 - [E2](#e2--selection-picking-and-highlight): the identity map and GPU hover
   picking are in place through P13; the line primitive, `world.select`,
@@ -1055,17 +1045,22 @@ E5, E9, E10 and E14's recording and scrubbing are in.
 - [E4](#e4--debug-views-everywhere) debug views everywhere (startable today),
   which also wires the `DisableScreenLights` lever: it reaches the pass block
   and the kernels, and no World setting or verb sets it.
-- [E6](#e6--why-is-this-dark-or-invisible) why is this dark or invisible.
+- [E6](#e6--why-is-this-dark-or-invisible): extend the existing renderer-backed
+  explain pick with light, shadow, probe, and material contributions and explicit
+  unavailable diagnostics; absorb findings, pins, goto, and annotate through one
+  overlay writer.
 - [E7](#e7--gizmos-and-pointer-dragging): pointer dragging on a tabletop is in
   place (a seated seat's pointer ray meets the board's playing surface in fixed
   point, `board(pointer, …)`, `WorldTabletopFrame.TryPointerCell`, and the debug
   world's chess rules lift a piece on press and put it down on a click or a
   release elsewhere); the gizmos and the placement drag remain.
-- [E8](#e8--editor-camera) editor camera.
+- [E8](#e8--editor-camera): generic editor camera ops with feel and bindings
+  authored in the standard editor source.
 - [E11](#e11--save-edits-back-to-source): source-preserving save for authored
   rows has landed, with named generated-row refusals; E3's live duplicate and
   rename workflow remains.
-- [E12](#e12--the-shape-gallery-as-a-world), the shape gallery as a world:
+- [E12](#e12--the-shape-gallery-as-a-world), gaps in the existing debug gallery:
+  - Placement-selection isolation remains open; prototype shape isolation exists.
   - `world.slice` on the GPU: on Direct3D 12 the sampler's answered field stops
     rising about 0.13 m from the surfaces of `shape-capsule-xz` (|grad d| near
     zero beyond), which the slice reports as `clipped=` and paints magenta.
@@ -1088,8 +1083,8 @@ E5, E9, E10 and E14's recording and scrubbing are in.
     distance, change the zero set or refuse such scales at authoring is the
     owner's call.
 - [E13](#e13--carving-and-the-brick-bake): a carve brush whose dabs are document
-  rows, which gives the GPU brick bake (`RequestBrickBake` and its kernel) its
-  live producer and a live `sdf.bricks` instance.
+  rows, one authored edit per stroke, using shared field/bake invalidation and
+  the engine job system for bake work.
 - [E14](#e14--scrub-the-recorded-past) remainder:
   - Prove the rest of its laws red with `puck laws prove`: the four
     `HistoryScrubLawTests`, and `ReplayArmingLawTests.ATapeWhoseCheckpointWasTakenAtTheWrongTickReportsMismatchAtItsFirstTick`
