@@ -31,9 +31,8 @@ public enum WorldQueryConfidence {
 /// <see cref="WorldQueryConfidence.Bounded"/> answer (<c>BakedWorldQuery</c>) hardcodes constant world
 /// <c>+Y</c> — a heightfield's only honest answer, since the baked artifact carries no per-hit surface orientation.
 /// A <see cref="WorldQueryConfidence.Exact"/> answer (<c>SdfFieldEvaluator</c>'s march) is always
-/// <see cref="FixedVector3.Zero"/>, deliberately NOT computed: no consumer reads it today (<c>WorldSolidField.ResolveCore</c>
-/// consumes only <c>RayHit.Distance</c>), so spending a gradient tap on every march hit was pure waste. A future
-/// consumer that needs it should call <see cref="IFieldEvaluator.TryFieldGradient(FixedPosition, out FixedVector3)"/>
+/// <see cref="FixedVector3.Zero"/>, not computed, so a march hit spends no gradient taps. A consumer that needs it
+/// calls <see cref="IFieldEvaluator.TryFieldGradient(FixedPosition, out FixedVector3)"/>
 /// at <see cref="Point"/> itself.</param>
 /// <param name="Distance">How far the query travelled along the cast direction before contact. For a sphere cast
 /// that is how far the sphere's CENTER moved, not the distance to <see cref="Point"/>; the two coincide only for a

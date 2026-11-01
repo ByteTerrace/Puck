@@ -8,10 +8,8 @@ namespace Puck.Physics;
 /// every caller in the same change.</summary>
 public static class FixedContactPushMath {
     /// <summary>The uncommitted outcome of resolving one confirmed contact push: the position/velocity deltas a
-    /// caller adds, whether the push reads as walkable, and the measured surface normal. <see cref="Normal"/> is
-    /// <see langword="null"/> exactly for a degenerate-gradient push (<see cref="ComputeDegenerate"/>), which
-    /// fabricates no normal and so never latches an obstruction witness.</summary>
-    public readonly record struct Trial(FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3? Normal);
+    /// caller adds, whether the push reads as walkable, and the measured surface normal.</summary>
+    public readonly record struct Trial(FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3 Normal);
 
     /// <summary>Applies a trial: displaces position, clamps velocity, and latches the walkable/obstruction witness.
     /// <paramref name="grounded"/> is a one-way latch — never cleared here — matching every caller's per-iteration
@@ -28,33 +26,10 @@ public static class FixedContactPushMath {
 
         if (trial.Grounded) {
             grounded = true;
-
-            if (trial.Normal is { } walkableNormal) {
-                groundNormal = walkableNormal;
-            }
-        } else if (trial.Normal is { } normal) {
-            lastNormal = normal;
+            groundNormal = trial.Normal;
+        } else {
+            lastNormal = trial.Normal;
         }
-    }
-    /// <summary>Computes the trial for the degenerate-gradient fallback: bare positional displacement along the
-    /// reverse-of-motion direction (or <paramref name="up"/> for a body at rest), with no velocity clamp and no
-    /// grounded/obstruction latch — the direction is not a measured normal, so it must never fabricate one.</summary>
-    /// <param name="velocity">The body's velocity, read only.</param>
-    /// <param name="penetration">The confirmed penetration depth.</param>
-    /// <param name="up">The body's up axis, used when <paramref name="velocity"/> is zero.</param>
-    internal static Trial ComputeDegenerate(in FixedVector3 velocity, FixedQ4816 penetration, FixedVector3 up) {
-        var direction = (-velocity).Normalize();
-
-        if (direction == FixedVector3.Zero) {
-            direction = up;
-        }
-
-        return new Trial(
-            Grounded: false,
-            Normal: null,
-            PositionDelta: (direction * penetration),
-            VelocityDelta: FixedVector3.Zero
-        );
     }
 
     /// <summary>Computes the trial for an ordinary push against a MEASURED surface normal: displacement along the

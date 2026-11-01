@@ -36,8 +36,9 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// <see cref="FixedStaticColliderKind.AxisAlignedBox"/>, <see cref="FixedStaticColliderKind.OrientedBox"/>,
 /// <see cref="FixedStaticColliderKind.RoundedBox"/>, <see cref="FixedStaticColliderKind.ChamferedBox"/>,
 /// <see cref="FixedStaticColliderKind.Superellipsoid"/>, <see cref="FixedStaticColliderKind.Cylinder"/>,
-/// <see cref="FixedStaticColliderKind.HalfSpace"/>, and <see cref="FixedStaticColliderKind.Field"/> (a projection by
-/// measured first-order steps, <see cref="FixedFieldColliderContact.Nearest"/>). A
+/// <see cref="FixedStaticColliderKind.HalfSpace"/>, and <see cref="FixedStaticColliderKind.Field"/> (the certified
+/// surface solve's projection, <see cref="FixedFieldColliderContact.TryNearest"/>; a field whose solve reaches no
+/// surface from the probe offers no candidate). A
 /// later slice reads a candidate's <see cref="FixedSurfaceAttachCandidate.Point"/> as the anchor and
 /// <see cref="FixedSurfaceAttachCandidate.Normal"/> as the surface-tangent-plane basis; nothing here decides grip,
 /// rope length, or reach — every distance and angle is caller-supplied, never a constant baked in.
@@ -80,10 +81,15 @@ public static class FixedSurfaceQuery {
         ref FixedSurfaceAttachCandidate best
     ) {
         for (var index = 0; (index < colliders.Length); index++) {
-            var (point, normal) = NearestOnCollider(
+            if (!TryNearestOnCollider(
                 collider: in colliders[index],
+                normal: out var normal,
+                point: out var point,
                 probe: probe
-            );
+            )) {
+                continue;
+            }
+
             var distance = (probe - point).Length;
 
             if (
@@ -118,10 +124,15 @@ public static class FixedSurfaceQuery {
         ref FixedSurfaceAttachCandidate best
     ) {
         for (var index = 0; (index < colliders.Length); index++) {
-            var (point, normal) = NearestOnCollider(
+            if (!TryNearestOnCollider(
                 collider: in colliders[index],
+                normal: out var normal,
+                point: out var point,
                 probe: origin
-            );
+            )) {
+                continue;
+            }
+
             var delta = (point - origin);
             var distance = delta.Length;
 
@@ -259,9 +270,18 @@ public static class FixedSurfaceQuery {
         return (Point: box.ToWorld(local: surfaceLocal), Normal: box.ToWorldOffset(local: normal));
     }
 
-    internal static (FixedVector3 Point, FixedVector3 Normal) NearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
+    // A collider's nearest surface point and its outward normal; false only for a field whose surface solve reaches no
+    // surface from the probe, which offers no point at all rather than the probe itself.
+    internal static bool TryNearestOnCollider(in FixedStaticCollider collider, FixedVector3 probe, out FixedVector3 point, out FixedVector3 normal) {
+        if (collider.Kind == FixedStaticColliderKind.Field) {
+            return FixedFieldColliderContact.TryNearest(collider: in collider, normal: out normal, point: out point, probe: probe);
+        }
+
+        (point, normal) = NearestOnAnalytic(collider: in collider, probe: probe);
+        return true;
+    }
+    private static (FixedVector3 Point, FixedVector3 Normal) NearestOnAnalytic(in FixedStaticCollider collider, FixedVector3 probe) => collider.Kind switch {
         FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => FixedConvexContact.Nearest(collider: in collider, probe: probe),
-        FixedStaticColliderKind.Field => FixedFieldColliderContact.Nearest(collider: in collider, probe: probe),
         FixedStaticColliderKind.RoundedBox => NearestOnRoundedBox(collider: in collider, probe: probe),
         FixedStaticColliderKind.Cylinder => NearestOnCylinder(collider: in collider, probe: probe),
         FixedStaticColliderKind.Sphere => NearestOnSphere(

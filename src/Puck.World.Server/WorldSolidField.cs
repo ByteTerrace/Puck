@@ -406,14 +406,16 @@ public sealed class WorldSolidField : IContactField {
         }
 
         foreach (var placement in definition.Placements) {
-            // A dealt template collides with nothing itself; its solid facet is what its dealt children carry.
+            // A dealt template collides with nothing itself; its solid facet is what its dealt children carry. A creation
+            // contact keeps no shape of emits nothing to collide with, and no scope to hold its relief.
             if (
                 (placement.Solid is not { } solid) ||
                 (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
                 id: placement.ShownPrototypeId
-            ) is not { } creation)
+            ) is not { } creation) ||
+                !CreationStampEmitter.EmitsContact(document: creation.EngineDocument)
             ) {
                 continue;
             }

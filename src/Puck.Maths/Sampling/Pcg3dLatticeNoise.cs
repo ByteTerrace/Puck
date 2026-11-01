@@ -110,14 +110,58 @@ public static class Pcg3dLatticeNoise {
         var ux = Quintic(t: (q.X - FixedQ4816.FromInteger(value: cx)));
         var uy = Quintic(t: (q.Y - FixedQ4816.FromInteger(value: cy)));
         var uz = Quintic(t: (q.Z - FixedQ4816.FromInteger(value: cz)));
-        var x00 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, cy, cz), to: Corner((cx + 1L), cy, cz));
-        var x10 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, (cy + 1L), cz), to: Corner((cx + 1L), (cy + 1L), cz));
-        var x01 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, cy, (cz + 1L)), to: Corner((cx + 1L), cy, (cz + 1L)));
-        var x11 = FixedQ4816.Lerp(amount: ux, from: Corner(cx, (cy + 1L), (cz + 1L)), to: Corner((cx + 1L), (cy + 1L), (cz + 1L)));
+        ref readonly var cell = ref CellCorners(seedX: seedX, seedY: seedY, seedZ: seedZ, x: cx, y: cy, z: cz);
+        var x00 = FixedQ4816.Lerp(amount: ux, from: cell.C000, to: cell.C100);
+        var x10 = FixedQ4816.Lerp(amount: ux, from: cell.C010, to: cell.C110);
+        var x01 = FixedQ4816.Lerp(amount: ux, from: cell.C001, to: cell.C101);
+        var x11 = FixedQ4816.Lerp(amount: ux, from: cell.C011, to: cell.C111);
         var y0 = FixedQ4816.Lerp(amount: uy, from: x00, to: x10);
         var y1 = FixedQ4816.Lerp(amount: uy, from: x01, to: x11);
 
         return ((FixedQ4816.Lerp(amount: uz, from: y0, to: y1) * FixedQ4816.FromInteger(value: 2)) - FixedQ4816.One);
+    }
+
+    // One lattice cell's eight corner values under one seed triple, the cell its least corner.
+    private struct LatticeCell {
+        public bool Filled;
+        public uint SeedX, SeedY, SeedZ;
+        public long X, Y, Z;
+        public FixedQ4816 C000, C100, C010, C110, C001, C101, C011, C111;
+    }
+
+    // The cells this thread read last, direct-mapped by key: a field read and its nearby reads (a gradient's taps, a
+    // ray's samples) fall in the same cell of every octave, so they hash its corners once. The corners are a pure
+    // function of the key, so a cached cell answers exactly what hashing it again would.
+    [ThreadStatic]
+    private static LatticeCell[]? LatticeCells;
+    private const int CellCacheBits = 6;
+
+    private static ref readonly LatticeCell CellCorners(uint seedX, uint seedY, uint seedZ, long x, long y, long z) {
+        var cells = (LatticeCells ??= new LatticeCell[1 << CellCacheBits]);
+        var slot = unchecked((int)((((seedX * HashStreamA) ^ ((uint)x * PcgMultiplier)) ^ (((uint)y * HashStreamB) ^ ((uint)z * HashTumble))) >> (32 - CellCacheBits)));
+        ref var cell = ref cells[slot];
+
+        if (!cell.Filled || (cell.SeedX != seedX) || (cell.SeedY != seedY) || (cell.SeedZ != seedZ) || (cell.X != x) || (cell.Y != y) || (cell.Z != z)) {
+            cell = new LatticeCell {
+                Filled = true,
+                SeedX = seedX,
+                SeedY = seedY,
+                SeedZ = seedZ,
+                X = x,
+                Y = y,
+                Z = z,
+                C000 = Corner(x: x, y: y, z: z),
+                C100 = Corner(x: (x + 1L), y: y, z: z),
+                C010 = Corner(x: x, y: (y + 1L), z: z),
+                C110 = Corner(x: (x + 1L), y: (y + 1L), z: z),
+                C001 = Corner(x: x, y: y, z: (z + 1L)),
+                C101 = Corner(x: (x + 1L), y: y, z: (z + 1L)),
+                C011 = Corner(x: x, y: (y + 1L), z: (z + 1L)),
+                C111 = Corner(x: (x + 1L), y: (y + 1L), z: (z + 1L)),
+            };
+        }
+
+        return ref cell;
 
         FixedQ4816 Corner(long x, long y, long z) => FixedQ4816.FromRawBits(value: ((long)(Pcg3d(
             x: (unchecked((uint)x) ^ seedX),
