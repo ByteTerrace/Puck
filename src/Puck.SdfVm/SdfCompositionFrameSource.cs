@@ -225,28 +225,19 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets the live program's word count, or zero before its first build.</summary>
     public int ProgramWordCapacity => (m_program?.Words.Length ?? 0);
 
-    // A live rebuild's emission, which reads the emitters' live state and so runs in the frame. `previous`, the program
-    // this call rebuilds, supplies List capacity hints for the fresh builder: its own counts are exactly what this build's
-    // counts were last time, and a live scene's shape rarely swings wildly frame to frame, so seeding from them removes
-    // most of List<T>'s geometric-growth reallocation without guessing at a number nothing measured. A capacity hint
-    // changes nothing observable (List<T>.Capacity affects no read value).
-    // The convex-polygon profiles the last live emission emitted: the program keeps its side table to itself.
-    private int m_emittedConvexPolygons;
+    // The composition owns its emission storage. Capture emits only after the previous asynchronous build has joined;
+    // Build snapshots its inputs, so neither a built program nor an observer borrows this builder after that join.
+    private readonly SdfProgramBuilder m_builder = new();
 
-    private SdfProgramBuilder EmitProgram(SdfEmitContext context, SdfProgram? previous) {
-        var builder = new SdfProgramBuilder(
-            instructionCapacity: (previous?.InstructionCount ?? 0),
-            instanceCapacity: (previous?.Instances.Count ?? 0),
-            materialCapacity: (previous?.MaterialCount ?? 0),
-            screenSurfaceCapacity: (previous?.ScreenSurfaces.Count ?? 0),
-            convexPolygonCapacity: m_emittedConvexPolygons
-        );
+    private SdfProgramBuilder EmitProgram(SdfEmitContext context) {
+        var builder = m_builder;
+
+        builder.Clear();
 
         Emit(
             builder: builder,
             context: context
         );
-        m_emittedConvexPolygons = builder.ConvexPolygonCount;
 
         return builder;
     }
@@ -268,6 +259,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets how long, in milliseconds, the latest program build took on whatever thread ran it: packing,
     /// validating and analysing the emitted builder.</summary>
     public double BuildMilliseconds => Volatile.Read(location: ref m_buildMilliseconds);
+
     // Adopts the program a background build finished, or waits for it in a converging or tick-locked frame, so that frame
     // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
     // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
@@ -506,14 +498,14 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         var root = m_programSlots;
 
         foreach (var emitter in m_emitters) {
-            m_meshAssetSlots.AddRange(emitter.MeshAssetSlots);
+            m_meshAssetSlots.AddRange(collection: emitter.MeshAssetSlots);
             foreach (var copy in emitter.MeshInstances) {
                 copy.FrameSlot = root;
                 var previous = m_transforms[root];
 
                 m_transforms[root] = copy.Transform;
-                if (previous != copy.Transform) { m_moved.Owe(start: root, count: 1); }
-                m_meshInstances.Add(copy);
+                if (previous != copy.Transform) { m_moved.Owe(count: 1, start: root); }
+                m_meshInstances.Add(item: copy);
                 root++;
             }
         }
@@ -561,10 +553,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
         layoutChanged |= (slots != m_programSlots);
         m_programSlots = slots;
-        var roots = m_emitters.Sum(emitter => emitter.MeshInstances.Count);
+        var roots = m_emitters.Sum(selector: emitter => emitter.MeshInstances.Count);
 
         if (m_transforms.Length != (slots + roots)) {
-            Array.Resize(ref m_transforms, (slots + roots));
+            Array.Resize(array: ref m_transforms, newSize: (slots + roots));
             m_transformsPacked = false;
         }
         var moved = (CaptureRevisions() || layoutChanged);
@@ -584,8 +576,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                     ParkPosition: ParkPosition,
                     SlotBase: 0,
                     InterpolationAlpha: interpolationAlpha
-                ),
-                previous: m_program
+                )
             );
 
             Volatile.Write(location: ref m_emitMilliseconds, value: System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: emitted).TotalMilliseconds);
@@ -652,7 +643,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         dressed.SlotClips = ComposeSlotClips();
         dressed = dressed with { MeshAssetSlots = m_meshAssetSlots, MeshInstances = m_meshInstances };
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
-        if (Frames == 0) { Console.Error.WriteLine($"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
+        if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;
         return dressed;
     }

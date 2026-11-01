@@ -69,10 +69,12 @@ public sealed class CompanionReturnLawTests {
         var companion = rows.Companions[0];
         var released = false;
 
-        rows.Host.SetPeerCallFault(fault: new LoseFirstCommit(Destination: rows.B.Server, Lost: () => {
-            Assert.Equal(actual: rows.Home.Server.RecordCustody(reason: out _, record: new WorldCrossingRecord.Release(Incarnation: companion)), expected: WorldCrossingDurability.Durable);
-            released = true;
-        }), instanceName: "row-b");
+        rows.Host.SetPeerCallFault(fault: new FaultingPeerCall(destination: rows.B.Server) {
+            Lost = () => {
+                Assert.Equal(actual: rows.Home.Server.RecordCustody(reason: out _, record: new WorldCrossingRecord.Release(Incarnation: companion)), expected: WorldCrossingDurability.Durable);
+                released = true;
+            },
+        }, instanceName: "row-b");
         rows.Cross(from: rows.Home, to: rows.B);
         rows.Step(ticks: 4);
 
@@ -135,33 +137,5 @@ public sealed class CompanionReturnLawTests {
             SourceTick: tick,
             TransferId: key.TransferId
         );
-    }
-    // Forwards every call to the destination except the first commit, which it loses on the way after running `Lost`:
-    // the source's departure is then in doubt and the destination's lease still live.
-    private sealed record LoseFirstCommit(WorldServer Destination, Action Lost) : IWorldPeerCall {
-        private readonly bool[] m_lost = [false];
-
-        public void Abort(string sourceAuthority, ulong transferId) => Destination.AbortTransfer(sourceAuthority: sourceAuthority, transferId: transferId);
-        public void Acknowledge(string sourceAuthority, ulong transferId) => Destination.AcknowledgeTransfer(sourceAuthority: sourceAuthority, transferId: transferId);
-        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) => Destination.ReserveTransfer(request: request);
-        public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
-            if (!m_lost[0]) {
-                m_lost[0] = true;
-                Lost();
-                status = WorldTransferStatus.Missing;
-                reason = "the commit was lost on the lane";
-                return WorldTransferStep.Unreachable;
-            }
-            status = Destination.CommitTransfer(members: members, reason: out reason, sourceAuthority: sourceAuthority, transferId: transferId);
-            return WorldTransferStep.Answered;
-        }
-        public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
-            status = Destination.TransferStatus(sourceAuthority: sourceAuthority, transferId: transferId);
-            return true;
-        }
-        public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
-            landed = Destination.TransferLanded(sourceAuthority: sourceAuthority, transferId: transferId);
-            return true;
-        }
     }
 }

@@ -38,6 +38,25 @@ public sealed partial class WorldServer {
             m_authorityRetiring = true;
         }
     }
+    /// <summary>Freezes this activation for retirement only when <paramref name="admits"/> answers
+    /// <see langword="true"/>, read under the same hold of the authority gate as the freeze: no reservation, commit or
+    /// submission lands between the decision and the closed admission. Answers <see langword="true"/> without asking
+    /// when the activation has already frozen.</summary>
+    /// <param name="admits">The final check, run under the authority gate on the calling thread; it may read this
+    /// activation through <see cref="ExecuteAuthorityOperation{T}(Func{T})"/>.</param>
+    /// <returns><see langword="true"/> once the activation is frozen; <see langword="false"/> when
+    /// <paramref name="admits"/> refused or a dispatched external operation has not settled yet.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="admits"/> is <see langword="null"/>.</exception>
+    public bool TryFreezeForRetirement(Func<bool> admits) {
+        ArgumentNullException.ThrowIfNull(argument: admits);
+
+        lock (m_authorityGate) {
+            if (m_authorityRetiring) { return true; }
+            if ((Extensions.ExternalOperationsInFlight != 0) || !admits()) { return false; }
+            FreezeForRetirement();
+            return true;
+        }
+    }
     /// <summary>Stops this activation for good: admission closes, and every submission still pending (a mutation, a
     /// rebuild, an undo, from any submitter) is answered now with a refusal naming the stop, through the same answers a
     /// refusal at the tick boundary gives — the typed completion and the edit echo — so no submitter waits for a tick

@@ -53,6 +53,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
     // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
     private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
+    private readonly Puck.State.ArenaScratch m_emissionScratch = new();
 
     // MeshDraws: the static draws each static rebuild replaces, then the pool's.
     private readonly WorldSceneMeshDraws m_meshDraws;
@@ -120,11 +121,13 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // The per-avatar body + accent materials, allocated up front so the catalog emitter is a straight builder chain.
         // A local seat's colors come from its seated profile (a pending seat renders a desaturated candidate); a stand-in's
         // from its snapshot palette. A color change bumps the revision and rebuilds; a settings-only edit does not.
-        var avatarBodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
-        var avatarAccentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        using var bodyMaterials = m_emissionScratch.Rent<int>(length: WorldBodiesLimits.CapacityCeiling);
+        using var accentMaterials = m_emissionScratch.Rent<int>(length: WorldBodiesLimits.CapacityCeiling);
+        var avatarBodyMaterials = bodyMaterials.Span;
+        var avatarAccentMaterials = accentMaterials.Span;
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
-            if (!IsAvatarPresented(index) || m_animator.HasBodyRegistration(index)) { continue; }
+            if (!IsAvatarPresented(index: index) || m_animator.HasBodyRegistration(bodyIndex: index)) { continue; }
             var bodyColor = (TryPresentedAppearance(
                 bodyColor: out var presentedColor,
                 catalogRig: out _,
@@ -241,7 +244,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     // the route seed/continuum pose. Adjacency rendering suppresses that exact address, so a transfer cannot create
     // a one-frame zero-avatar gap or a two-avatar overlap.
     private bool IsAvatarPresented(int index) {
-        if (m_animator.HasBodyRegistration(index)) { return false; }
+        if (m_animator.HasBodyRegistration(bodyIndex: index)) { return false; }
         if (IsPresentedElsewhere(index: index)) {
             return false;
         }
@@ -396,16 +399,16 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
 
     private void PrepareCatalog() {
         m_catalogSlotCount = 0;
-        Array.Fill(m_catalogSlots, -1);
+        Array.Fill(array: m_catalogSlots, value: -1);
         for (var body = 0; (body < m_catalogSlots.Length); body++) {
-            if (!IsAvatarPresented(body)) { continue; }
+            if (!IsAvatarPresented(index: body)) { continue; }
             m_catalogSlots[body] = m_catalogSlotCount;
             m_catalogSlotCount += WorldRigCatalog.TransformSlotsPerBody;
         }
-        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(index => (m_catalogSlots[index] >= 0))
-            .Select(index => (index, ((int)m_client.CatalogRig(index)), m_client.Look(index), m_client.BodyColor(index))).ToArray();
+        var image = Enumerable.Range(0, m_catalogSlots.Length).Where(predicate: index => (m_catalogSlots[index] >= 0))
+            .Select(selector: index => (index, ((int)m_client.CatalogRig(index: index)), m_client.Look(index: index), m_client.BodyColor(index: index))).ToArray();
 
-        if (!m_catalogImage.AsSpan().SequenceEqual(image)) { m_catalogImage = image; m_catalogRevision++; }
+        if (!m_catalogImage.AsSpan().SequenceEqual(other: image)) { m_catalogImage = image; m_catalogRevision++; }
     }
 
     private readonly int[] m_preparedRevision = new int[WorldClient.RevisionComponentCount];
@@ -419,9 +422,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     public void PrepareFrame() {
         Span<int> revision = stackalloc int[WorldClient.RevisionComponentCount];
 
-        m_client.WriteRevision(revision);
-        if (m_prepared && revision.SequenceEqual(m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
-        revision.CopyTo(m_preparedRevision);
+        m_client.WriteRevision(destination: revision);
+        if (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove()) { return; }
+        revision.CopyTo(destination: m_preparedRevision);
         m_prepared = true;
         m_preparedPresentation = m_continuum.PresentationRevision;
         m_preparedCode = Puck.Abstractions.CodeRevision.Current;
@@ -434,9 +437,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 m_presentedStamps.Add(item: stamp);
             }
         }
-        var articulated = m_presentedStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        var articulated = m_presentedStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
 
-        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Reconcile(
             looks: definition.Looks,
             placements: definition.Placements,
@@ -782,7 +785,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even
         // though no delivery has landed yet.
         m_derivedFaceRows = WorldPrototypeFacets.ReservedFaceSlots(
-            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
             derivedFaceScreens: m_derivedFaceScreens
         );
 
@@ -790,9 +793,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         // so the worst-case build sees the same pool the first live build will (body stamps are empty until the first
         // snapshot).
         m_census.Refresh(source: m_client);
-        var articulated = m_presentedStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
+        var articulated = m_presentedStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
 
-        if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
         m_animator.Reconcile(
             looks: definition.Looks,
             placements: definition.Placements,

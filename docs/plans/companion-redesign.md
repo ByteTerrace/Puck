@@ -407,7 +407,11 @@ runs the separation sweep for visiting companions and completes after the drain;
 not settled by then stays an in-doubt record in the final checkpoint, which the stop must
 write. A host that keeps no durable image cannot write one, so it refuses to stop a home
 holding a title abroad and waits while a row owes steps its drain makes. Reaping and stop
-read one guard (`WorldInstanceHost.CustodyHeldBy`).
+read one guard (`WorldInstanceHost.CustodyHeldBy`). The accepted stop is part of the row's
+image, so a restart resumes it; the sweep repeats at every drain; and the row retires only
+when, in the same hold of its authority gate that closes admission, it embodies no visitor
+and holds no live lease. A visitor whose home runs nowhere the stop can reach makes the stop
+refused, since no return obligation could be recorded for it.
 
 ## 6. Trust derivation
 
