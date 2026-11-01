@@ -1447,6 +1447,13 @@ the boot deadline, or give admission a ceiling that covers the granted queue.
   has deployed nothing since Sep 9. The fix at the cause is a silo that mounts
   addon guests (`Puck.World.Addons` is already referenced) and checkpoints
   their state, which today refuses capture. (from: the main landing's CI triage)
+- [low] The official tree (`puck official build --worlds worlds/debug`) ships
+  the composed debug world with its imports inlined, so the browser boots, but
+  its `sources` and `documents` stop at the package: none of `worlds/standard`'s
+  sources reach the authoring workspace, though `moth` and `debug` import
+  `../../standard/camera` and `../standard/standard`. Carry the packages a
+  package imports, as the published World's `compile --tree worlds` now does.
+  (from: the main landing's CI triage)
 
 Owner: delivery lane · ordinary · Next: measure deriving the eleven addon guest
 `.wasm` modules from source against edit-to-running.

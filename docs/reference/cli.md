@@ -3523,8 +3523,10 @@ output-relative path with forward slashes per line in ordinal order, once the
 run succeeds; the run removes the report before it starts, so a failed run
 leaves none. Which documents a source emits, and under which names, is not its
 file name, so a caller reads the report rather than deriving it from the
-sources' names. A release publish runs the tree form over a package
-(`puck compile --tree worlds/debug --output <publish>/worlds/debug`).
+sources' names. A release publish runs the tree form over the worlds directory
+(`puck compile --tree worlds --output <publish>/worlds`), so a package and the
+packages it imports by relative path (the debug world's `../standard/…`) keep
+their authored layout.
 `--check` compiles the tree into a scratch directory and compares it with
 `--output` instead of writing there. It exits 1 naming each file a fresh run
 writes that the output lacks or holds with other bytes, and each document,
