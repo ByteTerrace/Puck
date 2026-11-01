@@ -2607,6 +2607,18 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] A literal read from an initially empty ordered pile is refused even
+  when its key belongs to the declared `KeysOf` token domain. `RuleCompileContext.cs:242`
+  admits authored cells and `CellsOf` topology cells only;
+  `RuleCompiler.Operands.cs:365` then reports `StateCellUndeclared`. Reproduce by
+  adding `hand["c"] == 1` to `worlds/debug/unbiased-draws-tests.puck` after its
+  transfer: the real host refuses before running, although the transfer can
+  install that member. Admit literal keys from the declared token domain while
+  retaining refusal of out-of-domain keys; cover absence before transfer and
+  presence afterward. The sampling fixture checks counts and the remaining
+  source member, and its C# transform laws check transferred identities.
+  (from: unbiased-draws)
+
 - Decide (the language lane's call): whether a rule's effect list merges by
   `key` when a template is re-expanded over a basis. Today a rule whose effects
   write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with

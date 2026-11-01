@@ -5,6 +5,11 @@ description: "Picks Puck.Maths primitives and determinism rules: FixedQ4816, Fix
 
 # Puck.Maths: choose, obey, verify
 
+During the refactoring campaign, AGENTS.md suspends this skill's blanket test,
+coverage and gate requirements. An explicit brief's verification still applies;
+exact rejection and continuation laws are useful where a running world cannot
+reliably reach the inputs.
+
 Puck.Maths is the deterministic numerics library for values a simulation
 advances, compares, hashes, snapshots or replays: the same inputs give the same
 bits on every machine, backend and run. Presentation-only floats, shaders,
@@ -32,6 +37,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A target that eases or overshoots | `SecondOrderDynamics` | `SecondOrderFollower`, the presentation-only float twin |
 | Lerp or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector3.Lerp`, `FixedQuaternion.Slerp` | A hand-rolled `a + (b - a) * t` |
 | Sequential random draws | `Pcg32XshRr` | `System.Random`, `Random.Shared` |
+| A bounded index over a fallible or budgeted raw-word source | `BoundedRandomSampling.TryMap` for each word; the caller owns retries, raw cursor accounting and refusal | A multiply-high map without rejection; a second Lemire implementation |
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` | A per-call cumulative scan over floats |
 | A shuffle | `Pcg32XshRr.Shuffle` | `OrderBy(_ => random)` |
 | Spatial noise, per-cell randomness or a scattered point | `Pcg3dLatticeNoise` (`ValueNoise01`, `ScatterPoint`) | A per-call RNG; a second copy of the block formula |

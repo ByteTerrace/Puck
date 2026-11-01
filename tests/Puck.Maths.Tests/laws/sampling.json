@@ -1,5 +1,26 @@
 [
   {
+    "Id": "sampling.bounded-word-exact-rejection",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.BoundedRandomSampling",
+        "Name": "TryMap"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Acceptance and bounded output for explicit raw words at bounds 1, 2, 3, 208, 2147483649 and uint.MaxValue; zero bound refuses.",
+        "Against": "Exact BigInteger quotient and remainder of word times bound by 2^32, rejecting remainders below 2^32 mod bound.",
+        "Shared": "No Puck numeric kernel is used by the oracle.",
+        "Citation": "Integer division partitions every output bucket into the same accepted remainder interval.",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "sampling.bit-mix-constants-invert",
     "Tier": "Default",
     "Members": [
