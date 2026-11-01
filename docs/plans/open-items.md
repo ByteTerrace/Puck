@@ -81,7 +81,8 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    [the memo](simulation-thread.md)'s phases, one host loop first.
+    [the memo](simulation-thread.md)'s phases, one host loop first, then the
+    tick record and the step body on a worker.
 
 ## Owner decisions
 
@@ -999,23 +1000,43 @@ empty store (AGENTS.md).
 ### Simulation tick off the frame thread
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: build [the simulation thread](simulation-thread.md) by its phases, phase
-1 (one host loop, no thread) first. The owner queued the thread.
+Next: build [the simulation step off the frame thread](simulation-thread.md)
+by its phases: phase 1 (one host loop, no thread) is in flight; then phase 2
+(the tick record, still one thread), phase 3 (the produce path reads no
+server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
+(hardening). The owner queued the thread.
 
+- Owner decision owed: the design costs one iteration of presentation
+  latency for a tick's visible effect (about one frame period at 60 Hz, and
+  about 8 ms more than a free-running simulation thread would), the price of
+  keeping every client object on one thread
+  ([latency](simulation-thread.md#latency)). Under one step per dispatch a
+  World whose tick rate exceeds the display's refresh steps inline, as today.
 - [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
-
-- Decided in [the simulation thread](simulation-thread.md#decisions): one
-  simulation thread owns the pump, the server, every instance host, the
-  console drain and the seat half of the client; the handoff is a mailbox
-  behind the existing `IClientSink` seam, applied in order on the frame
-  thread, folding a superseded snapshot with `EntityContinuity.Then`; the
-  frame derives its clock and alpha from what it applied; input capture is
-  unchanged (the router's capture gate already crosses threads);
-  presentation verbs declare a routing on the registry's one routing axis;
-  offscreen, `world.lockstep` and unpaced headless step inline through the
-  same pump and loop; the three host loops converge into one before the
-  thread is added. The memo's build plan, duplicates and limits are its
-  sections 6 to 8.
+- Decided in [the simulation step off the frame thread](simulation-thread.md#decisions),
+  after the memo's one cross-family review (its findings and each one's
+  resolution are the memo's [review resolution](simulation-thread.md#review-resolution)):
+  the frame thread keeps everything it owns today (the pump, the router, the
+  one console drain, the capture scheduler, the client whole); one dedicated
+  worker runs only `WorldHostStep`'s body (the server step and the instance
+  steps) between a dispatch after present and a join after the next input
+  capture, so the step overlaps the present block and the pacer's wait; the
+  hub delivers the body's ticks into one tick record the frame thread replays
+  into the local sinks at the join, so writer and reader never overlap and
+  no ring, fold or second drain exists; the frame derives its clock and alpha
+  from the record it applied; one step per dispatch, with a replay drive's
+  burst budgeted to the next tick barrier (a pinned `world.at` line, a wait
+  release, a schedule step, a capture row); lockstep, offscreen and unpaced
+  headless join immediately through the same code; a debug guard on the
+  server's frame-facing seams proves the produce path reads no server state
+  before any thread exists; the three host loops converge first.
+- Filed by the review, outside this design: a remote `WorldSessionMirror`'s
+  per-property pose reads (`WorldSessionSceneEmitter.cs:693-705`) against its
+  socket thread's in-place delivery (`WorldSessionMirror.cs:533-594`) can
+  compose a frame from two ticks; the fix is the coherent-copy path the
+  adjacency pin already uses (`CopySnapshotTo`). Pre-existing; owner: the
+  federation lane. `CodeDerivedTable`'s stale-generation insert is fixed in
+  the memo's phase 2.
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a
