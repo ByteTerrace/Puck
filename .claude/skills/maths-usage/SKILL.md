@@ -37,7 +37,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A target that eases or overshoots | `SecondOrderDynamics` | `SecondOrderFollower`, the presentation-only float twin |
 | Lerp or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector3.Lerp`, `FixedQuaternion.Slerp` | A hand-rolled `a + (b - a) * t` |
 | Sequential random draws | `Pcg32XshRr` | `System.Random`, `Random.Shared` |
-| A bounded index over a fallible or budgeted raw-word source | `BoundedRandomSampling.TryMap` for each word; the caller owns retries, raw cursor accounting and refusal | A multiply-high map without rejection; a second Lemire implementation |
+| A bounded index over a fallible or budgeted raw-word source | `BoundedRandomSampling.TrySampleRange` (or `TrySampleWide` past 32 bits) over an `IRawWordSource`, with a caller-set attempt budget; it counts every raw word and refuses on exhaustion. `TryMap` is the per-word step | A multiply-high map without rejection; a second Lemire implementation |
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` | A per-call cumulative scan over floats |
 | A shuffle | `Pcg32XshRr.Shuffle` | `OrderBy(_ => random)` |
 | Spatial noise, per-cell randomness or a scattered point | `Pcg3dLatticeNoise` (`ValueNoise01`, `ScatterPoint`) | A per-call RNG; a second copy of the block formula |
