@@ -130,7 +130,9 @@ selects the file with `--extensions-config-file`; `world.extensions.catalog`
 lists every composed [extension](../../docs/reference/extensions.md) and its
 contributions, and `world.extensions` reads back the configured connections and
 participants.
-World composes both Gaming Brick forges as built-ins and discovers the rest from
+World composes both Gaming Brick forges, the Gaming Deck forge and
+`WorldServerExtension` as built-ins and discovers the rest (`Puck.World.Azure`
+among them) from
 `extensions` under the working directory and beside the executable; an
 installation it cannot use refuses the boot by name. Imported world content
 cannot enable cloud access by itself.

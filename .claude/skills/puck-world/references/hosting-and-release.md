@@ -175,7 +175,8 @@ result with `world.extensions.catalog` in a running host
 (`Puck.World.Server: WorldSiloStorageProvider directory` is a built-in line), and
 verify with `ExtensionModelLawTests`.
 
-`Puck.World` built-ins: both Gaming Brick forges plus `WorldServerExtension` (`directory` storage); the silo's:
+`Puck.World` built-ins: both Gaming Brick forges, the Gaming Deck forge and `WorldServerExtension` (`directory`
+storage, the `observation.fixture` provider); the silo's:
 `WorldServerExtension`. Both search `./extensions` then `<app>/extensions`. The silo selects persistence,
 connection authentication, retirement observers and health endpoints from contributions by the document's
 `type` with opaque settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle service

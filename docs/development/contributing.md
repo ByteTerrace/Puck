@@ -940,6 +940,15 @@ unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- Docker Desktop is installed on the lead machine, but its service starts
+  manually, so a stopped engine is not a missing one. When `docker version`
+  reports no server, start it with
+  `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"` and wait
+  until `docker version --format '{{.Server.Version}}'` answers (under a
+  minute). Then the container legs run locally: build an image as CI does
+  (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
+  from the root) and run `puck azure test-world-container --image
+  puck/world-silo:local`.
 - The owner's development machine (Ryzen 7 7800X3D, RTX 4070) powers off
   without a bugcheck, a dump or a hardware-error record under sustained load, as
   a thermal or power trip does, most often while a windowed World renders and

@@ -609,9 +609,9 @@ public sealed partial class WorldDocument {
         // classification the way TryApplyMutation's own AffectsAddons predicate is: a whole-document swap can move
         // ANY section, including the channel table TryPrepare's own dependency check watches for. Unconditional is
         // cheap here too — a reused row costs a structural compare, never a recompile. A server with no addon host
-        // attached (a test double; the silo attaches its own refusing WorldNoAddonHost instead of leaving this null)
+        // attached (a test double; production hosts attach WorldAddonRuntime)
         // is vacuous only for a candidate whose addon rows are all absent or disabled — an ENABLED row is refused by
-        // name below, the identical shape TryApplyMutation's own no-host gate and WorldNoAddonHost.TryPrepare use,
+        // name below, the identical shape TryApplyMutation's own no-host gate uses,
         // rather than installing a candidate that claims a mounted addon no host can ever run.
         IWorldAddonPreparedPlan? rebuildAddonPlan = null;
         int[]? newRebuildTickWrittenEntity = null;
@@ -1373,8 +1373,7 @@ public sealed partial class WorldDocument {
     }
     // ApplyRebuild's own null-host gate: with no addon host attached, a candidate whose addon rows are all absent or
     // disabled is vacuous (nothing to mount either way), but an ENABLED row names a guest that would install into
-    // the document with no runtime ever able to run it — the same shape TryApplyMutation's own no-host gate and
-    // WorldNoAddonHost.TryPrepare both refuse.
+    // the document with no runtime ever able to run it — the same shape TryApplyMutation's own no-host gate refuses.
     private static bool TryFindEnabledAddonRow(WorldDefinition candidate, out string name) {
         foreach (var row in candidate.Addons) {
             if (row.Enabled) {
@@ -2022,6 +2021,7 @@ public sealed partial class WorldDocument {
             throw new InvalidOperationException(message: "Tick-pumped addon hosts must implement Recomputed contributions; use WorldRecordedExtension for recorded providers.");
         }
 
+        Host.Persistence.RestoreAttachedAddons(host: runtime);
         Host.AdoptAddonHost(runtime: runtime);
 
         StageAddonContentionArrays(

@@ -47,6 +47,15 @@ agent works in that mode by default, without asking:
   parallel tick runs authored rules and motion programs in parallel; it does
   not hand-write a feature in C# to make it fast), and a C# default for
   something an author programs is a second implementation.
+- Puck plays nice with its host (the owner's ruling). On Windows or Linux,
+  Puck relies on the host's primitives rather than replacing them: OS threads
+  and their priorities, the host's waits, timers and scheduling, virtual
+  memory, file and network I/O, and the drivers. It does this because Puck's
+  correctness and performance goals depend on it. No busy-waiting or spinning
+  in place of a wait, and no seizing cores or global timer resolution at other
+  programs' expense. Puck's own scheduler, memory account and job system sit
+  on top of those primitives. Replacing them is only for Puck's own bare-metal
+  host ([runtime decision](docs/decisions/runtime-and-delivery.md#the-runtime)).
 - Puck is independent work (the owner's ruling). For an external protocol,
   format or device, consult several independent sources as second opinions
   (vendor documentation, kernel drivers, community reverse engineering, other

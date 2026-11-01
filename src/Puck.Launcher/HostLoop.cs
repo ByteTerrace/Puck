@@ -15,7 +15,10 @@ namespace Puck.Launcher;
 /// <param name="Steps">The whole steps the iteration ran.</param>
 /// <param name="HasSimulation">Whether the host steps a simulation.</param>
 /// <param name="Holding">Whether the previous frame left its tick owing a rendered frame.</param>
-public readonly record struct HostIteration(bool TickLocked, ulong IntervalTicks, ulong StepTicks, ulong ElapsedTicks, int Steps, bool HasSimulation, bool Holding) {
+/// <param name="StepsNext">Whether the next iteration is expected to run a step: under lockstep whenever the host steps
+/// a simulation, otherwise when the pump's held remainder and one more interval like this one reach a step
+/// (<see cref="FrameContext.StepsNext"/>).</param>
+public readonly record struct HostIteration(bool TickLocked, ulong IntervalTicks, ulong StepTicks, ulong ElapsedTicks, int Steps, bool HasSimulation, bool Holding, bool StepsNext = false) {
     /// <summary>Gets the simulation tick the pump has consumed through.</summary>
     public long Tick => ((StepTicks == 0UL) ? 0L : ((long)(ElapsedTicks / StepTicks)));
 }
@@ -101,7 +104,9 @@ public sealed class HostLoop(
                 timeline.Mark(phase: HostFramePhase.Commands);
 
                 if (produce is not null) {
-                    holding = produce(new HostIteration(tickLocked, interval, stepTicks, (pump?.ElapsedTicks ?? 0UL), steps, (pump is not null), holding));
+                    var stepsNext = ((pump is not null) && (tickLocked || ((pump.AccumulatorTicks + interval) >= stepTicks)));
+
+                    holding = produce(new HostIteration(tickLocked, interval, stepTicks, (pump?.ElapsedTicks ?? 0UL), steps, (pump is not null), holding, stepsNext));
                 }
                 if (terminal.TryConsumeExit()) {
                     break;

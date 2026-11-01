@@ -360,9 +360,14 @@ public sealed partial class WorldAddonRuntime {
             return false;
         }
 
-        candidate.Commit(plan: plan!);
-        server.AttachAddons(runtime: candidate);
-        candidate.Finish(plan: plan!);
+        try {
+            candidate.Commit(plan: plan!);
+            server.AttachAddons(runtime: candidate);
+            candidate.Finish(plan: plan!);
+        } catch {
+            candidate.Dispose();
+            throw;
+        }
         runtime = candidate;
         reason = null;
 
@@ -370,6 +375,10 @@ public sealed partial class WorldAddonRuntime {
     }
     /// <inheritdoc/>
     public void Commit(IWorldAddonPreparedPlan plan) {
+        CommitCore(plan, restoring: false);
+    }
+
+    private void CommitCore(IWorldAddonPreparedPlan plan, bool restoring) {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
         if (plan is not PreparedAddonInstall install) {
@@ -384,7 +393,7 @@ public sealed partial class WorldAddonRuntime {
         // for Finish, which the caller runs only after ITS OWN publication (document install, journal write) is
         // itself durable.
         foreach (var previous in m_mounted) {
-            if (!install.Mounted.Contains(item: previous)) { m_server.Input.CancelSnapshots(actor: previous.Principal, source: "addon"); }
+            if (!restoring && !install.Mounted.Contains(item: previous)) { m_server.Input.CancelSnapshots(actor: previous.Principal, source: "addon"); }
         }
         m_host = install.Host;
         // Null exactly when no row has ever enabled (an addon-free world, or every row disabled) — the Wasmtime
@@ -400,6 +409,7 @@ public sealed partial class WorldAddonRuntime {
         m_channelsSource = install.ChannelsSource;
         install.MarkCommitted();
     }
+
     /// <inheritdoc/>
     public void Finish(IWorldAddonPreparedPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);

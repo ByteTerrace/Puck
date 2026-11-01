@@ -91,6 +91,7 @@ public sealed partial class WorldSiloHost {
                         if (!WorldAuthorityCheckpointCodec.TryDecode(
                             bytes: bytes,
                             checkpoint: out var checkpoint,
+                            documentDirectory: m_documentDirectory,
                             reason: out reason
                         )) { throw new InvalidDataException(message: reason); }
                         WorldReleaseRewindBoundary.RequireContained(

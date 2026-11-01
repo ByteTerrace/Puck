@@ -210,5 +210,6 @@ public sealed record WorldAuthorityCheckpoint(
     IReadOnlyList<WorldFieldRegionCheckpoint>? Fields = null,
     ArenaSearchCheckpoint? Search = null,
     WorldBoardEnforcementCheckpoint? BoardEnforcement = null,
-    WorldMachineHostCheckpoint? Machines = null
+    WorldMachineHostCheckpoint? Machines = null,
+    byte[]? Addons = null
 );

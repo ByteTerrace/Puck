@@ -19,11 +19,19 @@ Copy the [Azure example](../Puck.World.Azure/azure.extensions.example.json)
 to a private deployment directory. Set the resource ID, API version, incarnation,
 and authentication arrangement for the resource you intend to operate. Choose a
 new lineage UUID for a new authority, then retain it across ordinary restarts.
-Never reuse an example's lineage for independent deployments.
+Never reuse an example's lineage for independent deployments. Install the
+extension that contributes each provider and participant type the file names
+before the host starts: no host references `Puck.World.Azure`, so a World run from
+the repository root reads it from `extensions/Puck.World.Azure`.
 
 ```text
+dotnet publish src/Puck.World.Azure -c Release -nodeReuse:false -o extensions/Puck.World.Azure
 dotnet run --project src/Puck.World -c Release -- --world my.world.json --extensions-config-file my.extensions.json
 ```
+
+A type that no installed extension contributes refuses the boot by name, listing
+the installed ones (`Provider 'azure' selects uninstalled type 'azure.resource';
+name one of: observation.fixture.`).
 
 The configuration's `world` must match that document's `documentId`. It applies
 to the boot authority; separately started world instances do not inherit its

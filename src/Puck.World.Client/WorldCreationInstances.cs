@@ -207,6 +207,11 @@ public sealed partial class WorldCreationInstances {
 
         // The slowest tier the body was rated at since its last full pack, the tier its next interval is recorded under.
         public int RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
+        // The tier the body's phase within its period was chosen at (every frame while unchosen), and the seconds its hold
+        // decisions count ahead of its held seconds until its next full pack, so the bodies that take a tier together
+        // spread their packs over the period's frames (WorldCreationInstances.Rates).
+        public int RatePhaseHertz = SdfUpdateRateTiers.EveryFrameHertz;
+        public float RateLead;
 
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;

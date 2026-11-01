@@ -2000,6 +2000,14 @@ world's `Store` names that store, which no machine keeps anywhere, so the
 checkpoint writes it as it is and a restore never resolves it.
 `CheckpointAssetAnchorLawTests` holds these rules.
 
+Mounted guests use the optional `IWorldAddonCheckpointHost` boundary. Its opaque
+addon image is framed in `WorldAuthorityCheckpoint.Addons`, alongside machine
+images, and captures supported guests even after they have run. A fresh server
+retains this image until addon attachment and cannot step or capture meanwhile.
+A live restore replaces the attached guests at the same authority boundary.
+The [addon runtime README](../Puck.World.Addons/README.md#durable-guest-state)
+owns its complete state inventory and unsupported-resource refusals.
+
 ## The tick (`WorldTick*.cs`)
 
 `WorldTick` is the tick facade of `WorldServer`: the one ordered domain and the
@@ -2213,7 +2221,7 @@ every screen slot's selector and link membership, the link rows
 (`WorldMachineHostCheckpoint`), the named bindings' memo and the live sessions,
 and the offline replay and the live drive restore them into their hosts. A
 state the checkpoint cannot capture refuses the arm by name
-(`ReplayRefusal.StartNotCheckpointable`): a pumped addon guest, a stepped
+(`ReplayRefusal.StartNotCheckpointable`): an addon restart that cannot prepare, a stepped
 machine without checkpoint support, a coupled link or rewind history.
 `Puck.World.WorldScreenBinder`
 is a pure reader of this type's outputs for presentation (a machine source
@@ -2558,7 +2566,7 @@ operation (`WorldPersistence.TryCaptureReplayStart`). The checkpoint never
 claims to hold guest memory: both live capture and re-drive initialize the
 pinned modules at that boundary. Refusal disposes the staged stores and leaves
 the running guests intact. This makes recording over MCP possible after boot;
-ordinary checkpoint capture continues to refuse pumped guests.
+ordinary checkpoint capture preserves supported pumped guests instead.
 
 Each authority tapes its own half of a crossing: a source its departure
 (`Transfer`, naming the target authority and the slots that left), a

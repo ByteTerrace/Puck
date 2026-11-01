@@ -46,6 +46,7 @@ Hosted machines under screens and the cartridges they run, as one page of packag
 
 The reference game's remaining engineering, its creatures and scale, the finder that admits a party across authorities, and the MCP adapter, as one page of packages. Forcing artifact: the debug world played by a party the finder admitted, with an agent authoring through MCP. The seat delivers the standard chase-camera template, the population's workload is a sizing input to the job-system memo, and the One World, content and federation waves are dormant. Its decisions are in [the register](../decisions/play.md).
 
+- [Port the experimental worlds' features](port-experimental.md)—the inventory of what the quarantined quilt, island, games and districts have that the debug world lacks, with each feature's source, support (wire, standard or gap), place and size, grouped into fourteen port lanes.
 - [Companion custody protocol](companion-redesign.md)—the specification the companion decision's build follows, and the model that checks it; steps 6 to 10 remain.
 
 ## [The valley, the moons and the flight between](valley-and-moons.md)

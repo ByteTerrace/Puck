@@ -485,11 +485,10 @@ public sealed partial class WorldPersistence {
         }
     }
 
-    /// <summary>Whether this server's live state is outside what a checkpoint can capture: a pumped addon guest, or a
-    /// stepped machine on a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
+    /// <summary>Whether a pumped addon or machine uses a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <param name="restartingAddons">Whether a prepared restart replaces the guests at this recording boundary.</param>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
-    private bool AnyUncapturableStateEverLatched(bool restartingAddons) => ((!restartingAddons && Host.AnyAddonEverPumped) ||
+    private bool AnyUncapturableStateEverLatched(bool restartingAddons) => ((!restartingAddons && Host.AnyAddonEverPumped && (Host.Addons is not IWorldAddonCheckpointHost)) ||
         (Host.AnyMachineEverPumped && (Host.Machines is not IWorldMachineCheckpointHost)));
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
@@ -544,7 +543,7 @@ public sealed partial class WorldPersistence {
     /// <summary>Captures a full simulation-state image of this server and every subsystem it owns, under
     /// <see cref="WorldServer.AuthorityGate"/>: the sessions it admitted, the screen slots and links a screen operation
     /// moves, and the machine cores included. Refuses by name (returns <see langword="false"/>) when this server has
-    /// ever pumped an addon or stepped a machine without durable checkpoint support. Supported machine hosts drain
+    /// ever pumped an addon or stepped a machine on a host without durable checkpoint support. Supported hosts drain
     /// accepted steps and capture their complete runtime images; unsupported runtime state, a live coupled link or
     /// enabled rewind history, refuses capture by name — or when <see cref="WorldDocument.Pending"/> or
     /// <see cref="WorldTick.Ordered"/> is non-empty at the moment of the call, which the caller must retry at the NEXT
@@ -609,6 +608,11 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
+            if ((m_pendingAddonCheckpoint is not null) || ((Host.Addons is null) && Host.Definition.Addons.Any(predicate: row => row.Enabled))) {
+                checkpoint = null;
+                reason = "a checkpoint requires the declared addon host and its restored state";
+                return false;
+            }
             if (AnyUncapturableStateEverLatched(restartingAddons: restartingAddons)) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture pumped addon guests or a stepped machine without durable checkpoint support";
@@ -659,6 +663,18 @@ public sealed partial class WorldPersistence {
             }
 
             WorldMachineHostCheckpoint? machines = null;
+            byte[]? addons = null;
+
+            if (!restartingAddons && (Host.Addons is { MountedCount: > 0 }) && (Host.Addons is IWorldAddonCheckpointHost addonHost)) {
+                try { addons = addonHost.CaptureCheckpoint(); } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException)) {
+                    checkpoint = null;
+                    reason = $"addon checkpoint refused: {error.Message}";
+                    return false;
+                }
+                if (addons.Length > ((64 * 1024) * 1024)) {
+                    checkpoint = null; reason = "addon checkpoint exceeds the authority section byte limit"; return false;
+                }
+            }
 
             if (Host.Machines is IWorldMachineCheckpointHost machineHost) {
                 try { machines = machineHost.CaptureCheckpoint(); } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException)) {
@@ -749,7 +765,8 @@ public sealed partial class WorldPersistence {
                 Fields: Host.Population.CaptureFieldRegions(),
                 Search: Host.Search.Capture(),
                 BoardEnforcement: BoardEnforcement.Capture(),
-                Machines: machines
+                Machines: machines,
+                Addons: addons
             );
             reason = string.Empty;
 
@@ -1042,6 +1059,8 @@ public sealed partial class WorldPersistence {
             throw new InvalidOperationException(message: $"the checkpoint's search progress does not restore: {searchReason}");
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
+        m_pendingAddonCheckpoint = checkpoint.Addons;
+        if (Host.Addons is { } addonHost) { RestoreAttachedAddons(host: addonHost); }
         if (resetSessionEpochs) {
             // A replay start must deliver its restored grants and seed clocks, including to attached sinks.
             Host.GrantTable.SyncState(definition: restoredDefinition, arena: Host.Arena);

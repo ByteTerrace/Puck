@@ -222,8 +222,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <summary>Gets a value indicating whether any mounted addon has ever had an admitted execution attempted (a real
     /// <c>TickAddons</c> pump, not merely mounting).
     /// <c>false</c> for a world that mounts no addon, or one whose mounted addons never reached their first tick.
-    /// Latched per mounted entry until that entry is replaced. Ordinary checkpoints cannot capture its accumulated
-    /// memory; a post-boot <c>replay.record</c> stages fresh guests and commits their restart only when its surrounding
+    /// Latched per mounted entry until that entry is replaced. Ordinary checkpoints capture supported hosts through
+    /// <see cref="IWorldAddonCheckpointHost"/>; a post-boot <c>replay.record</c> stages fresh guests and commits their restart only when its surrounding
     /// authority checkpoint succeeds, matching the replay's own initialization.</summary>
     public bool AnyAddonEverPumped => (m_addons?.AnyEverPumped ?? false);
     /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually
