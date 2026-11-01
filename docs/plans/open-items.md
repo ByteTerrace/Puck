@@ -182,6 +182,16 @@ One engine-wide job system answers all of it:
   where the storage goes native.
 - Decide (the lead's call): whether the 30 and 15 Hz update tiers become a
   continuous rate.
+- [medium] Kit bodies' advance stays serial, so the parallel tick partitions
+  only the snapshot, the crossing scan and the rigid bodies, which is less than
+  the measured 70 %. A kit body's advance is one arena transaction on the one
+  journal: `BeginKitStep` opens a scope (`WorldInputRuntime.Effects.cs:18-24`),
+  validation writes and rewinds the arena (`:101-132`), foreign effects mutate
+  another body at once (`:58-71`), and selector commits synchronize every owner
+  (`:74-83`). Partitioning it is the per-partition kit transaction the
+  [memo](engine-job-system.md) names under "What partitioning kit bodies would
+  need". It is a State and Server design with its own cross-family review,
+  taken after T1 to T3 measure what remains serial.
 
 #### Memory ownership
 
