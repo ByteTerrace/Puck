@@ -1284,7 +1284,21 @@ and warm builds measured.
   then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
   is full` and spawns only what the boot's entity table holds. Decide whether a
   reload grows the live entity table or refuses the raised capacity by name.
-- Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
+- A self-contained composite ReadyToRun publish for the published World and
+  the silo (decided by the lead). Composite brings the framework into the
+  version bubble, so it removes the cause of both first-use JIT costs: the
+  first crossing's 639 methods, and the 15,341 `System.Text.Json` generic
+  instantiations of the source-generated `WorldJsonSourceContext`, which a
+  per-assembly ReadyToRun publish cannot precompile. A rehearsal transfer at
+  boot would hide only the first. Local builds stay IL for the edit loop.
+  Measure before and after: JIT count to `world.status` (`host.memory` prints
+  it), the first crossing's frame, boot wall time, publish size and publish
+  time. The silo lane's non-composite ReadyToRun showed no proven gain under
+  load, so composite is the test.
+- [low] The silo activates worlds without calling
+  `WorldJsonContext.StartPreparing()`, which takes the document metadata's
+  configuration off the activation path as `Puck.World`'s `Program.cs` does.
+  (from: json-sourcegen)
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does. This reboot is the mechanism [in-world editing](#in-world-editing)
