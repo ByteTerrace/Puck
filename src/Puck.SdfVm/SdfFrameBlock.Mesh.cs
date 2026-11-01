@@ -64,6 +64,9 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block: block, offset: (ImageExtent + sizeof(uint)), value: ((uint)texels));
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
     }
+    /// <summary>The planes a final lattice holds at most along Z: a slab names its first plane in bits 2 to 15 of its
+    /// mode word, below the instance run (<c>sdf-mesh-bake.comp.hlsl</c>, <c>sdf-mesh-bake-mask.comp.hlsl</c>).</summary>
+    public const int MaxSlabPlanes = (1 << 14);
     /// <summary>Writes the mesh bake's pass block (<see cref="SdfWorldInterfaces.MeshBakeParameters"/>), all its mask
     /// and sampler read beside the extent the node writes: the live program's instance-mask width, the pass's rows of the
     /// work counters, and the lattices one bake dispatch samples and the instances each selects, four rows a lattice
@@ -79,7 +82,8 @@ public static partial class SdfFrameBlock {
     /// (<see cref="ShaderWorkCounters.DetailRow"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="batch"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="batch"/> holds more than
-    /// <see cref="SdfWorldPackage.MeshBakeBatch"/> lattices, which the bake kernels' search assumes it never does.</exception>
+    /// <see cref="SdfWorldPackage.MeshBakeBatch"/> lattices, which the bake kernels' search assumes it never does, or a
+    /// lattice whose first plane reaches <see cref="MaxSlabPlanes"/> or whose instance run passes 65,535.</exception>
     public static void WriteMeshBake(Span<byte> block, SdfMeshBakeBatch batch, uint instanceMaskWordCount, uint workCounterRow, uint workCounterDetailRow) {
         ArgumentNullException.ThrowIfNull(argument: batch);
         if (batch.Lattices.Length > SdfWorldPackage.MeshBakeBatch) {
@@ -106,6 +110,9 @@ public static partial class SdfFrameBlock {
             // The lattice's mode in the low two bits (three samples the point table with gradients, two without, zero a
             // grid), a slab's first plane of its final lattice above them, and, in the high half, the run of instances a
             // static selector names.
+            if ((lattice.Slab >= MaxSlabPlanes) || (((uint)lattice.Instances) > ushort.MaxValue)) {
+                throw new ArgumentException(message: $"A bake lattice names its first plane in 14 bits and its instance run in 16; this one names plane {lattice.Slab} and {lattice.Instances} instances.", paramName: nameof(batch));
+            }
             WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)Math.Max(val1: 0, val2: lattice.Slab)) << 2) | (((uint)lattice.Instances) << 16));
 
             var (poseFirst, poseRows) = ((index < batch.Poses.Length) ? batch.Poses[index] : (0, ReadOnlyMemory<Vector4>.Empty));

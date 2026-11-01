@@ -303,6 +303,9 @@ public sealed class SdfSampledLattice {
     // Per measured fine sample's slot, NaN for one CloseSheets left open; and how many it closed.
     private float[] m_closedValues = [];
     private int m_closedCount;
+    // Per fine key, whether FineInside has read the sample's sign, and that sign: one bit each.
+    private ulong[] m_signKnown = [];
+    private ulong[] m_signInside = [];
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -1036,16 +1039,102 @@ public sealed class SdfSampledLattice {
             m_fineValues[(first + index)] = values[index];
             m_fineMaterials[(first + index)] = materials[index];
         }
+        m_signKnown = [];
+        m_signInside = [];
     }
-    // An edge root stays bracketed by its original signs. The first trial is the linear estimate; subsequent trials
-    // bisect, so a field flat inside a corner cannot stall the search on the wrong face as an unguarded secant can.
-    private sealed class CrossingRoot(float first, float second) {
-        public float Low { get; set; }
-        public float High { get; set; } = 1f;
-        public bool LowInside { get; } = (first < 0f);
-        public float Position { get; set; } = Math.Clamp(value: (first / (first - second)), min: 0f, max: 1f);
-        public int Rounds { get; set; }
-        public bool Done { get; set; } = ((first == 0f) || (second == 0f));
+    // An edge root stays bracketed by its original signs, and the search ends once the bracket is a 4,096th of the edge
+    // wide, its root then the bracket's middle, within an 8,192th of the zero. Each round measures two trials a
+    // tolerance apart about an estimate (the linear estimate, first, then the secant through the last round's trials, or
+    // the false position between the bracket's ends where that secant leaves the bracket), so a root the
+    // estimate all but hits closes the bracket that round; the bracket becomes the part between its ends and the trials
+    // whose ends differ in sign. A bracket whose remaining thirdings fill its remaining rounds is cut in thirds instead,
+    // so a field flat inside a corner cannot stall the search on the wrong face as an unguarded secant can, and no search
+    // takes more than MostRounds readback round trips of its group's.
+    private sealed class CrossingRoot {
+        // The bracket width at which a search ends.
+        public const float Tolerance = (1f / 4096f);
+        // The rounds a search takes at most: one about the linear estimate, one about the next false position, and the
+        // eight thirdings that close an edge's bracket.
+        public const int MostRounds = 10;
+        // Half the gap between a round's trials about an estimate: under half the tolerance, so a root between them
+        // ends the search.
+        private const float Straddle = (0.45f * Tolerance);
+
+        public CrossingRoot(float first, float second) {
+            LowValue = first;
+            HighValue = second;
+            Done = ((first == 0f) || (second == 0f));
+            Position = (Done ? ((first == 0f) ? 0f : 1f) : 0.5f);
+            if (!Done) { Straddling(estimate: (first / (first - second))); }
+        }
+        public float Position { get; private set; }
+        public bool Done { get; private set; }
+        // The round's two trials along the edge, nearer the low end first.
+        public float First { get; private set; }
+        public float Second { get; private set; }
+        private float Low { get; set; }
+        private float High { get; set; } = 1f;
+        private float LowValue { get; set; }
+        private float HighValue { get; set; }
+        private float FirstValue { get; set; }
+        private int Answered { get; set; }
+        private int Rounds { get; set; }
+
+        // Takes the field's value at one of the round's trials (0 the first, 1 the second); once both are answered,
+        // narrows the bracket and chooses the next round's trials, or ends the search.
+        public void Answer(int trial, float value) {
+            if (Done) { return; }
+            if (trial == 0) { FirstValue = value; }
+            if (++Answered < 2) { return; }
+            Answered = 0;
+            Rounds++;
+
+            var secondValue = value;
+
+            if ((FirstValue == 0f) || (secondValue == 0f)) {
+                Position = ((FirstValue == 0f) ? First : Second);
+                Done = true;
+                return;
+            }
+            // The first part of low, first, second, high whose ends differ in sign.
+            var lowInside = (LowValue < 0f);
+
+            if ((FirstValue < 0f) != lowInside) {
+                (High, HighValue) = (First, FirstValue);
+            } else if ((secondValue < 0f) != lowInside) {
+                (Low, LowValue, High, HighValue) = (First, FirstValue, Second, secondValue);
+            } else {
+                (Low, LowValue) = (Second, secondValue);
+            }
+
+            var width = (High - Low);
+
+            if ((width <= Tolerance) || (Rounds >= MostRounds)) {
+                Position = ((Low + High) * 0.5f);
+                Done = true;
+                return;
+            }
+            // The thirdings the bracket still needs; once they fill the rounds left, every round cuts it in thirds.
+            if (((int)MathF.Ceiling(x: (MathF.Log2(x: (width / Tolerance)) / MathF.Log2(x: 3f)))) >= (MostRounds - Rounds)) {
+                First = (Low + (width / 3f));
+                Second = (Low + ((2f * width) / 3f));
+                return;
+            }
+            // The secant through the round's two trials, a tolerance apart, reads the field's slope where it was just
+            // measured and lands far nearer a curved surface's root than the bracket's false position does; where it
+            // leaves the bracket, the false position stands.
+            var secant = (First - ((FirstValue * (Second - First)) / (secondValue - FirstValue)));
+
+            Straddling(estimate: ((float.IsFinite(f: secant) && (secant > Low) && (secant < High)) ? secant : (((Low * HighValue) - (High * LowValue)) / (HighValue - LowValue))));
+        }
+        // Places the round's trials a tolerance apart about an estimate inside the bracket.
+        private void Straddling(float estimate) {
+            var inset = (0.125f * Tolerance);
+            var centre = (float.IsFinite(f: estimate) ? Math.Clamp(value: estimate, min: (Low + inset), max: (High - inset)) : ((Low + High) * 0.5f));
+
+            First = MathF.Max(x: (centre - Straddle), y: (Low + inset));
+            Second = MathF.Min(x: (centre + Straddle), y: (High - inset));
+        }
     }
     // Closing sheets changes their edge crossings deliberately; both crossing searches and gradient sampling use the
     // resulting lattice, prepared once after the refinement answers arrive.
@@ -1106,38 +1195,31 @@ public sealed class SdfSampledLattice {
         Array.Resize(array: ref m_pendingCrossings, newSize: kept);
         Array.Resize(array: ref m_pendingRoots, newSize: kept);
 
-        var points = new Vector3[kept];
+        // Two trials a root, the root's first then its second.
+        var points = new Vector3[(2 * kept)];
 
         for (var index = 0; (index < kept); index++) {
-            points[index] = CrossingPoint(key: m_pendingCrossings[index], fraction: m_pendingRoots[index].Position);
+            points[(2 * index)] = CrossingPoint(key: m_pendingCrossings[index], fraction: m_pendingRoots[index].First);
+            points[((2 * index) + 1)] = CrossingPoint(key: m_pendingCrossings[index], fraction: m_pendingRoots[index].Second);
         }
 
         return points;
     }
     /// <summary>Answers a chunk of the current <see cref="CrossingPoints"/> round with field values. Every root remains
-    /// on its own edge; at most twelve bisections after the initial estimate bound its error below one 4,096th of an edge.</summary>
+    /// on its own edge, bracketed, and its search ends once the bracket is a 4,096th of the edge wide, the root within an
+    /// 8,192th of the zero, in at most ten rounds.</summary>
     /// <param name="first">The first point answered in the current round.</param>
     /// <param name="values">One field value per point.</param>
     /// <exception cref="ArgumentException">The chunk reaches past the current round or holds a non-finite value.</exception>
     public void AnswerCrossings(int first, ReadOnlySpan<float> values) {
-        if ((first < 0) || ((first + values.Length) > m_pendingCrossings.Length)) {
+        if ((first < 0) || ((first + values.Length) > (2 * m_pendingCrossings.Length))) {
             throw new ArgumentException(message: "A crossing answer must name points in the current crossing round.");
         }
         for (var index = 0; (index < values.Length); index++) {
             var value = values[index];
 
             if (!float.IsFinite(value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
-            var root = m_pendingRoots[(first + index)];
-
-            if (value == 0f) {
-                root.Done = true;
-                continue;
-            }
-            if ((value < 0f) == root.LowInside) { root.Low = root.Position; }
-            else { root.High = root.Position; }
-            root.Rounds++;
-            root.Position = ((root.Low + root.High) * 0.5f);
-            root.Done = ((root.Rounds >= 13) || ((root.High - root.Low) <= 0.0001f));
+            m_pendingRoots[((first + index) / 2)].Answer(trial: ((first + index) % 2), value: value);
         }
     }
     /// <summary>Returns the samples the contour reads a gradient at: the corners of every crossed cell that contours whole,
@@ -1190,7 +1272,7 @@ public sealed class SdfSampledLattice {
                                 var fineMask = 0;
 
                                 for (var offset = 0; (offset < 8); offset++) {
-                                    fineMask |= ((FineValue(x: (fx + (offset & 1)), y: (fy + ((offset >> 1) & 1)), z: (fz + ((offset >> 2) & 1))) < 0f) ? (1 << offset) : 0);
+                                    fineMask |= (FineInside(x: (fx + (offset & 1)), y: (fy + ((offset >> 1) & 1)), z: (fz + ((offset >> 2) & 1))) ? (1 << offset) : 0);
                                 }
                                 if ((fineMask == 0) || (fineMask == 0xFF)) {
                                     continue;
@@ -1305,11 +1387,11 @@ public sealed class SdfSampledLattice {
         // too acute for its neighbours to reach deep would; with `thinner`, a sheet whose crossings on that line lie less
         // than a step apart.
         bool Sheet(Span<int> at, bool thinner) {
-            var value = FineValue(x: at[0], y: at[1], z: at[2]);
-
-            if (!(value < 0f)) {
+            if (!FineInside(x: at[0], y: at[1], z: at[2])) {
                 return false;
             }
+
+            var value = FineValue(x: at[0], y: at[1], z: at[2]);
 
             var deepest = float.NaN;
 
@@ -1360,7 +1442,7 @@ public sealed class SdfSampledLattice {
                             run = 0;
                             continue;
                         }
-                        run = ((FineValue(x: beside[0], y: beside[1], z: beside[2]) < 0f) ? (run + 1) : 0);
+                        run = (FineInside(x: beside[0], y: beside[1], z: beside[2]) ? (run + 1) : 0);
                         if (run >= 2) {
                             return true;
                         }
@@ -1401,24 +1483,23 @@ public sealed class SdfSampledLattice {
                     // The pair's outer neighbours may lie in a cell that interpolates its coarse corners, beside a sheet
                     // at the measured cells' edge.
                     // Every sample of the line lies outside, read before the slopes and depths about the pair.
-                    if (!Within(at: p)) { continue; }
-                    var before = FineValue(x: p[0], y: p[1], z: p[2]);
-                    if (before < 0f) { continue; }
+                    if (!Within(at: p) || FineInside(x: p[0], y: p[1], z: p[2])) { continue; }
                     p[axis]++;
-                    if (!Real(at: p)) { continue; }
-                    var first = FineValue(x: p[0], y: p[1], z: p[2]);
-                    if (first < 0f) { continue; }
-                    var firstKey = (Coarse(at: p) ? -1 : Key(at: p));
+                    if (!Real(at: p) || FineInside(x: p[0], y: p[1], z: p[2])) { continue; }
                     p[axis]++;
-                    if (!Real(at: p)) { continue; }
-                    var second = FineValue(x: p[0], y: p[1], z: p[2]);
-                    if (second < 0f) { continue; }
-                    var secondKey = (Coarse(at: p) ? -1 : Key(at: p));
+                    if (!Real(at: p) || FineInside(x: p[0], y: p[1], z: p[2])) { continue; }
                     p[axis]++;
-                    if (!Within(at: p)) { continue; }
+                    if (!Within(at: p) || FineInside(x: p[0], y: p[1], z: p[2])) { continue; }
                     var further = FineValue(x: p[0], y: p[1], z: p[2]);
-                    if (further < 0f) { continue; }
-                    p[axis] -= 2;
+                    p[axis]--;
+                    var second = FineValue(x: p[0], y: p[1], z: p[2]);
+                    var secondKey = (Coarse(at: p) ? -1 : Key(at: p));
+                    p[axis]--;
+                    var first = FineValue(x: p[0], y: p[1], z: p[2]);
+                    var firstKey = (Coarse(at: p) ? -1 : Key(at: p));
+                    p[axis]--;
+                    var before = FineValue(x: p[0], y: p[1], z: p[2]);
+                    p[axis]++;
                     var firstSlope = FineSlope(at: p);
                     var deepest = Deepest(at: p);
                     p[axis]++;
@@ -1458,6 +1539,7 @@ public sealed class SdfSampledLattice {
         Span<int> chosenAt = stackalloc int[3];
         Span<int> keys = stackalloc int[4];
         Span<float> values = stackalloc float[4];
+        Span<bool> signs = stackalloc bool[4];
 
         for (var pass = 0; (pass < 2); pass++) {
             closing.Clear();
@@ -1476,6 +1558,30 @@ public sealed class SdfSampledLattice {
                             corner[2] = z;
                             corner[u] += du;
                             corner[v] += dv;
+
+                            // The corners' signs alone, from FineInside, settle most faces: one whose signs cannot
+                            // alternate around it is passed before any of its slots is looked up.
+                            var alternates = true;
+
+                            for (var at = 0; (at < 4) && alternates; at++) {
+                                p[0] = corner[0];
+                                p[1] = corner[1];
+                                p[2] = corner[2];
+                                p[u] += (at & 1);
+                                p[v] += (at >> 1);
+                                if (!Within(at: p)) {
+                                    alternates = false;
+                                    break;
+                                }
+                                signs[at] = FineInside(x: p[0], y: p[1], z: p[2]);
+                                alternates = (at switch {
+                                    1 => (signs[1] != signs[0]),
+                                    2 => (signs[2] == signs[1]),
+                                    3 => (signs[3] == signs[0]),
+                                    _ => true,
+                                });
+                            }
+                            if (!alternates) { continue; }
 
                             // The face's corners in order: (0, 0), (1, 0), (0, 1), (1, 1) along (u, v). A face is read
                             // only while its corners can still alternate in sign around it: the first two differ, the
@@ -1585,6 +1691,7 @@ public sealed class SdfSampledLattice {
         if (!float.IsNaN(f: m_closedValues[slot])) { return; }
         m_closedValues[slot] = value;
         m_closedCount++;
+        KeepSign(key: key, value: value);
     }
     // The thickness, in steps, of the run of one sample `value` between `before` and `after` of the other sign along a
     // line, as the line's values interpolate its two crossings.
@@ -1611,7 +1718,7 @@ public sealed class SdfSampledLattice {
             var mask = 0;
 
             for (var offset = 0; (offset < 8); offset++) {
-                mask |= ((FineValue(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))) < 0f) ? (1 << offset) : 0);
+                mask |= (FineInside(x: (x + ((offset & 1) * stride)), y: (y + (((offset >> 1) & 1) * stride)), z: (z + (((offset >> 2) & 1) * stride))) ? (1 << offset) : 0);
             }
             if ((mask == 0) || (mask == 0xFF)) {
                 return;
@@ -2048,6 +2155,42 @@ public sealed class SdfSampledLattice {
 
         return sum;
     }
+    // Whether a fine sample lies inside: FineValue's sign, kept per fine key once read, since the contour's corner masks
+    // and CloseSheets' line scans read each sample's sign many times. AnswerRefinement clears the signs and CloseSample
+    // keeps a closed sample's.
+    private bool FineInside(int x, int y, int z) => FineInside(key: (x + ((((m_samplesX - 1) * m_factor) + 1) * (y + ((((m_samplesY - 1) * m_factor) + 1) * z)))));
+    private bool FineInside(int key) {
+        if (m_factor == 1) { return (m_values[key] < 0f); }
+        if (m_signKnown.Length == 0) {
+            var count = ((((long)(((m_samplesX - 1) * m_factor) + 1)) * (((m_samplesY - 1) * m_factor) + 1)) * (((m_samplesZ - 1) * m_factor) + 1));
+            var words = ((int)((count + 63L) >> 6));
+
+            m_signKnown = new ulong[words];
+            m_signInside = new ulong[words];
+        }
+
+        var word = (key >> 6);
+        var bit = (1UL << (key & 63));
+
+        if ((m_signKnown[word] & bit) != 0UL) { return ((m_signInside[word] & bit) != 0UL); }
+
+        var (x, y, z) = FineCoordinates(key: key);
+        var inside = (FineValue(x: x, y: y, z: z) < 0f);
+
+        m_signKnown[word] |= bit;
+        if (inside) { m_signInside[word] |= bit; }
+        return inside;
+    }
+    // Records a fine sample's new value's sign where FineInside has read its sign.
+    private void KeepSign(int key, float value) {
+        if (m_signKnown.Length == 0) { return; }
+
+        var word = (key >> 6);
+        var bit = (1UL << (key & 63));
+
+        m_signKnown[word] |= bit;
+        m_signInside[word] = ((value < 0f) ? (m_signInside[word] | bit) : (m_signInside[word] & ~bit));
+    }
     // A fine sample's gradient: the one measured there, or else the trilinear interpolation of its coarse cell's corners'.
     private Vector3 FineGradient(int x, int y, int z) {
         var factor = m_factor;
@@ -2125,11 +2268,7 @@ public sealed class SdfSampledLattice {
         public bool Measured(int x, int y, int z) => owner.m_measured[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool CoarseInside(int x, int y, int z) => (owner.m_values[owner.Index(x: x, y: y, z: z)] < 0f);
         public int Corner(int x, int y, int z) => (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
-        public bool Inside(int corner) {
-            var (x, y, z) = owner.FineCoordinates(key: corner);
-
-            return (owner.FineValue(x: x, y: y, z: z) < 0f);
-        }
+        public bool Inside(int corner) => owner.FineInside(key: corner);
         public double Value(int corner, int x, int y, int z) => owner.FineValue(x: x, y: y, z: z);
         public (double X, double Y, double Z) World(double x, double y, double z) {
             var cell = owner.ContourCell;

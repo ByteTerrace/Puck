@@ -66,6 +66,22 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   and its linear estimate put a slab's underside a centimetre up inside the
   slab. Only samples displaced by `CloseSheets` keep their lattice
   interpolation: their intentional surface differs from the original field.
+  The search (`CrossingRoot`) measures two trials a round, a tolerance apart
+  about an estimate (the linear one, then the secant through the last round's
+  pair), so a root the estimate all but hits closes the bracket that round, and
+  cuts the bracket in thirds once the thirdings it still needs fill its
+  remaining rounds; it ends once the bracket is a 4,096th of the edge wide (the
+  root, its middle, within an 8,192th), in at most ten rounds. The
+  `ACrossingLandsWithinAnEightThousandthOfItsEdgeInAFewRounds` law holds the
+  bound and the cost. Each round is a readback round trip of the group, and
+  only `MaxAdmitted` groups hold a final lattice, so a group's rounds bound its
+  latency: a search must not trade fewer samples for more rounds than its worst
+  root needs (a one-trial secant search's worst roots took up to 37).
+- **Signs are read once.** `SdfSampledLattice.FineInside` keeps each fine
+  sample's sign in a bit once read (`AnswerRefinement` clears them,
+  `CloseSample` keeps a closed sample's), and the contour's corner masks,
+  `CrossingEdges`, `GradientPoints` and `CloseSheets`' line scans and face tests
+  read signs through it; a value is computed only where its magnitude is used.
 - **Features are placed and shaded as features.** A vertex whose crossings'
   planes all meet and turn by over 30 degrees is a feature: it lies on the
   crease, inside its cell (a point past the cell folds the quads around it into
@@ -171,14 +187,38 @@ laws exercise that boundary.
   215 s cold). The frame thread only copies a batch's readback; it never
   decodes one. Only
   `MaxAdmitted` groups (twice the workers) hold a final lattice at once
-  (admitted at its first slab): unadmitted groups keep refining their small
-  coarse lattices, and the meshing's working memory stays a few dozen groups'
-  worth instead of every group's, whose collections pause for seconds.
+  (admitted at its first slab, whose answer allocates the lattice's values):
+  unadmitted groups keep refining their small coarse lattices, and the meshing's
+  working memory stays a few dozen groups' worth instead of every group's, whose
+  collections pause for seconds. A first slab a frame hands back unanswered (a
+  graph rebuilding) keeps its admission; counting its retry as a new one let
+  returned first slabs fill every admission and stall the bake. A stage that
+  throws is logged (`[sdf.mesh-bake] work failed`), and its group stays
+  unfinished, holding its admission. A group a later program does not keep, or
+  whose residency is released, is retired (`Group.Retired`), and the pool drops
+  its queued work.
+- **A dispatch fills its samples.** A frame takes lattices by priority until
+  `MeshBakeMaxSamples`, passing over one too large for what is left and taking
+  smaller ones behind it; stopping at the first that did not fit left the debug
+  world's dispatches under half full.
 - **One geometry bakes once a bake.** A group whose sealed geometry another
   group of the same restart already bakes or loads waits on it
   (`Group.Leader`, `Follow`) and takes the library's mesh, renumbered, when the
-  leader lands; the debug world plans 1,115 of its 2,090 groups that way.
-- **Large static unions draw in chunks.** `SdfMeshChunks` partitions the finished contour's triangles by their
+  leader lands; the debug world plans 1,115 of its 2,090 groups that way. The
+  renumbering copies arrays as large as the mesh, so it runs on the pool
+  (`TakeFollowed`), outside the gate the frame takes; a leader that found no
+  surface lands the follower empty too (`Draw(group, null)`), or it would keep
+  drawing the mesh it had before the rebake. An offline bake of chosen groups
+  (`puck mesh audit --cpu --group`) names them in `SdfMeshPathBake.Selection`:
+  an unselected group finishes unbaked and leads none, where answering it as
+  empty space handed its empty result to a selected follower.
+- **Large static groups draw in chunks.** A union, and one shape whose contour reaches
+  `SdfMeshChunks.WholeTriangles` (a 500,000-triangle terrain held one worker for its whole collapse), is chunked;
+  a smaller single shape stays whole, since locked seams tripled a terrain sector's first level. A mesh that would
+  fill more than `SdfMeshChunks.MostChunks` 8 m bins takes bins of twice the side until it fills no more: the world
+  group's far ground cut at 8 m made 160,000 draws, every pass culled and levelled each (`SdfWorldPassRecorder.Choose`),
+  and the frame took 700 ms, starving the bake of dispatches.
+  `SdfMeshChunks` partitions the finished contour's triangles by their
   centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
   edges with its neighbours. `SdfMesh.Chunks` holds the separately levelled draws; the parent concatenates their merged
