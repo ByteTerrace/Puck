@@ -47,8 +47,9 @@ blocked until it is taken.
 4. [Frame time on the lead machine](#frame-time-on-the-lead-machine): with the
    display lit the debug world holds p50 16.67 ms at every stop, but a frame
    carrying a 30 Hz tick misses the blank; the tick fell to about 6 ms at the
-   lobby and the rim, so take the next ranked costs (rule evaluation, snapshot
-   delivery, the scoped replay hash) and re-read the stops windowed.
+   lobby and the rim and its latch, delivery and scope-hash waste is cut, so
+   re-read the stops windowed, then take relief contact and rule evaluation's
+   own gate and expression cost.
 5. [Lighting and GI](#lighting-and-gi): the remaining local and far-field
    coverage, enclosure, floor and wrapped-diffuse sun findings; the quiet trace
    timing is settled (Vulkan matches Direct3D 12).
@@ -452,13 +453,27 @@ packet), and re-read these stops on a quiet machine.
   35 to 65 % CPU from other lanes), thread-time traces of about 450 ticks each:
   lobby p50 6.1 to 5.6 ms, p99 10.1 to 10.3 ms; valley rim p50 13.2 to 6.0 ms,
   p99 77.5 to 8.1 ms, the seat body's contact 35.7 % of the tick to 6.8 %. The
-  windowed reading of the five stops is in the tick-cost hand-back. What the
-  trace ranks next, as shares of a lobby tick: rule evaluation itself (gates
-  10 %, binding latches and their dictionaries) 44 %, `WorldTick.EmitSnapshot`
-  17 % (session snapshot delivery, 12 %, and its disclosure filter), the scoped
-  replay hash (`WorldScopedReplayRuntime.Hash`) 10 %, and
-  `WorldBody.CaptureIntegrationResidue` 8 %, which zero-fills a buffer on every
-  body's advance. (from: tick-cost)
+  windowed reading of the five stops is in the tick-cost hand-back. (from:
+  tick-cost) The tick-cost-2 lane then cut, with simulation state
+  bit-identical: the rule latch's per-question name lookups (one state per rule
+  resolved once a tick), the sessions' disclosure filter recomposing rows the
+  snapshot already carries, the mirrors' clear-and-import of every replaced
+  row (now in place, cell by cell), the scoped replay refolding unchanged rows,
+  and a linear board-anchor scan per topology read. `puck bench world`,
+  alternating base and final twice (machine 87 to 100 % CPU from other lanes):
+  paced tick median 5.38 and 5.47 ms to 4.74 and 4.77 ms, a 13-cell guest
+  burst tick 5.78 and 5.47 to 4.90 and 4.97 ms; quiet-tick allocation stays
+  144 bytes and a gallery walk tick about 3 KB, so the tick is not what fills
+  gen0. In headless thread-time traces the disclosure filter fell from 7.8 % to
+  0.3 % of a lobby tick and the scope hash from 14.6 % to 5.1 % (10.9 % to
+  5.0 % at the rim); rule evaluation is still 32 to 40 % (gate and expression
+  evaluation, the remaining two latch lookups a binding) and body advance 30 to
+  37 % at the rim. Next by share: relief contact at the rim (the
+  [refactoring campaign](#refactoring-campaign)'s two field-contact solvers),
+  the scope's body continuation hash, and the session mirrors' per-snapshot
+  body pass. Timings on this machine stay noisy while other lanes build; the
+  counts (rule evaluations, skips and firings identical tick for tick) are the
+  stable evidence. (from: tick-cost-2)
 - [low] A body resting at the overlook pays two ground snaps a tick (ten
   sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
   support whenever the body is grounded, and `ResolveProgramContacts`'s own

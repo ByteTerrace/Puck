@@ -19,15 +19,6 @@ public readonly record struct LatchKey(int Left, int Right, long LeftGeneration 
         Right: -1,
         RightGeneration: 0L
     );
-
-    /// <summary>Returns whether two bindings name the same participants and lifetimes.</summary>
-    /// <param name="other">The other binding.</param>
-    /// <returns><see langword="true"/> when every field matches.</returns>
-    public bool Equals(LatchKey other) => ((Left == other.Left) && (Right == other.Right) &&
-        (LeftGeneration == other.LeftGeneration) && (RightGeneration == other.RightGeneration));
-    /// <summary>Returns a hash of every field.</summary>
-    /// <returns>The hash code.</returns>
-    public override int GetHashCode() => HashCode.Combine(Left, Right, LeftGeneration, RightGeneration);
 }
 /// <summary>One rule family's edge latch — per rule name and per binding, whether the gate held at the last
 /// evaluation — kept outside the compiled array because a rule's own effect recompiles it. A bound entry not touched
