@@ -128,7 +128,7 @@ public sealed partial class WorldAddonRuntime {
         public bool FaultReported { get; set; }
         /// <summary>Gets a value indicating whether an admitted execution of this guest has ever been attempted — set unconditionally the
         /// first time <see cref="TickAddons"/> reaches the point of driving it (regardless of whether the tick
-        /// traps), never cleared on this entry. Ordinary checkpoints cannot capture that private state. A recording
+        /// traps), never cleared on this entry. Ordinary checkpoints preserve this entry's private state. A recording
         /// arm replaces the entry with a fresh guest only after its authority checkpoint succeeds.</summary>
         public bool HasEverPumped { get; set; }
         /// <summary>Gets the guest instance.</summary>
@@ -240,7 +240,8 @@ public sealed partial class WorldAddonRuntime {
         }
 
         public byte[]? MachineSnapshot { get; set; }
-        public Puck.Abstractions.Machines.IMachineRuntime? SnapshotRuntime { get; set; }
+        public string? SnapshotMachine { get; set; }
+        public ulong SnapshotGeneration { get; set; }
 
         // The Drive twin of Observe, beside it for the same reason (a shared latch across capabilities would let one
         // capability's line starve the other's).

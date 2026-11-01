@@ -87,6 +87,8 @@ prepared document's `../cartridges/...` reads the image's
 `/app/cartridges`. The first activation, a recovery from a checkpoint and a
 reload of published content all read the same directory. Without
 `documentDirectory`, a relative path in a hosted document is refused by name.
+Checkpoint decoding receives that directory too, before it validates embedded
+definitions; providing it only to the subsequent server constructor is too late.
 
 A `worlds[]` row may add `extensions`, the path of its own host-approved
 extension configuration: the same `puck.world.extensions.v1` document a local
@@ -239,9 +241,10 @@ activation's fence and requires recovery.
   Root and neighbour storage reads are awaited without a `Task.Run` wrapper.
 - `WorldGrainStatus`—the Orleans-serializable read-back payload
   `IWorldGrain.StatusAsync` and `silo.grains` both answer with.
-- `WorldNoAddonHost : IWorldAddonHost`—the inert host every row's replay
-  tape carries for its own offline re-drive seam; the silo mounts no addon
-  guests, so nothing ever calls it.
+- `WorldAddonRuntime` (`Puck.World.Addons`)—the same mounting transaction the
+  World host uses, owned by each activation and used by its replay factory.
+  Attachment restores the checkpoint's guest image before journal replay or
+  admission; row retirement disposes the runtime.
 - `WorldSiloBareInputBindings`/`WorldSiloBarePrincipalResolver`—the minimal
   `IInputBindings`/`IPrincipalResolver` pair `Puck.Launcher`'s
   simulation/router pairing rule needs; the silo embodies no local seats.
@@ -311,7 +314,10 @@ cannot replace another host's machine vocabulary.
 
 A parsed machine declaration does not establish that its provider is installed
 or its runtime state can be checkpointed. Qualification must exercise the
-distribution's supplied machine catalog; pumped addon state still refuses capture.
+distribution's supplied machine catalog. Addon checkpoints preserve guest and
+cross-tick host state through the ordinary authority checkpoint section; unsupported
+guest resources refuse capture by name. The [addon runtime](../Puck.World.Addons/README.md#durable-guest-state)
+owns the captured inventory and current resource limitations.
 
 ## Production deployment
 

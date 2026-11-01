@@ -13,8 +13,8 @@ namespace Puck.World.Server;
 public interface IWorldAddonHost : IWorldExtensionRuntime {
     /// <summary>WASM guests are reproduced by executing their pinned modules at the same tick boundaries.</summary>
     WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
-    /// <summary>Whether any currently mounted guest has had an admitted <c>TickAddons</c> pump. Ordinary checkpoints
-    /// refuse that private state; recording instead prepares fresh guests at its captured start.</summary>
+    /// <summary>Whether any currently mounted guest has had an admitted <c>TickAddons</c> pump. Durable capture
+    /// requires <see cref="IWorldAddonCheckpointHost"/>; recording prepares fresh guests at its captured start.</summary>
     bool AnyEverPumped { get; }
     /// <summary>The number of guests currently mounted — the sizing bound
     /// <see cref="WorldServer.AttachAddons"/> reads for its per-tick contention tracking.</summary>

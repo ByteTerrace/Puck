@@ -30,7 +30,7 @@ public readonly record struct WasmTableDeclaration(ulong MinimumElements, bool I
 /// <param name="Imports">Imported entities, in section order.</param>
 /// <param name="Memories">Every memory, imported ones first, as the module's memory index space orders them.</param>
 /// <param name="Tables">Every table, imported ones first, as the module's table index space orders them.</param>
-public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IReadOnlyList<WasmImport> Imports, IReadOnlyList<WasmMemoryDeclaration> Memories, IReadOnlyList<WasmTableDeclaration> Tables) {
+public sealed partial record WasmModuleDeclarations(IReadOnlyList<string> Exports, IReadOnlyList<WasmImport> Imports, IReadOnlyList<WasmMemoryDeclaration> Memories, IReadOnlyList<WasmTableDeclaration> Tables) {
     private const int DefaultPageSizeLog2 = 16;
 
     // Every read is checked against what remains, and a length is compared as the unsigned value it was encoded as
@@ -223,7 +223,7 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
             return false;
         }
 
-        table = new WasmTableDeclaration(MinimumElements: minimum, Imported: imported);
+        table = new WasmTableDeclaration(Imported: imported, MinimumElements: minimum);
         return true;
     }
     private static bool TryReadExportSection(ReadOnlySpan<byte> payload, List<string> exports, out string error) {
@@ -291,7 +291,7 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
 
                 memories.Add(item: memory);
             } else if (kind == 1) {
-                if (!TryReadTable(reader: ref reader, imported: true, table: out var table)) {
+                if (!TryReadTable(imported: true, reader: ref reader, table: out var table)) {
                     error = Describe(what: "the imported table's type or limits are malformed or unsupported", where: where);
                     return false;
                 }
@@ -352,7 +352,6 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
 
         return true;
     }
-
     private static bool TryReadTableSection(ReadOnlySpan<byte> payload, List<WasmTableDeclaration> tables, out string error) {
         var reader = new Reader(bytes: payload);
 
@@ -361,15 +360,15 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
             return false;
         }
 
-        for (var index = 0U; index < count; index++) {
-            if (!TryReadTable(reader: ref reader, imported: false, table: out var table)) {
+        for (var index = 0U; (index < count); index++) {
+            if (!TryReadTable(imported: false, reader: ref reader, table: out var table)) {
                 error = Describe(what: "its type or limits are malformed or unsupported", where: $"table section entry {index}");
                 return false;
             }
             tables.Add(item: table);
         }
 
-        error = reader.AtEnd ? string.Empty : "table section: bytes follow its last entry";
+        error = (reader.AtEnd ? string.Empty : "table section: bytes follow its last entry");
         return reader.AtEnd;
     }
 
@@ -429,10 +428,10 @@ public sealed record WasmModuleDeclarations(IReadOnlyList<string> Exports, IRead
                     error: out error,
                     imports: imports,
                     memories: imported,
-                    tables: importedTables,
-                    payload: payload
+                    payload: payload,
+                    tables: importedTables
                 ),
-                4 => TryReadTableSection(error: out error, tables: definedTables, payload: payload),
+                4 => TryReadTableSection(error: out error, payload: payload, tables: definedTables),
                 5 => TryReadMemorySection(
                     error: out error,
                     memories: defined,

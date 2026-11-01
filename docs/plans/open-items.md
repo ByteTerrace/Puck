@@ -27,9 +27,9 @@ Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
 The owner's direction: fundamentals first, known or found along the way
-(AGENTS.md), with vigilance against duplication. The first seven items are the
+(AGENTS.md), with vigilance against duplication. The first six items are the
 highs: the three stages of the engine job system, the bake, the companion
-custody build, certified field contact and the silo's addon hosting. The debug
+custody build and certified field contact. The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
@@ -56,8 +56,8 @@ experimental worlds have that it lacks is ported into it
    to 10.
 6. [Certified field contact](#certified-field-contact) [high]: one surface solve
    for both contact solvers, R4 to R8 closed in it, re-recorded hashes.
-7. [Delivery](#delivery-launcher-and-ci) [high]: a silo that mounts addon guests
-   and checkpoints their state, so the debug world deploys again.
+7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
+   and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
    authored screen material, the chase-camera template, inputs, skies and
    quality in the standard, the editor's bindings and feel authored.
@@ -188,8 +188,8 @@ One engine-wide job system answers all of it:
   - Direct3D standing (300 ticks) and walking (290 ticks) gen0 increments from
     `host.memory` fall from 4/4 to 1/1 (`host.frames` printed 5/4 before while
     it summed the inclusive generation counters); pauses are 18.85/26.19 ms
-    before and 18.41/12.12 ms after. The 23 s steady trace tail falls from 499.4 to
-    169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
+    before and 18.41/12.12 ms after. The 23 s steady trace tail falls from 499.4
+    to 169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
     (`SdfMeshIrradiance.cs:1010`), dressed-pick arrays, 32.0 MiB
     (`SdfDressedPickMap.cs:24-25`), and dressed motion identities, 9.1 MiB
     (`SdfMeshPathBake.cs:389`). Zero steady gen0 is not yet reached.
@@ -208,6 +208,42 @@ One engine-wide job system answers all of it:
     bounded retention reads 5,404 MiB versus the baseline's 6,222 MiB.
     Continue with owned storage, through `IAllocator` and `MimallocAllocator`
     where it goes native; a shared cross-thread pool belongs to the memo.
+- The allocation cuts' cross-family review. These are fixed in one batch after
+  the memo's M2a lands, because they touch the same bake files:
+  - [high] `FinalLattice.SetPoints` (`SdfMeshPathBake.cs:2072-2076`) now
+    converts points inside `lock (m_gate)` (`:1381`, `:1444`), the lock the
+    frame thread takes in `Dress` (`:342`), `TryTakeForFrame` (`:488`) and
+    `Stage` (`:622`). Before the cuts, that work ran before the lock. A
+    refinement round of up to 4M points stalls the frame while the lock holder
+    allocates, zeroes and converts, and the allocation can trigger a gen2
+    collection under the lock (estimated about 5 ms per million points). Fix:
+    build the converted buffer on the worker and swap it in under the lock.
+  - [medium] Decode buffers (`SdfMeshPathBake.cs:728-751`) keep up to tens of
+    MB per residency with no trim. They add a per-bake lock that serialises
+    workers' decoding, and they ignore the worker slot's scratch, so bake
+    storage has two owners.
+  - [medium] Static worker-slot refinement scratch
+    (`SdfMeshPathBake.Residency.cs:52`, `SdfSampledLattice.cs:908-913`) lives
+    for the whole process, up to about 96 MB, unreported. Its trim limit is a
+    guess rather than a measured working set. The large refinements that
+    dominate allocation still allocate, so the reuse helps only small ones.
+    It must be reported to M1's account.
+  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B runs
+    on a quiet machine, with GC events read from the trace. Retained large arrays
+    compacted by `ConserveMemory=5` are the likelier cause of the longer
+    suspension.
+  - [low] `SdfProgramBuilder.Clear` leaves `m_openInstanceBakesSeparately` and
+    `m_openInstanceBoundInSlotFrame` set after a thrown emission.
+  - [low] The reused frame builder keeps the last emission's objects alive into
+    gen2.
+  - [low] A cached rigid template matches only on the total material count, so
+    one avatar joining or leaving invalidates every template.
+  - [low] `WorldSeatBindings` checks overlay gates in three places, with two
+    change detectors for one fact.
+  - [low] `WorldSessionSceneEmitter` and `WorldAdjacencySceneEmitter` still
+    allocate the avatar material arrays.
+  - [low] `TemplateScratch` is a second cache of retained emissions beside
+    `WorldPlacementStamper`'s, which is duplication to converge.
 - Decided: the 30 and 15 Hz tiers stay tiers. On a fixed grid a floor's period
   is whole refreshes (`PresentationRate.GridSteps`), and with a 30 Hz tick on a
   60 Hz display only every other refresh is free of a step, so the useful
@@ -902,21 +938,26 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · high (silo), low · Next: a silo that mounts addon guests
-and checkpoints their state, then CI's steady state, the shader cache and the
-GC-hole retirement.
+Owner: delivery lane · medium · Next: the silo activation's long grain turn,
+then CI's steady state, the shader cache and the GC-hole retirement.
 
-- [high] The production silo cannot run the world it deploys: every addon row in
-  `worlds/debug` is enabled (companion, fuzzer, guide, kinematics-scope,
-  machine-debugger, traversal, watchdog), and the silo refuses a world naming an
-  enabled addon (`WorldNoAddonHost.TryPrepare`,
-  `src/Puck.World.Silo/WorldSiloHost.cs:1262`; `server.AttachAddons(runtime: new
-  WorldNoAddonHost())`, `WorldSiloHost.ActivationWiring.cs:35`), so `puck azure
-  test-world-container` fails with `Pinned row '…/debug' did not activate and
-  checkpoint` and Release Azure's deploys are blocked. The fix at the cause is a
-  silo that mounts addon guests (`Puck.World.Addons` is already referenced) and
-  checkpoints their state, which today refuses capture. (from: the main landing's
-  CI triage)
+- [medium] A world-silo activation of the debug world runs one synchronous
+  Orleans grain turn of 10.3 to 12.9 s. Orleans warns
+  (`WorkItemGroup[101215]`, "took elapsed time 0:00:10.343"), and the turn ends
+  as the seven addon guests finish mounting. This was measured by
+  `puck azure test-world-container` on a locally built `puck/world-silo` image,
+  where both boots otherwise pass. Nothing else runs on that activation
+  meanwhile, and Orleans' default call timeout is 30 s. Find what the turn spends
+  its time on (document composition, wasm compilation of the guests, the
+  checkpoint) and move it off the turn: precompiled or cached guest modules, and
+  the composition as background work the activation awaits. Never block
+  the scheduler thread.
+- [low] Extend addon checkpoints to table/reference and segment-drop state.
+  Capture currently refuses these resources by name
+  (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
+  `src/Puck.Scripting/AddonInstance.Checkpoint.cs:35`); the debug world's seven
+  guests use supported numeric globals and linear memory. The [runtime contract](../../src/Puck.World.Addons/README.md#durable-guest-state)
+  owns the supported inventory. (owner: delivery; from: silo-addons)
 - [low] The official tree (`puck official build --worlds worlds/debug`) ships
   the composed debug world with its imports inlined, so the browser boots, but
   its `sources` and `documents` stop at the package: none of `worlds/standard`'s

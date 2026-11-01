@@ -266,11 +266,13 @@ public sealed partial class WorldReplayInspector {
 
                         if (includePoses) { poses[index] = CapturePoses(population: population); }
                         var accepted = new StringBuilder();
+
                         foreach (var entry in recording.Ticks[index].Authority) {
                             if (accepted.Length != 0) { accepted.Append(value: "; "); }
                             accepted.Append(value: WorldReplayEntryDescriber.Describe(entry: entry));
                         }
                         var semantic = CaptureInputs(cursors: inputCursors, server: server);
+
                         if ((accepted.Length != 0) && (semantic.Length != 0)) { accepted.Append(value: "; "); }
                         inputs[index] = accepted.Append(value: semantic).ToString();
                         observed[index] = WorldReplaySnapshot.HashState(population: population);
@@ -499,12 +501,18 @@ public sealed partial class WorldReplayInspector {
     // A forwarding host: every member reaches the ordinary factory's product untouched, and ResolveReads — pump point
     // 3, after the population advanced — additionally fires the observer. Wrapping rather than subclassing keeps the
     // shadow drive's own guest set (and its receipts, which the mount pin compares) exactly what the factory built.
-    private sealed class ObservingAddonHost(IWorldAddonHost inner, Action<ulong> onResolved) : IWorldAddonHost {
+    private sealed class ObservingAddonHost(IWorldAddonHost inner, Action<ulong> onResolved) : IWorldAddonHost, IWorldAddonCheckpointHost {
         private readonly IWorldAddonHost m_inner = inner;
         private readonly Action<ulong> m_onResolved = onResolved;
 
         /// <inheritdoc/>
         public bool AnyEverPumped => m_inner.AnyEverPumped;
+
+        public byte[] CaptureCheckpoint() => ((m_inner as IWorldAddonCheckpointHost)
+            ?? throw new InvalidOperationException(message: "Observed addon host cannot checkpoint state.")).CaptureCheckpoint();
+        public void RestoreCheckpoint(byte[] checkpoint) => ((m_inner as IWorldAddonCheckpointHost)
+            ?? throw new InvalidOperationException(message: "Observed addon host cannot restore state.")).RestoreCheckpoint(checkpoint: checkpoint);
+
         /// <inheritdoc/>
         public int MountedCount => m_inner.MountedCount;
         /// <inheritdoc/>

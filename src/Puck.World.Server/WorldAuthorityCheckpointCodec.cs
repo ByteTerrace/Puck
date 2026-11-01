@@ -36,7 +36,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
     /// changes, and never reuse an earlier value.</summary>
-    public const ushort SupportedVersion = 29;
+    public const ushort SupportedVersion = 30;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -60,6 +60,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         body.WriteBlock(value: EncodeSearch(section: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty)));
         body.WriteBlock(value: EncodeBoardEnforcement(section: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty)));
         body.WriteBlock(value: EncodeMachines(section: (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty)));
+        body.WriteBlock(value: (checkpoint.Addons ?? []));
 
         var bodyBytes = body.ToArray();
         var writer = new WireWriter();
@@ -190,6 +191,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "machine section",
             maxBytes: MaxSectionBytes
         );
+        var addonBytes = body.ReadBlock(field: "addon section", maxBytes: MaxSectionBytes);
 
         if (!body.TryFinish(failure: out var bodyFailure)) {
             reason = $"checkpoint body: {bodyFailure}";
@@ -302,6 +304,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             HostRow: hostRow,
             InputHold: inputHold,
             Machines: machines,
+            Addons: ((addonBytes.Length == 0) ? null : addonBytes),
             OwnedWorlds: ownedWorlds,
             Population: population,
             Search: search,
